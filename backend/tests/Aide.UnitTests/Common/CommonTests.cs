@@ -106,6 +106,7 @@ public class ErrorCodesTests
             ["FORBIDDEN"] = 403,
             ["NOT_FOUND"] = 404,
             ["CONFLICT"] = 409,
+            ["ANTIFORGERY"] = 403,
             ["EMAIL_TAKEN"] = 409,
             ["INVALID_CREDENTIALS"] = 401,
             ["GITHUB_AUTH_FAILED"] = 400,

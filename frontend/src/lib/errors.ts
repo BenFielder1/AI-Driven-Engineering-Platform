@@ -1,0 +1,172 @@
+import type { FieldValues, Path, UseFormSetError } from 'react-hook-form'
+
+/**
+ * The ONE place that maps API `errorCode`s to user copy (CLAUDE.md rule 4). Mirrors
+ * backend/src/Aide.Domain/Common/ErrorCodes.cs (endpoint codes and agent-run codes; Guardian codes are separate).
+ */
+export const errorMessages = {
+  // Common
+  VALIDATION: 'Some fields need attention.',
+  UNAUTHENTICATED: 'Your session has ended. Sign in again to continue.',
+  FORBIDDEN: "You don't have permission to do that.",
+  NOT_FOUND: "We couldn't find that. It may have been deleted, or you may not have access.",
+  CONFLICT: 'Someone else changed this at the same time. Reload and try again.',
+  ANTIFORGERY: 'Your security token expired. Reload the page and try again.',
+  // Accounts and members
+  EMAIL_TAKEN: 'An account with this email already exists. Sign in instead.',
+  INVALID_CREDENTIALS: 'The email or password is incorrect.',
+  GITHUB_AUTH_FAILED: "GitHub sign-in didn't complete. Try again.",
+  USER_NOT_FOUND: 'No user with that email exists.',
+  LAST_OWNER: 'A project needs at least one Owner. Add another Owner first.',
+  // Lifecycle, gates, artifacts
+  PHASE_PRECONDITION_FAILED: "The project isn't ready to move to the next phase yet.",
+  GATE_PENDING: 'An approval gate is waiting for a decision.',
+  BUDGET_EXCEEDED: "The project's agent budget is used up.",
+  WRONG_PHASE: "That isn't available in the project's current phase.",
+  ARTIFACT_NOT_DRAFT: 'Only draft artifacts can be approved or rejected.',
+  ARTIFACT_LOCKED: 'This artifact version is locked. Create a new version instead.',
+  GATE_NOT_PENDING: 'This gate has already been decided.',
+  INVALID_DECISION: "That decision isn't valid for this gate.",
+  // Review, release, rollback
+  REVIEW_IN_PROGRESS: 'A review is already running.',
+  NOT_RELEASING: "The project isn't in the release phase.",
+  RELEASE_IN_PROGRESS: 'A release is already in progress.',
+  MERGE_CONFLICT: 'The release branch has merge conflicts that need resolving.',
+  INVALID_TARGET_VERSION: "You can't roll back to that version.",
+  ROLLBACK_BLOCKED: "A rollback isn't possible right now.",
+  RATE_LIMITED: 'Too many attempts. Wait a moment and try again.',
+  // Approval links
+  LINK_EXPIRED: 'This approval link has expired.',
+  LINK_USED: 'This approval link has already been used.',
+  // Agent runs (shown on run details)
+  MISSING_INPUT: 'The agent was missing a required input.',
+  INVALID_PLAN: 'The agent produced an invalid plan.',
+} as const satisfies Record<string, string>
+
+export type ErrorCode = keyof typeof errorMessages
+
+export const errorCodes = Object.keys(errorMessages) as ErrorCode[]
+
+/** FR-2: `reason` on `/login?error=GITHUB_AUTH_FAILED&reason=…` (see backend Auth/GitHubAuth.cs). */
+export const githubFailureMessages: Readonly<Record<string, string>> = {
+  link_required:
+    'An account with this GitHub email already exists. Sign in with your password, then link GitHub from your account page.',
+  oauth_failed: "GitHub sign-in didn't complete. Try again.",
+  email_required: "GitHub didn't share a verified email address. Add one to your GitHub account and try again.",
+  already_linked: 'That GitHub account is already linked to a different AIDE account.',
+  link_session: 'Your session ended while linking GitHub. Sign in and try linking again.',
+  link_failed: "We couldn't link your GitHub account. Try again.",
+  account_create_failed: "We couldn't create an account from your GitHub profile. Try again, or register with email.",
+}
+
+export function githubFailureMessage(reason: string | undefined): string {
+  return (reason ? githubFailureMessages[reason] : undefined) ?? errorMessages.GITHUB_AUTH_FAILED
+}
+
+function isErrorCode(code: unknown): code is ErrorCode {
+  return typeof code === 'string' && Object.hasOwn(errorMessages, code)
+}
+
+const statusFallback: Partial<Record<number, ErrorCode>> = {
+  400: 'VALIDATION',
+  401: 'UNAUTHENTICATED',
+  403: 'FORBIDDEN',
+  404: 'NOT_FOUND',
+  409: 'CONFLICT',
+  429: 'RATE_LIMITED',
+}
+
+interface ProblemBody {
+  title?: string | null
+  errorCode?: string
+  errors?: Record<string, string[]>
+  traceId?: string
+}
+
+/** A failed API call, normalised from a ProblemDetails body (or a bare status). */
+export class ApiError extends Error {
+  readonly status: number
+  readonly errorCode: ErrorCode | null
+  readonly fieldErrors: Record<string, string[]>
+  readonly retryAfterSeconds: number | null
+  readonly traceId: string | undefined
+
+  constructor(init: {
+    status: number
+    errorCode: ErrorCode | null
+    title?: string | null
+    fieldErrors?: Record<string, string[]>
+    retryAfterSeconds?: number | null
+    traceId?: string
+  }) {
+    super(init.title ?? `Request failed with HTTP ${String(init.status)}`)
+    this.name = 'ApiError'
+    this.status = init.status
+    this.errorCode = init.errorCode
+    this.fieldErrors = init.fieldErrors ?? {}
+    this.retryAfterSeconds = init.retryAfterSeconds ?? null
+    this.traceId = init.traceId
+  }
+}
+
+/** Builds an ApiError from an openapi-fetch `{ error, response }` pair. */
+export function toApiError(error: unknown, response: Response): ApiError {
+  const body: ProblemBody = typeof error === 'object' && error !== null ? error : {}
+  const code = isErrorCode(body.errorCode) ? body.errorCode : (statusFallback[response.status] ?? null)
+  const retryAfter = Number.parseInt(response.headers.get('Retry-After') ?? '', 10)
+  return new ApiError({
+    status: response.status,
+    errorCode: code,
+    title: body.title,
+    fieldErrors: body.errors ?? {},
+    retryAfterSeconds: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null,
+    traceId: body.traceId,
+  })
+}
+
+/** User-facing copy for any thrown error. */
+export function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.errorCode === 'RATE_LIMITED' && error.retryAfterSeconds) {
+      const s = error.retryAfterSeconds
+      return `Too many attempts. Try again in ${String(s)} second${s === 1 ? '' : 's'}.`
+    }
+    if (error.errorCode) {
+      return errorMessages[error.errorCode]
+    }
+    return 'Something went wrong on our side. Try again.'
+  }
+  if (error instanceof TypeError) {
+    return "We couldn't reach the server. Check your connection and try again."
+  }
+  return 'Something went wrong. Try again.'
+}
+
+export function isApiError(error: unknown, code?: ErrorCode): error is ApiError {
+  return error instanceof ApiError && (code === undefined || error.errorCode === code)
+}
+
+/**
+ * Maps a VALIDATION `errors` dictionary onto React Hook Form fields (keys compared case-insensitively).
+ * Returns the messages that didn't match a known field so the caller can show them in the summary.
+ */
+export function applyFieldErrors<T extends FieldValues>(
+  error: unknown,
+  setError: UseFormSetError<T>,
+  fields: readonly Path<T>[],
+): string[] {
+  if (!(error instanceof ApiError)) {
+    return []
+  }
+  const unmatched: string[] = []
+  for (const [key, messages] of Object.entries(error.fieldErrors)) {
+    const field = fields.find((f) => f.toLowerCase() === key.toLowerCase())
+    const message = messages.join(' ')
+    if (field) {
+      setError(field, { type: 'server', message })
+    } else if (message) {
+      unmatched.push(message)
+    }
+  }
+  return unmatched
+}

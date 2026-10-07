@@ -1,0 +1,38 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OpenApi;
+using Microsoft.OpenApi;
+
+namespace Aide.Api.Errors;
+
+/// <summary>Documents the <c>errorCode</c>, <c>traceId</c> and <c>details</c> extensions on the ProblemDetails
+/// schemas, so the generated client types them.</summary>
+internal sealed class ProblemDetailsSchemaTransformer : IOpenApiSchemaTransformer
+{
+    public Task TransformAsync(OpenApiSchema schema, OpenApiSchemaTransformerContext context, CancellationToken cancellationToken)
+    {
+        var type = context.JsonTypeInfo.Type;
+        if (type != typeof(ProblemDetails) && type != typeof(HttpValidationProblemDetails))
+        {
+            return Task.CompletedTask;
+        }
+
+        schema.Properties ??= new Dictionary<string, IOpenApiSchema>();
+        schema.Properties[ApiProblems.ErrorCodeKey] = new OpenApiSchema
+        {
+            Type = JsonSchemaType.String,
+            Description = "Stable UPPER_SNAKE error code from the spec's error table (SPEC §6).",
+        };
+        schema.Properties[ApiProblems.TraceIdKey] = new OpenApiSchema
+        {
+            Type = JsonSchemaType.String,
+            Description = "Trace id for correlating the error with server logs.",
+        };
+        schema.Properties[ApiProblems.DetailsKey] = new OpenApiSchema
+        {
+            Type = JsonSchemaType.Array,
+            Items = new OpenApiSchema { Type = JsonSchemaType.String },
+            Description = "Individual reasons, when there are several.",
+        };
+        return Task.CompletedTask;
+    }
+}

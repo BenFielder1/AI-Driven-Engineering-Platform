@@ -1,6 +1,88 @@
 @import 'tailwindcss';
 
-/* Light/dark follows the system preference (Tailwind's default `dark:` variant). */
+/*
+ * Theme: `.dark` on <html> (set by src/lib/theme.ts from the stored preference or the system setting).
+ * Colour tokens are CSS variables so both themes share one set of utilities (bg-canvas, text-muted, ...).
+ * Text tokens meet WCAG AA (>= 4.5:1) on canvas and surface in both themes; `field-border` meets 3:1 (non-text).
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-canvas: var(--aide-canvas);
+  --color-surface: var(--aide-surface);
+  --color-surface-raised: var(--aide-surface-raised);
+  --color-fg: var(--aide-fg);
+  --color-muted: var(--aide-muted);
+  --color-border: var(--aide-border);
+  --color-field-border: var(--aide-field-border);
+  --color-primary: var(--aide-primary);
+  --color-primary-hover: var(--aide-primary-hover);
+  --color-on-primary: var(--aide-on-primary);
+  --color-link: var(--aide-link);
+  --color-focus: var(--aide-focus);
+  --color-danger: var(--aide-danger);
+  --color-danger-bg: var(--aide-danger-bg);
+  --color-on-danger: var(--aide-on-danger);
+  --color-success: var(--aide-success);
+  --color-success-bg: var(--aide-success-bg);
+  --color-warning: var(--aide-warning);
+  --color-warning-bg: var(--aide-warning-bg);
+}
+
 :root {
   color-scheme: light dark;
+  --aide-canvas: #ffffff;
+  --aide-surface: #f8fafc; /* slate-50 */
+  --aide-surface-raised: #ffffff;
+  --aide-fg: #0f172a; /* slate-900, 17:1 */
+  --aide-muted: #475569; /* slate-600, 7.2:1 on surface */
+  --aide-border: #e2e8f0; /* slate-200, decorative */
+  --aide-field-border: #64748b; /* slate-500, 4.6:1 */
+  --aide-primary: #4338ca; /* indigo-700, white text 7.9:1 */
+  --aide-primary-hover: #3730a3;
+  --aide-on-primary: #ffffff;
+  --aide-link: #4338ca;
+  --aide-focus: #4338ca;
+  --aide-danger: #b91c1c; /* red-700, 6.4:1 */
+  --aide-danger-bg: #fef2f2;
+  --aide-on-danger: #ffffff;
+  --aide-success: #047857; /* emerald-700, 5.4:1 */
+  --aide-success-bg: #ecfdf5;
+  --aide-warning: #92400e; /* amber-800, 7:1 */
+  --aide-warning-bg: #fffbeb;
+}
+
+.dark {
+  --aide-canvas: #020617; /* slate-950 */
+  --aide-surface: #0f172a; /* slate-900 */
+  --aide-surface-raised: #1e293b; /* slate-800 */
+  --aide-fg: #f1f5f9; /* slate-100, 16:1 */
+  --aide-muted: #94a3b8; /* slate-400, 5.7:1 on slate-800 */
+  --aide-border: #334155; /* slate-700, decorative */
+  --aide-field-border: #64748b; /* slate-500, 3.7:1 on slate-950 */
+  --aide-primary: #a5b4fc; /* indigo-300 */
+  --aide-primary-hover: #c7d2fe;
+  --aide-on-primary: #1e1b4b; /* indigo-950 on indigo-300, 9:1 */
+  --aide-link: #a5b4fc;
+  --aide-focus: #a5b4fc;
+  --aide-danger: #fca5a5; /* red-300, 8:1 */
+  --aide-danger-bg: #450a0a;
+  --aide-on-danger: #450a0a;
+  --aide-success: #6ee7b7; /* emerald-300 */
+  --aide-success-bg: #022c22;
+  --aide-warning: #fcd34d; /* amber-300 */
+  --aide-warning-bg: #451a03;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-fg);
+  }
+
+  /* Visible keyboard focus everywhere (WCAG 2.4.7 / 2.4.11). */
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
 }

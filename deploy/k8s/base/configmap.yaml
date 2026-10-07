@@ -12,5 +12,9 @@ data:
   ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
   Telemetry__ConsoleExporter: "false"
   # SPEC §8/§9: Data Protection keys persisted on the aide-data volume.
-  # Not read by the app yet (phase 0); the volume is mounted at /data.
   DataProtection__KeysPath: /data/keys
+  # Auth (phase 2). SameAsRequest: the local app is plain HTTP on localhost:8080; Secure cookies when served over HTTPS.
+  Auth__Cookie__SecurePolicy: SameAsRequest
+  # Per-client-IP fixed-window limits (IP from X-Forwarded-For set by nginx).
+  Auth__RateLimits__LoginPerMinute: "5"
+  Auth__RateLimits__RegisterPerMinute: "5"

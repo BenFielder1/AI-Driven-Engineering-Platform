@@ -1,6 +1,13 @@
 using System.Text.Json.Serialization;
+using Aide.Api.Auth;
+using Aide.Api.Errors;
+using Aide.Api.Features.Admin;
+using Aide.Api.Features.Auth;
+using Aide.Api.Features.Tokens;
 using Aide.Api.Health;
+using Aide.Api.Json;
 using Aide.Infrastructure;
+using Aide.Infrastructure.Security;
 using Npgsql;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -43,17 +50,33 @@ builder.Services.AddOpenTelemetry()
         }
     });
 
-builder.Services.AddProblemDetails();
-builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-builder.Services.AddOpenApi(options => options.AddDocumentTransformer((document, _, _) =>
+// Errors: ProblemDetails with errorCode + traceId everywhere (§6).
+builder.Services.AddAideProblemDetails();
+builder.Services.AddValidation();
+
+// Domain enums on the wire use the snake_case names of SPEC.md and the database ("admin", "in_progress");
+// numbers are plain JSON numbers (not "number or numeric string").
+builder.Services.ConfigureHttpJsonOptions(o =>
 {
-    document.Info.Title = "AIDE Platform API";
-    document.Info.Version = "v1";
-    return Task.CompletedTask;
-}));
+    o.SerializerOptions.Converters.Add(new DomainEnumJsonConverter());
+    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    o.SerializerOptions.NumberHandling = JsonNumberHandling.Strict;
+});
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer((document, _, _) =>
+    {
+        document.Info.Title = "AIDE Platform API";
+        document.Info.Version = "v1";
+        return Task.CompletedTask;
+    });
+    options.AddSchemaTransformer<ProblemDetailsSchemaTransformer>();
+});
 builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddAideInfrastructure();
+builder.Services.AddAideDataProtection(builder.Configuration);
+builder.AddAideAuth();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseReadyHealthCheck>("database", tags: [HealthEndpoints.ReadyTag]);
 
@@ -61,6 +84,7 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseAideAuth();
 
 if (app.Environment.IsDevelopment())
 {
@@ -68,6 +92,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapHealthEndpoints();
+app.MapAuthEndpoints();
+app.MapApiTokenEndpoints();
+app.MapAdminUserEndpoints();
 
 await app.RunAsync();
 

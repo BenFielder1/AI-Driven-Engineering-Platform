@@ -26,6 +26,8 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: apiProxy,
+    // Tests only: src/lib/lib.test.ts reads the backend's ErrorCodes.cs to keep errors.ts in sync.
+    ...(process.env.VITEST ? { fs: { allow: ['.', '../backend/src/Aide.Domain/Common'] } } : {}),
   },
   preview: {
     port: 4173,

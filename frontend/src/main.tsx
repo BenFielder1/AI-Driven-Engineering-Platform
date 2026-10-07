@@ -1,24 +1,29 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { createRouter, RouterProvider } from '@tanstack/react-router'
+import { RouterProvider } from '@tanstack/react-router'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import './index.css'
-import { queryClient } from './lib/query-client'
-import { routeTree } from './routeTree.gen'
+import { refreshAntiforgeryToken } from './api/client'
+import { authKeys } from './features/auth/auth-api'
+import { createQueryClient } from './lib/query-client'
+import { initTheme } from './lib/theme'
+import { createAppRouter } from './router'
 
-const router = createRouter({
-  routeTree,
-  context: { queryClient },
-  defaultPreload: 'intent',
-  scrollRestoration: true,
+initTheme()
+// NFR-SEC: obtain the XSRF-TOKEN cookie up front (the client also fetches it lazily before a mutation).
+void refreshAntiforgeryToken()
+
+const queryClient = createQueryClient({
+  onUnauthenticated: () => {
+    queryClient.setQueryData(authKeys.me(), null)
+    const { pathname, href } = router.state.location
+    if (pathname !== '/login' && pathname !== '/register') {
+      void router.navigate({ to: '/login', search: { returnUrl: href } })
+    }
+  },
 })
-
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router
-  }
-}
+const router = createAppRouter(queryClient)
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {

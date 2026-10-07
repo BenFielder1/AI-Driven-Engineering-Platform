@@ -13,10 +13,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 
 | ID | Summary | Spec § | Area | Phase | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| FR-1 | Register, sign in/out, cookie session | 3 | both | 2 | todo | — |
-| FR-2 | GitHub sign-in and linking | 3 | both | 2 | todo | — |
-| FR-3 | First user Admin; admins change roles | 3 | both | 2 | todo | — |
-| FR-4 | Personal API tokens (hash stored) | 3 | both | 2 | todo | — |
+| FR-1 | Register, sign in/out, cookie session | 3 | both | 2 | done | auth endpoints + /login,/register; FR1_* tests; e2e/auth.spec |
+| FR-2 | GitHub sign-in and linking | 3 | both | 2 | done | GitHub OAuth (fake handler tests), hidden when unconfigured |
+| FR-3 | First user Admin; admins change roles | 3 | both | 2 | partial | first-user admin + PATCH /api/admin/users/{id}/role (admin UI phase 13) |
+| FR-4 | Personal API tokens (hash stored) | 3 | both | 2 | done | /api/me/tokens + bearer scheme + Account page; e2e |
 | FR-5 | Project wizard, defaults, PROJECT_CREATED | 3 | both | 3 | todo | — |
 | FR-6 | Projects list: paging, search, filters, sort, membership | 3 | both | 3 | todo | — |
 | FR-7 | Edit / delete project (owner) | 3 | both | 3 | todo | — |
@@ -83,10 +83,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
   - [x] aspnet-engineer (pure Aide.Domain rules + worked-example unit tests — 713 unit tests)
   - [x] ef-data-engineer (Identity + full §5 schema, migration CoreSchema)
   - [x] gate · review (1 Major, 6 Minor — all fixed) · redeploy · commit
-- [ ] 2 M1 Auth + app shell — IDs: FR-1–FR-4, NFR-SEC (cookies, antiforgery, login rate limit), NFR-OBS
-  - [ ] aspnet-engineer (auth, ProblemDetails, first contract)
-  - [ ] vite-react-engineer (shell, theme, nav, login/register, account tokens, generated client)
-  - [ ] gate · review · redeploy · commit
+- [x] 2 M1 Auth + app shell (base: 55bf373) — IDs: FR-1–FR-4, NFR-SEC (cookies, antiforgery, login rate limit), NFR-OBS
+  - [x] aspnet-engineer (auth, ProblemDetails, first contract — 884 tests)
+  - [x] vite-react-engineer (shell, theme, nav, login/register, account tokens, generated client)
+  - [x] gate · review (1 Major, 4 Minor — all fixed) · redeploy · E2E on k8s 4/4 · commit
 - [ ] 3 M1 Projects — IDs: FR-5–FR-10, DEP-2
 - [ ] 4 M2 Lifecycle, gates, jobs, events — IDs: FR-11–FR-14, FR-50, NFR-REL (job worker/outbox)
 - [ ] 5 M2 Artifacts + live updates — IDs: FR-16–FR-21, FR-46
@@ -143,9 +143,21 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-07 — Email uniqueness via citext column + unique index (plus Identity's normalized_email index); all tables plural snake_case; POCO entities in Aide.Domain/Entities, AppUser in Infrastructure — SPEC updated: no
 - 2026-10-07 — Extra columns beyond §5: job.locked_at/completed_at, project.last_rollback_at, agent_run.status/completed_at/output, approval_gate.target_version, execution_step.branch_name, compliance_report.escalation_reason, release.conflicting_files, project_git_settings.pull_request_url/number, notification_delivery.project_id/created_at/sent_at, created_at on api_tokens/project_members/approval_links — SPEC updated: no
 
+- 2026-10-07 — Password policy: ≥ 8 chars with a letter and a digit, no symbol requirement; login lockout after 10 failures for 5 min (still INVALID_CREDENTIALS) — SPEC silent — SPEC updated: no
+- 2026-10-07 — Auth cookie `aide.auth` SecurePolicy defaults to SameAsRequest (configurable `Auth:Cookie:SecurePolicy`) because the k8s app is served over http://localhost:8080; §8 says Secure — local-only deployment — SPEC updated: no
+- 2026-10-07 — Antiforgery: double-submit `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header for cookie-authenticated mutations; failure → 403 `ANTIFORGERY` (new error code); bearer-token requests exempt — §8 — SPEC updated: no
+- 2026-10-07 — GitHub sign-in with an email matching an existing *unlinked* account is not auto-linked (redirect `/login?error=GITHUB_AUTH_FAILED&reason=link_required`); user signs in and links from Account. Old stack auto-linked by email (account-takeover risk). GitHub callback errors redirect with `reason=` rather than returning 400 — SPEC updated: no
+- 2026-10-07 — Last Admin can't be demoted (409 CONFLICT); first-user-Admin made race-safe with an advisory lock; revoking a token twice is 204; `GET /api/auth/providers` (new) tells the SPA whether GitHub is configured; `GET /api/admin/users` (new) for the admin page — SPEC updated: no
+- 2026-10-07 — Domain enums serialise as snake_case strings on the wire (e.g. `admin`, `spec_approval`) — matches stored values and §5 — SPEC updated: no
+
+- 2026-10-07 — API tokens can't list/create/revoke tokens or change system roles (BrowserSession policy → 403); an admin token can still read admin lists — a leaked token must not be able to mint a replacement — SPEC updated: no
+- 2026-10-07 — 405/415 responses carry errorCode VALIDATION; GitHub create racing an existing email → reason=link_required; concurrent link of the same GitHub id → reason=already_linked — SPEC updated: no
+- 2026-10-07 — A failed GitHub *link* lands on /account?error=… (the SPA forwards from /login) — SPEC updated: no
+
 ## Known issues
 - kubeconform, oasdiff, actionlint not installed locally — schema validation skipped locally (CI runs kubeconform; actionlint was run via Docker) — install optionally — Ben
 - CI not yet run on GitHub (nothing pushed): Testcontainers on ubuntu-latest, SDK 10.0.401 install, Docker cache unverified — verify on first push — orchestrator
 - §2 mentions per-user notification preferences but §5 has no table — to be designed in phase 12 — orchestrator
 - Migrations need their own .editorconfig (generated_code) because the API image's build context is backend/ — fixed in phase 1 — —
+- E2E on k8s registers users in the persistent k8s DB; the first one became Admin there. Phase 3 dev seed must cope with an existing admin; E2E may need higher auth rate limits as specs grow — orchestrator
 - Migration Job logs a harmless "Cannot load library libgssapi_krb5.so.2" (Npgsql Kerberos probe) — ignore — —

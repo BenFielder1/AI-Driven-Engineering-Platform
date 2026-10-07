@@ -14,6 +14,9 @@ public static class ErrorCodes
     public const string NotFound = "NOT_FOUND";
     public const string Conflict = "CONFLICT";
 
+    /// <summary>A cookie-authenticated mutation without a valid <c>X-XSRF-TOKEN</c> header (§8 antiforgery).</summary>
+    public const string Antiforgery = "ANTIFORGERY";
+
     // Accounts and members
     public const string EmailTaken = "EMAIL_TAKEN";
     public const string InvalidCredentials = "INVALID_CREDENTIALS";
@@ -72,6 +75,7 @@ public static class ErrorCodes
         [Forbidden] = 403,
         [NotFound] = 404,
         [Conflict] = 409,
+        [Antiforgery] = 403,
         [EmailTaken] = 409,
         [InvalidCredentials] = 401,
         [GitHubAuthFailed] = 400,

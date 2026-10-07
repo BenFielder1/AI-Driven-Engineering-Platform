@@ -1,7 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
-import { HomePage } from '../features/home/home-page'
-
+/** `/` → /projects (the guard on /projects sends signed-out users to /login). */
 export const Route = createFileRoute('/')({
-  component: HomePage,
+  beforeLoad: () => {
+    // eslint-disable-next-line @typescript-eslint/only-throw-error -- TanStack Router redirects are thrown
+    throw redirect({ to: '/projects' })
+  },
 })
