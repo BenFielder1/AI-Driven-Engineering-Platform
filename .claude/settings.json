@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "react-dotnet-local-kit@bens-claude-kits": true
+  },
+  "permissions": {
+    "additionalDirectories": [
+      "../AIDE-Platform-old-stack"
+    ],
+    "deny": [
+      "Edit(//**/AIDE-Platform-old-stack/**)"
+    ]
+  }
+}
