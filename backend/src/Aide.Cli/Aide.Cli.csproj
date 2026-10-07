@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The `aide` .NET global tool (SPEC FR-52). Stub for now: prints its version. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Aide.Cli</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>aide</ToolCommandName>
+    <PackageId>Aide.Cli</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Command-line client for the AIDE Platform.</Description>
+  </PropertyGroup>
+
+</Project>

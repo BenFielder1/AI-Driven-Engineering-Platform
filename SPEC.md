@@ -440,10 +440,14 @@ Each decision is an improvement over the old stack (`../AIDE-Platform-old-stack/
 
 ## 11. Open questions
 
-- [ ] GitLab provider: the old stack had a GitLab provider. Keep it out of v1 (proposed), or add it in a later milestone? — Ben
-- [ ] GitHub Copilot LLM adapter: the old stack had one. Drop it (proposed; Anthropic/OpenAI/Ollama cover the need), or re-add it later? — Ben
-- [ ] Should agent output stream token-by-token to the UI (nice for long spec/plan generation), or is "running" enough for v1 (proposed)? — Ben
-- [ ] Default models per agent (proposed: Anthropic for spec/plan/review, a cheaper model for refinement). Confirm the model IDs at build time from provider docs. — Ben
+- [x] GitLab provider: the old stack had a GitLab provider. Keep it out of v1 (proposed), or add it in a later milestone? — Ben
+  - **Answered 2026-10-07:** out of v1. Keep the Git provider abstraction so it can be added later.
+- [x] GitHub Copilot LLM adapter: the old stack had one. Drop it (proposed; Anthropic/OpenAI/Ollama cover the need), or re-add it later? — Ben
+  - **Answered 2026-10-07:** dropped. Anthropic, OpenAI, Ollama and Fake only.
+- [x] Should agent output stream token-by-token to the UI (nice for long spec/plan generation), or is "running" enough for v1 (proposed)? — Ben
+  - **Answered 2026-10-07:** no streaming in v1; runs show as running until complete.
+- [x] Default models per agent (proposed: Anthropic for spec/plan/review, a cheaper model for refinement). Confirm the model IDs at build time from provider docs. — Ben
+  - **Answered 2026-10-07:** model IDs come from each provider's docs at build time and are configuration, not code. Anthropic for spec, plan, code generation and review; a cheaper model for refinement.
 
 ## 12. Milestones
 

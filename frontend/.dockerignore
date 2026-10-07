@@ -1,0 +1,17 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+.env
+.env.*
+.vscode/
+.idea/
+Dockerfile
+.dockerignore

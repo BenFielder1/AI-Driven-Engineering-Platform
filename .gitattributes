@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.{cmd,bat,ps1} text eol=crlf
+*.{png,jpg,jpeg,gif,ico,webp,woff,woff2,pfx,snk} binary
+# Generated files: collapse in diffs
+backend/openapi/api.json linguist-generated=true
+frontend/src/api/generated/** linguist-generated=true
+backend/src/Aide.Infrastructure/Migrations/*.Designer.cs linguist-generated=true
+backend/src/Aide.Infrastructure/Migrations/AideDbContextModelSnapshot.cs linguist-generated=true

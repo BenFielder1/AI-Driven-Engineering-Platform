@@ -1,0 +1,128 @@
+# Mirrors the CLAUDE.md gate, plus contract/client freshness, manifest validation and an image build check.
+# Nothing is pushed: images are built and discarded, no registry or repository secrets are used.
+name: CI
+
+on:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - ".claude/**"
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - ".claude/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+
+jobs:
+  backend:
+    name: Backend (build, test, format, contract)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: backend/global.json
+      - run: dotnet tool restore
+      - run: dotnet restore
+      - name: Build (warnings as errors; regenerates openapi/api.json)
+        run: dotnet build -c Release -warnaserror --no-restore
+      - name: Contract is up to date (backend/openapi/api.json)
+        run: bash ../scripts/ci/check-generated.sh "Run 'dotnet build src/Aide.Api' in backend/ and commit openapi/api.json." openapi/api.json
+      - name: Test (unit + integration via Testcontainers)
+        run: dotnet test -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
+      - name: Format
+        run: dotnet format --verify-no-changes --no-restore
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: backend-test-results
+          path: backend/TestResults
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend (client, typecheck, lint, test, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Client is up to date (frontend/src/api/generated from committed api.json)
+        run: |
+          npm run gen:api
+          bash ../scripts/ci/check-generated.sh "Run 'npm --prefix frontend run gen:api' and commit src/api/generated." src/api/generated
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - name: Route tree is up to date (src/routeTree.gen.ts)
+        run: bash ../scripts/ci/check-generated.sh "Run 'npm --prefix frontend run build' and commit src/routeTree.gen.ts." src/routeTree.gen.ts
+
+  manifests:
+    name: Manifests (kustomize render + kubeconform)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Dummy secrets.env from the committed example (real file is git-ignored)
+        run: cp deploy/k8s/overlays/local/secrets.env.example deploy/k8s/overlays/local/secrets.env
+      - name: Render
+        run: |
+          kubectl version --client
+          kubectl kustomize deploy/k8s/overlays/local > "$RUNNER_TEMP/rendered.yaml"
+          # kubeconform passes on zero resources, so fail on an empty render.
+          grep -q '^kind:' "$RUNNER_TEMP/rendered.yaml"
+          grep '^kind:' "$RUNNER_TEMP/rendered.yaml" | sort | uniq -c
+      - name: Validate
+        run: |
+          docker run --rm -v "$RUNNER_TEMP":/w ghcr.io/yannh/kubeconform:v0.8.0 \
+            -strict -summary -ignore-missing-schemas /w/rendered.yaml
+
+  images:
+    name: Image build (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            context: backend
+          - image: web
+            context: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/Dockerfile
+          push: false
+          tags: aide-${{ matrix.image }}:ci
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

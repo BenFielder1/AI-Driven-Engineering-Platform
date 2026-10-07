@@ -1,0 +1,24 @@
+# Dev-loop database only. The API and SPA run on the host (dotnet run / npm run dev).
+# Values come from .env (copy .env.example). Kubernetes uses deploy/k8s instead.
+name: aide
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aide}
+      POSTGRES_USER: ${POSTGRES_USER:-aide}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - aide-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  aide-db-data:

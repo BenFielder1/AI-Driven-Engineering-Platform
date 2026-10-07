@@ -1,0 +1,16 @@
+# Non-secret settings shared by db, api and the migration Job. Secrets come from app-secrets (overlay secretGenerator).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  POSTGRES_DB: aide
+  POSTGRES_USER: aide
+  ASPNETCORE_ENVIRONMENT: Production
+  ASPNETCORE_HTTP_PORTS: "8080"
+  # The API sits behind the web container's nginx; honour X-Forwarded-* (built-in ASP.NET Core switch).
+  ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+  Telemetry__ConsoleExporter: "false"
+  # SPEC §8/§9: Data Protection keys persisted on the aide-data volume.
+  # Not read by the app yet (phase 0); the volume is mounted at /data.
+  DataProtection__KeysPath: /data/keys

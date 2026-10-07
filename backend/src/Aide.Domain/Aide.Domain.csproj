@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure business rules: no EF Core, no ASP.NET Core, no I/O. -->
+  <PropertyGroup>
+    <RootNamespace>Aide.Domain</RootNamespace>
+  </PropertyGroup>
+
+</Project>

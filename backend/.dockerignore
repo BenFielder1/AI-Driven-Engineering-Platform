@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+**/TestResults/
+**/*.user
+**/.vs/
+**/.vscode/
+**/.idea/
+tests/
+openapi/
+efbundle
+efbundle.exe
+Dockerfile
+.dockerignore
+**/appsettings.*.local.json
+**/.env
+**/.env.*
