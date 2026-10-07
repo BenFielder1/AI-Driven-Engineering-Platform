@@ -66,7 +66,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-51 | Admin pages, dead-letter retry | 3 | both | 13 | todo | — |
 | FR-52 | `aide` CLI | 3 | backend | 13 | todo | — |
 | NFR-PERF | p95 < 300 ms reads; live events < 2 s | 8 | both | 14 | todo | — |
-| NFR-REL | Job lease expiry re-queue (5 min) | 8, 4.9 | backend | 1, 4 | todo | — |
+| NFR-REL | Job lease expiry re-queue (5 min) | 8, 4.9 | backend | 1, 4 | partial | JobPolicy + execution-job unique index (phase 1); worker in phase 4 |
 | NFR-SEC | Cookies, antiforgery, rate limits, Data Protection, no secret logging | 8 | backend | 2–3 | todo | — |
 | NFR-OBS | JSON logs, OTel console, ready check incl. migrations | 8 | backend | 0, 2 | partial | health live/ready + JSON logs + OTel (phase 0); project/run/job ids in logs later |
 | NFR-A11Y | WCAG 2.2 AA core flows, both themes | 8 | frontend | 2+ | todo | — |
@@ -79,9 +79,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
   - [x] repo-scaffolder (backend gate 5/5, frontend gate 3/3, dev loop ready=200)
   - [x] github-ci-engineer ‖ local-k8s-engineer (skeleton deployed + smoke ✓)
   - [x] gate · review (3 Major, 4 Minor — all fixed) · commit
-- [ ] 1 Domain core + base schema — IDs: §4.1–§4.9 rules (FR-11, FR-12, FR-16, FR-19, FR-32, FR-38, FR-39, FR-44 rule parts, NFR-REL)
-  - [ ] ef-data-engineer (Identity + core schema, first migration) ‖ aspnet-engineer (pure Aide.Domain rules + worked-example unit tests)
-  - [ ] gate · review · commit
+- [x] 1 Domain core + base schema (base: 45fcdae) — IDs: §4.1–§4.9 rules (FR-11, FR-12, FR-16, FR-19, FR-32, FR-38, FR-39, FR-44 rule parts, NFR-REL)
+  - [x] aspnet-engineer (pure Aide.Domain rules + worked-example unit tests — 713 unit tests)
+  - [x] ef-data-engineer (Identity + full §5 schema, migration CoreSchema)
+  - [x] gate · review (1 Major, 6 Minor — all fixed) · redeploy · commit
 - [ ] 2 M1 Auth + app shell — IDs: FR-1–FR-4, NFR-SEC (cookies, antiforgery, login rate limit), NFR-OBS
   - [ ] aspnet-engineer (auth, ProblemDetails, first contract)
   - [ ] vite-react-engineer (shell, theme, nav, login/register, account tokens, generated client)
@@ -116,7 +117,35 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-07 — `deploy/scripts/validate-manifests.sh` renders the overlay from a temp copy with secrets.env.example, so the gate works on a fresh clone without touching the real secrets.env — SPEC updated: no
 - 2026-10-07 — Secret env names (to confirm when the app reads them): Llm__Anthropic__ApiKey, Llm__OpenAI__ApiKey, GitHub__OAuth__ClientId/ClientSecret, Approvals__SigningKey, Smtp__*, DataProtection__ApplicationName/KeysPath (/data/keys) — SPEC updated: no
 
+- 2026-10-07 — Missing credentials never block: no GitHub OAuth config → "Continue with GitHub" hidden and /api/auth/github* return 404 (flow tested with a fake OAuth handler); no LLM keys → Anthropic/OpenAI shown "not configured", new projects and dev seed default to Fake; no SMTP → email skipped with a logged warning, other channels still work. README lists every real-use setting — Ben's instruction — SPEC updated: no
+
+- 2026-10-07 — Job retries: 4 attempts total (1 + 3 retries, per FR-25 example), backoff 2s/8s/32s; non-transient failures fail immediately; an expired lease counts as a failed attempt — §4.9/FR-25 wording — SPEC updated: no
+- 2026-10-07 — FR-33: attempts 1–3 rejected → retry; the 4th rejection blocks the step and creates an escalation gate (follows the acceptance example) — SPEC wording ambiguous — SPEC updated: no
+- 2026-10-07 — `execution → review` increments the version; only `review → execution` (review cycle) keeps it — §4.1 — SPEC updated: no
+- 2026-10-07 — Rollback may restore the same phase it is in (e.g. back to an earlier execution version); §4.1 says "earlier phase" — otherwise such rollbacks are impossible — SPEC updated: no
+- 2026-10-07 — Invalidation fallback is its own transition kind (earlier phase, status follows phase, version unchanged); reset steps count as produced by execution — §4.4 — SPEC updated: no
+- 2026-10-07 — Cascade and rollback invalidate drafts as well as locked versions (§4.3 lists only locked → invalidated) — a stale draft shouldn't stay approvable — SPEC updated: no
+- 2026-10-07 — Escalation gates are decided with continue/rollback/accept; "reject" on an escalation gate is INVALID_DECISION; rollback requires targetVersion — FR-14 — SPEC updated: no
+- 2026-10-07 — Rollback to v1 with no recorded transition restores refinement; check order INVALID_TARGET_VERSION → ROLLBACK_BLOCKED → RATE_LIMITED (with retry-after) — SPEC updated: no
+- 2026-10-07 — Review deterministic penalties: secret = critical, missing spec endpoint = major, dependency not on allowlist = major — §4.7 silent on severity — SPEC updated: no
+- 2026-10-07 — Guardian additions: UNSAFE_PATH (absolute, `..`, drive letters) error; protected paths matched case-insensitively; secret values never echoed — security — SPEC updated: no
+- 2026-10-07 — Next-step selection retries a `rejected` step before any new pending step; nothing is picked while a step is in progress (§4.9 one execution job per project) — SPEC updated: no
+- 2026-10-07 — Full §5 schema is created in phase 1 (one baseline migration), not split per phase — fewer serial migration steps, the model is fully specified — SPEC updated: no
+
+- 2026-10-07 — Any path with a `.git` segment is UNSAFE and rejected by plan validation and the Guardian even when declared (§4.6 says protected paths are allowed "unless declared") — prompt-injected plans could otherwise write git hooks/config and get code execution in the API pod — SPEC updated: no
+- 2026-10-07 — Rollback into a `release`-phase version is refused (INVALID_TARGET_VERSION) — it would leave the project in an unrecoverable `release/rolled_back` state — SPEC updated: no
+- 2026-10-07 — Review cycle: on `review_required` the review job creates the optimisation_plan draft and the phase stays `review`; approving that plan applies `review → execution` (requires plan locked, ≥1 step, working copy) — reconciles FR-39 ("re-enters execution") with FR-40 ("approved like any artifact") — SPEC updated: no
+- 2026-10-07 — Guardian rejects duplicate normalised produced paths — ambiguous content otherwise — SPEC updated: no
+- 2026-10-07 — One-click approval links only for spec_approval/plan_approval/pre_release gates; escalation notifications link to the project page (escalation needs continue/rollback/accept + target) — SPEC updated: no
+- 2026-10-07 — Review state persisted as `projects.review_cycle` (reset to 0 by rollback) and `projects.extra_review_cycles` (escalation "continue" adds one; effective max = max_review_cycles + extra); `compliance_reports.project_version` so only the current version's decision counts for release entry — §4.8 "review state is cleared" — SPEC updated: no
+- 2026-10-07 — Dead-letter retry (FR-51): the dead job becomes `retried` (new JobStatus value) and a new queued job with the same payload is created — §5 job status list lacked `retried` — SPEC updated: no
+- 2026-10-07 — DB guard for §4.9 "one execution job per project": partial unique index on jobs(project_id) where type='execution' and status in (queued, running) — SPEC updated: no
+- 2026-10-07 — Email uniqueness via citext column + unique index (plus Identity's normalized_email index); all tables plural snake_case; POCO entities in Aide.Domain/Entities, AppUser in Infrastructure — SPEC updated: no
+- 2026-10-07 — Extra columns beyond §5: job.locked_at/completed_at, project.last_rollback_at, agent_run.status/completed_at/output, approval_gate.target_version, execution_step.branch_name, compliance_report.escalation_reason, release.conflicting_files, project_git_settings.pull_request_url/number, notification_delivery.project_id/created_at/sent_at, created_at on api_tokens/project_members/approval_links — SPEC updated: no
+
 ## Known issues
 - kubeconform, oasdiff, actionlint not installed locally — schema validation skipped locally (CI runs kubeconform; actionlint was run via Docker) — install optionally — Ben
 - CI not yet run on GitHub (nothing pushed): Testcontainers on ubuntu-latest, SDK 10.0.401 install, Docker cache unverified — verify on first push — orchestrator
+- §2 mentions per-user notification preferences but §5 has no table — to be designed in phase 12 — orchestrator
+- Migrations need their own .editorconfig (generated_code) because the API image's build context is backend/ — fixed in phase 1 — —
 - Migration Job logs a harmless "Cannot load library libgssapi_krb5.so.2" (Npgsql Kerberos probe) — ignore — —
