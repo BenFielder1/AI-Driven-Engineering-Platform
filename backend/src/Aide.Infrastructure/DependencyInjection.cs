@@ -1,7 +1,10 @@
+using Aide.Infrastructure.Git;
+using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Aide.Infrastructure;
 
@@ -39,6 +42,30 @@ public static class DependencyInjection
 
             options.UseSnakeCaseNamingConvention();
         });
+
+        // LLM provider configuration (FR-22): defaults and which providers have a system key.
+        services.AddOptions<LlmOptions>()
+            .BindConfiguration(LlmOptions.SectionName)
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<LlmOptions>, LlmOptionsValidator>();
+        services.AddSingleton<ILlmProviderCatalog, LlmProviderCatalog>();
+
+        // Git providers (FR-10, FR-35) and working copies.
+        services.AddSingleton<IWorkspaceStore, WorkspaceStore>();
+        services.AddSingleton<IGitCli, GitCli>();
+        services.AddHttpClient(GitHubGitProvider.HttpClientName, (sp, client) =>
+        {
+            var configured = sp.GetRequiredService<IConfiguration>()[GitHubGitProvider.ApiBaseUrlKey];
+            var baseUrl = string.IsNullOrWhiteSpace(configured) ? GitHubGitProvider.DefaultApiBaseUrl : configured.Trim();
+            client.BaseAddress = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+            client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", GitHubGitProvider.ApiVersion);
+        });
+        services.AddScoped<IGitProvider, GitHubGitProvider>();
+        services.AddScoped<IGitProvider, LocalGitProvider>();
+        services.AddScoped<IGitProviderResolver, GitProviderResolver>();
 
         return services;
     }

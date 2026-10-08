@@ -260,10 +260,190 @@ export interface paths {
         patch: operations["ChangeUserSystemRole"];
         trace?: never;
     };
+    "/api/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's projects (every project for Admins), paged, with search by name, phase and status filters and sorting. */
+        get: operations["ListProjects"];
+        put?: never;
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. */
+        post: operations["CreateProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project (members and Admins; 404 for anyone else). */
+        get: operations["GetProject"];
+        put?: never;
+        post?: never;
+        /** Delete a project and everything it owns (Owner). */
+        delete: operations["DeleteProject"];
+        options?: never;
+        head?: never;
+        /** Edit name, approval mode, threshold and limits (Owner). 409 CONFLICT on a concurrent edit. */
+        patch: operations["UpdateProject"];
+        trace?: never;
+    };
+    "/api/projects/{id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Phase, status, version, artifact summary, execution counts, review state and pending gates (members). */
+        get: operations["GetProjectState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's members (members and Admins). */
+        get: operations["ListMembers"];
+        put?: never;
+        /** Add an existing user by email (Owner). 404 USER_NOT_FOUND for an unknown email, 409 CONFLICT if already a member. */
+        post: operations["AddMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a member (Owner), or leave the project (any member removing themselves). The last Owner can't be removed (409 LAST_OWNER). */
+        delete: operations["RemoveMember"];
+        options?: never;
+        head?: never;
+        /** Change a member's role (Owner). The last Owner can't be demoted (409 LAST_OWNER). */
+        patch: operations["UpdateMemberRole"];
+        trace?: never;
+    };
+    "/api/projects/{id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Git, LLM and notification settings with secrets as set / not set flags (Owner). */
+        get: operations["GetProjectSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/git": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. */
+        patch: operations["UpdateGitSettings"];
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/llm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update the LLM provider, models and optional project API key (Owner). */
+        patch: operations["UpdateLlmSettings"];
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Replace the notification channels (Owner). Slack/Teams webhook URLs are secrets (sent in secret, returned masked). A channel sent with its id and no secret keeps its saved secret. */
+        patch: operations["UpdateNotificationSettings"];
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/git/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test the saved Git settings: repo reachable, writable, default branch exists (Owner). Never changes settings. */
+        post: operations["TestGitConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Adds an existing user by email (FR-8). */
+        AddMemberRequest: {
+            email: string;
+            role: components["schemas"]["ProjectRole"];
+        };
         /** @description A user as shown on the admin users page. */
         AdminUserDto: {
             /** Format: uuid */
@@ -275,6 +455,14 @@ export interface components {
             githubLinked: boolean;
             /** Format: date-time */
             createdAt: string;
+        };
+        /** @description Model id per agent; an omitted or `null` agent uses the default model. */
+        AgentModelsDto: {
+            ideaRefinement?: null | string;
+            specGenerator?: null | string;
+            planGenerator?: null | string;
+            codeGenerator?: null | string;
+            codeReview?: null | string;
         };
         /** @description A personal API token as listed (never includes the token or its hash). */
         ApiTokenDto: {
@@ -290,6 +478,24 @@ export interface components {
             /** Format: date-time */
             revokedAt: null | string;
         };
+        /**
+         * @description Project approval mode (§4.2).
+         * @enum {unknown}
+         */
+        ApprovalMode: "strict" | "advisory" | "autonomous";
+        /** @description Latest and current locked version of one artifact type (§6 project state). */
+        ArtifactStateDto: {
+            type: components["schemas"]["ArtifactType"];
+            /** Format: int32 */
+            latestVersion: null | number;
+            latestStatus: null | components["schemas"]["ArtifactStatus"];
+            /** Format: int32 */
+            currentLockedVersion: null | number;
+        };
+        /** @enum {unknown} */
+        ArtifactStatus: "draft" | "locked" | "rejected" | "superseded" | "invalidated" | "corrupted" | null;
+        /** @enum {unknown} */
+        ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
         /** @description Which sign-in providers are available (the frontend hides GitHub when it isn't configured). */
         AuthProvidersDto: {
             github: boolean;
@@ -305,6 +511,33 @@ export interface components {
              */
             expiresAt?: null | string;
         };
+        /** @description Git step of the new-project wizard (FR-5, FR-35). */
+        CreateProjectGitRequest: {
+            provider: components["schemas"]["GitProvider"];
+            /** @description Required for `github`: `https://github.com/OWNER/REPO`, optionally ending in `.git`. */
+            repoUrl?: null | string;
+            defaultBranch?: string;
+            /** @description GitHub access token (`github` only). Stored encrypted and never returned. */
+            token?: null | string;
+        };
+        /** @description The new-project wizard (FR-5). Omitted settings take the FR-5 defaults. */
+        CreateProjectRequest: {
+            name: string;
+            idea: string;
+            approvalMode?: components["schemas"]["ApprovalMode"];
+            /** Format: double */
+            complianceThreshold?: number;
+            /** Format: int32 */
+            maxFilesPerStep?: number;
+            /** Format: int32 */
+            maxReviewCycles?: number;
+            /**
+             * Format: int64
+             * @description Token budget (at least 1000); `null` or omitted means unlimited.
+             */
+            tokenBudget?: null | number;
+            git: components["schemas"]["CreateProjectGitRequest"];
+        };
         /** @description A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again. */
         CreatedApiTokenDto: {
             /** Format: uuid */
@@ -313,6 +546,55 @@ export interface components {
             token: string;
             /** Format: date-time */
             expiresAt: null | string;
+        };
+        /** @enum {unknown} */
+        DriftLevel: "none" | "low" | "moderate" | "severe" | null;
+        /** @description Step counts of the current plan version. */
+        ExecutionCountsDto: {
+            /** Format: int32 */
+            total: number;
+            /** Format: int32 */
+            pending: number;
+            /** Format: int32 */
+            inProgress: number;
+            /** Format: int32 */
+            completed: number;
+            /** Format: int32 */
+            rejected: number;
+            /** Format: int32 */
+            blocked: number;
+        };
+        /** @description A pending approval gate. */
+        GateSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["GateType"];
+            /** Format: date-time */
+            createdAt: string;
+            overdue: boolean;
+        };
+        /** @enum {unknown} */
+        GateType: "spec_approval" | "plan_approval" | "pre_release" | "escalation";
+        /**
+         * @description Git provider of a project (FR-35). Wire values: `github`, `local`.
+         * @enum {unknown}
+         */
+        GitProvider: "github" | "local";
+        /** @description Git settings (FR-9, FR-35). The token is never returned, only `hasToken`. `branchName` is the project branch, once the working copy has been prepared. */
+        GitSettingsDto: {
+            provider: components["schemas"]["GitProvider"];
+            repoUrl: null | string;
+            defaultBranch: string;
+            branchName: null | string;
+            hasToken: boolean;
+        };
+        /** @description Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false. */
+        GitTestResultDto: {
+            ok: boolean;
+            reachable: boolean;
+            writable: boolean;
+            defaultBranchExists: boolean;
+            reason: null | string;
         };
         HealthCheckEntry: {
             name: string;
@@ -342,10 +624,90 @@ export interface components {
             /** @description Individual reasons, when there are several. */
             details?: string[];
         };
+        /**
+         * @description LLM provider (FR-22). Wire values: `anthropic`, `openai`, `ollama`, `fake`.
+         * @enum {unknown}
+         */
+        LlmProvider: "anthropic" | "openai" | "ollama" | "fake";
+        /** @description Whether a provider can be used: a system key is configured or the project has its own key (Ollama and Fake are always configured). */
+        LlmProviderStatusDto: {
+            provider: components["schemas"]["LlmProvider"];
+            configured: boolean;
+            defaultModel: string;
+        };
+        /** @description LLM settings (FR-9, FR-22). The API key is never returned, only `hasApiKey`. `providers` lists every provider with whether it's usable and its system default model. */
+        LlmSettingsDto: {
+            provider: components["schemas"]["LlmProvider"];
+            defaultModel: string;
+            modelsByAgent: components["schemas"]["AgentModelsDto"];
+            hasApiKey: boolean;
+            providers: components["schemas"]["LlmProviderStatusDto"][];
+        };
         /** @description FR-1 sign-in. */
         LoginRequest: {
             email: string;
             password: string;
+        };
+        /** @description A project member (FR-8). */
+        MemberDto: {
+            /** Format: uuid */
+            userId: string;
+            email: string;
+            name: string;
+            avatarUrl: null | string;
+            role: components["schemas"]["ProjectRole"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /**
+         * @description A notification channel (FR-47). Secrets are never returned, only `hasSecret`. For `email` and
+         *     `webhook`, `target` is the saved address or URL and the secret is a webhook's HMAC signing key. For
+         *     `slack` and `teams`, the incoming-webhook URL is itself the secret (a bearer credential): it is stored
+         *     encrypted, `target` is only a masked display value (host only, e.g. `hooks.slack.com/…`) and
+         *     `hasSecret` is `true` once a URL is saved.
+         */
+        NotificationChannelDto: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["NotificationChannelType"];
+            target: string;
+            hasSecret: boolean;
+            events: components["schemas"]["NotificationEvent"][];
+        };
+        /** @description A channel in a notification settings update. */
+        NotificationChannelInput: {
+            /**
+             * Format: uuid
+             * @description The id of an existing channel to keep (its secret, or Slack/Teams URL, is kept unless a new one or `clearSecret` is sent, or the type changes); omit for a new channel.
+             */
+            id?: null | string;
+            type: components["schemas"]["NotificationChannelType"];
+            /**
+             * @description Email address (email) or https URL (webhook); required for both. For slack and teams the URL is sent in
+             *     `secret` and `target` may be omitted or echo the masked value; an absolute URL sent here is still
+             *     accepted as the incoming-webhook URL (older clients) and treated as a secret.
+             */
+            target?: null | string;
+            /**
+             * @description The channel secret, stored encrypted and never returned: the HMAC signing key (webhook) or the https
+             *     incoming-webhook URL (slack, teams; required for a new channel). Email channels have none.
+             */
+            secret?: null | string;
+            clearSecret?: boolean;
+            events: components["schemas"]["NotificationEvent"][];
+        };
+        /**
+         * @description Project notification channel types (FR-47).
+         * @enum {unknown}
+         */
+        NotificationChannelType: "email" | "slack" | "teams" | "webhook";
+        /**
+         * @description Events a notification channel can subscribe to (FR-47). Wire values are snake_case.
+         * @enum {unknown}
+         */
+        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback";
+        NotificationSettingsDto: {
+            channels: components["schemas"]["NotificationChannelDto"][];
         };
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfAdminUserDto: {
@@ -357,6 +719,21 @@ export interface components {
             /** Format: int32 */
             total: number;
         };
+        /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
+        PagedResultOfProjectSummaryDto: {
+            items: components["schemas"]["ProjectSummaryDto"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            limit: number;
+            /** Format: int32 */
+            total: number;
+        };
+        /**
+         * @description The six lifecycle phases, in order (§4.1). Stored as snake_case strings.
+         * @enum {unknown}
+         */
+        Phase: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
         ProblemDetails: {
             type?: null | string;
             title?: null | string;
@@ -371,6 +748,79 @@ export interface components {
             /** @description Individual reasons, when there are several. */
             details?: string[];
         };
+        /** @description A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null` for an Admin who isn't a member); a `null` `tokenBudget` means unlimited. */
+        ProjectDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            slug: string;
+            idea: string;
+            currentPhase: components["schemas"]["Phase"];
+            status: components["schemas"]["ProjectStatus"];
+            /** Format: int32 */
+            projectVersion: number;
+            approvalMode: components["schemas"]["ApprovalMode"];
+            /** Format: double */
+            complianceThreshold: number;
+            /** Format: int32 */
+            maxFilesPerStep: number;
+            /** Format: int32 */
+            maxReviewCycles: number;
+            /** Format: int64 */
+            tokenBudget: null | number;
+            /** Format: int64 */
+            tokensUsed: number;
+            executionPaused: boolean;
+            myRole: null | components["schemas"]["ProjectRole"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @enum {unknown} */
+        ProjectRole: "viewer" | "contributor" | "owner" | null;
+        /** @description All project settings with secrets as set / not set flags (FR-9). */
+        ProjectSettingsDto: {
+            git: components["schemas"]["GitSettingsDto"];
+            llm: components["schemas"]["LlmSettingsDto"];
+            notifications: components["schemas"]["NotificationSettingsDto"];
+        };
+        /** @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). */
+        ProjectStateDto: {
+            /** Format: uuid */
+            projectId: string;
+            phase: components["schemas"]["Phase"];
+            status: components["schemas"]["ProjectStatus"];
+            /** Format: int32 */
+            projectVersion: number;
+            executionPaused: boolean;
+            artifacts: components["schemas"]["ArtifactStateDto"][];
+            execution: components["schemas"]["ExecutionCountsDto"];
+            review: components["schemas"]["ReviewStateDto"];
+            pendingGates: components["schemas"]["GateSummaryDto"][];
+        };
+        /**
+         * @description Project status (§4.1: status follows phase; `released` and `rolled_back` are special).
+         * @enum {unknown}
+         */
+        ProjectStatus: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back";
+        /** @description A row of the projects list (FR-6). `myRole` is `null` for an Admin who isn't a member. */
+        ProjectSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            slug: string;
+            currentPhase: components["schemas"]["Phase"];
+            status: components["schemas"]["ProjectStatus"];
+            /** Format: int32 */
+            projectVersion: number;
+            approvalMode: components["schemas"]["ApprovalMode"];
+            myRole: null | components["schemas"]["ProjectRole"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         /** @description FR-1 registration. */
         RegisterRequest: {
             email: string;
@@ -379,7 +829,64 @@ export interface components {
             password: string;
         };
         /** @enum {unknown} */
+        ReviewDecision: "release_eligible" | "review_required" | "escalation_required" | null;
+        /** @description Review cycle progress and the latest compliance result. `maxCycles` includes extra cycles granted by escalations. */
+        ReviewStateDto: {
+            /** Format: int32 */
+            cycle: number;
+            /** Format: int32 */
+            maxCycles: number;
+            /** Format: double */
+            latestScore: null | number;
+            latestDecision: null | components["schemas"]["ReviewDecision"];
+            driftLevel: null | components["schemas"]["DriftLevel"];
+        };
+        /** @enum {unknown} */
         SystemRole: "user" | "admin";
+        /** @description Partial update of the Git settings. Omitted fields are unchanged. */
+        UpdateGitSettingsRequest: {
+            provider?: null | components["schemas"]["GitProvider"];
+            /** @description Required when the provider is (or becomes) `github`. */
+            repoUrl?: null | string;
+            defaultBranch?: null | string;
+            /** @description Sets the access token. To remove it, send `clearToken: true`. */
+            token?: null | string;
+            clearToken?: boolean;
+        };
+        /** @description Partial update of the LLM settings. Omitted fields are unchanged; `modelsByAgent`, when sent, replaces the map. */
+        UpdateLlmSettingsRequest: {
+            provider?: null | components["schemas"]["LlmProvider"];
+            defaultModel?: null | string;
+            modelsByAgent?: null | components["schemas"]["AgentModelsDto"];
+            /** @description Sets the project's own API key. To remove it, send `clearApiKey: true`. */
+            apiKey?: null | string;
+            clearApiKey?: boolean;
+        };
+        UpdateMemberRoleRequest: {
+            role: components["schemas"]["ProjectRole"];
+        };
+        /** @description Replaces the project's notification channels (FR-47). */
+        UpdateNotificationSettingsRequest: {
+            channels: components["schemas"]["NotificationChannelInput"][];
+        };
+        /** @description Partial update of a project (FR-7). Omitted fields are unchanged. */
+        UpdateProjectRequest: {
+            name?: null | string;
+            approvalMode?: null | components["schemas"]["ApprovalMode"];
+            /** Format: double */
+            complianceThreshold?: null | number;
+            /** Format: int32 */
+            maxFilesPerStep?: null | number;
+            /** Format: int32 */
+            maxReviewCycles?: null | number;
+            /**
+             * Format: int64
+             * @description Sets the token budget (at least 1000). To remove the budget, send `clearTokenBudget: true`.
+             */
+            tokenBudget?: null | number;
+            /** @description `true` removes the token budget (unlimited). Can't be combined with `tokenBudget`. */
+            clearTokenBudget?: boolean;
+        };
         /** @description The signed-in user (or a user, for admins). */
         UserDto: {
             /** Format: uuid */
@@ -985,6 +1492,825 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListProjects: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+                search?: string;
+                phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+                status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back";
+                sortBy?: "created" | "updated" | "name";
+                sortOrder?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagedResultOfProjectSummaryDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetProjectState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectStateDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AddMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RemoveMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateMemberRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMemberRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetProjectSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSettingsDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateGitSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGitSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitSettingsDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateLlmSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLlmSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmSettingsDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateNotificationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateNotificationSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettingsDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestGitConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitTestResultDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

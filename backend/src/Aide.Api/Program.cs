@@ -3,9 +3,11 @@ using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Admin;
 using Aide.Api.Features.Auth;
+using Aide.Api.Features.Projects;
 using Aide.Api.Features.Tokens;
 using Aide.Api.Health;
 using Aide.Api.Json;
+using Aide.Api.Seed;
 using Aide.Infrastructure;
 using Aide.Infrastructure.Security;
 using Npgsql;
@@ -71,12 +73,28 @@ builder.Services.AddOpenApi(options =>
         return Task.CompletedTask;
     });
     options.AddSchemaTransformer<ProblemDetailsSchemaTransformer>();
+    options.AddSchemaTransformer<WireEnumSchemaTransformer>();
+    // XML-doc descriptions carry the source file's line endings; normalise them so api.json is identical on Windows and CI.
+    options.AddSchemaTransformer((schema, _, _) =>
+    {
+        schema.Description = schema.Description?.ReplaceLineEndings("\n");
+        return Task.CompletedTask;
+    });
+    options.AddOperationTransformer((operation, _, _) =>
+    {
+        operation.Summary = operation.Summary?.ReplaceLineEndings("\n");
+        operation.Description = operation.Description?.ReplaceLineEndings("\n");
+        return Task.CompletedTask;
+    });
 });
 builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddAideInfrastructure();
 builder.Services.AddAideDataProtection(builder.Configuration);
 builder.AddAideAuth();
+builder.Services.AddScoped<ProjectCreator>();
+builder.Services.AddOptions<SeedOptions>().BindConfiguration(SeedOptions.SectionName);
+builder.Services.AddHostedService<DevSeeder>();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseReadyHealthCheck>("database", tags: [HealthEndpoints.ReadyTag]);
 
@@ -95,6 +113,9 @@ app.MapHealthEndpoints();
 app.MapAuthEndpoints();
 app.MapApiTokenEndpoints();
 app.MapAdminUserEndpoints();
+app.MapProjectEndpoints();
+app.MapProjectMemberEndpoints();
+app.MapProjectSettingsEndpoints();
 
 await app.RunAsync();
 

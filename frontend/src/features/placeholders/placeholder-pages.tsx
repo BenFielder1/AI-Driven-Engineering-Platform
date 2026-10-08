@@ -2,16 +2,6 @@ import { EmptyState, ForbiddenState, PageHeader } from '../../components/ui/stat
 import { canViewAdmin } from '../../lib/permissions'
 import { useCurrentUser } from '../auth/auth-api'
 
-/** /projects. Placeholder until the projects feature lands (phase 3). */
-export function ProjectsPage() {
-  return (
-    <>
-      <PageHeader title="Projects" />
-      <EmptyState title="Projects are coming soon">The projects list arrives in the next phase.</EmptyState>
-    </>
-  )
-}
-
 /** /notifications. Placeholder until notifications land. */
 export function NotificationsPage() {
   return (

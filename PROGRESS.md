@@ -17,12 +17,12 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-2 | GitHub sign-in and linking | 3 | both | 2 | done | GitHub OAuth (fake handler tests), hidden when unconfigured |
 | FR-3 | First user Admin; admins change roles | 3 | both | 2 | partial | first-user admin + PATCH /api/admin/users/{id}/role (admin UI phase 13) |
 | FR-4 | Personal API tokens (hash stored) | 3 | both | 2 | done | /api/me/tokens + bearer scheme + Account page; e2e |
-| FR-5 | Project wizard, defaults, PROJECT_CREATED | 3 | both | 3 | todo | — |
-| FR-6 | Projects list: paging, search, filters, sort, membership | 3 | both | 3 | todo | — |
-| FR-7 | Edit / delete project (owner) | 3 | both | 3 | todo | — |
-| FR-8 | Members and roles, last-owner rule | 3 | both | 3 | todo | — |
-| FR-9 | Persisted encrypted Git/LLM/notification settings | 3 | both | 3 | todo | — |
-| FR-10 | Git connection test | 3 | both | 3 | todo | — |
+| FR-5 | Project wizard, defaults, PROJECT_CREATED | 3 | both | 3 | done | POST /api/projects + wizard; slug/defaults/PROJECT_CREATED; FR5_* tests |
+| FR-6 | Projects list: paging, search, filters, sort, membership | 3 | both | 3 | done | GET /api/projects paging/search/filters/sort; list page; FR6_* tests |
+| FR-7 | Edit / delete project (owner) | 3 | both | 3 | done | PATCH/DELETE project (owner); danger zone; FR7_* tests |
+| FR-8 | Members and roles, last-owner rule | 3 | both | 3 | done | members endpoints, LAST_OWNER row lock; members tab; FR8_* tests |
+| FR-9 | Persisted encrypted Git/LLM/notification settings | 3 | both | 3 | done | git/llm/notification settings, Data Protection-encrypted secrets (incl. Slack/Teams URLs); FR9_* tests |
+| FR-10 | Git connection test | 3 | both | 3 | done | POST …/settings/git/test (GitHub fake handler + Local); ok on k8s; FR10_* tests |
 | FR-11 | Phase changes only via state machine + transition + event | 3, 4.1 | backend | 1, 4 | todo | — |
 | FR-12 | Advance request; gate per approval mode | 3, 4.2 | both | 1, 4 | todo | — |
 | FR-13 | Approve/reject gates; rejection re-runs producer | 3, 4.2 | both | 4 | todo | — |
@@ -72,7 +72,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | NFR-A11Y | WCAG 2.2 AA core flows, both themes | 8 | frontend | 2+ | todo | — |
 | NFR-TEST | Domain unit tests, endpoint integration tests, Fake+Local E2E | 8 | both | all | todo | — |
 | DEP-1 | Docker Desktop k8s deploy at :8080, ns `aide`, db/api/web/db-migrate, aide-data PVC, WS proxy | 9 | deploy | 0, 14 | partial | skeleton deployed, smoke ✓ (phase 0) |
-| DEP-2 | Dev seed: admin + demo project (Fake + Local) | 9 | backend | 3 | todo | — |
+| DEP-2 | Dev seed: admin + demo project (Fake + Local) | 9 | backend | 3 | done | DevSeeder (admin@aide.local + Fake/Local demo, marker event); on in dev + k8s overlay; DEP2_* tests; verified on k8s |
 
 ## Phases
 - [x] 0 Walking skeleton (base: 581a8d6) — IDs: DEP-1 (skeleton), NFR-OBS (health)
@@ -87,7 +87,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
   - [x] aspnet-engineer (auth, ProblemDetails, first contract — 884 tests)
   - [x] vite-react-engineer (shell, theme, nav, login/register, account tokens, generated client)
   - [x] gate · review (1 Major, 4 Minor — all fixed) · redeploy · E2E on k8s 4/4 · commit
-- [ ] 3 M1 Projects — IDs: FR-5–FR-10, DEP-2
+- [x] 3 M1 Projects (base: 6d96fc9) — IDs: FR-5–FR-10, DEP-2
+  - [x] aspnet-engineer (projects, members, settings, git test, LLM catalog, dev seed) ‖ vite-react-engineer (list, wizard, overview, settings tabs) — resumed from an uncommitted tree; 5 failing integration tests fixed
+  - [x] gate · review (0 Critical, 5 Major, 6 Minor — all Major fixed; Minors fixed except SSRF/model IDs → Known issues) · redeploy (smoke ✓, seed ✓, Local git test ✓) · E2E on k8s 4/4 · commit
 - [ ] 4 M2 Lifecycle, gates, jobs, events — IDs: FR-11–FR-14, FR-50, NFR-REL (job worker/outbox)
 - [ ] 5 M2 Artifacts + live updates — IDs: FR-16–FR-21, FR-46
 - [ ] 6 M3 Agent infrastructure — IDs: FR-22–FR-26
@@ -154,6 +156,15 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-07 — 405/415 responses carry errorCode VALIDATION; GitHub create racing an existing email → reason=link_required; concurrent link of the same GitHub id → reason=already_linked — SPEC updated: no
 - 2026-10-07 — A failed GitHub *link* lands on /account?error=… (the SPA forwards from /login) — SPEC updated: no
 
+- 2026-10-08 — Validation errors from both ASP.NET's built-in validation and domain rules use camelCase wire keys (`name`, `git.repoUrl`, `channels[0].target`) — consistency with the wire format — SPEC updated: no
+- 2026-10-08 — Project slugs fold Latin-1/Latin Extended-A with an explicit table (ß→ss, æ→ae, œ→oe…) instead of Unicode normalisation, because the app runs with InvariantGlobalization — SPEC updated: no
+- 2026-10-08 — Slack/Teams incoming-webhook URLs are secrets: Data Protection-encrypted, sent in `secret`, returned only as a host-masked `target` + `hasSecret`, kept/replaced by channel id. Old stack stored them as plain targets — NFR-SEC — SPEC updated: no
+- 2026-10-08 — Switching a project's Git provider to local drops the saved GitHub token; the Local connection-test failure reason omits the server workspace path (logged only) — security — SPEC updated: no
+- 2026-10-08 — Dev seed (DEP-2) records a `DEMO_PROJECT_SEEDED` event; check + create run in one transaction under the advisory lock, so a deleted demo project is never recreated. Seed is gated only by `Seed:Enabled` (true in appsettings.Development.json and the k8s local overlay); the generated admin password is logged once at Warning — SPEC updated: no
+- 2026-10-08 — LLM config shape is `Llm:DefaultProvider` + `Llm:Providers:{Anthropic|OpenAI|Ollama|Fake}:{ApiKey,BaseUrl,DefaultModel,Models:{<agent>}}` (supersedes the `Llm:Defaults` wording in §11 Q4 and the earlier secret-name list: env names are `Llm__Providers__Anthropic__ApiKey`, `Llm__Providers__OpenAI__ApiKey`, `Llm__Providers__Ollama__BaseUrl`) — SPEC updated: no
+- 2026-10-08 — API image installs `git` (Local Git provider) with HOME=/tmp and GIT_CONFIG_NOSYSTEM=1 for the non-root, read-only-root-FS pod — SPEC updated: no
+- 2026-10-08 — OpenAPI descriptions are line-ending-normalised (LF) by a schema/operation transformer so api.json generated on Windows matches CI — SPEC updated: no
+
 ## Known issues
 - kubeconform, oasdiff, actionlint not installed locally — schema validation skipped locally (CI runs kubeconform; actionlint was run via Docker) — install optionally — Ben
 - CI not yet run on GitHub (nothing pushed): Testcontainers on ubuntu-latest, SDK 10.0.401 install, Docker cache unverified — verify on first push — orchestrator
@@ -161,3 +172,6 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - Migrations need their own .editorconfig (generated_code) because the API image's build context is backend/ — fixed in phase 1 — —
 - E2E on k8s registers users in the persistent k8s DB; the first one became Admin there. Phase 3 dev seed must cope with an existing admin; E2E may need higher auth rate limits as specs grow — orchestrator
 - Migration Job logs a harmless "Cannot load library libgssapi_krb5.so.2" (Npgsql Kerberos probe) — ignore — —
+- Webhook/Slack/Teams targets accept any https host (incl. private/loopback ranges); notification delivery (phase 12) must block private/link-local addresses at send time to avoid SSRF from the API pod — orchestrator (phase 12)
+- appsettings.json LLM model IDs are placeholders until phase 6 confirms them from provider docs and picks one naming style — orchestrator (phase 6)
+- The seed admin password is logged only by the pod that creates the account; after a redeploy the log line is gone, so note it on first deploy — documented in deploy-local.sh output — —

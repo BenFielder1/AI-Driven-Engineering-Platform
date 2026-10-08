@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 
 import { Button } from './button'
 
@@ -10,6 +10,10 @@ interface ConfirmDialogProps {
   pendingLabel?: string
   pending?: boolean
   destructive?: boolean
+  /** Keeps the confirm button disabled (e.g. until the typed project name matches). */
+  confirmDisabled?: boolean
+  /** Element to focus on open instead of Cancel (e.g. a confirmation input). */
+  initialFocusRef?: RefObject<HTMLElement | null>
   onConfirm: () => void
   onCancel: () => void
 }
@@ -28,6 +32,8 @@ export function ConfirmDialog({
   pendingLabel,
   pending = false,
   destructive = false,
+  confirmDisabled = false,
+  initialFocusRef,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -41,11 +47,12 @@ export function ConfirmDialog({
       return undefined
     }
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    cancelRef.current?.focus()
+    const target = initialFocusRef?.current ?? cancelRef.current
+    target?.focus()
     return () => {
       opener?.focus()
     }
-  }, [open])
+  }, [open, initialFocusRef])
 
   if (!open) {
     return null
@@ -103,6 +110,7 @@ export function ConfirmDialog({
           <Button
             variant={destructive ? 'danger' : 'primary'}
             onClick={onConfirm}
+            disabled={confirmDisabled}
             pending={pending}
             pendingLabel={pendingLabel}
           >

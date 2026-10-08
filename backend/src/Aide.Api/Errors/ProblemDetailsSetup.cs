@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Aide.Domain.Common;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +16,11 @@ public static class ProblemDetailsSetup
         services.AddProblemDetails(options => options.CustomizeProblemDetails = context =>
         {
             var problem = context.ProblemDetails;
+            if (problem is HttpValidationProblemDetails validation)
+            {
+                CamelCaseErrorKeys(validation.Errors);
+            }
+
             problem.Extensions[ApiProblems.TraceIdKey] = Activity.Current?.Id ?? context.HttpContext.TraceIdentifier;
 
             var status = problem.Status ?? context.HttpContext.Response.StatusCode;
@@ -25,6 +31,27 @@ public static class ProblemDetailsSetup
         });
         services.AddExceptionHandler<GlobalExceptionHandler>();
         return services;
+    }
+
+    /// <summary>
+    /// Validation error keys name fields as they appear on the wire: camelCase per path segment
+    /// (<c>Git.RepoUrl</c> → <c>git.repoUrl</c>, <c>Channels[0].Target</c> → <c>channels[0].target</c>). The built-in
+    /// endpoint validation keys errors by CLR property name; domain validation already uses wire names.
+    /// </summary>
+    internal static void CamelCaseErrorKeys(IDictionary<string, string[]> errors)
+    {
+        foreach (var key in errors.Keys.ToList())
+        {
+            var wireKey = string.Join('.', key.Split('.').Select(JsonNamingPolicy.CamelCase.ConvertName));
+            if (wireKey == key)
+            {
+                continue;
+            }
+
+            var messages = errors[key];
+            errors.Remove(key);
+            errors[wireKey] = errors.TryGetValue(wireKey, out var existing) ? [.. existing, .. messages] : messages;
+        }
     }
 }
 

@@ -32,11 +32,19 @@ RUN RID="linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')" \
       --project src/Aide.Infrastructure --startup-project src/Aide.Api -o /app/efbundle
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+# git: required by the Local Git provider and project working copies (/data/workspaces).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .
 COPY --from=build /app/efbundle /app/efbundle
+# The pod runs with a read-only root FS; /tmp is a writable emptyDir. HOME=/tmp gives git (and .NET) a writable
+# home for ~/.gitconfig; GIT_CONFIG_NOSYSTEM skips /etc/gitconfig so only the app's own config applies.
 ENV ASPNETCORE_HTTP_PORTS=8080 \
-    DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp
+    DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp \
+    HOME=/tmp \
+    GIT_CONFIG_NOSYSTEM=1
 USER $APP_UID
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "Aide.Api.dll"]

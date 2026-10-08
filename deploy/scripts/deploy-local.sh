@@ -50,6 +50,11 @@ for key in POSTGRES_PASSWORD ConnectionStrings__Aide; do
 done
 grep -qE '^(POSTGRES_PASSWORD=change-me|Approvals__SigningKey=change-me)$' "$SECRETS_FILE" \
   && die "$SECRETS_FILE still contains 'change-me' placeholders. Set real values (POSTGRES_PASSWORD must match the password in ConnectionStrings__Aide and, if the DB volume exists, the database's current password)."
+# Pre-phase-3 key names bind to nothing (the backend reads Llm:Providers:<Name>:ApiKey). Warn, never rewrite values.
+if grep -qE '^Llm__(Anthropic|OpenAI)__ApiKey=' "$SECRETS_FILE"; then
+  warn "$SECRETS_FILE uses old LLM key names (Llm__Anthropic__ApiKey / Llm__OpenAI__ApiKey), which the API ignores.
+       Rename them to Llm__Providers__Anthropic__ApiKey / Llm__Providers__OpenAI__ApiKey (see secrets.env.example)."
+fi
 git check-ignore -q "$SECRETS_FILE" || die "$SECRETS_FILE is not git-ignored. Refusing to continue."
 
 # ---------------------------------------------------------------------------
@@ -154,3 +159,8 @@ step "Smoke test"
 "$REPO_ROOT/deploy/scripts/smoke.sh"
 
 step "Deployed $TAG -> http://localhost:$APP_PORT"
+# DEP-2: the overlay sets Seed__Enabled=true. The api logs the generated admin password ONCE (Warning) when it
+# first creates admin@aide.local; later restarts don't log it again (the account is never reset).
+info "Seed admin: admin@aide.local (demo project: 'Demo: Todo API'). Its generated password is logged once, on first start:"
+info "  kubectl --context $CTX -n $NS logs deploy/api | grep -i 'Seeded admin'"
+info "  (only the pod that created the account has it; after a container restart add --previous; after a redeploy it is gone)"

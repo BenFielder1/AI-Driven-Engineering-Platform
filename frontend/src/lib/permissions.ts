@@ -13,8 +13,8 @@ export const canViewAdmin = isAdmin
 /** FR-3: only admins change system roles. */
 export const canChangeSystemRoles = isAdmin
 
-/** SPEC §2: per-project roles. (Not in the contract yet; projects arrive in a later phase.) */
-export type ProjectRole = 'owner' | 'contributor' | 'viewer'
+/** SPEC §2: per-project roles (the contract's `ProjectRole`, without its `null`). */
+export type ProjectRole = NonNullable<Schemas['ProjectRole']>
 
 export type ProjectCapability =
   | 'view'
@@ -74,4 +74,18 @@ export function canInProject(
 /** Writer = Contributor or Owner (SPEC §6). */
 export function isWriter(role: ProjectRole | null | undefined): boolean {
   return role === 'owner' || role === 'contributor'
+}
+
+/**
+ * The role the UI acts with in a project: the caller's membership role (`ProjectDto.myRole`), or Owner-equivalent
+ * for an Admin who isn't a member (SPEC §2 Admin row). `null` means no access.
+ */
+export function effectiveProjectRole(
+  user: User | null | undefined,
+  myRole: ProjectRole | null | undefined,
+): ProjectRole | null {
+  if (myRole) {
+    return myRole
+  }
+  return isAdmin(user) ? 'owner' : null
 }

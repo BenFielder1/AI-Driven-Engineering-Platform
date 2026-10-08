@@ -22,7 +22,7 @@ export const authDb = {
 }
 
 let idCounter = 0
-const nextId = () => {
+export const nextId = () => {
   idCounter += 1
   return `00000000-0000-7000-8000-${String(idCounter).padStart(12, '0')}`
 }
@@ -78,7 +78,8 @@ export function seedToken(overrides: Partial<Token> = {}): Token {
   return token
 }
 
-function currentUser(): StoredUser | undefined {
+/** The signed-in mock user, if any. */
+export function currentUser(): StoredUser | undefined {
   return authDb.users.find((u) => u.id === authDb.currentUserId)
 }
 
@@ -88,10 +89,10 @@ function issueXsrf() {
   document.cookie = `${XSRF_COOKIE}=${authDb.validXsrf}; path=/`
 }
 
-const unauthenticated = () => problem(401, 'UNAUTHENTICATED', 'Sign in to continue.')
+export const unauthenticated = () => problem(401, 'UNAUTHENTICATED', 'Sign in to continue.')
 
 /** Cookie-authenticated mutations need a valid X-XSRF-TOKEN (as the real API). */
-function antiforgeryFailure(request: Request) {
+export function antiforgeryFailure(request: Request) {
   if (authDb.currentUserId && request.headers.get(XSRF_HEADER) !== authDb.validXsrf) {
     return problem(403, 'ANTIFORGERY', 'The request is missing a valid antiforgery token.')
   }

@@ -104,7 +104,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
             db.ProjectNotificationSettings.Add(new ProjectNotificationSettings
             {
                 ProjectId = project.Id,
-                Channels = [new NotificationChannelConfig(NotificationChannelType.Slack, "https://hooks.slack.test/x", null, ["gate_required"])],
+                Channels = [new NotificationChannelConfig(Guid.CreateVersion7(), NotificationChannelType.Slack, "https://hooks.slack.test/x", null, ["gate_required"])],
             });
             db.ApiTokens.Add(new ApiToken { UserId = user.Id, Name = "cli", TokenHash = Hash(), CreatedAt = Now });
             db.Artifacts.Add(plan);

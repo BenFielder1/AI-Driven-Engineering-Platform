@@ -18,8 +18,12 @@ public sealed record CategoryScoreEntry(ReviewCategory Category, decimal Score, 
 /// <summary>A drift area reported by the review agent (§4.7).</summary>
 public sealed record DriftAreaEntry(string Area, Severity Severity, string Description);
 
-/// <summary>A configured project notification channel (FR-47). The secret is encrypted with Data Protection.</summary>
+/// <summary>A configured project notification channel (FR-47). The secret is encrypted with Data Protection: the
+/// HMAC signing key of a webhook, or the incoming-webhook URL of a Slack or Teams channel (a bearer credential), whose
+/// <see cref="Target"/> then only holds the masked display form (<c>hooks.slack.com/…</c>). <see cref="Id"/>
+/// identifies the channel across settings updates (a kept channel keeps its secret).</summary>
 public sealed record NotificationChannelConfig(
+    Guid Id,
     NotificationChannelType Type,
     string Target,
     string? SecretEncrypted,

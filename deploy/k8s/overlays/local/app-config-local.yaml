@@ -1,0 +1,8 @@
+# Local (Docker Desktop) settings merged into base app-config. Not in base: other environments never seed.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  # DEP-2: seed admin@aide.local (generated password logged once at Warning by the api) and the demo project.
+  Seed__Enabled: "true"

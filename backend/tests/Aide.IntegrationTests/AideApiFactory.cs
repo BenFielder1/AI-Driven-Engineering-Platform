@@ -30,6 +30,13 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder(PostgresImage).Build();
     private readonly string _keysPath = Path.Combine(Path.GetTempPath(), "aide-tests-keys", Guid.NewGuid().ToString("N"));
 
+    /// <summary>Git working copies (<c>Workspaces:Root</c>) for this factory, deleted with it.</summary>
+    public string WorkspacesRoot { get; } = Path.Combine(Path.GetTempPath(), "aide-tests-workspaces", Guid.NewGuid().ToString("N"));
+
+    /// <summary>GitHub API base address for tests: unresolvable, so no test can reach the real GitHub. Tests that
+    /// need GitHub swap the <c>github</c> HttpClient's handler for a fake.</summary>
+    public const string UnreachableGitHubApi = "https://github-api.invalid/";
+
     public AideApiFactory()
     {
         ClientOptions.BaseAddress = BaseUri;
@@ -46,6 +53,12 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
         builder.UseEnvironment("Testing");
         builder.UseSetting($"ConnectionStrings:{DependencyInjection.ConnectionStringName}", ConnectionString);
         builder.UseSetting(DataProtectionSetup.KeysPathKey, _keysPath);
+        builder.UseSetting("Workspaces:Root", WorkspacesRoot);
+        builder.UseSetting("GitHub:ApiBaseUrl", UnreachableGitHubApi);
+
+        // No system LLM keys, whatever the machine's environment: providers needing a key are "not configured".
+        builder.UseSetting("Llm:Providers:Anthropic:ApiKey", string.Empty);
+        builder.UseSetting("Llm:Providers:OpenAI:ApiKey", string.Empty);
 
         // Tests share one client IP; the limits themselves are tested with their real values in RateLimitTests.
         builder.UseSetting("Auth:RateLimits:LoginPerMinute", "100000");
@@ -77,16 +90,7 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
     /// <summary>A new, migrated, empty database on the same server (for "first user" scenarios).</summary>
     public async Task<string> CreateMigratedDatabaseAsync(CancellationToken cancellationToken)
     {
-        var name = $"aide_{Guid.NewGuid():N}";
-        await using (var connection = new NpgsqlConnection(ConnectionString))
-        {
-            await connection.OpenAsync(cancellationToken);
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"CREATE DATABASE \"{name}\"";
-            await command.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        var connectionString = new NpgsqlConnectionStringBuilder(ConnectionString) { Database = name }.ConnectionString;
+        var connectionString = await CreateEmptyDatabaseAsync(cancellationToken);
         var options = new DbContextOptionsBuilder<AideDbContext>()
             .UseNpgsql(connectionString, o => o.MigrationsHistoryTable(DependencyInjection.MigrationsHistoryTable))
             .UseSnakeCaseNamingConvention()
@@ -96,16 +100,34 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
         return connectionString;
     }
 
+    /// <summary>A new database on the same server with no migrations applied (every migration is pending).</summary>
+    public async Task<string> CreateEmptyDatabaseAsync(CancellationToken cancellationToken)
+    {
+        var name = $"aide_{Guid.NewGuid():N}";
+        await using (var connection = new NpgsqlConnection(ConnectionString))
+        {
+            await connection.OpenAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"CREATE DATABASE \"{name}\"";
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        return new NpgsqlConnectionStringBuilder(ConnectionString) { Database = name }.ConnectionString;
+    }
+
     public override async ValueTask DisposeAsync()
     {
         await base.DisposeAsync();
         await _postgres.DisposeAsync();
-        try
+        foreach (var path in new[] { _keysPath, WorkspacesRoot })
         {
-            Directory.Delete(_keysPath, recursive: true);
-        }
-        catch (DirectoryNotFoundException)
-        {
+            try
+            {
+                Directory.Delete(path, recursive: true);
+            }
+            catch (DirectoryNotFoundException)
+            {
+            }
         }
     }
 }

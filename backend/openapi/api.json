@@ -694,10 +694,1149 @@
           }
         }
       }
+    },
+    "/api/projects": {
+      "get": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "The caller's projects (every project for Admins), paged, with search by name, phase and status filters and sorting.",
+        "operationId": "ListProjects",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "name": "phase",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "refinement",
+                "specification",
+                "planning",
+                "execution",
+                "review",
+                "release"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "active",
+                "building",
+                "reviewing",
+                "releasing",
+                "released",
+                "rolled_back"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "created",
+                "updated",
+                "name"
+              ],
+              "type": "string",
+              "default": "updated"
+            }
+          },
+          {
+            "name": "sortOrder",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string",
+              "default": "desc"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfProjectSummaryDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults.",
+        "operationId": "CreateProject",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}": {
+      "get": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "A project (members and Admins; 404 for anyone else).",
+        "operationId": "GetProject",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Edit name, approval mode, threshold and limits (Owner). 409 CONFLICT on a concurrent edit.",
+        "operationId": "UpdateProject",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Delete a project and everything it owns (Owner).",
+        "operationId": "DeleteProject",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/state": {
+      "get": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Phase, status, version, artifact summary, execution counts, review state and pending gates (members).",
+        "operationId": "GetProjectState",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectStateDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/members": {
+      "get": {
+        "tags": [
+          "Project members"
+        ],
+        "summary": "The project's members (members and Admins).",
+        "operationId": "ListMembers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Project members"
+        ],
+        "summary": "Add an existing user by email (Owner). 404 USER_NOT_FOUND for an unknown email, 409 CONFLICT if already a member.",
+        "operationId": "AddMember",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/members/{userId}": {
+      "patch": {
+        "tags": [
+          "Project members"
+        ],
+        "summary": "Change a member's role (Owner). The last Owner can't be demoted (409 LAST_OWNER).",
+        "operationId": "UpdateMemberRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Project members"
+        ],
+        "summary": "Remove a member (Owner), or leave the project (any member removing themselves). The last Owner can't be removed (409 LAST_OWNER).",
+        "operationId": "RemoveMember",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings": {
+      "get": {
+        "tags": [
+          "Project settings"
+        ],
+        "summary": "Git, LLM and notification settings with secrets as set / not set flags (Owner).",
+        "operationId": "GetProjectSettings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings/git": {
+      "patch": {
+        "tags": [
+          "Project settings"
+        ],
+        "summary": "Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL.",
+        "operationId": "UpdateGitSettings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGitSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitSettingsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings/llm": {
+      "patch": {
+        "tags": [
+          "Project settings"
+        ],
+        "summary": "Update the LLM provider, models and optional project API key (Owner).",
+        "operationId": "UpdateLlmSettings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLlmSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmSettingsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings/notifications": {
+      "patch": {
+        "tags": [
+          "Project settings"
+        ],
+        "summary": "Replace the notification channels (Owner). Slack/Teams webhook URLs are secrets (sent in secret, returned masked). A channel sent with its id and no secret keeps its saved secret.",
+        "operationId": "UpdateNotificationSettings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings/git/test": {
+      "post": {
+        "tags": [
+          "Project settings"
+        ],
+        "summary": "Test the saved Git settings: repo reachable, writable, default branch exists (Owner). Never changes settings.",
+        "operationId": "TestGitConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitTestResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AddMemberRequest": {
+        "required": [
+          "email",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "maxLength": 256,
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ProjectRole"
+          }
+        },
+        "description": "Adds an existing user by email (FR-8)."
+      },
       "AdminUserDto": {
         "required": [
           "id",
@@ -738,6 +1877,47 @@
           }
         },
         "description": "A user as shown on the admin users page."
+      },
+      "AgentModelsDto": {
+        "type": "object",
+        "properties": {
+          "ideaRefinement": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "specGenerator": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "planGenerator": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "codeGenerator": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "codeReview": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Model id per agent; an omitted or `null` agent uses the default model."
       },
       "ApiTokenDto": {
         "required": [
@@ -785,6 +1965,72 @@
         },
         "description": "A personal API token as listed (never includes the token or its hash)."
       },
+      "ApprovalMode": {
+        "enum": [
+          "strict",
+          "advisory",
+          "autonomous"
+        ],
+        "description": "Project approval mode (§4.2)."
+      },
+      "ArtifactStateDto": {
+        "required": [
+          "type",
+          "latestVersion",
+          "latestStatus",
+          "currentLockedVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/ArtifactType"
+          },
+          "latestVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "latestStatus": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ArtifactStatus"
+              }
+            ]
+          },
+          "currentLockedVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "Latest and current locked version of one artifact type (§6 project state)."
+      },
+      "ArtifactStatus": {
+        "enum": [
+          "draft",
+          "locked",
+          "rejected",
+          "superseded",
+          "invalidated",
+          "corrupted",
+          null
+        ]
+      },
+      "ArtifactType": {
+        "enum": [
+          "project_request",
+          "technical_specification",
+          "implementation_plan",
+          "optimization_plan"
+        ]
+      },
       "AuthProvidersDto": {
         "required": [
           "github"
@@ -828,6 +2074,94 @@
           }
         }
       },
+      "CreateProjectGitRequest": {
+        "required": [
+          "provider"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/GitProvider"
+          },
+          "repoUrl": {
+            "maxLength": 2048,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Required for `github`: `https://github.com/OWNER/REPO`, optionally ending in `.git`."
+          },
+          "defaultBranch": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 1024,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "GitHub access token (`github` only). Stored encrypted and never returned."
+          }
+        },
+        "description": "Git step of the new-project wizard (FR-5, FR-35)."
+      },
+      "CreateProjectRequest": {
+        "required": [
+          "name",
+          "idea",
+          "git"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "idea": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "approvalMode": {
+            "$ref": "#/components/schemas/ApprovalMode"
+          },
+          "complianceThreshold": {
+            "maximum": 1,
+            "minimum": 0.5,
+            "type": "number",
+            "format": "double"
+          },
+          "maxFilesPerStep": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxReviewCycles": {
+            "maximum": 10,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          },
+          "tokenBudget": {
+            "maximum": 9007199254740991,
+            "minimum": 1000,
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "Token budget (at least 1000); `null` or omitted means unlimited.",
+            "format": "int64"
+          },
+          "git": {
+            "$ref": "#/components/schemas/CreateProjectGitRequest"
+          }
+        },
+        "description": "The new-project wizard (FR-5). Omitted settings take the FR-5 defaults."
+      },
       "CreatedApiTokenDto": {
         "required": [
           "id",
@@ -856,6 +2190,159 @@
           }
         },
         "description": "A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again."
+      },
+      "DriftLevel": {
+        "enum": [
+          "none",
+          "low",
+          "moderate",
+          "severe",
+          null
+        ]
+      },
+      "ExecutionCountsDto": {
+        "required": [
+          "total",
+          "pending",
+          "inProgress",
+          "completed",
+          "rejected",
+          "blocked"
+        ],
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pending": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inProgress": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rejected": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blocked": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "Step counts of the current plan version."
+      },
+      "GateSummaryDto": {
+        "required": [
+          "id",
+          "type",
+          "createdAt",
+          "overdue"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/GateType"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "overdue": {
+            "type": "boolean"
+          }
+        },
+        "description": "A pending approval gate."
+      },
+      "GateType": {
+        "enum": [
+          "spec_approval",
+          "plan_approval",
+          "pre_release",
+          "escalation"
+        ]
+      },
+      "GitProvider": {
+        "enum": [
+          "github",
+          "local"
+        ],
+        "description": "Git provider of a project (FR-35). Wire values: `github`, `local`."
+      },
+      "GitSettingsDto": {
+        "required": [
+          "provider",
+          "repoUrl",
+          "defaultBranch",
+          "branchName",
+          "hasToken"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/GitProvider"
+          },
+          "repoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "defaultBranch": {
+            "type": "string"
+          },
+          "branchName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hasToken": {
+            "type": "boolean"
+          }
+        },
+        "description": "Git settings (FR-9, FR-35). The token is never returned, only `hasToken`. `branchName` is the project branch, once the working copy has been prepared."
+      },
+      "GitTestResultDto": {
+        "required": [
+          "ok",
+          "reachable",
+          "writable",
+          "defaultBranchExists",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "reachable": {
+            "type": "boolean"
+          },
+          "writable": {
+            "type": "boolean"
+          },
+          "defaultBranchExists": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false."
       },
       "HealthCheckEntry": {
         "required": [
@@ -964,6 +2451,66 @@
           }
         }
       },
+      "LlmProvider": {
+        "enum": [
+          "anthropic",
+          "openai",
+          "ollama",
+          "fake"
+        ],
+        "description": "LLM provider (FR-22). Wire values: `anthropic`, `openai`, `ollama`, `fake`."
+      },
+      "LlmProviderStatusDto": {
+        "required": [
+          "provider",
+          "configured",
+          "defaultModel"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/LlmProvider"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "defaultModel": {
+            "type": "string"
+          }
+        },
+        "description": "Whether a provider can be used: a system key is configured or the project has its own key (Ollama and Fake are always configured)."
+      },
+      "LlmSettingsDto": {
+        "required": [
+          "provider",
+          "defaultModel",
+          "modelsByAgent",
+          "hasApiKey",
+          "providers"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/LlmProvider"
+          },
+          "defaultModel": {
+            "type": "string"
+          },
+          "modelsByAgent": {
+            "$ref": "#/components/schemas/AgentModelsDto"
+          },
+          "hasApiKey": {
+            "type": "boolean"
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LlmProviderStatusDto"
+            }
+          }
+        },
+        "description": "LLM settings (FR-9, FR-22). The API key is never returned, only `hasApiKey`. `providers` lists every provider with whether it's usable and its system default model."
+      },
       "LoginRequest": {
         "required": [
           "email",
@@ -981,6 +2528,160 @@
           }
         },
         "description": "FR-1 sign-in."
+      },
+      "MemberDto": {
+        "required": [
+          "userId",
+          "email",
+          "name",
+          "avatarUrl",
+          "role",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/ProjectRole"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "A project member (FR-8)."
+      },
+      "NotificationChannelDto": {
+        "required": [
+          "id",
+          "type",
+          "target",
+          "hasSecret",
+          "events"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/NotificationChannelType"
+          },
+          "target": {
+            "type": "string"
+          },
+          "hasSecret": {
+            "type": "boolean"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationEvent"
+            }
+          }
+        },
+        "description": "A notification channel (FR-47). Secrets are never returned, only `hasSecret`. For `email` and\n`webhook`, `target` is the saved address or URL and the secret is a webhook's HMAC signing key. For\n`slack` and `teams`, the incoming-webhook URL is itself the secret (a bearer credential): it is stored\nencrypted, `target` is only a masked display value (host only, e.g. `hooks.slack.com/…`) and\n`hasSecret` is `true` once a URL is saved."
+      },
+      "NotificationChannelInput": {
+        "required": [
+          "type",
+          "events"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The id of an existing channel to keep (its secret, or Slack/Teams URL, is kept unless a new one or `clearSecret` is sent, or the type changes); omit for a new channel.",
+            "format": "uuid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/NotificationChannelType"
+          },
+          "target": {
+            "maxLength": 2048,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Email address (email) or https URL (webhook); required for both. For slack and teams the URL is sent in\n`secret` and `target` may be omitted or echo the masked value; an absolute URL sent here is still\naccepted as the incoming-webhook URL (older clients) and treated as a secret."
+          },
+          "secret": {
+            "maxLength": 2048,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The channel secret, stored encrypted and never returned: the HMAC signing key (webhook) or the https\nincoming-webhook URL (slack, teams; required for a new channel). Email channels have none."
+          },
+          "clearSecret": {
+            "type": "boolean"
+          },
+          "events": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationEvent"
+            }
+          }
+        },
+        "description": "A channel in a notification settings update."
+      },
+      "NotificationChannelType": {
+        "enum": [
+          "email",
+          "slack",
+          "teams",
+          "webhook"
+        ],
+        "description": "Project notification channel types (FR-47)."
+      },
+      "NotificationEvent": {
+        "enum": [
+          "gate_required",
+          "gate_overdue",
+          "artifact_ready",
+          "step_blocked",
+          "run_failed",
+          "budget_exceeded",
+          "review_completed",
+          "release_completed",
+          "release_failed",
+          "rollback"
+        ],
+        "description": "Events a notification channel can subscribe to (FR-47). Wire values are snake_case."
+      },
+      "NotificationSettingsDto": {
+        "required": [
+          "channels"
+        ],
+        "type": "object",
+        "properties": {
+          "channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationChannelDto"
+            }
+          }
+        }
       },
       "PagedResultOfAdminUserDto": {
         "required": [
@@ -1011,6 +2712,47 @@
           }
         },
         "description": "One page of results. int PagedResult&lt;T&gt;.Page is 1-based."
+      },
+      "PagedResultOfProjectSummaryDto": {
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectSummaryDto"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "One page of results. int PagedResult&lt;T&gt;.Page is 1-based."
+      },
+      "Phase": {
+        "enum": [
+          "refinement",
+          "specification",
+          "planning",
+          "execution",
+          "review",
+          "release"
+        ],
+        "description": "The six lifecycle phases, in order (§4.1). Stored as snake_case strings."
       },
       "ProblemDetails": {
         "type": "object",
@@ -1063,6 +2805,251 @@
           }
         }
       },
+      "ProjectDto": {
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "idea",
+          "currentPhase",
+          "status",
+          "projectVersion",
+          "approvalMode",
+          "complianceThreshold",
+          "maxFilesPerStep",
+          "maxReviewCycles",
+          "tokenBudget",
+          "tokensUsed",
+          "executionPaused",
+          "myRole",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "idea": {
+            "type": "string"
+          },
+          "currentPhase": {
+            "$ref": "#/components/schemas/Phase"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "projectVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "approvalMode": {
+            "$ref": "#/components/schemas/ApprovalMode"
+          },
+          "complianceThreshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxFilesPerStep": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxReviewCycles": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tokenBudget": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
+          },
+          "tokensUsed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "executionPaused": {
+            "type": "boolean"
+          },
+          "myRole": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectRole"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null` for an Admin who isn't a member); a `null` `tokenBudget` means unlimited."
+      },
+      "ProjectRole": {
+        "enum": [
+          "viewer",
+          "contributor",
+          "owner",
+          null
+        ]
+      },
+      "ProjectSettingsDto": {
+        "required": [
+          "git",
+          "llm",
+          "notifications"
+        ],
+        "type": "object",
+        "properties": {
+          "git": {
+            "$ref": "#/components/schemas/GitSettingsDto"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/LlmSettingsDto"
+          },
+          "notifications": {
+            "$ref": "#/components/schemas/NotificationSettingsDto"
+          }
+        },
+        "description": "All project settings with secrets as set / not set flags (FR-9)."
+      },
+      "ProjectStateDto": {
+        "required": [
+          "projectId",
+          "phase",
+          "status",
+          "projectVersion",
+          "executionPaused",
+          "artifacts",
+          "execution",
+          "review",
+          "pendingGates"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/Phase"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "projectVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "executionPaused": {
+            "type": "boolean"
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactStateDto"
+            }
+          },
+          "execution": {
+            "$ref": "#/components/schemas/ExecutionCountsDto"
+          },
+          "review": {
+            "$ref": "#/components/schemas/ReviewStateDto"
+          },
+          "pendingGates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GateSummaryDto"
+            }
+          }
+        },
+        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`)."
+      },
+      "ProjectStatus": {
+        "enum": [
+          "active",
+          "building",
+          "reviewing",
+          "releasing",
+          "released",
+          "rolled_back"
+        ],
+        "description": "Project status (§4.1: status follows phase; `released` and `rolled_back` are special)."
+      },
+      "ProjectSummaryDto": {
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "currentPhase",
+          "status",
+          "projectVersion",
+          "approvalMode",
+          "myRole",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "currentPhase": {
+            "$ref": "#/components/schemas/Phase"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "projectVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "approvalMode": {
+            "$ref": "#/components/schemas/ApprovalMode"
+          },
+          "myRole": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectRole"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "A row of the projects list (FR-6). `myRole` is `null` for an Admin who isn't a member."
+      },
       "RegisterRequest": {
         "required": [
           "email",
@@ -1088,11 +3075,247 @@
         },
         "description": "FR-1 registration."
       },
+      "ReviewDecision": {
+        "enum": [
+          "release_eligible",
+          "review_required",
+          "escalation_required",
+          null
+        ]
+      },
+      "ReviewStateDto": {
+        "required": [
+          "cycle",
+          "maxCycles",
+          "latestScore",
+          "latestDecision",
+          "driftLevel"
+        ],
+        "type": "object",
+        "properties": {
+          "cycle": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxCycles": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "latestScore": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "latestDecision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReviewDecision"
+              }
+            ]
+          },
+          "driftLevel": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DriftLevel"
+              }
+            ]
+          }
+        },
+        "description": "Review cycle progress and the latest compliance result. `maxCycles` includes extra cycles granted by escalations."
+      },
       "SystemRole": {
         "enum": [
           "user",
           "admin"
         ]
+      },
+      "UpdateGitSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GitProvider"
+              }
+            ]
+          },
+          "repoUrl": {
+            "maxLength": 2048,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Required when the provider is (or becomes) `github`."
+          },
+          "defaultBranch": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "token": {
+            "maxLength": 1024,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Sets the access token. To remove it, send `clearToken: true`."
+          },
+          "clearToken": {
+            "type": "boolean"
+          }
+        },
+        "description": "Partial update of the Git settings. Omitted fields are unchanged."
+      },
+      "UpdateLlmSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LlmProvider"
+              }
+            ]
+          },
+          "defaultModel": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "modelsByAgent": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentModelsDto"
+              }
+            ]
+          },
+          "apiKey": {
+            "maxLength": 1024,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Sets the project's own API key. To remove it, send `clearApiKey: true`."
+          },
+          "clearApiKey": {
+            "type": "boolean"
+          }
+        },
+        "description": "Partial update of the LLM settings. Omitted fields are unchanged; `modelsByAgent`, when sent, replaces the map."
+      },
+      "UpdateMemberRoleRequest": {
+        "required": [
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/ProjectRole"
+          }
+        }
+      },
+      "UpdateNotificationSettingsRequest": {
+        "required": [
+          "channels"
+        ],
+        "type": "object",
+        "properties": {
+          "channels": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationChannelInput"
+            }
+          }
+        },
+        "description": "Replaces the project's notification channels (FR-47)."
+      },
+      "UpdateProjectRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "approvalMode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApprovalMode"
+              }
+            ]
+          },
+          "complianceThreshold": {
+            "maximum": 1,
+            "minimum": 0.5,
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "maxFilesPerStep": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "maxReviewCycles": {
+            "maximum": 10,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "tokenBudget": {
+            "maximum": 9007199254740991,
+            "minimum": 1000,
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "Sets the token budget (at least 1000). To remove the budget, send `clearTokenBudget: true`.",
+            "format": "int64"
+          },
+          "clearTokenBudget": {
+            "type": "boolean",
+            "description": "`true` removes the token budget (unlimited). Can't be combined with `tokenBudget`."
+          }
+        },
+        "description": "Partial update of a project (FR-7). Omitted fields are unchanged."
       },
       "UserDto": {
         "required": [
@@ -1144,6 +3367,15 @@
     },
     {
       "name": "Admin"
+    },
+    {
+      "name": "Projects"
+    },
+    {
+      "name": "Project members"
+    },
+    {
+      "name": "Project settings"
     }
   ]
 }

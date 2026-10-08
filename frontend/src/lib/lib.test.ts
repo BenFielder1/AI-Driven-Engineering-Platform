@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { ApiError, errorCodes, errorMessage, errorMessages, toApiError } from './errors'
+import { ApiError, contextualErrorMessages, errorCodes, errorMessage, errorMessages, toApiError } from './errors'
 import { canInProject, canViewAdmin, isWriter, projectCapabilities } from './permissions'
 import { safeReturnUrl } from './return-url'
 
@@ -38,6 +38,15 @@ describe('errors.ts', () => {
 
   it('network failures get connection copy', () => {
     expect(errorMessage(new TypeError('Failed to fetch'))).toMatch(/couldn't reach the server/)
+  })
+
+  it('uses a context override when one exists, and the generic copy otherwise (FR-8 add member)', () => {
+    const conflict = new ApiError({ status: 409, errorCode: 'CONFLICT' })
+    expect(errorMessage(conflict, 'addMember')).toBe(contextualErrorMessages.addMember.CONFLICT)
+    expect(errorMessage(conflict)).toBe(errorMessages.CONFLICT)
+    expect(errorMessage(new ApiError({ status: 404, errorCode: 'USER_NOT_FOUND' }), 'addMember')).toBe(
+      errorMessages.USER_NOT_FOUND,
+    )
   })
 })
 

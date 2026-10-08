@@ -15,6 +15,10 @@ labels:
 resources:
   - ../../base
 
+# Local-only settings (DEP-2 seed) merged into base app-config.
+patches:
+  - path: app-config-local.yaml
+
 images:
   - name: aide-api
     newTag: dev

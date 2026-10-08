@@ -47,6 +47,25 @@ export type ErrorCode = keyof typeof errorMessages
 
 export const errorCodes = Object.keys(errorMessages) as ErrorCode[]
 
+/**
+ * Context-specific copy for codes whose generic message is misleading in a particular action (still the one place
+ * for error copy, CLAUDE.md rule 4). Pass the context to `errorMessage(error, context)`.
+ */
+export const contextualErrorMessages = {
+  /** POST /api/projects/:id/members — 409 CONFLICT means the user is already a member (FR-8). */
+  addMember: {
+    CONFLICT: 'That user is already a member of this project.',
+  },
+} as const satisfies Record<string, Partial<Record<ErrorCode, string>>>
+
+export type ErrorContext = keyof typeof contextualErrorMessages
+
+/** Copy for a code, preferring the context's override. */
+export function messageFor(code: ErrorCode, context?: ErrorContext): string {
+  const overrides: Partial<Record<ErrorCode, string>> | undefined = context ? contextualErrorMessages[context] : undefined
+  return overrides?.[code] ?? errorMessages[code]
+}
+
 /** FR-2: `reason` on `/login?error=GITHUB_AUTH_FAILED&reason=…` (see backend Auth/GitHubAuth.cs). */
 export const githubFailureMessages: Readonly<Record<string, string>> = {
   link_required:
@@ -124,15 +143,15 @@ export function toApiError(error: unknown, response: Response): ApiError {
   })
 }
 
-/** User-facing copy for any thrown error. */
-export function errorMessage(error: unknown): string {
+/** User-facing copy for any thrown error; `context` selects overrides from `contextualErrorMessages`. */
+export function errorMessage(error: unknown, context?: ErrorContext): string {
   if (error instanceof ApiError) {
     if (error.errorCode === 'RATE_LIMITED' && error.retryAfterSeconds) {
       const s = error.retryAfterSeconds
       return `Too many attempts. Try again in ${String(s)} second${s === 1 ? '' : 's'}.`
     }
     if (error.errorCode) {
-      return errorMessages[error.errorCode]
+      return messageFor(error.errorCode, context)
     }
     return 'Something went wrong on our side. Try again.'
   }
