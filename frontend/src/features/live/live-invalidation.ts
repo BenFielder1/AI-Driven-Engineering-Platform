@@ -1,0 +1,48 @@
+import type { QueryClient, QueryKey } from '@tanstack/react-query'
+
+import type { Schemas } from '../../api/client'
+import { projectKeys } from '../projects/projects-api'
+
+export type EventCategory = NonNullable<Schemas['EventCategory']>
+
+interface Target {
+  queryKey: QueryKey
+  exact?: boolean
+}
+
+const project = (id: string): Target => ({ queryKey: projectKeys.detail(id), exact: true })
+const state = (id: string): Target => ({ queryKey: projectKeys.state(id) })
+const gates = (id: string): Target => ({ queryKey: projectKeys.gates(id) })
+const activity = (id: string): Target => ({ queryKey: [...projectKeys.detail(id), 'activity'] })
+const artifacts = (id: string): Target => ({ queryKey: projectKeys.artifacts(id) })
+const lists = (): Target => ({ queryKey: projectKeys.lists() })
+/** Everything about the project (the detail key prefixes all of its queries). */
+const everything = (id: string): Target => ({ queryKey: projectKeys.detail(id) })
+
+/**
+ * FR-46: which cached queries a live `projectEvent` makes stale, by category. Exhaustive over the contract's
+ * `EventCategory`, so a new category is a type error until it's mapped. The activity feed takes every event.
+ */
+export const liveInvalidation: Record<EventCategory, (id: string) => Target[]> = {
+  // Phase or status change: header, timeline, state and the projects list all change.
+  transition: (id) => [everything(id), lists()],
+  // Gate created/decided: approving moves the phase (that also arrives as a transition event).
+  gate: (id) => [project(id), state(id), gates(id), activity(id)],
+  // New version, approval, rejection, invalidation cascade (§4.4) or corruption.
+  artifact: (id) => [artifacts(id), state(id), activity(id)],
+  integrity: (id) => [artifacts(id), activity(id)],
+  // Agent runs produce artifacts (which arrive as artifact events) and use the token budget.
+  run: (id) => [project(id), state(id), activity(id)],
+  step: (id) => [state(id), activity(id)],
+  review: (id) => [state(id), activity(id)],
+  release: (id) => [project(id), state(id), activity(id), lists()],
+  // A rollback changes version, phase, artifacts and steps (§4.8).
+  rollback: (id) => [everything(id), lists()],
+  // Settings, members, rename.
+  project: (id) => [everything(id), lists()],
+}
+
+/** Invalidates what a live event of `category` affects for project `id`. */
+export function invalidateForEvent(queryClient: QueryClient, id: string, category: EventCategory) {
+  return Promise.all(liveInvalidation[category](id).map((target) => queryClient.invalidateQueries(target)))
+}

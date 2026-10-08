@@ -54,11 +54,24 @@ public sealed class JobEnqueuer(AideDbContext db, TimeProvider time)
 }
 
 /// <summary>
-/// Payload of agent jobs started by the lifecycle (FR-28, FR-29, FR-38) or by a gate rejection (FR-13): the project, the
-/// project version it was queued at, and the reviewer's feedback and gate when a rejection triggered the re-run.
+/// Payload of agent jobs started by the lifecycle (FR-28, FR-29, FR-38), by a gate rejection (FR-13), by an artifact
+/// rejection (FR-17) or by a failed integrity check (FR-20): the project, the project version it was queued at, the
+/// reviewer's feedback, and the gate or artifact that triggered the re-run.
 /// </summary>
-public sealed record LifecycleJobPayload(Guid ProjectId, int ProjectVersion, string Trigger, string? Feedback = null, Guid? GateId = null)
+public sealed record LifecycleJobPayload(
+    Guid ProjectId,
+    int ProjectVersion,
+    string Trigger,
+    string? Feedback = null,
+    Guid? GateId = null,
+    Guid? ArtifactId = null)
 {
     public const string PhaseEntered = "phase_entered";
     public const string GateRejected = "gate_rejected";
+
+    /// <summary>FR-17: an Owner rejected the agent's draft; <see cref="Feedback"/> is the comment.</summary>
+    public const string ArtifactRejected = "artifact_rejected";
+
+    /// <summary>FR-20: the artifact's content no longer matched its hash; regenerate it.</summary>
+    public const string ArtifactCorrupted = "artifact_corrupted";
 }

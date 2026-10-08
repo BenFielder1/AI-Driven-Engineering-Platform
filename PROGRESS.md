@@ -28,12 +28,12 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-13 | Approve/reject gates; rejection re-runs producer | 3, 4.2 | both | 4 | done | gates approve/reject (owner), GATE_NOT_PENDING; rejection enqueues producer job (handlers arrive phase 6–7); pending-gates panel; FR13_* tests |
 | FR-14 | Escalation gate decisions | 3, 4.5 | both | 4, 10 | partial | continue/rollback/accept decisions + validation + dialog (phase 4); escalation creation by review in phase 10 |
 | FR-15 | Gate reminders 24h, overdue 72h | 3 | both | 12 | todo | — |
-| FR-16 | Versioned artifacts with hash, parent, status | 3, 4.3 | backend | 1, 5 | todo | — |
-| FR-17 | Approve/reject drafts; locking | 3, 4.3 | both | 5 | todo | — |
-| FR-18 | Human-edited drafts | 3 | both | 5 | todo | — |
-| FR-19 | Invalidation cascade | 3, 4.4 | backend | 1, 5 | todo | — |
-| FR-20 | Integrity re-check, corrupted, alert, regenerate | 3 | both | 5 | todo | — |
-| FR-21 | Artifact history and diff | 3 | both | 5 | todo | — |
+| FR-16 | Versioned artifacts with hash, parent, status | 3, 4.3 | backend | 1, 5 | done | artifact endpoints (latest/history/versions), version+parent+hash+status; FR16_* tests |
+| FR-17 | Approve/reject drafts; locking | 3, 4.3 | both | 5 | done | approve/reject (owner), no-op on locked, producer re-run on agent drafts; detail page actions; FR17_* tests |
+| FR-18 | Human-edited drafts | 3 | both | 5 | done | POST …/artifacts/{type} with baseVersion (stale → CONFLICT); editor; FR18_* tests |
+| FR-19 | Invalidation cascade | 3, 4.4 | backend | 1, 5 | done | cascade + phase fallback + stale gate cancel in one tx; spec v4 example; FR19_* tests |
+| FR-20 | Integrity re-check, corrupted, alert, regenerate | 3 | both | 5 | done | every read re-hashes; corrupted + INTEGRITY_ALERT; re-run for current agent version; FR20_* tests |
+| FR-21 | Artifact history and diff | 3 | both | 5 | done | Myers diff (collapsed context, 100k-line cap), side-by-side view; FR21_* tests |
 | FR-22 | LLM provider abstraction (Anthropic/OpenAI/Ollama/Fake) | 3 | backend | 6 | todo | — |
 | FR-23 | Agent run records | 3 | both | 6 | todo | — |
 | FR-24 | Versioned prompt templates, MISSING_INPUT | 3 | backend | 6 | todo | — |
@@ -58,7 +58,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-43 | Merge conflict blocks release; retry | 3 | both | 11 | todo | — |
 | FR-44 | Rollback | 3, 4.8 | both | 1, 11 | todo | — |
 | FR-45 | Rollback rate limit and blocking | 3 | backend | 11 | todo | — |
-| FR-46 | Live updates (SignalR) | 3 | both | 5 | todo | — |
+| FR-46 | Live updates (SignalR) | 3 | both | 5 | done | /api/hubs/projects, post-commit publisher, origin check; useProjectLive invalidation; FR46_* tests (browser E2E in phase 14) |
 | FR-47 | Notifications: in-app + channels | 3 | both | 12 | todo | — |
 | FR-48 | Signed single-use approval links | 3 | both | 12 | todo | — |
 | FR-49 | Per-channel delivery retry | 3 | backend | 12 | todo | — |
@@ -93,7 +93,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 4 M2 Lifecycle, gates, jobs, events (base: a50f6c1) — IDs: FR-11–FR-14, FR-50, NFR-REL (job worker/outbox)
   - [x] aspnet-engineer (advance, gates, escalation decisions, activity, job worker/outbox) ‖ vite-react-engineer (lifecycle card, gates panel/dialogs, gate history, activity feed) — resumed from an uncommitted tree; 2 lint errors fixed
   - [x] gate · review (0 Critical, 1 Major, 3 Minor — Major + 2 Minor fixed; gate list paging → Known issues) · redeploy (smoke ✓) · commit
-- [ ] 5 M2 Artifacts + live updates — IDs: FR-16–FR-21, FR-46
+- [x] 5 M2 Artifacts + live updates (base: 6841646) — IDs: FR-16–FR-21, FR-46
+  - [x] aspnet-engineer (contract stubs) → aspnet-engineer (artifacts, cascade, integrity, diff, SignalR hub + publisher) ‖ vite-react-engineer (artifacts pages, diff view, editor, useProjectLive)
+  - [x] gate · review (0 Critical, 1 Major, 6 Minor + flaky tests — all fixed) · redeploy (smoke ✓, CSP ✓, hub foreign origin 403 ✓) · E2E on k8s 4/4 · commit
 - [ ] 6 M3 Agent infrastructure — IDs: FR-22–FR-26
 - [ ] 7 M3 Refinement, spec, plan — IDs: FR-27–FR-30
 - [ ] 8 M4 Execution runner — IDs: FR-31–FR-33, FR-37
@@ -169,6 +171,16 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-08 — A gated advance keeps the user's reason in the GATE_CREATED payload; the transition recorded on approval reads "<reason> (<type> gate approved[: <comment>])" (previously the bare approval comment) — FR-11 audit — SPEC updated: no
 - 2026-10-08 — Job worker fills free slots continuously and renews its lease every LeaseDuration/3; a job whose lease is lost is cancelled and its outcome discarded — review finding (long LLM runs) — SPEC updated: no
 - 2026-10-08 — Activity feed text is built client-side from event type + payload with the UI label maps; the server `summary` is the fallback — SPEC updated: no
+- 2026-10-08 — FR-20 "integrity admin alert" is an `INTEGRITY_ALERT` event (category `integrity`) — §5 has no alerts table; admin events page lists it — SPEC updated: no
+- 2026-10-08 — Approving a new artifact version cancels stale pending gates (GATE_CANCELLED): all of them on phase fallback, those whose artifact was invalidated, those holding an older version of the type; the Owner re-requests advance. Gates are never re-pointed (decisions final, §4.2) — SPEC updated: no
+- 2026-10-08 — Drafts allowed from the type's producing phase onwards; optimisation plan only in review; none while releasing. A version without created_by_user_id is agent-authored. A cascade that resets steps also cancels queued execution jobs — SPEC updated: no
+- 2026-10-08 — Corrupted artifacts always raise an alert; the producing agent re-runs only for the current version (open draft or highest locked) when agent-authored; marked via conditional update (one alert/job under concurrent reads) — SPEC updated: no
+- 2026-10-08 — Diff: Myers, 3 lines of context with `skipped` collapse entries (new DiffLineKind), refuses > 100,000 total lines with VALIDATION — DoS — SPEC updated: no
+- 2026-10-08 — Draft create takes optional `baseVersion`; a stale base → 409 CONFLICT (details latestVersion) so concurrent edits don't silently supersede — SPEC updated: no
+- 2026-10-08 — Live events published by an EF interceptor after save/commit (never on rollback); in-process groups → single API replica (a backplane would be needed to scale); hub join subscribes then checks membership; removed members are dropped — SPEC updated: no
+- 2026-10-08 — /api/hubs requires a matching Origin (scheme+host, X-Forwarded-Host, or `Live:AllowedOrigins`); cookie WS upgrades without Origin are refused (CSWSH under SameSite=Lax on localhost) — NFR-SEC — SPEC updated: no
+- 2026-10-08 — Markdown never loads remote images (rendered as a link); nginx sends a strict CSP and proxies with `Host $http_host` — NFR-SEC (prompt-injected content) — SPEC updated: no
+- 2026-10-08 — Adding a value to a response enum (EventCategory `integrity`, DiffLineKind `skipped`) is treated as additive: the only client is the generated SPA client, regenerated in the same change — SPEC updated: no
 
 ## Known issues
 - kubeconform, oasdiff, actionlint not installed locally — schema validation skipped locally (CI runs kubeconform; actionlint was run via Docker) — install optionally — Ben
@@ -182,3 +194,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - The seed admin password is logged only by the pod that creates the account; after a redeploy the log line is gone, so note it on first deploy — documented in deploy-local.sh output — —
 - GET /api/projects/:id/gates is unpaged (spec doesn't require paging); add a limit/cursor if gate counts grow — orchestrator
 - Activity summaries exist on both server (fallback) and client; keep them in step when adding event types — orchestrator
+- Phases 1–4 commits lacked Aide.Domain/Artifacts (+ its unit tests) because `.gitignore` had an unanchored `artifacts/`; fixed in 6841646 — commits before it don't build from a clean checkout — —
+- The UI can't tell whether a corrupted version was current when marked (no `regenerationRequested` flag); copy may over-promise regeneration for rejected/invalidated latest versions — orchestrator
+- Admin demotion doesn't drop hub subscriptions the user held as admin on non-member projects (until reconnect) — orchestrator
+- Two users writing the very first version of a type concurrently aren't warned (baseVersion null) — accepted

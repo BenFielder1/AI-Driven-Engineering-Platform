@@ -14,6 +14,9 @@ public enum EventCategory
 
     /// <summary>Project, member and settings changes (FR-5–FR-9).</summary>
     Project = 8,
+
+    /// <summary>Integrity alerts for admins (FR-20): an artifact's content no longer matches its hash.</summary>
+    Integrity = 9,
 }
 
 /// <summary>
@@ -59,6 +62,13 @@ public static class EventTypes
     public const string ArtifactInvalidated = "ARTIFACT_INVALIDATED";
     public const string ArtifactCorrupted = "ARTIFACT_CORRUPTED";
 
+    /// <summary>
+    /// FR-20 "integrity admin alert": raised with <see cref="ArtifactCorrupted"/> when a read finds a hash mismatch.
+    /// There is no alerts table (§5), so the alert is this event (category <see cref="EventCategory.Integrity"/>),
+    /// visible in the project feed and the admin event list.
+    /// </summary>
+    public const string IntegrityAlert = "INTEGRITY_ALERT";
+
     // Agent runs (FR-22–FR-26)
     public const string RunStarted = "RUN_STARTED";
     public const string RunCompleted = "RUN_COMPLETED";
@@ -93,6 +103,7 @@ public static class EventTypes
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed],
         [EventCategory.Rollback] = [RollbackCompleted],
         [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated],
+        [EventCategory.Integrity] = [IntegrityAlert],
     };
 
     private static readonly Dictionary<string, EventCategory> CategoryByType = ByCategory

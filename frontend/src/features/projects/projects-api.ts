@@ -37,6 +37,8 @@ export const projectKeys = {
   gates: (id: string) => [...projectKeys.detail(id), 'gates'] as const,
   /** GET /activity, per category filter (`all` when unfiltered). */
   activity: (id: string, category: string | null) => [...projectKeys.detail(id), 'activity', category ?? 'all'] as const,
+  /** Every artifact query of the project (list, per-type latest/history/versions/diffs; see artifacts-api.ts). */
+  artifacts: (id: string) => [...projectKeys.detail(id), 'artifacts'] as const,
 }
 
 /** Unwraps an openapi-fetch result: the body on success, an ApiError otherwise. */

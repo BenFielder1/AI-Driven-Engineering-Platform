@@ -15,7 +15,7 @@ public partial class EventTypesTests
     [Fact]
     public void FR50_Event_category_wire_values() =>
         Assert.Equal(
-            ["transition", "gate", "artifact", "run", "step", "review", "release", "rollback", "project"],
+            ["transition", "gate", "artifact", "run", "step", "review", "release", "rollback", "project", "integrity"],
             EnumStrings.Values<EventCategory>());
 
     [Fact]
@@ -54,6 +54,7 @@ public partial class EventTypesTests
     [InlineData(EventTypes.ReleaseCompleted, EventCategory.Release)]
     [InlineData(EventTypes.RollbackCompleted, EventCategory.Rollback)]
     [InlineData(EventTypes.MemberAdded, EventCategory.Project)]
+    [InlineData(EventTypes.IntegrityAlert, EventCategory.Integrity)]
     public void FR50_Event_type_maps_to_its_category(string type, EventCategory expected) =>
         Assert.Equal(expected, EventTypes.CategoryOf(type));
 

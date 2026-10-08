@@ -8,18 +8,9 @@ import { ActivityFeed } from '../activity/activity-feed'
 import { GateHistory } from '../gates/gate-history'
 import { PendingGatesPanel } from '../gates/pending-gates-panel'
 import { LifecycleCard } from '../lifecycle/lifecycle-card'
-import { artifactTypeLabels } from './labels'
+import { artifactStatusLabels, artifactTypeLabels } from './labels'
 import { useProjectAccess } from './project-context'
 import { useProjectState, type ProjectState } from './projects-api'
-
-const artifactStatusLabels: Record<NonNullable<ProjectState['artifacts'][number]['latestStatus']>, string> = {
-  draft: 'Draft',
-  locked: 'Approved',
-  rejected: 'Rejected',
-  superseded: 'Superseded',
-  invalidated: 'Invalidated',
-  corrupted: 'Corrupted',
-}
 
 const decisionLabels: Record<NonNullable<ProjectState['review']['latestDecision']>, string> = {
   release_eligible: 'Release eligible',

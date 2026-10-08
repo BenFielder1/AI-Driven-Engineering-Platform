@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { errorMessage } from '../../lib/errors'
+import { errorMessage, type ErrorContext } from '../../lib/errors'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { Alert } from './alert'
 import { Button } from './button'
@@ -13,14 +13,16 @@ export function LoadingState({ label = 'Loading…' }: { label?: string }) {
   )
 }
 
-export function ErrorState({ error, onRetry, title = "Something went wrong" }: {
+export function ErrorState({ error, onRetry, title = "Something went wrong", context }: {
   error: unknown
   onRetry?: () => void
   title?: string
+  /** Selects context-specific copy from `contextualErrorMessages`. */
+  context?: ErrorContext
 }) {
   return (
     <Alert tone="error" role="alert" title={title}>
-      <p>{errorMessage(error)}</p>
+      <p>{errorMessage(error, context)}</p>
       {onRetry && (
         <Button variant="secondary" className="mt-2" onClick={onRetry}>
           Try again

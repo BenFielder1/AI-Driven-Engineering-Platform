@@ -98,11 +98,100 @@ public static class ArtifactRules
     /// <summary>Cascade or rollback: drafts and locked versions become invalidated; others are left as history.</summary>
     public static bool ShouldInvalidate(ArtifactStatus status) => status is ArtifactStatus.Draft or ArtifactStatus.Locked;
 
-    /// <summary>FR-20: a hash mismatch marks the artifact corrupted and re-runs its producing agent.</summary>
-    public static ArtifactStatusChange OnIntegrityCheck(ArtifactType type, ArtifactStatus status, string content, string storedHash) =>
+    /// <summary>
+    /// FR-20: a hash mismatch marks the artifact corrupted (and raises the alert). Its producing agent re-runs only when
+    /// the row is the current version of its type (<paramref name="isCurrentVersion"/>, see <see cref="IsCurrentVersion"/>)
+    /// and agent-authored: regenerating history (a superseded, rejected, invalidated or older locked version) would
+    /// replace newer work, and a human-authored artifact (FR-18) has no agent to regenerate it.
+    /// </summary>
+    public static ArtifactStatusChange OnIntegrityCheck(
+        ArtifactType type, ArtifactStatus status, string content, string storedHash, bool authoredByAgent = true, bool isCurrentVersion = true) =>
         ContentHash.Matches(content, storedHash) || status == ArtifactStatus.Corrupted
             ? new ArtifactStatusChange(status, Changed: false)
-            : new ArtifactStatusChange(ArtifactStatus.Corrupted, Changed: true, ProducingAgent(type));
+            : new ArtifactStatusChange(ArtifactStatus.Corrupted, Changed: true, authoredByAgent && isCurrentVersion ? ProducingAgent(type) : null);
+
+    /// <summary>
+    /// FR-20: is <paramref name="candidate"/> (with its status before any corruption mark) the current version of its
+    /// type — the open draft, or the highest locked version? <paramref name="others"/> are the type's other versions.
+    /// </summary>
+    public static bool IsCurrentVersion(ArtifactVersion candidate, IEnumerable<ArtifactVersion> others)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        ArgumentNullException.ThrowIfNull(others);
+        return candidate.Status switch
+        {
+            ArtifactStatus.Draft => true,
+            ArtifactStatus.Locked => others.All(o => o.Status != ArtifactStatus.Locked || o.Version < candidate.Version),
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// FR-18: an edit made from version <paramref name="baseVersion"/> may only be saved while that is still the latest
+    /// version of the type; otherwise someone (or an agent) saved a newer version since, and saving would silently
+    /// discard it — <c>CONFLICT</c> with <c>latestVersion: N</c> (or <c>none</c>) in the details. This also covers editing
+    /// a locked version while a newer draft exists. No base version (CLI uploads) is always allowed.
+    /// </summary>
+    public static Result CheckBaseVersion(int? baseVersion, IEnumerable<ArtifactVersion> existing)
+    {
+        ArgumentNullException.ThrowIfNull(existing);
+        if (baseVersion is not { } requested)
+        {
+            return Result.Success();
+        }
+
+        var latest = existing.Select(a => (int?)a.Version).Max();
+        if (latest == requested)
+        {
+            return Result.Success();
+        }
+
+        var latestText = latest?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";
+        return Result.Failure(new DomainError(
+            ErrorCodes.Conflict,
+            $"This edit was based on version {requested}, but the latest version is {latestText}. Reload to see it, then edit again.")
+        {
+            Details = [$"latestVersion: {latestText}"],
+        });
+    }
+
+    /// <summary>
+    /// FR-20: the integrity reported on a read. <c>corrupted</c> when the stored content no longer matches its hash, or
+    /// the row was already marked <see cref="ArtifactStatus.Corrupted"/> by an earlier read.
+    /// </summary>
+    public static ArtifactIntegrity IntegrityOf(ArtifactStatus status, string content, string storedHash) =>
+        status == ArtifactStatus.Corrupted || !ContentHash.Matches(content, storedHash)
+            ? ArtifactIntegrity.Corrupted
+            : ArtifactIntegrity.Ok;
+
+    /// <summary>
+    /// FR-18: can a new draft of <paramref name="type"/> be saved now? A type can be edited from the phase that
+    /// produces it onwards (a later edit is approved like any version and cascades per §4.4); the optimisation plan
+    /// only during review (it belongs to a review cycle); and nothing while a release is in progress
+    /// (<see cref="ProjectStatus.Releasing"/>). Otherwise <c>WRONG_PHASE</c>.
+    /// </summary>
+    public static Result CanCreateDraft(ArtifactType type, Phase phase, ProjectStatus status)
+    {
+        var producing = ProducingPhase(type);
+        if (status == ProjectStatus.Releasing)
+        {
+            return WrongPhase($"A release is in progress; {type.ToWire()} can't be edited until it finishes.");
+        }
+
+        if (type == ArtifactType.OptimizationPlan && phase != Phase.Review)
+        {
+            return WrongPhase($"The optimization plan can only be edited during review, not in {phase.ToWire()}.");
+        }
+
+        return phase.IsBefore(producing)
+            ? WrongPhase($"The {type.ToWire()} is produced in {producing.ToWire()}; the project is still in {phase.ToWire()}.")
+            : Result.Success();
+    }
+
+    /// <summary>The author of a version: an agent run unless a user created it (FR-16, FR-18).</summary>
+    public static bool IsAuthoredByAgent(Guid? createdByUserId) => createdByUserId is null;
+
+    private static Result WrongPhase(string message) => Result.Failure(new DomainError(ErrorCodes.WrongPhase, message));
 
     private static DomainError Locked() =>
         new(ErrorCodes.ArtifactLocked, "The artifact is locked; create a new version instead.");

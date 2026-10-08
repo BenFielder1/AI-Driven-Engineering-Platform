@@ -27,6 +27,9 @@ public enum GateFollowUp
     MarkReleaseEligible = 5,
 }
 
+/// <summary>A pending gate as the artifact-approval rules see it.</summary>
+public sealed record PendingGateRef(Guid Id, GateType Type, Guid? ArtifactId);
+
 /// <summary>The outcome of deciding a gate.</summary>
 public sealed record GateResolution(
     GateStatus NewStatus,
@@ -136,6 +139,35 @@ public static class GateRules
             GateStatus.Rejected,
             agent is null ? GateFollowUp.None : GateFollowUp.RerunAgent,
             agent));
+    }
+
+    /// <summary>
+    /// FR-17/FR-19 with §4.2: the pending gates that approving a new artifact version makes stale, so they are cancelled
+    /// (a gate decision is final, so a stale gate is never re-pointed). A gate holds the version that was locked when the
+    /// advance was requested; it is cancelled when
+    /// <list type="bullet">
+    /// <item>the phase fell back (§4.4) — like a rollback, every pending gate guards a move that no longer applies;</item>
+    /// <item>its artifact was invalidated by the cascade;</item>
+    /// <item>it approves an older version of the type just approved (the Owner re-requests the advance for the new one).</item>
+    /// </list>
+    /// </summary>
+    public static IReadOnlyList<Guid> StaleAfterArtifactApproval(
+        Guid approvedArtifactId,
+        ArtifactType approvedType,
+        IReadOnlyCollection<Guid> invalidatedArtifactIds,
+        bool phaseFellBack,
+        IEnumerable<PendingGateRef> pendingGates)
+    {
+        ArgumentNullException.ThrowIfNull(invalidatedArtifactIds);
+        ArgumentNullException.ThrowIfNull(pendingGates);
+        return
+        [
+            .. pendingGates
+                .Where(g => phaseFellBack
+                    || (g.ArtifactId is { } id && invalidatedArtifactIds.Contains(id))
+                    || (GatedArtifact(g.Type) == approvedType && g.ArtifactId != approvedArtifactId))
+                .Select(g => g.Id),
+        ];
     }
 
     /// <summary>Rollback cancels pending gates; decided gates are history and stay as they are.</summary>

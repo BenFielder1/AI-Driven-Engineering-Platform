@@ -3,9 +3,11 @@ using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Admin;
+using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Lifecycle;
+using Aide.Api.Features.Live;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Tokens;
 using Aide.Api.Health;
@@ -80,6 +82,8 @@ builder.Services.AddOpenApi(options =>
     options.AddSchemaTransformer<ProblemDetailsSchemaTransformer>();
     options.AddSchemaTransformer<WireEnumSchemaTransformer>();
     options.AddSchemaTransformer<FreeFormObjectSchemaTransformer>();
+    // SignalR message schemas (FR-46) aren't reachable from any operation; add them to components.
+    options.AddDocumentTransformer<LiveContractDocumentTransformer>();
     // XML-doc descriptions carry the source file's line endings; normalise them so api.json is identical on Windows and CI.
     options.AddSchemaTransformer((schema, _, _) =>
     {
@@ -108,6 +112,15 @@ builder.Services.AddScoped<RollbackWriter>();
 builder.Services.AddScoped<GateService>();
 builder.Services.AddScoped<GateReader>();
 builder.Services.AddAideJobs();
+
+// Artifacts: versions, approval, cascade, integrity, diff (FR-16–FR-21).
+builder.Services.AddScoped<ArtifactIntegrityGuard>();
+builder.Services.AddScoped<ArtifactReader>();
+builder.Services.AddScoped<ArtifactService>();
+
+// Live project updates over SignalR (FR-46).
+builder.Services.AddAideLive();
+builder.Services.AddLiveOriginCheck();
 builder.Services.AddOptions<SeedOptions>().BindConfiguration(SeedOptions.SectionName);
 builder.Services.AddHostedService<DevSeeder>();
 builder.Services.AddHealthChecks()
@@ -117,6 +130,7 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseLiveOriginCheck();
 app.UseAideAuth();
 app.UseProjectLogScope();
 
@@ -135,6 +149,8 @@ app.MapProjectSettingsEndpoints();
 app.MapLifecycleEndpoints();
 app.MapGateEndpoints();
 app.MapActivityEndpoints();
+app.MapArtifactEndpoints();
+app.MapLiveEndpoints();
 
 await app.RunAsync();
 

@@ -71,6 +71,7 @@ describe('Overview → Activity (FR-50)', () => {
       'Releases',
       'Rollbacks',
       'Project and members',
+      'Integrity alerts',
     ])
     await user.selectOptions(filter, 'Gates')
 

@@ -103,6 +103,7 @@ export const eventCategories = [
   'release',
   'rollback',
   'project',
+  'integrity',
 ] as const satisfies readonly NonNullable<Schemas['EventCategory']>[]
 
 export const eventCategoryLabels: Record<NonNullable<Schemas['EventCategory']>, string> = {
@@ -115,6 +116,7 @@ export const eventCategoryLabels: Record<NonNullable<Schemas['EventCategory']>, 
   release: 'Releases',
   rollback: 'Rollbacks',
   project: 'Project and members',
+  integrity: 'Integrity alerts',
 }
 
 /** SPEC §4.1: the next phase forward, or null in the last phase. */
@@ -134,6 +136,16 @@ export const artifactTypeLabels: Record<Schemas['ArtifactType'], string> = {
   technical_specification: 'Technical specification',
   implementation_plan: 'Implementation plan',
   optimization_plan: 'Optimisation plan',
+}
+
+/** SPEC §4.3: artifact statuses. `locked` is what an approved version is stored as. */
+export const artifactStatusLabels: Record<NonNullable<Schemas['ArtifactStatus']>, string> = {
+  draft: 'Draft',
+  locked: 'Approved',
+  rejected: 'Rejected',
+  superseded: 'Superseded',
+  invalidated: 'Invalidated',
+  corrupted: 'Corrupted',
 }
 
 export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {

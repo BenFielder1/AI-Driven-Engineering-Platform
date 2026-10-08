@@ -2256,7 +2256,8 @@
                 "review",
                 "release",
                 "rollback",
-                "project"
+                "project",
+                "integrity"
               ],
               "type": "string"
             }
@@ -2314,6 +2315,731 @@
           },
           "404": {
             "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/artifacts": {
+      "get": {
+        "tags": [
+          "Artifacts"
+        ],
+        "summary": "The latest version of each artifact type that exists, without content (members).",
+        "operationId": "ListLatestArtifacts",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactSummaryDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/artifacts/{type}/latest": {
+      "get": {
+        "tags": [
+          "Artifacts"
+        ],
+        "summary": "The highest version of an artifact type, with content and integrity (members).",
+        "operationId": "GetLatestArtifact",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "project_request",
+                "technical_specification",
+                "implementation_plan",
+                "optimization_plan"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION: unknown artifact type.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or no version of this type exists.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/artifacts/{type}/history": {
+      "get": {
+        "tags": [
+          "Artifacts"
+        ],
+        "summary": "Every version of an artifact type, newest first, without content (members).",
+        "operationId": "GetArtifactHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "project_request",
+                "technical_specification",
+                "implementation_plan",
+                "optimization_plan"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactSummaryDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION: unknown artifact type.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/artifacts/{type}/versions/{version}": {
+      "get": {
+        "tags": [
+          "Artifacts"
+        ],
+        "summary": "One version of an artifact type, with content and integrity (members).",
+        "operationId": "GetArtifactVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "project_request",
+                "technical_specification",
+                "implementation_plan",
+                "optimization_plan"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION: unknown artifact type or version below 1.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project or version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/artifacts/{type}/diff": {
+      "get": {
+        "tags": [
+          "Artifacts"
+        ],
+        "summary": "Line diff between two versions of an artifact type: unified text plus a structured line list for side-by-side rendering (members).",
+        "operationId": "GetArtifactDiff",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "project_request",
+                "technical_specification",
+                "implementation_plan",
+                "optimization_plan"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactDiffDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION: unknown artifact type, from/to missing or below 1, or the versions have more than 100,000 lines together.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or either version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/artifacts/{type}": {
+      "post": {
+        "tags": [
+          "Artifacts"
+        ],
+        "summary": "Save edited Markdown as a new draft version (Contributor or Owner): version = latest + 1, parent = latest; an open draft of the type becomes superseded. With baseVersion, 409 CONFLICT unless it is still the latest version. 409 WRONG_PHASE.",
+        "operationId": "CreateArtifactDraft",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "project_request",
+                "technical_specification",
+                "implementation_plan",
+                "optimization_plan"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateArtifactDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION: unknown artifact type, or empty or too long content.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: Viewers can't create drafts.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "WRONG_PHASE: the type can't be edited in the current phase; CONFLICT: baseVersion is no longer the latest version (details: latestVersion), or a concurrent save.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/artifacts/{artifactId}/approve": {
+      "post": {
+        "tags": [
+          "Artifacts"
+        ],
+        "summary": "Approve a draft (Owner): records approver and time, sets locked and applies the invalidation cascade (§4.4). Approving an already locked artifact is a no-op. 409 ARTIFACT_NOT_DRAFT.",
+        "operationId": "ApproveArtifact",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "artifactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecideArtifactRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: only Owners approve artifacts.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project or artifact.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted), ARTIFACT_LOCKED or CONFLICT.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/artifacts/{artifactId}/reject": {
+      "post": {
+        "tags": [
+          "Artifacts"
+        ],
+        "summary": "Reject a draft (Owner): records the comment and re-runs the producing agent with it (not for human-edited drafts). 409 ARTIFACT_NOT_DRAFT, ARTIFACT_LOCKED.",
+        "operationId": "RejectArtifact",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "artifactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecideArtifactRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION: comment too long.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: only Owners reject artifacts.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project or artifact.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ARTIFACT_NOT_DRAFT, ARTIFACT_LOCKED or CONFLICT.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2608,6 +3334,155 @@
         ],
         "description": "Project approval mode (§4.2)."
       },
+      "ArtifactAuthorDto": {
+        "required": [
+          "user",
+          "agentRunId"
+        ],
+        "type": "object",
+        "properties": {
+          "user": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ActorDto"
+              }
+            ]
+          },
+          "agentRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "Who produced an artifact version (FR-16): a user (`user`, for drafts edited in the browser or uploaded via the\nCLI) or an agent run (`agentRunId`). Exactly one of the two is set."
+      },
+      "ArtifactDiffDto": {
+        "required": [
+          "from",
+          "to",
+          "unifiedDiff",
+          "lines"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "to": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unifiedDiff": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiffLineDto"
+            }
+          }
+        },
+        "description": "A line diff between versions `from` and `to` of one artifact type (FR-21): `unifiedDiff` is the\nunified-diff text (3 lines of context) and `lines` the same hunks as context/added/removed lines, with each\nunchanged run outside them collapsed into one `skipped` entry, for side-by-side rendering. Versions with more\nthan 100,000 lines together are not diffed (400 `VALIDATION`)."
+      },
+      "ArtifactDto": {
+        "required": [
+          "id",
+          "type",
+          "version",
+          "parentVersion",
+          "content",
+          "contentHash",
+          "status",
+          "projectVersionAtCreation",
+          "author",
+          "approvedBy",
+          "approvedAt",
+          "rejectionComment",
+          "createdAt",
+          "integrity"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ArtifactType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "parentVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "content": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ArtifactStatus"
+          },
+          "projectVersionAtCreation": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "author": {
+            "$ref": "#/components/schemas/ArtifactAuthorDto"
+          },
+          "approvedBy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ActorDto"
+              }
+            ]
+          },
+          "approvedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "rejectionComment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/ArtifactIntegrity"
+          }
+        },
+        "description": "One artifact version with its Markdown content (FR-16, §4.3). `contentHash` is the lowercase hex SHA-256 of the\nnormalised content; `integrity` is `corrupted` when it no longer matches (FR-20). `approvedBy` and\n`approvedAt` are set once approved (status `locked`); `rejectionComment` once rejected (FR-17)."
+      },
+      "ArtifactIntegrity": {
+        "enum": [
+          "ok",
+          "corrupted"
+        ],
+        "description": "Result of re-checking an artifact's content hash on read (FR-20). `corrupted` means the stored content no\nlonger matches `content_hash` (§4.3), or the row is already marked ArtifactStatus.Corrupted."
+      },
       "ArtifactStateDto": {
         "required": [
           "type",
@@ -2657,6 +3532,45 @@
           "corrupted",
           null
         ]
+      },
+      "ArtifactSummaryDto": {
+        "required": [
+          "id",
+          "type",
+          "version",
+          "status",
+          "integrity",
+          "createdAt",
+          "author"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ArtifactType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ArtifactStatus"
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/ArtifactIntegrity"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "author": {
+            "$ref": "#/components/schemas/ArtifactAuthorDto"
+          }
+        },
+        "description": "One artifact version without its content (FR-16, FR-21): the artifacts page cards and the history list.\n`integrity` is the result of re-checking the content hash on this read (FR-20)."
       },
       "ArtifactType": {
         "enum": [
@@ -2708,6 +3622,30 @@
             "format": "date-time"
           }
         }
+      },
+      "CreateArtifactDraftRequest": {
+        "required": [
+          "content"
+        ],
+        "type": "object",
+        "properties": {
+          "content": {
+            "maxLength": 1000000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "baseVersion": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "The version the edit started from. When set, the save is refused with 409 `CONFLICT` (details\n`latestVersion: N`) unless it is still the latest version of the type, so a version saved meanwhile is\nnever silently superseded. Omit it to always save (CLI uploads).",
+            "format": "int32"
+          }
+        },
+        "description": "A new draft version of an artifact type from edited Markdown (FR-18)."
       },
       "CreateProjectGitRequest": {
         "required": [
@@ -2826,6 +3764,19 @@
         },
         "description": "A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again."
       },
+      "DecideArtifactRequest": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "maxLength": 4000,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Approve or reject a draft (FR-17). On reject, `comment` is recorded and fed to the re-run agent."
+      },
       "DecideGateRequest": {
         "type": "object",
         "properties": {
@@ -2857,6 +3808,55 @@
           }
         },
         "description": "Approve or reject a pending gate (FR-13, FR-14). `comment` is optional (on reject it is the feedback for the\nre-run agent). Escalation gates are approved with a `decision`; `rollback` also needs a\n`targetVersion`. Other gates take neither (400 `INVALID_DECISION`), and escalation gates can't be rejected."
+      },
+      "DiffLineDto": {
+        "required": [
+          "kind",
+          "oldLine",
+          "newLine",
+          "text",
+          "skipped"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/DiffLineKind"
+          },
+          "oldLine": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "newLine": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "text": {
+            "type": "string"
+          },
+          "skipped": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "One line of a diff between two versions (FR-21). `oldLine` is the 1-based line number in the `from` version\n(null for `added`), `newLine` the line number in the `to` version (null for `removed`); `text`\nis the line without its line ending. Lines are in order, so a side-by-side view pairs them by line numbers.\nA `skipped` entry stands for `skipped` unchanged lines (more than 3 lines from any change) that are left\nout: `oldLine`/`newLine` are the numbers of the first of them and `text` is empty; `skipped` is\nnull for every other kind."
+      },
+      "DiffLineKind": {
+        "enum": [
+          "context",
+          "added",
+          "removed",
+          "skipped"
+        ],
+        "description": "The kind of one line of a line diff between two artifact versions (FR-21)."
       },
       "DriftLevel": {
         "enum": [
@@ -2895,6 +3895,7 @@
           "release",
           "rollback",
           "project",
+          "integrity",
           null
         ]
       },
@@ -3730,6 +4731,54 @@
         },
         "description": "A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null` for an Admin who isn't a member); a `null` `tokenBudget` means unlimited."
       },
+      "ProjectEventMessage": {
+        "required": [
+          "id",
+          "projectId",
+          "type",
+          "category",
+          "payload",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "transition",
+              "gate",
+              "artifact",
+              "run",
+              "step",
+              "review",
+              "release",
+              "rollback",
+              "project",
+              "integrity"
+            ],
+            "description": "Categories of project events, used to filter the activity feed (FR-50) and to group live updates (FR-46)."
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": { }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "A project event pushed live to everyone viewing the project (FR-46): the SignalR `projectEvent` message.\n`id`, `type`, `payload` and `createdAt` are the stored audit event (FR-50); `category` tells the\npage which data to refresh. Not an HTTP response: the schema is added to the OpenAPI components by\nLiveContractDocumentTransformer so the generated client has the type."
+      },
       "ProjectRole": {
         "enum": [
           "viewer",
@@ -4215,6 +5264,9 @@
     },
     {
       "name": "Activity"
+    },
+    {
+      "name": "Artifacts"
     }
   ]
 }

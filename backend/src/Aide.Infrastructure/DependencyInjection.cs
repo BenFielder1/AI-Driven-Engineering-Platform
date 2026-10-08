@@ -4,6 +4,7 @@ using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace Aide.Infrastructure;
@@ -41,7 +42,12 @@ public static class DependencyInjection
             }
 
             options.UseSnakeCaseNamingConvention();
+
+            // FR-46: committed project events are pushed live (the API replaces the no-op publisher).
+            options.AddInterceptors(sp.GetRequiredService<ProjectEventPublishingInterceptor>());
         });
+        services.TryAddSingleton<IProjectEventPublisher, NullProjectEventPublisher>();
+        services.TryAddSingleton<ProjectEventPublishingInterceptor>();
 
         // LLM provider configuration (FR-22): defaults and which providers have a system key.
         services.AddOptions<LlmOptions>()

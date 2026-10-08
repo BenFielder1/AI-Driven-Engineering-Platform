@@ -21,12 +21,13 @@ import { Route as AppProjectsIndexRouteImport } from './routes/_app/projects/ind
 import { Route as AppProjectsProjectIdRouteImport } from './routes/_app/projects/$projectId'
 import { Route as AppProjectsNewRouteImport } from './routes/_app/projects/new'
 import { Route as AppProjectsProjectIdIndexRouteImport } from './routes/_app/projects/$projectId/index'
-import { Route as AppProjectsProjectIdArtifactsRouteImport } from './routes/_app/projects/$projectId/artifacts'
 import { Route as AppProjectsProjectIdExecutionRouteImport } from './routes/_app/projects/$projectId/execution'
 import { Route as AppProjectsProjectIdRefinementRouteImport } from './routes/_app/projects/$projectId/refinement'
 import { Route as AppProjectsProjectIdReviewRouteImport } from './routes/_app/projects/$projectId/review'
 import { Route as AppProjectsProjectIdRunsRouteImport } from './routes/_app/projects/$projectId/runs'
 import { Route as AppProjectsProjectIdSettingsRouteImport } from './routes/_app/projects/$projectId/settings'
+import { Route as AppProjectsProjectIdArtifactsIndexRouteImport } from './routes/_app/projects/$projectId/artifacts/index'
+import { Route as AppProjectsProjectIdArtifactsTypeRouteImport } from './routes/_app/projects/$projectId/artifacts/$type'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -87,12 +88,6 @@ const AppProjectsProjectIdIndexRoute =
     path: '/',
     getParentRoute: () => AppProjectsProjectIdRoute,
   } as any)
-const AppProjectsProjectIdArtifactsRoute =
-  AppProjectsProjectIdArtifactsRouteImport.update({
-    id: '/artifacts',
-    path: '/artifacts',
-    getParentRoute: () => AppProjectsProjectIdRoute,
-  } as any)
 const AppProjectsProjectIdExecutionRoute =
   AppProjectsProjectIdExecutionRouteImport.update({
     id: '/execution',
@@ -123,6 +118,18 @@ const AppProjectsProjectIdSettingsRoute =
     path: '/settings',
     getParentRoute: () => AppProjectsProjectIdRoute,
   } as any)
+const AppProjectsProjectIdArtifactsIndexRoute =
+  AppProjectsProjectIdArtifactsIndexRouteImport.update({
+    id: '/artifacts/',
+    path: '/artifacts/',
+    getParentRoute: () => AppProjectsProjectIdRoute,
+  } as any)
+const AppProjectsProjectIdArtifactsTypeRoute =
+  AppProjectsProjectIdArtifactsTypeRouteImport.update({
+    id: '/artifacts/$type',
+    path: '/artifacts/$type',
+    getParentRoute: () => AppProjectsProjectIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -134,13 +141,14 @@ export interface FileRoutesByFullPath {
   '/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/projects/new': typeof AppProjectsNewRoute
   '/projects/': typeof AppProjectsIndexRoute
-  '/projects/$projectId/artifacts': typeof AppProjectsProjectIdArtifactsRoute
   '/projects/$projectId/execution': typeof AppProjectsProjectIdExecutionRoute
   '/projects/$projectId/refinement': typeof AppProjectsProjectIdRefinementRoute
   '/projects/$projectId/review': typeof AppProjectsProjectIdReviewRoute
   '/projects/$projectId/runs': typeof AppProjectsProjectIdRunsRoute
   '/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
   '/projects/$projectId/': typeof AppProjectsProjectIdIndexRoute
+  '/projects/$projectId/artifacts/$type': typeof AppProjectsProjectIdArtifactsTypeRoute
+  '/projects/$projectId/artifacts/': typeof AppProjectsProjectIdArtifactsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -151,13 +159,14 @@ export interface FileRoutesByTo {
   '/register': typeof PublicRegisterRoute
   '/projects/new': typeof AppProjectsNewRoute
   '/projects': typeof AppProjectsIndexRoute
-  '/projects/$projectId/artifacts': typeof AppProjectsProjectIdArtifactsRoute
   '/projects/$projectId/execution': typeof AppProjectsProjectIdExecutionRoute
   '/projects/$projectId/refinement': typeof AppProjectsProjectIdRefinementRoute
   '/projects/$projectId/review': typeof AppProjectsProjectIdReviewRoute
   '/projects/$projectId/runs': typeof AppProjectsProjectIdRunsRoute
   '/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
   '/projects/$projectId': typeof AppProjectsProjectIdIndexRoute
+  '/projects/$projectId/artifacts/$type': typeof AppProjectsProjectIdArtifactsTypeRoute
+  '/projects/$projectId/artifacts': typeof AppProjectsProjectIdArtifactsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -172,13 +181,14 @@ export interface FileRoutesById {
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/_app/projects/new': typeof AppProjectsNewRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
-  '/_app/projects/$projectId/artifacts': typeof AppProjectsProjectIdArtifactsRoute
   '/_app/projects/$projectId/execution': typeof AppProjectsProjectIdExecutionRoute
   '/_app/projects/$projectId/refinement': typeof AppProjectsProjectIdRefinementRoute
   '/_app/projects/$projectId/review': typeof AppProjectsProjectIdReviewRoute
   '/_app/projects/$projectId/runs': typeof AppProjectsProjectIdRunsRoute
   '/_app/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
   '/_app/projects/$projectId/': typeof AppProjectsProjectIdIndexRoute
+  '/_app/projects/$projectId/artifacts/$type': typeof AppProjectsProjectIdArtifactsTypeRoute
+  '/_app/projects/$projectId/artifacts/': typeof AppProjectsProjectIdArtifactsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -192,13 +202,14 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/projects/new'
     | '/projects/'
-    | '/projects/$projectId/artifacts'
     | '/projects/$projectId/execution'
     | '/projects/$projectId/refinement'
     | '/projects/$projectId/review'
     | '/projects/$projectId/runs'
     | '/projects/$projectId/settings'
     | '/projects/$projectId/'
+    | '/projects/$projectId/artifacts/$type'
+    | '/projects/$projectId/artifacts/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -209,13 +220,14 @@ export interface FileRouteTypes {
     | '/register'
     | '/projects/new'
     | '/projects'
-    | '/projects/$projectId/artifacts'
     | '/projects/$projectId/execution'
     | '/projects/$projectId/refinement'
     | '/projects/$projectId/review'
     | '/projects/$projectId/runs'
     | '/projects/$projectId/settings'
     | '/projects/$projectId'
+    | '/projects/$projectId/artifacts/$type'
+    | '/projects/$projectId/artifacts'
   id:
     | '__root__'
     | '/'
@@ -229,13 +241,14 @@ export interface FileRouteTypes {
     | '/_app/projects/$projectId'
     | '/_app/projects/new'
     | '/_app/projects/'
-    | '/_app/projects/$projectId/artifacts'
     | '/_app/projects/$projectId/execution'
     | '/_app/projects/$projectId/refinement'
     | '/_app/projects/$projectId/review'
     | '/_app/projects/$projectId/runs'
     | '/_app/projects/$projectId/settings'
     | '/_app/projects/$projectId/'
+    | '/_app/projects/$projectId/artifacts/$type'
+    | '/_app/projects/$projectId/artifacts/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -330,13 +343,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsProjectIdIndexRouteImport
       parentRoute: typeof AppProjectsProjectIdRoute
     }
-    '/_app/projects/$projectId/artifacts': {
-      id: '/_app/projects/$projectId/artifacts'
-      path: '/artifacts'
-      fullPath: '/projects/$projectId/artifacts'
-      preLoaderRoute: typeof AppProjectsProjectIdArtifactsRouteImport
-      parentRoute: typeof AppProjectsProjectIdRoute
-    }
     '/_app/projects/$projectId/execution': {
       id: '/_app/projects/$projectId/execution'
       path: '/execution'
@@ -372,27 +378,45 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsProjectIdSettingsRouteImport
       parentRoute: typeof AppProjectsProjectIdRoute
     }
+    '/_app/projects/$projectId/artifacts/': {
+      id: '/_app/projects/$projectId/artifacts/'
+      path: '/artifacts'
+      fullPath: '/projects/$projectId/artifacts/'
+      preLoaderRoute: typeof AppProjectsProjectIdArtifactsIndexRouteImport
+      parentRoute: typeof AppProjectsProjectIdRoute
+    }
+    '/_app/projects/$projectId/artifacts/$type': {
+      id: '/_app/projects/$projectId/artifacts/$type'
+      path: '/artifacts/$type'
+      fullPath: '/projects/$projectId/artifacts/$type'
+      preLoaderRoute: typeof AppProjectsProjectIdArtifactsTypeRouteImport
+      parentRoute: typeof AppProjectsProjectIdRoute
+    }
   }
 }
 
 interface AppProjectsProjectIdRouteChildren {
-  AppProjectsProjectIdArtifactsRoute: typeof AppProjectsProjectIdArtifactsRoute
   AppProjectsProjectIdExecutionRoute: typeof AppProjectsProjectIdExecutionRoute
   AppProjectsProjectIdRefinementRoute: typeof AppProjectsProjectIdRefinementRoute
   AppProjectsProjectIdReviewRoute: typeof AppProjectsProjectIdReviewRoute
   AppProjectsProjectIdRunsRoute: typeof AppProjectsProjectIdRunsRoute
   AppProjectsProjectIdSettingsRoute: typeof AppProjectsProjectIdSettingsRoute
   AppProjectsProjectIdIndexRoute: typeof AppProjectsProjectIdIndexRoute
+  AppProjectsProjectIdArtifactsTypeRoute: typeof AppProjectsProjectIdArtifactsTypeRoute
+  AppProjectsProjectIdArtifactsIndexRoute: typeof AppProjectsProjectIdArtifactsIndexRoute
 }
 
 const AppProjectsProjectIdRouteChildren: AppProjectsProjectIdRouteChildren = {
-  AppProjectsProjectIdArtifactsRoute: AppProjectsProjectIdArtifactsRoute,
   AppProjectsProjectIdExecutionRoute: AppProjectsProjectIdExecutionRoute,
   AppProjectsProjectIdRefinementRoute: AppProjectsProjectIdRefinementRoute,
   AppProjectsProjectIdReviewRoute: AppProjectsProjectIdReviewRoute,
   AppProjectsProjectIdRunsRoute: AppProjectsProjectIdRunsRoute,
   AppProjectsProjectIdSettingsRoute: AppProjectsProjectIdSettingsRoute,
   AppProjectsProjectIdIndexRoute: AppProjectsProjectIdIndexRoute,
+  AppProjectsProjectIdArtifactsTypeRoute:
+    AppProjectsProjectIdArtifactsTypeRoute,
+  AppProjectsProjectIdArtifactsIndexRoute:
+    AppProjectsProjectIdArtifactsIndexRoute,
 }
 
 const AppProjectsProjectIdRouteWithChildren =

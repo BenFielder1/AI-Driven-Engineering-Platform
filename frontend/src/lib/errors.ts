@@ -56,6 +56,23 @@ export const contextualErrorMessages = {
   addMember: {
     CONFLICT: 'That user is already a member of this project.',
   },
+  /** POST /api/projects/:id/artifacts/:type — a new draft from edited Markdown (FR-18). */
+  createArtifactDraft: {
+    WRONG_PHASE: "This artifact can't be edited in the project's current phase.",
+    /** `baseVersion` is no longer the latest version; `errorMessage` names it when the details carry `latestVersion: N`. */
+    CONFLICT:
+      'Someone saved a newer version while you were editing. Your text is kept here: copy it, then cancel and edit again to start from their version.',
+  },
+  /** GET /api/projects/:id/artifacts/:type/diff — the page only sends valid version pairs, so 400 means too large (FR-21). */
+  artifactDiff: {
+    VALIDATION: 'These versions are too large to compare here: together they have more than 100,000 lines.',
+  },
+  /** POST /api/projects/:id/artifacts/:artifactId/approve · /reject (FR-17). */
+  decideArtifact: {
+    ARTIFACT_NOT_DRAFT: 'This version is no longer a draft: it was decided or replaced by a newer draft. The page now shows the latest state.',
+    ARTIFACT_LOCKED: 'This version is already approved and locked, so it can no longer be rejected.',
+    WRONG_PHASE: "Artifacts of this type can't be decided in the project's current phase.",
+  },
 } as const satisfies Record<string, Partial<Record<ErrorCode, string>>>
 
 export type ErrorContext = keyof typeof contextualErrorMessages
@@ -149,12 +166,25 @@ export function toApiError(error: unknown, response: Response): ApiError {
   })
 }
 
+/** The value of a `key: value` entry in ProblemDetails `details` (e.g. `latestVersion: 5`), if present. */
+export function detailValue(error: ApiError, key: string): string | null {
+  const prefix = `${key}:`
+  const entry = error.details.find((d) => d.startsWith(prefix))
+  return entry === undefined ? null : entry.slice(prefix.length).trim()
+}
+
 /** User-facing copy for any thrown error; `context` selects overrides from `contextualErrorMessages`. */
 export function errorMessage(error: unknown, context?: ErrorContext): string {
   if (error instanceof ApiError) {
     if (error.errorCode === 'RATE_LIMITED' && error.retryAfterSeconds) {
       const s = error.retryAfterSeconds
       return `Too many attempts. Try again in ${String(s)} second${s === 1 ? '' : 's'}.`
+    }
+    if (context === 'createArtifactDraft' && error.errorCode === 'CONFLICT') {
+      const latest = detailValue(error, 'latestVersion')
+      if (latest && /^\d+$/.test(latest)) {
+        return `Someone saved a newer version (v${latest}) while you were editing. Your text is kept here: copy it, then cancel and edit again to start from v${latest}.`
+      }
     }
     if (error.errorCode) {
       return messageFor(error.errorCode, context)

@@ -520,6 +520,142 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The latest version of each artifact type that exists, without content (members). */
+        get: operations["ListLatestArtifacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/artifacts/{type}/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The highest version of an artifact type, with content and integrity (members). */
+        get: operations["GetLatestArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/artifacts/{type}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every version of an artifact type, newest first, without content (members). */
+        get: operations["GetArtifactHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/artifacts/{type}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One version of an artifact type, with content and integrity (members). */
+        get: operations["GetArtifactVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/artifacts/{type}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Line diff between two versions of an artifact type: unified text plus a structured line list for side-by-side rendering (members). */
+        get: operations["GetArtifactDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/artifacts/{type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save edited Markdown as a new draft version (Contributor or Owner): version = latest + 1, parent = latest; an open draft of the type becomes superseded. With baseVersion, 409 CONFLICT unless it is still the latest version. 409 WRONG_PHASE. */
+        post: operations["CreateArtifactDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/artifacts/{artifactId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a draft (Owner): records approver and time, sets locked and applies the invalidation cascade (§4.4). Approving an already locked artifact is a no-op. 409 ARTIFACT_NOT_DRAFT. */
+        post: operations["ApproveArtifact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/artifacts/{artifactId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a draft (Owner): records the comment and re-runs the producing agent with it (not for human-edited drafts). 409 ARTIFACT_NOT_DRAFT, ARTIFACT_LOCKED. */
+        post: operations["RejectArtifact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -609,6 +745,62 @@ export interface components {
          * @enum {unknown}
          */
         ApprovalMode: "strict" | "advisory" | "autonomous";
+        /**
+         * @description Who produced an artifact version (FR-16): a user (`user`, for drafts edited in the browser or uploaded via the
+         *     CLI) or an agent run (`agentRunId`). Exactly one of the two is set.
+         */
+        ArtifactAuthorDto: {
+            user: null | components["schemas"]["ActorDto"];
+            /** Format: uuid */
+            agentRunId: null | string;
+        };
+        /**
+         * @description A line diff between versions `from` and `to` of one artifact type (FR-21): `unifiedDiff` is the
+         *     unified-diff text (3 lines of context) and `lines` the same hunks as context/added/removed lines, with each
+         *     unchanged run outside them collapsed into one `skipped` entry, for side-by-side rendering. Versions with more
+         *     than 100,000 lines together are not diffed (400 `VALIDATION`).
+         */
+        ArtifactDiffDto: {
+            /** Format: int32 */
+            from: number;
+            /** Format: int32 */
+            to: number;
+            unifiedDiff: string;
+            lines: components["schemas"]["DiffLineDto"][];
+        };
+        /**
+         * @description One artifact version with its Markdown content (FR-16, §4.3). `contentHash` is the lowercase hex SHA-256 of the
+         *     normalised content; `integrity` is `corrupted` when it no longer matches (FR-20). `approvedBy` and
+         *     `approvedAt` are set once approved (status `locked`); `rejectionComment` once rejected (FR-17).
+         */
+        ArtifactDto: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["ArtifactType"];
+            /** Format: int32 */
+            version: number;
+            /** Format: int32 */
+            parentVersion: null | number;
+            content: string;
+            contentHash: string;
+            status: components["schemas"]["ArtifactStatus"];
+            /** Format: int32 */
+            projectVersionAtCreation: number;
+            author: components["schemas"]["ArtifactAuthorDto"];
+            approvedBy: null | components["schemas"]["ActorDto"];
+            /** Format: date-time */
+            approvedAt: null | string;
+            rejectionComment: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            integrity: components["schemas"]["ArtifactIntegrity"];
+        };
+        /**
+         * @description Result of re-checking an artifact's content hash on read (FR-20). `corrupted` means the stored content no
+         *     longer matches `content_hash` (§4.3), or the row is already marked ArtifactStatus.Corrupted.
+         * @enum {unknown}
+         */
+        ArtifactIntegrity: "ok" | "corrupted";
         /** @description Latest and current locked version of one artifact type (§6 project state). */
         ArtifactStateDto: {
             type: components["schemas"]["ArtifactType"];
@@ -620,6 +812,22 @@ export interface components {
         };
         /** @enum {unknown} */
         ArtifactStatus: "draft" | "locked" | "rejected" | "superseded" | "invalidated" | "corrupted" | null;
+        /**
+         * @description One artifact version without its content (FR-16, FR-21): the artifacts page cards and the history list.
+         *     `integrity` is the result of re-checking the content hash on this read (FR-20).
+         */
+        ArtifactSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["ArtifactType"];
+            /** Format: int32 */
+            version: number;
+            status: components["schemas"]["ArtifactStatus"];
+            integrity: components["schemas"]["ArtifactIntegrity"];
+            /** Format: date-time */
+            createdAt: string;
+            author: components["schemas"]["ArtifactAuthorDto"];
+        };
         /** @enum {unknown} */
         ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
         /** @description Which sign-in providers are available (the frontend hides GitHub when it isn't configured). */
@@ -636,6 +844,17 @@ export interface components {
              * @description Optional expiry; must be in the future.
              */
             expiresAt?: null | string;
+        };
+        /** @description A new draft version of an artifact type from edited Markdown (FR-18). */
+        CreateArtifactDraftRequest: {
+            content: string;
+            /**
+             * Format: int32
+             * @description The version the edit started from. When set, the save is refused with 409 `CONFLICT` (details
+             *     `latestVersion: N`) unless it is still the latest version of the type, so a version saved meanwhile is
+             *     never silently superseded. Omit it to always save (CLI uploads).
+             */
+            baseVersion?: null | number;
         };
         /** @description Git step of the new-project wizard (FR-5, FR-35). */
         CreateProjectGitRequest: {
@@ -673,6 +892,10 @@ export interface components {
             /** Format: date-time */
             expiresAt: null | string;
         };
+        /** @description Approve or reject a draft (FR-17). On reject, `comment` is recorded and fed to the re-run agent. */
+        DecideArtifactRequest: {
+            comment?: null | string;
+        };
         /**
          * @description Approve or reject a pending gate (FR-13, FR-14). `comment` is optional (on reject it is the feedback for the
          *     re-run agent). Escalation gates are approved with a `decision`; `rollback` also needs a
@@ -684,6 +907,29 @@ export interface components {
             /** Format: int32 */
             targetVersion?: null | number;
         };
+        /**
+         * @description One line of a diff between two versions (FR-21). `oldLine` is the 1-based line number in the `from` version
+         *     (null for `added`), `newLine` the line number in the `to` version (null for `removed`); `text`
+         *     is the line without its line ending. Lines are in order, so a side-by-side view pairs them by line numbers.
+         *     A `skipped` entry stands for `skipped` unchanged lines (more than 3 lines from any change) that are left
+         *     out: `oldLine`/`newLine` are the numbers of the first of them and `text` is empty; `skipped` is
+         *     null for every other kind.
+         */
+        DiffLineDto: {
+            kind: components["schemas"]["DiffLineKind"];
+            /** Format: int32 */
+            oldLine: null | number;
+            /** Format: int32 */
+            newLine: null | number;
+            text: string;
+            /** Format: int32 */
+            skipped: null | number;
+        };
+        /**
+         * @description The kind of one line of a line diff between two artifact versions (FR-21).
+         * @enum {unknown}
+         */
+        DiffLineKind: "context" | "added" | "removed" | "skipped";
         /** @enum {unknown} */
         DriftLevel: "none" | "low" | "moderate" | "severe" | null;
         /** @enum {unknown} */
@@ -691,7 +937,7 @@ export interface components {
         /** @enum {unknown} */
         EscalationReason: "low_score" | "severe_drift" | "max_cycles" | "no_improvement" | null;
         /** @enum {unknown} */
-        EventCategory: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project" | null;
+        EventCategory: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project" | "integrity" | null;
         /** @description Step counts of the current plan version. */
         ExecutionCountsDto: {
             /** Format: int32 */
@@ -954,6 +1200,29 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /**
+         * @description A project event pushed live to everyone viewing the project (FR-46): the SignalR `projectEvent` message.
+         *     `id`, `type`, `payload` and `createdAt` are the stored audit event (FR-50); `category` tells the
+         *     page which data to refresh. Not an HTTP response: the schema is added to the OpenAPI components by
+         *     LiveContractDocumentTransformer so the generated client has the type.
+         */
+        ProjectEventMessage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            type: string;
+            /**
+             * @description Categories of project events, used to filter the activity feed (FR-50) and to group live updates (FR-46).
+             * @enum {unknown}
+             */
+            category: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project" | "integrity";
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            createdAt: string;
         };
         /** @enum {unknown} */
         ProjectRole: "viewer" | "contributor" | "owner" | null;
@@ -2778,7 +3047,7 @@ export interface operations {
     ListProjectActivity: {
         parameters: {
             query?: {
-                type?: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project";
+                type?: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project" | "integrity";
                 before?: string;
                 limit?: number;
             };
@@ -2819,6 +3088,475 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListLatestArtifacts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactSummaryDto"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetLatestArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactDto"];
+                };
+            };
+            /** @description VALIDATION: unknown artifact type. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or no version of this type exists. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetArtifactHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactSummaryDto"][];
+                };
+            };
+            /** @description VALIDATION: unknown artifact type. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetArtifactVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactDto"];
+                };
+            };
+            /** @description VALIDATION: unknown artifact type or version below 1. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project or version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetArtifactDiff: {
+        parameters: {
+            query: {
+                from: number;
+                to: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactDiffDto"];
+                };
+            };
+            /** @description VALIDATION: unknown artifact type, from/to missing or below 1, or the versions have more than 100,000 lines together. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or either version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateArtifactDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateArtifactDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactDto"];
+                };
+            };
+            /** @description VALIDATION: unknown artifact type, or empty or too long content. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't create drafts. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description WRONG_PHASE: the type can't be edited in the current phase; CONFLICT: baseVersion is no longer the latest version (details: latestVersion), or a concurrent save. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ApproveArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                artifactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["DecideArtifactRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactDto"];
+                };
+            };
+            /** @description VALIDATION. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners approve artifacts. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project or artifact. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted), ARTIFACT_LOCKED or CONFLICT. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RejectArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                artifactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["DecideArtifactRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactDto"];
+                };
+            };
+            /** @description VALIDATION: comment too long. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners reject artifacts. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project or artifact. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description ARTIFACT_NOT_DRAFT, ARTIFACT_LOCKED or CONFLICT. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

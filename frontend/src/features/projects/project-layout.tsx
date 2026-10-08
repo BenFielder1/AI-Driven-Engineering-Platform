@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { buttonClasses } from '../../components/ui/button-classes'
 import { ErrorState, ForbiddenState, LoadingState } from '../../components/ui/states'
 import { isApiError } from '../../lib/errors'
+import { ProjectLive } from '../live/live-indicator'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { PhaseTimeline, StatusBadge } from './project-badges'
 import { ProjectContext } from './project-context'
@@ -63,6 +64,7 @@ export function ProjectLayout({ projectId, children }: { projectId: string; chil
           <h1 className="break-words text-2xl font-semibold tracking-tight">{p.name}</h1>
           <StatusBadge status={p.status} />
           <span className="text-sm text-muted">Version {p.projectVersion}</span>
+          <ProjectLive projectId={projectId} />
         </div>
         {!onOverview && <PhaseTimeline current={p.currentPhase} />}
         <nav aria-label="Project sections">

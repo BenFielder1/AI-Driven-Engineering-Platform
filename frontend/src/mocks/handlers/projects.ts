@@ -44,6 +44,8 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
   gates: Schemas['GateDto'][]
   /** Activity feed events in insertion order (FR-50). */
   events: Schemas['ActivityItemDto'][]
+  /** Every artifact version, any type (FR-16); see mocks/handlers/artifacts.ts. */
+  artifacts: Schemas['ArtifactDto'][]
   /** Phase recorded at each project version (rollback restores it, §4.8). */
   phaseAtVersion: Record<number, Project['currentPhase']>
 }
@@ -120,6 +122,7 @@ export function seedProject(
     state: emptyState(),
     gates: [],
     events: [],
+    artifacts: [],
     phaseAtVersion: {},
     ...rest,
     members: (members ?? (owner ? [{ userId: owner, role: 'owner' as const }] : [])).map((m) => ({

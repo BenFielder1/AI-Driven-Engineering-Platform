@@ -50,12 +50,16 @@ public static class LifecycleSeed
         ArtifactStatus status = ArtifactStatus.Locked,
         int version = 1,
         int projectVersionAtCreation = 1,
-        DateTimeOffset? createdAt = null) =>
+        DateTimeOffset? createdAt = null,
+        string? content = null,
+        Guid? createdByUserId = null) =>
         ProjectApi.WithDbAsync(factory, async db =>
         {
-            var content = $"# {type} v{version}";
+            content ??= $"# {type} v{version}";
             var artifact = new Artifact
             {
+                CreatedByUserId = createdByUserId,
+                ParentVersion = version > 1 ? version - 1 : null,
                 ProjectId = projectId,
                 Type = type,
                 Version = version,
