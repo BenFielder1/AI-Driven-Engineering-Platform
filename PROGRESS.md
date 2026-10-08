@@ -23,10 +23,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-8 | Members and roles, last-owner rule | 3 | both | 3 | done | members endpoints, LAST_OWNER row lock; members tab; FR8_* tests |
 | FR-9 | Persisted encrypted Git/LLM/notification settings | 3 | both | 3 | done | git/llm/notification settings, Data Protection-encrypted secrets (incl. Slack/Teams URLs); FR9_* tests |
 | FR-10 | Git connection test | 3 | both | 3 | done | POST …/settings/git/test (GitHub fake handler + Local); ok on k8s; FR10_* tests |
-| FR-11 | Phase changes only via state machine + transition + event | 3, 4.1 | backend | 1, 4 | todo | — |
-| FR-12 | Advance request; gate per approval mode | 3, 4.2 | both | 1, 4 | todo | — |
-| FR-13 | Approve/reject gates; rejection re-runs producer | 3, 4.2 | both | 4 | todo | — |
-| FR-14 | Escalation gate decisions | 3, 4.5 | both | 4, 10 | todo | — |
+| FR-11 | Phase changes only via state machine + transition + event | 3, 4.1 | backend | 1, 4 | done | LifecycleService/Writer: transition + PHASE_CHANGED + follow-up job in one SaveChanges, xmin → CONFLICT; FR11_* tests |
+| FR-12 | Advance request; gate per approval mode | 3, 4.2 | both | 1, 4 | done | POST …/phase/advance (state or pending gate, GATE_PENDING); reason kept through gate; lifecycle card; FR12_* tests |
+| FR-13 | Approve/reject gates; rejection re-runs producer | 3, 4.2 | both | 4 | done | gates approve/reject (owner), GATE_NOT_PENDING; rejection enqueues producer job (handlers arrive phase 6–7); pending-gates panel; FR13_* tests |
+| FR-14 | Escalation gate decisions | 3, 4.5 | both | 4, 10 | partial | continue/rollback/accept decisions + validation + dialog (phase 4); escalation creation by review in phase 10 |
 | FR-15 | Gate reminders 24h, overdue 72h | 3 | both | 12 | todo | — |
 | FR-16 | Versioned artifacts with hash, parent, status | 3, 4.3 | backend | 1, 5 | todo | — |
 | FR-17 | Approve/reject drafts; locking | 3, 4.3 | both | 5 | todo | — |
@@ -62,11 +62,11 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-47 | Notifications: in-app + channels | 3 | both | 12 | todo | — |
 | FR-48 | Signed single-use approval links | 3 | both | 12 | todo | — |
 | FR-49 | Per-channel delivery retry | 3 | backend | 12 | todo | — |
-| FR-50 | Activity feed | 3 | both | 4 | todo | — |
+| FR-50 | Activity feed | 3 | both | 4 | done | GET …/activity (type filter, keyset `before`, 50/page); activity feed with load more, humanised copy; FR50_* tests |
 | FR-51 | Admin pages, dead-letter retry | 3 | both | 13 | todo | — |
 | FR-52 | `aide` CLI | 3 | backend | 13 | todo | — |
 | NFR-PERF | p95 < 300 ms reads; live events < 2 s | 8 | both | 14 | todo | — |
-| NFR-REL | Job lease expiry re-queue (5 min) | 8, 4.9 | backend | 1, 4 | partial | JobPolicy + execution-job unique index (phase 1); worker in phase 4 |
+| NFR-REL | Job lease expiry re-queue (5 min) | 8, 4.9 | backend | 1, 4 | done | JobWorker: SKIP LOCKED claim, continuous slots, lease renewal, reaper, 2/8/32 s backoff → dead letter; NFR_REL_* tests |
 | NFR-SEC | Cookies, antiforgery, rate limits, Data Protection, no secret logging | 8 | backend | 2–3 | todo | — |
 | NFR-OBS | JSON logs, OTel console, ready check incl. migrations | 8 | backend | 0, 2 | partial | health live/ready + JSON logs + OTel (phase 0); project/run/job ids in logs later |
 | NFR-A11Y | WCAG 2.2 AA core flows, both themes | 8 | frontend | 2+ | todo | — |
@@ -90,7 +90,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 3 M1 Projects (base: 6d96fc9) — IDs: FR-5–FR-10, DEP-2
   - [x] aspnet-engineer (projects, members, settings, git test, LLM catalog, dev seed) ‖ vite-react-engineer (list, wizard, overview, settings tabs) — resumed from an uncommitted tree; 5 failing integration tests fixed
   - [x] gate · review (0 Critical, 5 Major, 6 Minor — all Major fixed; Minors fixed except SSRF/model IDs → Known issues) · redeploy (smoke ✓, seed ✓, Local git test ✓) · E2E on k8s 4/4 · commit
-- [ ] 4 M2 Lifecycle, gates, jobs, events — IDs: FR-11–FR-14, FR-50, NFR-REL (job worker/outbox)
+- [x] 4 M2 Lifecycle, gates, jobs, events (base: a50f6c1) — IDs: FR-11–FR-14, FR-50, NFR-REL (job worker/outbox)
+  - [x] aspnet-engineer (advance, gates, escalation decisions, activity, job worker/outbox) ‖ vite-react-engineer (lifecycle card, gates panel/dialogs, gate history, activity feed) — resumed from an uncommitted tree; 2 lint errors fixed
+  - [x] gate · review (0 Critical, 1 Major, 3 Minor — Major + 2 Minor fixed; gate list paging → Known issues) · redeploy (smoke ✓) · commit
 - [ ] 5 M2 Artifacts + live updates — IDs: FR-16–FR-21, FR-46
 - [ ] 6 M3 Agent infrastructure — IDs: FR-22–FR-26
 - [ ] 7 M3 Refinement, spec, plan — IDs: FR-27–FR-30
@@ -164,6 +166,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-08 — LLM config shape is `Llm:DefaultProvider` + `Llm:Providers:{Anthropic|OpenAI|Ollama|Fake}:{ApiKey,BaseUrl,DefaultModel,Models:{<agent>}}` (supersedes the `Llm:Defaults` wording in §11 Q4 and the earlier secret-name list: env names are `Llm__Providers__Anthropic__ApiKey`, `Llm__Providers__OpenAI__ApiKey`, `Llm__Providers__Ollama__BaseUrl`) — SPEC updated: no
 - 2026-10-08 — API image installs `git` (Local Git provider) with HOME=/tmp and GIT_CONFIG_NOSYSTEM=1 for the non-root, read-only-root-FS pod — SPEC updated: no
 - 2026-10-08 — OpenAPI descriptions are line-ending-normalised (LF) by a schema/operation transformer so api.json generated on Windows matches CI — SPEC updated: no
+- 2026-10-08 — A gated advance keeps the user's reason in the GATE_CREATED payload; the transition recorded on approval reads "<reason> (<type> gate approved[: <comment>])" (previously the bare approval comment) — FR-11 audit — SPEC updated: no
+- 2026-10-08 — Job worker fills free slots continuously and renews its lease every LeaseDuration/3; a job whose lease is lost is cancelled and its outcome discarded — review finding (long LLM runs) — SPEC updated: no
+- 2026-10-08 — Activity feed text is built client-side from event type + payload with the UI label maps; the server `summary` is the fallback — SPEC updated: no
 
 ## Known issues
 - kubeconform, oasdiff, actionlint not installed locally — schema validation skipped locally (CI runs kubeconform; actionlint was run via Docker) — install optionally — Ben
@@ -175,3 +180,5 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - Webhook/Slack/Teams targets accept any https host (incl. private/loopback ranges); notification delivery (phase 12) must block private/link-local addresses at send time to avoid SSRF from the API pod — orchestrator (phase 12)
 - appsettings.json LLM model IDs are placeholders until phase 6 confirms them from provider docs and picks one naming style — orchestrator (phase 6)
 - The seed admin password is logged only by the pod that creates the account; after a redeploy the log line is gone, so note it on first deploy — documented in deploy-local.sh output — —
+- GET /api/projects/:id/gates is unpaged (spec doesn't require paging); add a limit/cursor if gate counts grow — orchestrator
+- Activity summaries exist on both server (fallback) and client; keep them in step when adding event types — orchestrator

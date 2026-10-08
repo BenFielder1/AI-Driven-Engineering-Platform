@@ -1,9 +1,14 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
-import { Badge } from '../../components/ui/badge'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
+import { Tabs, type TabItem } from '../../components/ui/tabs'
+import { canInProject } from '../../lib/permissions'
 import { useDocumentTitle } from '../../lib/use-document-title'
-import { artifactTypeLabels, formatDateTime, gateTypeLabels, phaseLabels } from './labels'
+import { ActivityFeed } from '../activity/activity-feed'
+import { GateHistory } from '../gates/gate-history'
+import { PendingGatesPanel } from '../gates/pending-gates-panel'
+import { LifecycleCard } from '../lifecycle/lifecycle-card'
+import { artifactTypeLabels } from './labels'
 import { useProjectAccess } from './project-context'
 import { useProjectState, type ProjectState } from './projects-api'
 
@@ -50,11 +55,22 @@ function Stat({ term, children }: { term: string; children: ReactNode }) {
   )
 }
 
-/** /projects/:id overview (first version): pending gates, next-action area and state summaries from /state. */
+const historyTabs = [
+  { id: 'activity', label: 'Activity' },
+  { id: 'gates', label: 'Gate history' },
+] as const satisfies readonly TabItem<string>[]
+
+type HistoryTab = (typeof historyTabs)[number]['id']
+
+/**
+ * /projects/:id overview (SPEC §7): lifecycle timeline with the advance action (FR-11, FR-12), pending gates with
+ * Owner decisions (FR-13–FR-15), state summaries from /state, and the activity feed and gate history (FR-50).
+ */
 export function ProjectOverviewPage() {
-  const { project } = useProjectAccess()
+  const { project, user, role } = useProjectAccess()
   useDocumentTitle(project.name)
   const state = useProjectState(project.id)
+  const [historyTab, setHistoryTab] = useState<HistoryTab>('activity')
 
   if (state.isPending) {
     return <LoadingState label="Loading project state…" />
@@ -66,33 +82,13 @@ export function ProjectOverviewPage() {
   const s = state.data
   return (
     <div className="flex flex-col gap-5">
-      <section aria-labelledby="next-action-title" className="rounded-lg border border-primary bg-surface p-4">
-        <h2 id="next-action-title" className="text-lg font-semibold">
-          Next action
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          The project is in {phaseLabels[s.phase]}
-          {s.executionPaused ? ' (execution paused)' : ''}. Lifecycle actions arrive in a later phase.
-        </p>
-      </section>
+      <LifecycleCard projectId={project.id} state={s} canAdvance={canInProject(user, role, 'advancePhase')} />
 
-      <Card title="Pending gates">
-        {s.pendingGates.length === 0 ? (
-          <EmptyState title="No gates are waiting for a decision" />
-        ) : (
-          <ul className="divide-y divide-border" aria-label="Pending gates">
-            {s.pendingGates.map((gate) => (
-              <li key={gate.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span className="font-medium">{gateTypeLabels[gate.type]}</span>
-                <span className="flex items-center gap-2 text-sm text-muted">
-                  Waiting since <time dateTime={gate.createdAt}>{formatDateTime(gate.createdAt)}</time>
-                  {gate.overdue && <Badge tone="warning">Overdue</Badge>}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      <PendingGatesPanel
+        projectId={project.id}
+        canDecide={canInProject(user, role, 'decideGates')}
+        currentVersion={s.projectVersion}
+      />
 
       <div className="grid gap-5 md:grid-cols-3">
         <Card title="Artifacts">
@@ -134,6 +130,15 @@ export function ProjectOverviewPage() {
           </dl>
         </Card>
       </div>
+
+      <section aria-labelledby="history-title" className="rounded-lg border border-border bg-surface-raised p-4">
+        <h2 id="history-title" className="mb-3 text-lg font-semibold">
+          History
+        </h2>
+        <Tabs label="History" tabs={historyTabs} selected={historyTab} onSelect={setHistoryTab}>
+          {historyTab === 'activity' ? <ActivityFeed projectId={project.id} /> : <GateHistory projectId={project.id} />}
+        </Tabs>
+      </section>
     </div>
   )
 }

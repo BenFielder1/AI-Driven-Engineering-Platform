@@ -38,7 +38,14 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
   git: GitSettings
   llm: Omit<LlmSettings, 'providers'>
   channels: StoredChannel[]
-  state: Pick<State, 'artifacts' | 'execution' | 'review' | 'pendingGates'>
+  /** `pendingGates` on /state is derived from `gates`. */
+  state: Pick<State, 'artifacts' | 'execution' | 'review'>
+  /** Gates, any status (FR-12–FR-15); see mocks/handlers/lifecycle.ts. */
+  gates: Schemas['GateDto'][]
+  /** Activity feed events in insertion order (FR-50). */
+  events: Schemas['ActivityItemDto'][]
+  /** Phase recorded at each project version (rollback restores it, §4.8). */
+  phaseAtVersion: Record<number, Project['currentPhase']>
 }
 
 /** A request the mock API received (for assertions such as "the token was sent but never shown"). */
@@ -79,7 +86,6 @@ const emptyState = (): StoredProject['state'] => ({
   ],
   execution: { total: 0, pending: 0, inProgress: 0, completed: 0, rejected: 0, blocked: 0 },
   review: { cycle: 0, maxCycles: 3, latestScore: null, latestDecision: null, driftLevel: null },
-  pendingGates: [],
 })
 
 /**
@@ -112,6 +118,9 @@ export function seedProject(
     llm: { provider: 'anthropic', defaultModel: 'claude-sonnet-4-5', modelsByAgent: {}, hasApiKey: false },
     channels: [],
     state: emptyState(),
+    gates: [],
+    events: [],
+    phaseAtVersion: {},
     ...rest,
     members: (members ?? (owner ? [{ userId: owner, role: 'owner' as const }] : [])).map((m) => ({
       ...m,
@@ -129,7 +138,7 @@ function slugify(name: string) {
     .replace(/^-|-$/g, '')
 }
 
-function roleOf(project: StoredProject, userId: string): ProjectRole | null {
+export function roleOf(project: StoredProject, userId: string): ProjectRole | null {
   return project.members.find((m) => m.userId === userId)?.role ?? null
 }
 
@@ -257,10 +266,25 @@ function planChannels(
   return Object.keys(errors).length > 0 ? { errors } : { channels }
 }
 
-type Access = { project: StoredProject; userId: string; level: 'owner' | 'contributor' | 'viewer' | 'admin' } | Response
+/** GET /state for a stored project; `pendingGates` comes from its gates. */
+export function stateDto(p: StoredProject): State {
+  return {
+    projectId: p.id,
+    phase: p.currentPhase,
+    status: p.status,
+    projectVersion: p.projectVersion,
+    executionPaused: p.executionPaused,
+    ...p.state,
+    pendingGates: p.gates
+      .filter((g) => g.status === 'pending')
+      .map(({ id, type, createdAt, overdue }) => ({ id, type, createdAt, overdue })),
+  }
+}
+
+export type Access = { project: StoredProject; userId: string; level: 'owner' | 'contributor' | 'viewer' | 'admin' } | Response
 
 /** Member (or Admin) access to a project; 401 signed out, 404 unknown or not a member (SPEC §2). */
-function access(id: unknown): Access {
+export function access(id: unknown): Access {
   const user = currentUser()
   if (!user) {
     return unauthenticated()
@@ -273,11 +297,11 @@ function access(id: unknown): Access {
   return { project, userId: user.id, level: role ?? 'admin' }
 }
 
-const forbidden = () => problem(403, 'FORBIDDEN', 'Only project Owners can do that.')
-const isOwnerLevel = (a: Exclude<Access, Response>) => a.level === 'owner' || a.level === 'admin'
+export const forbidden = () => problem(403, 'FORBIDDEN', 'Only project Owners can do that.')
+export const isOwnerLevel = (a: Exclude<Access, Response>) => a.level === 'owner' || a.level === 'admin'
 
 /** Access check for owner-only mutations, including antiforgery. */
-function ownerMutation(request: Request, id: unknown): Access {
+export function ownerMutation(request: Request, id: unknown): Access {
   const a = access(id)
   if (a instanceof Response) {
     return a
@@ -289,7 +313,7 @@ function ownerMutation(request: Request, id: unknown): Access {
   return isOwnerLevel(a) ? a : forbidden()
 }
 
-async function record(request: Request): Promise<unknown> {
+export async function record(request: Request): Promise<unknown> {
   const text = await request.clone().text()
   const body: unknown = text ? JSON.parse(text) : null
   projectsDb.requests.push({ method: request.method, path: new URL(request.url).pathname, body })
@@ -420,15 +444,7 @@ export const projectHandlers = [
     if (a instanceof Response) {
       return a
     }
-    const p = a.project
-    return HttpResponse.json<State>({
-      projectId: p.id,
-      phase: p.currentPhase,
-      status: p.status,
-      projectVersion: p.projectVersion,
-      executionPaused: p.executionPaused,
-      ...p.state,
-    })
+    return HttpResponse.json<State>(stateDto(a.project))
   }),
 
   // ---- Members (FR-8) ----

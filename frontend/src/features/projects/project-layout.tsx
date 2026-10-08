@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useMatchRoute } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import { buttonClasses } from '../../components/ui/button-classes'
@@ -39,6 +39,8 @@ function ProjectNotFound() {
 /** /projects/:id layout: loads the project, shows its header and section links, and handles 403/404. */
 export function ProjectLayout({ projectId, children }: { projectId: string; children: ReactNode }) {
   const project = useProject(projectId)
+  // The Overview renders the detailed phase timeline itself, so the compact one is shown on the other sections only.
+  const onOverview = Boolean(useMatchRoute()({ to: '/projects/$projectId', params: { projectId } }))
 
   if (project.isPending) {
     return <LoadingState label="Loading project…" />
@@ -62,7 +64,7 @@ export function ProjectLayout({ projectId, children }: { projectId: string; chil
           <StatusBadge status={p.status} />
           <span className="text-sm text-muted">Version {p.projectVersion}</span>
         </div>
-        <PhaseTimeline current={p.currentPhase} />
+        {!onOverview && <PhaseTimeline current={p.currentPhase} />}
         <nav aria-label="Project sections">
           <ul className="flex flex-wrap gap-1 border-b border-border">
             {tabs.map((tab) => (

@@ -1,0 +1,97 @@
+using Aide.Domain.Jobs;
+
+namespace Aide.Api.Jobs;
+
+/// <summary>Job worker settings (section <c>Jobs</c>, §4.9, NFR-REL).</summary>
+public sealed class JobOptions
+{
+    public const string SectionName = "Jobs";
+
+    /// <summary>Run the background worker loop. Tests turn it off and drive <see cref="JobWorker.RunOnceAsync"/>.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>How long the worker waits before polling again when there was nothing to do.</summary>
+    public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>Jobs one worker runs at once; a free slot is filled on the next poll or as soon as a running job finishes.</summary>
+    public int Concurrency { get; set; } = 4;
+
+    /// <summary>
+    /// A running job whose lease hasn't been renewed within this time is re-queued (NFR-REL: 5 minutes). The worker renews
+    /// the lease of each job it runs every third of this, so only a dead or stalled worker loses its jobs.
+    /// </summary>
+    public TimeSpan LeaseDuration { get; set; } = JobPolicy.LeaseDuration;
+}
+
+/// <summary>A claimed job, as handed to its <see cref="IJobHandler"/>. <see cref="Attempt"/> is 1-based.</summary>
+public sealed record JobExecution(Guid Id, string Type, string Payload, Guid? ProjectId, int Attempt);
+
+/// <summary>
+/// Runs one job type. Handlers are idempotent (§4.9): a job can be delivered again after a lease expiry. Throw
+/// <see cref="JobFailedException"/> with <c>transient: false</c> for failures a retry can't fix (e.g.
+/// <c>MISSING_INPUT</c>); any other exception is a transient failure and is retried with backoff.
+/// </summary>
+public interface IJobHandler
+{
+    Task HandleAsync(JobExecution job, CancellationToken cancellationToken);
+}
+
+/// <summary>A handled job failure; <see cref="Transient"/> decides between retry and immediate failure (JobPolicy).</summary>
+public sealed class JobFailedException : Exception
+{
+    public JobFailedException()
+    {
+    }
+
+    public JobFailedException(string message)
+        : base(message)
+    {
+    }
+
+    public JobFailedException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    public JobFailedException(string message, bool transient, string? errorCode = null)
+        : base(message)
+    {
+        Transient = transient;
+        ErrorCode = errorCode;
+    }
+
+    public bool Transient { get; } = true;
+
+    public string? ErrorCode { get; }
+}
+
+/// <summary>A handler for one job type. Only registered types are claimed by the worker.</summary>
+public sealed record JobHandlerRegistration(string JobType, Func<IServiceProvider, IJobHandler> Factory);
+
+public static class JobServiceCollectionExtensions
+{
+    /// <summary>Registers <typeparamref name="THandler"/> (scoped) as the handler of <paramref name="jobType"/>.</summary>
+    public static IServiceCollection AddJobHandler<THandler>(this IServiceCollection services, string jobType)
+        where THandler : class, IJobHandler
+    {
+        ArgumentException.ThrowIfNullOrEmpty(jobType);
+        services.AddScoped<THandler>();
+        services.AddSingleton(new JobHandlerRegistration(jobType, sp => sp.GetRequiredService<THandler>()));
+        return services;
+    }
+
+    /// <summary>The job queue (outbox enqueuer) and the background worker (§4.9).</summary>
+    public static IServiceCollection AddAideJobs(this IServiceCollection services)
+    {
+        services.AddOptions<JobOptions>()
+            .BindConfiguration(JobOptions.SectionName)
+            .Validate(o => o.Concurrency >= 1, "Jobs:Concurrency must be at least 1.")
+            .Validate(o => o.PollInterval > TimeSpan.Zero, "Jobs:PollInterval must be positive.")
+            .Validate(o => o.LeaseDuration > TimeSpan.Zero, "Jobs:LeaseDuration must be positive.")
+            .ValidateOnStart();
+        services.AddScoped<JobEnqueuer>();
+        services.AddSingleton<JobWorker>();
+        services.AddHostedService(sp => sp.GetRequiredService<JobWorker>());
+        return services;
+    }
+}

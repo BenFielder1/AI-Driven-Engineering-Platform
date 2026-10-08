@@ -1,12 +1,17 @@
 using System.Text.Json.Serialization;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
+using Aide.Api.Features.Activity;
 using Aide.Api.Features.Admin;
 using Aide.Api.Features.Auth;
+using Aide.Api.Features.Gates;
+using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Tokens;
 using Aide.Api.Health;
+using Aide.Api.Jobs;
 using Aide.Api.Json;
+using Aide.Api.Logging;
 using Aide.Api.Seed;
 using Aide.Infrastructure;
 using Aide.Infrastructure.Security;
@@ -74,6 +79,7 @@ builder.Services.AddOpenApi(options =>
     });
     options.AddSchemaTransformer<ProblemDetailsSchemaTransformer>();
     options.AddSchemaTransformer<WireEnumSchemaTransformer>();
+    options.AddSchemaTransformer<FreeFormObjectSchemaTransformer>();
     // XML-doc descriptions carry the source file's line endings; normalise them so api.json is identical on Windows and CI.
     options.AddSchemaTransformer((schema, _, _) =>
     {
@@ -93,6 +99,15 @@ builder.Services.AddAideInfrastructure();
 builder.Services.AddAideDataProtection(builder.Configuration);
 builder.AddAideAuth();
 builder.Services.AddScoped<ProjectCreator>();
+
+// Lifecycle, gates and background work (FR-11–FR-14, §4.9).
+builder.Services.AddScoped<LifecycleSnapshotLoader>();
+builder.Services.AddScoped<LifecycleWriter>();
+builder.Services.AddScoped<LifecycleService>();
+builder.Services.AddScoped<RollbackWriter>();
+builder.Services.AddScoped<GateService>();
+builder.Services.AddScoped<GateReader>();
+builder.Services.AddAideJobs();
 builder.Services.AddOptions<SeedOptions>().BindConfiguration(SeedOptions.SectionName);
 builder.Services.AddHostedService<DevSeeder>();
 builder.Services.AddHealthChecks()
@@ -103,6 +118,7 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseAideAuth();
+app.UseProjectLogScope();
 
 if (app.Environment.IsDevelopment())
 {
@@ -116,6 +132,9 @@ app.MapAdminUserEndpoints();
 app.MapProjectEndpoints();
 app.MapProjectMemberEndpoints();
 app.MapProjectSettingsEndpoints();
+app.MapLifecycleEndpoints();
+app.MapGateEndpoints();
+app.MapActivityEndpoints();
 
 await app.RunAsync();
 

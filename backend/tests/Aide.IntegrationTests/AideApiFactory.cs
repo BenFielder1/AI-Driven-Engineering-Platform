@@ -63,6 +63,9 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
         // Tests share one client IP; the limits themselves are tested with their real values in RateLimitTests.
         builder.UseSetting("Auth:RateLimits:LoginPerMinute", "100000");
         builder.UseSetting("Auth:RateLimits:RegisterPerMinute", "100000");
+
+        // The background job worker doesn't run in tests; job tests drive JobWorker.RunOnceAsync with their own clock.
+        builder.UseSetting("Jobs:Enabled", "false");
         // Capture logs for assertions instead of writing JSON to the test console.
         builder.ConfigureLogging(logging =>
         {

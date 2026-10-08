@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
+import { useId, useRef, type ReactNode, type RefObject } from 'react'
 
 import { Button } from './button'
+import { useModalFocus } from './use-modal-focus'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -17,8 +18,6 @@ interface ConfirmDialogProps {
   onConfirm: () => void
   onCancel: () => void
 }
-
-const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'
 
 /**
  * Modal confirmation (SPEC §7: destructive actions need confirmation). Focus moves to Cancel on open, is trapped
@@ -42,46 +41,19 @@ export function ConfirmDialog({
   const panelRef = useRef<HTMLDivElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
 
-  useEffect(() => {
-    if (!open) {
-      return undefined
-    }
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const target = initialFocusRef?.current ?? cancelRef.current
-    target?.focus()
-    return () => {
-      opener?.focus()
-    }
-  }, [open, initialFocusRef])
-
-  if (!open) {
-    return null
-  }
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'Escape') {
-      event.stopPropagation()
+  const onKeyDown = useModalFocus({
+    open,
+    panelRef,
+    initialFocusRef: initialFocusRef ?? cancelRef,
+    onEscape: () => {
       if (!pending) {
         onCancel()
       }
-      return
-    }
-    if (event.key !== 'Tab' || !panelRef.current) {
-      return
-    }
-    const focusable = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE))
-    const first = focusable[0]
-    const last = focusable[focusable.length - 1]
-    if (!first || !last) {
-      return
-    }
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault()
-      last.focus()
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault()
-      first.focus()
-    }
+    },
+  })
+
+  if (!open) {
+    return null
   }
 
   return (

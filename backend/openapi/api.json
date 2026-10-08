@@ -1816,10 +1816,609 @@
           }
         }
       }
+    },
+    "/api/projects/{id}/phase/advance": {
+      "post": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "summary": "Advance to the next phase (Contributor or Owner). Returns the new state, or the pending gate created when the approval mode requires one (phase unchanged). 409 PHASE_PRECONDITION_FAILED (with reason), GATE_PENDING, WRONG_PHASE or CONFLICT.",
+        "operationId": "AdvancePhase",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdvancePhaseRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdvanceResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: Viewers can't advance.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PHASE_PRECONDITION_FAILED (details lists every unmet condition), GATE_PENDING, WRONG_PHASE (already in release) or CONFLICT.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/gates": {
+      "get": {
+        "tags": [
+          "Gates"
+        ],
+        "summary": "The project's gates, newest first, optionally filtered by status (members).",
+        "operationId": "ListGates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "pending",
+                "approved",
+                "rejected",
+                "cancelled"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GateDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/gates/{gateId}/approve": {
+      "post": {
+        "tags": [
+          "Gates"
+        ],
+        "summary": "Approve a pending gate (Owner). Applies the gated transition; escalation gates need a decision (continue, rollback with targetVersion, or accept). 409 GATE_NOT_PENDING, 400 INVALID_DECISION.",
+        "operationId": "ApproveGate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "gateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecideGateRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GateDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION, INVALID_DECISION, or INVALID_TARGET_VERSION (escalation rollback).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: only Owners decide gates.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project or gate.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "GATE_NOT_PENDING, PHASE_PRECONDITION_FAILED, WRONG_PHASE, ROLLBACK_BLOCKED (escalation rollback) or CONFLICT.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED: escalation rollback within a minute of the last rollback; see Retry-After.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the action is allowed again.",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/gates/{gateId}/reject": {
+      "post": {
+        "tags": [
+          "Gates"
+        ],
+        "summary": "Reject a pending gate (Owner). The phase is unchanged and the agent that produced the gated artifact re-runs with the comment as feedback. Escalation gates can't be rejected (400 INVALID_DECISION). 409 GATE_NOT_PENDING.",
+        "operationId": "RejectGate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "gateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecideGateRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GateDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION or INVALID_DECISION.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: only Owners decide gates.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project or gate.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "GATE_NOT_PENDING or CONFLICT.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/activity": {
+      "get": {
+        "tags": [
+          "Activity"
+        ],
+        "summary": "The project's activity feed, newest first (members). Filter by category with type; load more with before = the previous page's nextBefore. limit defaults to 50 (max 100).",
+        "operationId": "ListProjectActivity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "transition",
+                "gate",
+                "artifact",
+                "run",
+                "step",
+                "review",
+                "release",
+                "rollback",
+                "project"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "ActivityItemDto": {
+        "required": [
+          "id",
+          "type",
+          "category",
+          "occurredAt",
+          "actor",
+          "summary",
+          "payload"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string"
+          },
+          "category": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventCategory"
+              }
+            ]
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/ActorDto"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/JsonObject"
+          }
+        },
+        "description": "One entry of a project's activity feed (FR-50). `type` is the stored event type (e.g. `PHASE_CHANGED`),\n`category` its feed category (`null` for internal events), `summary` a one-line description and\n`payload` the raw event payload."
+      },
+      "ActivityPageDto": {
+        "required": [
+          "items",
+          "nextBefore"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityItemDto"
+            }
+          },
+          "nextBefore": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A page of the activity feed, newest first. Pass `nextBefore` as `before` to load more; `null` when there is no more."
+      },
+      "ActorDto": {
+        "required": [
+          "id",
+          "name",
+          "isSystem"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "isSystem": {
+            "type": "boolean"
+          }
+        },
+        "description": "Who did something: a user (`id` and display name) or the system actor (`isSystem`, no `id`)."
+      },
       "AddMemberRequest": {
         "required": [
           "email",
@@ -1877,6 +2476,42 @@
           }
         },
         "description": "A user as shown on the admin users page."
+      },
+      "AdvancePhaseRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "maxLength": 1000,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "\"Advance to next phase\" (FR-12). `reason` is recorded on the state transition."
+      },
+      "AdvanceResultDto": {
+        "required": [
+          "state",
+          "gate"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/ProjectStateDto"
+          },
+          "gate": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GateDto"
+              }
+            ]
+          }
+        },
+        "description": "Result of \"advance to next phase\" (FR-12). When the approval mode requires a gate for the next phase (§4.2),\n`gate` is the pending gate that was created and `state` still shows the current phase; otherwise\n`gate` is `null` and `state` shows the new phase."
       },
       "AgentModelsDto": {
         "type": "object",
@@ -2191,12 +2826,75 @@
         },
         "description": "A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again."
       },
+      "DecideGateRequest": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "maxLength": 4000,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EscalationDecision"
+              }
+            ]
+          },
+          "targetVersion": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "Approve or reject a pending gate (FR-13, FR-14). `comment` is optional (on reject it is the feedback for the\nre-run agent). Escalation gates are approved with a `decision`; `rollback` also needs a\n`targetVersion`. Other gates take neither (400 `INVALID_DECISION`), and escalation gates can't be rejected."
+      },
       "DriftLevel": {
         "enum": [
           "none",
           "low",
           "moderate",
           "severe",
+          null
+        ]
+      },
+      "EscalationDecision": {
+        "enum": [
+          "continue",
+          "rollback",
+          "accept",
+          null
+        ]
+      },
+      "EscalationReason": {
+        "enum": [
+          "low_score",
+          "severe_drift",
+          "max_cycles",
+          "no_improvement",
+          null
+        ]
+      },
+      "EventCategory": {
+        "enum": [
+          "transition",
+          "gate",
+          "artifact",
+          "run",
+          "step",
+          "review",
+          "release",
+          "rollback",
+          "project",
           null
         ]
       },
@@ -2237,6 +2935,134 @@
           }
         },
         "description": "Step counts of the current plan version."
+      },
+      "GateDto": {
+        "required": [
+          "id",
+          "type",
+          "status",
+          "artifactId",
+          "artifactType",
+          "artifactVersion",
+          "escalationReason",
+          "reason",
+          "createdAt",
+          "decidedAt",
+          "decidedBy",
+          "comment",
+          "decision",
+          "targetVersion",
+          "overdue"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/GateType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GateStatus"
+          },
+          "artifactId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "artifactType": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ArtifactType"
+              }
+            ]
+          },
+          "artifactVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "escalationReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EscalationReason"
+              }
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decidedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "decidedBy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ActorDto"
+              }
+            ]
+          },
+          "comment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EscalationDecision"
+              }
+            ]
+          },
+          "targetVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "overdue": {
+            "type": "boolean"
+          }
+        },
+        "description": "An approval gate (§4.2, FR-12–FR-15). `artifactId`, `artifactType` and `artifactVersion` identify\nthe gated artifact (spec and plan gates). Escalation gates carry `escalationReason` and, once decided,\n`decision` (and `targetVersion` for a rollback). `reason` is a human-readable context line.\n`decidedBy`, `decidedAt` and `comment` are set once the gate is decided. `overdue` is true\n72 hours after creation while pending (FR-15)."
+      },
+      "GateStatus": {
+        "enum": [
+          "pending",
+          "approved",
+          "rejected",
+          "cancelled"
+        ]
       },
       "GateSummaryDto": {
         "required": [
@@ -2450,6 +3276,10 @@
             "description": "Individual reasons, when there are several."
           }
         }
+      },
+      "JsonObject": {
+        "type": "object",
+        "additionalProperties": { }
       },
       "LlmProvider": {
         "enum": [
@@ -3376,6 +4206,15 @@
     },
     {
       "name": "Project settings"
+    },
+    {
+      "name": "Lifecycle"
+    },
+    {
+      "name": "Gates"
+    },
+    {
+      "name": "Activity"
     }
   ]
 }

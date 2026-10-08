@@ -18,6 +18,7 @@ export type ProjectRole = NonNullable<Schemas['ProjectRole']>
 
 export type ProjectCapability =
   | 'view'
+  | 'advancePhase'
   | 'startAgents'
   | 'startExecution'
   | 'createDraft'
@@ -33,6 +34,7 @@ export type ProjectCapability =
 const viewer: readonly ProjectCapability[] = ['view']
 const contributor: readonly ProjectCapability[] = [
   ...viewer,
+  'advancePhase',
   'startAgents',
   'startExecution',
   'createDraft',

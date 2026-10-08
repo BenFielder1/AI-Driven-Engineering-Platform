@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { ApiError, contextualErrorMessages, errorCodes, errorMessage, errorMessages, toApiError } from './errors'
+import { formatRelativeTime } from '../features/projects/labels'
+import {
+  ApiError,
+  contextualErrorMessages,
+  errorCodes,
+  errorMessage,
+  errorMessages,
+  errorReasons,
+  toApiError,
+} from './errors'
 import { canInProject, canViewAdmin, isWriter, projectCapabilities } from './permissions'
 import { safeReturnUrl } from './return-url'
 
@@ -50,6 +59,30 @@ describe('errors.ts', () => {
   })
 })
 
+describe('error reasons (FR-11)', () => {
+  it('FR-11: PHASE_PRECONDITION_FAILED exposes the ProblemDetails details, falling back to the title', () => {
+    const withDetails = toApiError(
+      { errorCode: 'PHASE_PRECONDITION_FAILED', title: "Can't enter planning: x", details: ['Spec must be approved.', 42] },
+      new Response(null, { status: 409 }),
+    )
+    expect(errorReasons(withDetails)).toEqual(['Spec must be approved.'])
+    const titleOnly = toApiError(
+      { errorCode: 'PHASE_PRECONDITION_FAILED', title: "Can't enter planning" },
+      new Response(null, { status: 409 }),
+    )
+    expect(errorReasons(titleOnly)).toEqual(["Can't enter planning"])
+    expect(errorReasons(new ApiError({ status: 409, errorCode: 'CONFLICT', details: ['x'] }))).toEqual([])
+    expect(errorReasons(new Error('x'))).toEqual([])
+  })
+
+  it('FR-50: relative times', () => {
+    const now = Date.parse('2026-09-01T12:00:00Z')
+    expect(formatRelativeTime('2026-09-01T11:59:30Z', now)).toBe('just now')
+    expect(formatRelativeTime('2026-09-01T11:55:00Z', now)).toBe('5 minutes ago')
+    expect(formatRelativeTime('2026-08-31T12:00:00Z', now)).toBe('yesterday')
+  })
+})
+
 describe('permissions.ts (SPEC §2)', () => {
   const admin = { systemRole: 'admin' as const }
   const user = { systemRole: 'user' as const }
@@ -64,6 +97,8 @@ describe('permissions.ts (SPEC §2)', () => {
     expect(canInProject(user, 'owner', 'deleteProject')).toBe(true)
     expect(canInProject(user, 'contributor', 'startExecution')).toBe(true)
     expect(canInProject(user, 'contributor', 'decideGates')).toBe(false)
+    expect(canInProject(user, 'contributor', 'advancePhase')).toBe(true)
+    expect(canInProject(user, 'viewer', 'advancePhase')).toBe(false)
     expect(canInProject(user, 'contributor', 'rollback')).toBe(false)
     expect(canInProject(user, 'viewer', 'view')).toBe(true)
     expect(canInProject(user, 'viewer', 'createDraft')).toBe(false)

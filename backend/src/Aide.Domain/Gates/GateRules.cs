@@ -1,4 +1,5 @@
 using Aide.Domain.Agents;
+using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
 
@@ -57,6 +58,23 @@ public static class GateRules
     /// Escalation decisions need a choice (and maybe a version), so their notifications link to the project page.
     /// </summary>
     public static bool SupportsApprovalLinks(GateType type) => type is GateType.SpecApproval or GateType.PlanApproval or GateType.PreRelease;
+
+    /// <summary>The phase whose entry a gate guards; <c>null</c> for escalation gates, which guard no single entry.</summary>
+    public static Phase? GuardedEntry(GateType type) => type switch
+    {
+        GateType.SpecApproval => Phase.Planning,
+        GateType.PlanApproval => Phase.Execution,
+        GateType.PreRelease => Phase.Release,
+        _ => null,
+    };
+
+    /// <summary>The artifact a gate approves (the latest locked version is attached to the gate); <c>null</c> for pre_release and escalation.</summary>
+    public static ArtifactType? GatedArtifact(GateType type) => type switch
+    {
+        GateType.SpecApproval => ArtifactType.TechnicalSpecification,
+        GateType.PlanApproval => ArtifactType.ImplementationPlan,
+        _ => null,
+    };
 
     /// <summary>The agent re-run when a gate is rejected (D16: spec gate → spec generator).</summary>
     public static AgentKind? AgentToRerunOnReject(GateType type) => type switch

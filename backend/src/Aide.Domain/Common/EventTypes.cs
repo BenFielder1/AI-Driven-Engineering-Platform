@@ -1,5 +1,21 @@
 namespace Aide.Domain.Common;
 
+/// <summary>Categories of project events, used to filter the activity feed (FR-50) and to group live updates (FR-46).</summary>
+public enum EventCategory
+{
+    Transition = 0,
+    Gate = 1,
+    Artifact = 2,
+    Run = 3,
+    Step = 4,
+    Review = 5,
+    Release = 6,
+    Rollback = 7,
+
+    /// <summary>Project, member and settings changes (FR-5–FR-9).</summary>
+    Project = 8,
+}
+
 /// <summary>
 /// Types of the append-only audit events (table <c>events</c>, FR-50, FR-51). Values are SCREAMING_SNAKE strings
 /// and are part of the stored data and the live/activity feeds, so they never change once used.
@@ -27,4 +43,70 @@ public static class EventTypes
 
     // Lifecycle (FR-11)
     public const string PhaseChanged = "PHASE_CHANGED";
+
+    // Gates (FR-12–FR-15)
+    public const string GateCreated = "GATE_CREATED";
+    public const string GateApproved = "GATE_APPROVED";
+    public const string GateRejected = "GATE_REJECTED";
+    public const string GateCancelled = "GATE_CANCELLED";
+    public const string GateOverdue = "GATE_OVERDUE";
+
+    // Artifacts (FR-16–FR-21)
+    public const string ArtifactCreated = "ARTIFACT_CREATED";
+    public const string ArtifactApproved = "ARTIFACT_APPROVED";
+    public const string ArtifactRejected = "ARTIFACT_REJECTED";
+    public const string ArtifactSuperseded = "ARTIFACT_SUPERSEDED";
+    public const string ArtifactInvalidated = "ARTIFACT_INVALIDATED";
+    public const string ArtifactCorrupted = "ARTIFACT_CORRUPTED";
+
+    // Agent runs (FR-22–FR-26)
+    public const string RunStarted = "RUN_STARTED";
+    public const string RunCompleted = "RUN_COMPLETED";
+    public const string RunFailed = "RUN_FAILED";
+
+    // Execution steps (FR-30–FR-34)
+    public const string StepStarted = "STEP_STARTED";
+    public const string StepCompleted = "STEP_COMPLETED";
+    public const string StepRejected = "STEP_REJECTED";
+    public const string StepBlocked = "STEP_BLOCKED";
+
+    // Review (FR-38–FR-41)
+    public const string ReviewStarted = "REVIEW_STARTED";
+    public const string ReviewCompleted = "REVIEW_COMPLETED";
+
+    // Release (FR-42, FR-43)
+    public const string ReleaseStarted = "RELEASE_STARTED";
+    public const string ReleaseCompleted = "RELEASE_COMPLETED";
+    public const string ReleaseFailed = "RELEASE_FAILED";
+
+    // Rollback (FR-44, FR-45)
+    public const string RollbackCompleted = "ROLLBACK_COMPLETED";
+
+    private static readonly Dictionary<EventCategory, IReadOnlyList<string>> ByCategory = new()
+    {
+        [EventCategory.Transition] = [PhaseChanged],
+        [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
+        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted],
+        [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed],
+        [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked],
+        [EventCategory.Review] = [ReviewStarted, ReviewCompleted],
+        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed],
+        [EventCategory.Rollback] = [RollbackCompleted],
+        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated],
+    };
+
+    private static readonly Dictionary<string, EventCategory> CategoryByType = ByCategory
+        .SelectMany(kv => kv.Value.Select(type => (type, kv.Key)))
+        .ToDictionary(x => x.type, x => x.Key, StringComparer.Ordinal);
+
+    /// <summary>The event types in a category (FR-50 activity filter).</summary>
+    public static IReadOnlyList<string> InCategory(EventCategory category) =>
+        ByCategory.TryGetValue(category, out var types) ? types : [];
+
+    /// <summary>The category of an event type; <c>null</c> for internal markers such as <see cref="DemoProjectSeeded"/>.</summary>
+    public static EventCategory? CategoryOf(string type) =>
+        CategoryByType.TryGetValue(type, out var category) ? category : null;
+
+    /// <summary>Every categorised event type.</summary>
+    public static IReadOnlyCollection<string> AllCategorised => CategoryByType.Keys;
 }

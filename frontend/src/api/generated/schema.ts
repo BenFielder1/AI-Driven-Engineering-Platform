@@ -435,10 +435,123 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/phase/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Advance to the next phase (Contributor or Owner). Returns the new state, or the pending gate created when the approval mode requires one (phase unchanged). 409 PHASE_PRECONDITION_FAILED (with reason), GATE_PENDING, WRONG_PHASE or CONFLICT. */
+        post: operations["AdvancePhase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/gates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's gates, newest first, optionally filtered by status (members). */
+        get: operations["ListGates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/gates/{gateId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a pending gate (Owner). Applies the gated transition; escalation gates need a decision (continue, rollback with targetVersion, or accept). 409 GATE_NOT_PENDING, 400 INVALID_DECISION. */
+        post: operations["ApproveGate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/gates/{gateId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a pending gate (Owner). The phase is unchanged and the agent that produced the gated artifact re-runs with the comment as feedback. Escalation gates can't be rejected (400 INVALID_DECISION). 409 GATE_NOT_PENDING. */
+        post: operations["RejectGate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's activity feed, newest first (members). Filter by category with type; load more with before = the previous page's nextBefore. limit defaults to 50 (max 100). */
+        get: operations["ListProjectActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description One entry of a project's activity feed (FR-50). `type` is the stored event type (e.g. `PHASE_CHANGED`),
+         *     `category` its feed category (`null` for internal events), `summary` a one-line description and
+         *     `payload` the raw event payload.
+         */
+        ActivityItemDto: {
+            /** Format: uuid */
+            id: string;
+            type: string;
+            category: null | components["schemas"]["EventCategory"];
+            /** Format: date-time */
+            occurredAt: string;
+            actor: components["schemas"]["ActorDto"];
+            summary: string;
+            payload: components["schemas"]["JsonObject"];
+        };
+        /** @description A page of the activity feed, newest first. Pass `nextBefore` as `before` to load more; `null` when there is no more. */
+        ActivityPageDto: {
+            items: components["schemas"]["ActivityItemDto"][];
+            nextBefore: null | string;
+        };
+        /** @description Who did something: a user (`id` and display name) or the system actor (`isSystem`, no `id`). */
+        ActorDto: {
+            /** Format: uuid */
+            id: null | string;
+            name: string;
+            isSystem: boolean;
+        };
         /** @description Adds an existing user by email (FR-8). */
         AddMemberRequest: {
             email: string;
@@ -455,6 +568,19 @@ export interface components {
             githubLinked: boolean;
             /** Format: date-time */
             createdAt: string;
+        };
+        /** @description "Advance to next phase" (FR-12). `reason` is recorded on the state transition. */
+        AdvancePhaseRequest: {
+            reason?: null | string;
+        };
+        /**
+         * @description Result of "advance to next phase" (FR-12). When the approval mode requires a gate for the next phase (§4.2),
+         *     `gate` is the pending gate that was created and `state` still shows the current phase; otherwise
+         *     `gate` is `null` and `state` shows the new phase.
+         */
+        AdvanceResultDto: {
+            state: components["schemas"]["ProjectStateDto"];
+            gate: null | components["schemas"]["GateDto"];
         };
         /** @description Model id per agent; an omitted or `null` agent uses the default model. */
         AgentModelsDto: {
@@ -547,8 +673,25 @@ export interface components {
             /** Format: date-time */
             expiresAt: null | string;
         };
+        /**
+         * @description Approve or reject a pending gate (FR-13, FR-14). `comment` is optional (on reject it is the feedback for the
+         *     re-run agent). Escalation gates are approved with a `decision`; `rollback` also needs a
+         *     `targetVersion`. Other gates take neither (400 `INVALID_DECISION`), and escalation gates can't be rejected.
+         */
+        DecideGateRequest: {
+            comment?: null | string;
+            decision?: null | components["schemas"]["EscalationDecision"];
+            /** Format: int32 */
+            targetVersion?: null | number;
+        };
         /** @enum {unknown} */
         DriftLevel: "none" | "low" | "moderate" | "severe" | null;
+        /** @enum {unknown} */
+        EscalationDecision: "continue" | "rollback" | "accept" | null;
+        /** @enum {unknown} */
+        EscalationReason: "low_score" | "severe_drift" | "max_cycles" | "no_improvement" | null;
+        /** @enum {unknown} */
+        EventCategory: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project" | null;
         /** @description Step counts of the current plan version. */
         ExecutionCountsDto: {
             /** Format: int32 */
@@ -564,6 +707,38 @@ export interface components {
             /** Format: int32 */
             blocked: number;
         };
+        /**
+         * @description An approval gate (§4.2, FR-12–FR-15). `artifactId`, `artifactType` and `artifactVersion` identify
+         *     the gated artifact (spec and plan gates). Escalation gates carry `escalationReason` and, once decided,
+         *     `decision` (and `targetVersion` for a rollback). `reason` is a human-readable context line.
+         *     `decidedBy`, `decidedAt` and `comment` are set once the gate is decided. `overdue` is true
+         *     72 hours after creation while pending (FR-15).
+         */
+        GateDto: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["GateType"];
+            status: components["schemas"]["GateStatus"];
+            /** Format: uuid */
+            artifactId: null | string;
+            artifactType: null | components["schemas"]["ArtifactType"];
+            /** Format: int32 */
+            artifactVersion: null | number;
+            escalationReason: null | components["schemas"]["EscalationReason"];
+            reason: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            decidedAt: null | string;
+            decidedBy: null | components["schemas"]["ActorDto"];
+            comment: null | string;
+            decision: null | components["schemas"]["EscalationDecision"];
+            /** Format: int32 */
+            targetVersion: null | number;
+            overdue: boolean;
+        };
+        /** @enum {unknown} */
+        GateStatus: "pending" | "approved" | "rejected" | "cancelled";
         /** @description A pending approval gate. */
         GateSummaryDto: {
             /** Format: uuid */
@@ -623,6 +798,9 @@ export interface components {
             traceId?: string;
             /** @description Individual reasons, when there are several. */
             details?: string[];
+        };
+        JsonObject: {
+            [key: string]: unknown;
         };
         /**
          * @description LLM provider (FR-22). Wire values: `anthropic`, `openai`, `ollama`, `fake`.
@@ -2302,6 +2480,336 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdvancePhase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["AdvancePhaseRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdvanceResultDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't advance. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PHASE_PRECONDITION_FAILED (details lists every unmet condition), GATE_PENDING, WRONG_PHASE (already in release) or CONFLICT. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListGates: {
+        parameters: {
+            query?: {
+                status?: "pending" | "approved" | "rejected" | "cancelled";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GateDto"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ApproveGate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                gateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["DecideGateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GateDto"];
+                };
+            };
+            /** @description VALIDATION, INVALID_DECISION, or INVALID_TARGET_VERSION (escalation rollback). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners decide gates. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project or gate. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GATE_NOT_PENDING, PHASE_PRECONDITION_FAILED, WRONG_PHASE, ROLLBACK_BLOCKED (escalation rollback) or CONFLICT. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description RATE_LIMITED: escalation rollback within a minute of the last rollback; see Retry-After. */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RejectGate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                gateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["DecideGateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GateDto"];
+                };
+            };
+            /** @description VALIDATION or INVALID_DECISION. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners decide gates. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project or gate. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GATE_NOT_PENDING or CONFLICT. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListProjectActivity: {
+        parameters: {
+            query?: {
+                type?: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project";
+                before?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPageDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

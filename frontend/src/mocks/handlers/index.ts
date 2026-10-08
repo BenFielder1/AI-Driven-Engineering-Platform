@@ -1,5 +1,6 @@
 import { authHandlers } from './auth'
 import { healthHandlers } from './health'
+import { lifecycleHandlers } from './lifecycle'
 import { projectHandlers } from './projects'
 
-export const handlers = [...healthHandlers, ...authHandlers, ...projectHandlers]
+export const handlers = [...healthHandlers, ...authHandlers, ...projectHandlers, ...lifecycleHandlers]

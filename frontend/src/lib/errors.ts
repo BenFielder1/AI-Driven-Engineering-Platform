@@ -99,6 +99,7 @@ interface ProblemBody {
   title?: string | null
   errorCode?: string
   errors?: Record<string, string[]>
+  details?: string[]
   traceId?: string
 }
 
@@ -107,6 +108,8 @@ export class ApiError extends Error {
   readonly status: number
   readonly errorCode: ErrorCode | null
   readonly fieldErrors: Record<string, string[]>
+  /** ProblemDetails `details`: the individual reasons (e.g. the unmet entry conditions of PHASE_PRECONDITION_FAILED). */
+  readonly details: readonly string[]
   readonly retryAfterSeconds: number | null
   readonly traceId: string | undefined
 
@@ -115,6 +118,7 @@ export class ApiError extends Error {
     errorCode: ErrorCode | null
     title?: string | null
     fieldErrors?: Record<string, string[]>
+    details?: readonly string[]
     retryAfterSeconds?: number | null
     traceId?: string
   }) {
@@ -123,6 +127,7 @@ export class ApiError extends Error {
     this.status = init.status
     this.errorCode = init.errorCode
     this.fieldErrors = init.fieldErrors ?? {}
+    this.details = init.details ?? []
     this.retryAfterSeconds = init.retryAfterSeconds ?? null
     this.traceId = init.traceId
   }
@@ -138,6 +143,7 @@ export function toApiError(error: unknown, response: Response): ApiError {
     errorCode: code,
     title: body.title,
     fieldErrors: body.errors ?? {},
+    details: Array.isArray(body.details) ? body.details.filter((d) => typeof d === 'string') : [],
     retryAfterSeconds: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null,
     traceId: body.traceId,
   })
@@ -159,6 +165,20 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
     return "We couldn't reach the server. Check your connection and try again."
   }
   return 'Something went wrong. Try again.'
+}
+
+/**
+ * The server's reasons behind an error, for codes where they help the user act (PHASE_PRECONDITION_FAILED lists the
+ * unmet entry conditions, FR-11). Falls back to the ProblemDetails title when there are no `details`.
+ */
+export function errorReasons(error: unknown): string[] {
+  if (!(error instanceof ApiError) || error.errorCode !== 'PHASE_PRECONDITION_FAILED') {
+    return []
+  }
+  if (error.details.length > 0) {
+    return [...error.details]
+  }
+  return error.message ? [error.message] : []
 }
 
 export function isApiError(error: unknown, code?: ErrorCode): error is ApiError {

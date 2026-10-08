@@ -319,10 +319,17 @@ public static partial class ProjectEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
+        var state = await LoadStateAsync(db, id, time, cancellationToken);
+        return state is null ? ApiProblems.NotFound("The project was not found.") : TypedResults.Ok(state);
+    }
+
+    /// <summary>The §6 project state, read from the database (no tracking); <c>null</c> if the project doesn't exist.</summary>
+    internal static async Task<ProjectStateDto?> LoadStateAsync(AideDbContext db, Guid id, TimeProvider time, CancellationToken cancellationToken)
+    {
         var project = await db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
         if (project is null)
         {
-            return ApiProblems.NotFound("The project was not found.");
+            return null;
         }
 
         var artifacts = await db.Artifacts.AsNoTracking()
@@ -390,7 +397,7 @@ public static partial class ProjectEndpoints
             .Select(g => new GateSummaryDto(g.Id, g.Type, g.CreatedAt, g.Overdue || now - g.CreatedAt >= GateTimers.OverdueAfter))
             .ToList();
 
-        return TypedResults.Ok(new ProjectStateDto(
+        return new ProjectStateDto(
             project.Id,
             project.CurrentPhase,
             project.Status,
@@ -399,7 +406,7 @@ public static partial class ProjectEndpoints
             artifactStates,
             execution,
             review,
-            pendingGates));
+            pendingGates);
     }
 
     internal static ProblemHttpResult ConcurrentEdit() =>

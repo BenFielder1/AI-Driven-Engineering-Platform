@@ -33,10 +33,14 @@ export const projectKeys = {
   state: (id: string) => [...projectKeys.detail(id), 'state'] as const,
   members: (id: string) => [...projectKeys.detail(id), 'members'] as const,
   settings: (id: string) => [...projectKeys.detail(id), 'settings'] as const,
+  /** GET /gates (all statuses; the overview splits pending from decided). */
+  gates: (id: string) => [...projectKeys.detail(id), 'gates'] as const,
+  /** GET /activity, per category filter (`all` when unfiltered). */
+  activity: (id: string, category: string | null) => [...projectKeys.detail(id), 'activity', category ?? 'all'] as const,
 }
 
 /** Unwraps an openapi-fetch result: the body on success, an ApiError otherwise. */
-function unwrap<T>(result: { data?: T; error?: unknown; response: Response }): T {
+export function unwrap<T>(result: { data?: T; error?: unknown; response: Response }): T {
   if (result.data !== undefined) {
     return result.data
   }

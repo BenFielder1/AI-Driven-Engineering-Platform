@@ -50,12 +50,84 @@ export const roleLabels: Record<ProjectRole, string> = {
 
 export const projectRoles = ['owner', 'contributor', 'viewer'] as const satisfies readonly ProjectRole[]
 
+export const gateTypes = ['spec_approval', 'plan_approval', 'pre_release', 'escalation'] as const satisfies
+  readonly Schemas['GateType'][]
+
 export const gateTypeLabels: Record<Schemas['GateType'], string> = {
   spec_approval: 'Specification approval',
   plan_approval: 'Plan approval',
   pre_release: 'Release approval',
   escalation: 'Escalation',
 }
+
+export const gateStatusLabels: Record<Schemas['GateStatus'], string> = {
+  pending: 'Pending',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
+}
+
+/** SPEC §4.5: why review escalated to a human. */
+export const escalationReasonLabels: Record<NonNullable<Schemas['EscalationReason']>, string> = {
+  low_score: 'Compliance score below 0.75',
+  severe_drift: 'Severe drift from the specification',
+  max_cycles: 'Maximum review cycles reached',
+  no_improvement: 'No improvement since the last review cycle',
+}
+
+/** FR-14: the three escalation decisions. */
+export const escalationDecisions = ['continue', 'rollback', 'accept'] as const satisfies readonly NonNullable<
+  Schemas['EscalationDecision']
+>[]
+
+export const escalationDecisionLabels: Record<NonNullable<Schemas['EscalationDecision']>, string> = {
+  continue: 'Continue',
+  rollback: 'Roll back',
+  accept: 'Accept',
+}
+
+export const escalationDecisionDescriptions: Record<NonNullable<Schemas['EscalationDecision']>, string> = {
+  continue: 'Start another review cycle: execution re-enters for an optimisation plan.',
+  rollback: 'Return the project to an earlier version. Later artifacts are invalidated; history is kept.',
+  accept: 'Mark the project release-eligible as it is. Any comment is recorded with the decision.',
+}
+
+/** FR-50: activity feed filter categories. */
+export const eventCategories = [
+  'transition',
+  'gate',
+  'artifact',
+  'run',
+  'step',
+  'review',
+  'release',
+  'rollback',
+  'project',
+] as const satisfies readonly NonNullable<Schemas['EventCategory']>[]
+
+export const eventCategoryLabels: Record<NonNullable<Schemas['EventCategory']>, string> = {
+  transition: 'Phase changes',
+  gate: 'Gates',
+  artifact: 'Artifacts',
+  run: 'Agent runs',
+  step: 'Execution steps',
+  review: 'Reviews',
+  release: 'Releases',
+  rollback: 'Rollbacks',
+  project: 'Project and members',
+}
+
+/** SPEC §4.1: the next phase forward, or null in the last phase. */
+export function nextPhase(phase: Schemas['Phase']): Schemas['Phase'] | null {
+  return phases[phases.indexOf(phase) + 1] ?? null
+}
+
+export const artifactTypes = [
+  'project_request',
+  'technical_specification',
+  'implementation_plan',
+  'optimization_plan',
+] as const satisfies readonly Schemas['ArtifactType'][]
 
 export const artifactTypeLabels: Record<Schemas['ArtifactType'], string> = {
   project_request: 'Project request',
@@ -125,6 +197,27 @@ export const notificationEventLabels: Record<Schemas['NotificationEvent'], strin
 
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 export const formatDateTime = (iso: string) => dateTimeFormat.format(new Date(iso))
+
+const relativeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+const relativeUnits: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['year', 365 * 24 * 3600],
+  ['month', 30 * 24 * 3600],
+  ['week', 7 * 24 * 3600],
+  ['day', 24 * 3600],
+  ['hour', 3600],
+  ['minute', 60],
+]
+
+/** "3 hours ago" style copy relative to `now` (pair it with the absolute time in a title). */
+export function formatRelativeTime(iso: string, now: number = Date.now()): string {
+  const seconds = Math.round((new Date(iso).getTime() - now) / 1000)
+  for (const [unit, size] of relativeUnits) {
+    if (Math.abs(seconds) >= size) {
+      return relativeFormat.format(Math.trunc(seconds / size), unit)
+    }
+  }
+  return 'just now'
+}
 
 const numberFormat = new Intl.NumberFormat()
 export const formatNumber = (n: number) => numberFormat.format(n)
