@@ -6,7 +6,7 @@ import { openOwnerSettings } from '../../../test/project-settings'
 
 async function openLlm(hasApiKey = false) {
   const utils = await openOwnerSettings('llm', {
-    llm: { provider: 'anthropic', defaultModel: 'claude-sonnet-4-5', modelsByAgent: {}, hasApiKey },
+    llm: { provider: 'anthropic', defaultModel: 'claude-opus-5-5', modelsByAgent: {}, hasApiKey },
   })
   await screen.findByRole('heading', { name: 'LLM' })
   return utils
@@ -15,10 +15,10 @@ async function openLlm(hasApiKey = false) {
 describe('Settings → LLM (FR-9)', () => {
   it('FR-9: providers without a system key are marked "not configured" and can\'t be picked without a project key', async () => {
     projectsDb.providers = [
-      { provider: 'anthropic', configured: true, defaultModel: 'claude-sonnet-4-5' },
-      { provider: 'openai', configured: false, defaultModel: 'gpt-4.1' },
-      { provider: 'ollama', configured: false, defaultModel: 'llama3.1' },
-      { provider: 'fake', configured: true, defaultModel: 'fake-model' },
+      { provider: 'anthropic', configured: true, defaultModel: 'claude-opus-5-5' },
+      { provider: 'openai', configured: false, defaultModel: 'gpt-6-astra' },
+      { provider: 'ollama', configured: false, defaultModel: 'qwen2.5-coder' },
+      { provider: 'fake', configured: true, defaultModel: 'fake-1' },
     ]
     await openLlm()
 
@@ -37,10 +37,10 @@ describe('Settings → LLM (FR-9)', () => {
 
   it('FR-9: entering a project API key makes an unconfigured provider selectable', async () => {
     projectsDb.providers = [
-      { provider: 'anthropic', configured: true, defaultModel: 'claude-sonnet-4-5' },
-      { provider: 'openai', configured: false, defaultModel: 'gpt-4.1' },
-      { provider: 'ollama', configured: true, defaultModel: 'llama3.1' },
-      { provider: 'fake', configured: true, defaultModel: 'fake-model' },
+      { provider: 'anthropic', configured: true, defaultModel: 'claude-opus-5-5' },
+      { provider: 'openai', configured: false, defaultModel: 'gpt-6-astra' },
+      { provider: 'ollama', configured: true, defaultModel: 'qwen2.5-coder' },
+      { provider: 'fake', configured: true, defaultModel: 'fake-1' },
     ]
     const { user } = await openLlm()
 
@@ -50,6 +50,26 @@ describe('Settings → LLM (FR-9)', () => {
     await user.selectOptions(screen.getByLabelText('Provider'), 'openai')
 
     expect(screen.getByText(/OpenAI isn.t configured on this server\. The project API key will be used\./)).toBeInTheDocument()
-    expect(screen.getByLabelText('Default model')).toHaveValue('gpt-4.1')
+    expect(screen.getByLabelText('Default model')).toHaveValue('gpt-6-astra')
+  })
+
+  it('FR-22: choosing Ollama fills its system default model (qwen2.5-coder) and saves provider and model', async () => {
+    const { user, project } = await openLlm()
+
+    expect(screen.getByLabelText('Default model')).toHaveValue('claude-opus-5-5')
+    expect(screen.getByLabelText('Default model')).toHaveAccessibleDescription(
+      'The system default for Anthropic is claude-opus-5-5.',
+    )
+    await user.selectOptions(screen.getByLabelText('Provider'), 'ollama')
+    expect(screen.getByLabelText('Default model')).toHaveValue('qwen2.5-coder')
+    await user.type(screen.getByLabelText('Code generator'), 'qwen2.5-coder:32b')
+    await user.click(screen.getByRole('button', { name: 'Save LLM settings' }))
+
+    expect(await screen.findByText('LLM settings saved.')).toBeInTheDocument()
+    expect(project.llm).toMatchObject({
+      provider: 'ollama',
+      defaultModel: 'qwen2.5-coder',
+      modelsByAgent: { codeGenerator: 'qwen2.5-coder:32b' },
+    })
   })
 })

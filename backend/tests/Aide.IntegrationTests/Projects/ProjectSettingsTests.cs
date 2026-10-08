@@ -131,8 +131,8 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
         var llm = await ProjectApi.ReadAsync<LlmSettingsDto>(withKey);
 
         await Problems.AssertAsync(refused, HttpStatusCode.BadRequest, ErrorCodes.Validation);
-        Assert.Equal((LlmProvider.Anthropic, "claude-sonnet-5-5", true), (llm.Provider, llm.DefaultModel, llm.HasApiKey));
-        Assert.Equal("claude-haiku-4-5-20251001", llm.ModelsByAgent.IdeaRefinement);
+        Assert.Equal((LlmProvider.Anthropic, "claude-opus-5-5", true), (llm.Provider, llm.DefaultModel, llm.HasApiKey));
+        Assert.Equal("claude-sonnet-5-5", llm.ModelsByAgent.IdeaRefinement);
         Assert.True(llm.Providers.Single(p => p.Provider == LlmProvider.Anthropic).Configured);
         Assert.False(llm.Providers.Single(p => p.Provider == LlmProvider.Openai).Configured);
         Assert.DoesNotContain(LlmKey, withKeyText, StringComparison.Ordinal);
@@ -141,6 +141,22 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
 
         // Clearing the only key of a provider that needs one is refused too.
         await Problems.AssertAsync(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/llm", new { clearApiKey = true }), HttpStatusCode.BadRequest, ErrorCodes.Validation);
+    }
+
+    [Theory]
+    [InlineData("sk-ant-first-half\nsecond-half")]
+    [InlineData("sk-ant-trailing-newline\n")]
+    [InlineData("sk-ant with-space")]
+    [InlineData("sk-ant-bell\u0007")]
+    public async Task FR25_An_LLM_key_with_whitespace_or_control_characters_is_VALIDATION_and_not_saved(string key)
+    {
+        using var fixture = await ProjectApi.FixtureAsync(factory);
+
+        var response = await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/llm", new { provider = "anthropic", apiKey = key });
+
+        var body = await Problems.AssertAsync(response, HttpStatusCode.BadRequest, ErrorCodes.Validation);
+        Assert.True(body.GetProperty("errors").TryGetProperty("apiKey", out _), body.ToString());
+        Assert.Null(await ProjectApi.WithDbAsync(factory, db => db.ProjectLlmSettings.Where(s => s.ProjectId == fixture.Project.Id).Select(s => s.ApiKeyEncrypted).SingleAsync(Ct)));
     }
 
     [Fact]

@@ -7,12 +7,17 @@ using Microsoft.Extensions.Options;
 namespace Aide.Infrastructure.Llm;
 
 /// <summary>
-/// System LLM configuration (section <c>Llm</c>, FR-22, §11 Q4). Keys:
-/// <c>Llm:DefaultProvider</c> (anthropic|openai|ollama|fake, default anthropic);
-/// <c>Llm:Providers:{Anthropic|OpenAI|Ollama|Fake}:DefaultModel</c>;
-/// <c>Llm:Providers:{Provider}:Models:{AgentKind}</c> (e.g. <c>Models:IdeaRefinement</c>);
-/// <c>Llm:Providers:Anthropic:ApiKey</c>, <c>Llm:Providers:OpenAI:ApiKey</c> (secrets: user-secrets / secrets.env only);
-/// <c>Llm:Providers:Ollama:BaseUrl</c>. Environment variables use <c>__</c>, e.g. <c>Llm__Providers__Anthropic__ApiKey</c>.
+/// System LLM configuration (section <c>Llm</c>, FR-22–FR-26, §11 Q4). Keys:
+/// <list type="bullet">
+/// <item><c>Llm:DefaultProvider</c> (anthropic|openai|ollama|fake, default anthropic);</item>
+/// <item><c>Llm:Providers:{Anthropic|OpenAI|Ollama|Fake}:DefaultModel</c> and <c>…:Models:{AgentKind}</c> (e.g. <c>Models:IdeaRefinement</c>);</item>
+/// <item><c>Llm:Providers:Anthropic:ApiKey</c>, <c>Llm:Providers:OpenAI:ApiKey</c> (secrets: user-secrets / secrets.env only);</item>
+/// <item><c>Llm:Providers:{Provider}:BaseUrl</c> (defaults: https://api.anthropic.com, https://api.openai.com/v1, and for
+/// Ollama http://localhost:11434 in the dev loop or http://host.docker.internal:11434 in a container);</item>
+/// <item><c>Llm:Pricing:{model-id}:InputPerMTok</c> / <c>OutputPerMTok</c> (USD per million tokens; unpriced models cost 0);</item>
+/// <item><c>Llm:RequestTimeout</c> (per provider call, default 00:05:00) and <c>Llm:MaxOutputTokens</c> (default 16000).</item>
+/// </list>
+/// Environment variables use <c>__</c>, e.g. <c>Llm__Providers__Anthropic__ApiKey</c>.
 /// </summary>
 public sealed class LlmOptions
 {
@@ -21,6 +26,31 @@ public sealed class LlmOptions
     public string DefaultProvider { get; set; } = "anthropic";
 
     public LlmProvidersOptions Providers { get; set; } = new();
+
+    /// <summary>Price per model id (case-insensitive), for run cost estimates (FR-23, D15).</summary>
+    public Dictionary<string, LlmPriceOptions> Pricing { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>How long one provider call may take before it counts as a (transient) timeout.</summary>
+    public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>Default output token cap per call.</summary>
+    public int MaxOutputTokens { get; set; } = 16_000;
+
+    /// <summary>The Ollama endpoint: <c>Llm:Providers:Ollama:BaseUrl</c>, else host.docker.internal in a container or
+    /// localhost for the dev loop.</summary>
+    public Uri ResolveOllamaBaseUrl() => new(
+        Providers.Ollama.BaseUrl is { Length: > 0 } url ? url
+        : string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase)
+            ? LlmProviderCatalog.ContainerOllamaUrl
+            : LlmProviderCatalog.LocalOllamaUrl);
+}
+
+/// <summary>USD per million input and output tokens.</summary>
+public sealed class LlmPriceOptions
+{
+    public decimal InputPerMTok { get; set; }
+
+    public decimal OutputPerMTok { get; set; }
 }
 
 public sealed class LlmProvidersOptions
@@ -48,7 +78,7 @@ public sealed class LlmProviderOptions
     /// <summary>System API key (Anthropic, OpenAI). Never logged or returned.</summary>
     public string? ApiKey { get; set; }
 
-    /// <summary>Endpoint (Ollama).</summary>
+    /// <summary>Endpoint override (all providers; Ollama has an environment-dependent default).</summary>
     public string? BaseUrl { get; set; }
 
     public string DefaultModel { get; set; } = string.Empty;
@@ -85,9 +115,32 @@ internal sealed class LlmOptionsValidator : IValidateOptions<LlmOptions>
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(options.Providers.Ollama.BaseUrl) && !Uri.TryCreate(options.Providers.Ollama.BaseUrl, UriKind.Absolute, out _))
+        foreach (var provider in Enum.GetValues<LlmProvider>())
         {
-            failures.Add("Llm:Providers:Ollama:BaseUrl must be an absolute URL.");
+            var baseUrl = options.Providers.For(provider).BaseUrl;
+            if (!string.IsNullOrWhiteSpace(baseUrl)
+                && !(Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)))
+            {
+                failures.Add($"Llm:Providers:{provider}:BaseUrl must be an absolute http(s) URL.");
+            }
+        }
+
+        foreach (var (model, price) in options.Pricing)
+        {
+            if (price is null || price.InputPerMTok < 0 || price.OutputPerMTok < 0)
+            {
+                failures.Add($"Llm:Pricing:{model} prices must be zero or more.");
+            }
+        }
+
+        if (options.RequestTimeout <= TimeSpan.Zero)
+        {
+            failures.Add("Llm:RequestTimeout must be positive.");
+        }
+
+        if (options.MaxOutputTokens < 1)
+        {
+            failures.Add("Llm:MaxOutputTokens must be at least 1.");
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
@@ -115,6 +168,12 @@ public interface ILlmProviderCatalog
     /// <summary>The Ollama endpoint: <c>Llm:Providers:Ollama:BaseUrl</c>, else host.docker.internal in a container
     /// or localhost for the dev loop.</summary>
     Uri OllamaBaseUrl { get; }
+
+    /// <summary>The system API key of a provider (Anthropic, OpenAI), or <c>null</c>. Never log it.</summary>
+    string? SystemApiKey(LlmProvider provider);
+
+    /// <summary>The configured price of a model (<c>Llm:Pricing</c>), or <c>null</c> when unpriced.</summary>
+    ModelPrice? PriceOf(string model);
 }
 
 internal sealed class LlmProviderCatalog(IOptions<LlmOptions> options) : ILlmProviderCatalog
@@ -130,13 +189,20 @@ internal sealed class LlmProviderCatalog(IOptions<LlmOptions> options) : ILlmPro
     public LlmProvider DefaultForNewProject =>
         ProjectSettingsRules.DefaultProviderForNewProject(ConfiguredDefault, HasSystemKey(ConfiguredDefault));
 
-    public Uri OllamaBaseUrl => new(
-        _options.Providers.Ollama.BaseUrl is { Length: > 0 } url ? url
-        : InContainer ? ContainerOllamaUrl
-        : LocalOllamaUrl);
+    public Uri OllamaBaseUrl => _options.ResolveOllamaBaseUrl();
 
-    private static bool InContainer =>
-        string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase);
+    public string? SystemApiKey(LlmProvider provider) =>
+        HasSystemKey(provider) ? _options.Providers.For(provider).ApiKey!.Trim() : null;
+
+    public ModelPrice? PriceOf(string model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        var key = model.Trim();
+        var price = _options.Pricing.TryGetValue(key, out var exact)
+            ? exact
+            : _options.Pricing.FirstOrDefault(kv => string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase)).Value;
+        return price is null ? null : new ModelPrice(price.InputPerMTok, price.OutputPerMTok);
+    }
 
     public bool HasSystemKey(LlmProvider provider) =>
         ProjectSettingsRules.RequiresApiKey(provider) && !string.IsNullOrWhiteSpace(_options.Providers.For(provider).ApiKey);

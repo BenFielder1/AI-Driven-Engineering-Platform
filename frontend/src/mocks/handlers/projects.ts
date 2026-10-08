@@ -46,6 +46,8 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
   events: Schemas['ActivityItemDto'][]
   /** Every artifact version, any type (FR-16); see mocks/handlers/artifacts.ts. */
   artifacts: Schemas['ArtifactDto'][]
+  /** Agent runs, any order (the API lists newest first); see mocks/handlers/runs.ts (FR-23). */
+  runs: Schemas['AgentRunDetailDto'][]
   /** Phase recorded at each project version (rollback restores it, §4.8). */
   phaseAtVersion: Record<number, Project['currentPhase']>
 }
@@ -58,10 +60,10 @@ export interface RecordedRequest {
 }
 
 const defaultProviders = (): ProviderStatus[] => [
-  { provider: 'anthropic', configured: true, defaultModel: 'claude-sonnet-4-5' },
-  { provider: 'openai', configured: false, defaultModel: 'gpt-4.1' },
-  { provider: 'ollama', configured: true, defaultModel: 'llama3.1' },
-  { provider: 'fake', configured: true, defaultModel: 'fake-model' },
+  { provider: 'anthropic', configured: true, defaultModel: 'claude-opus-5-5' },
+  { provider: 'openai', configured: false, defaultModel: 'gpt-6-astra' },
+  { provider: 'ollama', configured: true, defaultModel: 'qwen2.5-coder' },
+  { provider: 'fake', configured: true, defaultModel: 'fake-1' },
 ]
 
 /** In-memory projects backend for tests (reset after each test by src/test/setup.ts). */
@@ -117,12 +119,13 @@ export function seedProject(
     createdAt: now,
     updatedAt: now,
     git: { provider: 'github', repoUrl: 'https://github.com/acme/inventory', defaultBranch: 'main', branchName: null, hasToken: false },
-    llm: { provider: 'anthropic', defaultModel: 'claude-sonnet-4-5', modelsByAgent: {}, hasApiKey: false },
+    llm: { provider: 'anthropic', defaultModel: 'claude-opus-5-5', modelsByAgent: {}, hasApiKey: false },
     channels: [],
     state: emptyState(),
     gates: [],
     events: [],
     artifacts: [],
+    runs: [],
     phaseAtVersion: {},
     ...rest,
     members: (members ?? (owner ? [{ userId: owner, role: 'owner' as const }] : [])).map((m) => ({
@@ -281,6 +284,8 @@ export function stateDto(p: StoredProject): State {
     pendingGates: p.gates
       .filter((g) => g.status === 'pending')
       .map(({ id, type, createdAt, overdue }) => ({ id, type, createdAt, overdue })),
+    tokensUsed: p.tokensUsed,
+    tokenBudget: p.tokenBudget,
   }
 }
 

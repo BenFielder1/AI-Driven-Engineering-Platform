@@ -20,6 +20,9 @@ namespace Aide.Api.Jobs;
 /// <item>records the outcome: success, or retry with backoff / dead letter / failure per <see cref="JobPolicy.OnFailure"/>.
 /// On shutdown, interrupted jobs are handed back without counting the attempt.</item>
 /// </list>
+/// A job that ends without succeeding — dead-lettered by a handler failure or by the reaper, or failed permanently — runs
+/// the registered <see cref="IJobEndedHook"/>s in the same transaction as its final status (e.g. failing agent runs the job
+/// left <c>running</c>, FR-25).
 /// Time comes from the injected <see cref="TimeProvider"/>; <see cref="RunOnceAsync"/> lets tests drive it deterministically.
 /// </summary>
 public sealed partial class JobWorker : BackgroundService
@@ -183,10 +186,25 @@ public sealed partial class JobWorker : BackgroundService
             job.LockedBy = null;
             job.LockedAt = null;
             job.CompletedAt = outcome.Status == JobStatus.Queued ? null : now;
+            if (outcome.IsDeadLetter)
+            {
+                await NotifyEndedAsync(scope.ServiceProvider, db, job, deadLettered: true, job.LastError, cancellationToken);
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>Runs the <see cref="IJobEndedHook"/>s for a job that ended without succeeding; they add their changes to
+    /// <paramref name="db"/>, which the caller saves with the job's final status.</summary>
+    private static async Task NotifyEndedAsync(IServiceProvider services, AideDbContext db, Job job, bool deadLettered, string? error, CancellationToken cancellationToken)
+    {
+        var ended = new JobEnded(job.Id, job.Type, job.ProjectId, deadLettered, error);
+        foreach (var hook in services.GetServices<IJobEndedHook>())
+        {
+            await hook.OnJobEndedAsync(db, ended, cancellationToken);
+        }
     }
 
     private async Task<List<Job>> ClaimAsync(string[] types, int limit, CancellationToken cancellationToken)
@@ -359,6 +377,7 @@ public sealed partial class JobWorker : BackgroundService
             var outcome = JobPolicy.OnFailure(job.Attempts, transient, now);
             var lastError = Truncate(error);
             var completedAt = outcome.Status == JobStatus.Queued ? (DateTimeOffset?)null : now;
+            await using var transaction = await db.Database.BeginTransactionAsync(CancellationToken.None);
             updated = await mine.ExecuteUpdateAsync(
                 s => s.SetProperty(j => j.Status, outcome.Status)
                     .SetProperty(j => j.RunAfter, outcome.RunAfter ?? job.RunAfter)
@@ -367,6 +386,13 @@ public sealed partial class JobWorker : BackgroundService
                     .SetProperty(j => j.LockedBy, (string?)null)
                     .SetProperty(j => j.LockedAt, (DateTimeOffset?)null),
                 CancellationToken.None);
+            if (updated > 0 && outcome.Status != JobStatus.Queued)
+            {
+                await NotifyEndedAsync(scope.ServiceProvider, db, job, outcome.IsDeadLetter, lastError, CancellationToken.None);
+                await db.SaveChangesAsync(CancellationToken.None);
+            }
+
+            await transaction.CommitAsync(CancellationToken.None);
             if (outcome.IsDeadLetter)
             {
                 LogDeadLettered(_logger, job.Attempts);

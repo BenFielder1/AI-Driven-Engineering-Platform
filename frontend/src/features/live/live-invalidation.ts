@@ -15,6 +15,7 @@ const state = (id: string): Target => ({ queryKey: projectKeys.state(id) })
 const gates = (id: string): Target => ({ queryKey: projectKeys.gates(id) })
 const activity = (id: string): Target => ({ queryKey: [...projectKeys.detail(id), 'activity'] })
 const artifacts = (id: string): Target => ({ queryKey: projectKeys.artifacts(id) })
+const runs = (id: string): Target => ({ queryKey: projectKeys.runs(id) })
 const lists = (): Target => ({ queryKey: projectKeys.lists() })
 /** Everything about the project (the detail key prefixes all of its queries). */
 const everything = (id: string): Target => ({ queryKey: projectKeys.detail(id) })
@@ -31,8 +32,9 @@ export const liveInvalidation: Record<EventCategory, (id: string) => Target[]> =
   // New version, approval, rejection, invalidation cascade (§4.4) or corruption.
   artifact: (id) => [artifacts(id), state(id), activity(id)],
   integrity: (id) => [artifacts(id), activity(id)],
-  // Agent runs produce artifacts (which arrive as artifact events) and use the token budget.
-  run: (id) => [project(id), state(id), activity(id)],
+  // Agent runs (started, completed, failed, refused by the budget) change the runs list and the tokens used; the
+  // artifacts they produce arrive as artifact events (FR-23, FR-26).
+  run: (id) => [project(id), state(id), runs(id), activity(id)],
   step: (id) => [state(id), activity(id)],
   review: (id) => [state(id), activity(id)],
   release: (id) => [project(id), state(id), activity(id), lists()],

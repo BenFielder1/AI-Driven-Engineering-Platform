@@ -656,6 +656,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's agent runs, newest first, paged, optionally filtered by agent (members). */
+        get: operations["ListRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One agent run with its output (members). 404 NOT_FOUND for a run of another project. */
+        get: operations["GetRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -718,6 +752,11 @@ export interface components {
             state: components["schemas"]["ProjectStateDto"];
             gate: null | components["schemas"]["GateDto"];
         };
+        /**
+         * @description The five cognitive agents (§1, FR-23).
+         * @enum {unknown}
+         */
+        AgentKind: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review";
         /** @description Model id per agent; an omitted or `null` agent uses the default model. */
         AgentModelsDto: {
             ideaRefinement?: null | string;
@@ -726,6 +765,80 @@ export interface components {
             codeGenerator?: null | string;
             codeReview?: null | string;
         };
+        /**
+         * @description An agent run with the provider's output text (FR-23). `output` is `null` until the run succeeds and is cut
+         *     to the first 200,000 characters (`outputTruncated`).
+         */
+        AgentRunDetailDto: {
+            /** Format: uuid */
+            id: string;
+            agent: components["schemas"]["AgentKind"];
+            phase: components["schemas"]["Phase"];
+            /** Format: uuid */
+            stepId: null | string;
+            provider: components["schemas"]["LlmProvider"];
+            model: string;
+            promptVersion: string;
+            inputArtifacts: components["schemas"]["RunInputArtifactDto"][];
+            userFeedback: null | string;
+            status: components["schemas"]["AgentRunStatus"];
+            /** Format: int32 */
+            attempts: number;
+            /** Format: int32 */
+            inputTokens: number;
+            /** Format: int32 */
+            outputTokens: number;
+            /** Format: double */
+            costEstimate: number;
+            /** Format: int64 */
+            durationMs: number;
+            error: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+            output: null | string;
+            outputTruncated: boolean;
+        };
+        /**
+         * @description An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt
+         *     template version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in
+         *     USD, duration and error. `userFeedback` is the feedback or answers given to the agent.
+         */
+        AgentRunDto: {
+            /** Format: uuid */
+            id: string;
+            agent: components["schemas"]["AgentKind"];
+            phase: components["schemas"]["Phase"];
+            /** Format: uuid */
+            stepId: null | string;
+            provider: components["schemas"]["LlmProvider"];
+            model: string;
+            promptVersion: string;
+            inputArtifacts: components["schemas"]["RunInputArtifactDto"][];
+            userFeedback: null | string;
+            status: components["schemas"]["AgentRunStatus"];
+            /** Format: int32 */
+            attempts: number;
+            /** Format: int32 */
+            inputTokens: number;
+            /** Format: int32 */
+            outputTokens: number;
+            /** Format: double */
+            costEstimate: number;
+            /** Format: int64 */
+            durationMs: number;
+            error: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+        };
+        /**
+         * @description Status of an agent run (FR-23, FR-25).
+         * @enum {unknown}
+         */
+        AgentRunStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
         /** @description A personal API token as listed (never includes the token or its hash). */
         ApiTokenDto: {
             /** Format: uuid */
@@ -1144,6 +1257,16 @@ export interface components {
             total: number;
         };
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
+        PagedResultOfAgentRunDto: {
+            items: components["schemas"]["AgentRunDto"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            limit: number;
+            /** Format: int32 */
+            total: number;
+        };
+        /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfProjectSummaryDto: {
             items: components["schemas"]["ProjectSummaryDto"][];
             /** Format: int32 */
@@ -1232,7 +1355,7 @@ export interface components {
             llm: components["schemas"]["LlmSettingsDto"];
             notifications: components["schemas"]["NotificationSettingsDto"];
         };
-        /** @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). */
+        /** @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). */
         ProjectStateDto: {
             /** Format: uuid */
             projectId: string;
@@ -1245,6 +1368,10 @@ export interface components {
             execution: components["schemas"]["ExecutionCountsDto"];
             review: components["schemas"]["ReviewStateDto"];
             pendingGates: components["schemas"]["GateSummaryDto"][];
+            /** Format: int64 */
+            tokensUsed: number;
+            /** Format: int64 */
+            tokenBudget: null | number;
         };
         /**
          * @description Project status (§4.1: status follows phase; `released` and `rolled_back` are special).
@@ -1287,6 +1414,12 @@ export interface components {
             latestScore: null | number;
             latestDecision: null | components["schemas"]["ReviewDecision"];
             driftLevel: null | components["schemas"]["DriftLevel"];
+        };
+        /** @description An artifact version a run used as input (FR-23). */
+        RunInputArtifactDto: {
+            type: components["schemas"]["ArtifactType"];
+            /** Format: int32 */
+            version: number;
         };
         /** @enum {unknown} */
         SystemRole: "user" | "admin";
@@ -3557,6 +3690,100 @@ export interface operations {
             };
             /** @description ARTIFACT_NOT_DRAFT, ARTIFACT_LOCKED or CONFLICT. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListRuns: {
+        parameters: {
+            query?: {
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review";
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagedResultOfAgentRunDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunDetailDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -406,7 +406,9 @@ public static partial class ProjectEndpoints
             artifactStates,
             execution,
             review,
-            pendingGates);
+            pendingGates,
+            project.TokensUsed,
+            project.TokenBudget);
     }
 
     internal static ProblemHttpResult ConcurrentEdit() =>

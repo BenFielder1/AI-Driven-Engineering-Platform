@@ -233,3 +233,46 @@ export function formatRelativeTime(iso: string, now: number = Date.now()): strin
 
 const numberFormat = new Intl.NumberFormat()
 export const formatNumber = (n: number) => numberFormat.format(n)
+
+/** FR-23: the five agents (the contract's `AgentKind`). */
+export const agentKinds = [
+  'idea_refinement',
+  'spec_generator',
+  'plan_generator',
+  'code_generator',
+  'code_review',
+] as const satisfies readonly Schemas['AgentKind'][]
+
+export const agentKindLabels: Record<Schemas['AgentKind'], string> = {
+  idea_refinement: 'Idea refinement',
+  spec_generator: 'Spec generator',
+  plan_generator: 'Plan generator',
+  code_generator: 'Code generator',
+  code_review: 'Code review',
+}
+
+/** FR-23, FR-25: agent run statuses. Running runs stream nothing in v1 (SPEC §8, §11 Q3). */
+export const runStatusLabels: Record<Schemas['AgentRunStatus'], string> = {
+  queued: 'Queued',
+  running: 'Running…',
+  succeeded: 'Succeeded',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+}
+
+/** "850 ms", "12.4 s", "3 min 05 s". */
+export function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return `${String(Math.round(ms))} ms`
+  }
+  const seconds = ms / 1000
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)} s`
+  }
+  const whole = Math.round(seconds)
+  return `${String(Math.floor(whole / 60))} min ${String(whole % 60).padStart(2, '0')} s`
+}
+
+const costFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 })
+/** Estimated USD cost of a run (D15: an estimate from configured prices; unpriced models cost $0.00). */
+export const formatCost = (usd: number) => costFormat.format(usd)

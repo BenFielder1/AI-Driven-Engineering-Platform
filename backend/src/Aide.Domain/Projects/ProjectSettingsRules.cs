@@ -172,7 +172,18 @@ public static partial class ProjectSettingsRules
     public static LlmProvider DefaultProviderForNewProject(LlmProvider configuredDefault, bool defaultHasSystemKey) =>
         IsConfigured(configuredDefault, defaultHasSystemKey, hasProjectKey: false) ? configuredDefault : LlmProvider.Fake;
 
-    /// <summary>Validates LLM settings as they will be stored (after a partial update).</summary>
+    /// <summary>
+    /// NFR-SEC: a provider API key is sent as an HTTP header, so it may not contain whitespace or control characters
+    /// (a pasted key with a line break would otherwise fail every run, and the header error would echo the key).
+    /// </summary>
+    public static bool IsWellFormedApiKey(string apiKey)
+    {
+        ArgumentNullException.ThrowIfNull(apiKey);
+        return !Agents.SecretRedaction.HasWhitespaceOrControl(apiKey);
+    }
+
+    /// <summary>Validates LLM settings as they will be stored (after a partial update). <paramref name="apiKey"/> is
+    /// the key sent, when one was.</summary>
     public static Result ValidateLlm(
         LlmProvider provider,
         string? defaultModel,
@@ -181,7 +192,8 @@ public static partial class ProjectSettingsRules
         bool apiKeySentBlank,
         bool clearApiKey,
         bool hasSystemKey,
-        bool hasProjectKeyAfter)
+        bool hasProjectKeyAfter,
+        string? apiKey = null)
     {
         var problems = new List<string>();
         if (string.IsNullOrWhiteSpace(defaultModel))
@@ -208,6 +220,10 @@ public static partial class ProjectSettingsRules
         else if (apiKeySent && !RequiresApiKey(provider))
         {
             problems.Add($"apiKey: {provider.ToWire()} doesn't use an API key.");
+        }
+        else if (apiKey is not null && !IsWellFormedApiKey(apiKey))
+        {
+            problems.Add("apiKey: The API key can't contain spaces, line breaks or other control characters.");
         }
 
         if (problems.Count == 0 && !IsConfigured(provider, hasSystemKey, hasProjectKeyAfter))

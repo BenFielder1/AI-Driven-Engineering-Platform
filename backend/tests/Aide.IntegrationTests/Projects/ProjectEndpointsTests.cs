@@ -187,8 +187,8 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
 
         var settings = await ProjectApi.ReadAsync<ProjectSettingsDto>(await owner.Client.GetAsync(new Uri($"/api/projects/{project.Id}/settings", UriKind.Relative), Ct));
         Assert.Equal(LlmProvider.Anthropic, settings.Llm.Provider);
-        Assert.Equal("claude-sonnet-5-5", settings.Llm.DefaultModel);
-        Assert.Equal("claude-haiku-4-5-20251001", settings.Llm.ModelsByAgent.IdeaRefinement);
+        Assert.Equal("claude-opus-5-5", settings.Llm.DefaultModel);
+        Assert.Equal("claude-sonnet-5-5", settings.Llm.ModelsByAgent.IdeaRefinement);
         Assert.Null(settings.Llm.ModelsByAgent.SpecGenerator);
         Assert.False(settings.Llm.HasApiKey);
         Assert.True(settings.Llm.Providers.Single(p => p.Provider == LlmProvider.Anthropic).Configured);

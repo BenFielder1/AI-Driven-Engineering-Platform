@@ -3050,6 +3050,165 @@
           }
         }
       }
+    },
+    "/api/projects/{id}/runs": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "summary": "The project's agent runs, newest first, paged, optionally filtered by agent (members).",
+        "operationId": "ListRuns",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "idea_refinement",
+                "spec_generator",
+                "plan_generator",
+                "code_generator",
+                "code_review"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfAgentRunDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/runs/{runId}": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "summary": "One agent run with its output (members). 404 NOT_FOUND for a run of another project.",
+        "operationId": "GetRun",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunDetailDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3239,6 +3398,16 @@
         },
         "description": "Result of \"advance to next phase\" (FR-12). When the approval mode requires a gate for the next phase (§4.2),\n`gate` is the pending gate that was created and `state` still shows the current phase; otherwise\n`gate` is `null` and `state` shows the new phase."
       },
+      "AgentKind": {
+        "enum": [
+          "idea_refinement",
+          "spec_generator",
+          "plan_generator",
+          "code_generator",
+          "code_review"
+        ],
+        "description": "The five cognitive agents (§1, FR-23)."
+      },
       "AgentModelsDto": {
         "type": "object",
         "properties": {
@@ -3279,6 +3448,235 @@
           }
         },
         "description": "Model id per agent; an omitted or `null` agent uses the default model."
+      },
+      "AgentRunDetailDto": {
+        "required": [
+          "id",
+          "agent",
+          "phase",
+          "stepId",
+          "provider",
+          "model",
+          "promptVersion",
+          "inputArtifacts",
+          "userFeedback",
+          "status",
+          "attempts",
+          "inputTokens",
+          "outputTokens",
+          "costEstimate",
+          "durationMs",
+          "error",
+          "createdAt",
+          "completedAt",
+          "output",
+          "outputTruncated"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agent": {
+            "$ref": "#/components/schemas/AgentKind"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/Phase"
+          },
+          "stepId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/LlmProvider"
+          },
+          "model": {
+            "type": "string"
+          },
+          "promptVersion": {
+            "type": "string"
+          },
+          "inputArtifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunInputArtifactDto"
+            }
+          },
+          "userFeedback": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentRunStatus"
+          },
+          "attempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inputTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "outputTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "costEstimate": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "output": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "outputTruncated": {
+            "type": "boolean"
+          }
+        },
+        "description": "An agent run with the provider's output text (FR-23). `output` is `null` until the run succeeds and is cut\nto the first 200,000 characters (`outputTruncated`)."
+      },
+      "AgentRunDto": {
+        "required": [
+          "id",
+          "agent",
+          "phase",
+          "stepId",
+          "provider",
+          "model",
+          "promptVersion",
+          "inputArtifacts",
+          "userFeedback",
+          "status",
+          "attempts",
+          "inputTokens",
+          "outputTokens",
+          "costEstimate",
+          "durationMs",
+          "error",
+          "createdAt",
+          "completedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agent": {
+            "$ref": "#/components/schemas/AgentKind"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/Phase"
+          },
+          "stepId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/LlmProvider"
+          },
+          "model": {
+            "type": "string"
+          },
+          "promptVersion": {
+            "type": "string"
+          },
+          "inputArtifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunInputArtifactDto"
+            }
+          },
+          "userFeedback": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentRunStatus"
+          },
+          "attempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inputTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "outputTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "costEstimate": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt\ntemplate version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in\nUSD, duration and error. `userFeedback` is the feedback or answers given to the agent."
+      },
+      "AgentRunStatus": {
+        "enum": [
+          "queued",
+          "running",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ],
+        "description": "Status of an agent run (FR-23, FR-25)."
       },
       "ApiTokenDto": {
         "required": [
@@ -4544,6 +4942,36 @@
         },
         "description": "One page of results. int PagedResult&lt;T&gt;.Page is 1-based."
       },
+      "PagedResultOfAgentRunDto": {
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentRunDto"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "One page of results. int PagedResult&lt;T&gt;.Page is 1-based."
+      },
       "PagedResultOfProjectSummaryDto": {
         "required": [
           "items",
@@ -4817,7 +5245,9 @@
           "artifacts",
           "execution",
           "review",
-          "pendingGates"
+          "pendingGates",
+          "tokensUsed",
+          "tokenBudget"
         ],
         "type": "object",
         "properties": {
@@ -4855,9 +5285,20 @@
             "items": {
               "$ref": "#/components/schemas/GateSummaryDto"
             }
+          },
+          "tokensUsed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tokenBudget": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
           }
         },
-        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`)."
+        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26)."
       },
       "ProjectStatus": {
         "enum": [
@@ -5009,6 +5450,23 @@
           }
         },
         "description": "Review cycle progress and the latest compliance result. `maxCycles` includes extra cycles granted by escalations."
+      },
+      "RunInputArtifactDto": {
+        "required": [
+          "type",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/ArtifactType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "An artifact version a run used as input (FR-23)."
       },
       "SystemRole": {
         "enum": [
@@ -5267,6 +5725,9 @@
     },
     {
       "name": "Artifacts"
+    },
+    {
+      "name": "Runs"
     }
   ]
 }

@@ -3,5 +3,13 @@ import { authHandlers } from './auth'
 import { healthHandlers } from './health'
 import { lifecycleHandlers } from './lifecycle'
 import { projectHandlers } from './projects'
+import { runHandlers } from './runs'
 
-export const handlers = [...healthHandlers, ...authHandlers, ...projectHandlers, ...lifecycleHandlers, ...artifactHandlers]
+export const handlers = [
+  ...healthHandlers,
+  ...authHandlers,
+  ...projectHandlers,
+  ...lifecycleHandlers,
+  ...artifactHandlers,
+  ...runHandlers,
+]

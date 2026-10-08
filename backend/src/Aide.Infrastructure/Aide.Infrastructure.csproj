@@ -19,4 +19,9 @@
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Versioned prompt templates (FR-24, D7), one per agent, loaded by EmbeddedPromptLibrary. -->
+    <EmbeddedResource Include="Agents\Prompts\*.md" LogicalName="Aide.Infrastructure.Agents.Prompts.%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

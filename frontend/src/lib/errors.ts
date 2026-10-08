@@ -21,7 +21,7 @@ export const errorMessages = {
   // Lifecycle, gates, artifacts
   PHASE_PRECONDITION_FAILED: "The project isn't ready to move to the next phase yet.",
   GATE_PENDING: 'An approval gate is waiting for a decision.',
-  BUDGET_EXCEEDED: "The project's agent budget is used up.",
+  BUDGET_EXCEEDED: 'This project has used its token budget — an Owner can raise it in Settings.',
   WRONG_PHASE: "That isn't available in the project's current phase.",
   ARTIFACT_NOT_DRAFT: 'Only draft artifacts can be approved or rejected.',
   ARTIFACT_LOCKED: 'This artifact version is locked. Create a new version instead.',
@@ -41,6 +41,9 @@ export const errorMessages = {
   // Agent runs (shown on run details)
   MISSING_INPUT: 'The agent was missing a required input.',
   INVALID_PLAN: 'The agent produced an invalid plan.',
+  PROVIDER_NOT_CONFIGURED:
+    "The run's LLM provider has no API key on this project or the server. An Owner can add one in Settings → LLM.",
+  PROVIDER_ERROR: 'The model provider returned an error.',
 } as const satisfies Record<string, string>
 
 export type ErrorCode = keyof typeof errorMessages

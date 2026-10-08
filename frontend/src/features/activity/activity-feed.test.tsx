@@ -197,6 +197,45 @@ describe('Overview → Activity (FR-50)', () => {
     ])
   })
 
+  it('FR23_ activity: agent run and budget events are described with agent labels, tokens and durations', async () => {
+    await openOverviewAs('owner', {}, (p) => {
+      addEvent(p, {
+        type: 'RUN_STARTED',
+        category: 'run',
+        summary: 'spec_generator run started',
+        payload: { runId: 'r1', agent: 'spec_generator', provider: 'anthropic', model: 'claude-opus-5-5', promptVersion: '1', stepId: null },
+      })
+      addEvent(p, {
+        type: 'RUN_COMPLETED',
+        category: 'run',
+        summary: 'spec_generator run completed',
+        payload: { runId: 'r1', agent: 'spec_generator', inputTokens: 3412, outputTokens: 9876, costEstimate: 0.211, durationMs: 48250 },
+      })
+      addEvent(p, {
+        type: 'RUN_FAILED',
+        category: 'run',
+        summary: 'code_generator run failed',
+        payload: { runId: 'r2', agent: 'code_generator', errorCode: 'PROVIDER_ERROR', error: 'x', attempts: 4, deadLettered: true },
+      })
+      addEvent(p, {
+        type: 'BUDGET_EXCEEDED',
+        category: 'run',
+        summary: 'Token budget exceeded',
+        payload: { agent: 'code_review', tokenBudget: 100000, tokensUsed: 100000, jobId: 'j1' },
+      })
+      addEvent(p, { type: 'RUN_FAILED', category: 'run', summary: 'A run failed', payload: { agent: 'nobody' } })
+    })
+
+    await screen.findByRole('list', { name: 'Activity' })
+    expect(feedItems().map((li) => li.querySelector('span')?.textContent)).toEqual([
+      'A run failed',
+      'Code review run refused: the token budget is used up (100,000 of 100,000 tokens used)',
+      'Code generator run failed after 4 attempts',
+      'Spec generator run completed: 13,288 tokens in 48.3 s',
+      'Spec generator run started on claude-opus-5-5',
+    ])
+  })
+
   it('FR-50: empty and error states', async () => {
     server.use(
       http.get('*/api/projects/:id/activity', () => problem(404, 'NOT_FOUND', 'The project was not found.')),

@@ -11,6 +11,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Aide.Domain/Aide.Domain.csproj" />
+    <!-- LLM providers and prompt templates are tested against fake HTTP handlers, without a database (FR-22, FR-24). -->
+    <ProjectReference Include="../../src/Aide.Infrastructure/Aide.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '../../components/ui/button'
 import { buttonClasses } from '../../components/ui/button-classes'
+import { Pagination } from '../../components/ui/pagination'
+import { resultSummary } from '../../components/ui/result-summary'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../../components/ui/states'
 import { SelectField } from '../../components/ui/select-field'
 import { TextField } from '../../components/ui/text-field'
@@ -74,7 +76,7 @@ export function ProjectsListPage({ search, onSearchChange }: ProjectsListPagePro
       {projects.isSuccess && projects.data.total > 0 && (
         <>
           <p role="status" aria-live="polite" className="mb-3 text-sm text-muted">
-            {resultSummary(projects.data.page, projects.data.limit, projects.data.items.length, projects.data.total)}
+            {resultSummary(projects.data.page, projects.data.limit, projects.data.items.length, projects.data.total, 'project')}
           </p>
           <ul aria-label="Projects" aria-busy={projects.isPlaceholderData || undefined} className="flex flex-col gap-3">
             {projects.data.items.map((p) => (
@@ -92,12 +94,6 @@ export function ProjectsListPage({ search, onSearchChange }: ProjectsListPagePro
       )}
     </>
   )
-}
-
-function resultSummary(page: number, limit: number, count: number, total: number): string {
-  const from = (page - 1) * limit + 1
-  const to = from + count - 1
-  return `Showing ${String(from)}–${String(to)} of ${String(total)} project${total === 1 ? '' : 's'}`
 }
 
 function ProjectFilters({ search, onChange }: { search: ProjectsSearch; onChange: (patch: Partial<ProjectsSearch>) => void }) {
@@ -247,36 +243,5 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         </div>
       </dl>
     </li>
-  )
-}
-
-function Pagination({ page, pageCount, onPage }: { page: number; pageCount: number; onPage: (page: number) => void }) {
-  if (pageCount <= 1) {
-    return null
-  }
-  return (
-    <nav aria-label="Pagination" className="mt-5 flex items-center justify-between gap-3">
-      <Button
-        variant="secondary"
-        disabled={page <= 1}
-        onClick={() => {
-          onPage(page - 1)
-        }}
-      >
-        Previous page
-      </Button>
-      <span className="text-sm text-muted">
-        Page {page} of {pageCount}
-      </span>
-      <Button
-        variant="secondary"
-        disabled={page >= pageCount}
-        onClick={() => {
-          onPage(page + 1)
-        }}
-      >
-        Next page
-      </Button>
-    </nav>
   )
 }

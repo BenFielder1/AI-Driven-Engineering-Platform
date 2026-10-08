@@ -1,8 +1,12 @@
 import {
+  agentKindLabels,
+  agentKinds,
   artifactTypeLabels,
   artifactTypes,
   escalationDecisionLabels,
   escalationDecisions,
+  formatDuration,
+  formatNumber,
   gateTypeLabels,
   gateTypes,
   phaseLabels,
@@ -83,6 +87,50 @@ function describeRollback(payload: Payload): string | null {
     : `Rolled back from version ${String(from)} to version ${String(target)}`
 }
 
+/** A whole, non-negative count (tokens, attempts, milliseconds), or `null`. */
+function count(payload: Payload, key: string): number | null {
+  return version(payload, key)
+}
+
+/** Agent run events (FR-23, FR-25, FR-26); payloads from AgentRunner. */
+function describeRun(type: string, payload: Payload): string | null {
+  const agent = oneOf(payload, 'agent', agentKinds)
+  if (!agent) {
+    return null
+  }
+  const run = `${agentKindLabels[agent]} run`
+  switch (type) {
+    case 'RUN_STARTED': {
+      const model = typeof payload.model === 'string' && payload.model ? payload.model : null
+      return model ? `${run} started on ${model}` : `${run} started`
+    }
+    case 'RUN_COMPLETED': {
+      const input = count(payload, 'inputTokens')
+      const output = count(payload, 'outputTokens')
+      const ms = count(payload, 'durationMs')
+      if (input === null || output === null) {
+        return `${run} completed`
+      }
+      const tokens = `${formatNumber(input + output)} tokens`
+      return ms === null ? `${run} completed: ${tokens}` : `${run} completed: ${tokens} in ${formatDuration(ms)}`
+    }
+    case 'RUN_FAILED': {
+      const attempts = count(payload, 'attempts')
+      return attempts === null || attempts === 0
+        ? `${run} failed`
+        : `${run} failed after ${String(attempts)} attempt${attempts === 1 ? '' : 's'}`
+    }
+    case 'BUDGET_EXCEEDED': {
+      const used = count(payload, 'tokensUsed')
+      const budget = count(payload, 'tokenBudget')
+      const detail = used !== null && budget !== null ? ` (${formatNumber(used)} of ${formatNumber(budget)} tokens used)` : ''
+      return `${run} refused: the token budget is used up${detail}`
+    }
+    default:
+      return null
+  }
+}
+
 /** Events whose payload names an artifact type and version (e.g. `ARTIFACT_APPROVED`). */
 function describeArtifact(type: string, payload: Payload): string | null {
   const artifactType = oneOf(payload, 'type', artifactTypes)
@@ -111,6 +159,12 @@ export function describeActivity(item: Pick<ActivityItem, 'type' | 'payload' | '
       break
     case 'ROLLBACK_COMPLETED':
       text = describeRollback(payload)
+      break
+    case 'RUN_STARTED':
+    case 'RUN_COMPLETED':
+    case 'RUN_FAILED':
+    case 'BUDGET_EXCEEDED':
+      text = describeRun(type, payload)
       break
     default:
       text = describeArtifact(type, payload)

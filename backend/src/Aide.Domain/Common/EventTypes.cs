@@ -74,6 +74,9 @@ public static class EventTypes
     public const string RunCompleted = "RUN_COMPLETED";
     public const string RunFailed = "RUN_FAILED";
 
+    /// <summary>FR-26: a run was refused because the project's token budget is used up (Owners are notified, phase 12).</summary>
+    public const string BudgetExceeded = "BUDGET_EXCEEDED";
+
     // Execution steps (FR-30–FR-34)
     public const string StepStarted = "STEP_STARTED";
     public const string StepCompleted = "STEP_COMPLETED";
@@ -97,7 +100,7 @@ public static class EventTypes
         [EventCategory.Transition] = [PhaseChanged],
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
         [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted],
-        [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed],
+        [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted],
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed],

@@ -39,6 +39,8 @@ export const projectKeys = {
   activity: (id: string, category: string | null) => [...projectKeys.detail(id), 'activity', category ?? 'all'] as const,
   /** Every artifact query of the project (list, per-type latest/history/versions/diffs; see artifacts-api.ts). */
   artifacts: (id: string) => [...projectKeys.detail(id), 'artifacts'] as const,
+  /** Every agent-run query of the project (pages per filter, single runs; see runs-api.ts). */
+  runs: (id: string) => [...projectKeys.detail(id), 'runs'] as const,
 }
 
 /** Unwraps an openapi-fetch result: the body on success, an ApiError otherwise. */

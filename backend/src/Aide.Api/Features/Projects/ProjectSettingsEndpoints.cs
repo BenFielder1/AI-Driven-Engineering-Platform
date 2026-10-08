@@ -182,7 +182,8 @@ public static partial class ProjectSettingsEndpoints
             apiKeySent && string.IsNullOrWhiteSpace(request.ApiKey),
             request.ClearApiKey,
             catalog.HasSystemKey(provider),
-            hasProjectKeyAfter: apiKeyValid || keepsKey);
+            hasProjectKeyAfter: apiKeyValid || keepsKey,
+            apiKey: request.ApiKey);
         if (validation.IsFailure)
         {
             return ApiProblems.Validation(validation.Error!);

@@ -34,11 +34,11 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-19 | Invalidation cascade | 3, 4.4 | backend | 1, 5 | done | cascade + phase fallback + stale gate cancel in one tx; spec v4 example; FR19_* tests |
 | FR-20 | Integrity re-check, corrupted, alert, regenerate | 3 | both | 5 | done | every read re-hashes; corrupted + INTEGRITY_ALERT; re-run for current agent version; FR20_* tests |
 | FR-21 | Artifact history and diff | 3 | both | 5 | done | Myers diff (collapsed context, 100k-line cap), side-by-side view; FR21_* tests |
-| FR-22 | LLM provider abstraction (Anthropic/OpenAI/Ollama/Fake) | 3 | backend | 6 | todo | — |
-| FR-23 | Agent run records | 3 | both | 6 | todo | — |
-| FR-24 | Versioned prompt templates, MISSING_INPUT | 3 | backend | 6 | todo | — |
-| FR-25 | Provider retries, dead letter | 3, 4.9 | backend | 6 | todo | — |
-| FR-26 | Token budget | 3 | both | 6 | todo | — |
+| FR-22 | LLM provider abstraction (Anthropic/OpenAI/Ollama/Fake) | 3 | backend | 6 | done | ILlmProvider + typed HttpClients, resolver (project → config), Fake responder seam; FR22_* tests (fake handlers only) |
+| FR-23 | Agent run records | 3 | both | 6 | done | AgentRunner run rows (tokens, cost, duration, inputs, prompt version); GET …/runs[/:id]; runs page + drawer; FR23_* tests (admin list phase 13) |
+| FR-24 | Versioned prompt templates, MISSING_INPUT | 3 | backend | 6 | done | embedded Prompts/*.md with front-matter version, delimited data tags, MISSING_INPUT before provider call; FR24_* tests |
+| FR-25 | Provider retries, dead letter | 3, 4.9 | backend | 6 | done | transient classification, 4 job attempts, run failed + dead letter + RUN_FAILED (incl. reaper path); FR25_* tests (owner notification phase 12) |
+| FR-26 | Token budget | 3 | both | 6 | done | TokenBudget rule, BUDGET_EXCEEDED event, Owner raises via PATCH project; budget meter; FR26_* tests (execution start check phase 8) |
 | FR-27 | Idea refinement rounds with questions | 3 | both | 7 | todo | — |
 | FR-28 | Spec generation, 11 sections, retry | 3 | backend | 7 | todo | — |
 | FR-29 | Structured plan generation, INVALID_PLAN | 3 | backend | 7 | todo | — |
@@ -96,7 +96,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 5 M2 Artifacts + live updates (base: 6841646) — IDs: FR-16–FR-21, FR-46
   - [x] aspnet-engineer (contract stubs) → aspnet-engineer (artifacts, cascade, integrity, diff, SignalR hub + publisher) ‖ vite-react-engineer (artifacts pages, diff view, editor, useProjectLive)
   - [x] gate · review (0 Critical, 1 Major, 6 Minor + flaky tests — all fixed) · redeploy (smoke ✓, CSP ✓, hub foreign origin 403 ✓) · E2E on k8s 4/4 · commit
-- [ ] 6 M3 Agent infrastructure — IDs: FR-22–FR-26
+- [x] 6 M3 Agent infrastructure (base: 64010e6) — IDs: FR-22–FR-26
+  - [x] aspnet-engineer (providers, prompts, runner, runs endpoints; resumed once after a rate-limit stop) → vite-react-engineer (runs page + drawer, budget card)
+  - [x] gate · review (0 Critical, 1 Major, 7 Minor — Major + 5 Minor fixed; budget soft cap and OpenAI pricing logged) · redeploy (smoke ✓) · E2E on k8s 4/4 · commit
 - [ ] 7 M3 Refinement, spec, plan — IDs: FR-27–FR-30
 - [ ] 8 M4 Execution runner — IDs: FR-31–FR-33, FR-37
 - [ ] 9 M4 Git providers, commits, PR — IDs: FR-34–FR-36
@@ -181,6 +183,13 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-08 — /api/hubs requires a matching Origin (scheme+host, X-Forwarded-Host, or `Live:AllowedOrigins`); cookie WS upgrades without Origin are refused (CSWSH under SameSite=Lax on localhost) — NFR-SEC — SPEC updated: no
 - 2026-10-08 — Markdown never loads remote images (rendered as a link); nginx sends a strict CSP and proxies with `Host $http_host` — NFR-SEC (prompt-injected content) — SPEC updated: no
 - 2026-10-08 — Adding a value to a response enum (EventCategory `integrity`, DiffLineKind `skipped`) is treated as additive: the only client is the generated SPA client, regenerated in the same change — SPEC updated: no
+- 2026-10-08 — Default models confirmed from provider docs (platform.claude.com/docs/en/models/overview, developers.openai.com/docs/models): Anthropic `claude-opus-5-5` for spec/plan/code/review, `claude-sonnet-5-5` for refinement; OpenAI `gpt-6-astra`, `gpt-6.1-sol` for refinement; Ollama `qwen2.5-coder`; Fake `fake-1` — §11 Q4 — SPEC updated: no
+- 2026-10-08 — Cost estimate from `Llm:Pricing:<model>` (opus 4/20, sonnet 2/10, haiku 0.10/0.50 USD/MTok); unpriced models (OpenAI, Ollama, Fake) report 0 until configured — OpenAI docs gave no prices — SPEC updated: no
+- 2026-10-08 — One run row per job: run id = job id, or a v8 GUID from job id + run key; a redelivered succeeded run returns stored output; RUN_STARTED carries `jobId` so job-end (complete, permanent failure, dead letter, lease reaper) fails runs left `running` — FR-25 — SPEC updated: no
+- 2026-10-08 — Budget refusal writes BUDGET_EXCEEDED and creates no run; MISSING_INPUT / PROVIDER_NOT_CONFIGURED create a failed run with 0 attempts. The budget is a soft cap checked at run start (concurrent runs of one project can overshoot slightly; the token count itself is atomic) — SPEC updated: no
+- 2026-10-08 — Transient = timeouts, connection errors, 408/425/429/5xx; provider error text is redacted (key-like tokens) and capped, 401/403 get a fixed message; project API keys reject whitespace/control chars; a project key is used only when its settings name that provider — NFR-SEC — SPEC updated: no
+- 2026-10-08 — Prompt values are wrapped in data tags and closing tags inside values are neutralised (prompt-injection hardening); integer inputs stay inline — SPEC updated: no
+- 2026-10-08 — LLM base URLs are system config only (no per-project base URL → no SSRF); Ollama defaults to host.docker.internal:11434 in containers — SPEC updated: no
 
 ## Known issues
 - kubeconform, oasdiff, actionlint not installed locally — schema validation skipped locally (CI runs kubeconform; actionlint was run via Docker) — install optionally — Ben

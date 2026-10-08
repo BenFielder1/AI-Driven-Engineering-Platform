@@ -9,6 +9,7 @@ import { openOverviewAs } from '../../test/overview'
 import { createTestQueryClient } from '../../test/render'
 import { artifactKeys } from '../artifacts/artifacts-api'
 import { projectKeys } from '../projects/projects-api'
+import { runKeys } from '../runs/runs-api'
 import { LiveConnectionContext } from './live-connection'
 import { useProjectLive } from './use-project-live'
 
@@ -72,6 +73,24 @@ describe('useProjectLive (FR-46)', () => {
     hub.latest.emit(projectEvent(PROJECT, 'artifact', { type: 'ARTIFACT_CREATED' }))
     expect(stale(artifactKeys.list(PROJECT))).toBe(true)
     expect(stale(projectKeys.state(PROJECT))).toBe(true)
+    expect(stale(projectKeys.gates(PROJECT))).toBe(false)
+  })
+
+  it('FR23_ live: a run event invalidates the runs list and detail, the state (tokens used) and the activity', async () => {
+    const { hub, result, stale, queryClient } = setup()
+    queryClient.setQueryData(runKeys.list(PROJECT, null, 1), { items: [] })
+    queryClient.setQueryData(runKeys.detail(PROJECT, 'run-1'), { id: 'run-1' })
+    await waitFor(() => {
+      expect(result.current).toBe('live')
+    })
+
+    hub.latest.emit(projectEvent(PROJECT, 'run', { type: 'RUN_COMPLETED' }))
+
+    expect(stale(runKeys.list(PROJECT, null, 1))).toBe(true)
+    expect(stale(runKeys.detail(PROJECT, 'run-1'))).toBe(true)
+    expect(stale(projectKeys.state(PROJECT))).toBe(true)
+    expect(stale(projectKeys.activity(PROJECT, null))).toBe(true)
+    expect(stale(artifactKeys.list(PROJECT))).toBe(false)
     expect(stale(projectKeys.gates(PROJECT))).toBe(false)
   })
 

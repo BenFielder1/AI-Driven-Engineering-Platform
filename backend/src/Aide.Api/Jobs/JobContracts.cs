@@ -1,4 +1,5 @@
 using Aide.Domain.Jobs;
+using Aide.Infrastructure.Persistence;
 
 namespace Aide.Api.Jobs;
 
@@ -34,6 +35,20 @@ public sealed record JobExecution(Guid Id, string Type, string Payload, Guid? Pr
 public interface IJobHandler
 {
     Task HandleAsync(JobExecution job, CancellationToken cancellationToken);
+}
+
+/// <summary>A job that ended without succeeding: dead-lettered (retries used up, or the lease expired on the last
+/// attempt) or failed permanently. <see cref="Error"/> is the job's last error.</summary>
+public sealed record JobEnded(Guid JobId, string JobType, Guid? ProjectId, bool DeadLettered, string? Error);
+
+/// <summary>
+/// Cleans up after a job that ended without succeeding (e.g. fails agent runs the job left <c>running</c>, FR-25). Called
+/// by the worker on both the handler path and the lease reaper, with the worker's <see cref="AideDbContext"/> before it
+/// saves: changes are recorded in the same transaction as the job's final status. Must be idempotent.
+/// </summary>
+public interface IJobEndedHook
+{
+    Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken);
 }
 
 /// <summary>A handled job failure; <see cref="Transient"/> decides between retry and immediate failure (JobPolicy).</summary>

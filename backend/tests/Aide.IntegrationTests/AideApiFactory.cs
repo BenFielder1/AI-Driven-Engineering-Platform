@@ -1,5 +1,6 @@
 using Aide.Domain.Access;
 using Aide.Infrastructure;
+using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Identity;
 using Aide.Infrastructure.Security;
@@ -7,6 +8,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -37,6 +39,9 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
     /// need GitHub swap the <c>github</c> HttpClient's handler for a fake.</summary>
     public const string UnreachableGitHubApi = "https://github-api.invalid/";
 
+    /// <summary>LLM provider base address for tests: unresolvable (see <see cref="NoNetworkHandler"/>).</summary>
+    public const string UnreachableLlmApi = "https://llm-api.invalid/";
+
     public AideApiFactory()
     {
         ClientOptions.BaseAddress = BaseUri;
@@ -59,6 +64,19 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
         // No system LLM keys, whatever the machine's environment: providers needing a key are "not configured".
         builder.UseSetting("Llm:Providers:Anthropic:ApiKey", string.Empty);
         builder.UseSetting("Llm:Providers:OpenAI:ApiKey", string.Empty);
+
+        // No test can reach a real LLM provider (CLAUDE.md rule 11): unresolvable base URLs, and every provider's
+        // HttpClient answers through a handler that refuses to send. Tests that script a provider swap in their own
+        // handler with ConfigureTestServices (registered later, so it wins).
+        builder.UseSetting("Llm:Providers:Anthropic:BaseUrl", UnreachableLlmApi);
+        builder.UseSetting("Llm:Providers:OpenAI:BaseUrl", UnreachableLlmApi);
+        builder.UseSetting("Llm:Providers:Ollama:BaseUrl", UnreachableLlmApi);
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddHttpClient<AnthropicLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
+            services.AddHttpClient<OpenAiLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
+            services.AddHttpClient<OllamaLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
+        });
 
         // Tests share one client IP; the limits themselves are tested with their real values in RateLimitTests.
         builder.UseSetting("Auth:RateLimits:LoginPerMinute", "100000");
@@ -133,6 +151,13 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
             }
         }
     }
+}
+
+/// <summary>An HTTP handler that never sends: every request fails as a connection error.</summary>
+public sealed class NoNetworkHandler : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        Task.FromException<HttpResponseMessage>(new HttpRequestException(HttpRequestError.ConnectionError, $"Tests never reach real providers ({request.RequestUri?.Host})."));
 }
 
 [CollectionDefinition(Name)]

@@ -156,6 +156,23 @@ public class ProjectSettingsRulesTests
         Assert.True(Llm(LlmProvider.Anthropic, "m", apiKeySent: true, hasProjectKeyAfter: true).IsSuccess);
     }
 
+    [Theory]
+    [InlineData("sk-ant-abc\ndef")]
+    [InlineData("sk-ant-abcdef\n")]
+    [InlineData(" sk-ant-abcdef")]
+    [InlineData("sk-ant abcdef")]
+    [InlineData("sk-ant-abc\u0001def")]
+    [InlineData("sk-ant-abc\tdef")]
+    public void FR25_ValidateLlm_rejects_api_keys_with_whitespace_or_control_characters(string key)
+    {
+        AssertProblem(ProjectSettingsRules.ValidateLlm(LlmProvider.Anthropic, "m", null, true, false, false, false, true, key), "apiKey");
+        Assert.False(ProjectSettingsRules.IsWellFormedApiKey(key));
+    }
+
+    [Fact]
+    public void FR25_ValidateLlm_accepts_a_well_formed_api_key() =>
+        Assert.True(ProjectSettingsRules.ValidateLlm(LlmProvider.Anthropic, "m", null, true, false, false, false, true, "sk-ant-api03_AbC-123").IsSuccess);
+
     [Fact]
     public void FR9_ValidateLlm_unconfigured_provider_is_refused()
     {

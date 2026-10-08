@@ -51,6 +51,12 @@ public static class ErrorCodes
     public const string MissingInput = "MISSING_INPUT";
     public const string InvalidPlan = "INVALID_PLAN";
 
+    /// <summary>FR-22: the run's provider needs an API key and neither the project nor the system has one; never called.</summary>
+    public const string ProviderNotConfigured = "PROVIDER_NOT_CONFIGURED";
+
+    /// <summary>FR-25: the provider failed (status, timeout or unreadable response); transient ones are retried first.</summary>
+    public const string ProviderError = "PROVIDER_ERROR";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {

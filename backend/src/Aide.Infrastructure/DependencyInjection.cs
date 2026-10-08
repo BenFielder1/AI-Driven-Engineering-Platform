@@ -1,3 +1,4 @@
+using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
@@ -56,6 +57,20 @@ public static class DependencyInjection
         services.AddSingleton<IValidateOptions<LlmOptions>, LlmOptionsValidator>();
         services.AddSingleton<ILlmProviderCatalog, LlmProviderCatalog>();
 
+        // The one LLM abstraction (FR-22, CLAUDE.md rule 11): typed HttpClients for the real providers, an offline Fake,
+        // versioned prompt templates (FR-24) and the resolver that picks provider, model and key per project and agent.
+        // No client retries: the job worker retries transient failures (FR-25).
+        services.AddHttpClient<AnthropicLlmProvider>(ConfigureLlmClient);
+        services.AddHttpClient<OpenAiLlmProvider>(ConfigureLlmClient);
+        services.AddHttpClient<OllamaLlmProvider>(ConfigureLlmClient);
+        services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<AnthropicLlmProvider>());
+        services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<OpenAiLlmProvider>());
+        services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<OllamaLlmProvider>());
+        services.AddSingleton<FakeLlmProvider>();
+        services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<FakeLlmProvider>());
+        services.AddSingleton<IPromptLibrary, EmbeddedPromptLibrary>();
+        services.AddScoped<ILlmResolver, LlmResolver>();
+
         // Git providers (FR-10, FR-35) and working copies.
         services.AddSingleton<IWorkspaceStore, WorkspaceStore>();
         services.AddSingleton<IGitCli, GitCli>();
@@ -74,5 +89,11 @@ public static class DependencyInjection
         services.AddScoped<IGitProviderResolver, GitProviderResolver>();
 
         return services;
+    }
+
+    private static void ConfigureLlmClient(IServiceProvider sp, HttpClient client)
+    {
+        client.Timeout = sp.GetRequiredService<IOptions<LlmOptions>>().Value.RequestTimeout;
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
     }
 }

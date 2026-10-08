@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Aide.Api.Agents;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Activity;
@@ -9,6 +10,7 @@ using Aide.Api.Features.Gates;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Live;
 using Aide.Api.Features.Projects;
+using Aide.Api.Features.Runs;
 using Aide.Api.Features.Tokens;
 using Aide.Api.Health;
 using Aide.Api.Jobs;
@@ -118,6 +120,10 @@ builder.Services.AddScoped<ArtifactIntegrityGuard>();
 builder.Services.AddScoped<ArtifactReader>();
 builder.Services.AddScoped<ArtifactService>();
 
+// Agents (FR-22–FR-26): the runner used by agent job handlers; providers and prompts come from Aide.Infrastructure.
+builder.Services.AddScoped<AgentRunner>();
+builder.Services.AddScoped<IJobEndedHook, AgentRunJobEndedHook>();
+
 // Live project updates over SignalR (FR-46).
 builder.Services.AddAideLive();
 builder.Services.AddLiveOriginCheck();
@@ -150,6 +156,7 @@ app.MapLifecycleEndpoints();
 app.MapGateEndpoints();
 app.MapActivityEndpoints();
 app.MapArtifactEndpoints();
+app.MapRunEndpoints();
 app.MapLiveEndpoints();
 
 await app.RunAsync();
