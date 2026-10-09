@@ -65,6 +65,14 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
   complianceReports?: Schemas['ComplianceReportDto'][]
   /** Phase recorded at each project version (rollback restores it, §4.8). */
   phaseAtVersion: Record<number, Project['currentPhase']>
+  /** Release attempts, oldest first (FR-42, FR-43); see mocks/handlers/release.ts. */
+  releases?: Schemas['ReleaseDto'][]
+  /** Recorded rollbacks, oldest first (FR-44); see mocks/handlers/release.ts. */
+  rollbacks?: Schemas['RollbackDto'][]
+  /** When the last rollback ran (epoch ms), for the one-per-minute limit (FR-45). */
+  lastRollbackAt?: number
+  /** A step or agent run is in progress: POST /rollback answers 409 ROLLBACK_BLOCKED (FR-45). */
+  rollbackBlocked?: boolean
 }
 
 /** A refinement round as stored: the round DTO plus the questions its run asked (null until it succeeds). */
@@ -342,7 +350,18 @@ export function stateDto(p: StoredProject): State {
     tokensUsed: p.tokensUsed,
     tokenBudget: p.tokenBudget,
     pullRequest: pullRequestSummary(p.pullRequest),
+    latestRelease: latestReleaseSummary(p.releases),
   }
+}
+
+/** FR-42, FR-43: /state's latest release attempt, or null before the first. */
+function latestReleaseSummary(releases: Schemas['ReleaseDto'][] | undefined): Schemas['ReleaseSummaryDto'] | null {
+  const latest = releases?.at(-1)
+  if (!latest) {
+    return null
+  }
+  const { id, projectVersion, status, tag, startedAt } = latest
+  return { id, projectVersion, status, tag, startedAt }
 }
 
 export type Access = { project: StoredProject; userId: string; level: 'owner' | 'contributor' | 'viewer' | 'admin' } | Response

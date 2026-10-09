@@ -275,7 +275,9 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         var step = (await StepsAsync(fixture.Viewer.Client, id)).Steps[0];
         Assert.Equal((StepStatus.Pending, 0), (step.Status, step.Attempt));
         var record = await ProjectApi.WithDbAsync(factory, db => db.RollbackEvents.SingleAsync(r => r.ProjectId == id, Ct));
-        Assert.Contains(step.Id, record.ResetStepIds);
+        Assert.Equal(Phase.Planning, record.RestoredPhase);
+        Assert.Equal([step.Id], record.RequeuedStepIds);
+        Assert.DoesNotContain(step.Id, record.ResetStepIds);
 
         Assert.Equal(HttpStatusCode.OK, (await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id)).StatusCode);
         var started = await ControlAsync(fixture.Contributor.Client, id, "start");

@@ -878,6 +878,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry a failed release (Owner, FR-43): queues the release job again for the current project version (merge the project PR or branch into the default branch, tag v<version>-aide, or the first free v<version>-aide.<k> when a version number reused after a rollback is already tagged elsewhere; an existing tag of the version holding the branch is a no-op). Only in the release phase with status releasing, after the latest attempt failed (e.g. MERGE_CONFLICT resolved on the branch). Returns 202 with the new in_progress release; the outcome arrives on the live channel. */
+        post: operations["RetryRelease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every release attempt of the project, newest first (members, FR-42, FR-43). Empty before the first release. */
+        get: operations["ListReleases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/releases/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The latest release attempt (members, FR-42, FR-43): in progress, succeeded, or failed with its error and conflicting files. */
+        get: operations["GetLatestRelease"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Roll the project back to an earlier version (Owner, FR-44, FR-45, §4.8). In one transaction: restores the phase recorded at that version (status rolled_back), invalidates artifacts created after it, resets their plans' steps, cancels pending gates and queued jobs, clears the review state and records the rollback. The Git branch is not rewritten. Checks run in order: INVALID_TARGET_VERSION, ROLLBACK_BLOCKED, RATE_LIMITED (one rollback per project per minute). */
+        post: operations["RollbackProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/rollbacks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every rollback of the project, newest first (members, FR-44), including rollbacks chosen on escalation gates. */
+        get: operations["ListRollbacks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's versions from its state transitions, newest first (members, FR-44): the phase recorded at each version (the latest transition at that version; version 1 without one is refinement), when it was entered, and whether it is a valid rollback target now. */
+        get: operations["ListProjectVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1734,7 +1836,7 @@ export interface components {
             llm: components["schemas"]["LlmSettingsDto"];
             notifications: components["schemas"]["NotificationSettingsDto"];
         };
-        /** @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened it (FR-36), else `null`. */
+        /** @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened it (FR-36), else `null`. `latestRelease` is the latest release attempt (FR-42, FR-43), else `null`. */
         ProjectStateDto: {
             /** Format: uuid */
             projectId: string;
@@ -1753,6 +1855,7 @@ export interface components {
             tokenBudget: null | number;
             executionStatus: components["schemas"]["ExecutionRunStatus"];
             pullRequest: null | components["schemas"]["PullRequestSummaryDto"];
+            latestRelease: null | components["schemas"]["ReleaseSummaryDto"];
         };
         /**
          * @description Project status (§4.1: status follows phase; `released` and `rolled_back` are special).
@@ -1775,6 +1878,21 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /**
+         * @description A project version from the state transitions (FR-44), for the rollback target picker: the phase entered at that version
+         *     and when. `rollbackAllowed` says whether it is a valid rollback target now; when it isn't,
+         *     `rollbackBlockedReason` says why (`current_version`, `release_phase`). Rate limits and running work
+         *     (RATE_LIMITED, ROLLBACK_BLOCKED) are not reflected here: they are checked when the rollback is requested.
+         */
+        ProjectVersionDto: {
+            /** Format: int32 */
+            version: number;
+            phase: components["schemas"]["Phase"];
+            /** Format: date-time */
+            enteredAt: string;
+            rollbackAllowed: boolean;
+            rollbackBlockedReason: null | components["schemas"]["RollbackTargetBlock"];
         };
         /** @description A commit on the project branch that isn't on the default branch; `url` links it on GitHub (`null` for Local). */
         PullRequestCommitDto: {
@@ -1900,6 +2018,52 @@ export interface components {
             password: string;
         };
         /**
+         * @description A release attempt (FR-42, FR-43). `status` is `in_progress` while the release job is queued or running, then
+         *     `succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`.
+         *     A failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict
+         *     `conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`
+         *     for Local). `attempt` counts the release attempts for this project version (1 for the first, +1 per retry).
+         *     `completedAt` is `null` while in progress. `tag` is `v&lt;version&gt;-aide` until the release succeeds,
+         *     then the tag it was recorded with: `v&lt;version&gt;-aide.&lt;k&gt;` when the version number was reused after a rollback
+         *     and the base tag holds an earlier release; several attempts of one version may succeed (re-releases after rollbacks).
+         *     `mergeCommitSha` is set as soon as the merge exists, before tagging.
+         */
+        ReleaseDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            projectVersion: number;
+            status: components["schemas"]["ReleaseStatus"];
+            tag: string;
+            mergeCommitSha: null | string;
+            pullRequestUrl: null | string;
+            conflictingFiles: string[];
+            errorCode: null | string;
+            errorMessage: null | string;
+            /** Format: int32 */
+            attempt: number;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+        };
+        /**
+         * @description Outcome of a release attempt (FR-42, FR-43).
+         * @enum {unknown}
+         */
+        ReleaseStatus: "succeeded" | "failed" | "in_progress";
+        /** @description The latest release attempt in the project state (FR-42, FR-43): enough for the overview's release banner. */
+        ReleaseSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            projectVersion: number;
+            status: components["schemas"]["ReleaseStatus"];
+            tag: string;
+            /** Format: date-time */
+            startedAt: string;
+        };
+        /**
          * @description Compliance categories (§4.7).
          * @enum {unknown}
          */
@@ -1930,6 +2094,42 @@ export interface components {
             driftLevel: null | components["schemas"]["DriftLevel"];
             status: components["schemas"]["ReviewRunStatus"];
         };
+        /**
+         * @description A recorded rollback (FR-44, §4.8): from `fromVersion` to `toVersion`, restoring `restoredPhase`.
+         *     `invalidatedArtifactIds` are the artifacts created after the target version; `resetStepIds` the steps of
+         *     invalidated plans (now `invalidated`); `requeuedStepIds` the blocked or rejected steps of surviving plans
+         *     (back to `pending`); `cancelledGateIds` and `cancelledJobIds` the pending gates and queued jobs it
+         *     cancelled. `createdBy` is the Owner (or the system, for an escalation decision recorded by a worker).
+         */
+        RollbackDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            fromVersion: number;
+            /** Format: int32 */
+            toVersion: number;
+            restoredPhase: components["schemas"]["Phase"];
+            reason: string;
+            invalidatedArtifactIds: string[];
+            resetStepIds: string[];
+            requeuedStepIds: string[];
+            cancelledGateIds: string[];
+            cancelledJobIds: string[];
+            /** Format: date-time */
+            createdAt: string;
+            createdBy: components["schemas"]["ActorDto"];
+        };
+        /**
+         * @description Roll the project back to an earlier project version (FR-44, §4.8). `targetVersion` must be below the current
+         *     version, recorded, and not a release-phase version; `reason` is recorded on the rollback and its state transition.
+         */
+        RollbackRequest: {
+            /** Format: int32 */
+            targetVersion: number;
+            reason: string;
+        };
+        /** @enum {unknown} */
+        RollbackTargetBlock: "current_version" | "release_phase" | null;
         /** @description An artifact version a run used as input (FR-23). */
         RunInputArtifactDto: {
             type: components["schemas"]["ArtifactType"];
@@ -4948,6 +5148,306 @@ export interface operations {
                 };
             };
             /** @description NOT_FOUND: the project, or no review has completed yet. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RetryRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The release job was queued; the release is in_progress. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners release. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_RELEASING (not in the release phase with status releasing, e.g. already released), RELEASE_IN_PROGRESS (a release job is queued or running) or CONFLICT (a concurrent change). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListReleases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetLatestRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or no release has started yet. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RollbackProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RollbackRequest"];
+            };
+        };
+        responses: {
+            /** @description The rollback was applied and recorded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RollbackDto"];
+                };
+            };
+            /** @description VALIDATION (targetVersion < 1, reason empty or over 500 characters) or INVALID_TARGET_VERSION (not below the current version, not recorded, or a release-phase version). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners roll back. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description ROLLBACK_BLOCKED with details ["reason: <step_in_progress|agent_run_in_progress|release_running|release_partially_applied>"] (a step, agent run or release job is running, or a queued release retry already merged), or CONFLICT (a concurrent change). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description RATE_LIMITED: a rollback within the last minute; see Retry-After. */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListRollbacks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RollbackDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListProjectVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectVersionDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
             404: {
                 headers: {
                     [name: string]: unknown;

@@ -13,7 +13,9 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Live;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Refinement;
+using Aide.Api.Features.Release;
 using Aide.Api.Features.Review;
+using Aide.Api.Features.Rollback;
 using Aide.Api.Features.Runs;
 using Aide.Api.Features.Tokens;
 using Aide.Api.Health;
@@ -138,6 +140,10 @@ builder.Services.AddExecution();
 builder.Services.AddPullRequests();
 builder.Services.AddReview();
 
+// Release and rollback (FR-42–FR-45): the release job, retries, rollback, history and versions.
+builder.Services.AddReleases();
+builder.Services.AddScoped<RollbackService>();
+
 // Live project updates over SignalR (FR-46).
 builder.Services.AddAideLive();
 builder.Services.AddLiveOriginCheck();
@@ -175,6 +181,8 @@ app.MapRefinementEndpoints();
 app.MapExecutionEndpoints();
 app.MapGitEndpoints();
 app.MapReviewEndpoints();
+app.MapReleaseEndpoints();
+app.MapRollbackEndpoints();
 app.MapLiveEndpoints();
 
 await app.RunAsync();

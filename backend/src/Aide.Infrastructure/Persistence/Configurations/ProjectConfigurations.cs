@@ -106,6 +106,10 @@ internal sealed class RollbackEventConfiguration : IEntityTypeConfiguration<Roll
         builder.Property(r => r.TriggeredBy).HasMaxLength(200).IsRequired();
         builder.PrimitiveCollection(r => r.InvalidatedArtifactIds).HasColumnType("uuid[]").IsRequired();
         builder.PrimitiveCollection(r => r.ResetStepIds).HasColumnType("uuid[]").IsRequired();
+        builder.PrimitiveCollection(r => r.RequeuedStepIds).HasColumnType("uuid[]").HasDefaultValueSql("'{}'::uuid[]").IsRequired();
+        builder.PrimitiveCollection(r => r.CancelledGateIds).HasColumnType("uuid[]").HasDefaultValueSql("'{}'::uuid[]").IsRequired();
+        builder.PrimitiveCollection(r => r.CancelledJobIds).HasColumnType("uuid[]").HasDefaultValueSql("'{}'::uuid[]").IsRequired();
+        builder.Property(r => r.RestoredPhase).IsRequired();
         builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(r => new { r.ProjectId, r.CreatedAt });
     }
@@ -121,11 +125,15 @@ internal sealed class ReleaseConfiguration : IEntityTypeConfiguration<Release>
         builder.Property(r => r.Tag).HasMaxLength(100).IsRequired();
         builder.Property(r => r.MergeCommitSha).HasMaxLength(64);
         builder.Property(r => r.PrUrl).HasMaxLength(500);
+        builder.Property(r => r.Attempt).HasDefaultValue(1);
+        builder.Property(r => r.ErrorCode).HasMaxLength(32);
+        builder.Property(r => r.ErrorMessage).HasColumnName("error_message");
         builder.PrimitiveCollection(r => r.ConflictingFiles).HasColumnType("text[]").IsRequired();
         builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);
-        builder.HasIndex(r => new { r.ProjectId, r.ProjectVersion })
+        // One row per attempt. Several attempts of a version may succeed (a version number is reused after a rollback, and
+        // each release gets its own tag, or reuses the one already holding it), so uniqueness is per attempt, not per version.
+        builder.HasIndex(r => new { r.ProjectId, r.ProjectVersion, r.Attempt })
             .IsUnique()
-            .HasFilter("status = 'succeeded'")
-            .HasDatabaseName("ux_releases_project_id_project_version_succeeded");
+            .HasDatabaseName("ux_releases_project_id_project_version_attempt");
     }
 }

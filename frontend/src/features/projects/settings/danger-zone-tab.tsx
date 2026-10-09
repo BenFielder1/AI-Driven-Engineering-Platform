@@ -7,9 +7,10 @@ import { Button } from '../../../components/ui/button'
 import { ConfirmDialog } from '../../../components/ui/confirm-dialog'
 import { TextField } from '../../../components/ui/text-field'
 import { errorMessage } from '../../../lib/errors'
+import { RollbackSection } from '../../release/rollback-section'
 import { projectKeys, useDeleteProject, type Project } from '../projects-api'
 
-/** Settings → Danger zone: delete with typed-name confirmation (FR-7, SPEC §7). Rollback arrives in phase 11. */
+/** Settings → Danger zone: roll back (FR-44, FR-45) and delete with typed-name confirmation (FR-7, SPEC §7). */
 export function DangerZoneTab({ project }: { project: Project }) {
   const del = useDeleteProject(project.id)
   const navigate = useNavigate()
@@ -45,12 +46,7 @@ export function DangerZoneTab({ project }: { project: Project }) {
     <div className="flex max-w-2xl flex-col gap-6">
       <h2 className="text-xl font-semibold">Danger zone</h2>
 
-      <section aria-labelledby="rollback-title" className="rounded-lg border border-border p-4">
-        <h3 id="rollback-title" className="font-semibold">
-          Roll back
-        </h3>
-        <p className="mt-1 text-sm text-muted">Rolling back to an earlier project version arrives in a later phase.</p>
-      </section>
+      <RollbackSection projectId={project.id} currentVersion={project.projectVersion} />
 
       <section aria-labelledby="delete-title" className="rounded-lg border border-danger p-4">
         <h3 id="delete-title" className="font-semibold">

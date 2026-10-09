@@ -3,8 +3,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Projects;
+using Aide.Domain.Releases;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -247,6 +249,273 @@ internal sealed partial class GitHubGitProvider(
     }
 
     /// <summary>
+    /// FR-42, FR-43: reads the project PR; a release tag of the version already on GitHub that contains the project branch (or
+    /// the PR's merge) is a no-op; tags elsewhere are never moved (the first free <c>v&lt;N&gt;-aide[.k]</c> is used). Otherwise merges the PR through the API (<c>GitHub:ReleaseMergeMethod</c>,
+    /// pinned to the fetched branch head, which must be the PR head GitHub reports), fetches the merge commit, tags it (annotated) in the working copy and pushes the
+    /// tag with the token in the per-command header. A PR GitHub can't merge because of conflicts is listed with a trial
+    /// merge in the working copy (<c>MERGE_CONFLICT</c>). The working copy was fetched by the caller's prepare.
+    /// </summary>
+    public async Task<ReleaseOutcome> ReleaseAsync(GitConnectionSettings settings, ReleaseRequest request, string? token, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(request);
+        if (Remote(settings, token) is not { } remote || !ProjectSettingsRules.TryParseGitHubRepo(settings.RepoUrl, out var repo))
+        {
+            var missing = MissingRemote(settings, token);
+            return ReleaseOutcome.Failed(ErrorCodes.GitError, missing.Reason!, missing.Transient);
+        }
+
+        if (request.PullRequestNumber is not { } number)
+        {
+            return ReleaseOutcome.Failed(
+                ErrorCodes.GitError,
+                "No pull request is recorded for the project branch, so there is nothing to merge. Open it again from the project's Git section, then retry the release.",
+                transient: false);
+        }
+
+        var id = settings.ProjectId;
+        try
+        {
+            var remoteHead = $"refs/remotes/{GitRemote.Name}/{request.Branch}";
+            var head = await workingCopies.ResolveCommitAsync(id, remoteHead, cancellationToken)
+                ?? await workingCopies.ResolveCommitAsync(id, $"refs/heads/{request.Branch}", cancellationToken);
+            if (head is null)
+            {
+                return ReleaseOutcome.Failed(ErrorCodes.GitError, $"The project branch '{request.Branch}' doesn't exist in {repo.Owner}/{repo.Name}.", transient: false);
+            }
+
+            var client = clients.CreateClient(HttpClientName);
+            var pull = $"repos/{Uri.EscapeDataString(repo.Owner)}/{Uri.EscapeDataString(repo.Name)}/pulls/{number.ToString(CultureInfo.InvariantCulture)}";
+            var pr = await ReadPullAsync(client, pull, token!, cancellationToken);
+            if (pr.Failure is { } unreadable)
+            {
+                return unreadable;
+            }
+
+            var listed = await workingCopies.RemoteReleaseTagsAsync(id, request.ProjectVersion, remote, cancellationToken);
+            if (!listed.Ok)
+            {
+                var reason = Scrub(remote, id, $"Reading the release tags of version {request.ProjectVersion} failed: {listed.Failure!.StandardError.Trim()}");
+                LogGitFailed(logger, id, "ls-remote", reason);
+                return ReleaseOutcome.Failed(ErrorCodes.GitError, reason, GitHubFailures.IsTransientGitError(reason));
+            }
+
+            // A release tag of this version that holds the branch head (or the PR's merge) is the release already made; tags
+            // elsewhere (an earlier release of a version number reused after a rollback) are never moved: the next free one is used.
+            var existing = new List<ExistingReleaseTag>();
+            foreach (var found in listed.Tags)
+            {
+                var contains = await workingCopies.IsAncestorAsync(id, head, found.Commit, cancellationToken)
+                    || (pr.Merged && pr.MergeCommitSha is { } prMerge && IsCommitId(prMerge) && await workingCopies.IsAncestorAsync(id, prMerge, found.Commit, cancellationToken));
+                existing.Add(new ExistingReleaseTag(found.Tag, contains));
+            }
+
+            var choice = ReleaseRules.ChooseTag(request.ProjectVersion, existing);
+            if (choice.AlreadyReleased)
+            {
+                return ReleaseOutcome.Released(listed.Tags.Single(t => t.Tag == choice.Tag).Commit, choice.Tag, alreadyTagged: true);
+            }
+
+            var tagName = choice.Tag;
+            string mergeSha;
+            if (pr.Merged)
+            {
+                if (pr.MergeCommitSha is not { } merged || !IsCommitId(merged))
+                {
+                    return ReleaseOutcome.Failed(ErrorCodes.GitError, $"GitHub reports pull request #{number} as merged but returned no merge commit.", transient: true);
+                }
+
+                mergeSha = merged;
+            }
+            else
+            {
+                if (pr.State == "closed")
+                {
+                    return ReleaseOutcome.Failed(
+                        ErrorCodes.GitError, $"Pull request #{number} was closed without merging. Reopen it on GitHub, then retry the release.", transient: false);
+                }
+
+                if (pr.Mergeable == false)
+                {
+                    return await ConflictAsync(settings, request, head, cancellationToken)
+                        ?? ReleaseOutcome.Failed(ErrorCodes.GitError, $"GitHub can't merge pull request #{number} (mergeable: false).", transient: false);
+                }
+
+                // The merge is pinned to the head the tag check above used: if GitHub's PR head differs (the branch moved, or
+                // the fetch is behind), merging would release commits nobody checked. The next attempt fetches again.
+                if (pr.HeadSha != head)
+                {
+                    return ReleaseOutcome.Failed(
+                        ErrorCodes.GitError,
+                        $"Pull request #{number} points at a different commit than the fetched project branch ({head[..12]}); the release retries with a fresh fetch.",
+                        transient: true);
+                }
+
+                var merge = await MergePullAsync(client, pull, number, ReleaseRules.MergeTitle(request.ProjectName, request.ProjectVersion, tagName), head, token!, cancellationToken);
+                if (merge.Sha is not { } sha)
+                {
+                    if (merge.NotMergeable)
+                    {
+                        return await ConflictAsync(settings, request, head, cancellationToken) ?? merge.Failure!;
+                    }
+
+                    return merge.Failure!;
+                }
+
+                mergeSha = sha;
+                LogMerged(logger, id, number, sha);
+            }
+
+            if (request.OnMerged is { } onMerged)
+            {
+                await onMerged(mergeSha, cancellationToken);
+            }
+
+            // The merge commit is on GitHub: fetch it, tag it in the working copy, push the tag.
+            await workingCopies.SyncFromRemoteAsync(id, remote, cancellationToken);
+            if (await workingCopies.ResolveCommitAsync(id, mergeSha, cancellationToken) is null)
+            {
+                return ReleaseOutcome.Failed(ErrorCodes.GitError, $"The merge commit {mergeSha[..12]} isn't visible in the repository yet.", transient: true);
+            }
+
+            await workingCopies.CreateTagAsync(id, tagName, mergeSha, ReleaseRules.TagMessage(request.ProjectName, request.ProjectVersion, tagName), cancellationToken);
+            var pushed = await workingCopies.PushTagAsync(id, tagName, remote, cancellationToken);
+            if (!pushed.Succeeded)
+            {
+                var reason = Scrub(remote, id, $"git push of tag {tagName} failed (exit {pushed.ExitCode}): {pushed.StandardError.Trim()}");
+                LogGitFailed(logger, id, "push tag", reason);
+
+                // A tag pushed meanwhile ("already exists") is checked by the next attempt; other rejections are permanent.
+                var transient = reason.Contains("already exists", StringComparison.OrdinalIgnoreCase) || GitHubFailures.IsTransientGitError(reason);
+                return ReleaseOutcome.Failed(ErrorCodes.GitError, reason, transient);
+            }
+
+            return ReleaseOutcome.Released(mergeSha, tagName, alreadyTagged: false);
+        }
+        catch (GitCommandException ex)
+        {
+            var reason = Scrub(remote, id, ex.Message);
+            LogGitFailed(logger, id, "release", reason);
+            return ReleaseOutcome.Failed(ErrorCodes.GitError, reason, GitHubFailures.IsTransientGitError(reason));
+        }
+        catch (WorkingCopyException ex)
+        {
+            return ReleaseOutcome.Failed(ErrorCodes.GitError, Scrub(remote, id, ex.Message), transient: false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogGitFailed(logger, id, "release", ex.GetType().Name);
+            return ReleaseOutcome.Failed(ErrorCodes.GitError, "The working copy could not be written on the AIDE server. Ask an admin to check the server log.", transient: true);
+        }
+    }
+
+    /// <summary>FR-43: the conflicting files from a trial merge of the remote project branch into the remote default branch; <c>null</c> when it merges cleanly.</summary>
+    private async Task<ReleaseOutcome?> ConflictAsync(GitConnectionSettings settings, ReleaseRequest request, string head, CancellationToken cancellationToken)
+    {
+        var files = await workingCopies.TrialMergeConflictsAsync(settings.ProjectId, ComparisonBaseRef(settings), head, cancellationToken);
+        return files.Count == 0
+            ? null
+            : ReleaseOutcome.Conflicted(
+                files,
+                $"The pull request from {request.Branch} conflicts with {settings.DefaultBranch} in {files.Count} file(s). Resolve them on the project branch, then retry the release.");
+    }
+
+    private static async Task<PullState> ReadPullAsync(HttpClient client, string pull, string token, CancellationToken cancellationToken)
+    {
+        using var sent = await SendAsync(client, HttpMethod.Get, pull, token, cancellationToken);
+        if (sent.Error is { } unreachable)
+        {
+            return PullState.Failed(ReleaseOutcome.Failed(ErrorCodes.GitError, unreachable, transient: true));
+        }
+
+        var response = sent.Message!;
+        if (!response.IsSuccessStatusCode)
+        {
+            var reason = await DescribeFailureAsync(response, cancellationToken);
+            return PullState.Failed(ReleaseOutcome.Failed(ErrorCodes.GitError, reason, GitHubFailures.IsTransientStatus(response.StatusCode, IsRateLimited(response))));
+        }
+
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var root = json.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return PullState.Failed(ReleaseOutcome.Failed(ErrorCodes.GitError, "GitHub returned an unreadable pull request.", transient: true));
+            }
+
+            return new PullState(
+                Text(root, "state"),
+                root.TryGetProperty("merged", out var merged) && merged.ValueKind == JsonValueKind.True,
+                root.TryGetProperty("mergeable", out var mergeable) && mergeable.ValueKind is JsonValueKind.True or JsonValueKind.False ? mergeable.GetBoolean() : null,
+                Text(root, "merge_commit_sha"),
+                root.TryGetProperty("head", out var prHead) && prHead.ValueKind == JsonValueKind.Object ? Text(prHead, "sha") : null,
+                null);
+        }
+        catch (JsonException)
+        {
+            return PullState.Failed(ReleaseOutcome.Failed(ErrorCodes.GitError, "GitHub returned an unreadable pull request.", transient: true));
+        }
+    }
+
+    private async Task<MergeAttempt> MergePullAsync(
+        HttpClient client, string pull, int number, string mergeTitle, string headSha, string token, CancellationToken cancellationToken)
+    {
+        // Pinned: GitHub refuses (409) if the branch moved since it was fetched; the job retries and fetches it again.
+        var body = new Dictionary<string, string> { ["merge_method"] = options.Value.ReleaseMergeMethod, ["commit_title"] = mergeTitle, ["sha"] = headSha };
+
+        using var sent = await SendAsync(client, HttpMethod.Put, $"{pull}/merge", token, cancellationToken, JsonContent.Create(body));
+        if (sent.Error is { } unreachable)
+        {
+            return new MergeAttempt(null, false, ReleaseOutcome.Failed(ErrorCodes.GitError, unreachable, transient: true));
+        }
+
+        var response = sent.Message!;
+        if (response.IsSuccessStatusCode)
+        {
+            try
+            {
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                if (json.RootElement.ValueKind == JsonValueKind.Object && Text(json.RootElement, "sha") is { } sha && IsCommitId(sha))
+                {
+                    return new MergeAttempt(sha, false, null);
+                }
+            }
+            catch (JsonException)
+            {
+            }
+
+            // Merged, but the reply is unreadable: the next attempt reads the PR as merged and uses its merge commit.
+            return new MergeAttempt(null, false, ReleaseOutcome.Failed(ErrorCodes.GitError, $"GitHub merged pull request #{number} but returned an unreadable reply.", transient: true));
+        }
+
+        var reason = await DescribeFailureAsync(response, cancellationToken);
+        LogMergeFailed(logger, number, (int)response.StatusCode);
+        return response.StatusCode switch
+        {
+            HttpStatusCode.MethodNotAllowed => new MergeAttempt(null, true, ReleaseOutcome.Failed(ErrorCodes.GitError, reason, transient: false)),
+            HttpStatusCode.Conflict => new MergeAttempt(null, false, ReleaseOutcome.Failed(ErrorCodes.GitError, reason, transient: true)),
+            _ => new MergeAttempt(null, false, ReleaseOutcome.Failed(ErrorCodes.GitError, reason, GitHubFailures.IsTransientStatus(response.StatusCode, IsRateLimited(response)))),
+        };
+    }
+
+    private static string? Text(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static bool IsCommitId(string value) => value.Length is 40 or 64 && value.All(char.IsAsciiHexDigitLower);
+
+    /// <summary>The project PR as the release needs it, or the failure reading it.</summary>
+    private sealed record PullState(string? State, bool Merged, bool? Mergeable, string? MergeCommitSha, string? HeadSha, ReleaseOutcome? Failure)
+    {
+        public static PullState Failed(ReleaseOutcome failure) => new(null, false, null, null, null, failure);
+    }
+
+    /// <summary>The merge API's answer: the merge commit, or whether GitHub found the PR not mergeable (405), or the failure.</summary>
+    private sealed record MergeAttempt(string? Sha, bool NotMergeable, ReleaseOutcome? Failure);
+
+    /// <summary>
     /// Brings a reused open PR's title and description up to date (they describe the plan that just completed). A transient
     /// failure retries the job; a permanent one (e.g. the token may not edit it) keeps the PR as it is.
     /// </summary>
@@ -483,6 +752,12 @@ internal sealed partial class GitHubGitProvider(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Opening the pull request for project {ProjectId} failed with HTTP {Status}")]
     private static partial void LogPullRequestFailed(ILogger logger, Guid projectId, int status);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Merged pull request #{Number} for project {ProjectId} as {Sha}")]
+    private static partial void LogMerged(ILogger logger, Guid projectId, int number, string sha);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Merging pull request #{Number} failed with HTTP {Status}")]
+    private static partial void LogMergeFailed(ILogger logger, int number, int status);
 }
 
 /// <summary>
@@ -558,6 +833,70 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
         ArgumentNullException.ThrowIfNull(settings);
         return $"refs/heads/{settings.DefaultBranch}";
     }
+
+    /// <summary>
+    /// FR-42, FR-43 (D12): the repository is the working copy, so the release is local Git work: a release tag of the version
+    /// that contains the project branch is a no-op; otherwise (tags elsewhere are never moved: the first free
+    /// <c>v&lt;N&gt;-aide[.k]</c> is used) merge the branch into the default branch
+    /// (<c>--no-ff</c>, hooks off; a conflict is listed and aborted) and create the annotated tag on the merge commit.
+    /// </summary>
+    public async Task<ReleaseOutcome> ReleaseAsync(GitConnectionSettings settings, ReleaseRequest request, string? token, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(request);
+        var id = settings.ProjectId;
+        try
+        {
+            if (await workingCopies.ResolveCommitAsync(id, $"refs/heads/{request.Branch}", cancellationToken) is not { } head)
+            {
+                return ReleaseOutcome.Failed(ErrorCodes.GitError, $"The project branch '{request.Branch}' doesn't exist in the local repository.", transient: false);
+            }
+
+            var tags = await workingCopies.ReleaseTagsAsync(id, request.ProjectVersion, cancellationToken);
+            var existing = new List<ExistingReleaseTag>();
+            foreach (var found in tags)
+            {
+                existing.Add(new ExistingReleaseTag(found.Tag, await workingCopies.IsAncestorAsync(id, head, found.Commit, cancellationToken)));
+            }
+
+            var choice = ReleaseRules.ChooseTag(request.ProjectVersion, existing);
+            if (choice.AlreadyReleased)
+            {
+                return ReleaseOutcome.Released(tags.Single(t => t.Tag == choice.Tag).Commit, choice.Tag, alreadyTagged: true);
+            }
+
+            var merged = await workingCopies.MergeIntoDefaultAsync(
+                id, settings.DefaultBranch, request.Branch, ReleaseRules.MergeTitle(request.ProjectName, request.ProjectVersion, choice.Tag), cancellationToken);
+            if (!merged.Merged)
+            {
+                return ReleaseOutcome.Conflicted(
+                    merged.Conflicts,
+                    $"Merging {request.Branch} into {settings.DefaultBranch} conflicts in {merged.Conflicts.Count} file(s). Resolve them on the project branch, then retry the release.");
+            }
+
+            if (request.OnMerged is { } onMerged)
+            {
+                await onMerged(merged.Sha!, cancellationToken);
+            }
+
+            await workingCopies.CreateTagAsync(
+                id, choice.Tag, merged.Sha!, ReleaseRules.TagMessage(request.ProjectName, request.ProjectVersion, choice.Tag), cancellationToken);
+            return ReleaseOutcome.Released(merged.Sha!, choice.Tag, alreadyTagged: false);
+        }
+        catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException or UnauthorizedAccessException)
+        {
+            LogReleaseFailed(logger, ex, id);
+            // The server path stays in the log; the reason shown to users is generic. A git command failure (e.g. a timeout)
+            // may pass on a retry; an unusable working copy won't.
+            return ReleaseOutcome.Failed(
+                ErrorCodes.GitError,
+                "The local repository could not be merged or tagged on the AIDE server. Ask an admin to check the server log.",
+                transient: ex is GitCommandException or IOException);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Releasing the local repository of project {ProjectId} failed")]
+    private static partial void LogReleaseFailed(ILogger logger, Exception exception, Guid projectId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Preparing the local repository of project {ProjectId} failed")]
     private static partial void LogPrepareFailed(ILogger logger, Exception exception, Guid projectId);

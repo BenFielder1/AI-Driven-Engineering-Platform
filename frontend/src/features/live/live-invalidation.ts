@@ -20,6 +20,7 @@ const refinement = (id: string): Target => ({ queryKey: projectKeys.refinement(i
 const execution = (id: string): Target => ({ queryKey: projectKeys.execution(id) })
 const pullRequest = (id: string): Target => ({ queryKey: projectKeys.pullRequest(id) })
 const review = (id: string): Target => ({ queryKey: projectKeys.review(id) })
+const releases = (id: string): Target => ({ queryKey: projectKeys.releases(id) })
 const lists = (): Target => ({ queryKey: projectKeys.lists() })
 /** Everything about the project (the detail key prefixes all of its queries). */
 const everything = (id: string): Target => ({ queryKey: projectKeys.detail(id) })
@@ -48,7 +49,9 @@ export const liveInvalidation: Record<EventCategory, (id: string) => Target[]> =
   // drift change; a review_required cycle drafts an optimisation plan (FR-40). The decision's gate (pre_release or
   // escalation) arrives as a gate event and a re-entry to execution as a transition event.
   review: (id) => [project(id), state(id), activity(id), review(id), artifacts(id)],
-  release: (id) => [project(id), state(id), activity(id), lists()],
+  // RELEASE_STARTED/COMPLETED/FAILED (FR-42, FR-43): /state's latestRelease and status, the release attempts, and the
+  // project's status on the header and the list.
+  release: (id) => [project(id), state(id), activity(id), releases(id), lists()],
   // A rollback changes version, phase, artifacts and steps (§4.8).
   rollback: (id) => [everything(id), lists()],
   // Settings, members, rename.

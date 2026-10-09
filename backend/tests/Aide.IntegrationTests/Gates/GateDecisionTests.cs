@@ -297,6 +297,9 @@ public sealed class GateDecisionTests(AideApiFactory factory)
             Assert.Equal((5, 3, "Plan was wrong"), (record.FromVersion, record.TargetVersion, record.Reason));
             Assert.Equal([optimisation.Id], record.InvalidatedArtifactIds);
             Assert.Equal(optimisationSteps.Select(s => s.Id).Order(), record.ResetStepIds.Order());
+            Assert.Equal(Phase.Planning, record.RestoredPhase);
+            Assert.Empty(record.RequeuedStepIds);
+            Assert.Equal([otherGate.Id], record.CancelledGateIds);
 
             Assert.Equal(GateStatus.Cancelled, (await db.ApprovalGates.SingleAsync(g => g.Id == otherGate.Id, Ct)).Status);
             Assert.Equal(GateStatus.Approved, (await db.ApprovalGates.SingleAsync(g => g.Id == gate.Id, Ct)).Status);

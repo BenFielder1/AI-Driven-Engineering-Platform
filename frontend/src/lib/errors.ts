@@ -36,12 +36,22 @@ export const errorMessages = {
     "A refinement round is already queued or running. Wait for it to finish, then answer its questions.",
   // Review, release, rollback
   REVIEW_IN_PROGRESS: "A review is already running.",
-  NOT_RELEASING: "The project isn't in the release phase.",
-  RELEASE_IN_PROGRESS: "A release is already in progress.",
-  MERGE_CONFLICT: "The release branch has merge conflicts that need resolving.",
-  INVALID_TARGET_VERSION: "You can't roll back to that version.",
-  ROLLBACK_BLOCKED: "A rollback isn't possible right now.",
+  NOT_RELEASING:
+    "The project isn't waiting to be released: it's not in the Release phase, or it was already released.",
+  RELEASE_IN_PROGRESS:
+    "A release is already queued or running. The page shows its outcome when it finishes.",
+  MERGE_CONFLICT:
+    "The project branch conflicts with the default branch, so it couldn't be merged. Resolve the conflict on the project branch, then retry the release.",
+  INVALID_TARGET_VERSION:
+    "You can't roll back to that version: pick a recorded version below the current one that isn't in the Release phase.",
+  ROLLBACK_BLOCKED:
+    "A rollback isn't possible while an execution step or agent run is in progress. Wait for it to finish (or pause execution), then try again.",
   RATE_LIMITED: "Too many attempts. Wait a moment and try again.",
+  // Recorded on a failed release attempt (not returned by an endpoint)
+  TAG_CONFLICT:
+    "The release tag already exists in the repository and points at a different commit. Tags are never moved.",
+  GIT_ERROR: "Git or GitHub refused the operation.",
+  RELEASE_CANCELLED: "A rollback cancelled this release before it ran.",
   // Approval links
   LINK_EXPIRED: "This approval link has expired.",
   LINK_USED: "This approval link has already been used.",
@@ -140,6 +150,29 @@ export const contextualErrorMessages = {
     FORBIDDEN:
       "Only Contributors and Owners can retry opening the pull request.",
   },
+  /** POST /api/projects/:id/release — retry a failed release (FR-43). */
+  retryRelease: {
+    CONFLICT:
+      "Someone else changed the project at the same time. The page now shows the latest state; retry if the release is still needed.",
+    FORBIDDEN: "Only project Owners can retry a release.",
+  },
+  /** A failed release attempt's recorded `errorCode` (FR-42, FR-43), shown on Overview → Release. */
+  releaseAttempt: {
+    TAG_CONFLICT:
+      "The release tag already exists in the repository and points at a different commit, so it wasn't moved. Check the tag on the repository, then retry the release.",
+    GIT_ERROR:
+      "Git or GitHub refused the merge, tag or push. Check the repository access and the project branch, then retry the release.",
+    RELEASE_CANCELLED:
+      "A rollback cancelled this release before it ran. Retry the release once the project is ready again.",
+  },
+  /** POST /api/projects/:id/rollback (FR-44, FR-45). */
+  rollback: {
+    CONFLICT:
+      "Someone else changed the project at the same time. Close this dialog to see the latest state, then try again.",
+    FORBIDDEN: "Only project Owners can roll back.",
+    RATE_LIMITED:
+      "A rollback ran less than a minute ago. Only one rollback per minute is allowed.",
+  },
 } as const satisfies Record<string, Partial<Record<ErrorCode, string>>>;
 
 export type ErrorContext = keyof typeof contextualErrorMessages;
@@ -177,6 +210,11 @@ export function githubFailureMessage(reason: string | undefined): string {
 
 function isErrorCode(code: unknown): code is ErrorCode {
   return typeof code === "string" && Object.hasOwn(errorMessages, code);
+}
+
+/** Copy for an `errorCode` recorded on a resource (e.g. a failed release), or `null` when the code is unknown. */
+export function copyForCode(code: string | null | undefined, context?: ErrorContext): string | null {
+  return isErrorCode(code) ? messageFor(code, context) : null;
 }
 
 const statusFallback: Partial<Record<number, ErrorCode>> = {
@@ -258,6 +296,28 @@ export function detailValue(error: ApiError, key: string): string | null {
   return entry === undefined ? null : entry.slice(prefix.length).trim();
 }
 
+/**
+ * ROLLBACK_BLOCKED has several reasons (FR-45); the server names the release-related ones in its title or in a
+ * `reason: …` detail. Only the reasons are matched here, never a tag (tags may carry a suffix such as `v6-aide.2`).
+ */
+export const rollbackBlockedMessages = {
+  releasePartiallyApplied:
+    "A rollback isn't possible because the release was partially applied (merged or tagged, but not finished). Retry the release first.",
+  releaseRunning:
+    "A rollback isn't possible while a release is merging and tagging. Wait for it to finish, then try again.",
+} as const;
+
+function rollbackBlockedMessage(error: ApiError): string | null {
+  const reason = `${detailValue(error, "reason") ?? ""} ${error.message}`.toLowerCase();
+  if (/partially[ _-]applied/.test(reason)) {
+    return rollbackBlockedMessages.releasePartiallyApplied;
+  }
+  if (/release is (merging|running)|release_running/.test(reason)) {
+    return rollbackBlockedMessages.releaseRunning;
+  }
+  return null;
+}
+
 /** User-facing copy for any thrown error; `context` selects overrides from `contextualErrorMessages`. */
 export function errorMessage(error: unknown, context?: ErrorContext): string {
   if (error instanceof ApiError) {
@@ -269,6 +329,12 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
       const latest = detailValue(error, "latestVersion");
       if (latest && /^\d+$/.test(latest)) {
         return `Someone saved a newer version (v${latest}) while you were editing. Your text is kept here: copy it, then cancel and edit again to start from v${latest}.`;
+      }
+    }
+    if (error.errorCode === "ROLLBACK_BLOCKED") {
+      const blocked = rollbackBlockedMessage(error);
+      if (blocked) {
+        return blocked;
       }
     }
     if (error.errorCode) {

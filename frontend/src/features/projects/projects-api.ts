@@ -49,6 +49,12 @@ export const projectKeys = {
   pullRequest: (id: string) => [...projectKeys.detail(id), 'git', 'pull-request'] as const,
   /** Every compliance query of the project: latest report, trend and drift (FR-38–FR-41; see features/review/review-api.ts). */
   review: (id: string) => [...projectKeys.detail(id), 'review'] as const,
+  /** GET /releases: every release attempt, newest first (FR-42, FR-43; see features/release/release-api.ts). */
+  releases: (id: string) => [...projectKeys.detail(id), 'releases'] as const,
+  /** GET /rollbacks: recorded rollbacks (FR-44). */
+  rollbacks: (id: string) => [...projectKeys.detail(id), 'rollbacks'] as const,
+  /** GET /versions: project versions with their rollback eligibility (FR-44). */
+  versions: (id: string) => [...projectKeys.detail(id), 'versions'] as const,
 }
 
 /** Unwraps an openapi-fetch result: the body on success, an ApiError otherwise. */

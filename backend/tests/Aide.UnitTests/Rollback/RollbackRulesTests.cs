@@ -187,4 +187,57 @@ public class RollbackRulesTests
         Assert.Equal(5, next.Value.Version);
         Assert.Equal(ProjectStatus.Building, next.Value.Status);
     }
+
+    [Fact]
+    public void FR45_Rollback_blocked_names_its_reason_in_the_details()
+    {
+        var running = RollbackRules.Plan(Request() with { ReleaseRunning = true }).Error!;
+        Assert.Equal((ErrorCodes.RollbackBlocked, "reason: release_running"), (running.Code, Assert.Single(running.Details)));
+
+        var partial = RollbackRules.Plan(Request() with { ReleasePartiallyApplied = true }).Error!;
+        Assert.Equal((ErrorCodes.RollbackBlocked, "reason: release_partially_applied"), (partial.Code, Assert.Single(partial.Details)));
+
+        var agent = RollbackRules.Plan(Request(runInProgress: true)).Error!;
+        Assert.Equal("reason: agent_run_in_progress", Assert.Single(agent.Details));
+
+        var step = new StepRef(Guid.CreateVersion7(), Guid.CreateVersion7(), StepStatus.InProgress);
+        Assert.Equal("reason: step_in_progress", Assert.Single(RollbackRules.Plan(Request(steps: [step], runInProgress: true)).Error!.Details));
+    }
+
+    [Fact]
+    public void FR45_Rollback_is_blocked_while_a_release_job_is_running_and_checks_run_in_order()
+    {
+        Assert.Equal(ErrorCodes.RollbackBlocked, RollbackRules.Plan(Request() with { ReleaseRunning = true }).Error!.Code);
+
+        // INVALID_TARGET_VERSION → ROLLBACK_BLOCKED → RATE_LIMITED.
+        var everything = Request(9, runInProgress: true, lastRollbackAt: T0.AddHours(1)) with { ReleaseRunning = true };
+        Assert.Equal(ErrorCodes.InvalidTargetVersion, RollbackRules.Plan(everything).Error!.Code);
+        Assert.Equal(ErrorCodes.RollbackBlocked, RollbackRules.Plan(everything with { TargetVersion = 4 }).Error!.Code);
+        Assert.Equal(ErrorCodes.RateLimited, RollbackRules.Plan(Request(lastRollbackAt: T0.AddHours(1))).Error!.Code);
+    }
+
+    [Fact]
+    public void FR44_Versions_list_the_restorable_versions_up_to_the_current_one_newest_first()
+    {
+        RecordedTransition[] history = [.. History, new(8, Phase.Release, T0.AddMinutes(9)), new(9, Phase.Release, T0.AddMinutes(10)), new(10, Phase.Review, T0.AddMinutes(11))];
+        var created = T0.AddMinutes(-5);
+
+        // The project is released at version 9; the transition at version 10 belongs to a timeline a rollback left.
+        var versions = RollbackRules.Versions(history, 9, Phase.Release, created);
+
+        Assert.Equal([9, 8, 7, 6, 5, 4, 3, 2, 1], versions.Select(v => v.Version));
+        Assert.Equal(VersionBlock.CurrentVersion, versions[0].Block);
+        Assert.Equal((Phase.Release, VersionBlock.ReleasePhase, false), (versions[1].Phase, versions[1].Block, versions[1].RollbackAllowed));
+        Assert.Equal((Phase.Review, (VersionBlock?)null, true, T0.AddMinutes(8)), (versions[2].Phase, versions[2].Block, versions[2].RollbackAllowed, versions[2].EnteredAt));
+        Assert.Equal(Phase.Execution, versions[3].Phase); // latest transition at version 6 (a review cycle)
+        Assert.Equal((Phase.Refinement, created), (versions[8].Phase, versions[8].EnteredAt));
+    }
+
+    [Fact]
+    public void FR44_Versions_skip_versions_without_a_recorded_phase_but_always_list_the_current_one()
+    {
+        var versions = RollbackRules.Versions([new RecordedTransition(3, Phase.Planning, T0)], 4, Phase.Execution, T0.AddMinutes(-1));
+
+        Assert.Equal([(4, Phase.Execution), (3, Phase.Planning), (1, Phase.Refinement)], versions.Select(v => (v.Version, v.Phase)));
+    }
 }

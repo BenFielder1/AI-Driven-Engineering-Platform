@@ -305,6 +305,37 @@ function describeReview(type: string, payload: Payload): string | null {
   }
 }
 
+/**
+ * Release events (FR-42, FR-43). Assumed payload: `tag`, `attempt`, and on failure `errorCode` and `conflictingFiles`;
+ * anything missing falls back to a shorter line.
+ */
+function describeRelease(type: string, payload: Payload): string | null {
+  const tag = str(payload, "tag");
+  const release = tag ? `Release ${tag}` : "Release";
+  switch (type) {
+    case "RELEASE_STARTED": {
+      const attempt = count(payload, "attempt");
+      return attempt !== null && attempt > 1
+        ? `${release} started (attempt ${String(attempt)})`
+        : `${release} started`;
+    }
+    case "RELEASE_COMPLETED":
+      return tag ? `Released: merged and tagged ${tag}` : "Released: merged and tagged";
+    case "RELEASE_FAILED": {
+      if (str(payload, "errorCode") === "MERGE_CONFLICT") {
+        const files = payload.conflictingFiles;
+        const n = Array.isArray(files) ? files.length : 0;
+        return n > 0
+          ? `${release} failed: merge conflict in ${plural(n, "file")}`
+          : `${release} failed: merge conflict`;
+      }
+      return `${release} failed`;
+    }
+    default:
+      return null;
+  }
+}
+
 /** Events whose payload names an artifact type and version (e.g. `ARTIFACT_APPROVED`). */
 function describeArtifact(type: string, payload: Payload): string | null {
   const artifactType = oneOf(payload, "type", artifactTypes);
@@ -337,6 +368,11 @@ export function describeActivity(
       break;
     case "ROLLBACK_COMPLETED":
       text = describeRollback(payload);
+      break;
+    case "RELEASE_STARTED":
+    case "RELEASE_COMPLETED":
+    case "RELEASE_FAILED":
+      text = describeRelease(type, payload);
       break;
     case "RUN_STARTED":
     case "RUN_COMPLETED":

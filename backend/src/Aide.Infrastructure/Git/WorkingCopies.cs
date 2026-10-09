@@ -60,6 +60,23 @@ public sealed record ComparedFile(string Path, string Status);
 /// <summary>FR-35 (Local "PR"): the project branch compared with the default branch (<c>base...head</c>).</summary>
 public sealed record BranchComparison(string BaseSha, string HeadSha, IReadOnlyList<ComparedCommit> Commits, IReadOnlyList<ComparedFile> Files, bool Truncated);
 
+/// <summary>
+/// FR-42, FR-43: the outcome of merging the project branch into the default branch: merged (the default branch's new head,
+/// which may be its old head when the branch was already merged), or not merged because of <see cref="Conflicts"/>.
+/// </summary>
+public sealed record MergeResult(bool Merged, string? Sha, IReadOnlyList<string> Conflicts)
+{
+    public static MergeResult Success(string sha) => new(true, sha, []);
+
+    public static MergeResult Conflicted(IReadOnlyList<string> conflicts) => new(false, null, conflicts);
+}
+
+/// <summary>A release tag (FR-42) and the commit it points at (peeled).</summary>
+public sealed record ReleaseTagRef(string Tag, string Commit);
+
+/// <summary>The release tags of one version on a remote (FR-42), or the failed command.</summary>
+public sealed record RemoteReleaseTags(bool Ok, IReadOnlyList<ReleaseTagRef> Tags, GitCommandResult? Failure);
+
 /// <summary>A working copy can't be used safely (e.g. a path resolves outside it or through a link).</summary>
 public sealed class WorkingCopyException : Exception
 {
@@ -147,6 +164,43 @@ public interface IWorkingCopies
     /// </summary>
     Task<StepCommitResult> CommitStepAsync(
         Guid projectId, string branch, Guid stepId, IReadOnlyList<ProducedFile> files, StepCommitMessage message, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-42 (Local): merges <paramref name="branch"/> into <paramref name="defaultBranch"/> with a merge commit
+    /// (<c>--no-ff</c>, hooks off) titled <paramref name="message"/>. On a conflict the conflicting files are listed and the
+    /// merge is aborted (FR-43), leaving the default branch unchanged. The project branch is checked out again either way.
+    /// </summary>
+    Task<MergeResult> MergeIntoDefaultAsync(Guid projectId, string defaultBranch, string branch, string message, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-43 (GitHub): the files that conflict when <paramref name="headRef"/> is merged into <paramref name="baseRef"/>, found
+    /// with a trial merge that is aborted (nothing is committed); empty when they merge cleanly.
+    /// </summary>
+    Task<IReadOnlyList<string>> TrialMergeConflictsAsync(Guid projectId, string baseRef, string headRef, CancellationToken cancellationToken);
+
+    /// <summary>The commit <paramref name="revision"/> names in the working copy, or <c>null</c> (no repository, unknown revision).</summary>
+    Task<string?> ResolveCommitAsync(Guid projectId, string revision, CancellationToken cancellationToken);
+
+    /// <summary>Whether commit <paramref name="ancestor"/> is <paramref name="descendant"/> or one of its ancestors (false if either is unknown).</summary>
+    Task<bool> IsAncestorAsync(Guid projectId, string ancestor, string descendant, CancellationToken cancellationToken);
+
+    /// <summary>The local release tags of <paramref name="projectVersion"/> (base and suffixed) with their commits; empty without a repository.</summary>
+    Task<IReadOnlyList<ReleaseTagRef>> ReleaseTagsAsync(Guid projectId, int projectVersion, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-42: creates the annotated release tag <paramref name="tag"/> on <paramref name="commit"/>. A local tag of that
+    /// name pointing elsewhere (left by an attempt whose push failed) is replaced: only published tags are never moved.
+    /// </summary>
+    Task CreateTagAsync(Guid projectId, string tag, string commit, string message, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-42 (GitHub): the release tags of <paramref name="projectVersion"/> on <paramref name="remote"/> (base and suffixed,
+    /// peeled commits), or a failure (redacted git output). Tags found there are fetched, so their commits can be inspected locally.
+    /// </summary>
+    Task<RemoteReleaseTags> RemoteReleaseTagsAsync(Guid projectId, int projectVersion, GitRemote remote, CancellationToken cancellationToken);
+
+    /// <summary>FR-42 (GitHub): pushes the release tag to <paramref name="remote"/>. The result is returned (redacted), not thrown.</summary>
+    Task<GitCommandResult> PushTagAsync(Guid projectId, string tag, GitRemote remote, CancellationToken cancellationToken);
 }
 
 internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli git, ILogger<WorkingCopies> logger) : IWorkingCopies
@@ -522,6 +576,264 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
         });
     }
 
+    public Task<MergeResult> MergeIntoDefaultAsync(Guid projectId, string defaultBranch, string branch, string message, CancellationToken cancellationToken)
+    {
+        RequireBranchName(defaultBranch);
+        RequireBranchName(branch);
+        ArgumentException.ThrowIfNullOrEmpty(message);
+        return WithLockAsync(projectId, async () =>
+        {
+            var root = RequireRepository(projectId);
+            foreach (var name in new[] { defaultBranch, branch })
+            {
+                if (!await RefExistsAsync(root, name, cancellationToken))
+                {
+                    throw new WorkingCopyException($"The branch '{name}' doesn't exist in the working copy.");
+                }
+            }
+
+            await DiscardLeftoversAsync(root, cancellationToken);
+            await RunAsync(root, ["checkout", "-q", defaultBranch, "--"], cancellationToken);
+            try
+            {
+                var merge = await RunAsync(
+                    root, ["merge", "--no-ff", "--no-edit", "--no-verify", "-m", message, $"refs/heads/{branch}"], cancellationToken, allowFailure: true);
+                if (!merge.Succeeded)
+                {
+                    var conflicts = await UnmergedAsync(root, cancellationToken);
+                    await RunAsync(root, ["merge", "--abort"], cancellationToken, allowFailure: true);
+                    if (conflicts.Count == 0)
+                    {
+                        var error = merge.StandardError.Trim();
+                        throw new GitCommandException($"git merge failed (exit {merge.ExitCode}): {(error.Length > 500 ? error[..500] : error)}");
+                    }
+
+                    LogMergeConflict(logger, projectId, conflicts.Count);
+                    return MergeResult.Conflicted(conflicts);
+                }
+
+                var sha = (await RunAsync(root, ["rev-parse", "HEAD"], cancellationToken)).StandardOutput.Trim();
+                LogMerged(logger, projectId, branch, defaultBranch, sha);
+                return MergeResult.Success(sha);
+            }
+            finally
+            {
+                // Whatever happened, leave a clean working copy on the project branch (execution and review read it).
+                await DiscardLeftoversAsync(root, CancellationToken.None);
+                await RunAsync(root, ["checkout", "-q", branch, "--"], CancellationToken.None, allowFailure: true);
+            }
+        });
+    }
+
+    public Task<IReadOnlyList<string>> TrialMergeConflictsAsync(Guid projectId, string baseRef, string headRef, CancellationToken cancellationToken)
+    {
+        RequireRevision(baseRef);
+        RequireRevision(headRef);
+        return WithLockAsync<IReadOnlyList<string>>(projectId, async () =>
+        {
+            var root = RequireRepository(projectId);
+            var previous = await RunAsync(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken, allowFailure: true);
+            await DiscardLeftoversAsync(root, cancellationToken);
+            await RunAsync(root, ["checkout", "-q", "--detach", baseRef, "--"], cancellationToken);
+            try
+            {
+                var merge = await RunAsync(root, ["merge", "--no-commit", "--no-ff", "--no-verify", headRef], cancellationToken, allowFailure: true);
+                IReadOnlyList<string> conflicts = merge.Succeeded ? [] : await UnmergedAsync(root, cancellationToken);
+                await RunAsync(root, ["merge", "--abort"], cancellationToken, allowFailure: true);
+                return conflicts;
+            }
+            finally
+            {
+                await DiscardLeftoversAsync(root, CancellationToken.None);
+                if (previous.Succeeded)
+                {
+                    await RunAsync(root, ["checkout", "-q", previous.StandardOutput.Trim(), "--"], CancellationToken.None, allowFailure: true);
+                }
+            }
+        });
+    }
+
+    public Task<string?> ResolveCommitAsync(Guid projectId, string revision, CancellationToken cancellationToken)
+    {
+        RequireRevision(revision);
+        if (!IsRepository(projectId))
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        return WithLockAsync(projectId, () => ResolveCoreAsync(PathFor(projectId), revision, cancellationToken));
+    }
+
+    public Task<bool> IsAncestorAsync(Guid projectId, string ancestor, string descendant, CancellationToken cancellationToken)
+    {
+        RequireRevision(ancestor);
+        RequireRevision(descendant);
+        if (!IsRepository(projectId))
+        {
+            return Task.FromResult(false);
+        }
+
+        return WithLockAsync(projectId, async () =>
+            (await RunAsync(PathFor(projectId), ["merge-base", "--is-ancestor", ancestor, descendant], cancellationToken, allowFailure: true)).Succeeded);
+    }
+
+    public Task<IReadOnlyList<ReleaseTagRef>> ReleaseTagsAsync(Guid projectId, int projectVersion, CancellationToken cancellationToken)
+    {
+        if (!IsRepository(projectId))
+        {
+            return Task.FromResult<IReadOnlyList<ReleaseTagRef>>([]);
+        }
+
+        var pattern = $"refs/tags/{Domain.Releases.ReleaseRules.Tag(projectVersion)}*";
+        return WithLockAsync<IReadOnlyList<ReleaseTagRef>>(projectId, async () =>
+        {
+            var root = PathFor(projectId);
+            var listed = await RunAsync(root, ["for-each-ref", "--format=%(refname:strip=2)", pattern], cancellationToken);
+            var tags = new List<ReleaseTagRef>();
+            foreach (var name in listed.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (Domain.Releases.ReleaseRules.IsReleaseTagOf(name, projectVersion)
+                    && await ResolveCoreAsync(root, $"refs/tags/{name}", cancellationToken) is { } commit)
+                {
+                    tags.Add(new ReleaseTagRef(name, commit));
+                }
+            }
+
+            return tags;
+        });
+    }
+
+    public Task CreateTagAsync(Guid projectId, string tag, string commit, string message, CancellationToken cancellationToken)
+    {
+        RequireTagName(tag);
+        RequireRevision(commit);
+        ArgumentException.ThrowIfNullOrEmpty(message);
+        return WithLockAsync(projectId, async () =>
+        {
+            var root = RequireRepository(projectId);
+            var existing = await ResolveCoreAsync(root, $"refs/tags/{tag}", cancellationToken);
+            if (existing is not null)
+            {
+                if (existing == await ResolveCoreAsync(root, commit, cancellationToken))
+                {
+                    return 0;
+                }
+
+                await RunAsync(root, ["tag", "-d", tag], cancellationToken);
+            }
+
+            await RunAsync(root, ["tag", "-a", tag, "-m", message, commit], cancellationToken);
+            LogTagged(logger, projectId, tag, commit);
+            return 0;
+        });
+    }
+
+    public Task<RemoteReleaseTags> RemoteReleaseTagsAsync(Guid projectId, int projectVersion, GitRemote remote, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(remote);
+        return WithLockAsync(projectId, async () =>
+        {
+            var root = RequireRepository(projectId);
+            var listed = await git.RunAsync(root, ["ls-remote", "--tags", GitRemote.Name], remote.ConfigEnvironment, cancellationToken);
+            if (!listed.Succeeded)
+            {
+                return new RemoteReleaseTags(false, [], Redacted(listed, remote));
+            }
+
+            // "<sha>\trefs/tags/<tag>" and, for an annotated tag, "<commit>\trefs/tags/<tag>^{}" (the peeled commit).
+            var peeled = new Dictionary<string, string>(StringComparer.Ordinal);
+            var direct = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var line in listed.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var parts = line.Split('\t', 2);
+                if (parts.Length != 2 || !parts[1].StartsWith("refs/tags/", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var name = parts[1]["refs/tags/".Length..];
+                var target = name.EndsWith("^{}", StringComparison.Ordinal) ? peeled : direct;
+                name = name.EndsWith("^{}", StringComparison.Ordinal) ? name[..^3] : name;
+                if (Domain.Releases.ReleaseRules.IsReleaseTagOf(name, projectVersion))
+                {
+                    target[name] = parts[0];
+                }
+            }
+
+            var tags = direct.Keys
+                .Select(name => new ReleaseTagRef(name, peeled.TryGetValue(name, out var commit) ? commit : direct[name]))
+                .OrderBy(t => t.Tag, StringComparer.Ordinal)
+                .ToList();
+            if (tags.Count == 0)
+            {
+                return new RemoteReleaseTags(true, [], null);
+            }
+
+            var fetched = await git.RunAsync(
+                root,
+                ["fetch", "-q", "--no-tags", GitRemote.Name, .. tags.Select(t => $"+refs/tags/{t.Tag}:refs/tags/{t.Tag}")],
+                remote.ConfigEnvironment,
+                cancellationToken);
+            return fetched.Succeeded ? new RemoteReleaseTags(true, tags, null) : new RemoteReleaseTags(false, [], Redacted(fetched, remote));
+        });
+    }
+
+    public Task<GitCommandResult> PushTagAsync(Guid projectId, string tag, GitRemote remote, CancellationToken cancellationToken)
+    {
+        RequireTagName(tag);
+        ArgumentNullException.ThrowIfNull(remote);
+        return WithLockAsync(projectId, async () =>
+        {
+            var root = RequireRepository(projectId);
+            var result = await git.RunAsync(
+                root, ["push", "--porcelain", "--no-verify", GitRemote.Name, $"refs/tags/{tag}:refs/tags/{tag}"], remote.ConfigEnvironment, cancellationToken);
+            if (result.Succeeded)
+            {
+                LogTagPushed(logger, projectId, tag);
+            }
+
+            return Redacted(result, remote);
+        });
+    }
+
+    private static GitCommandResult Redacted(GitCommandResult result, GitRemote remote) =>
+        result with { StandardError = remote.Redact(result.StandardError), StandardOutput = remote.Redact(result.StandardOutput) };
+
+    private async Task<string?> ResolveCoreAsync(string root, string revision, CancellationToken cancellationToken)
+    {
+        var resolved = await RunAsync(root, ["rev-parse", "--verify", "--quiet", $"{revision}^{{commit}}"], cancellationToken, allowFailure: true);
+        return resolved.Succeeded ? resolved.StandardOutput.Trim() : null;
+    }
+
+    /// <summary>The unmerged (conflicting) paths of the merge in progress, in git's order.</summary>
+    private async Task<IReadOnlyList<string>> UnmergedAsync(string root, CancellationToken cancellationToken)
+    {
+        var unmerged = await RunAsync(root, ["diff", "--name-only", "--diff-filter=U", "-z"], cancellationToken, allowFailure: true);
+        return [.. unmerged.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal)];
+    }
+
+    private static void RequireTagName(string tag)
+    {
+        if (!Domain.Releases.ReleaseRules.IsReleaseTag(tag))
+        {
+            throw new WorkingCopyException("The tag name is not a release tag.");
+        }
+    }
+
+    /// <summary>A revision passed to git: a commit id or a fully qualified ref, never something git could read as an option.</summary>
+    private static void RequireRevision(string revision)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(revision);
+        var commitId = revision.Length is >= 7 and <= 64 && revision.All(char.IsAsciiHexDigitLower);
+        var qualifiedRef = revision.StartsWith("refs/", StringComparison.Ordinal)
+            && !revision.Contains("..", StringComparison.Ordinal)
+            && revision.All(c => char.IsAsciiLetterOrDigit(c) || c is '/' or '-' or '_' or '.');
+        if (!commitId && !qualifiedRef)
+        {
+            throw new WorkingCopyException("The revision is not a commit id or a qualified ref.");
+        }
+    }
+
     private async Task<StepCommitResult?> FindCoreAsync(string root, string branch, Guid stepId, CancellationToken cancellationToken)
     {
         if (!await RefExistsAsync(root, branch, cancellationToken))
@@ -729,4 +1041,16 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Step {StepId} of project {ProjectId} is already committed as {Sha}")]
     private static partial void LogAlreadyCommitted(ILogger logger, Guid projectId, Guid stepId, string sha);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Merged {Branch} into {DefaultBranch} for project {ProjectId} as {Sha}")]
+    private static partial void LogMerged(ILogger logger, Guid projectId, string branch, string defaultBranch, string sha);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Merging the project branch of project {ProjectId} conflicts in {Count} files; the merge was aborted")]
+    private static partial void LogMergeConflict(ILogger logger, Guid projectId, int count);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Tagged {Tag} on {Commit} for project {ProjectId}")]
+    private static partial void LogTagged(ILogger logger, Guid projectId, string tag, string commit);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Pushed tag {Tag} of project {ProjectId}")]
+    private static partial void LogTagPushed(ILogger logger, Guid projectId, string tag);
 }

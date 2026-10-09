@@ -8,6 +8,7 @@ import {
   errorMessage,
   errorMessages,
   errorReasons,
+  rollbackBlockedMessages,
   toApiError,
 } from './errors'
 import { canInProject, canViewAdmin, isWriter, projectCapabilities } from './permissions'
@@ -129,5 +130,16 @@ describe('safeReturnUrl', () => {
     [undefined, '/projects'],
   ])('%s → %s', (input, expected) => {
     expect(safeReturnUrl(input)).toBe(expected)
+  })
+
+  it('FR45: ROLLBACK_BLOCKED names the release reasons, else the generic copy', () => {
+    const blocked = (title: string, details?: string[]) =>
+      errorMessage(toApiError({ errorCode: 'ROLLBACK_BLOCKED', title, details }, new Response(null, { status: 409 })), 'rollback')
+    expect(blocked('The release was partially applied; retry the release first.')).toBe(
+      rollbackBlockedMessages.releasePartiallyApplied,
+    )
+    expect(blocked('Blocked.', ['reason: release_partially_applied'])).toBe(rollbackBlockedMessages.releasePartiallyApplied)
+    expect(blocked('A release is merging and tagging; wait for it to finish.')).toBe(rollbackBlockedMessages.releaseRunning)
+    expect(blocked('A step or agent run is in progress; wait for it to finish.')).toBe(errorMessages.ROLLBACK_BLOCKED)
   })
 })

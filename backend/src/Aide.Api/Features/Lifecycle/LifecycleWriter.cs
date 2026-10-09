@@ -68,6 +68,12 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
                 project.Id,
                 cancellationToken,
                 now);
+            if (transition.To == Phase.Release)
+            {
+                // FR-42: the release attempt is visible (in progress) from the moment the release job is queued.
+                await Features.Release.ReleaseRecords.AddAttemptAsync(
+                    db, project, Features.Release.ReleaseRecords.PhaseEntered, actor, now, cancellationToken);
+            }
         }
     }
 

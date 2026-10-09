@@ -1075,6 +1075,16 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int>("Attempt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("attempt");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
                     b.PrimitiveCollection<string[]>("ConflictingFiles")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -1084,9 +1094,14 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("Error")
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ErrorMessage")
                         .HasColumnType("text")
-                        .HasColumnName("error");
+                        .HasColumnName("error_message");
 
                     b.Property<string>("MergeCommitSha")
                         .HasMaxLength(64)
@@ -1121,10 +1136,9 @@ namespace Aide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_releases");
 
-                    b.HasIndex("ProjectId", "ProjectVersion")
+                    b.HasIndex("ProjectId", "ProjectVersion", "Attempt")
                         .IsUnique()
-                        .HasDatabaseName("ux_releases_project_id_project_version_succeeded")
-                        .HasFilter("status = 'succeeded'");
+                        .HasDatabaseName("ux_releases_project_id_project_version_attempt");
 
                     b.ToTable("releases", (string)null);
                 });
@@ -1134,6 +1148,20 @@ namespace Aide.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.PrimitiveCollection<Guid[]>("CancelledGateIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("cancelled_gate_ids")
+                        .HasDefaultValueSql("'{}'::uuid[]");
+
+                    b.PrimitiveCollection<Guid[]>("CancelledJobIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("cancelled_job_ids")
+                        .HasDefaultValueSql("'{}'::uuid[]");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1157,10 +1185,23 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("reason");
 
+                    b.PrimitiveCollection<Guid[]>("RequeuedStepIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("requeued_step_ids")
+                        .HasDefaultValueSql("'{}'::uuid[]");
+
                     b.PrimitiveCollection<Guid[]>("ResetStepIds")
                         .IsRequired()
                         .HasColumnType("uuid[]")
                         .HasColumnName("reset_step_ids");
+
+                    b.Property<string>("RestoredPhase")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("restored_phase");
 
                     b.Property<int>("TargetVersion")
                         .HasColumnType("integer")

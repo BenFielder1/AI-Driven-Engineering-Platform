@@ -46,6 +46,18 @@ public static class ErrorCodes
     public const string RollbackBlocked = "ROLLBACK_BLOCKED";
     public const string RateLimited = "RATE_LIMITED";
 
+    /// <summary>
+    /// FR-42 (recorded on a failed release, not returned by an endpoint): the release tag <c>v&lt;version&gt;-aide</c> already
+    /// exists but points at a commit that doesn't contain the project branch; tags are never moved.
+    /// </summary>
+    public const string TagConflict = "TAG_CONFLICT";
+
+    /// <summary>FR-42, FR-43 (recorded on a failed release): Git or GitHub refused the merge, tag or push for good.</summary>
+    public const string GitError = "GIT_ERROR";
+
+    /// <summary>FR-44 (recorded on a release): a rollback cancelled the release before it ran.</summary>
+    public const string ReleaseCancelled = "RELEASE_CANCELLED";
+
     // Approval links
     public const string LinkExpired = "LINK_EXPIRED";
     public const string LinkUsed = "LINK_USED";

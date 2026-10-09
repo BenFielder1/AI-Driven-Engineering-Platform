@@ -4013,6 +4013,406 @@
           }
         }
       }
+    },
+    "/api/projects/{id}/release": {
+      "post": {
+        "tags": [
+          "Release"
+        ],
+        "summary": "Retry a failed release (Owner, FR-43): queues the release job again for the current project version (merge the project PR or branch into the default branch, tag v<version>-aide, or the first free v<version>-aide.<k> when a version number reused after a rollback is already tagged elsewhere; an existing tag of the version holding the branch is a no-op). Only in the release phase with status releasing, after the latest attempt failed (e.g. MERGE_CONFLICT resolved on the branch). Returns 202 with the new in_progress release; the outcome arrives on the live channel.",
+        "operationId": "RetryRelease",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The release job was queued; the release is in_progress.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: only Owners release.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "NOT_RELEASING (not in the release phase with status releasing, e.g. already released), RELEASE_IN_PROGRESS (a release job is queued or running) or CONFLICT (a concurrent change).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/releases": {
+      "get": {
+        "tags": [
+          "Release"
+        ],
+        "summary": "Every release attempt of the project, newest first (members, FR-42, FR-43). Empty before the first release.",
+        "operationId": "ListReleases",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReleaseDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/releases/latest": {
+      "get": {
+        "tags": [
+          "Release"
+        ],
+        "summary": "The latest release attempt (members, FR-42, FR-43): in progress, succeeded, or failed with its error and conflicting files.",
+        "operationId": "GetLatestRelease",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or no release has started yet.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/rollback": {
+      "post": {
+        "tags": [
+          "Rollback"
+        ],
+        "summary": "Roll the project back to an earlier version (Owner, FR-44, FR-45, §4.8). In one transaction: restores the phase recorded at that version (status rolled_back), invalidates artifacts created after it, resets their plans' steps, cancels pending gates and queued jobs, clears the review state and records the rollback. The Git branch is not rewritten. Checks run in order: INVALID_TARGET_VERSION, ROLLBACK_BLOCKED, RATE_LIMITED (one rollback per project per minute).",
+        "operationId": "RollbackProject",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The rollback was applied and recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RollbackDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION (targetVersion < 1, reason empty or over 500 characters) or INVALID_TARGET_VERSION (not below the current version, not recorded, or a release-phase version).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: only Owners roll back.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ROLLBACK_BLOCKED with details [\"reason: <step_in_progress|agent_run_in_progress|release_running|release_partially_applied>\"] (a step, agent run or release job is running, or a queued release retry already merged), or CONFLICT (a concurrent change).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED: a rollback within the last minute; see Retry-After.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the action is allowed again.",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/rollbacks": {
+      "get": {
+        "tags": [
+          "Rollback"
+        ],
+        "summary": "Every rollback of the project, newest first (members, FR-44), including rollbacks chosen on escalation gates.",
+        "operationId": "ListRollbacks",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RollbackDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/versions": {
+      "get": {
+        "tags": [
+          "Rollback"
+        ],
+        "summary": "The project's versions from its state transitions, newest first (members, FR-44): the phase recorded at each version (the latest transition at that version; version 1 without one is refinement), when it was entered, and whether it is a valid rollback target now.",
+        "operationId": "ListProjectVersions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectVersionDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6611,7 +7011,8 @@
           "tokensUsed",
           "tokenBudget",
           "executionStatus",
-          "pullRequest"
+          "pullRequest",
+          "latestRelease"
         ],
         "type": "object",
         "properties": {
@@ -6673,9 +7074,19 @@
                 "$ref": "#/components/schemas/PullRequestSummaryDto"
               }
             ]
+          },
+          "latestRelease": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReleaseSummaryDto"
+              }
+            ]
           }
         },
-        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened it (FR-36), else `null`."
+        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened it (FR-36), else `null`. `latestRelease` is the latest release attempt (FR-42, FR-43), else `null`."
       },
       "ProjectStatus": {
         "enum": [
@@ -6746,6 +7157,43 @@
           }
         },
         "description": "A row of the projects list (FR-6). `myRole` is `null` for an Admin who isn't a member."
+      },
+      "ProjectVersionDto": {
+        "required": [
+          "version",
+          "phase",
+          "enteredAt",
+          "rollbackAllowed",
+          "rollbackBlockedReason"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/Phase"
+          },
+          "enteredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rollbackAllowed": {
+            "type": "boolean"
+          },
+          "rollbackBlockedReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RollbackTargetBlock"
+              }
+            ]
+          }
+        },
+        "description": "A project version from the state transitions (FR-44), for the rollback target picker: the phase entered at that version\nand when. `rollbackAllowed` says whether it is a valid rollback target now; when it isn't,\n`rollbackBlockedReason` says why (`current_version`, `release_phase`). Rate limits and running work\n(RATE_LIMITED, ROLLBACK_BLOCKED) are not reflected here: they are checked when the rollback is requested."
       },
       "PullRequestCommitDto": {
         "required": [
@@ -7147,6 +7595,124 @@
         },
         "description": "FR-1 registration."
       },
+      "ReleaseDto": {
+        "required": [
+          "id",
+          "projectVersion",
+          "status",
+          "tag",
+          "mergeCommitSha",
+          "pullRequestUrl",
+          "conflictingFiles",
+          "errorCode",
+          "errorMessage",
+          "attempt",
+          "startedAt",
+          "completedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReleaseStatus"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "mergeCommitSha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pullRequestUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conflictingFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "errorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errorMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "attempt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "A release attempt (FR-42, FR-43). `status` is `in_progress` while the release job is queued or running, then\n`succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`.\nA failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict\n`conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`\nfor Local). `attempt` counts the release attempts for this project version (1 for the first, +1 per retry).\n`completedAt` is `null` while in progress. `tag` is `v&lt;version&gt;-aide` until the release succeeds,\nthen the tag it was recorded with: `v&lt;version&gt;-aide.&lt;k&gt;` when the version number was reused after a rollback\nand the base tag holds an earlier release; several attempts of one version may succeed (re-releases after rollbacks).\n`mergeCommitSha` is set as soon as the merge exists, before tagging."
+      },
+      "ReleaseStatus": {
+        "enum": [
+          "succeeded",
+          "failed",
+          "in_progress"
+        ],
+        "description": "Outcome of a release attempt (FR-42, FR-43)."
+      },
+      "ReleaseSummaryDto": {
+        "required": [
+          "id",
+          "projectVersion",
+          "status",
+          "tag",
+          "startedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReleaseStatus"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "The latest release attempt in the project state (FR-42, FR-43): enough for the overview's release banner."
+      },
       "ReviewCategory": {
         "enum": [
           "feature_coverage",
@@ -7244,6 +7810,114 @@
           }
         },
         "description": "Review cycle progress and the latest compliance result (FR-38). `maxCycles` includes extra cycles granted by escalations (FR-14 continue). `status` is the review job's state: `running` while a review is queued or running, then `completed` or `failed`; `idle` before the first cycle or after a rollback cleared the review state (§4.8)."
+      },
+      "RollbackDto": {
+        "required": [
+          "id",
+          "fromVersion",
+          "toVersion",
+          "restoredPhase",
+          "reason",
+          "invalidatedArtifactIds",
+          "resetStepIds",
+          "requeuedStepIds",
+          "cancelledGateIds",
+          "cancelledJobIds",
+          "createdAt",
+          "createdBy"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fromVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "toVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "restoredPhase": {
+            "$ref": "#/components/schemas/Phase"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "invalidatedArtifactIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "resetStepIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "requeuedStepIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "cancelledGateIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "cancelledJobIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "$ref": "#/components/schemas/ActorDto"
+          }
+        },
+        "description": "A recorded rollback (FR-44, §4.8): from `fromVersion` to `toVersion`, restoring `restoredPhase`.\n`invalidatedArtifactIds` are the artifacts created after the target version; `resetStepIds` the steps of\ninvalidated plans (now `invalidated`); `requeuedStepIds` the blocked or rejected steps of surviving plans\n(back to `pending`); `cancelledGateIds` and `cancelledJobIds` the pending gates and queued jobs it\ncancelled. `createdBy` is the Owner (or the system, for an escalation decision recorded by a worker)."
+      },
+      "RollbackRequest": {
+        "required": [
+          "targetVersion",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "targetVersion": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "description": "Roll the project back to an earlier project version (FR-44, §4.8). `targetVersion` must be below the current\nversion, recorded, and not a release-phase version; `reason` is recorded on the rollback and its state transition."
+      },
+      "RollbackTargetBlock": {
+        "enum": [
+          "current_version",
+          "release_phase",
+          null
+        ]
       },
       "RunInputArtifactDto": {
         "required": [
@@ -7643,6 +8317,12 @@
     },
     {
       "name": "Review"
+    },
+    {
+      "name": "Release"
+    },
+    {
+      "name": "Rollback"
     }
   ]
 }

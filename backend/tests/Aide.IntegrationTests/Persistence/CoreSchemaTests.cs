@@ -142,10 +142,12 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
                 Reason = "bad plan",
                 InvalidatedArtifactIds = [plan.Id],
                 ResetStepIds = [step.Id],
+                RequeuedStepIds = [plan.Id],
+                RestoredPhase = Phase.Planning,
                 TriggeredBy = user.Id.ToString(),
                 CreatedAt = Now,
             });
-            db.Releases.Add(new Release { ProjectId = project.Id, ProjectVersion = 7, Tag = "v7-aide", Status = ReleaseStatus.Failed, ConflictingFiles = ["a.txt"], CreatedAt = Now });
+            db.Releases.Add(new Release { ProjectId = project.Id, ProjectVersion = 7, Tag = "v7-aide", Status = ReleaseStatus.Failed, ConflictingFiles = ["a.txt"], ErrorCode = "MERGE_CONFLICT", ErrorMessage = "conflict", Attempt = 2, CreatedAt = Now, CompletedAt = Now });
             db.Events.Add(new AuditEvent { ProjectId = project.Id, Type = "PHASE_CHANGED", Payload = """{"to":"planning"}""", Actor = "aide-system", CreatedAt = Now });
             db.Jobs.Add(new Job { ProjectId = project.Id, Type = "agent_run", Payload = """{"runId":"x"}""", RunAfter = Now, CreatedAt = Now });
             db.Notifications.Add(new Notification { UserId = user.Id, ProjectId = project.Id, Type = "gate_required", Title = "Gate", Body = "Approve", Link = "/projects/x", CreatedAt = Now });
@@ -200,13 +202,19 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
             var rollback = await db.RollbackEvents.AsNoTracking().SingleAsync(r => r.ProjectId == project.Id, Ct);
             Assert.Equal([plan.Id], rollback.InvalidatedArtifactIds);
             Assert.Equal([step.Id], rollback.ResetStepIds);
+            Assert.Equal([plan.Id], rollback.RequeuedStepIds);
+            Assert.Equal(Phase.Planning, rollback.RestoredPhase);
+            Assert.Empty(rollback.CancelledGateIds);
+            Assert.Empty(rollback.CancelledJobIds);
 
             var llm = await db.ProjectLlmSettings.AsNoTracking().SingleAsync(s => s.ProjectId == project.Id, Ct);
             Assert.Equal("model-b", llm.ModelsByAgent["idea_refinement"]);
             var channels = await db.ProjectNotificationSettings.AsNoTracking().SingleAsync(s => s.ProjectId == project.Id, Ct);
             Assert.Equal(["gate_required"], Assert.Single(channels.Channels).Events);
 
-            Assert.Equal(["a.txt"], (await db.Releases.AsNoTracking().SingleAsync(r => r.ProjectId == project.Id, Ct)).ConflictingFiles);
+            var release = await db.Releases.AsNoTracking().SingleAsync(r => r.ProjectId == project.Id, Ct);
+            Assert.Equal(["a.txt"], release.ConflictingFiles);
+            Assert.Equal(("MERGE_CONFLICT", "conflict", 2, (DateTimeOffset?)Now), (release.ErrorCode, release.ErrorMessage, release.Attempt, release.CompletedAt));
             Assert.Equal(JobStatus.Queued, (await db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == project.Id, Ct)).Status);
 
             // Enums are stored as snake_case wire strings, also inside jsonb.

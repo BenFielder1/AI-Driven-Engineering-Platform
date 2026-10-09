@@ -46,6 +46,67 @@ public interface IGitProvider
 
     /// <summary>The ref in the working copy the project branch is compared with (FR-35/FR-36): the (remote) default branch.</summary>
     string ComparisonBaseRef(GitConnectionSettings settings);
+
+    /// <summary>
+    /// FR-42, FR-43: releases the project branch: merges it into the default branch (GitHub: merges the project PR through the
+    /// API; Local: <c>git merge --no-ff</c> in the working copy) and creates the annotated tag (GitHub: pushed). Idempotent: a
+    /// release tag of the version that already contains the branch is a no-op success; tags elsewhere are never moved, the
+    /// release uses the first free <c>v&lt;N&gt;-aide.&lt;k&gt;</c> instead (<see cref="Domain.Releases.ReleaseRules.ChooseTag"/>). A
+    /// merge conflict is returned with the conflicting files, never thrown. The working copy must be prepared first.
+    /// </summary>
+    Task<ReleaseOutcome> ReleaseAsync(GitConnectionSettings settings, ReleaseRequest request, string? token, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// A release to perform (FR-42): the project branch, the project version and name (the tag, its message and the merge title
+/// come from <see cref="Domain.Releases.ReleaseRules"/> once the provider has chosen the tag), the project PR (GitHub), and
+/// <see cref="OnMerged"/>, called with the merge commit as soon as the merge exists (before tagging), so the merge is on
+/// record even if tagging fails. An exception from it ends the release (nothing is tagged).
+/// </summary>
+public sealed record ReleaseRequest(
+    string Branch,
+    int ProjectVersion,
+    string ProjectName,
+    int? PullRequestNumber,
+    Func<string, CancellationToken, Task>? OnMerged = null);
+
+/// <summary>How a release attempt ended at the provider.</summary>
+public enum ReleaseOutcomeKind
+{
+    /// <summary>Merged and tagged (or the tag already held the release).</summary>
+    Released = 0,
+
+    /// <summary>The branch conflicts with the default branch (FR-43): nothing was merged.</summary>
+    Conflict = 1,
+
+    /// <summary>Another failure; <see cref="ReleaseOutcome.Transient"/> says whether a retry could help.</summary>
+    Failed = 2,
+}
+
+/// <summary>
+/// The outcome of <see cref="IGitProvider.ReleaseAsync"/>: the merge commit (the tagged commit), the release tag used and
+/// whether it already existed; or the conflicting files; or an error code (<c>GIT_ERROR</c>) with a token-free reason.
+/// </summary>
+public sealed record ReleaseOutcome(
+    ReleaseOutcomeKind Kind,
+    string? MergeCommitSha,
+    bool AlreadyTagged,
+    IReadOnlyList<string> ConflictingFiles,
+    string? ErrorCode,
+    string? Reason,
+    bool Transient)
+{
+    /// <summary>The release tag (base or suffixed) the release was recorded with; set when released.</summary>
+    public string? Tag { get; init; }
+
+    public static ReleaseOutcome Released(string mergeCommitSha, string tag, bool alreadyTagged) =>
+        new(ReleaseOutcomeKind.Released, mergeCommitSha, alreadyTagged, [], null, null, false) { Tag = tag };
+
+    public static ReleaseOutcome Conflicted(IReadOnlyList<string> files, string reason) =>
+        new(ReleaseOutcomeKind.Conflict, null, false, files, Domain.Common.ErrorCodes.MergeConflict, reason, false);
+
+    public static ReleaseOutcome Failed(string errorCode, string reason, bool transient) =>
+        new(ReleaseOutcomeKind.Failed, null, false, [], errorCode, reason, transient);
 }
 
 /// <summary>The project PR to open (FR-36).</summary>

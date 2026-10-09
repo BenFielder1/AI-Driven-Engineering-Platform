@@ -24,6 +24,17 @@ public sealed class GitHubGitOptions
     /// </summary>
     public bool AllowInsecureGitBaseUrl { get; set; }
 
+    /// <summary>
+    /// FR-42: how the release merges the project PR through the GitHub API: <c>merge</c> (a merge commit, the default),
+    /// <c>squash</c> or <c>rebase</c>. The release tag goes on the commit GitHub reports as the merge.
+    /// </summary>
+    public string ReleaseMergeMethod { get; set; } = DefaultReleaseMergeMethod;
+
+    public const string DefaultReleaseMergeMethod = "merge";
+
+    /// <summary>The merge methods the GitHub API accepts.</summary>
+    public static IReadOnlyList<string> ReleaseMergeMethods { get; } = ["merge", "squash", "rebase"];
+
     /// <summary><see cref="GitBaseUrl"/> with a trailing slash.</summary>
     public string NormalizedGitBaseUrl => GitBaseUrl.EndsWith('/') ? GitBaseUrl : GitBaseUrl + "/";
 }
@@ -46,6 +57,11 @@ internal sealed class GitHubGitOptionsValidator : IValidateOptions<GitHubGitOpti
         if (!string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
         {
             return ValidateOptionsResult.Fail("GitHub:GitBaseUrl must not contain credentials, a query or a fragment.");
+        }
+
+        if (!GitHubGitOptions.ReleaseMergeMethods.Contains(options.ReleaseMergeMethod, StringComparer.Ordinal))
+        {
+            return ValidateOptionsResult.Fail("GitHub:ReleaseMergeMethod must be merge, squash or rebase.");
         }
 
         return ValidateOptionsResult.Success;

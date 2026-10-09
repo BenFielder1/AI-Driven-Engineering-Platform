@@ -53,6 +53,11 @@ public sealed partial class GateService(
         Decide(gate, resolution.NewStatus, resolution.Decision, resolution.TargetVersion, reviewerId, comment, now);
         project.UpdatedAt = now;
 
+        // A rollback decision locks the project's jobs until the decision commits (RollbackWriter); a failure rolls it back.
+        await using var transaction = resolution.FollowUp == GateFollowUp.Rollback
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         switch (resolution.FollowUp)
         {
             case GateFollowUp.ApplyTransition:
@@ -176,6 +181,11 @@ public sealed partial class GateService(
         if (saved.IsFailure)
         {
             return Result.Failure<ApprovalGate>(saved.Error!);
+        }
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
         }
 
         LogApproved(logger, project.Id, gate.Id, gate.Type, resolution.FollowUp);

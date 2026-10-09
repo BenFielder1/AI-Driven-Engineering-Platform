@@ -16,7 +16,11 @@ namespace Aide.Api.Features.Lifecycle;
 /// (nothing is saved here): the restored phase/version (status <c>rolled_back</c>), the state transition and
 /// <c>PHASE_CHANGED</c> event, invalidated artifacts, reset steps (invalidated, or requeued when their plan survives), cancelled pending gates and queued jobs, review cycle
 /// reset, <c>last_rollback_at</c>, the <c>rollback_events</c> row and a <c>ROLLBACK_COMPLETED</c> event. The Git branch is
-/// never rewritten. Used by the escalation <c>rollback</c> decision now and by <c>POST /rollback</c> (phase 11).
+/// never rewritten. Must run inside a transaction: the project's queued and running jobs are locked (<c>FOR UPDATE</c>) so
+/// none can be claimed between the decision and the commit. A release job that is running blocks the rollback (its Git work
+/// can't be undone), as does a queued release retry whose attempt already merged; otherwise in-progress release attempts
+/// whose job was queued fail as <c>RELEASE_CANCELLED</c>. Used by the escalation <c>rollback</c> decision and by
+/// <c>POST /rollback</c>.
 /// </summary>
 public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
 {
@@ -34,7 +38,31 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A rollback runs inside a database transaction: the project's job rows stay locked until it commits.");
+        }
+
         var id = project.Id;
+
+        // Lock the project's queued and running jobs until the rollback commits. Claiming takes queued rows with SKIP LOCKED,
+        // so none of them can start meanwhile; a claim already in flight holds its rows, so this waits for it and then sees
+        // the job running (PostgreSQL re-checks the row it waited for). The decision below and the cancellations use these rows.
+        var activeJobs = await db.Jobs
+            .FromSql($"""
+                SELECT * FROM jobs
+                WHERE project_id = {id} AND status IN ('queued', 'running')
+                ORDER BY id
+                FOR UPDATE
+                """)
+            .ToListAsync(cancellationToken);
+        var releaseRunning = activeJobs.Any(j => j.Type == JobTypes.Release && j.Status == JobStatus.Running);
+
+        // A release job waiting out a retry backoff whose attempt already merged: cancelling it would leave a merged,
+        // untagged release behind (the merge can't be undone), so the rollback waits for the release instead.
+        var releasePartiallyApplied = activeJobs.Any(j => j.Type == JobTypes.Release && j.Status == JobStatus.Queued)
+            && await db.Releases.AsNoTracking().AnyAsync(
+                r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress && r.MergeCommitSha != null, cancellationToken);
 
         var transitions = await db.StateTransitions.AsNoTracking()
             .Where(t => t.ProjectId == id)
@@ -54,7 +82,11 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
             [.. steps.Select(s => new StepRef(s.Id, s.PlanArtifactId, s.Status))],
             runInProgress,
             now,
-            project.LastRollbackAt));
+            project.LastRollbackAt)
+        {
+            ReleaseRunning = releaseRunning,
+            ReleasePartiallyApplied = releasePartiallyApplied,
+        });
         if (planned.IsFailure)
         {
             return Result.Failure<RollbackEvent>(planned.Error!);
@@ -106,11 +138,19 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
             db.AddEvent(EventTypes.GateCancelled, id, new { gateId = gate.Id, type = gate.Type, cause = "rollback", targetVersion }, actor, now);
         }
 
-        var queuedJobs = await db.Jobs.Where(j => j.ProjectId == id && j.Status == JobStatus.Queued).ToListAsync(cancellationToken);
+        var queuedJobs = activeJobs.Where(j => j.Status == JobStatus.Queued).ToList();
         foreach (var job in queuedJobs)
         {
             job.Status = JobPolicy.Cancel(job.Status);
             job.CompletedAt = now;
+        }
+
+        // A release whose job was still queued (now cancelled) will never run: its attempt fails as cancelled (FR-43, FR-44).
+        var releases = await db.Releases.Where(r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress).ToListAsync(cancellationToken);
+        foreach (var release in releases)
+        {
+            Release.ReleaseRecords.Fail(
+                db, release, ErrorCodes.ReleaseCancelled, $"Cancelled by the rollback to version {targetVersion}.", [], actor, now);
         }
 
         var record = new RollbackEvent
@@ -118,9 +158,13 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
             ProjectId = id,
             FromVersion = plan.FromVersion,
             TargetVersion = plan.TargetVersion,
+            RestoredPhase = plan.Transition.To,
             Reason = reason,
             InvalidatedArtifactIds = plan.InvalidatedArtifactIds,
-            ResetStepIds = [.. plan.ResetStepIds, .. plan.RequeuedStepIds],
+            ResetStepIds = plan.ResetStepIds,
+            RequeuedStepIds = plan.RequeuedStepIds,
+            CancelledGateIds = [.. pendingGates.Select(g => g.Id)],
+            CancelledJobIds = [.. queuedJobs.Select(j => j.Id)],
             TriggeredBy = actor,
             CreatedAt = now,
         };

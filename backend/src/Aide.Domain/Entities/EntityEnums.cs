@@ -31,6 +31,9 @@ public enum ReleaseStatus
 {
     Succeeded = 0,
     Failed = 1,
+
+    /// <summary>The release job is queued or running (stored as <c>in_progress</c>; no schema change: enums are strings).</summary>
+    InProgress = 2,
 }
 
 /// <summary>Per-channel delivery state of a notification (FR-49).</summary>

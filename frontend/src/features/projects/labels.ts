@@ -224,6 +224,19 @@ export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {
   local: 'Local repository',
 }
 
+/** FR-42, FR-43: a release attempt's outcome. */
+export const releaseStatusLabels: Record<Schemas['ReleaseStatus'], string> = {
+  in_progress: 'Releasing',
+  succeeded: 'Released',
+  failed: 'Failed',
+}
+
+/** FR-44: why a project version can't be a rollback target. */
+export const rollbackBlockLabels: Record<NonNullable<Schemas['RollbackTargetBlock']>, string> = {
+  current_version: 'current version',
+  release_phase: 'release versions can’t be restored',
+}
+
 /** FR-36: how a file differs between the default branch and the project branch. */
 export const pullRequestFileStatusLabels: Record<Schemas['PullRequestFileStatus'], string> = {
   added: 'Added',

@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Admin;
+using Aide.Api.Features.Release;
 using Aide.Api.Features.Review;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
@@ -422,7 +423,13 @@ public static partial class ProjectEndpoints
                 [.. stepCounts.Where(c => c.Key != StepStatus.Invalidated).SelectMany(c => Enumerable.Repeat(c.Key, c.Value))],
                 project.ExecutionPaused,
                 await Execution.ExecutionQueries.JobActiveAsync(db, id, cancellationToken)),
-            await Git.PullRequestReader.SummaryAsync(db, id, cancellationToken));
+            await Git.PullRequestReader.SummaryAsync(db, id, cancellationToken),
+            await db.Releases.AsNoTracking()
+                .Where(r => r.ProjectId == id)
+                .OrderByDescending(r => r.CreatedAt)
+                .ThenByDescending(r => r.Id)
+                .Select(r => new ReleaseSummaryDto(r.Id, r.ProjectVersion, r.Status, r.Tag, r.CreatedAt))
+                .FirstOrDefaultAsync(cancellationToken));
     }
 
     internal static ProblemHttpResult ConcurrentEdit() =>

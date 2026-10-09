@@ -8,6 +8,7 @@ import { ActivityFeed } from '../activity/activity-feed'
 import { GateHistory } from '../gates/gate-history'
 import { PendingGatesPanel } from '../gates/pending-gates-panel'
 import { LifecycleCard } from '../lifecycle/lifecycle-card'
+import { ReleasePanel } from '../release/release-panel'
 import { TokenBudget } from '../runs/token-budget'
 import { artifactStatusLabels, artifactTypeLabels } from './labels'
 import { useProjectAccess } from './project-context'
@@ -56,7 +57,7 @@ type HistoryTab = (typeof historyTabs)[number]['id']
 
 /**
  * /projects/:id overview (SPEC §7): lifecycle timeline with the advance action (FR-11, FR-12), pending gates with
- * Owner decisions (FR-13–FR-15), state summaries from /state, tokens used against the budget (FR-26), and the activity feed and gate history (FR-50).
+ * Owner decisions (FR-13–FR-15), state summaries from /state, tokens used against the budget (FR-26), the release (FR-42, FR-43), and the activity feed and gate history (FR-50).
  */
 export function ProjectOverviewPage() {
   const { project, user, role } = useProjectAccess()
@@ -81,6 +82,10 @@ export function ProjectOverviewPage() {
         canDecide={canInProject(user, role, 'decideGates')}
         currentVersion={s.projectVersion}
       />
+
+      {(s.phase === 'release' || s.latestRelease !== null) && (
+        <ReleasePanel projectId={project.id} state={s} canRelease={canInProject(user, role, 'requestRelease')} />
+      )}
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         <Card title="Artifacts">
