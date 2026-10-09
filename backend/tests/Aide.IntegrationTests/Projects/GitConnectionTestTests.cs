@@ -233,5 +233,8 @@ public sealed class GitConnectionTestTests(AideApiFactory factory)
     public sealed class FakeGitCli(string? version) : IGitCli
     {
         public Task<string?> GetVersionAsync(CancellationToken cancellationToken) => Task.FromResult(version);
+
+        public Task<GitCommandResult> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken cancellationToken) =>
+            throw new GitCommandException("The fake git CLI runs no commands.");
     }
 }

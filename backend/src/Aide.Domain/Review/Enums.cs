@@ -14,6 +14,9 @@ public enum EscalationReason
     SevereDrift = 1,
     MaxCycles = 2,
     NoImprovement = 3,
+
+    /// <summary>FR-33: an execution step was rejected on its fourth attempt and is blocked.</summary>
+    StepBlocked = 4,
 }
 
 public enum DriftLevel

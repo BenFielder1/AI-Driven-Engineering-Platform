@@ -144,6 +144,12 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
         {
             try
             {
+                // Git marks object files read-only, which blocks deletion on Windows.
+                foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+                {
+                    File.SetAttributes(file, FileAttributes.Normal);
+                }
+
                 Directory.Delete(path, recursive: true);
             }
             catch (DirectoryNotFoundException)

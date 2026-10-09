@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -78,58 +77,3 @@ internal sealed partial class WorkspaceStore(IConfiguration configuration, ILogg
     private static partial void LogDeleteFailed(ILogger logger, Exception exception, Guid projectId);
 }
 
-/// <summary>The <c>git</c> command-line tool (needed by the Local provider and, in phase 9, for working copies).</summary>
-public interface IGitCli
-{
-    /// <summary>The output of <c>git --version</c>, or <c>null</c> if git isn't installed or doesn't answer.</summary>
-    Task<string?> GetVersionAsync(CancellationToken cancellationToken);
-}
-
-internal sealed class GitCli : IGitCli
-{
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
-
-    public async Task<string?> GetVersionAsync(CancellationToken cancellationToken)
-    {
-        var start = new ProcessStartInfo("git")
-        {
-            ArgumentList = { "--version" },
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-
-        try
-        {
-            using var process = Process.Start(start);
-            if (process is null)
-            {
-                return null;
-            }
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(Timeout);
-            try
-            {
-                var output = await process.StandardOutput.ReadToEndAsync(timeout.Token);
-                await process.WaitForExitAsync(timeout.Token);
-                return process.ExitCode == 0 ? output.Trim() : null;
-            }
-            catch (OperationCanceledException)
-            {
-                process.Kill(entireProcessTree: true);
-                throw;
-            }
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            // Not installed / not on PATH.
-            return null;
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return null;
-        }
-    }
-}

@@ -70,6 +70,23 @@ public class RollbackRulesTests
     }
 
     [Fact]
+    public void S4_8_Rollback_keeping_the_plan_requeues_its_blocked_and_rejected_steps_but_not_completed_ones()
+    {
+        var plan4 = new ArtifactRef(Guid.NewGuid(), ArtifactType.ImplementationPlan, ArtifactStatus.Locked, 4);
+        var completed = new StepRef(Guid.NewGuid(), plan4.Id, StepStatus.Completed);
+        var blocked = new StepRef(Guid.NewGuid(), plan4.Id, StepStatus.Blocked);
+        var rejected = new StepRef(Guid.NewGuid(), plan4.Id, StepStatus.Rejected);
+        var pending = new StepRef(Guid.NewGuid(), plan4.Id, StepStatus.Pending);
+        var optimisation6 = new ArtifactRef(Guid.NewGuid(), ArtifactType.OptimizationPlan, ArtifactStatus.Locked, 6);
+        var blockedOptimisation = new StepRef(Guid.NewGuid(), optimisation6.Id, StepStatus.Blocked);
+
+        var plan = RollbackRules.Plan(Request(artifacts: [plan4, optimisation6], steps: [completed, blocked, rejected, pending, blockedOptimisation])).Value;
+
+        Assert.Equal([blocked.Id, rejected.Id], plan.RequeuedStepIds);
+        Assert.Equal([blockedOptimisation.Id], plan.ResetStepIds);
+    }
+
+    [Fact]
     public void FR44_Rollback_into_a_release_is_invalid_target_version()
     {
         RecordedTransition[] history = [.. History, new(7, Phase.Release, T0.AddMinutes(9)), new(8, Phase.Release, T0.AddMinutes(10))];

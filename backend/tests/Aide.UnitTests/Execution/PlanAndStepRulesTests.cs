@@ -89,6 +89,42 @@ public class PlanValidatorTests
     }
 
     [Fact]
+    public void FR29_No_plan_may_declare_a_path_under_aide_even_when_protected_paths_are_allowed()
+    {
+        var result = PlanValidator.Validate([Step(1, null, new DeclaredFile(".aide/rules.md", FileAction.Modify))], allowProtectedPaths: true);
+
+        Assert.Equal(ErrorCodes.InvalidPlan, result.Error!.Code);
+        Assert.Contains(result.Error.Details!, d => d.Contains(".aide/", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(StepStatus.Blocked, true)]
+    [InlineData(StepStatus.Rejected, true)]
+    [InlineData(StepStatus.Pending, false)]
+    [InlineData(StepStatus.Completed, false)]
+    [InlineData(StepStatus.Invalidated, false)]
+    [InlineData(StepStatus.InProgress, false)]
+    public void S4_8_Rollback_requeues_only_blocked_or_rejected_steps_of_a_surviving_plan(StepStatus status, bool requeued) =>
+        Assert.Equal(requeued, StepRules.RequeueOnRollback(status));
+
+    [Theory]
+    [InlineData(StepStatus.InProgress, StepStatus.Rejected, true)]
+    [InlineData(StepStatus.Pending, StepStatus.Pending, false)]
+    [InlineData(StepStatus.Completed, StepStatus.Completed, false)]
+    [InlineData(StepStatus.Blocked, StepStatus.Blocked, false)]
+    public void FR33_An_ended_execution_job_turns_its_in_progress_step_into_a_rejected_attempt(StepStatus status, StepStatus expected, bool changed) =>
+        Assert.Equal(new StepStatusChange(expected, changed), StepRules.AbandonAttempt(status));
+
+    [Fact]
+    public void FR33_An_abandoned_attempt_is_retried_as_the_next_attempt()
+    {
+        var abandoned = StepRules.AbandonAttempt(StepStatus.InProgress);
+        var retry = StepRules.BeginAttempt(abandoned.NewStatus, 2);
+
+        Assert.Equal(new StepAttemptStart(3, true), retry.Value);
+    }
+
+    [Fact]
     public void FR29_Protected_paths_are_refused_only_when_protected_paths_are_not_allowed()
     {
         PlanStep[] plan = [Step(1, null, new DeclaredFile(".github/workflows/ci.yml", FileAction.Create), new DeclaredFile("yarn.lock", FileAction.Modify))];

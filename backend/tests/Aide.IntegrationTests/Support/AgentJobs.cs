@@ -6,6 +6,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Jobs;
 using Aide.Infrastructure.Agents;
+using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,7 @@ public static class AgentJobs
     {
         ArgumentNullException.ThrowIfNull(app);
         var types = app.Services.GetServices<JobHandlerRegistration>().Select(r => r.JobType).ToArray();
-        for (var round = 0; round < 10; round++)
+        for (var round = 0; round < 25; round++)
         {
             var queued = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
                 .Where(j => j.ProjectId == projectId && j.Status == JobStatus.Queued && types.Contains(j.Type))
@@ -72,8 +73,26 @@ public static class AgentJobs
             }
         }
 
-        await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, status).SetProperty(j => j.LastError, error).SetProperty(j => j.CompletedAt, DateTimeOffset.UtcNow), Ct));
+        if (status != JobStatus.Succeeded)
+        {
+            await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, status).SetProperty(j => j.LastError, error).SetProperty(j => j.CompletedAt, DateTimeOffset.UtcNow), Ct));
+            return;
+        }
+
+        // Like the worker: mark it succeeded and run the succeeded hooks (e.g. the next execution job) in one transaction.
+        await using var hookScope = app.Services.CreateAsyncScope();
+        var hookDb = hookScope.ServiceProvider.GetRequiredService<AideDbContext>();
+        await using var transaction = await hookDb.Database.BeginTransactionAsync(Ct);
+        await hookDb.Jobs.Where(j => j.Id == job.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Succeeded).SetProperty(j => j.LastError, (string?)null).SetProperty(j => j.CompletedAt, DateTimeOffset.UtcNow), Ct);
+        foreach (var hook in hookScope.ServiceProvider.GetServices<IJobSucceededHook>())
+        {
+            await hook.OnJobSucceededAsync(hookDb, new JobExecution(job.Id, job.Type, job.Payload, job.ProjectId, attempt), Ct);
+        }
+
+        await hookDb.SaveChangesAsync(Ct);
+        await transaction.CommitAsync(Ct);
     }
 
     /// <summary>The factory with <paramref name="responders"/> replacing the built-in Fake replies of their agents.</summary>

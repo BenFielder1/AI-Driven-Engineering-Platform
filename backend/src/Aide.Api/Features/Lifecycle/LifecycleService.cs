@@ -1,3 +1,4 @@
+using Aide.Api.Features.Execution;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -20,6 +21,7 @@ public sealed partial class LifecycleService(
     AideDbContext db,
     LifecycleSnapshotLoader snapshots,
     LifecycleWriter writer,
+    WorkingCopyPreparer workingCopies,
     TimeProvider time,
     ILogger<LifecycleService> logger)
 {
@@ -31,8 +33,21 @@ public sealed partial class LifecycleService(
             return Result.Failure<AdvanceResult>(new DomainError(ErrorCodes.NotFound, "The project was not found."));
         }
 
+        bool? prepared = null;
+        if (PhaseOrder.Next(project.CurrentPhase) == Phase.Execution)
+        {
+            // FR-35, §4.1: prepare the working copy and project branch before execution is entered (idempotent). The
+            // outcome is the "working copy prepared" condition: a failure leaves it unmet, which the state machine reports.
+            prepared = (await workingCopies.PrepareAsync(project.Id, cancellationToken)).IsSuccess;
+        }
+
         var state = new LifecycleState(project.CurrentPhase, project.Status, project.ProjectVersion);
         var snapshot = await snapshots.LoadAsync(project, cancellationToken);
+        if (prepared is { } ready)
+        {
+            snapshot = snapshot with { WorkingCopyPrepared = ready };
+        }
+
         var cleanReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
         var outcome = LifecycleStateMachine.RequestAdvance(state, snapshot, cleanReason);
         if (outcome.IsFailure)

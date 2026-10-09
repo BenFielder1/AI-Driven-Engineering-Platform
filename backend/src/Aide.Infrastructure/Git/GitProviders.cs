@@ -91,6 +91,14 @@ internal sealed partial class GitHubGitProvider(IHttpClientFactory clients, ILog
         return new GitTestResult(failure is null, Reachable: true, writable, branchExists, failure);
     }
 
+    /// <summary>Phase 9 (FR-35): clone over HTTPS with the project token into the working copy.</summary>
+    public Task<GitOutcome> PrepareWorkingCopyAsync(GitConnectionSettings settings, string branchName, string? token, CancellationToken cancellationToken) =>
+        Task.FromResult(GitOutcome.Failed("Execution with the GitHub provider is not available yet; use the Local provider."));
+
+    /// <summary>Phase 9 (FR-34): push the project branch.</summary>
+    public Task<GitOutcome> PublishBranchAsync(GitConnectionSettings settings, string branchName, string? token, CancellationToken cancellationToken) =>
+        Task.FromResult(GitOutcome.Failed("Pushing to GitHub is not available yet."));
+
     private static async Task<Sent> SendAsync(HttpClient client, string path, string? token, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(path, UriKind.Relative));
@@ -184,7 +192,7 @@ internal sealed partial class GitHubGitProvider(IHttpClientFactory clients, ILog
 /// the flow works offline. The test passes when the root is writable and the git CLI runs. The default branch is
 /// created with the local repository, so it always "exists".
 /// </summary>
-internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitCli git, ILogger<LocalGitProvider> logger) : IGitProvider
+internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitCli git, IWorkingCopies workingCopies, ILogger<LocalGitProvider> logger) : IGitProvider
 {
     public GitProvider Kind => GitProvider.Local;
 
@@ -217,6 +225,34 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
 
         return new GitTestResult(true, true, true, true, null);
     }
+
+    /// <summary>
+    /// FR-35 (D12): the repository is the working copy itself, on the data volume: created with an empty initial commit on
+    /// the default branch, then the project branch is created from it and checked out.
+    /// </summary>
+    public async Task<GitOutcome> PrepareWorkingCopyAsync(GitConnectionSettings settings, string branchName, string? token, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        try
+        {
+            await workingCopies.InitAsync(settings.ProjectId, settings.DefaultBranch, cancellationToken);
+            await workingCopies.CheckoutBranchAsync(settings.ProjectId, settings.DefaultBranch, branchName, cancellationToken);
+            return GitOutcome.Success;
+        }
+        catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException or UnauthorizedAccessException)
+        {
+            LogPrepareFailed(logger, ex, settings.ProjectId);
+            // The server path stays in the log; the reason shown to users is generic.
+            return GitOutcome.Failed("The local repository could not be prepared on the AIDE server. Ask an admin to check the server log and the Workspaces:Root volume.");
+        }
+    }
+
+    /// <summary>A Local repository has no remote: the commit is already where it belongs.</summary>
+    public Task<GitOutcome> PublishBranchAsync(GitConnectionSettings settings, string branchName, string? token, CancellationToken cancellationToken) =>
+        Task.FromResult(GitOutcome.Success);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Preparing the local repository of project {ProjectId} failed")]
+    private static partial void LogPrepareFailed(ILogger logger, Exception exception, Guid projectId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Workspace root {Root} is not writable (project {ProjectId})")]
     private static partial void LogNotWritable(ILogger logger, Exception exception, Guid projectId, string root);

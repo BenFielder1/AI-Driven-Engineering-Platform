@@ -11,13 +11,7 @@ import { RadioGroup } from '../../components/ui/radio-group'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { TextField } from '../../components/ui/text-field'
 import { applyFieldErrors, errorMessage } from '../../lib/errors'
-import {
-  escalationDecisionDescriptions,
-  escalationDecisionLabels,
-  escalationDecisions,
-  gateTypeLabels,
-  phaseLabels,
-} from '../projects/labels'
+import { escalationDecisionLabels, escalationOptionsFor, gateTypeLabels, phaseLabels } from '../projects/labels'
 import { commentSchema, escalationSchema } from './gate-schemas'
 import { useApproveGate, useRejectGate, type Gate } from './gates-api'
 
@@ -164,6 +158,9 @@ export function EscalationDialog({
   // §7: rollback is destructive, so the dialog becomes an alertdialog with a danger submit naming the version.
   const isRollback = decision === 'rollback'
   const rollbackLabel = /^\d+$/.test(target) ? `Roll back to v${target}` : 'Roll back'
+  // FR-33: a blocked execution step can be retried (continue) or rolled back; accept does nothing there, so it's hidden.
+  const stepBlocked = gate.escalationReason === 'step_blocked'
+  const stepLabel = gate.stepNumber === null ? 'An execution step' : `Step ${String(gate.stepNumber)}`
 
   const onSubmit = handleSubmit((values) => {
     setServerError(null)
@@ -178,14 +175,20 @@ export function EscalationDialog({
       {
         onSuccess: () => {
           onDecided(
-            values.decision === 'rollback'
+            stepBlocked && values.decision === 'continue'
+              ? `Escalation decided: ${stepLabel.toLowerCase()} will be retried.`
+              : values.decision === 'rollback'
               ? `Escalation decided: roll back to version ${values.targetVersion.trim()}.`
               : `Escalation decided: ${escalationDecisionLabels[values.decision].toLowerCase()}.`,
           )
         },
         onError: (error) => {
           const unmatched = applyFieldErrors(error, setError, ['targetVersion', 'comment', 'decision'])
-          setServerError(unmatched.length > 0 ? unmatched.join(' ') : errorMessage(error))
+          setServerError(
+            unmatched.length > 0
+              ? unmatched.join(' ')
+              : errorMessage(error, stepBlocked ? 'stepEscalationDecision' : undefined),
+          )
         },
       },
     )
@@ -195,7 +198,11 @@ export function EscalationDialog({
     <Dialog
       open
       title="Decide the escalation"
-      description="Review needs a human decision before the project can continue."
+      description={
+        stepBlocked
+          ? `${stepLabel} was rejected by the Execution Guardian on every attempt and is blocked. Continue retries it with fresh attempts; roll back returns the project to an earlier version.`
+          : 'Review needs a human decision before the project can continue.'
+      }
       role={isRollback ? 'alertdialog' : 'dialog'}
       busy={approve.isPending}
       fallbackFocusRef={fallbackFocusRef}
@@ -212,11 +219,7 @@ export function EscalationDialog({
         <RadioGroup
           legend="Decision"
           id={ids.decision}
-          options={escalationDecisions.map((d) => ({
-            value: d,
-            label: escalationDecisionLabels[d],
-            description: escalationDecisionDescriptions[d],
-          }))}
+          options={escalationOptionsFor(gate.escalationReason)}
           inputProps={register('decision')}
           error={errors.decision?.message}
         />

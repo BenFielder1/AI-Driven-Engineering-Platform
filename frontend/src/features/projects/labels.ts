@@ -73,6 +73,7 @@ export const escalationReasonLabels: Record<NonNullable<Schemas['EscalationReaso
   severe_drift: 'Severe drift from the specification',
   max_cycles: 'Maximum review cycles reached',
   no_improvement: 'No improvement since the last review cycle',
+  step_blocked: 'An execution step was rejected 4 times and is blocked',
 }
 
 /** FR-14: the three escalation decisions. */
@@ -90,6 +91,33 @@ export const escalationDecisionDescriptions: Record<NonNullable<Schemas['Escalat
   continue: 'Start another review cycle: execution re-enters for an optimisation plan.',
   rollback: 'Return the project to an earlier version. Later artifacts are invalidated; history is kept.',
   accept: 'Mark the project release-eligible as it is. Any comment is recorded with the decision.',
+}
+
+/**
+ * FR-14, FR-33: the decisions offered for an escalation, with what each does. A blocked execution step (`step_blocked`)
+ * can only be retried (continue) or rolled back: accept has no effect during execution, so it isn't offered.
+ */
+export function escalationOptionsFor(reason: Schemas['EscalationReason'] | undefined) {
+  if (reason === 'step_blocked') {
+    return [
+      {
+        value: 'continue' as const,
+        label: escalationDecisionLabels.continue,
+        description:
+          'Retry the blocked step: it goes back to pending with fresh attempts (its violations stay as feedback) and execution carries on unless paused.',
+      },
+      {
+        value: 'rollback' as const,
+        label: escalationDecisionLabels.rollback,
+        description: 'Return the project to an earlier version instead. Later artifacts and steps are invalidated; history is kept.',
+      },
+    ]
+  }
+  return escalationDecisions.map((d) => ({
+    value: d,
+    label: escalationDecisionLabels[d],
+    description: escalationDecisionDescriptions[d],
+  }))
 }
 
 /** FR-50: activity feed filter categories. */
@@ -156,6 +184,25 @@ export const stepStatusLabels: Record<Schemas['StepStatus'], string> = {
   rejected: 'Rejected',
   blocked: 'Blocked',
   invalidated: 'Invalidated',
+}
+
+/** FR-31, FR-33, FR-37: the execution runner's overall status. */
+export const executionRunStatusLabels: Record<Schemas['ExecutionRunStatus'], string> = {
+  idle: 'Not running',
+  running: 'Running',
+  paused: 'Paused',
+  completed: 'Completed',
+  blocked: 'Blocked',
+}
+
+/** §4.6, FR-32: Execution Guardian checks. */
+export const guardianCheckLabels: Record<Schemas['GuardianCheck'], string> = {
+  single_step: 'Single step',
+  file_limit: 'File limit',
+  dependency_order: 'Dependency order',
+  plan_alignment: 'Plan alignment',
+  scope_creep: 'Scope creep',
+  secret_scan: 'Secret scan',
 }
 
 export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {

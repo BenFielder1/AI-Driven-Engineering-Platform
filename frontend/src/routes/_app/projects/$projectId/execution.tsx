@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { ProjectPlaceholderPage } from '../../../../features/projects/project-overview-page'
+import { ExecutionPage } from '../../../../features/execution/execution-page'
 
 export const Route = createFileRoute('/_app/projects/$projectId/execution')({
-  component: () => <ProjectPlaceholderPage title="Execution" />,
+  component: ExecutionPage,
 })

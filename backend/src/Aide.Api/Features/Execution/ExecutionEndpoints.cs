@@ -25,7 +25,8 @@ public sealed record StepViolationDto(GuardianCheck Check, string Code, Violatio
 /// <summary>
 /// One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on
 /// earlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the
-/// branch and commit once accepted.
+/// branch and commit once accepted. <c>commitUrl</c> links the commit on GitHub; it is <c>null</c> for the Local provider
+/// (no remote) and before the step is committed.
 /// </summary>
 public sealed record ExecutionStepDto(
     Guid Id,
@@ -41,7 +42,22 @@ public sealed record ExecutionStepDto(
     string? BranchName,
     string? CommitSha,
     DateTimeOffset? StartedAt,
-    DateTimeOffset? CompletedAt);
+    DateTimeOffset? CompletedAt,
+    IReadOnlyList<FileManifestEntryDto>? FileManifest,
+    string? CommitUrl);
+
+/// <summary>A file an accepted step wrote (FR-34), with the SHA-256 of its content.</summary>
+public sealed record FileManifestEntryDto(string Path, FileAction Action, string ContentHash);
+
+/// <summary>
+/// The execution runner's state after a start/pause/resume request (FR-31, FR-37). <c>paused</c> is the project's pause flag;
+/// <c>currentStepNumber</c> is the step <c>in_progress</c>, if any; <c>counts</c> are over the current plan version's steps.
+/// </summary>
+public sealed record ExecutionStateDto(
+    ExecutionRunStatus Status,
+    bool Paused,
+    int? CurrentStepNumber,
+    ExecutionCountsDto Counts);
 
 /// <summary>The plan version the steps belong to.</summary>
 public sealed record ExecutionPlanDto(Guid ArtifactId, ArtifactType Type, int Version, ArtifactStatus Status);
@@ -68,6 +84,21 @@ public static class ExecutionEndpoints
             .WithResponseDescriptions(
                 (StatusCodes.Status400BadRequest, "VALIDATION: unknown planType, or planVersion below 1."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project, or the requested plan version."));
+
+        group.MapPost("/start", StartExecution)
+            .WithName("StartExecution")
+            .WithSummary("Start execution (Contributor or Owner): prepares the working copy and project branch if needed, clears the pause flag and queues the next runnable step of the current plan (FR-31, FR-35). Returns 202 with the execution state; progress arrives over the live channel. 409 PHASE_PRECONDITION_FAILED, BUDGET_EXCEEDED, CONFLICT.")
+            .WithExecutionControlResponses("PHASE_PRECONDITION_FAILED (not in execution, no locked plan, or nothing runnable), BUDGET_EXCEEDED (token budget used up) or CONFLICT (a concurrent change).");
+
+        group.MapPost("/pause", PauseExecution)
+            .WithName("PauseExecution")
+            .WithSummary("Pause execution (Contributor or Owner): a running step finishes, but no new step starts until resumed (FR-37). Idempotent. Returns 202 with the execution state.")
+            .WithExecutionControlResponses("PHASE_PRECONDITION_FAILED (not in execution) or CONFLICT (a concurrent change).");
+
+        group.MapPost("/resume", ResumeExecution)
+            .WithName("ResumeExecution")
+            .WithSummary("Resume paused execution (Contributor or Owner): clears the pause flag and queues the next runnable step (FR-37). Returns 202 with the execution state.")
+            .WithExecutionControlResponses("PHASE_PRECONDITION_FAILED (not in execution), BUDGET_EXCEEDED (token budget used up) or CONFLICT (a concurrent change).");
 
         return app;
     }
@@ -107,12 +138,58 @@ public static class ExecutionEndpoints
             .Where(s => s.ProjectId == id && s.PlanArtifactId == plan.Id)
             .OrderBy(s => s.StepNumber)
             .ToListAsync(cancellationToken);
+        var git = await db.ProjectGitSettings.AsNoTracking()
+            .Where(g => g.ProjectId == id)
+            .Select(g => new { g.Provider, g.RepoUrl })
+            .FirstOrDefaultAsync(cancellationToken);
         return TypedResults.Ok(new ExecutionStepsDto(
             new ExecutionPlanDto(plan.Id, plan.Type, plan.Version, plan.Status),
-            [.. steps.Select(ToDto)]));
+            [.. steps.Select(s => ToDto(s, git is null ? null : ExecutionQueries.CommitUrl(git.Provider, git.RepoUrl, s.CommitSha)))]));
     }
 
-    private static ExecutionStepDto ToDto(ExecutionStep s) => new(
+    private static RouteHandlerBuilder WithExecutionControlResponses(this RouteHandlerBuilder builder, string conflicts) => builder
+        .Produces<ExecutionStateDto>(StatusCodes.Status202Accepted)
+        .ProducesProblem(StatusCodes.Status403Forbidden)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .WithResponseDescriptions(
+            (StatusCodes.Status403Forbidden, "FORBIDDEN: Viewers can't control execution."),
+            (StatusCodes.Status404NotFound, "NOT_FOUND: the project."),
+            (StatusCodes.Status409Conflict, conflicts));
+
+    private static Task<Results<Accepted<ExecutionStateDto>, ProblemHttpResult, StatusCodeHttpResult>> StartExecution(
+        Guid id, IProjectAccess access, ICurrentUser currentUser, ExecutionService execution, CancellationToken cancellationToken) =>
+        ControlAsync(id, access, (actor, ct) => execution.StartAsync(id, actor, ct), currentUser, cancellationToken);
+
+    private static Task<Results<Accepted<ExecutionStateDto>, ProblemHttpResult, StatusCodeHttpResult>> PauseExecution(
+        Guid id, IProjectAccess access, ICurrentUser currentUser, ExecutionService execution, CancellationToken cancellationToken) =>
+        ControlAsync(id, access, (actor, ct) => execution.PauseAsync(id, actor, ct), currentUser, cancellationToken);
+
+    private static Task<Results<Accepted<ExecutionStateDto>, ProblemHttpResult, StatusCodeHttpResult>> ResumeExecution(
+        Guid id, IProjectAccess access, ICurrentUser currentUser, ExecutionService execution, CancellationToken cancellationToken) =>
+        ControlAsync(id, access, (actor, ct) => execution.ResumeAsync(id, actor, ct), currentUser, cancellationToken);
+
+    /// <summary>Writers only (§2 ControlExecution); the service decides and writes; 202 with the runner's state.</summary>
+    private static async Task<Results<Accepted<ExecutionStateDto>, ProblemHttpResult, StatusCodeHttpResult>> ControlAsync(
+        Guid id,
+        IProjectAccess access,
+        Func<string, CancellationToken, Task<Result<ExecutionStateDto>>> action,
+        ICurrentUser currentUser,
+        CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.ControlExecution, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        var result = await action(currentUser.Actor, cancellationToken);
+        return result.IsSuccess
+            ? TypedResults.Accepted($"/api/projects/{id}/execution/steps", result.Value)
+            : ApiProblems.FromError(result.Error!);
+    }
+
+    private static ExecutionStepDto ToDto(ExecutionStep s, string? commitUrl) => new(
         s.Id,
         s.StepNumber,
         s.Title,
@@ -126,5 +203,7 @@ public static class ExecutionEndpoints
         s.BranchName,
         s.CommitSha,
         s.StartedAt,
-        s.CompletedAt);
+        s.CompletedAt,
+        s.FileManifest is null ? null : [.. s.FileManifest.Select(f => new FileManifestEntryDto(f.Path, f.Action, f.ContentHash))],
+        commitUrl);
 }

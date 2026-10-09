@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Aide.Api.Features.Activity;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -52,15 +53,21 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
                 .ToListAsync(cancellationToken)
             : [];
 
+        // An escalation raised by a blocked step (FR-33) names the step in its GATE_CREATED payload.
+        var blockedSteps = await BlockedStepsAsync(db, projectId, [.. gates.Where(g => g.Type == GateType.Escalation).Select(g => g.Id)], cancellationToken);
+
         var reviewers = await ActorResolver.NamesAsync(db, gates.Select(g => g.ReviewerId).OfType<Guid>(), cancellationToken);
         var now = time.GetUtcNow();
 
         return [.. gates.Select(g =>
         {
             var artifact = g.ArtifactId is { } aid && artifacts.TryGetValue(aid, out var a) ? a : null;
-            var escalationReason = g.Type == GateType.Escalation
-                ? escalations.Where(r => r.CreatedAt <= g.CreatedAt).OrderByDescending(r => r.CreatedAt).Select(r => r.EscalationReason).FirstOrDefault()
-                : null;
+            var blocked = blockedSteps.TryGetValue(g.Id, out var stepRef) ? stepRef : null;
+            var escalationReason = g.Type != GateType.Escalation
+                ? null
+                : blocked is not null
+                    ? EscalationReason.StepBlocked
+                    : escalations.Where(r => r.CreatedAt <= g.CreatedAt).OrderByDescending(r => r.CreatedAt).Select(r => r.EscalationReason).FirstOrDefault();
             return new GateDto(
                 g.Id,
                 g.Type,
@@ -78,8 +85,55 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
                 g.Comment,
                 g.Decision,
                 g.TargetVersion,
-                g.Status == GateStatus.Pending && (g.Overdue || now - g.CreatedAt >= GateTimers.OverdueAfter));
+                g.Status == GateStatus.Pending && (g.Overdue || now - g.CreatedAt >= GateTimers.OverdueAfter),
+                blocked?.StepId,
+                blocked?.StepNumber);
         })];
+    }
+
+    /// <summary>The step an escalation gate was raised for (FR-33), read from the gate's <c>GATE_CREATED</c> payload.</summary>
+    internal sealed record BlockedStepRef(Guid StepId, int StepNumber);
+
+    /// <summary>
+    /// The blocked steps behind <paramref name="escalationIds"/>: the <c>GATE_CREATED</c> events of those gates that name a
+    /// step, filtered in SQL by gate id, so only those payloads are read.
+    /// </summary>
+    internal static async Task<Dictionary<Guid, BlockedStepRef>> BlockedStepsAsync(
+        AideDbContext db, Guid projectId, IReadOnlyCollection<Guid> escalationIds, CancellationToken cancellationToken)
+    {
+        if (escalationIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = escalationIds.Select(id => id.ToString("D")).ToArray();
+        var payloads = await db.Events
+            .FromSql($"SELECT * FROM events WHERE project_id = {projectId} AND type = {EventTypes.GateCreated} AND payload ->> 'gateId' = ANY({ids}) AND payload ->> 'stepId' IS NOT NULL")
+            .AsNoTracking()
+            .Select(e => e.Payload)
+            .ToListAsync(cancellationToken);
+        var result = new Dictionary<Guid, BlockedStepRef>();
+        foreach (var payload in payloads)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(payload);
+                var root = doc.RootElement;
+                if (root.ValueKind == JsonValueKind.Object
+                    && root.TryGetProperty("gateId", out var gateId) && gateId.TryGetGuid(out var id) && escalationIds.Contains(id)
+                    && root.TryGetProperty("stepId", out var stepId) && stepId.TryGetGuid(out var step)
+                    && root.TryGetProperty("stepNumber", out var number) && number.TryGetInt32(out var n))
+                {
+                    result[id] = new BlockedStepRef(step, n);
+                }
+            }
+            catch (JsonException)
+            {
+                // Not a payload we wrote; ignore.
+            }
+        }
+
+        return result;
     }
 
     internal static string ReasonFor(GateType type, int? artifactVersion, EscalationReason? escalation)
@@ -96,6 +150,7 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
                 EscalationReason.SevereDrift => "The code drifts severely from the specification. Continue, roll back or accept.",
                 EscalationReason.MaxCycles => "The maximum number of review cycles was reached. Continue, roll back or accept.",
                 EscalationReason.NoImprovement => "The review score did not improve on the previous cycle. Continue, roll back or accept.",
+                EscalationReason.StepBlocked => "An execution step was rejected four times and is blocked. Continue (retry the step with fresh attempts) or roll back.",
                 _ => $"A human decision is needed ({GateType.Escalation.ToWire()}). Continue, roll back or accept.",
             },
         };

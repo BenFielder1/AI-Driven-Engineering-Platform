@@ -43,13 +43,13 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-28 | Spec generation, 11 sections, retry | 3 | backend | 7 | done | 11-section check, one corrective re-run listing missing sections, MISSING_SECTIONS → no draft; FR28_* tests |
 | FR-29 | Structured plan generation, INVALID_PLAN | 3 | backend | 7 | done | aide-plan block + rendered Markdown (round-trip checked), INVALID_PLAN reasons, agent plans reject protected/unsafe paths; plan preview; FR29_* tests |
 | FR-30 | Plan approval creates execution steps | 3 | backend | 7 | done | approval creates one pending step per plan step (current max files/step re-checked); GET …/execution/steps with protected flag; FR30_* tests |
-| FR-31 | Step runner ordering and inputs | 3 | backend | 8 | todo | — |
-| FR-32 | Execution Guardian | 3, 4.6 | backend | 1, 8 | todo | — |
-| FR-33 | Step retries, blocked, escalation | 3 | backend | 8 | todo | — |
-| FR-34 | Commit per step on project branch | 3 | backend | 9 | todo | — |
-| FR-35 | GitHub and Local Git providers | 3 | backend | 9 | todo | — |
+| FR-31 | Step runner ordering and inputs | 3 | backend | 8 | done | ExecutionJobHandler: one attempt per job, StepRules next step, inputs incl. declared file content from the working copy; Execution page; FR31_* tests; 4 steps ran on k8s |
+| FR-32 | Execution Guardian | 3, 4.6 | backend | 1, 8 | done | all six checks + UNSAFE_PATH (Windows aliases) + `.aide/` never writable; violations stored and shown; FR32_*/S4_6_* tests |
+| FR-33 | Step retries, blocked, escalation | 3 | backend | 8 | done | violations fed back, 4th rejection → blocked + step_blocked escalation (continue/rollback; accept invalid); interrupted jobs → rejected; FR33_* tests |
+| FR-34 | Commit per step on project branch | 3 | backend | 8, 9 | partial | Local: commit per step with subject/body + AIDE-Step-Id trailer, sha/branch/manifest recorded (verified on k8s); GitHub push in phase 9 |
+| FR-35 | GitHub and Local Git providers | 3 | backend | 8, 9 | partial | Local working copy + branch prepared on entering execution, hardened git CLI; GitHub clone in phase 9 |
 | FR-36 | PR on completion, advance to review | 3 | backend | 9 | todo | — |
-| FR-37 | Pause / resume execution | 3 | both | 8 | todo | — |
+| FR-37 | Pause / resume execution | 3 | both | 8 | done | start/pause/resume endpoints (202 ExecutionStateDto), running step finishes, no new step; executionStatus on /state; page controls; FR37_* tests |
 | FR-38 | Review cycle: checks + review agent | 3, 4.7 | backend | 1, 10 | todo | — |
 | FR-39 | Release decision | 3, 4.5 | backend | 1, 10 | todo | — |
 | FR-40 | Optimisation loop | 3 | backend | 10 | todo | — |
@@ -99,10 +99,12 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 6 M3 Agent infrastructure (base: 64010e6) — IDs: FR-22–FR-26
   - [x] aspnet-engineer (providers, prompts, runner, runs endpoints; resumed once after a rate-limit stop) → vite-react-engineer (runs page + drawer, budget card)
   - [x] gate · review (0 Critical, 1 Major, 7 Minor — Major + 5 Minor fixed; budget soft cap and OpenAI pricing logged) · redeploy (smoke ✓) · E2E on k8s 4/4 · commit
-- [x] 7 M3 Refinement, spec, plan (base: e850d35) — IDs: FR-27–FR-30
+- [x] 7 M3 Refinement, spec, plan (base: e850d35 → e6f6531) — IDs: FR-27–FR-30
   - [x] aspnet-engineer (refinement, spec/plan agents, plan validation, steps on approval) ‖ vite-react-engineer (refinement page, plan steps) — resumed from an uncommitted tree that didn't build (unfinished AgentRunner change, broken MSW mock types); fixed forward
   - [x] gate · review (0 Critical, 3 Major, 5 Minor — all Major + 4 Minor fixed; error-table Minor logged as a Decision) · redeploy (smoke ✓, refinement round → draft on k8s ✓) · commit
-- [ ] 8 M4 Execution runner — IDs: FR-31–FR-33, FR-37
+- [x] 8 M4 Execution runner (base: e6f6531) — IDs: FR-31–FR-33, FR-37, FR-34/FR-35 (Local part)
+  - [x] aspnet-engineer (contract stubs) → aspnet-engineer (runner, Guardian wiring, retries/escalation, pause/resume, Local working copy + commits) ‖ vite-react-engineer (Execution page) → vite-react-engineer (wired to final contract)
+  - [x] gate · review (0 Critical, 5 Major, 5 Minor — all fixed; backend fixer resumed once after a usage-limit stop) · redeploy (smoke ✓, full Fake+Local run to 4 completed steps with commits on k8s ✓) · commit
 - [ ] 9 M4 Git providers, commits, PR — IDs: FR-34–FR-36
 - [ ] 10 M5 Review — IDs: FR-38–FR-41, FR-14 (escalation continue)
 - [ ] 11 M6 Release + rollback — IDs: FR-42–FR-45
@@ -203,6 +205,20 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-09 — Approving a draft created at a project version above the current one (stale after rollback/fallback) → 409 ARTIFACT_NOT_DRAFT; execution steps expose `protected` per declared file so the UI flags it — SPEC updated: no
 - 2026-10-09 — A refinement round whose job was skipped or ended without a draft is reported `cancelled` with a reason (not `succeeded` with no output) — SPEC updated: no
 
+- 2026-10-09 — Phase 8 includes the Local-provider parts of FR-34/FR-35 (prepare working copy + branch, write, commit per step) so execution works end to end with Fake + Local; GitHub clone/push, PR and advance to review are phase 9. GitHub projects can't enter execution until then — sequencing — SPEC updated: no
+- 2026-10-09 — Entering execution (advance or plan_approval gate approval) prepares the working copy first, satisfying §4.1's "working copy prepared" precondition — SPEC updated: no
+- 2026-10-09 — One execution job = one step attempt; the next job is enqueued in the same transaction as the step outcome unless paused, blocked or done. Redelivery finds the step's commit by an `AIDE-Step-Id` commit trailer (no second commit/attempt) and reuses a succeeded run (no second provider call) — §4.9 idempotency — SPEC updated: no
+- 2026-10-09 — Branch short id = first 8 hex chars of the project id (old stack); project rules = project limits + `.aide/rules.md` from the working copy if present; the Local repo is the working copy itself, created with an empty initial commit — SPEC silent — SPEC updated: no
+- 2026-10-09 — An unparseable code-generator reply is a rejected attempt (INVALID_OUTPUT violation). A blocked step halts all execution. A provider failure or budget refusal mid-step leaves the step in_progress; the next start continues it — SPEC silent — SPEC updated: no
+- 2026-10-09 — Escalation gate for a blocked step: reason `step_blocked`, step id/number carried in the GATE_CREATED payload and exposed on GateDto (no column). "continue" resets blocked steps to pending with attempt 0 and queues a job; "accept" has no effect in execution (UI hides it) — FR-14/FR-33 — SPEC updated: no
+- 2026-10-09 — Git is run as argument lists with hooks, fsmonitor, system/global config and credential helpers disabled, inherited GIT_* env stripped and identity per command; writes can't escape the working copy or follow links — NFR-SEC — SPEC updated: no
+- 2026-10-09 — New events (category `step`): EXECUTION_STARTED/PAUSED/RESUMED/COMPLETED, STEP_UNBLOCKED; ProjectStateDto.executionStatus, ExecutionStepDto.commitUrl/fileManifest added — SPEC updated: no
+- 2026-10-09 — Unsafe paths also include Windows aliases: `.git` with trailing dots/spaces, `~<digit>` short names, `:` and `<>"|?*`, device names (CON/NUL/AUX/PRN/COM/LPT), segments ending in dot/space; resolved paths must stay under the root and outside `<root>/.git`; git runs with an allow-listed environment (not the API's) — review finding (RCE via .git/config on Windows) — SPEC updated: no
+- 2026-10-09 — Nothing under `.aide/` is ever writable by agents (Guardian error even if declared) and no plan may declare it; humans edit `.aide/rules.md` directly. §4.6 allowed protected paths "if declared" — persistent prompt-injection route — SPEC updated: no
+- 2026-10-09 — "accept" on a step_blocked escalation → 400 INVALID_DECISION (replaces "accept has no effect", which deadlocked the project) — review finding — SPEC updated: no
+- 2026-10-09 — Rollback re-queues blocked/rejected steps of surviving plans (pending, attempt 0); completed steps stay completed because their commits stay on the branch (§4.8) — otherwise rolling back to the planning version left execution unstartable — SPEC updated: no
+- 2026-10-09 — The working copy is prepared before a step attempt starts; an execution job that dies or fails returns its in_progress step to `rejected` (attempt kept, STEP_REJECTED interrupted=true), so a dead 4th attempt allows a 5th before blocking. Uncommitted leftovers are discarded (reset --hard + clean) before every step, so prompts see only committed content. The empty initial commit is made only on a fresh repo — SPEC updated: no
+
 ## Known issues
 - kubeconform, oasdiff, actionlint not installed locally — schema validation skipped locally (CI runs kubeconform; actionlint was run via Docker) — install optionally — Ben
 - CI not yet run on GitHub (nothing pushed): Testcontainers on ubuntu-latest, SDK 10.0.401 install, Docker cache unverified — verify on first push — orchestrator
@@ -221,4 +237,6 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - k8s DB holds a check user (k8s-check-*@example.com) and project "K8s refinement check" from the phase 7 deploy check — delete if unwanted — Ben
 - Frontend mock `isProtectedPath()` mirrors only part of PathRules.IsProtected (mocks only); the plan draft preview doesn't flag protected paths (agent plans can't declare them; Owner edits can) — orchestrator
 - `scripts/ci/check-generated.sh` needs an argument and fails locally without one (`$1: unbound variable`) — check in Final CI pass — orchestrator
+- GET …/execution/steps without planType returns the implementation plan; the Execution page picks the current plan type from /state (optimisation plan if locked). Make the endpoint default to the current plan, or expose the current plan type/version, in phase 10 — orchestrator (phase 10)
+- Frontend Vitest suites occasionally time out at the 5 s default under load (3 failures in one full-gate run on 2026-10-09, green on re-run); raise testTimeout or split heavy page tests — orchestrator (Final)
 - Two users writing the very first version of a type concurrently aren't warned (baseVersion null) — accepted

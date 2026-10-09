@@ -1,8 +1,10 @@
 using System.Text.Json;
+using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Aide.Domain.Execution;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
@@ -23,6 +25,7 @@ public sealed partial class GateService(
     LifecycleWriter writer,
     RollbackWriter rollbacks,
     JobEnqueuer jobs,
+    WorkingCopyPreparer workingCopies,
     TimeProvider time,
     ILogger<GateService> logger)
 {
@@ -35,7 +38,9 @@ public sealed partial class GateService(
             return NotFound();
         }
 
-        var resolved = GateRules.Approve(gate.Type, gate.Status, request.Decision, request.TargetVersion);
+        var stepBlocked = gate.Type == GateType.Escalation
+            && (await GateReader.BlockedStepsAsync(db, project.Id, [gate.Id], cancellationToken)).ContainsKey(gate.Id);
+        var resolved = GateRules.Approve(gate.Type, gate.Status, request.Decision, request.TargetVersion, stepBlocked);
         if (resolved.IsFailure)
         {
             return Result.Failure<ApprovalGate>(resolved.Error!);
@@ -60,11 +65,20 @@ public sealed partial class GateService(
                             $"The project is in {project.CurrentPhase.ToWire()}; this {gate.Type.ToWire()} gate guards entry to {entry?.ToWire()}."));
                     }
 
+                    bool? prepared = null;
+                    if (entry == Phase.Execution)
+                    {
+                        // FR-35, §4.1: the working copy and project branch are prepared before execution is entered; the
+                        // outcome is the condition, so a failure leaves it unmet and the state machine reports it.
+                        prepared = (await workingCopies.PrepareAsync(project.Id, cancellationToken)).IsSuccess;
+                    }
+
                     var snapshot = await snapshots.LoadAsync(project, cancellationToken);
                     snapshot = snapshot with
                     {
                         EntryGateApproved = true,
                         PendingGates = [.. snapshot.PendingGates.Where(t => t != gate.Type)],
+                        WorkingCopyPrepared = prepared ?? snapshot.WorkingCopyPrepared,
                     };
                     var advanceReason = await AdvanceReasonAsync(project.Id, gate.Id, cancellationToken);
                     var reason = GatedAdvanceReason(gate.Type, advanceReason, comment);
@@ -77,6 +91,10 @@ public sealed partial class GateService(
                     await writer.ApplyAsync(project, applied.Value, actor, now, cancellationToken);
                     break;
                 }
+
+            case GateFollowUp.StartReviewCycle when project.CurrentPhase == Phase.Execution:
+                await ContinueBlockedStepsAsync(project, gate, actor, now, cancellationToken);
+                break;
 
             case GateFollowUp.StartReviewCycle:
                 {
@@ -146,6 +164,42 @@ public sealed partial class GateService(
 
         LogApproved(logger, project.Id, gate.Id, gate.Type, resolution.FollowUp);
         return Result.Success(gate);
+    }
+
+    /// <summary>
+    /// FR-14 <c>continue</c> on the escalation of a blocked step (FR-33): the current plan's blocked steps go back to
+    /// <c>pending</c> with fresh attempts (their violations stay as feedback) and, unless paused, execution is queued.
+    /// </summary>
+    private async Task ContinueBlockedStepsAsync(Project project, ApprovalGate gate, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (await ExecutionQueries.CurrentPlanIdAsync(db, project.Id, cancellationToken) is not { } planId)
+        {
+            return;
+        }
+
+        var steps = await ExecutionQueries.CurrentStepsAsync(db, planId, track: true, cancellationToken);
+        foreach (var step in steps)
+        {
+            var change = StepRules.Unblock(step.Status);
+            if (!change.Changed)
+            {
+                continue;
+            }
+
+            step.Status = change.NewStatus;
+            step.Attempt = 0;
+            db.AddEvent(
+                EventTypes.StepUnblocked,
+                project.Id,
+                new { stepId = step.Id, stepNumber = step.StepNumber, gateId = gate.Id },
+                actor,
+                now);
+        }
+
+        if (ExecutionRules.ShouldContinue([.. steps.Select(ExecutionQueries.ToState)], project.ExecutionPaused))
+        {
+            await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.EscalationContinue), project.Id, cancellationToken, now);
+        }
     }
 
     public async Task<Result<ApprovalGate>> RejectAsync(Guid projectId, Guid gateId, DecideGateRequest request, Guid reviewerId, string actor, CancellationToken cancellationToken)

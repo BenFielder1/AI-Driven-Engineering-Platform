@@ -114,6 +114,19 @@ public class GateRulesTests
         Assert.Equal(GateFollowUp.MarkReleaseEligible, result.Value.FollowUp);
     }
 
+    [Fact]
+    public void FR33_A_blocked_step_escalation_cannot_be_accepted() =>
+        Assert.Equal(
+            ErrorCodes.InvalidDecision,
+            GateRules.Approve(GateType.Escalation, GateStatus.Pending, EscalationDecision.Accept, stepBlocked: true).Error!.Code);
+
+    [Fact]
+    public void FR33_A_blocked_step_escalation_can_be_continued_or_rolled_back()
+    {
+        Assert.Equal(GateFollowUp.StartReviewCycle, GateRules.Approve(GateType.Escalation, GateStatus.Pending, EscalationDecision.Continue, stepBlocked: true).Value.FollowUp);
+        Assert.Equal(GateFollowUp.Rollback, GateRules.Approve(GateType.Escalation, GateStatus.Pending, EscalationDecision.Rollback, 3, stepBlocked: true).Value.FollowUp);
+    }
+
     [Theory]
     [InlineData(null, null)]
     [InlineData(EscalationDecision.Rollback, null)]

@@ -131,6 +131,9 @@ builder.Services.AddScoped<IJobEndedHook, AgentRunJobEndedHook>();
 builder.Services.AddAgentJobs();
 builder.Services.AddScoped<RefinementService>();
 
+// Execution runner (FR-31–FR-37): step jobs, Guardian, commits on the project branch, pause/resume.
+builder.Services.AddExecution();
+
 // Live project updates over SignalR (FR-46).
 builder.Services.AddAideLive();
 builder.Services.AddLiveOriginCheck();

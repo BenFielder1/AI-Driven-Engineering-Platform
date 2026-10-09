@@ -14,7 +14,7 @@ namespace Aide.Api.Features.Lifecycle;
 /// <summary>
 /// FR-44, FR-45, §4.8, D5: plans a rollback with <see cref="RollbackRules"/> and writes it into the current unit of work
 /// (nothing is saved here): the restored phase/version (status <c>rolled_back</c>), the state transition and
-/// <c>PHASE_CHANGED</c> event, invalidated artifacts, reset steps, cancelled pending gates and queued jobs, review cycle
+/// <c>PHASE_CHANGED</c> event, invalidated artifacts, reset steps (invalidated, or requeued when their plan survives), cancelled pending gates and queued jobs, review cycle
 /// reset, <c>last_rollback_at</c>, the <c>rollback_events</c> row and a <c>ROLLBACK_COMPLETED</c> event. The Git branch is
 /// never rewritten. Used by the escalation <c>rollback</c> decision now and by <c>POST /rollback</c> (phase 11).
 /// </summary>
@@ -83,6 +83,17 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
             step.Status = StepStatus.Invalidated;
         }
 
+        // Steps of surviving plans that were blocked or rejected get fresh attempts (their escalation gate, if any, is
+        // cancelled below), so re-entering execution can run them again.
+        var requeued = plan.RequeuedStepIds.ToHashSet();
+        foreach (var step in steps.Where(s => requeued.Contains(s.Id)))
+        {
+            step.Status = StepStatus.Pending;
+            step.Attempt = 0;
+            step.StartedAt = null;
+            step.CompletedAt = null;
+        }
+
         var pendingGates = await db.ApprovalGates
             .Where(g => g.ProjectId == id && g.Status == GateStatus.Pending && g.Id != keepGateId)
             .ToListAsync(cancellationToken);
@@ -108,7 +119,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
             TargetVersion = plan.TargetVersion,
             Reason = reason,
             InvalidatedArtifactIds = plan.InvalidatedArtifactIds,
-            ResetStepIds = plan.ResetStepIds,
+            ResetStepIds = [.. plan.ResetStepIds, .. plan.RequeuedStepIds],
             TriggeredBy = actor,
             CreatedAt = now,
         };
@@ -125,6 +136,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
                 reason,
                 invalidatedArtifactIds = plan.InvalidatedArtifactIds,
                 resetStepIds = plan.ResetStepIds,
+                requeuedStepIds = plan.RequeuedStepIds,
                 cancelledGateIds = pendingGates.Select(g => g.Id).ToList(),
                 cancelledJobIds = queuedJobs.Select(j => j.Id).ToList(),
             },

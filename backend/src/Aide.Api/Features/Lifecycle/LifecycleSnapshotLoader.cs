@@ -48,6 +48,8 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
         var current = stepCounts.FirstOrDefault(c => c.PlanId == currentPlanId);
         var optimization = stepCounts.FirstOrDefault(c => c.PlanId == optimizationPlanId);
 
+        // A project branch was recorded by an earlier preparation. Entering execution from planning prepares the working
+        // copy first and replaces this with that outcome (LifecycleService, GateService); the review cycle relies on it.
         var workingCopyPrepared = await db.ProjectGitSettings.AsNoTracking()
             .AnyAsync(g => g.ProjectId == id && g.BranchName != null, cancellationToken);
 

@@ -91,6 +91,18 @@ export const contextualErrorMessages = {
     /** FR-30: the plan's `aide-plan` block can't produce execution steps; the reasons are in `details`. */
     INVALID_PLAN: "This plan's aide-plan block is invalid, so it can't be approved. Edit it as a new draft and fix these problems.",
   },
+  /** POST /api/projects/:id/execution/start · /pause · /resume (FR-31, FR-37); the unmet conditions are in `details`. */
+  /** POST /api/projects/:id/gates/:gateId/approve on a step_blocked escalation (FR-33): accept is refused there. */
+  stepEscalationDecision: {
+    INVALID_DECISION:
+      "That decision isn't available for a blocked step. Choose Continue to retry the step, or Roll back to a version below the current one.",
+  },
+  executionControl: {
+    PHASE_PRECONDITION_FAILED: "Execution can't be started or changed right now.",
+    BUDGET_EXCEEDED: 'This project has used its token budget, so no new step can start. An Owner can raise it in Settings.',
+    CONFLICT: 'Someone else changed execution at the same time. The page now shows the latest state.',
+    FORBIDDEN: 'Only Contributors and Owners can start, pause or resume execution.',
+  },
 } as const satisfies Record<string, Partial<Record<ErrorCode, string>>>
 
 export type ErrorContext = keyof typeof contextualErrorMessages

@@ -236,6 +236,38 @@ describe('Overview → Activity (FR-50)', () => {
     ])
   })
 
+  it('FR31_ activity: execution and step events are described from their payloads', async () => {
+    await openOverviewAs('owner', {}, (p) => {
+      const step = (type: string, payload: Record<string, unknown>) => {
+        addEvent(p, { type, category: 'step', summary: type, payload })
+      }
+      step('EXECUTION_STARTED', { branch: 'aide/x' })
+      step('STEP_STARTED', { stepId: 's1', stepNumber: 1, title: 'T', attempt: 1 })
+      step('STEP_REJECTED', { stepId: 's1', stepNumber: 1, attempt: 1, retry: true, codes: ['X'], errorCount: 2, warningCount: 0 })
+      step('STEP_BLOCKED', { stepId: 's1', stepNumber: 1, attempt: 4 })
+      step('STEP_UNBLOCKED', { stepId: 's1', stepNumber: 1, gateId: 'g1' })
+      step('STEP_COMPLETED', { stepId: 's1', stepNumber: 1, attempt: 1, commitSha: '3f2a9c1d8e7b', fileCount: 1, warningCount: 0 })
+      step('EXECUTION_PAUSED', { paused: true })
+      step('EXECUTION_RESUMED', { paused: false })
+      step('EXECUTION_COMPLETED', { stepCount: 3 })
+      step('STEP_STARTED', { stepNumber: 'one' })
+    })
+
+    await screen.findByRole('list', { name: 'Activity' })
+    expect(feedItems().map((li) => li.querySelector('span')?.textContent)).toEqual([
+      'STEP_STARTED',
+      'Execution completed: all 3 steps done',
+      'Execution resumed',
+      'Execution paused: no new step starts until it is resumed',
+      'Step 1 completed: commit 3f2a9c1',
+      'Step 1 unblocked: it will be retried with fresh attempts',
+      'Step 1 blocked after 4 attempts: an Owner decides its escalation',
+      'Step 1 rejected by the Execution Guardian with 2 errors (attempt 1), retrying',
+      'Step 1 started (attempt 1)',
+      'Execution started',
+    ])
+  })
+
   it('FR-50: empty and error states', async () => {
     server.use(
       http.get('*/api/projects/:id/activity', () => problem(404, 'NOT_FOUND', 'The project was not found.')),

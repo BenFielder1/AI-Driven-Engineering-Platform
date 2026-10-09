@@ -741,6 +741,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/execution/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start execution (Contributor or Owner): prepares the working copy and project branch if needed, clears the pause flag and queues the next runnable step of the current plan (FR-31, FR-35). Returns 202 with the execution state; progress arrives over the live channel. 409 PHASE_PRECONDITION_FAILED, BUDGET_EXCEEDED, CONFLICT. */
+        post: operations["StartExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/execution/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause execution (Contributor or Owner): a running step finishes, but no new step starts until resumed (FR-37). Idempotent. Returns 202 with the execution state. */
+        post: operations["PauseExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/execution/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume paused execution (Contributor or Owner): clears the pause flag and queues the next runnable step (FR-37). Returns 202 with the execution state. */
+        post: operations["ResumeExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1110,7 +1161,7 @@ export interface components {
         /** @enum {unknown} */
         EscalationDecision: "continue" | "rollback" | "accept" | null;
         /** @enum {unknown} */
-        EscalationReason: "low_score" | "severe_drift" | "max_cycles" | "no_improvement" | null;
+        EscalationReason: "low_score" | "severe_drift" | "max_cycles" | "no_improvement" | "step_blocked" | null;
         /** @enum {unknown} */
         EventCategory: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project" | "integrity" | null;
         /** @description Step counts of the current plan version. */
@@ -1138,9 +1189,28 @@ export interface components {
             status: components["schemas"]["ArtifactStatus"];
         };
         /**
+         * @description The execution runner's overall state for a project (FR-31, FR-33, FR-37): `idle` (not started, or nothing to run),
+         *     `running`, `paused` (no new step starts; a running step may still finish), `completed` (every step of the
+         *     current plan completed) or `blocked` (a step is blocked awaiting an escalation decision).
+         * @enum {unknown}
+         */
+        ExecutionRunStatus: "idle" | "running" | "paused" | "completed" | "blocked";
+        /**
+         * @description The execution runner's state after a start/pause/resume request (FR-31, FR-37). `paused` is the project's pause flag;
+         *     `currentStepNumber` is the step `in_progress`, if any; `counts` are over the current plan version's steps.
+         */
+        ExecutionStateDto: {
+            status: components["schemas"]["ExecutionRunStatus"];
+            paused: boolean;
+            /** Format: int32 */
+            currentStepNumber: null | number;
+            counts: components["schemas"]["ExecutionCountsDto"];
+        };
+        /**
          * @description One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on
          *     earlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the
-         *     branch and commit once accepted.
+         *     branch and commit once accepted. `commitUrl` links the commit on GitHub; it is `null` for the Local provider
+         *     (no remote) and before the step is committed.
          */
         ExecutionStepDto: {
             /** Format: uuid */
@@ -1162,6 +1232,8 @@ export interface components {
             startedAt: null | string;
             /** Format: date-time */
             completedAt: null | string;
+            fileManifest: null | components["schemas"]["FileManifestEntryDto"][];
+            commitUrl: null | string;
         };
         /** @description A plan version's execution steps in step order (FR-30); `plan` is `null` (and no steps) before any plan is approved. */
         ExecutionStepsDto: {
@@ -1173,12 +1245,20 @@ export interface components {
          * @enum {unknown}
          */
         FileAction: "create" | "modify";
+        /** @description A file an accepted step wrote (FR-34), with the SHA-256 of its content. */
+        FileManifestEntryDto: {
+            path: string;
+            action: components["schemas"]["FileAction"];
+            contentHash: string;
+        };
         /**
          * @description An approval gate (§4.2, FR-12–FR-15). `artifactId`, `artifactType` and `artifactVersion` identify
          *     the gated artifact (spec and plan gates). Escalation gates carry `escalationReason` and, once decided,
          *     `decision` (and `targetVersion` for a rollback). `reason` is a human-readable context line.
          *     `decidedBy`, `decidedAt` and `comment` are set once the gate is decided. `overdue` is true
-         *     72 hours after creation while pending (FR-15).
+         *     72 hours after creation while pending (FR-15). An escalation raised by a blocked execution step (FR-33) has
+         *     `escalationReason` `step_blocked` and names the step in `executionStepId` and `stepNumber`
+         *     (both `null` otherwise).
          */
         GateDto: {
             /** Format: uuid */
@@ -1202,6 +1282,10 @@ export interface components {
             /** Format: int32 */
             targetVersion: null | number;
             overdue: boolean;
+            /** Format: uuid */
+            executionStepId: null | string;
+            /** Format: int32 */
+            stepNumber: null | number;
         };
         /** @enum {unknown} */
         GateStatus: "pending" | "approved" | "rejected" | "cancelled";
@@ -1467,7 +1551,7 @@ export interface components {
             llm: components["schemas"]["LlmSettingsDto"];
             notifications: components["schemas"]["NotificationSettingsDto"];
         };
-        /** @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). */
+        /** @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37). */
         ProjectStateDto: {
             /** Format: uuid */
             projectId: string;
@@ -1484,6 +1568,7 @@ export interface components {
             tokensUsed: number;
             /** Format: int64 */
             tokenBudget: null | number;
+            executionStatus: components["schemas"]["ExecutionRunStatus"];
         };
         /**
          * @description Project status (§4.1: status follows phase; `released` and `rolled_back` are special).
@@ -4148,6 +4233,180 @@ export interface operations {
             };
             /** @description NOT_FOUND: the project, or the requested plan version. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StartExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionStateDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't control execution. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PHASE_PRECONDITION_FAILED (not in execution, no locked plan, or nothing runnable), BUDGET_EXCEEDED (token budget used up) or CONFLICT (a concurrent change). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PauseExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionStateDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't control execution. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PHASE_PRECONDITION_FAILED (not in execution) or CONFLICT (a concurrent change). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ResumeExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionStateDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't control execution. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PHASE_PRECONDITION_FAILED (not in execution), BUDGET_EXCEEDED (token budget used up) or CONFLICT (a concurrent change). */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -299,3 +299,65 @@ public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
         userInstructions = (string?)null,
     };
 }
+
+/// <summary>
+/// Fake Code Generator (FR-31, D13): implements the requested step by writing exactly its declared files (read from the
+/// prompt's <c>&lt;declared_files&gt;</c> list), with deterministic content per file type, so execution runs end to end with
+/// the Fake and Local providers. The content never matches a secret pattern, so the Guardian accepts it.
+/// </summary>
+public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
+{
+    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
+
+    public AgentKind Agent => AgentKind.CodeGenerator;
+
+    public string Respond(LlmRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var prompt = string.Join("\n", request.Messages.Select(m => m.Content));
+        var number = StepPattern().Match(prompt) is { Success: true } m
+            ? int.Parse(m.Groups["n"].Value, System.Globalization.CultureInfo.InvariantCulture)
+            : 1;
+        var title = FakePrompt.Tag(request, "step_title") is { Length: > 0 } t ? t : $"Step {number}";
+        var name = FakePrompt.Title(FakePrompt.Tag(request, "project_request"), "project");
+        var files = FilePattern().Matches(FakePrompt.Tag(request, "declared_files"))
+            .Select(f => (Path: f.Groups["path"].Value.Trim(), Action: f.Groups["action"].Value))
+            .Select(f => new { path = f.Path, content = Content(f.Path, f.Action, name, number, title) })
+            .ToList();
+        return JsonSerializer.Serialize(new
+        {
+            stepNumber = number,
+            files,
+            notes = $"Fake implementation of step {number} ({title}): wrote {files.Count} declared file(s).",
+        });
+    }
+
+    private static string Content(string path, string action, string project, int step, string title)
+    {
+        var verb = action == "modify" ? "Updated" : "Created";
+        var fileName = path.Split('/')[^1];
+        if (fileName.Equals("package.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return JsonSerializer.Serialize(
+                new { name = FakePrompt.Resource(project) + "-service", version = "0.1.0", @private = true, description = $"{project} (step {step}: {title})", scripts = new { start = "node src/server.js", test = "jest" } },
+                Indented) + "\n";
+        }
+
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        return extension switch
+        {
+            ".md" => $"# {title}\n\n{verb} by AIDE in step {step} of the {project} plan.\n",
+            ".json" => JsonSerializer.Serialize(new { step, title }) + "\n",
+            ".js" or ".ts" or ".mjs" or ".cjs" or ".jsx" or ".tsx" or ".cs" or ".java" or ".go" or ".rs" or ".c" or ".cpp" =>
+                $"// {title}\n// {verb} by AIDE in step {step} of the {project} plan.\n\nexport const step{step} = '{fileName}';\n",
+            ".py" or ".rb" or ".sh" or ".yml" or ".yaml" or ".toml" => $"# {title}\n# {verb} by AIDE in step {step} of the {project} plan.\n",
+            _ => $"{title}\n{verb} by AIDE in step {step} of the {project} plan.\n",
+        };
+    }
+
+    [GeneratedRegex(@"<step number=""(?<n>\d+)"">", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex StepPattern();
+
+    [GeneratedRegex(@"^- (?<path>.+) \((?<action>create|modify)\)\s*$", RegexOptions.CultureInvariant | RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex FilePattern();
+}

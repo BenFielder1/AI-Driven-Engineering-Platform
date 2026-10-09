@@ -131,6 +131,56 @@ function describeRun(type: string, payload: Payload): string | null {
   }
 }
 
+const plural = (n: number, one: string, many = `${one}s`) => `${String(n)} ${n === 1 ? one : many}`
+
+/** Execution step and runner events (FR-31–FR-34, FR-37); payloads from the execution job and ExecutionService. */
+function describeStep(type: string, payload: Payload): string | null {
+  switch (type) {
+    case 'EXECUTION_STARTED':
+      return 'Execution started'
+    case 'EXECUTION_PAUSED':
+      return 'Execution paused: no new step starts until it is resumed'
+    case 'EXECUTION_RESUMED':
+      return 'Execution resumed'
+    case 'EXECUTION_COMPLETED': {
+      const steps = count(payload, 'stepCount')
+      return steps === null ? 'Execution completed: every step is done' : `Execution completed: all ${plural(steps, 'step')} done`
+    }
+    default:
+      break
+  }
+  const n = count(payload, 'stepNumber')
+  if (n === null) {
+    return null
+  }
+  const step = `Step ${String(n)}`
+  const attempt = count(payload, 'attempt')
+  switch (type) {
+    case 'STEP_STARTED':
+      return attempt === null ? `${step} started` : `${step} started (attempt ${String(attempt)})`
+    case 'STEP_COMPLETED': {
+      const sha = typeof payload.commitSha === 'string' && payload.commitSha ? payload.commitSha.slice(0, 7) : null
+      return sha ? `${step} completed: commit ${sha}` : `${step} completed`
+    }
+    case 'STEP_REJECTED': {
+      const errors = count(payload, 'errorCount')
+      const detail = errors === null ? '' : ` with ${plural(errors, 'error')}`
+      const retry = payload.retry === true ? ', retrying' : ''
+      return attempt === null
+        ? `${step} rejected by the Execution Guardian${detail}${retry}`
+        : `${step} rejected by the Execution Guardian${detail} (attempt ${String(attempt)})${retry}`
+    }
+    case 'STEP_BLOCKED':
+      return attempt === null
+        ? `${step} blocked: an Owner decides its escalation`
+        : `${step} blocked after ${plural(attempt, 'attempt')}: an Owner decides its escalation`
+    case 'STEP_UNBLOCKED':
+      return `${step} unblocked: it will be retried with fresh attempts`
+    default:
+      return null
+  }
+}
+
 /** Events whose payload names an artifact type and version (e.g. `ARTIFACT_APPROVED`). */
 function describeArtifact(type: string, payload: Payload): string | null {
   const artifactType = oneOf(payload, 'type', artifactTypes)
@@ -165,6 +215,17 @@ export function describeActivity(item: Pick<ActivityItem, 'type' | 'payload' | '
     case 'RUN_FAILED':
     case 'BUDGET_EXCEEDED':
       text = describeRun(type, payload)
+      break
+    case 'STEP_STARTED':
+    case 'STEP_COMPLETED':
+    case 'STEP_REJECTED':
+    case 'STEP_BLOCKED':
+    case 'STEP_UNBLOCKED':
+    case 'EXECUTION_STARTED':
+    case 'EXECUTION_PAUSED':
+    case 'EXECUTION_RESUMED':
+    case 'EXECUTION_COMPLETED':
+      text = describeStep(type, payload)
       break
     default:
       text = describeArtifact(type, payload)

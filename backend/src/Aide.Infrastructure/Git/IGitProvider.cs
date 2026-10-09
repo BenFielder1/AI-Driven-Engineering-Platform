@@ -17,10 +17,10 @@ public sealed record GitTestResult(bool Ok, bool Reachable, bool Writable, bool 
 /// this interface. Tokens are passed in decrypted per call and never stored, logged or echoed in results.
 /// </summary>
 /// <remarks>
-/// Phase 9 adds the working-copy operations here (FR-34–FR-36, FR-42, FR-43), roughly:
-/// <c>PrepareWorkingCopyAsync</c> (clone or init the repo under the workspace and create the project branch),
-/// <c>CommitAsync</c> (write a step's files and commit them), <c>PushAsync</c>, <c>OpenPullRequestAsync</c>,
-/// <c>MergePullRequestAsync</c> (reporting conflicting files) and <c>CreateTagAsync</c>.
+/// The working copy itself (reading files, writing and committing a step) is provider-agnostic: <see cref="IWorkingCopies"/>.
+/// A provider puts the repository there (<see cref="PrepareWorkingCopyAsync"/>) and publishes the branch after each step
+/// commit (<see cref="PublishBranchAsync"/>). Phase 9 adds <c>OpenPullRequestAsync</c>, <c>MergePullRequestAsync</c>
+/// (reporting conflicting files) and <c>CreateTagAsync</c> (FR-36, FR-42, FR-43).
 /// </remarks>
 public interface IGitProvider
 {
@@ -28,6 +28,23 @@ public interface IGitProvider
 
     /// <summary>Checks that the repository is reachable and writable and that the default branch exists. Changes nothing.</summary>
     Task<GitTestResult> TestConnectionAsync(GitConnectionSettings settings, string? token, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-35: makes the project's working copy a repository with <paramref name="branchName"/> created from the default
+    /// branch and checked out. Idempotent: an existing repository and branch are reused (the branch is never rewritten, §4.8).
+    /// </summary>
+    Task<GitOutcome> PrepareWorkingCopyAsync(GitConnectionSettings settings, string branchName, string? token, CancellationToken cancellationToken);
+
+    /// <summary>FR-34: publishes the project branch after a step commit (GitHub: push; Local: nothing to do).</summary>
+    Task<GitOutcome> PublishBranchAsync(GitConnectionSettings settings, string branchName, string? token, CancellationToken cancellationToken);
+}
+
+/// <summary>The outcome of a provider operation; <see cref="Reason"/> explains a failure (never contains a token).</summary>
+public sealed record GitOutcome(bool Ok, string? Reason)
+{
+    public static GitOutcome Success { get; } = new(true, null);
+
+    public static GitOutcome Failed(string reason) => new(false, reason);
 }
 
 /// <summary>Picks the <see cref="IGitProvider"/> for a project's provider setting.</summary>

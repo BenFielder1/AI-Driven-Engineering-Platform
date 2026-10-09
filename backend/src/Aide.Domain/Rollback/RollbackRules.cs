@@ -24,7 +24,8 @@ public sealed record RollbackRequest(
 /// <summary>
 /// What to write in the rollback transaction (FR-44). The caller also cancels pending gates and queued
 /// jobs, clears the review state and sets the project's review cycle to <see cref="ReviewCycle"/> (0);
-/// the Git branch is never rewritten.
+/// the Git branch is never rewritten. <see cref="ResetStepIds"/> become <c>invalidated</c> (their plan is invalidated);
+/// <see cref="RequeuedStepIds"/> go back to <c>pending</c> with the attempt count reset (their plan survives).
 /// </summary>
 public sealed record RollbackPlan(
     PhaseTransition Transition,
@@ -33,6 +34,13 @@ public sealed record RollbackPlan(
     IReadOnlyList<Guid> InvalidatedArtifactIds,
     IReadOnlyList<Guid> ResetStepIds)
 {
+    /// <summary>
+    /// Blocked or rejected steps of plans that survive the rollback: back to <c>pending</c> with attempt 0, so a rollback
+    /// that keeps the plan (e.g. to the planning version) never leaves a step blocked with its escalation gate cancelled.
+    /// Completed steps stay completed: their commits stay on the branch (§4.8), so re-running them would only re-find them.
+    /// </summary>
+    public IReadOnlyList<Guid> RequeuedStepIds { get; init; } = [];
+
     /// <summary>The project's review cycle counter after the rollback: always reset to 0.</summary>
     public int ReviewCycle { get; init; } = ReviewCycleRules.CycleAfterRollback;
 }
@@ -98,12 +106,20 @@ public static class RollbackRules
             .Select(s => s.Id)
             .ToList();
 
+        var requeuedSteps = request.Steps
+            .Where(s => !invalidatedPlanIds.Contains(s.PlanArtifactId) && StepRules.RequeueOnRollback(s.Status))
+            .Select(s => s.Id)
+            .ToList();
+
         return Result.Success(new RollbackPlan(
             transition.Value,
             current.Version,
             target,
             [.. invalidated.Select(a => a.Id)],
-            resetSteps));
+            resetSteps)
+        {
+            RequeuedStepIds = requeuedSteps,
+        });
     }
 
     /// <summary>

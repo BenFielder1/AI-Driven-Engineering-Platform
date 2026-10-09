@@ -353,13 +353,7 @@ public sealed partial class JobWorker : BackgroundService
         int updated;
         if (succeeded)
         {
-            updated = await mine.ExecuteUpdateAsync(
-                s => s.SetProperty(j => j.Status, JobStatus.Succeeded)
-                    .SetProperty(j => j.CompletedAt, now)
-                    .SetProperty(j => j.LastError, (string?)null)
-                    .SetProperty(j => j.LockedBy, (string?)null)
-                    .SetProperty(j => j.LockedAt, (DateTimeOffset?)null),
-                CancellationToken.None);
+            updated = await MarkSucceededAsync(scope.ServiceProvider, db, job, now, withHooks: true);
             LogSucceeded(_logger);
         }
         else if (released)
@@ -413,6 +407,48 @@ public sealed partial class JobWorker : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Marks the job succeeded and, in the same transaction, runs the <see cref="IJobSucceededHook"/>s. If their changes
+    /// can't be saved, the job is marked succeeded without them (a clash means the follow-up already exists).
+    /// </summary>
+    private async Task<int> MarkSucceededAsync(IServiceProvider services, AideDbContext db, Job job, DateTimeOffset now, bool withHooks)
+    {
+        List<IJobSucceededHook> hooks = withHooks ? [.. services.GetServices<IJobSucceededHook>()] : [];
+        await using var transaction = await db.Database.BeginTransactionAsync(CancellationToken.None);
+        var updated = await db.Jobs
+            .Where(j => j.Id == job.Id && j.Status == JobStatus.Running && j.LockedBy == WorkerId)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(j => j.Status, JobStatus.Succeeded)
+                    .SetProperty(j => j.CompletedAt, now)
+                    .SetProperty(j => j.LastError, (string?)null)
+                    .SetProperty(j => j.LockedBy, (string?)null)
+                    .SetProperty(j => j.LockedAt, (DateTimeOffset?)null),
+                CancellationToken.None);
+        if (updated > 0 && hooks.Count > 0)
+        {
+            try
+            {
+                var execution = new JobExecution(job.Id, job.Type, job.Payload, job.ProjectId, job.Attempts);
+                foreach (var hook in hooks)
+                {
+                    await hook.OnJobSucceededAsync(db, execution, CancellationToken.None);
+                }
+
+                await db.SaveChangesAsync(CancellationToken.None);
+            }
+            catch (DbUpdateException ex)
+            {
+                LogFollowUpFailed(_logger, ex);
+                await transaction.RollbackAsync(CancellationToken.None);
+                db.ChangeTracker.Clear();
+                return await MarkSucceededAsync(services, db, job, now, withHooks: false);
+            }
+        }
+
+        await transaction.CommitAsync(CancellationToken.None);
+        return updated;
+    }
+
     private IDisposable? BeginJobScope(Job job) => _logger.BeginScope(new Dictionary<string, object?>
     {
         ["JobId"] = job.Id,
@@ -437,6 +473,9 @@ public sealed partial class JobWorker : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Running {JobType} job (attempt {Attempt})")]
     private static partial void LogRunning(ILogger logger, string jobType, int attempt);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The job's follow-up work could not be saved; the job is recorded as succeeded without it")]
+    private static partial void LogFollowUpFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Job succeeded")]
     private static partial void LogSucceeded(ILogger logger);

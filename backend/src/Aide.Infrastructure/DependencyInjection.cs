@@ -70,6 +70,7 @@ public static class DependencyInjection
         services.AddSingleton<IFakeAgentResponder, FakeIdeaRefinementResponder>();
         services.AddSingleton<IFakeAgentResponder, FakeSpecGeneratorResponder>();
         services.AddSingleton<IFakeAgentResponder, FakePlanGeneratorResponder>();
+        services.AddSingleton<IFakeAgentResponder, FakeCodeGeneratorResponder>();
         services.AddSingleton<FakeLlmProvider>();
         services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<FakeLlmProvider>());
         services.AddSingleton<IPromptLibrary, EmbeddedPromptLibrary>();
@@ -78,6 +79,7 @@ public static class DependencyInjection
         // Git providers (FR-10, FR-35) and working copies.
         services.AddSingleton<IWorkspaceStore, WorkspaceStore>();
         services.AddSingleton<IGitCli, GitCli>();
+        services.AddSingleton<IWorkingCopies, WorkingCopies>();
         services.AddHttpClient(GitHubGitProvider.HttpClientName, (sp, client) =>
         {
             var configured = sp.GetRequiredService<IConfiguration>()[GitHubGitProvider.ApiBaseUrlKey];

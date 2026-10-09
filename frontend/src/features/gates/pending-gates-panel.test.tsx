@@ -2,7 +2,8 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { http } from 'msw'
 import { describe, expect, it } from 'vitest'
 
-import { errorMessages } from '../../lib/errors'
+import { contextualErrorMessages, errorMessages } from '../../lib/errors'
+import { seedExecution } from '../../mocks/handlers/execution'
 import { lockArtifact, seedGate } from '../../mocks/handlers/lifecycle'
 import { problem } from '../../mocks/handlers/problem'
 import { server } from '../../mocks/server'
@@ -229,6 +230,55 @@ describe('Overview → Escalation decision (FR-14)', () => {
       expect(currentTimelineStep()).toHaveTextContent('Planning')
     })
     expect(project.projectVersion).toBe(2)
+  })
+
+  it('FR33_step_blocked_escalation_names_its_step_offers_continue_or_rollback_and_continue_retries', async () => {
+    const { user, project } = await openOverviewAs('owner', {}, (p) => {
+      const [first] = seedExecution(p, 2, (steps) => {
+        Object.assign(steps[0] ?? {}, { status: 'blocked', attempt: 4 })
+      })
+      seedGate(p, { type: 'escalation', escalationReason: 'step_blocked', executionStepId: first?.id ?? null, stepNumber: 1 })
+    })
+    const gate = pendingGate('Escalation')
+    expect(within(gate).getByText('Reason: An execution step was rejected 4 times and is blocked')).toBeInTheDocument()
+    expect(within(gate).getByRole('link', { name: 'Step 1' })).toHaveAttribute('href', `/projects/${project.id}/execution`)
+
+    await user.click(within(gate).getByRole('button', { name: 'Decide' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Decide the escalation' })
+    expect(dialog).toHaveAccessibleDescription(/Step 1 was rejected .* Continue retries it with fresh attempts/)
+    // Accept has no effect during execution, so it isn't offered.
+    expect(within(dialog).queryByLabelText('Accept')).not.toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Roll back')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Continue')).toHaveAccessibleDescription(/fresh attempts/)
+
+    await user.click(within(dialog).getByLabelText('Continue'))
+    await user.click(within(dialog).getByRole('button', { name: 'Record decision' }))
+    expect(await screen.findByText('Escalation decided: step 1 will be retried.')).toBeInTheDocument()
+    expect(requestsTo('POST', '/approve')[0]?.body).toEqual({ decision: 'continue', comment: null, targetVersion: null })
+    expect(project.executionSteps[0]).toMatchObject({ status: 'pending', attempt: 0 })
+    expect(project.currentPhase).toBe('execution')
+  })
+
+  it('FR33_step_blocked_invalid_decision_has_step_specific_copy', async () => {
+    server.use(
+      http.post('*/api/projects/:id/gates/:gateId/approve', () =>
+        problem(400, 'INVALID_DECISION', 'A blocked step can be continued (retried) or rolled back, not accepted.'),
+      ),
+    )
+    const { user } = await openOverviewAs('owner', {}, (p) => {
+      const [first] = seedExecution(p, 1, (steps) => {
+        Object.assign(steps[0] ?? {}, { status: 'blocked', attempt: 4 })
+      })
+      seedGate(p, { type: 'escalation', escalationReason: 'step_blocked', executionStepId: first?.id ?? null, stepNumber: 1 })
+    })
+    await user.click(within(pendingGate('Escalation')).getByRole('button', { name: 'Decide' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Decide the escalation' })
+    await user.click(within(dialog).getByLabelText('Continue'))
+    await user.click(within(dialog).getByRole('button', { name: 'Record decision' }))
+
+    expect(
+      await within(dialog).findByText(contextualErrorMessages.stepEscalationDecision.INVALID_DECISION),
+    ).toBeInTheDocument()
   })
 
   it('FR-14: switching away from rollback restores the normal dialog and submit', async () => {

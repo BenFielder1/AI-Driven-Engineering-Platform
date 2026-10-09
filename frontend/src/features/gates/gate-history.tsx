@@ -2,7 +2,7 @@ import { Badge, type BadgeTone } from '../../components/ui/badge'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
 import { escalationDecisionLabels, escalationReasonLabels, gateStatusLabels, gateTypeLabels } from '../projects/labels'
 import { RelativeTime } from '../projects/relative-time'
-import { GateArtifactRef } from './pending-gates-panel'
+import { GateArtifactRef, GateStepRef } from './pending-gates-panel'
 import { useGates, type Gate } from './gates-api'
 
 const statusTones: Record<Gate['status'], BadgeTone> = {
@@ -52,6 +52,7 @@ export function GateHistory({ projectId }: { projectId: string }) {
               {gate.decidedAt ? <RelativeTime iso={gate.decidedAt} /> : <>created <RelativeTime iso={gate.createdAt} /></>}
             </span>
             <GateArtifactRef projectId={projectId} gate={gate} />
+            <GateStepRef projectId={projectId} gate={gate} />
             {gate.escalationReason && <span>Reason: {escalationReasonLabels[gate.escalationReason]}</span>}
             {gate.comment && (
               <blockquote className="border-l-2 border-border pl-3 break-words whitespace-pre-wrap">

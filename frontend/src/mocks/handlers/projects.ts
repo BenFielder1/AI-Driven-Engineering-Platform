@@ -52,6 +52,11 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
   refinementRounds: StoredRefinementRound[]
   /** Execution steps of approved plan versions (FR-30); see mocks/handlers/execution.ts. */
   executionSteps: StoredExecutionStep[]
+  /**
+   * Set once execution was started or resumed (the mock's stand-in for the runner's queued work; FR-31). Left unset,
+   * an in_progress or rejected step implies queued work; `false` means no job is queued (an interrupted runner).
+   */
+  executionStarted?: boolean
   /** Phase recorded at each project version (rollback restores it, §4.8). */
   phaseAtVersion: Record<number, Project['currentPhase']>
 }
@@ -288,6 +293,24 @@ function planChannels(
   return Object.keys(errors).length > 0 ? { errors } : { channels }
 }
 
+/**
+ * ExecutionRunStatus as the backend derives it from the current plan's counts (blocked > completed > paused >
+ * running > idle); `executionStarted` stands in for the runner's queued work between two steps (FR-31, FR-37).
+ */
+export function executionRunStatus(p: StoredProject): Schemas['ExecutionRunStatus'] {
+  const c = p.state.execution
+  if (c.blocked > 0) {
+    return 'blocked'
+  }
+  if (c.total > 0 && c.completed === c.total) {
+    return 'completed'
+  }
+  if (p.executionPaused) {
+    return 'paused'
+  }
+  return (p.executionStarted ?? (c.inProgress > 0 || c.rejected > 0)) ? 'running' : 'idle'
+}
+
 /** GET /state for a stored project; `pendingGates` comes from its gates. */
 export function stateDto(p: StoredProject): State {
   return {
@@ -296,6 +319,7 @@ export function stateDto(p: StoredProject): State {
     status: p.status,
     projectVersion: p.projectVersion,
     executionPaused: p.executionPaused,
+    executionStatus: executionRunStatus(p),
     ...p.state,
     pendingGates: p.gates
       .filter((g) => g.status === 'pending')

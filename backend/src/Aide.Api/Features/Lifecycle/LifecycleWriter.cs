@@ -4,6 +4,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
+using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
 
 namespace Aide.Api.Features.Lifecycle;
@@ -70,7 +71,12 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
     /// <paramref name="reason"/> is the reason given with the advance that needed the gate (FR-12); it is kept in the event
     /// payload so approving the gate can record it on the transition (<see cref="GateCreatedReasonKey"/>).
     /// </summary>
-    public ApprovalGate AddGate(Project project, GateType type, Guid? artifactId, string actor, DateTimeOffset now, string? reason = null)
+    /// <remarks>
+    /// <paramref name="blockedStep"/> is the step whose fourth rejection raised an escalation gate (FR-33); the payload then
+    /// records <c>stepId</c>, <c>stepNumber</c> and <c>escalationReason = step_blocked</c>, which the gate list reads back
+    /// (no gate column is needed).
+    /// </remarks>
+    public ApprovalGate AddGate(Project project, GateType type, Guid? artifactId, string actor, DateTimeOffset now, string? reason = null, ExecutionStep? blockedStep = null)
     {
         ArgumentNullException.ThrowIfNull(project);
         var gate = new ApprovalGate
@@ -83,12 +89,20 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
         };
         db.ApprovalGates.Add(gate);
         project.UpdatedAt = now;
-        db.AddEvent(
-            EventTypes.GateCreated,
-            project.Id,
-            new { gateId = gate.Id, type, artifactId, projectVersion = project.ProjectVersion, reason },
-            actor,
-            now);
+        object payload = blockedStep is null
+            ? new { gateId = gate.Id, type, artifactId, projectVersion = project.ProjectVersion, reason }
+            : new
+            {
+                gateId = gate.Id,
+                type,
+                artifactId,
+                projectVersion = project.ProjectVersion,
+                reason,
+                escalationReason = EscalationReason.StepBlocked,
+                stepId = blockedStep.Id,
+                stepNumber = blockedStep.StepNumber,
+            };
+        db.AddEvent(EventTypes.GateCreated, project.Id, payload, actor, now);
         return gate;
     }
 }

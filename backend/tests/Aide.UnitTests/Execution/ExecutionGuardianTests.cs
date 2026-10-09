@@ -154,6 +154,34 @@ public class ExecutionGuardianTests
         Assert.True(result.Accepted);
     }
 
+    [Theory]
+    [InlineData(".aide/rules.md")]
+    [InlineData(".AIDE/state.json")]
+    [InlineData(".aide")]
+    public void S4_6_Agent_output_under_aide_is_rejected_even_when_declared(string path)
+    {
+        var plan = new[] { new StepState(1, StepStatus.Pending, [], [path]) };
+
+        var result = ExecutionGuardian.Validate(new GuardianInput(1, 1, plan, [File(path)], 20));
+
+        Assert.False(result.Accepted);
+        Assert.Contains(result.Errors, v => v.Code == ErrorCodes.Guardian.ProtectedPath && v.Path == path);
+    }
+
+    [Theory]
+    [InlineData(".git./config")]
+    [InlineData(".git /config")]
+    [InlineData("GIT~1/config")]
+    [InlineData("a:stream")]
+    public void S4_6_Windows_aliases_of_git_internals_are_rejected_even_when_declared(string path)
+    {
+        var plan = new[] { new StepState(1, StepStatus.Pending, [], [path]) };
+
+        var result = ExecutionGuardian.Validate(new GuardianInput(1, 1, plan, [File(path)], 20));
+
+        Assert.Contains(result.Errors, v => v.Code == ErrorCodes.Guardian.UnsafePath);
+    }
+
     [Fact]
     public void S4_6_File_shared_by_two_steps_is_fine_when_declared_in_this_step()
     {
@@ -207,6 +235,58 @@ public class PathRulesTests
     [InlineData("src/git/x.ts", false)]
     public void S4_6_Any_git_segment_is_unsafe(string path, bool unsafePath) =>
         Assert.Equal(unsafePath, PathRules.IsUnsafe(path));
+
+    [Theory]
+    [InlineData(".git.")]
+    [InlineData(".git./config")]
+    [InlineData(".git../config")]
+    [InlineData(".git /config")]
+    [InlineData(".GIT. ./config")]
+    [InlineData("sub/.git./HEAD")]
+    [InlineData("GIT~1/config")]
+    [InlineData("git~12/config")]
+    [InlineData("GITHUB~1/workflows/ci.yml")]
+    [InlineData("a:stream")]
+    [InlineData("src/a.ts:secret")]
+    [InlineData("C:/Windows/x.dll")]
+    [InlineData("CON")]
+    [InlineData("nul.txt")]
+    [InlineData("src/Aux.js")]
+    [InlineData("src/com1.ts")]
+    [InlineData("LPT9")]
+    [InlineData("src/prn .md")]
+    [InlineData("src/name.")]
+    [InlineData("src/name ")]
+    [InlineData(".github./workflows/ci.yml")]
+    [InlineData("a<b.ts")]
+    [InlineData("a|b.ts")]
+    [InlineData("a?b.ts")]
+    [InlineData("a*b.ts")]
+    [InlineData("a\"b.ts")]
+    public void S4_6_Windows_aliases_devices_and_streams_are_unsafe(string path) =>
+        Assert.True(PathRules.IsUnsafe(path));
+
+    [Theory]
+    [InlineData("src/console.ts")]
+    [InlineData("src/nullable.ts")]
+    [InlineData("src/auxiliary.js")]
+    [InlineData("src/com10.ts")]
+    [InlineData("src/a~b.ts")]
+    [InlineData("docs/v1.0/notes.md")]
+    [InlineData(".gitignore")]
+    [InlineData(".gitattributes")]
+    [InlineData("src/.github.ts")]
+    public void S4_6_Ordinary_names_close_to_the_aliases_are_safe(string path) =>
+        Assert.False(PathRules.IsUnsafe(path));
+
+    [Theory]
+    [InlineData(".aide/rules.md", true)]
+    [InlineData(".Aide/x", true)]
+    [InlineData(".aide", true)]
+    [InlineData(".aider/x", false)]
+    [InlineData("src/.aide/x", false)]
+    public void S4_6_Only_humans_write_under_aide(string path, bool forbidden) =>
+        Assert.Equal(forbidden, PathRules.IsAgentForbidden(path));
 
     [Theory]
     [InlineData("./src/a.ts", "src/a.ts")]

@@ -408,7 +408,11 @@ public static partial class ProjectEndpoints
             review,
             pendingGates,
             project.TokensUsed,
-            project.TokenBudget);
+            project.TokenBudget,
+            ExecutionRules.Status(
+                [.. stepCounts.Where(c => c.Key != StepStatus.Invalidated).SelectMany(c => Enumerable.Repeat(c.Key, c.Value))],
+                project.ExecutionPaused,
+                await Execution.ExecutionQueries.JobActiveAsync(db, id, cancellationToken)));
     }
 
     internal static ProblemHttpResult ConcurrentEdit() =>

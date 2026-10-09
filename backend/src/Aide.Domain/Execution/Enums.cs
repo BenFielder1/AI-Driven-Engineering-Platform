@@ -33,3 +33,17 @@ public enum ViolationSeverity
     Error = 0,
     Warning = 1,
 }
+
+/// <summary>
+/// The execution runner's overall state for a project (FR-31, FR-33, FR-37): <c>idle</c> (not started, or nothing to run),
+/// <c>running</c>, <c>paused</c> (no new step starts; a running step may still finish), <c>completed</c> (every step of the
+/// current plan completed) or <c>blocked</c> (a step is blocked awaiting an escalation decision).
+/// </summary>
+public enum ExecutionRunStatus
+{
+    Idle = 0,
+    Running = 1,
+    Paused = 2,
+    Completed = 3,
+    Blocked = 4,
+}

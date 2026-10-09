@@ -24,7 +24,8 @@ public sealed record PlanStep(
 /// <para>
 /// Protected paths (<see cref="PathRules.IsProtected"/>) depend on who wrote the plan: an Owner-edited plan may declare
 /// them (§4.6 lets a declared step write one), a generated plan may not (<c>allowProtectedPaths: false</c>), so a
-/// prompt-injected agent can't plan its way into CI workflows, lockfiles or env files.
+/// prompt-injected agent can't plan its way into CI workflows, lockfiles or env files. No plan may declare a path under
+/// <c>.aide/</c> (<see cref="PathRules.IsAgentForbidden"/>): the Guardian rejects agent output there even when declared.
 /// </para>
 /// </summary>
 public static class PlanValidator
@@ -119,6 +120,12 @@ public static class PlanValidator
                 if (!allowProtectedPaths && PathRules.IsProtected(path))
                 {
                     reasons.Add($"Step {step.Number} declares the protected path '{path}'; a generated plan may not create or modify protected paths (.git/, .aide/, CI workflows, lockfiles, .env files).");
+                    continue;
+                }
+
+                if (PathRules.IsAgentForbidden(path))
+                {
+                    reasons.Add($"Step {step.Number} declares '{path}' under .aide/, which only humans edit; agents never write it.");
                     continue;
                 }
 

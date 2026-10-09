@@ -89,9 +89,12 @@ public static class GateRules
 
     /// <summary>
     /// Approve a gate. Escalation gates need a <paramref name="decision"/>; <c>rollback</c> needs a
-    /// <paramref name="targetVersion"/> (validated later by the rollback rules).
+    /// <paramref name="targetVersion"/> (validated later by the rollback rules). An escalation raised by a blocked execution
+    /// step (<paramref name="stepBlocked"/>, FR-33) can't be <c>accept</c>ed: there is no review to accept and the step would
+    /// stay blocked, so only <c>continue</c> (retry the step) and <c>rollback</c> are valid (<c>INVALID_DECISION</c>).
     /// </summary>
-    public static Result<GateResolution> Approve(GateType type, GateStatus status, EscalationDecision? decision = null, int? targetVersion = null)
+    public static Result<GateResolution> Approve(
+        GateType type, GateStatus status, EscalationDecision? decision = null, int? targetVersion = null, bool stepBlocked = false)
     {
         if (status != GateStatus.Pending)
         {
@@ -113,6 +116,8 @@ public static class GateRules
             EscalationDecision.Rollback =>
                 Result.Success(new GateResolution(GateStatus.Approved, GateFollowUp.Rollback, Decision: decision, TargetVersion: targetVersion)),
             _ when targetVersion is not null => InvalidDecision("Only a rollback decision takes a target version."),
+            EscalationDecision.Accept when stepBlocked =>
+                InvalidDecision("A blocked step's escalation is decided with continue or rollback; there is no review result to accept."),
             EscalationDecision.Continue =>
                 Result.Success(new GateResolution(GateStatus.Approved, GateFollowUp.StartReviewCycle, Decision: decision)),
             EscalationDecision.Accept =>

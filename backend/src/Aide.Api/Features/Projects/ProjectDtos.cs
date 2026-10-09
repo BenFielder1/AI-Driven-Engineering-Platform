@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
+using Aide.Domain.Execution;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
@@ -148,7 +149,7 @@ public sealed record ReviewStateDto(
 /// <summary>A pending approval gate.</summary>
 public sealed record GateSummaryDto(Guid Id, GateType Type, DateTimeOffset CreatedAt, bool Overdue);
 
-/// <summary>Deterministic project state for the overview page and the CLI (§6 <c>/api/projects/:id/state</c>). <c>tokensUsed</c> counts every agent run's tokens; a <c>null</c> <c>tokenBudget</c> means unlimited (FR-26).</summary>
+/// <summary>Deterministic project state for the overview page and the CLI (§6 <c>/api/projects/:id/state</c>). <c>tokensUsed</c> counts every agent run's tokens; a <c>null</c> <c>tokenBudget</c> means unlimited (FR-26). <c>executionStatus</c> is the execution runner's state over the current plan (FR-31, FR-37).</summary>
 public sealed record ProjectStateDto(
     Guid ProjectId,
     Phase Phase,
@@ -160,7 +161,8 @@ public sealed record ProjectStateDto(
     ReviewStateDto Review,
     IReadOnlyList<GateSummaryDto> PendingGates,
     long TokensUsed,
-    long? TokenBudget);
+    long? TokenBudget,
+    ExecutionRunStatus ExecutionStatus);
 
 /// <summary>A project member (FR-8).</summary>
 public sealed record MemberDto(Guid UserId, string Email, string Name, string? AvatarUrl, ProjectRole Role, DateTimeOffset CreatedAt);

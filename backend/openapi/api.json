@@ -3454,6 +3454,222 @@
           }
         }
       }
+    },
+    "/api/projects/{id}/execution/start": {
+      "post": {
+        "tags": [
+          "Execution"
+        ],
+        "summary": "Start execution (Contributor or Owner): prepares the working copy and project branch if needed, clears the pause flag and queues the next runnable step of the current plan (FR-31, FR-35). Returns 202 with the execution state; progress arrives over the live channel. 409 PHASE_PRECONDITION_FAILED, BUDGET_EXCEEDED, CONFLICT.",
+        "operationId": "StartExecution",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionStateDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: Viewers can't control execution.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PHASE_PRECONDITION_FAILED (not in execution, no locked plan, or nothing runnable), BUDGET_EXCEEDED (token budget used up) or CONFLICT (a concurrent change).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/execution/pause": {
+      "post": {
+        "tags": [
+          "Execution"
+        ],
+        "summary": "Pause execution (Contributor or Owner): a running step finishes, but no new step starts until resumed (FR-37). Idempotent. Returns 202 with the execution state.",
+        "operationId": "PauseExecution",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionStateDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: Viewers can't control execution.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PHASE_PRECONDITION_FAILED (not in execution) or CONFLICT (a concurrent change).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/execution/resume": {
+      "post": {
+        "tags": [
+          "Execution"
+        ],
+        "summary": "Resume paused execution (Contributor or Owner): clears the pause flag and queues the next runnable step (FR-37). Returns 202 with the execution state.",
+        "operationId": "ResumeExecution",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionStateDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: Viewers can't control execution.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PHASE_PRECONDITION_FAILED (not in execution), BUDGET_EXCEEDED (token budget used up) or CONFLICT (a concurrent change).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4554,6 +4770,7 @@
           "severe_drift",
           "max_cycles",
           "no_improvement",
+          "step_blocked",
           null
         ]
       },
@@ -4636,6 +4853,44 @@
         },
         "description": "The plan version the steps belong to."
       },
+      "ExecutionRunStatus": {
+        "enum": [
+          "idle",
+          "running",
+          "paused",
+          "completed",
+          "blocked"
+        ],
+        "description": "The execution runner's overall state for a project (FR-31, FR-33, FR-37): `idle` (not started, or nothing to run),\n`running`, `paused` (no new step starts; a running step may still finish), `completed` (every step of the\ncurrent plan completed) or `blocked` (a step is blocked awaiting an escalation decision)."
+      },
+      "ExecutionStateDto": {
+        "required": [
+          "status",
+          "paused",
+          "currentStepNumber",
+          "counts"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ExecutionRunStatus"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "currentStepNumber": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/ExecutionCountsDto"
+          }
+        },
+        "description": "The execution runner's state after a start/pause/resume request (FR-31, FR-37). `paused` is the project's pause flag;\n`currentStepNumber` is the step `in_progress`, if any; `counts` are over the current plan version's steps."
+      },
       "ExecutionStepDto": {
         "required": [
           "id",
@@ -4651,7 +4906,9 @@
           "branchName",
           "commitSha",
           "startedAt",
-          "completedAt"
+          "completedAt",
+          "fileManifest",
+          "commitUrl"
         ],
         "type": "object",
         "properties": {
@@ -4729,9 +4986,24 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "fileManifest": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/FileManifestEntryDto"
+            }
+          },
+          "commitUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
-        "description": "One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on\nearlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the\nbranch and commit once accepted."
+        "description": "One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on\nearlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the\nbranch and commit once accepted. `commitUrl` links the commit on GitHub; it is `null` for the Local provider\n(no remote) and before the step is committed."
       },
       "ExecutionStepsDto": {
         "required": [
@@ -4766,6 +5038,26 @@
         ],
         "description": "Declared action for a file in a plan step (FR-29)."
       },
+      "FileManifestEntryDto": {
+        "required": [
+          "path",
+          "action",
+          "contentHash"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/components/schemas/FileAction"
+          },
+          "contentHash": {
+            "type": "string"
+          }
+        },
+        "description": "A file an accepted step wrote (FR-34), with the SHA-256 of its content."
+      },
       "GateDto": {
         "required": [
           "id",
@@ -4782,7 +5074,9 @@
           "comment",
           "decision",
           "targetVersion",
-          "overdue"
+          "overdue",
+          "executionStepId",
+          "stepNumber"
         ],
         "type": "object",
         "properties": {
@@ -4882,9 +5176,23 @@
           },
           "overdue": {
             "type": "boolean"
+          },
+          "executionStepId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "stepNumber": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
           }
         },
-        "description": "An approval gate (§4.2, FR-12–FR-15). `artifactId`, `artifactType` and `artifactVersion` identify\nthe gated artifact (spec and plan gates). Escalation gates carry `escalationReason` and, once decided,\n`decision` (and `targetVersion` for a rollback). `reason` is a human-readable context line.\n`decidedBy`, `decidedAt` and `comment` are set once the gate is decided. `overdue` is true\n72 hours after creation while pending (FR-15)."
+        "description": "An approval gate (§4.2, FR-12–FR-15). `artifactId`, `artifactType` and `artifactVersion` identify\nthe gated artifact (spec and plan gates). Escalation gates carry `escalationReason` and, once decided,\n`decision` (and `targetVersion` for a rollback). `reason` is a human-readable context line.\n`decidedBy`, `decidedAt` and `comment` are set once the gate is decided. `overdue` is true\n72 hours after creation while pending (FR-15). An escalation raised by a blocked execution step (FR-33) has\n`escalationReason` `step_blocked` and names the step in `executionStepId` and `stepNumber`\n(both `null` otherwise)."
       },
       "GateStatus": {
         "enum": [
@@ -5689,7 +5997,8 @@
           "review",
           "pendingGates",
           "tokensUsed",
-          "tokenBudget"
+          "tokenBudget",
+          "executionStatus"
         ],
         "type": "object",
         "properties": {
@@ -5738,9 +6047,12 @@
               "integer"
             ],
             "format": "int64"
+          },
+          "executionStatus": {
+            "$ref": "#/components/schemas/ExecutionRunStatus"
           }
         },
-        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26)."
+        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37)."
       },
       "ProjectStatus": {
         "enum": [

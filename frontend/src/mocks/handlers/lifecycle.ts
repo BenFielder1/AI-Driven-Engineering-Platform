@@ -97,6 +97,8 @@ export function seedGate(project: StoredProject, overrides: Partial<Gate> = {}):
     decision: null,
     targetVersion: null,
     overdue: false,
+    executionStepId: null,
+    stepNumber: null,
     ...overrides,
   }
   if (gate.type === 'spec_approval' && overrides.artifactType === undefined) {
@@ -321,6 +323,9 @@ export const lifecycleHandlers = [
       if (!decision) {
         return invalidDecision('Escalation gates need a decision: continue, rollback or accept.')
       }
+      if (decision === 'accept' && gate.escalationReason === 'step_blocked') {
+        return invalidDecision('A blocked step can be continued (retried) or rolled back, not accepted.')
+      }
       const target = body?.targetVersion ?? null
       if (decision === 'rollback') {
         if (target === null || target < 1 || target >= p.projectVersion) {
@@ -339,7 +344,23 @@ export const lifecycleHandlers = [
         payload: { gateId: gate.id, type: gate.type, decision, targetVersion: target },
         actor,
       })
-      if (decision === 'continue') {
+      if (decision === 'continue' && p.currentPhase === 'execution') {
+        // FR-14, FR-33: continue during execution retries the blocked steps with fresh attempts.
+        for (const step of p.executionSteps.filter((s) => s.status === 'blocked')) {
+          step.status = 'pending'
+          step.attempt = 0
+          addEvent(p, {
+            type: 'STEP_UNBLOCKED',
+            category: 'step',
+            summary: `Step ${String(step.number)} unblocked`,
+            payload: { stepId: step.id, stepNumber: step.number, gateId: gate.id },
+            actor,
+          })
+        }
+        p.state.execution.pending += p.state.execution.blocked
+        p.state.execution.blocked = 0
+        p.executionStarted = !p.executionPaused
+      } else if (decision === 'continue') {
         p.state.review.maxCycles += 1
         moveTo(p, 'execution', actor, 'cycle')
       } else if (decision === 'rollback' && target !== null) {

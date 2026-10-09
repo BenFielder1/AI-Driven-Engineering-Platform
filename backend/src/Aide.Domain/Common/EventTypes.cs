@@ -83,6 +83,17 @@ public static class EventTypes
     public const string StepRejected = "STEP_REJECTED";
     public const string StepBlocked = "STEP_BLOCKED";
 
+    /// <summary>An escalation <c>continue</c> put a blocked step back to pending with fresh attempts (FR-14, FR-33).</summary>
+    public const string StepUnblocked = "STEP_UNBLOCKED";
+
+    // Execution runner (FR-31, FR-36, FR-37): category step, like the step events.
+    public const string ExecutionStarted = "EXECUTION_STARTED";
+    public const string ExecutionPaused = "EXECUTION_PAUSED";
+    public const string ExecutionResumed = "EXECUTION_RESUMED";
+
+    /// <summary>Every step of the current plan is completed (the PR and the advance to review follow, FR-36).</summary>
+    public const string ExecutionCompleted = "EXECUTION_COMPLETED";
+
     // Review (FR-38–FR-41)
     public const string ReviewStarted = "REVIEW_STARTED";
     public const string ReviewCompleted = "REVIEW_COMPLETED";
@@ -101,7 +112,7 @@ public static class EventTypes
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
         [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted],
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded],
-        [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked],
+        [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted],
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed],
         [EventCategory.Rollback] = [RollbackCompleted],

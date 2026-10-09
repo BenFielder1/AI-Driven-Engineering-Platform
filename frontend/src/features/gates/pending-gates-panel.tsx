@@ -28,6 +28,21 @@ export function GateArtifactRef({ projectId, gate }: { projectId: string; gate: 
   )
 }
 
+/** FR-33: the blocked execution step an escalation is about, linking to the execution page. */
+export function GateStepRef({ projectId, gate }: { projectId: string; gate: Gate }) {
+  if (gate.stepNumber === null) {
+    return null
+  }
+  return (
+    <span>
+      Step:{' '}
+      <Link to="/projects/$projectId/execution" params={{ projectId }} className="font-medium text-primary underline">
+        Step {gate.stepNumber}
+      </Link>
+    </span>
+  )
+}
+
 function PendingGateItem({
   projectId,
   gate,
@@ -53,6 +68,7 @@ function PendingGateItem({
           Created <RelativeTime iso={gate.createdAt} /> ({formatDateTime(gate.createdAt)})
         </span>
         <GateArtifactRef projectId={projectId} gate={gate} />
+        <GateStepRef projectId={projectId} gate={gate} />
         {gate.escalationReason && <span>Reason: {escalationReasonLabels[gate.escalationReason]}</span>}
         {gate.reason && <span className="text-muted">{gate.reason}</span>}
       </div>

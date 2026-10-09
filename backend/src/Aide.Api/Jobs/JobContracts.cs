@@ -51,6 +51,17 @@ public interface IJobEndedHook
     Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Follow-up work of a job that succeeded (e.g. queueing the next execution step, §4.9). Called by the worker with its
+/// <see cref="AideDbContext"/> in the same transaction that marks the job succeeded, so the job's row is already
+/// <c>succeeded</c> when the hook queries jobs. Changes are saved by the worker. If saving them fails (e.g. a concurrent
+/// writer queued the same execution job), the job is still marked succeeded without them. Must be idempotent.
+/// </summary>
+public interface IJobSucceededHook
+{
+    Task OnJobSucceededAsync(AideDbContext db, JobExecution job, CancellationToken cancellationToken);
+}
+
 /// <summary>A handled job failure; <see cref="Transient"/> decides between retry and immediate failure (JobPolicy).</summary>
 public sealed class JobFailedException : Exception
 {

@@ -1,9 +1,9 @@
 import { http, HttpResponse } from 'msw'
 
 import type { Schemas } from '../../api/client'
-import { nextId } from './auth'
+import { antiforgeryFailure, nextId } from './auth'
 import { problem } from './problem'
-import { access, type StoredExecutionStep, type StoredProject } from './projects'
+import { access, executionRunStatus, record, type Access, type StoredExecutionStep, type StoredProject } from './projects'
 
 type Artifact = Schemas['ArtifactDto']
 type FileAction = Schemas['FileAction']
@@ -124,15 +124,189 @@ export function createExecutionSteps(project: StoredProject, plan: Artifact, ste
         violations: null,
         branchName: null,
         commitSha: null,
+        commitUrl: null,
         startedAt: null,
         completedAt: null,
+        fileManifest: null,
       }),
     ),
   )
 }
 
+/**
+ * The steps of the current plan, in step order. As in the backend (ExecutionQueries.CurrentPlanIdAsync), the current
+ * plan is the most recently created locked plan: the implementation plan, or a review cycle's optimisation plan.
+ */
+export function currentPlanSteps(project: StoredProject): StoredExecutionStep[] {
+  const plan = project.artifacts
+    .filter((x) => planTypes.includes(x.type) && x.status === 'locked')
+    .sort((x, y) => y.createdAt.localeCompare(x.createdAt) || y.version - x.version)[0]
+  return plan
+    ? project.executionSteps.filter((s) => s.planArtifactId === plan.id).sort((x, y) => x.number - y.number)
+    : []
+}
+
+/** ExecutionCountsDto over the current plan's steps. */
+export function executionCounts(project: StoredProject): Schemas['ExecutionCountsDto'] {
+  const steps = currentPlanSteps(project)
+  const count = (status: Schemas['StepStatus']) => steps.filter((s) => s.status === status).length
+  return {
+    total: steps.length,
+    pending: count('pending'),
+    inProgress: count('in_progress'),
+    completed: count('completed'),
+    rejected: count('rejected'),
+    blocked: count('blocked'),
+  }
+}
+
+/** Recomputes the /state execution counts from the stored steps (call after changing steps in a test). */
+export function syncExecutionState(project: StoredProject) {
+  project.state.execution = executionCounts(project)
+}
+
+/**
+ * Seeds an approved implementation plan with `count` steps (FR-30) and lets `setup` change them (status, attempt,
+ * violations, commit…). The project is put in the execution phase and the /state counts follow the steps.
+ */
+export function seedExecution(
+  project: StoredProject,
+  count: number,
+  setup?: (steps: StoredExecutionStep[]) => void,
+): StoredExecutionStep[] {
+  const steps = planSteps(count)
+  const plan: Artifact = {
+    id: nextId(),
+    type: 'implementation_plan',
+    version: 1,
+    parentVersion: null,
+    content: planMarkdown(steps),
+    contentHash: 'sha256:plan',
+    status: 'locked',
+    projectVersionAtCreation: project.projectVersion,
+    author: { user: null, agentRunId: nextId() },
+    approvedBy: null,
+    approvedAt: '2026-09-01T10:00:00Z',
+    rejectionComment: null,
+    createdAt: '2026-09-01T10:00:00Z',
+    integrity: 'ok',
+  }
+  project.artifacts.push(plan)
+  project.currentPhase = 'execution'
+  project.status = 'building'
+  createExecutionSteps(project, plan, steps)
+  const stored = currentPlanSteps(project)
+  setup?.(stored)
+  syncExecutionState(project)
+  return stored
+}
+
+/**
+ * Seeds a locked optimisation plan (a review cycle's, §4.4) with `count` steps after the implementation plan, making
+ * it the current plan: /state's artifact summary and counts follow it.
+ */
+export function seedOptimizationPlan(
+  project: StoredProject,
+  count: number,
+  version = 1,
+  setup?: (steps: StoredExecutionStep[]) => void,
+): StoredExecutionStep[] {
+  const steps = planSteps(count).map((s) => ({ ...s, title: `Optimisation ${String(s.number)} title` }))
+  const plan: Artifact = {
+    id: nextId(),
+    type: 'optimization_plan',
+    version,
+    parentVersion: version > 1 ? version - 1 : null,
+    content: planMarkdown(steps, 'Optimisation plan'),
+    contentHash: 'sha256:optimisation-plan',
+    status: 'locked',
+    projectVersionAtCreation: project.projectVersion,
+    author: { user: null, agentRunId: nextId() },
+    approvedBy: null,
+    approvedAt: '2026-09-02T10:00:00Z',
+    rejectionComment: null,
+    createdAt: '2026-09-02T10:00:00Z',
+    integrity: 'ok',
+  }
+  project.artifacts.push(plan)
+  const summary = { type: 'optimization_plan' as const, latestVersion: version, latestStatus: 'locked' as const, currentLockedVersion: version }
+  const existing = project.state.artifacts.find((a) => a.type === 'optimization_plan')
+  if (existing) {
+    Object.assign(existing, summary)
+  } else {
+    project.state.artifacts.push(summary)
+  }
+  createExecutionSteps(project, plan, steps)
+  const stored = currentPlanSteps(project)
+  setup?.(stored)
+  syncExecutionState(project)
+  return stored
+}
+
+function executionState(project: StoredProject): Schemas['ExecutionStateDto'] {
+  syncExecutionState(project)
+  return {
+    status: executionRunStatus(project),
+    paused: project.executionPaused,
+    currentStepNumber: currentPlanSteps(project).find((s) => s.status === 'in_progress')?.number ?? null,
+    counts: project.state.execution,
+  }
+}
+
+/** Writer (Contributor/Owner/Admin) access for execution control, including antiforgery. */
+function writer(request: Request, id: unknown): Access {
+  const a = access(id)
+  if (a instanceof Response) {
+    return a
+  }
+  const rejected = antiforgeryFailure(request)
+  if (rejected) {
+    return rejected
+  }
+  return a.level === 'viewer' ? problem(403, 'FORBIDDEN', 'Viewers can’t control execution.') : a
+}
+
+/** §6: start · pause · resume. All need the execution phase; start and resume also need budget left (FR-26). */
+function control(action: 'start' | 'pause' | 'resume') {
+  return http.post(`*/api/projects/:id/execution/${action}`, async ({ request, params }) => {
+    const a = writer(request, params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    await record(request)
+    const p = a.project
+    if (p.currentPhase !== 'execution') {
+      return problem(409, 'PHASE_PRECONDITION_FAILED', 'Execution can be controlled only in the execution phase.', {
+        details: [`The project is in ${p.currentPhase}, not execution.`],
+      })
+    }
+    if (action !== 'pause' && p.tokenBudget !== null && p.tokensUsed >= p.tokenBudget) {
+      return problem(409, 'BUDGET_EXCEEDED', 'The project has used its token budget.')
+    }
+    if (action === 'start') {
+      // FR-31, FR-33: pending steps, rejected ones (retried first) and an interrupted in_progress step can run.
+      const c = executionCounts(p)
+      if (c.pending + c.rejected + c.inProgress === 0) {
+        return problem(409, 'PHASE_PRECONDITION_FAILED', 'Nothing to run.', {
+          details: ['The current plan has no pending, rejected or interrupted step to run.'],
+        })
+      }
+    }
+    if (action === 'pause') {
+      p.executionPaused = true
+    } else {
+      p.executionPaused = false
+      p.executionStarted = true
+    }
+    return HttpResponse.json<Schemas['ExecutionStateDto']>(executionState(p), { status: 202 })
+  })
+}
+
 export const executionHandlers = [
-  // FR-30: the steps of a plan version (default: the current locked implementation plan).
+  control('start'),
+  control('pause'),
+  control('resume'),
+  // FR-30: the steps of a plan version (default: the current locked implementation plan, as in the API).
   http.get('*/api/projects/:id/execution/steps', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {

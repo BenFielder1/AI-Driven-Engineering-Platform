@@ -17,6 +17,10 @@ public sealed record StepRejectionOutcome(StepStatus NewStatus, bool Retry, bool
 /// <summary>A start/complete outcome; <see cref="Changed"/> is false for an idempotent re-delivery (D17).</summary>
 public sealed record StepStatusChange(StepStatus NewStatus, bool Changed);
 
+/// <summary>An attempt of a step started (<see cref="StepRules.BeginAttempt"/>): the attempt number it runs as, and
+/// whether it is a new attempt (false when an interrupted attempt continues).</summary>
+public sealed record StepAttemptStart(int Attempt, bool NewAttempt);
+
 /// <summary>Execution step rules (FR-30, FR-31, FR-33, D17).</summary>
 public static class StepRules
 {
@@ -68,6 +72,41 @@ public static class StepRules
         StepStatus.InProgress => Result.Success(new StepStatusChange(StepStatus.InProgress, Changed: false)),
         _ => Conflict(status, "started"),
     };
+
+    /// <summary>
+    /// Starts an attempt (FR-33): pending/rejected → in_progress with the attempt number raised by one. A step already
+    /// <c>in_progress</c> continues its current attempt (a redelivered or resumed job), so attempts are never double-counted.
+    /// </summary>
+    public static Result<StepAttemptStart> BeginAttempt(StepStatus status, int attempt)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(attempt);
+        var started = Start(status);
+        return started.IsFailure
+            ? Result.Failure<StepAttemptStart>(started.Error!)
+            : Result.Success(new StepAttemptStart(started.Value.Changed ? attempt + 1 : Math.Max(attempt, 1), started.Value.Changed));
+    }
+
+    /// <summary>
+    /// An escalation <c>continue</c> decision on a blocked step (FR-14, FR-33): blocked → pending with the attempt count
+    /// reset, so the step gets a fresh set of retries. Other statuses are unchanged.
+    /// </summary>
+    public static StepStatusChange Unblock(StepStatus status) =>
+        status == StepStatus.Blocked ? new StepStatusChange(StepStatus.Pending, true) : new StepStatusChange(status, false);
+
+    /// <summary>
+    /// §4.8 (Decisions: rollback of a surviving plan): a rollback that keeps the step's plan puts a <c>blocked</c> or
+    /// <c>rejected</c> step back to <c>pending</c> with fresh attempts. <c>pending</c>, <c>completed</c> (its commit stays
+    /// on the branch) and <c>invalidated</c> steps are left alone; <c>in_progress</c> refuses the rollback before this.
+    /// </summary>
+    public static bool RequeueOnRollback(StepStatus status) => status is StepStatus.Blocked or StepStatus.Rejected;
+
+    /// <summary>
+    /// An execution job ended (dead-lettered or failed) while its step was <c>in_progress</c>: the attempt is over, so the
+    /// step becomes <c>rejected</c> (attempt kept) and is retried like a rejection, or blocked by the next one. Other
+    /// statuses are unchanged.
+    /// </summary>
+    public static StepStatusChange AbandonAttempt(StepStatus status) =>
+        status == StepStatus.InProgress ? new StepStatusChange(StepStatus.Rejected, true) : new StepStatusChange(status, false);
 
     /// <summary>D17: completion is keyed by step, so a re-delivered completion is a no-op and never double-counts.</summary>
     public static Result<StepStatusChange> Complete(StepStatus status) => status switch

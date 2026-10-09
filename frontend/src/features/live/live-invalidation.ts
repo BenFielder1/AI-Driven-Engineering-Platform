@@ -38,7 +38,9 @@ export const liveInvalidation: Record<EventCategory, (id: string) => Target[]> =
   // Agent runs (started, completed, failed, refused by the budget) change the runs list and the tokens used; the
   // artifacts they produce arrive as artifact events (FR-23, FR-26). A refinement round's status is its run's (FR-27).
   run: (id) => [project(id), state(id), runs(id), activity(id), refinement(id)],
-  step: (id) => [state(id), activity(id), execution(id)],
+  // STEP_STARTED/COMPLETED/REJECTED/BLOCKED (FR-31–FR-34) and pause/resume (FR-37): steps, counts and the pause flag
+  // (on both /state and the project). A blocked step's escalation gate arrives as a gate event.
+  step: (id) => [project(id), state(id), activity(id), execution(id)],
   review: (id) => [state(id), activity(id)],
   release: (id) => [project(id), state(id), activity(id), lists()],
   // A rollback changes version, phase, artifacts and steps (§4.8).
