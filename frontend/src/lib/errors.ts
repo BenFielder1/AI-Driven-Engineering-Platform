@@ -23,10 +23,12 @@ export const errorMessages = {
   GATE_PENDING: 'An approval gate is waiting for a decision.',
   BUDGET_EXCEEDED: 'This project has used its token budget — an Owner can raise it in Settings.',
   WRONG_PHASE: "That isn't available in the project's current phase.",
-  ARTIFACT_NOT_DRAFT: 'Only draft artifacts can be approved or rejected.',
+  ARTIFACT_NOT_DRAFT:
+    'This draft can no longer be approved or rejected: it was already decided, or it is out of date because the project moved on since it was created.',
   ARTIFACT_LOCKED: 'This artifact version is locked. Create a new version instead.',
   GATE_NOT_PENDING: 'This gate has already been decided.',
   INVALID_DECISION: "That decision isn't valid for this gate.",
+  REFINEMENT_IN_PROGRESS: 'A refinement round is already queued or running. Wait for it to finish, then answer its questions.',
   // Review, release, rollback
   REVIEW_IN_PROGRESS: 'A review is already running.',
   NOT_RELEASING: "The project isn't in the release phase.",
@@ -41,6 +43,8 @@ export const errorMessages = {
   // Agent runs (shown on run details)
   MISSING_INPUT: 'The agent was missing a required input.',
   INVALID_PLAN: 'The agent produced an invalid plan.',
+  MISSING_SECTIONS: "The agent's specification was still missing required sections after a retry.",
+  INVALID_OUTPUT: "The agent's reply couldn't be read, even after a retry.",
   PROVIDER_NOT_CONFIGURED:
     "The run's LLM provider has no API key on this project or the server. An Owner can add one in Settings → LLM.",
   PROVIDER_ERROR: 'The model provider returned an error.',
@@ -65,6 +69,13 @@ export const contextualErrorMessages = {
     /** `baseVersion` is no longer the latest version; `errorMessage` names it when the details carry `latestVersion: N`. */
     CONFLICT:
       'Someone saved a newer version while you were editing. Your text is kept here: copy it, then cancel and edit again to start from their version.',
+    /** FR-18, FR-29: an edited plan's `aide-plan` block breaks the plan rules; the reasons are in `details`. */
+    INVALID_PLAN: "The plan in the aide-plan block is invalid, so it wasn't saved. Fix these problems and save again.",
+  },
+  /** POST /api/projects/:id/refinement/run (FR-27). */
+  startRefinement: {
+    WRONG_PHASE: 'Refinement rounds run only while the project is in the Refinement phase.',
+    CONFLICT: 'Someone else started a round at the same time. The page now shows it.',
   },
   /** GET /api/projects/:id/artifacts/:type/diff — the page only sends valid version pairs, so 400 means too large (FR-21). */
   artifactDiff: {
@@ -72,9 +83,13 @@ export const contextualErrorMessages = {
   },
   /** POST /api/projects/:id/artifacts/:artifactId/approve · /reject (FR-17). */
   decideArtifact: {
-    ARTIFACT_NOT_DRAFT: 'This version is no longer a draft: it was decided or replaced by a newer draft. The page now shows the latest state.',
+    /** Also a stale draft: one created at an older project version (e.g. before a rollback or a newer approval). */
+    ARTIFACT_NOT_DRAFT:
+      'This draft can no longer be decided: it was already decided, replaced by a newer draft, or is out of date because the project moved on since it was created. The page now shows the latest state; edit the current version to make a new draft.',
     ARTIFACT_LOCKED: 'This version is already approved and locked, so it can no longer be rejected.',
     WRONG_PHASE: "Artifacts of this type can't be decided in the project's current phase.",
+    /** FR-30: the plan's `aide-plan` block can't produce execution steps; the reasons are in `details`. */
+    INVALID_PLAN: "This plan's aide-plan block is invalid, so it can't be approved. Edit it as a new draft and fix these problems.",
   },
 } as const satisfies Record<string, Partial<Record<ErrorCode, string>>>
 
@@ -202,10 +217,13 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
 
 /**
  * The server's reasons behind an error, for codes where they help the user act (PHASE_PRECONDITION_FAILED lists the
- * unmet entry conditions, FR-11). Falls back to the ProblemDetails title when there are no `details`.
+ * unmet entry conditions, FR-11; INVALID_PLAN every broken plan rule, FR-29). Falls back to the ProblemDetails title
+ * when there are no `details`.
  */
+const codesWithReasons: readonly ErrorCode[] = ['PHASE_PRECONDITION_FAILED', 'INVALID_PLAN']
+
 export function errorReasons(error: unknown): string[] {
-  if (!(error instanceof ApiError) || error.errorCode !== 'PHASE_PRECONDITION_FAILED') {
+  if (!(error instanceof ApiError) || error.errorCode === null || !codesWithReasons.includes(error.errorCode)) {
     return []
   }
   if (error.details.length > 0) {

@@ -148,6 +148,16 @@ export const artifactStatusLabels: Record<NonNullable<Schemas['ArtifactStatus']>
   corrupted: 'Corrupted',
 }
 
+/** FR-30–FR-34: execution step status. */
+export const stepStatusLabels: Record<Schemas['StepStatus'], string> = {
+  pending: 'Pending',
+  in_progress: 'In progress',
+  completed: 'Completed',
+  rejected: 'Rejected',
+  blocked: 'Blocked',
+  invalidated: 'Invalidated',
+}
+
 export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {
   github: 'GitHub',
   local: 'Local repository',

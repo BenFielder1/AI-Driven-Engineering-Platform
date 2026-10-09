@@ -16,6 +16,8 @@ const gates = (id: string): Target => ({ queryKey: projectKeys.gates(id) })
 const activity = (id: string): Target => ({ queryKey: [...projectKeys.detail(id), 'activity'] })
 const artifacts = (id: string): Target => ({ queryKey: projectKeys.artifacts(id) })
 const runs = (id: string): Target => ({ queryKey: projectKeys.runs(id) })
+const refinement = (id: string): Target => ({ queryKey: projectKeys.refinement(id) })
+const execution = (id: string): Target => ({ queryKey: projectKeys.execution(id) })
 const lists = (): Target => ({ queryKey: projectKeys.lists() })
 /** Everything about the project (the detail key prefixes all of its queries). */
 const everything = (id: string): Target => ({ queryKey: projectKeys.detail(id) })
@@ -29,13 +31,14 @@ export const liveInvalidation: Record<EventCategory, (id: string) => Target[]> =
   transition: (id) => [everything(id), lists()],
   // Gate created/decided: approving moves the phase (that also arrives as a transition event).
   gate: (id) => [project(id), state(id), gates(id), activity(id)],
-  // New version, approval, rejection, invalidation cascade (§4.4) or corruption.
-  artifact: (id) => [artifacts(id), state(id), activity(id)],
+  // New version, approval, rejection, invalidation cascade (§4.4) or corruption. A new project request draft ends a
+  // refinement round (FR-27); approving a plan creates its execution steps and invalidates older ones (FR-30).
+  artifact: (id) => [artifacts(id), state(id), activity(id), refinement(id), execution(id)],
   integrity: (id) => [artifacts(id), activity(id)],
   // Agent runs (started, completed, failed, refused by the budget) change the runs list and the tokens used; the
-  // artifacts they produce arrive as artifact events (FR-23, FR-26).
-  run: (id) => [project(id), state(id), runs(id), activity(id)],
-  step: (id) => [state(id), activity(id)],
+  // artifacts they produce arrive as artifact events (FR-23, FR-26). A refinement round's status is its run's (FR-27).
+  run: (id) => [project(id), state(id), runs(id), activity(id), refinement(id)],
+  step: (id) => [state(id), activity(id), execution(id)],
   review: (id) => [state(id), activity(id)],
   release: (id) => [project(id), state(id), activity(id), lists()],
   // A rollback changes version, phase, artifacts and steps (§4.8).

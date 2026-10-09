@@ -440,14 +440,14 @@ describe('Artifact detail (FR-16–FR-21)', () => {
 
   it('shows the empty state, and a Writer can write the first draft', async () => {
     const project = seedProjectAs('contributor')
-    const { user } = await openArtifact(project, 'optimization_plan')
+    const { user } = await openArtifact(project, SPEC)
 
     expect(await screen.findByText('No versions yet')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Write the first draft' }))
-    await user.type(await screen.findByLabelText('Markdown'), '# Optimise')
+    await user.type(await screen.findByLabelText('Markdown'), '# Spec')
     await user.click(screen.getByRole('button', { name: 'Save as new draft' }))
 
-    expect(await content('Optimisation plan v1')).toBeInTheDocument()
+    expect(await content('Technical specification v1')).toBeInTheDocument()
   })
 
   it('an unknown artifact type shows not found', async () => {

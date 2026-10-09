@@ -39,10 +39,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-24 | Versioned prompt templates, MISSING_INPUT | 3 | backend | 6 | done | embedded Prompts/*.md with front-matter version, delimited data tags, MISSING_INPUT before provider call; FR24_* tests |
 | FR-25 | Provider retries, dead letter | 3, 4.9 | backend | 6 | done | transient classification, 4 job attempts, run failed + dead letter + RUN_FAILED (incl. reaper path); FR25_* tests (owner notification phase 12) |
 | FR-26 | Token budget | 3 | both | 6 | done | TokenBudget rule, BUDGET_EXCEEDED event, Owner raises via PATCH project; budget meter; FR26_* tests (execution start check phase 8) |
-| FR-27 | Idea refinement rounds with questions | 3 | both | 7 | todo | — |
-| FR-28 | Spec generation, 11 sections, retry | 3 | backend | 7 | todo | — |
-| FR-29 | Structured plan generation, INVALID_PLAN | 3 | backend | 7 | todo | — |
-| FR-30 | Plan approval creates execution steps | 3 | backend | 7 | todo | — |
+| FR-27 | Idea refinement rounds with questions | 3 | both | 7 | done | refinement endpoints, rounds + answers, each round a new draft, REFINEMENT_IN_PROGRESS, cancelled rounds; refinement page; FR27_* tests; verified on k8s |
+| FR-28 | Spec generation, 11 sections, retry | 3 | backend | 7 | done | 11-section check, one corrective re-run listing missing sections, MISSING_SECTIONS → no draft; FR28_* tests |
+| FR-29 | Structured plan generation, INVALID_PLAN | 3 | backend | 7 | done | aide-plan block + rendered Markdown (round-trip checked), INVALID_PLAN reasons, agent plans reject protected/unsafe paths; plan preview; FR29_* tests |
+| FR-30 | Plan approval creates execution steps | 3 | backend | 7 | done | approval creates one pending step per plan step (current max files/step re-checked); GET …/execution/steps with protected flag; FR30_* tests |
 | FR-31 | Step runner ordering and inputs | 3 | backend | 8 | todo | — |
 | FR-32 | Execution Guardian | 3, 4.6 | backend | 1, 8 | todo | — |
 | FR-33 | Step retries, blocked, escalation | 3 | backend | 8 | todo | — |
@@ -99,7 +99,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 6 M3 Agent infrastructure (base: 64010e6) — IDs: FR-22–FR-26
   - [x] aspnet-engineer (providers, prompts, runner, runs endpoints; resumed once after a rate-limit stop) → vite-react-engineer (runs page + drawer, budget card)
   - [x] gate · review (0 Critical, 1 Major, 7 Minor — Major + 5 Minor fixed; budget soft cap and OpenAI pricing logged) · redeploy (smoke ✓) · E2E on k8s 4/4 · commit
-- [ ] 7 M3 Refinement, spec, plan — IDs: FR-27–FR-30
+- [x] 7 M3 Refinement, spec, plan (base: e850d35) — IDs: FR-27–FR-30
+  - [x] aspnet-engineer (refinement, spec/plan agents, plan validation, steps on approval) ‖ vite-react-engineer (refinement page, plan steps) — resumed from an uncommitted tree that didn't build (unfinished AgentRunner change, broken MSW mock types); fixed forward
+  - [x] gate · review (0 Critical, 3 Major, 5 Minor — all Major + 4 Minor fixed; error-table Minor logged as a Decision) · redeploy (smoke ✓, refinement round → draft on k8s ✓) · commit
 - [ ] 8 M4 Execution runner — IDs: FR-31–FR-33, FR-37
 - [ ] 9 M4 Git providers, commits, PR — IDs: FR-34–FR-36
 - [ ] 10 M5 Review — IDs: FR-38–FR-41, FR-14 (escalation continue)
@@ -191,6 +193,16 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-08 — Prompt values are wrapped in data tags and closing tags inside values are neutralised (prompt-injection hardening); integer inputs stay inline — SPEC updated: no
 - 2026-10-08 — LLM base URLs are system config only (no per-project base URL → no SSRF); Ollama defaults to host.docker.internal:11434 in containers — SPEC updated: no
 
+- 2026-10-09 — New error codes/API for phase 7 beyond §6: REFINEMENT_IN_PROGRESS (409), INVALID_PLAN as 400 with per-step reasons (draft create/approve), MISSING_SECTIONS and INVALID_OUTPUT as run/job failure codes; GET /api/projects/{id}/refinement, POST …/refinement/run, GET …/execution/steps (optional planType) — FR-27–FR-30 needed them — SPEC updated: no
+- 2026-10-09 — Plan structure is stored inside the artifact Markdown as a fenced `aide-plan` JSON block plus the rendered Markdown (no separate plan table); render must round-trip and fences inside task/instructions are neutralised — FR-29 "stores the structure and renders it" — SPEC updated: no
+- 2026-10-09 — Agent drafts are saved in their own transaction after the run row/tokens commit; idempotent per run id; a save conflict is a transient retry that reuses the succeeded run (no second provider call); the save bumps the project row so a concurrent rollback/fallback forces a re-check — review finding — SPEC updated: no
+- 2026-10-09 — FR-28 corrective re-run uses its own run key (`corrective`) and lists the missing sections; a second miss fails the job with MISSING_SECTIONS and creates no draft — SPEC updated: no
+- 2026-10-09 — Agent-generated plans may not declare protected paths (§4.6 list: .github/workflows, .aide/, .env*, lockfiles…) — rejected with a reason so the corrective run can fix it; Owner-edited plans may still declare them per §4.6. Prompt-injected specs could otherwise grant the code agent CI-workflow write access — security — SPEC updated: no
+- 2026-10-09 — Plan approval re-validates against the project's current max_files_per_step — SPEC updated: no
+- 2026-10-09 — Paths with control characters, line breaks or backticks are UNSAFE everywhere (plan validation and Guardian); runs of ≥3 backticks/tildes in plan title/task/instructions are backslash-escaped in the rendered Markdown and every render is checked to round-trip — review finding (fence injection) — SPEC updated: no
+- 2026-10-09 — Approving a draft created at a project version above the current one (stale after rollback/fallback) → 409 ARTIFACT_NOT_DRAFT; execution steps expose `protected` per declared file so the UI flags it — SPEC updated: no
+- 2026-10-09 — A refinement round whose job was skipped or ended without a draft is reported `cancelled` with a reason (not `succeeded` with no output) — SPEC updated: no
+
 ## Known issues
 - kubeconform, oasdiff, actionlint not installed locally — schema validation skipped locally (CI runs kubeconform; actionlint was run via Docker) — install optionally — Ben
 - CI not yet run on GitHub (nothing pushed): Testcontainers on ubuntu-latest, SDK 10.0.401 install, Docker cache unverified — verify on first push — orchestrator
@@ -206,4 +218,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - Phases 1–4 commits lacked Aide.Domain/Artifacts (+ its unit tests) because `.gitignore` had an unanchored `artifacts/`; fixed in 6841646 — commits before it don't build from a clean checkout — —
 - The UI can't tell whether a corrupted version was current when marked (no `regenerationRequested` flag); copy may over-promise regeneration for rejected/invalidated latest versions — orchestrator
 - Admin demotion doesn't drop hub subscriptions the user held as admin on non-member projects (until reconnect) — orchestrator
+- k8s DB holds a check user (k8s-check-*@example.com) and project "K8s refinement check" from the phase 7 deploy check — delete if unwanted — Ben
+- Frontend mock `isProtectedPath()` mirrors only part of PathRules.IsProtected (mocks only); the plan draft preview doesn't flag protected paths (agent plans can't declare them; Owner edits can) — orchestrator
+- `scripts/ci/check-generated.sh` needs an argument and fails locally without one (`$1: unbound variable`) — check in Final CI pass — orchestrator
 - Two users writing the very first version of a type concurrently aren't warned (baseVersion null) — accepted

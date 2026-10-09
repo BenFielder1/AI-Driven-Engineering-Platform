@@ -80,7 +80,7 @@ public static class ArtifactEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION: unknown artifact type, or empty or too long content."),
+                (StatusCodes.Status400BadRequest, "VALIDATION: unknown artifact type, or empty or too long content. INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason)."),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN: Viewers can't create drafts."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project."),
                 (StatusCodes.Status409Conflict, "WRONG_PHASE: the type can't be edited in the current phase; CONFLICT: baseVersion is no longer the latest version (details: latestVersion), or a concurrent save."));
@@ -94,10 +94,10 @@ public static class ArtifactEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION."),
+                (StatusCodes.Status400BadRequest, "VALIDATION. INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason)."),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN: only Owners approve artifacts."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project or artifact."),
-                (StatusCodes.Status409Conflict, "ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted), ARTIFACT_LOCKED or CONFLICT."));
+                (StatusCodes.Status409Conflict, "ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted, or created after the version the project was rolled back to), ARTIFACT_LOCKED or CONFLICT."));
 
         group.MapPost("/{artifactId:guid}/reject", RejectArtifact)
             .WithName("RejectArtifact")

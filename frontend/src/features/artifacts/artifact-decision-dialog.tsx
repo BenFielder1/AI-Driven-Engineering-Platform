@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/button'
 import { Dialog } from '../../components/ui/dialog'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
 import { TextAreaField } from '../../components/ui/textarea-field'
-import { applyFieldErrors, errorMessage } from '../../lib/errors'
+import { applyFieldErrors, errorMessage, errorReasons } from '../../lib/errors'
 import { artifactTypeLabels } from '../projects/labels'
 import { isAgentAuthored } from './artifact-author'
 import { decisionSchema } from './artifact-schemas'
@@ -69,7 +69,11 @@ export function ArtifactDecisionDialog({
         },
         onError: (error) => {
           const unmatched = applyFieldErrors(error, setError, ['comment'])
-          setServerError(unmatched.length > 0 ? unmatched.join(' ') : errorMessage(error, 'decideArtifact'))
+          setServerError(
+            unmatched.length > 0
+              ? unmatched.join(' ')
+              : [errorMessage(error, 'decideArtifact'), ...errorReasons(error)].join(' '),
+          )
         },
       },
     )

@@ -6,10 +6,12 @@ using Aide.Api.Features.Activity;
 using Aide.Api.Features.Admin;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
+using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Live;
 using Aide.Api.Features.Projects;
+using Aide.Api.Features.Refinement;
 using Aide.Api.Features.Runs;
 using Aide.Api.Features.Tokens;
 using Aide.Api.Health;
@@ -119,10 +121,15 @@ builder.Services.AddAideJobs();
 builder.Services.AddScoped<ArtifactIntegrityGuard>();
 builder.Services.AddScoped<ArtifactReader>();
 builder.Services.AddScoped<ArtifactService>();
+builder.Services.AddScoped<AgentDraftWriter>();
 
 // Agents (FR-22–FR-26): the runner used by agent job handlers; providers and prompts come from Aide.Infrastructure.
 builder.Services.AddScoped<AgentRunner>();
 builder.Services.AddScoped<IJobEndedHook, AgentRunJobEndedHook>();
+
+// Refinement, specification and planning agents (FR-27–FR-30): job handlers, refinement rounds and execution steps.
+builder.Services.AddAgentJobs();
+builder.Services.AddScoped<RefinementService>();
 
 // Live project updates over SignalR (FR-46).
 builder.Services.AddAideLive();
@@ -157,6 +164,8 @@ app.MapGateEndpoints();
 app.MapActivityEndpoints();
 app.MapArtifactEndpoints();
 app.MapRunEndpoints();
+app.MapRefinementEndpoints();
+app.MapExecutionEndpoints();
 app.MapLiveEndpoints();
 
 await app.RunAsync();

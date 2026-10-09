@@ -74,6 +74,18 @@ public static class ArtifactRules
     };
 
     /// <summary>
+    /// FR-17, FR-19 (rollback): a draft created at a project version above the project's current version belongs to work
+    /// a rollback discarded (rollback moves the project back to an earlier version and invalidates everything created
+    /// after it); one that slipped in concurrently is refused with <c>ARTIFACT_NOT_DRAFT</c> instead of being locked.
+    /// </summary>
+    public static Result EnsureNotStale(int projectVersionAtCreation, int currentProjectVersion) =>
+        projectVersionAtCreation > currentProjectVersion
+            ? Result.Failure(new DomainError(
+                ErrorCodes.ArtifactNotDraft,
+                $"The draft was created at project version {projectVersionAtCreation}, after the project was rolled back to version {currentProjectVersion}; it can't be approved."))
+            : Result.Success();
+
+    /// <summary>
     /// FR-17: reject a draft → rejected. The producing agent re-runs with the comment unless the draft
     /// was a human edit (FR-18).
     /// </summary>

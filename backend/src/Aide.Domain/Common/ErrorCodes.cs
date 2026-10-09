@@ -34,6 +34,9 @@ public static class ErrorCodes
     public const string GateNotPending = "GATE_NOT_PENDING";
     public const string InvalidDecision = "INVALID_DECISION";
 
+    /// <summary>FR-27: a refinement round is already queued or running for the project.</summary>
+    public const string RefinementInProgress = "REFINEMENT_IN_PROGRESS";
+
     // Review, release, rollback
     public const string ReviewInProgress = "REVIEW_IN_PROGRESS";
     public const string NotReleasing = "NOT_RELEASING";
@@ -49,7 +52,18 @@ public static class ErrorCodes
 
     // Agent runs (recorded on the run, not returned by an endpoint)
     public const string MissingInput = "MISSING_INPUT";
+
+    /// <summary>
+    /// FR-29: a plan breaks the plan rules. Recorded on a plan generator run whose corrective re-run is still invalid, and
+    /// returned (400) when a human-edited plan draft (FR-18) or a plan being approved (FR-30) is invalid.
+    /// </summary>
     public const string InvalidPlan = "INVALID_PLAN";
+
+    /// <summary>FR-28: the spec generator's output still misses required sections after its corrective re-run.</summary>
+    public const string MissingSections = "MISSING_SECTIONS";
+
+    /// <summary>FR-27: an agent's structured (JSON) output could not be read, even after its corrective re-run.</summary>
+    public const string InvalidOutput = "INVALID_OUTPUT";
 
     /// <summary>FR-22: the run's provider needs an API key and neither the project nor the system has one; never called.</summary>
     public const string ProviderNotConfigured = "PROVIDER_NOT_CONFIGURED";
@@ -95,6 +109,8 @@ public static class ErrorCodes
         [ArtifactLocked] = 409,
         [GateNotPending] = 409,
         [InvalidDecision] = 400,
+        [RefinementInProgress] = 409,
+        [InvalidPlan] = 400,
         [ReviewInProgress] = 409,
         [NotReleasing] = 409,
         [ReleaseInProgress] = 409,

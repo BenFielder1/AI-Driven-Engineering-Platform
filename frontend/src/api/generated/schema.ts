@@ -690,6 +690,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/refinement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The refinement state (members): the latest project request version, the latest round with its status, and the clarifying questions of the latest completed round with any answers already given. */
+        get: operations["GetRefinement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/refinement/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run a refinement round (Contributor or Owner): queues the Idea Refinement agent on the idea, the current draft and the answers given (questionId of a question from the latest round, or the question text). Returns 202 with the queued round; the new draft and questions arrive with the run. 409 WRONG_PHASE, BUDGET_EXCEEDED, REFINEMENT_IN_PROGRESS. */
+        post: operations["StartRefinement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/execution/steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The execution steps of a plan version, in step order (members). planType defaults to implementation_plan and planVersion to its current (highest locked) version; with no locked plan the result has no plan and no steps. */
+        get: operations["ListExecutionSteps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -752,6 +803,8 @@ export interface components {
             state: components["schemas"]["ProjectStateDto"];
             gate: null | components["schemas"]["GateDto"];
         };
+        /** @enum {unknown} */
+        AgentJobTrigger: "user_requested" | "phase_entered" | "gate_rejected" | "artifact_rejected" | "artifact_corrupted" | null;
         /**
          * @description The five cognitive agents (§1, FR-23).
          * @enum {unknown}
@@ -1021,6 +1074,15 @@ export interface components {
             targetVersion?: null | number;
         };
         /**
+         * @description A file a step declares it creates or modifies (FR-29). `protected` marks a protected path (§4.6: .git/, .aide/, CI
+         *     workflows, lockfiles, .env files) — only an Owner-edited plan can declare one; the step may then write it.
+         */
+        DeclaredFileDto: {
+            path: string;
+            action: components["schemas"]["FileAction"];
+            protected: boolean;
+        };
+        /**
          * @description One line of a diff between two versions (FR-21). `oldLine` is the 1-based line number in the `from` version
          *     (null for `added`), `newLine` the line number in the `to` version (null for `removed`); `text`
          *     is the line without its line ending. Lines are in order, so a side-by-side view pairs them by line numbers.
@@ -1066,6 +1128,51 @@ export interface components {
             /** Format: int32 */
             blocked: number;
         };
+        /** @description The plan version the steps belong to. */
+        ExecutionPlanDto: {
+            /** Format: uuid */
+            artifactId: string;
+            type: components["schemas"]["ArtifactType"];
+            /** Format: int32 */
+            version: number;
+            status: components["schemas"]["ArtifactStatus"];
+        };
+        /**
+         * @description One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on
+         *     earlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the
+         *     branch and commit once accepted.
+         */
+        ExecutionStepDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            number: number;
+            title: string;
+            task: string;
+            declaredFiles: components["schemas"]["DeclaredFileDto"][];
+            dependencies: number[];
+            userInstructions: null | string;
+            status: components["schemas"]["StepStatus"];
+            /** Format: int32 */
+            attempt: number;
+            violations: null | components["schemas"]["StepViolationDto"][];
+            branchName: null | string;
+            commitSha: null | string;
+            /** Format: date-time */
+            startedAt: null | string;
+            /** Format: date-time */
+            completedAt: null | string;
+        };
+        /** @description A plan version's execution steps in step order (FR-30); `plan` is `null` (and no steps) before any plan is approved. */
+        ExecutionStepsDto: {
+            plan: null | components["schemas"]["ExecutionPlanDto"];
+            steps: components["schemas"]["ExecutionStepDto"][];
+        };
+        /**
+         * @description Declared action for a file in a plan step (FR-29).
+         * @enum {unknown}
+         */
+        FileAction: "create" | "modify";
         /**
          * @description An approval gate (§4.2, FR-12–FR-15). `artifactId`, `artifactType` and `artifactVersion` identify
          *     the gated artifact (spec and plan gates). Escalation gates carry `escalationReason` and, once decided,
@@ -1130,6 +1237,11 @@ export interface components {
             defaultBranchExists: boolean;
             reason: null | string;
         };
+        /**
+         * @description The six Execution Guardian checks (§4.6).
+         * @enum {unknown}
+         */
+        GuardianCheck: "single_step" | "file_limit" | "dependency_order" | "plan_alignment" | "scope_creep" | "secret_scan";
         HealthCheckEntry: {
             name: string;
             status: components["schemas"]["HealthState"];
@@ -1395,6 +1507,70 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        /** @description An answer given to the agent: `questionId` when it answered a question of a round, and the question text. */
+        RefinementAnswerDto: {
+            questionId: null | string;
+            question: string;
+            answer: string;
+        };
+        /**
+         * @description An answer for the next refinement round (FR-27): `questionId` of a question from the latest round, or the
+         *     `question` text for anything else, and the `answer`.
+         */
+        RefinementAnswerRequest: {
+            questionId?: null | string;
+            question?: null | string;
+            answer: string;
+        };
+        /**
+         * @description The refinement page (FR-27): the latest project request version (`latestDraft`, without content — read it from
+         *     the artifacts API), the latest round and its status, and the clarifying questions of the latest completed round
+         *     (`questionsRunId`) with any answers already given.
+         */
+        RefinementDto: {
+            latestDraft: null | components["schemas"]["ArtifactSummaryDto"];
+            latestRound: null | components["schemas"]["RefinementRoundDto"];
+            /** Format: uuid */
+            questionsRunId: null | string;
+            questions: components["schemas"]["RefinementQuestionDto"][];
+        };
+        /**
+         * @description A clarifying question of the latest completed round (FR-27). `answer` is the answer already given for the next
+         *     round (while that round is queued or running, or after it failed), else `null`.
+         */
+        RefinementQuestionDto: {
+            id: string;
+            question: string;
+            reason: null | string;
+            answer: null | string;
+        };
+        /**
+         * @description One refinement round (FR-27): an idea refinement job and its agent run. `runId` is the run that produced (or will
+         *     produce) the draft — the corrective re-run when the first reply couldn't be read; the run appears under
+         *     `/runs/{runId}` once the job has started. `status` is `queued` until then. `trigger` says who started
+         *     it: a writer (`user_requested`), or a rejected or corrupted project request. A round that ended without a draft
+         *     because the project no longer allowed one (e.g. a release in progress) is `cancelled`, with the reason in `error`. `answers` and `feedback` are
+         *     what the agent was given; `draftArtifactId`/`draftVersion` the project request version it created.
+         */
+        RefinementRoundDto: {
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            jobId: string;
+            trigger: null | components["schemas"]["AgentJobTrigger"];
+            status: components["schemas"]["AgentRunStatus"];
+            error: null | string;
+            answers: components["schemas"]["RefinementAnswerDto"][];
+            feedback: null | string;
+            /** Format: uuid */
+            draftArtifactId: null | string;
+            /** Format: int32 */
+            draftVersion: null | number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+        };
         /** @description FR-1 registration. */
         RegisterRequest: {
             email: string;
@@ -1420,6 +1596,20 @@ export interface components {
             type: components["schemas"]["ArtifactType"];
             /** Format: int32 */
             version: number;
+        };
+        /** @description Start a refinement round (FR-27), optionally answering some or all clarifying questions of the latest round. */
+        StartRefinementRequest: {
+            answers?: null | components["schemas"]["RefinementAnswerRequest"][];
+        };
+        /** @enum {unknown} */
+        StepStatus: "pending" | "in_progress" | "completed" | "rejected" | "blocked" | "invalidated";
+        /** @description A Guardian violation recorded on a step's last rejected attempt (§4.6, FR-32). Never contains secret values. */
+        StepViolationDto: {
+            check: components["schemas"]["GuardianCheck"];
+            code: string;
+            severity: components["schemas"]["ViolationSeverity"];
+            message: string;
+            path: null | string;
         };
         /** @enum {unknown} */
         SystemRole: "user" | "admin";
@@ -1477,6 +1667,8 @@ export interface components {
             avatarUrl: null | string;
             githubLinked: boolean;
         };
+        /** @enum {unknown} */
+        ViolationSeverity: "error" | "warning";
     };
     responses: never;
     parameters: never;
@@ -3508,7 +3700,7 @@ export interface operations {
                     "application/json": components["schemas"]["ArtifactDto"];
                 };
             };
-            /** @description VALIDATION: unknown artifact type, or empty or too long content. */
+            /** @description VALIDATION: unknown artifact type, or empty or too long content. INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3580,7 +3772,7 @@ export interface operations {
                     "application/json": components["schemas"]["ArtifactDto"];
                 };
             };
-            /** @description VALIDATION. */
+            /** @description VALIDATION. INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3616,7 +3808,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted), ARTIFACT_LOCKED or CONFLICT. */
+            /** @description ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted, or created after the version the project was rolled back to), ARTIFACT_LOCKED or CONFLICT. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3783,6 +3975,178 @@ export interface operations {
                 };
             };
             /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetRefinement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefinementDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StartRefinement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["StartRefinementRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefinementRoundDto"];
+                };
+            };
+            /** @description VALIDATION: an answer is blank or too long, names an unknown questionId, has neither questionId nor question, or answers a question twice; more than 20 answers. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't run agents. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description WRONG_PHASE (not in refinement), BUDGET_EXCEEDED (token budget used up), REFINEMENT_IN_PROGRESS (a round is queued or running) or CONFLICT (a concurrent start). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListExecutionSteps: {
+        parameters: {
+            query?: {
+                planVersion?: number;
+                planType?: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionStepsDto"];
+                };
+            };
+            /** @description VALIDATION: unknown planType, or planVersion below 1. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or the requested plan version. */
             404: {
                 headers: {
                     [name: string]: unknown;

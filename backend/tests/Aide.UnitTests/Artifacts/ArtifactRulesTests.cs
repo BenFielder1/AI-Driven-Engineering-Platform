@@ -117,6 +117,18 @@ public class ArtifactRulesTests
         Assert.Equal(ErrorCodes.ArtifactNotDraft, ArtifactRules.Reject(ArtifactType.ProjectRequest, status, true).Error!.Code);
     }
 
+    [Theory]
+    [InlineData(3, 3, true)]
+    [InlineData(2, 3, true)]
+    [InlineData(4, 3, false)]
+    public void FR19_A_draft_created_after_the_rollback_version_can_not_be_approved(int createdAt, int projectVersion, bool allowed)
+    {
+        var result = ArtifactRules.EnsureNotStale(createdAt, projectVersion);
+
+        Assert.Equal(allowed, result.IsSuccess);
+        Assert.Equal(allowed ? null : ErrorCodes.ArtifactNotDraft, result.Error?.Code);
+    }
+
     [Fact]
     public void FR17_Changing_a_locked_artifact_is_artifact_locked()
     {

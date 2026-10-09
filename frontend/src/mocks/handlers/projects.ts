@@ -48,8 +48,22 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
   artifacts: Schemas['ArtifactDto'][]
   /** Agent runs, any order (the API lists newest first); see mocks/handlers/runs.ts (FR-23). */
   runs: Schemas['AgentRunDetailDto'][]
+  /** Refinement rounds, oldest first, with the questions each completed round asked; see mocks/handlers/refinement.ts (FR-27). */
+  refinementRounds: StoredRefinementRound[]
+  /** Execution steps of approved plan versions (FR-30); see mocks/handlers/execution.ts. */
+  executionSteps: StoredExecutionStep[]
   /** Phase recorded at each project version (rollback restores it, §4.8). */
   phaseAtVersion: Record<number, Project['currentPhase']>
+}
+
+/** A refinement round as stored: the round DTO plus the questions its run asked (null until it succeeds). */
+export type StoredRefinementRound = Schemas['RefinementRoundDto'] & {
+  questions: Omit<Schemas['RefinementQuestionDto'], 'answer'>[] | null
+}
+
+/** An execution step and the plan version it belongs to. */
+export type StoredExecutionStep = Schemas['ExecutionStepDto'] & {
+  planArtifactId: string
 }
 
 /** A request the mock API received (for assertions such as "the token was sent but never shown"). */
@@ -126,6 +140,8 @@ export function seedProject(
     events: [],
     artifacts: [],
     runs: [],
+    refinementRounds: [],
+    executionSteps: [],
     phaseAtVersion: {},
     ...rest,
     members: (members ?? (owner ? [{ userId: owner, role: 'owner' as const }] : [])).map((m) => ({

@@ -39,10 +39,20 @@ public sealed record AgentRunRequest
 
     /// <summary>Output token cap; default <c>Llm:MaxOutputTokens</c>.</summary>
     public int? MaxTokens { get; init; }
+
+    /// <summary>
+    /// A pure check of the provider's reply (FR-27–FR-29), applied before the run's completion is saved. A failure fails
+    /// the run with the error's code (tokens are still counted, the reply is kept on the run) and the runner throws a
+    /// non-transient <see cref="JobFailedException"/>. It must not write anything: what the run produces (e.g. the
+    /// artifact draft) is created by the caller after the run's completion and tokens are committed, so a conflict while
+    /// creating it can never roll back the token count or make a retried job call the provider again (FR-26). Not called
+    /// when a redelivered job finds the run already succeeded (the reply passed it then).
+    /// </summary>
+    public Func<string, Result>? Check { get; init; }
 }
 
-/// <summary>A succeeded run: its id, the provider's text and what it cost.</summary>
-public sealed record AgentRunOutcome(Guid RunId, string Text, string StopReason, LlmProvider Provider, string Model, string PromptVersion, int InputTokens, int OutputTokens);
+/// <summary>A succeeded run: its id, the provider's text, what it cost and when it completed.</summary>
+public sealed record AgentRunOutcome(Guid RunId, string Text, string StopReason, LlmProvider Provider, string Model, string PromptVersion, int InputTokens, int OutputTokens, DateTimeOffset CompletedAt);
 
 /// <summary>
 /// Runs agents for background jobs (FR-22–FR-26). Never called from endpoints (CLAUDE.md rule 11). One run row per job
@@ -55,7 +65,8 @@ public sealed record AgentRunOutcome(Guid RunId, string Text, string StopReason,
 /// <item>Render the prompt: a missing input fails the run with <c>MISSING_INPUT</c>; a provider without a key fails it
 /// with <c>PROVIDER_NOT_CONFIGURED</c>. Neither calls the provider.</item>
 /// <item>Call the provider (<c>attempts</c> + 1). Success records tokens, cost, duration and output, adds the tokens to
-/// the project, and writes <c>RUN_COMPLETED</c>, in one transaction. A transient failure keeps the run <c>running</c>
+/// the project, and writes <c>RUN_COMPLETED</c>, in one transaction that holds nothing else (results such as drafts are
+/// created by the caller afterwards). A transient failure keeps the run <c>running</c>
 /// and throws a transient <see cref="JobFailedException"/> so the worker retries (2/8/32 s); on the job's last attempt
 /// the run is <c>failed</c>, <c>RUN_FAILED</c> is written and the job dead-letters. A permanent failure fails at once.
 /// Any other exception from the call is a <c>PROVIDER_ERROR</c> (transient only for I/O, HTTP and timeout errors).
@@ -170,7 +181,7 @@ public sealed partial class AgentRunner(
             throw new JobFailedException(message, transient, ErrorCodes.ProviderError);
         }
 
-        await CompleteAsync(run, completion, Elapsed(started));
+        await CompleteAsync(run, completion, Elapsed(started), request.Check);
         return Outcome(run);
     }
 
@@ -241,9 +252,12 @@ public sealed partial class AgentRunner(
         return run;
     }
 
-    private async Task CompleteAsync(AgentRun run, LlmCompletion completion, long elapsedMs)
+    private async Task CompleteAsync(AgentRun run, LlmCompletion completion, long elapsedMs, Func<string, Result>? check)
     {
-        var now = time.GetUtcNow();
+        // timestamptz keeps microseconds: truncate so the outcome (and the draft dated by it) matches what a redelivered
+        // job reads back from the stored run.
+        var utcNow = time.GetUtcNow();
+        var now = utcNow.AddTicks(-(utcNow.Ticks % TimeSpan.TicksPerMicrosecond));
         run.Status = AgentRunStatus.Succeeded;
         run.InputTokens = completion.InputTokens;
         run.OutputTokens = completion.OutputTokens;
@@ -253,20 +267,36 @@ public sealed partial class AgentRunner(
         run.Error = null;
         run.CompletedAt = now;
         long tokens = completion.InputTokens + completion.OutputTokens;
-        db.AddEvent(
-            EventTypes.RunCompleted,
-            run.ProjectId,
-            new { runId = run.Id, agent = run.Agent.ToWire(), inputTokens = run.InputTokens, outputTokens = run.OutputTokens, costEstimate = run.CostEstimate, durationMs = run.DurationMs },
-            SystemActor.Name,
-            now);
 
-        // The provider was paid for: record it even if the job is being cancelled.
+        // The provider was paid for: record it even if the job is being cancelled. Only the run, its event and the token
+        // count are saved here (nothing that can collide with other writers), so the tokens are never lost to a retry.
+        var accepted = check is null ? Result.Success() : check(completion.Text);
+        if (accepted.IsFailure)
+        {
+            MarkFailed(db, run, accepted.Error!.Code, accepted.Error.Message, deadLetter: false, now);
+        }
+        else
+        {
+            db.AddEvent(
+                EventTypes.RunCompleted,
+                run.ProjectId,
+                new { runId = run.Id, agent = run.Agent.ToWire(), inputTokens = run.InputTokens, outputTokens = run.OutputTokens, costEstimate = run.CostEstimate, durationMs = run.DurationMs },
+                SystemActor.Name,
+                now);
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(CancellationToken.None);
         await db.Projects
             .Where(p => p.Id == run.ProjectId)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.TokensUsed, p => p.TokensUsed + tokens), CancellationToken.None);
         await db.SaveChangesAsync(CancellationToken.None);
         await transaction.CommitAsync(CancellationToken.None);
+        if (accepted.IsFailure)
+        {
+            LogOutputRejected(logger, accepted.Error!.Code, run.InputTokens, run.OutputTokens);
+            throw new JobFailedException(accepted.Error.Message, transient: false, accepted.Error.Code);
+        }
+
         LogSucceeded(logger, run.InputTokens, run.OutputTokens, run.DurationMs, run.CostEstimate);
     }
 
@@ -294,7 +324,7 @@ public sealed partial class AgentRunner(
     private static AgentRunOutcome Outcome(AgentRun run)
     {
         var output = ReadOutput(run.Output);
-        return new AgentRunOutcome(run.Id, output?.Text ?? string.Empty, output?.StopReason ?? string.Empty, run.Provider, run.Model, run.PromptVersion, run.InputTokens, run.OutputTokens);
+        return new AgentRunOutcome(run.Id, output?.Text ?? string.Empty, output?.StopReason ?? string.Empty, run.Provider, run.Model, run.PromptVersion, run.InputTokens, run.OutputTokens, run.CompletedAt ?? run.CreatedAt);
     }
 
     /// <summary>The stored output of a run (<c>{"text": …, "stopReason": …}</c>), or <c>null</c>.</summary>
@@ -327,6 +357,9 @@ public sealed partial class AgentRunner(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Agent run succeeded: {InputTokens} input / {OutputTokens} output tokens in {DurationMs} ms (cost {CostEstimate})")]
     private static partial void LogSucceeded(ILogger logger, int inputTokens, int outputTokens, long durationMs, decimal costEstimate);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Agent run failed: its output was rejected with {ErrorCode} ({InputTokens} input / {OutputTokens} output tokens)")]
+    private static partial void LogOutputRejected(ILogger logger, string errorCode, int inputTokens, int outputTokens);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Agent run already succeeded; returning its output")]
     private static partial void LogAlreadySucceeded(ILogger logger);

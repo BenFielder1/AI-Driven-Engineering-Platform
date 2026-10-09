@@ -47,6 +47,21 @@ public sealed partial class ArtifactService(
             return Result.Failure<Artifact>(allowed.Error!);
         }
 
+        // FR-18, FR-29: an edited plan is validated from its aide-plan block like a generated one, and stored re-rendered
+        // from it, so the readable step list always matches the steps that will run. An Owner's edit may declare protected
+        // paths (§4.6); the re-rendered document must read back to the same steps before it is stored.
+        if (IsPlan(type))
+        {
+            var plan = PlanDocument.ParseMarkdown(content, project.MaxFilesPerStep);
+            var rendered = plan.IsSuccess ? PlanDocument.RenderChecked(type, plan.Value, project.MaxFilesPerStep) : Result.Failure<string>(plan.Error!);
+            if (rendered.IsFailure)
+            {
+                return Result.Failure<Artifact>(rendered.Error!);
+            }
+
+            content = rendered.Value;
+        }
+
         var existing = await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.Type == type)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
@@ -57,13 +72,13 @@ public sealed partial class ArtifactService(
             return Result.Failure<Artifact>(current.Error!);
         }
 
-        var plan = ArtifactRules.NewDraft(existing);
+        var numbering = ArtifactRules.NewDraft(existing);
         var now = time.GetUtcNow();
 
-        if (plan.SupersededVersions.Count > 0)
+        if (numbering.SupersededVersions.Count > 0)
         {
             var drafts = await db.Artifacts
-                .Where(a => a.ProjectId == projectId && a.Type == type && plan.SupersededVersions.Contains(a.Version))
+                .Where(a => a.ProjectId == projectId && a.Type == type && numbering.SupersededVersions.Contains(a.Version))
                 .ToListAsync(cancellationToken);
             foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
             {
@@ -71,7 +86,7 @@ public sealed partial class ArtifactService(
                 db.AddEvent(
                     EventTypes.ArtifactSuperseded,
                     projectId,
-                    new { artifactId = draft.Id, type, version = draft.Version, supersededByVersion = plan.Version },
+                    new { artifactId = draft.Id, type, version = draft.Version, supersededByVersion = numbering.Version },
                     actor,
                     now);
             }
@@ -81,8 +96,8 @@ public sealed partial class ArtifactService(
         {
             ProjectId = projectId,
             Type = type,
-            Version = plan.Version,
-            ParentVersion = plan.ParentVersion,
+            Version = numbering.Version,
+            ParentVersion = numbering.ParentVersion,
             Content = content,
             ContentHash = ContentHash.Compute(content),
             Status = ArtifactStatus.Draft,
@@ -143,6 +158,29 @@ public sealed partial class ArtifactService(
             return decided.IsFailure ? Result.Failure<Artifact>(decided.Error!) : Result.Success(artifact);
         }
 
+        // A draft written after the version the project was rolled back to is discarded work (the rollback's own
+        // invalidation and the project's xmin normally catch it; this closes any gap).
+        var current = ArtifactRules.EnsureNotStale(artifact.ProjectVersionAtCreation, project.ProjectVersion);
+        if (current.IsFailure)
+        {
+            return Result.Failure<Artifact>(current.Error!);
+        }
+
+        // FR-30: a plan's execution steps are created from its aide-plan block when it is locked (once per plan version),
+        // checked against the project's current files-per-step limit.
+        var steps = await db.ExecutionSteps.Where(s => s.ProjectId == projectId).ToListAsync(cancellationToken);
+        IReadOnlyList<PlanStep> planSteps = [];
+        if (IsPlan(artifact.Type) && !steps.Any(s => s.PlanArtifactId == artifact.Id))
+        {
+            var parsed = PlanDocument.ParseMarkdown(artifact.Content, project.MaxFilesPerStep);
+            if (parsed.IsFailure)
+            {
+                return Result.Failure<Artifact>(parsed.Error!);
+            }
+
+            planSteps = parsed.Value;
+        }
+
         // Stored at PostgreSQL's precision (1 µs), so this response and later reads agree.
         var now = time.GetUtcNow();
         now = now.AddTicks(-(now.Ticks % EventLog.Step.Ticks));
@@ -153,7 +191,6 @@ public sealed partial class ArtifactService(
         project.UpdatedAt = now;
 
         // §4.4 cascade.
-        var steps = await db.ExecutionSteps.Where(s => s.ProjectId == projectId).ToListAsync(cancellationToken);
         var cascade = InvalidationCascade.Plan(
             artifact.Id,
             artifact.Type,
@@ -172,6 +209,7 @@ public sealed partial class ArtifactService(
                 comment = cleanComment,
                 invalidatedArtifactIds = cascade.InvalidatedArtifactIds,
                 resetStepIds = cascade.ResetStepIds,
+                createdStepCount = planSteps.Count,
             },
             actor,
             now);
@@ -222,6 +260,13 @@ public sealed partial class ArtifactService(
         if (reset.Count > 0)
         {
             await CancelQueuedExecutionAsync(projectId, now, cancellationToken);
+        }
+
+        foreach (var planStep in planSteps)
+        {
+            var step = NewStep(projectId, artifact.Id, planStep);
+            db.ExecutionSteps.Add(step);
+            steps.Add(step);
         }
 
         if (artifact.Type == ArtifactType.OptimizationPlan && project.CurrentPhase == Phase.Review)
@@ -374,6 +419,23 @@ public sealed partial class ArtifactService(
             await writer.ApplyAsync(project, cycle.Value, actor, now, cancellationToken);
         }
     }
+
+    private static bool IsPlan(ArtifactType type) => type is ArtifactType.ImplementationPlan or ArtifactType.OptimizationPlan;
+
+    /// <summary>FR-30: a <c>pending</c> execution step of a locked plan version.</summary>
+    private static ExecutionStep NewStep(Guid projectId, Guid planArtifactId, PlanStep step) => new()
+    {
+        ProjectId = projectId,
+        PlanArtifactId = planArtifactId,
+        StepNumber = step.Number,
+        Title = step.Title,
+        Task = step.Task,
+        DeclaredFiles = step.Files,
+        Dependencies = step.Dependencies,
+        UserInstructions = step.UserInstructions,
+        Status = StepStatus.Pending,
+        Attempt = 0,
+    };
 
     private static string? Clean(string? comment) => string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
 

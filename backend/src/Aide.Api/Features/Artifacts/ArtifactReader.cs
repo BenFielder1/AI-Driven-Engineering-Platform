@@ -33,6 +33,16 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
         return await SummariesAsync(versions, cancellationToken);
     }
 
+    /// <summary>The highest version of a type without its content, or <c>null</c>.</summary>
+    public async Task<ArtifactSummaryDto?> LatestSummaryAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
+    {
+        var artifact = await db.Artifacts.AsNoTracking()
+            .Where(a => a.ProjectId == projectId && a.Type == type)
+            .OrderByDescending(a => a.Version)
+            .FirstOrDefaultAsync(cancellationToken);
+        return artifact is null ? null : (await SummariesAsync([artifact], cancellationToken))[0];
+    }
+
     /// <summary>The highest version of a type, or <c>null</c>.</summary>
     public async Task<ArtifactDto?> LatestAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
     {

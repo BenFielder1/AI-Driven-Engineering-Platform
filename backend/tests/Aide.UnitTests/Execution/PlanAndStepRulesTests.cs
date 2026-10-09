@@ -16,7 +16,7 @@ public class PlanValidatorTests
         [
             Step(1, null, new DeclaredFile("./src/app.ts", FileAction.Create)),
             Step(2, [1], new DeclaredFile("src\\app.ts", FileAction.Modify)),
-            Step(3, [1, 2]),
+            Step(3, [1, 2], new DeclaredFile("README.md", FileAction.Create)),
         ];
 
         var result = PlanValidator.Validate(plan);
@@ -78,6 +78,28 @@ public class PlanValidatorTests
         Assert.Equal(ErrorCodes.InvalidPlan, PlanValidator.Validate([Step(1, null, new DeclaredFile("../x.ts", FileAction.Create))]).Error!.Code);
 
     [Theory]
+    [InlineData("a\nb.ts")]
+    [InlineData("a\rb.ts")]
+    [InlineData("a`b.ts")]
+    [InlineData("a\u007fb.ts")]
+    public void FR29_Paths_with_line_breaks_backticks_or_control_characters_are_unsafe(string path)
+    {
+        Assert.True(PathRules.IsUnsafe(PathRules.Normalize(path)));
+        Assert.Equal(ErrorCodes.InvalidPlan, PlanValidator.Validate([Step(1, null, new DeclaredFile(path, FileAction.Create))]).Error!.Code);
+    }
+
+    [Fact]
+    public void FR29_Protected_paths_are_refused_only_when_protected_paths_are_not_allowed()
+    {
+        PlanStep[] plan = [Step(1, null, new DeclaredFile(".github/workflows/ci.yml", FileAction.Create), new DeclaredFile("yarn.lock", FileAction.Modify))];
+
+        Assert.True(PlanValidator.Validate(plan).IsSuccess);
+        var refused = PlanValidator.Validate(plan, allowProtectedPaths: false);
+        Assert.Equal(2, refused.Error!.Details.Count);
+        Assert.All(refused.Error.Details, d => Assert.Contains("protected path", d, StringComparison.Ordinal));
+    }
+
+    [Theory]
     [InlineData(".git/config")]
     [InlineData("lib/.GIT/hooks/post-merge")]
     public void FR29_Declaring_a_git_internal_path_is_invalid(string path) =>
@@ -85,14 +107,81 @@ public class PlanValidatorTests
 
     [Fact]
     public void FR29_Missing_title_or_task_is_invalid() =>
-        Assert.Equal(2, PlanValidator.Validate([new PlanStep(1, " ", "", [], [])]).Error!.Details.Count);
+        Assert.Equal(2, PlanValidator.Validate([new PlanStep(1, " ", "", [new DeclaredFile("a.txt", FileAction.Create)], [])]).Error!.Details.Count);
 
     [Fact]
     public void FR29_Every_problem_is_reported()
     {
         PlanStep[] plan = [Step(1, [1]), Step(3, [4])];
 
-        Assert.Equal(3, PlanValidator.Validate(plan).Error!.Details.Count);
+        // Self dependency, numbering, forward dependency, and both steps without files.
+        Assert.Equal(5, PlanValidator.Validate(plan).Error!.Details.Count);
+    }
+
+    [Fact]
+    public void FR29_A_step_without_declared_files_is_invalid()
+    {
+        var result = PlanValidator.Validate([Step(1)]);
+
+        Assert.Contains(result.Error!.Details, d => d.Contains("declares no files", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void FR29_Declaring_more_files_than_the_project_allows_per_step_is_invalid()
+    {
+        var files = Enumerable.Range(1, 3).Select(i => new DeclaredFile($"src/f{i}.ts", FileAction.Create)).ToArray();
+
+        Assert.True(PlanValidator.Validate([Step(1, null, files)], maxFilesPerStep: 3).IsSuccess);
+        var result = PlanValidator.Validate([Step(1, null, files)], maxFilesPerStep: 2);
+        Assert.Contains(result.Error!.Details, d => d.Contains("declares 3 files; at most 2", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void FR29_Modifying_a_file_before_the_step_that_creates_it_is_invalid()
+    {
+        PlanStep[] plan =
+        [
+            Step(1, null, new DeclaredFile("src/a.ts", FileAction.Modify)),
+            Step(2, [1], new DeclaredFile("src/a.ts", FileAction.Create)),
+        ];
+
+        Assert.Contains(PlanValidator.Validate(plan).Error!.Details, d => d.Contains("modifies 'src/a.ts' before step 2 creates it", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void FR29_Modifying_a_file_requires_depending_on_its_creator_directly_or_indirectly()
+    {
+        PlanStep[] missing =
+        [
+            Step(1, null, new DeclaredFile("src/a.ts", FileAction.Create)),
+            Step(2, null, new DeclaredFile("src/b.ts", FileAction.Create)),
+            Step(3, [2], new DeclaredFile("src/a.ts", FileAction.Modify)),
+        ];
+        PlanStep[] indirect =
+        [
+            Step(1, null, new DeclaredFile("src/a.ts", FileAction.Create)),
+            Step(2, [1], new DeclaredFile("src/b.ts", FileAction.Create)),
+            Step(3, [2], new DeclaredFile("src/a.ts", FileAction.Modify)),
+        ];
+
+        Assert.Contains(PlanValidator.Validate(missing).Error!.Details, d => d.Contains("but doesn't depend on step 1", StringComparison.Ordinal));
+        Assert.True(PlanValidator.Validate(indirect).IsSuccess);
+    }
+
+    [Fact]
+    public void FR29_Modifying_a_file_the_plan_does_not_create_is_allowed()
+    {
+        Assert.True(PlanValidator.Validate([Step(1, null, new DeclaredFile("README.md", FileAction.Modify))]).IsSuccess);
+    }
+
+    [Fact]
+    public void FR29_More_than_the_maximum_number_of_steps_is_invalid()
+    {
+        var plan = Enumerable.Range(1, PlanValidator.MaxSteps + 1)
+            .Select(n => Step(n, null, new DeclaredFile($"f{n}.txt", FileAction.Create)))
+            .ToList();
+
+        Assert.Contains(PlanValidator.Validate(plan).Error!.Details, d => d.Contains($"at most {PlanValidator.MaxSteps}", StringComparison.Ordinal));
     }
 }
 

@@ -41,6 +41,10 @@ export const projectKeys = {
   artifacts: (id: string) => [...projectKeys.detail(id), 'artifacts'] as const,
   /** Every agent-run query of the project (pages per filter, single runs; see runs-api.ts). */
   runs: (id: string) => [...projectKeys.detail(id), 'runs'] as const,
+  /** GET /refinement: latest draft, latest round and its clarifying questions (FR-27; see refinement-api.ts). */
+  refinement: (id: string) => [...projectKeys.detail(id), 'refinement'] as const,
+  /** Every execution-steps query of the project, per plan type and version (FR-30; see execution-api.ts). */
+  execution: (id: string) => [...projectKeys.detail(id), 'execution'] as const,
 }
 
 /** Unwraps an openapi-fetch result: the body on success, an ApiError otherwise. */

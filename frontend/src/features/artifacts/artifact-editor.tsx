@@ -7,10 +7,11 @@ import { Alert, ErrorSummary } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
 import { TextAreaField } from '../../components/ui/textarea-field'
-import { applyFieldErrors, errorMessage } from '../../lib/errors'
+import { applyFieldErrors, errorMessage, errorReasons } from '../../lib/errors'
 import { artifactTypeLabels } from '../projects/labels'
 import { draftSchema } from './artifact-schemas'
 import { useCreateArtifactDraft, type Artifact, type ArtifactType } from './artifacts-api'
+import { isPlanType, PLAN_BLOCK_LANGUAGE } from './plan-block'
 
 type Values = z.infer<typeof draftSchema>
 
@@ -39,7 +40,9 @@ export function ArtifactEditor({
   // a live event) must not move the base under the user, or saving would silently replace that newer version.
   const [openedFrom] = useState(base)
   const create = useCreateArtifactDraft(projectId, type)
-  const [serverError, setServerError] = useState<string | null>(null)
+  /** The error copy, then the server's reasons (INVALID_PLAN lists every broken plan rule, FR-29). */
+  const [serverErrors, setServerErrors] = useState<string[]>([])
+  const plan = isPlanType(type)
   const contentId = `artifact-${type}-content`
   const {
     register,
@@ -49,7 +52,7 @@ export function ArtifactEditor({
   } = useForm<Values>({ resolver: zodResolver(draftSchema), defaultValues: { content: openedFrom?.content ?? '' } })
 
   const onSubmit = handleSubmit(({ content }) => {
-    setServerError(null)
+    setServerErrors([])
     if (openedFrom?.content === content) {
       setError('content', { type: 'unchanged', message: `Change the Markdown before saving: it matches v${String(openedFrom.version)}.` })
       return
@@ -58,7 +61,9 @@ export function ArtifactEditor({
       onSuccess: onSaved,
       onError: (error) => {
         const unmatched = applyFieldErrors(error, setError, ['content'])
-        setServerError(unmatched.length > 0 ? unmatched.join(' ') : errorMessage(error, 'createArtifactDraft'))
+        setServerErrors(
+          unmatched.length > 0 ? [unmatched.join(' ')] : [errorMessage(error, 'createArtifactDraft'), ...errorReasons(error)],
+        )
       },
     })
   })
@@ -74,10 +79,19 @@ export function ArtifactEditor({
       <ErrorSummary
         title="We couldn't save the draft"
         errors={[
-          ...(serverError ? [{ message: serverError }] : []),
+          ...serverErrors.map((message) => ({ message })),
           ...(isSubmitted ? fieldErrorSummary(errors, { content: contentId }) : []),
         ]}
       />
+      {plan && (
+        <Alert tone="warning" title={`The ${PLAN_BLOCK_LANGUAGE} block is the source of truth`}>
+          <p>
+            To change the plan, edit the steps in the JSON of the {PLAN_BLOCK_LANGUAGE} block at the end. Saving validates
+            that block and renders the step list above it again from it, so changes made only to the text outside the
+            block are dropped.
+          </p>
+        </Alert>
+      )}
       {openDraftVersion !== null && (
         <Alert tone="warning">
           Saving supersedes the open draft v{openDraftVersion}: only one draft per artifact can wait for approval.

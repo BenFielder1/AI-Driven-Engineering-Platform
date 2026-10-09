@@ -40,15 +40,27 @@ public static class PathRules
     /// <summary>
     /// A normalised path that is empty, absolute, drive-rooted or climbs out with <c>..</c> could escape the
     /// working copy, and any <c>.git</c> segment (any depth, any case, file or folder) could rewrite repository
-    /// internals, so such paths are never accepted, even when declared.
+    /// internals, so such paths are never accepted, even when declared. Control characters (line breaks included) and
+    /// backticks (<see cref="HasUnsafeCharacters"/>) are refused too: a path is written into Markdown and prompts.
     /// </summary>
     public static bool IsUnsafe(string normalisedPath)
     {
         ArgumentNullException.ThrowIfNull(normalisedPath);
         return normalisedPath.Length == 0
+            || HasUnsafeCharacters(normalisedPath)
             || normalisedPath.StartsWith('/')
             || (normalisedPath.Length >= 2 && normalisedPath[1] == ':')
             || normalisedPath.Split('/').Any(segment => segment is ".." or "." or "" || segment.Equals(".git", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A control character (line breaks, tabs, NUL, …) or a backtick: either could break out of the Markdown a path is
+    /// rendered into (a plan's file list, a fenced block) or forge lines in a prompt.
+    /// </summary>
+    public static bool HasUnsafeCharacters(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        return path.Any(c => char.IsControl(c) || c == '`');
     }
 
     /// <summary>

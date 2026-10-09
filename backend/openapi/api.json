@@ -2795,7 +2795,7 @@
             }
           },
           "400": {
-            "description": "VALIDATION: unknown artifact type, or empty or too long content.",
+            "description": "VALIDATION: unknown artifact type, or empty or too long content. INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2902,7 +2902,7 @@
             }
           },
           "400": {
-            "description": "VALIDATION.",
+            "description": "VALIDATION. INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2932,7 +2932,7 @@
             }
           },
           "409": {
-            "description": "ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted), ARTIFACT_LOCKED or CONFLICT.",
+            "description": "ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted, or created after the version the project was rolled back to), ARTIFACT_LOCKED or CONFLICT.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3209,6 +3209,251 @@
           }
         }
       }
+    },
+    "/api/projects/{id}/refinement": {
+      "get": {
+        "tags": [
+          "Refinement"
+        ],
+        "summary": "The refinement state (members): the latest project request version, the latest round with its status, and the clarifying questions of the latest completed round with any answers already given.",
+        "operationId": "GetRefinement",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/refinement/run": {
+      "post": {
+        "tags": [
+          "Refinement"
+        ],
+        "summary": "Run a refinement round (Contributor or Owner): queues the Idea Refinement agent on the idea, the current draft and the answers given (questionId of a question from the latest round, or the question text). Returns 202 with the queued round; the new draft and questions arrive with the run. 409 WRONG_PHASE, BUDGET_EXCEEDED, REFINEMENT_IN_PROGRESS.",
+        "operationId": "StartRefinement",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StartRefinementRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementRoundDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION: an answer is blank or too long, names an unknown questionId, has neither questionId nor question, or answers a question twice; more than 20 answers.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: Viewers can't run agents.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "WRONG_PHASE (not in refinement), BUDGET_EXCEEDED (token budget used up), REFINEMENT_IN_PROGRESS (a round is queued or running) or CONFLICT (a concurrent start).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/execution/steps": {
+      "get": {
+        "tags": [
+          "Execution"
+        ],
+        "summary": "The execution steps of a plan version, in step order (members). planType defaults to implementation_plan and planVersion to its current (highest locked) version; with no locked plan the result has no plan and no steps.",
+        "operationId": "ListExecutionSteps",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "planVersion",
+            "in": "query",
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "planType",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "project_request",
+                "technical_specification",
+                "implementation_plan",
+                "optimization_plan"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionStepsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION: unknown planType, or planVersion below 1.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or the requested plan version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3397,6 +3642,16 @@
           }
         },
         "description": "Result of \"advance to next phase\" (FR-12). When the approval mode requires a gate for the next phase (§4.2),\n`gate` is the pending gate that was created and `state` still shows the current phase; otherwise\n`gate` is `null` and `state` shows the new phase."
+      },
+      "AgentJobTrigger": {
+        "enum": [
+          "user_requested",
+          "phase_entered",
+          "gate_rejected",
+          "artifact_rejected",
+          "artifact_corrupted",
+          null
+        ]
       },
       "AgentKind": {
         "enum": [
@@ -4207,6 +4462,26 @@
         },
         "description": "Approve or reject a pending gate (FR-13, FR-14). `comment` is optional (on reject it is the feedback for the\nre-run agent). Escalation gates are approved with a `decision`; `rollback` also needs a\n`targetVersion`. Other gates take neither (400 `INVALID_DECISION`), and escalation gates can't be rejected."
       },
+      "DeclaredFileDto": {
+        "required": [
+          "path",
+          "action",
+          "protected"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/components/schemas/FileAction"
+          },
+          "protected": {
+            "type": "boolean"
+          }
+        },
+        "description": "A file a step declares it creates or modifies (FR-29). `protected` marks a protected path (§4.6: .git/, .aide/, CI\nworkflows, lockfiles, .env files) — only an Owner-edited plan can declare one; the step may then write it."
+      },
       "DiffLineDto": {
         "required": [
           "kind",
@@ -4334,6 +4609,162 @@
           }
         },
         "description": "Step counts of the current plan version."
+      },
+      "ExecutionPlanDto": {
+        "required": [
+          "artifactId",
+          "type",
+          "version",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ArtifactType"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ArtifactStatus"
+          }
+        },
+        "description": "The plan version the steps belong to."
+      },
+      "ExecutionStepDto": {
+        "required": [
+          "id",
+          "number",
+          "title",
+          "task",
+          "declaredFiles",
+          "dependencies",
+          "userInstructions",
+          "status",
+          "attempt",
+          "violations",
+          "branchName",
+          "commitSha",
+          "startedAt",
+          "completedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "declaredFiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclaredFileDto"
+            }
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "userInstructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/StepStatus"
+          },
+          "attempt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "violations": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/StepViolationDto"
+            }
+          },
+          "branchName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "commitSha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "startedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on\nearlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the\nbranch and commit once accepted."
+      },
+      "ExecutionStepsDto": {
+        "required": [
+          "plan",
+          "steps"
+        ],
+        "type": "object",
+        "properties": {
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExecutionPlanDto"
+              }
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExecutionStepDto"
+            }
+          }
+        },
+        "description": "A plan version's execution steps in step order (FR-30); `plan` is `null` (and no steps) before any plan is approved."
+      },
+      "FileAction": {
+        "enum": [
+          "create",
+          "modify"
+        ],
+        "description": "Declared action for a file in a plan step (FR-29)."
       },
       "GateDto": {
         "required": [
@@ -4568,6 +4999,17 @@
           }
         },
         "description": "Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false."
+      },
+      "GuardianCheck": {
+        "enum": [
+          "single_step",
+          "file_limit",
+          "dependency_order",
+          "plan_alignment",
+          "scope_creep",
+          "secret_scan"
+        ],
+        "description": "The six Execution Guardian checks (§4.6)."
       },
       "HealthCheckEntry": {
         "required": [
@@ -5370,6 +5812,215 @@
         },
         "description": "A row of the projects list (FR-6). `myRole` is `null` for an Admin who isn't a member."
       },
+      "RefinementAnswerDto": {
+        "required": [
+          "questionId",
+          "question",
+          "answer"
+        ],
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "question": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          }
+        },
+        "description": "An answer given to the agent: `questionId` when it answered a question of a round, and the question text."
+      },
+      "RefinementAnswerRequest": {
+        "required": [
+          "answer"
+        ],
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "maxLength": 20,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "question": {
+            "maxLength": 1000,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answer": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "description": "An answer for the next refinement round (FR-27): `questionId` of a question from the latest round, or the\n`question` text for anything else, and the `answer`."
+      },
+      "RefinementDto": {
+        "required": [
+          "latestDraft",
+          "latestRound",
+          "questionsRunId",
+          "questions"
+        ],
+        "type": "object",
+        "properties": {
+          "latestDraft": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ArtifactSummaryDto"
+              }
+            ]
+          },
+          "latestRound": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RefinementRoundDto"
+              }
+            ]
+          },
+          "questionsRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RefinementQuestionDto"
+            }
+          }
+        },
+        "description": "The refinement page (FR-27): the latest project request version (`latestDraft`, without content — read it from\nthe artifacts API), the latest round and its status, and the clarifying questions of the latest completed round\n(`questionsRunId`) with any answers already given."
+      },
+      "RefinementQuestionDto": {
+        "required": [
+          "id",
+          "question",
+          "reason",
+          "answer"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A clarifying question of the latest completed round (FR-27). `answer` is the answer already given for the next\nround (while that round is queued or running, or after it failed), else `null`."
+      },
+      "RefinementRoundDto": {
+        "required": [
+          "runId",
+          "jobId",
+          "trigger",
+          "status",
+          "error",
+          "answers",
+          "feedback",
+          "draftArtifactId",
+          "draftVersion",
+          "createdAt",
+          "completedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trigger": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentJobTrigger"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentRunStatus"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RefinementAnswerDto"
+            }
+          },
+          "feedback": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "draftArtifactId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "draftVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "One refinement round (FR-27): an idea refinement job and its agent run. `runId` is the run that produced (or will\nproduce) the draft — the corrective re-run when the first reply couldn't be read; the run appears under\n`/runs/{runId}` once the job has started. `status` is `queued` until then. `trigger` says who started\nit: a writer (`user_requested`), or a rejected or corrupted project request. A round that ended without a draft\nbecause the project no longer allowed one (e.g. a release in progress) is `cancelled`, with the reason in `error`. `answers` and `feedback` are\nwhat the agent was given; `draftArtifactId`/`draftVersion` the project request version it created."
+      },
       "RegisterRequest": {
         "required": [
           "email",
@@ -5467,6 +6118,63 @@
           }
         },
         "description": "An artifact version a run used as input (FR-23)."
+      },
+      "StartRefinementRequest": {
+        "type": "object",
+        "properties": {
+          "answers": {
+            "maxItems": 20,
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RefinementAnswerRequest"
+            }
+          }
+        },
+        "description": "Start a refinement round (FR-27), optionally answering some or all clarifying questions of the latest round."
+      },
+      "StepStatus": {
+        "enum": [
+          "pending",
+          "in_progress",
+          "completed",
+          "rejected",
+          "blocked",
+          "invalidated"
+        ]
+      },
+      "StepViolationDto": {
+        "required": [
+          "check",
+          "code",
+          "severity",
+          "message",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "check": {
+            "$ref": "#/components/schemas/GuardianCheck"
+          },
+          "code": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/ViolationSeverity"
+          },
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A Guardian violation recorded on a step's last rejected attempt (§4.6, FR-32). Never contains secret values."
       },
       "SystemRole": {
         "enum": [
@@ -5689,6 +6397,12 @@
           }
         },
         "description": "The signed-in user (or a user, for admins)."
+      },
+      "ViolationSeverity": {
+        "enum": [
+          "error",
+          "warning"
+        ]
       }
     }
   },
@@ -5728,6 +6442,12 @@
     },
     {
       "name": "Runs"
+    },
+    {
+      "name": "Refinement"
+    },
+    {
+      "name": "Execution"
     }
   ]
 }

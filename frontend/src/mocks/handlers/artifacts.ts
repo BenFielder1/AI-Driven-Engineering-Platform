@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw'
 
 import type { Schemas } from '../../api/client'
 import { antiforgeryFailure, authDb, nextId } from './auth'
+import { createExecutionSteps, invalidPlan, validatePlan } from './execution'
 import { addEvent } from './lifecycle'
 import { problem } from './problem'
 import { access, ownerMutation, record, type Access, type StoredProject } from './projects'
@@ -225,7 +226,7 @@ function unifiedDiff(lines: DiffLine[]): string {
 }
 
 /** Writer (Contributor/Owner/Admin) access, including antiforgery. */
-function writerMutation(request: Request, id: unknown): Access {
+export function writerMutation(request: Request, id: unknown): Access {
   const a = access(id)
   if (a instanceof Response) {
     return a
@@ -346,6 +347,13 @@ export const artifactHandlers = [
       })
     }
     const p = a.project
+    // FR-18, FR-29: an edited plan is validated from its aide-plan block (the backend also re-renders the prose).
+    if (type === 'implementation_plan' || type === 'optimization_plan') {
+      const plan = validatePlan(content)
+      if ('reasons' in plan) {
+        return invalidPlan(plan.reasons)
+      }
+    }
     // FR-18: an edit made from `baseVersion` may only be saved while that is still the latest version of the type.
     const latest = latestOf(p, type)?.version ?? null
     const base = body?.baseVersion ?? null
@@ -386,6 +394,14 @@ export const artifactHandlers = [
     }
     if (artifact.status !== 'draft') {
       return problem(409, 'ARTIFACT_NOT_DRAFT', 'Only drafts can be approved.')
+    }
+    // FR-30: approving a plan creates its execution steps from the aide-plan block.
+    if (artifact.type === 'implementation_plan' || artifact.type === 'optimization_plan') {
+      const plan = validatePlan(artifact.content)
+      if ('reasons' in plan) {
+        return invalidPlan(plan.reasons)
+      }
+      createExecutionSteps(p, artifact, plan.steps)
     }
     const actor = userActor(a.userId)
     artifact.status = 'locked'

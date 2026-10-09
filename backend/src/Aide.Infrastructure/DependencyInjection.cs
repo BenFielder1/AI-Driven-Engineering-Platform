@@ -66,6 +66,10 @@ public static class DependencyInjection
         services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<AnthropicLlmProvider>());
         services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<OpenAiLlmProvider>());
         services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<OllamaLlmProvider>());
+        // Built-in Fake replies for the refinement, spec and plan agents (FR-27–FR-29): E2E and the dev seed run offline.
+        services.AddSingleton<IFakeAgentResponder, FakeIdeaRefinementResponder>();
+        services.AddSingleton<IFakeAgentResponder, FakeSpecGeneratorResponder>();
+        services.AddSingleton<IFakeAgentResponder, FakePlanGeneratorResponder>();
         services.AddSingleton<FakeLlmProvider>();
         services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<FakeLlmProvider>());
         services.AddSingleton<IPromptLibrary, EmbeddedPromptLibrary>();

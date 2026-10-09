@@ -27,6 +27,8 @@ import {
 } from './artifacts-api'
 import { DiffView } from './diff-view'
 import { MarkdownView } from './markdown-view'
+import { isPlanType } from './plan-block'
+import { PlanSteps } from './plan-steps'
 
 const versionOption = (a: ArtifactSummary) =>
   `v${String(a.version)} · ${a.status ? artifactStatusLabels[a.status] : 'Unknown'}${a.integrity === 'corrupted' ? ' · integrity check failed' : ''}`
@@ -482,6 +484,11 @@ export function ArtifactDetailPage({
               <CorruptedAlert artifact={shown.data} current={isCurrentVersion(shown.data.version, versions)} />
             )}
             <VersionDetails artifact={shown.data} />
+            {isPlanType(type) && (
+              <Section id="plan-steps" title="Steps">
+                <PlanSteps projectId={project.id} artifact={shown.data} />
+              </Section>
+            )}
             <MarkdownView content={shown.data.content} label={`${label} v${String(shown.data.version)}`} />
           </>
         )}

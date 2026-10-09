@@ -129,6 +129,8 @@ public class ErrorCodesTests
             ["LINK_EXPIRED"] = 410,
             ["LINK_USED"] = 409,
             ["MERGE_CONFLICT"] = 409,
+            ["REFINEMENT_IN_PROGRESS"] = 409,
+            ["INVALID_PLAN"] = 400,
         };
 
         foreach (var (code, status) in expected)
@@ -150,7 +152,8 @@ public class ErrorCodesTests
     public void Run_and_guardian_codes_are_not_http_errors()
     {
         Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.MissingInput));
-        Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.InvalidPlan));
+        Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.MissingSections));
+        Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.InvalidOutput));
         Assert.All(ErrorCodes.Guardian.All, c => Assert.Null(ErrorCodes.StatusCodeFor(c)));
     }
 }

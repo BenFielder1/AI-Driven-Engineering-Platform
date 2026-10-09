@@ -1,7 +1,9 @@
+import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { Alert } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
+import { buttonClasses } from '../../components/ui/button-classes'
 import { errorMessage, errorReasons } from '../../lib/errors'
 import { StatusBadge } from '../projects/project-badges'
 import { gateTypeLabels, nextPhase, phaseLabels, phases } from '../projects/labels'
@@ -112,6 +114,18 @@ export function LifecycleCard({
       </div>
 
       <PhaseTimelineDetailed current={state.phase} />
+
+      {state.phase === 'refinement' && (
+        <div className="mt-4">
+          <Link
+            to="/projects/$projectId/refinement"
+            params={{ projectId }}
+            className={buttonClasses(canAdvance ? 'primary' : 'secondary')}
+          >
+            {canAdvance ? 'Refine the idea' : 'Follow refinement'}
+          </Link>
+        </div>
+      )}
 
       {canAdvance && (
         <div className="mt-4">
