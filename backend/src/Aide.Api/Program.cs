@@ -8,6 +8,7 @@ using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
+using Aide.Api.Features.Git;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Live;
 using Aide.Api.Features.Projects;
@@ -133,6 +134,7 @@ builder.Services.AddScoped<RefinementService>();
 
 // Execution runner (FR-31–FR-37): step jobs, Guardian, commits on the project branch, pause/resume.
 builder.Services.AddExecution();
+builder.Services.AddPullRequests();
 
 // Live project updates over SignalR (FR-46).
 builder.Services.AddAideLive();
@@ -169,6 +171,7 @@ app.MapArtifactEndpoints();
 app.MapRunEndpoints();
 app.MapRefinementEndpoints();
 app.MapExecutionEndpoints();
+app.MapGitEndpoints();
 app.MapLiveEndpoints();
 
 await app.RunAsync();

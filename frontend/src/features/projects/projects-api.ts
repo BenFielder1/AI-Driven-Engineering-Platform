@@ -45,6 +45,8 @@ export const projectKeys = {
   refinement: (id: string) => [...projectKeys.detail(id), 'refinement'] as const,
   /** Every execution-steps query of the project, per plan type and version (FR-30; see execution-api.ts). */
   execution: (id: string) => [...projectKeys.detail(id), 'execution'] as const,
+  /** GET /git/pull-request: the recorded PR and its branch comparison (FR-36; see features/git/pull-request-api.ts). */
+  pullRequest: (id: string) => [...projectKeys.detail(id), 'git', 'pull-request'] as const,
 }
 
 /** Unwraps an openapi-fetch result: the body on success, an ApiError otherwise. */

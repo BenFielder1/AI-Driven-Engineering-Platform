@@ -22,6 +22,12 @@ public static class JobTypes
     /// <summary>FR-31–FR-34: run the current plan's steps. At most one queued or running per project (§4.9).</summary>
     public const string Execution = Job.ExecutionType;
 
+    /// <summary>
+    /// FR-36: when every step of the current plan is completed, push the project branch, open (or reuse) the one project PR
+    /// (GitHub) or record the branch comparison (Local), then advance execution → review.
+    /// </summary>
+    public const string PullRequest = "pull_request";
+
     /// <summary>FR-38: one review cycle.</summary>
     public const string Review = "review";
 

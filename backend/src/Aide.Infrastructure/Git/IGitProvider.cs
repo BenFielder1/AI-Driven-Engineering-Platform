@@ -19,8 +19,8 @@ public sealed record GitTestResult(bool Ok, bool Reachable, bool Writable, bool 
 /// <remarks>
 /// The working copy itself (reading files, writing and committing a step) is provider-agnostic: <see cref="IWorkingCopies"/>.
 /// A provider puts the repository there (<see cref="PrepareWorkingCopyAsync"/>) and publishes the branch after each step
-/// commit (<see cref="PublishBranchAsync"/>). Phase 9 adds <c>OpenPullRequestAsync</c>, <c>MergePullRequestAsync</c>
-/// (reporting conflicting files) and <c>CreateTagAsync</c> (FR-36, FR-42, FR-43).
+/// commit (<see cref="PublishBranchAsync"/>), and opens the project PR when execution completes
+/// (<see cref="OpenPullRequestAsync"/>, FR-36). The release phase adds merging and tagging (FR-42, FR-43).
 /// </remarks>
 public interface IGitProvider
 {
@@ -37,14 +37,40 @@ public interface IGitProvider
 
     /// <summary>FR-34: publishes the project branch after a step commit (GitHub: push; Local: nothing to do).</summary>
     Task<GitOutcome> PublishBranchAsync(GitConnectionSettings settings, string branchName, string? token, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-36: opens the one project PR from <see cref="PullRequestRequest.HeadBranch"/> to the default branch, or reuses the
+    /// open one for that branch (idempotent). Local: there is nothing to open; the "PR" is the recorded branch comparison.
+    /// </summary>
+    Task<PullRequestOutcome> OpenPullRequestAsync(GitConnectionSettings settings, PullRequestRequest request, string? token, CancellationToken cancellationToken);
+
+    /// <summary>The ref in the working copy the project branch is compared with (FR-35/FR-36): the (remote) default branch.</summary>
+    string ComparisonBaseRef(GitConnectionSettings settings);
 }
 
-/// <summary>The outcome of a provider operation; <see cref="Reason"/> explains a failure (never contains a token).</summary>
-public sealed record GitOutcome(bool Ok, string? Reason)
+/// <summary>The project PR to open (FR-36).</summary>
+public sealed record PullRequestRequest(string HeadBranch, string Title, string Body);
+
+/// <summary>
+/// The outcome of opening the project PR: its number and web URL (GitHub; both <c>null</c> for Local), whether an open PR
+/// was reused, or a failure <see cref="Reason"/> (never containing a token) and whether a retry could help.
+/// </summary>
+public sealed record PullRequestOutcome(bool Ok, int? Number, string? Url, bool Reused, string? Reason, bool Transient)
+{
+    public static PullRequestOutcome Opened(int? number, string? url, bool reused) => new(true, number, url, reused, null, false);
+
+    public static PullRequestOutcome Failed(string reason, bool transient) => new(false, null, null, false, reason, transient);
+}
+
+/// <summary>
+/// The outcome of a provider operation; <see cref="Reason"/> explains a failure (never contains a token) and
+/// <see cref="Transient"/> tells whether a retry could help (a network error) or not (bad credentials, a rejected push).
+/// </summary>
+public sealed record GitOutcome(bool Ok, string? Reason, bool Transient = true)
 {
     public static GitOutcome Success { get; } = new(true, null);
 
-    public static GitOutcome Failed(string reason) => new(false, reason);
+    public static GitOutcome Failed(string reason, bool transient = true) => new(false, reason, transient);
 }
 
 /// <summary>Picks the <see cref="IGitProvider"/> for a project's provider setting.</summary>

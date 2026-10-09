@@ -5,6 +5,8 @@ import { Alert } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { buttonClasses } from '../../components/ui/button-classes'
 import { errorMessage, errorReasons } from '../../lib/errors'
+import { BranchPair } from '../git/pull-request-section'
+import type { PullRequestSummary } from '../git/pull-request-api'
 import { StatusBadge } from '../projects/project-badges'
 import { gateTypeLabels, nextPhase, phaseLabels, phases } from '../projects/labels'
 import type { ProjectState } from '../projects/projects-api'
@@ -41,6 +43,39 @@ export function PhaseTimelineDetailed({ current }: { current: ProjectState['phas
         )
       })}
     </ol>
+  )
+}
+
+/**
+ * FR-36: the recorded pull request. GitHub links out to the PR; a Local project's "PR" is the recorded branch
+ * comparison, shown on the Execution page.
+ */
+function PullRequestSummaryLine({ projectId, pr }: { projectId: string; pr: PullRequestSummary }) {
+  return (
+    <section aria-labelledby="lifecycle-pull-request" className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      <h3 id="lifecycle-pull-request" className="font-semibold">
+        Pull request
+      </h3>
+      {pr.number !== null && pr.url ? (
+        <a href={pr.url} target="_blank" rel="noopener noreferrer" className="text-link underline">
+          #{pr.number}
+          <span className="sr-only"> (opens on GitHub)</span>
+        </a>
+      ) : (
+        <span>Branch comparison recorded</span>
+      )}
+      <BranchPair pr={pr} />
+      {pr.url === null && (
+        <Link
+          to="/projects/$projectId/execution"
+          params={{ projectId }}
+          hash="pull-request"
+          className="text-link underline"
+        >
+          View the comparison
+        </Link>
+      )}
+    </section>
   )
 }
 
@@ -114,6 +149,8 @@ export function LifecycleCard({
       </div>
 
       <PhaseTimelineDetailed current={state.phase} />
+
+      {state.pullRequest && <PullRequestSummaryLine projectId={projectId} pr={state.pullRequest} />}
 
       {state.phase === 'refinement' && (
         <div className="mt-4">

@@ -38,6 +38,14 @@ public interface IGitCli
     /// exit is returned, not thrown; git missing or a timeout throws <see cref="GitCommandException"/>.
     /// </summary>
     Task<GitCommandResult> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// As <see cref="RunAsync(string, IReadOnlyList{string}, CancellationToken)"/>, with per-command configuration passed
+    /// through the environment (<c>GIT_CONFIG_COUNT</c>, <c>GIT_CONFIG_KEY_n</c>, <c>GIT_CONFIG_VALUE_n</c>; nothing else is
+    /// accepted). Used for remote access (FR-35): the auth header lives only in the child process's environment, never in
+    /// <c>.git/config</c>, the remote URL or the command line.
+    /// </summary>
+    Task<GitCommandResult> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, IReadOnlyDictionary<string, string>? configEnvironment, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -86,7 +94,25 @@ internal sealed class GitCli : IGitCli
         return RunCoreAsync(workingDirectory, arguments, CommandTimeout, cancellationToken);
     }
 
-    private static async Task<GitCommandResult> RunCoreAsync(string? workingDirectory, IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken cancellationToken)
+    public Task<GitCommandResult> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, IReadOnlyDictionary<string, string>? configEnvironment, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(workingDirectory);
+        ArgumentNullException.ThrowIfNull(arguments);
+        if (configEnvironment?.Keys.FirstOrDefault(k => !IsConfigVariable(k)) is { } refused)
+        {
+            throw new ArgumentException($"Only GIT_CONFIG_COUNT/KEY_n/VALUE_n may be passed to git, not {refused}.", nameof(configEnvironment));
+        }
+
+        return RunCoreAsync(workingDirectory, arguments, CommandTimeout, cancellationToken, configEnvironment);
+    }
+
+    private static bool IsConfigVariable(string name) =>
+        name == "GIT_CONFIG_COUNT"
+        || (name.StartsWith("GIT_CONFIG_KEY_", StringComparison.Ordinal) && name.Length > 15 && name[15..].All(char.IsAsciiDigit))
+        || (name.StartsWith("GIT_CONFIG_VALUE_", StringComparison.Ordinal) && name.Length > 17 && name[17..].All(char.IsAsciiDigit));
+
+    private static async Task<GitCommandResult> RunCoreAsync(
+        string? workingDirectory, IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? configEnvironment = null)
     {
         var start = new ProcessStartInfo("git")
         {
@@ -119,6 +145,10 @@ internal sealed class GitCli : IGitCli
         start.Environment["GIT_TERMINAL_PROMPT"] = "0";
         start.Environment["GIT_ASKPASS"] = string.Empty;
         start.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+        foreach (var (key, value) in configEnvironment ?? new Dictionary<string, string>())
+        {
+            start.Environment[key] = value;
+        }
 
         string[] config =
         [

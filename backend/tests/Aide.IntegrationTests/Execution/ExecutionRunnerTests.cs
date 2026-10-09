@@ -134,10 +134,11 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
 
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.ExecutionCompleted));
         Assert.Equal(3, (await LifecycleSeed.EventsAsync(factory, id, EventTypes.StepCompleted)).Count);
-        Assert.All(await LifecycleSeed.JobsAsync(factory, id), j => Assert.Equal(JobStatus.Succeeded, j.Status));
+        // FR-36: the pull request job recorded the Local comparison and moved the project to review (its job queued).
+        Assert.All((await LifecycleSeed.JobsAsync(factory, id)).Where(j => j.Type != JobTypes.Review), j => Assert.Equal(JobStatus.Succeeded, j.Status));
         var state = await ProjectApi.ReadAsync<ProjectStateDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/state", UriKind.Relative), Ct));
         Assert.Equal((ExecutionRunStatus.Completed, 3), (state.ExecutionStatus, state.Execution.Completed));
-        Assert.Equal(Phase.Execution, state.Phase);
+        Assert.Equal(Phase.Review, state.Phase);
     }
 
     [Fact]

@@ -80,6 +80,10 @@ public static class DependencyInjection
         services.AddSingleton<IWorkspaceStore, WorkspaceStore>();
         services.AddSingleton<IGitCli, GitCli>();
         services.AddSingleton<IWorkingCopies, WorkingCopies>();
+        services.AddOptions<GitHubGitOptions>()
+            .BindConfiguration(GitHubGitOptions.SectionName)
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<GitHubGitOptions>, GitHubGitOptionsValidator>();
         services.AddHttpClient(GitHubGitProvider.HttpClientName, (sp, client) =>
         {
             var configured = sp.GetRequiredService<IConfiguration>()[GitHubGitProvider.ApiBaseUrlKey];

@@ -11,6 +11,55 @@ public sealed record CommittedFile(string Path, string Content);
 /// <summary>A step's commit (FR-34): its SHA, whether it already existed (a redelivery), and the files it holds.</summary>
 public sealed record StepCommitResult(string Sha, bool AlreadyCommitted, IReadOnlyList<CommittedFile> Files);
 
+/// <summary>
+/// A remote repository and how to reach it (FR-35): the clean URL (never holding credentials) and the per-command git
+/// configuration (auth header, protocol allow-list) passed through the environment. <see cref="ToString"/> never shows the
+/// configuration, and <see cref="Redact"/> removes the secrets from any text.
+/// </summary>
+public sealed class GitRemote
+{
+    public const string Name = "origin";
+
+    private readonly IReadOnlyList<string> _secrets;
+
+    public GitRemote(string url, IReadOnlyDictionary<string, string> configEnvironment, IEnumerable<string> secrets)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(url);
+        ArgumentNullException.ThrowIfNull(configEnvironment);
+        ArgumentNullException.ThrowIfNull(secrets);
+        Url = url;
+        ConfigEnvironment = configEnvironment;
+        _secrets = [.. secrets.Where(v => !string.IsNullOrEmpty(v)).OrderByDescending(v => v.Length)];
+    }
+
+    public string Url { get; }
+
+    public IReadOnlyDictionary<string, string> ConfigEnvironment { get; }
+
+    /// <summary><paramref name="text"/> with every secret replaced by <c>***</c>.</summary>
+    public string Redact(string? text)
+    {
+        var result = text ?? string.Empty;
+        foreach (var secret in _secrets)
+        {
+            result = result.Replace(secret, "***", StringComparison.Ordinal);
+        }
+
+        return result;
+    }
+
+    public override string ToString() => Url;
+}
+
+/// <summary>A commit between the default branch and the project branch.</summary>
+public sealed record ComparedCommit(string Sha, string Subject);
+
+/// <summary>A file changed between the default branch and the project branch; <see cref="Status"/> is added, modified, deleted, renamed, copied or changed.</summary>
+public sealed record ComparedFile(string Path, string Status);
+
+/// <summary>FR-35 (Local "PR"): the project branch compared with the default branch (<c>base...head</c>).</summary>
+public sealed record BranchComparison(string BaseSha, string HeadSha, IReadOnlyList<ComparedCommit> Commits, IReadOnlyList<ComparedFile> Files, bool Truncated);
+
 /// <summary>A working copy can't be used safely (e.g. a path resolves outside it or through a link).</summary>
 public sealed class WorkingCopyException : Exception
 {
@@ -48,6 +97,28 @@ public interface IWorkingCopies
 
     /// <summary>Creates <paramref name="branch"/> from <paramref name="defaultBranch"/> if it doesn't exist and checks it out.</summary>
     Task CheckoutBranchAsync(Guid projectId, string defaultBranch, string branch, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-35 (GitHub): clones <paramref name="remote"/> into the working copy if it isn't a repository yet; otherwise points
+    /// <c>origin</c> at the remote's (clean) URL and fetches. The remote's credentials are used for this command only.
+    /// </summary>
+    Task SyncFromRemoteAsync(Guid projectId, GitRemote remote, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-35 (GitHub): checks out <paramref name="branch"/>; if it doesn't exist locally it is created from the remote project
+    /// branch if one exists (an earlier push), else from the remote default branch. Never resets an existing local branch.
+    /// </summary>
+    Task CheckoutRemoteBranchAsync(Guid projectId, string defaultBranch, string branch, CancellationToken cancellationToken);
+
+    /// <summary>FR-34: pushes <paramref name="branch"/> to the same branch on <paramref name="remote"/> (fast-forward only). The result is returned, not thrown.</summary>
+    Task<GitCommandResult> PushBranchAsync(Guid projectId, string branch, GitRemote remote, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-35/FR-36: the commits on <paramref name="branch"/> not on <paramref name="baseRef"/> (newest first) and the files
+    /// changed since their merge base, capped at <paramref name="maxCommits"/>/<paramref name="maxFiles"/>. <c>null</c> when
+    /// there is no repository or either ref is missing.
+    /// </summary>
+    Task<BranchComparison?> CompareAsync(Guid projectId, string baseRef, string branch, int maxCommits, int maxFiles, CancellationToken cancellationToken);
 
     /// <summary>FR-31: the current content of <paramref name="paths"/> in the working copy.</summary>
     Task<IReadOnlyList<WorkingFileContent>> ReadAsync(Guid projectId, IEnumerable<string> paths, CancellationToken cancellationToken);
@@ -126,6 +197,176 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
             await CheckoutCoreAsync(RequireRepository(projectId), defaultBranch, branch, cancellationToken);
             return 0;
         });
+    }
+
+    public async Task SyncFromRemoteAsync(Guid projectId, GitRemote remote, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(remote);
+        await WithLockAsync(projectId, async () =>
+        {
+            var path = PathFor(projectId);
+            var dotGit = Path.Combine(path, ".git");
+            if (File.Exists(dotGit) || (Directory.Exists(dotGit) && IsLink(new DirectoryInfo(dotGit))))
+            {
+                throw new WorkingCopyException("The working copy's .git is not a plain directory.");
+            }
+
+            if (!Directory.Exists(dotGit))
+            {
+                if (Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
+                {
+                    throw new WorkingCopyException("The working copy folder holds files but no repository; an admin needs to remove it.");
+                }
+
+                Directory.CreateDirectory(workspaces.Root);
+                await RunRemoteAsync(
+                    workspaces.Root,
+                    ["clone", "-q", "--no-tags", "--origin", GitRemote.Name, "--", remote.Url, projectId.ToString("D")],
+                    remote,
+                    cancellationToken);
+                LogCloned(logger, projectId);
+                return 0;
+            }
+
+            var current = await RunAsync(path, ["remote", "get-url", GitRemote.Name], cancellationToken, allowFailure: true);
+            if (!current.Succeeded)
+            {
+                await RunAsync(path, ["remote", "add", GitRemote.Name, remote.Url], cancellationToken);
+            }
+            else if (current.StandardOutput.Trim() != remote.Url)
+            {
+                await RunAsync(path, ["remote", "set-url", GitRemote.Name, remote.Url], cancellationToken);
+            }
+
+            await RunRemoteAsync(path, ["fetch", "-q", "--no-tags", "--prune", GitRemote.Name], remote, cancellationToken);
+            return 0;
+        });
+    }
+
+    public async Task CheckoutRemoteBranchAsync(Guid projectId, string defaultBranch, string branch, CancellationToken cancellationToken)
+    {
+        RequireBranchName(defaultBranch);
+        RequireBranchName(branch);
+        await WithLockAsync(projectId, async () =>
+        {
+            var root = RequireRepository(projectId);
+            if (!await RefExistsAsync(root, branch, cancellationToken))
+            {
+                var remoteBranch = $"refs/remotes/{GitRemote.Name}/{branch}";
+                var remoteDefault = $"refs/remotes/{GitRemote.Name}/{defaultBranch}";
+                string start;
+                if (await RefExistsAsync(root, remoteBranch, cancellationToken, qualified: true))
+                {
+                    start = remoteBranch;
+                }
+                else if (await RefExistsAsync(root, remoteDefault, cancellationToken, qualified: true))
+                {
+                    start = remoteDefault;
+                }
+                else
+                {
+                    throw new WorkingCopyException(
+                        $"The default branch '{defaultBranch}' doesn't exist in the repository. Push an initial commit to it, or correct the default branch in the project's Git settings.");
+                }
+
+                await RunAsync(root, ["branch", "--no-track", branch, start], cancellationToken);
+            }
+
+            await DiscardLeftoversAsync(root, cancellationToken);
+            var head = await RunAsync(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken, allowFailure: true);
+            if (!head.Succeeded || head.StandardOutput.Trim() != branch)
+            {
+                await RunAsync(root, ["checkout", "-q", branch, "--"], cancellationToken);
+            }
+
+            return 0;
+        });
+    }
+
+    public Task<GitCommandResult> PushBranchAsync(Guid projectId, string branch, GitRemote remote, CancellationToken cancellationToken)
+    {
+        RequireBranchName(branch);
+        ArgumentNullException.ThrowIfNull(remote);
+        return WithLockAsync(projectId, async () =>
+        {
+            var root = RequireRepository(projectId);
+            var result = await git.RunAsync(
+                root,
+                ["push", "--porcelain", "--no-verify", GitRemote.Name, $"refs/heads/{branch}:refs/heads/{branch}"],
+                remote.ConfigEnvironment,
+                cancellationToken);
+            if (result.Succeeded)
+            {
+                LogPushed(logger, projectId, branch);
+            }
+
+            return result with { StandardError = remote.Redact(result.StandardError), StandardOutput = remote.Redact(result.StandardOutput) };
+        });
+    }
+
+    public Task<BranchComparison?> CompareAsync(Guid projectId, string baseRef, string branch, int maxCommits, int maxFiles, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(baseRef);
+        RequireBranchName(branch);
+        if (!IsRepository(projectId))
+        {
+            return Task.FromResult<BranchComparison?>(null);
+        }
+
+        return WithLockAsync<BranchComparison?>(projectId, async () =>
+        {
+            var root = PathFor(projectId);
+            var head = await RunAsync(root, ["rev-parse", "--verify", "--quiet", $"refs/heads/{branch}^{{commit}}"], cancellationToken, allowFailure: true);
+            var start = await RunAsync(root, ["rev-parse", "--verify", "--quiet", $"{baseRef}^{{commit}}"], cancellationToken, allowFailure: true);
+            if (!head.Succeeded || !start.Succeeded)
+            {
+                return null;
+            }
+
+            var headSha = head.StandardOutput.Trim();
+            var baseSha = start.StandardOutput.Trim();
+            var log = await RunAsync(
+                root,
+                ["log", "-z", "--format=%H%x1f%s", $"--max-count={maxCommits + 1}", $"{baseSha}..{headSha}", "--"],
+                cancellationToken);
+            var commits = log.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+                .Select(entry => entry.Trim('\n').Split('\u001f', 2))
+                .Where(parts => parts.Length == 2)
+                .Select(parts => new ComparedCommit(parts[0], parts[1]))
+                .ToList();
+
+            var diff = await RunAsync(root, ["diff", "--name-status", "-z", "--no-renames", $"{baseSha}...{headSha}", "--"], cancellationToken);
+            var fields = diff.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+            var files = new List<ComparedFile>();
+            for (var i = 0; i + 1 < fields.Length; i += 2)
+            {
+                files.Add(new ComparedFile(fields[i + 1], FileStatus(fields[i])));
+            }
+
+            var truncated = commits.Count > maxCommits || files.Count > maxFiles;
+            return new BranchComparison(baseSha, headSha, [.. commits.Take(maxCommits)], [.. files.Take(maxFiles)], truncated);
+        });
+    }
+
+    private static string FileStatus(string code) => code.Length == 0 ? "changed" : code[0] switch
+    {
+        'A' => "added",
+        'M' => "modified",
+        'D' => "deleted",
+        'R' => "renamed",
+        'C' => "copied",
+        _ => "changed",
+    };
+
+    /// <summary>A command that talks to the remote; git's error text is redacted before it can reach an exception or a log.</summary>
+    private async Task RunRemoteAsync(string directory, IReadOnlyList<string> arguments, GitRemote remote, CancellationToken cancellationToken)
+    {
+        var result = await git.RunAsync(directory, arguments, remote.ConfigEnvironment, cancellationToken);
+        if (!result.Succeeded)
+        {
+            var error = remote.Redact(result.StandardError.Trim());
+            throw new GitCommandException($"git {arguments[0]} failed (exit {result.ExitCode}): {(error.Length > 500 ? error[..500] : error)}");
+        }
     }
 
     public async Task<IReadOnlyList<WorkingFileContent>> ReadAsync(Guid projectId, IEnumerable<string> paths, CancellationToken cancellationToken)
@@ -263,8 +504,8 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
         await RunAsync(root, ["clean", "-fdq"], cancellationToken);
     }
 
-    private async Task<bool> RefExistsAsync(string root, string branch, CancellationToken cancellationToken) =>
-        (await RunAsync(root, ["rev-parse", "--verify", "--quiet", $"refs/heads/{branch}"], cancellationToken, allowFailure: true)).Succeeded;
+    private async Task<bool> RefExistsAsync(string root, string branch, CancellationToken cancellationToken, bool qualified = false) =>
+        (await RunAsync(root, ["rev-parse", "--verify", "--quiet", qualified ? branch : $"refs/heads/{branch}"], cancellationToken, allowFailure: true)).Succeeded;
 
     private static async Task<WorkingFileContent> ReadOneAsync(string root, string path, CancellationToken cancellationToken, bool allowProtected = true)
     {
@@ -392,6 +633,12 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Initialised the local repository of project {ProjectId} on {DefaultBranch}")]
     private static partial void LogInitialised(ILogger logger, Guid projectId, string defaultBranch);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cloned the repository of project {ProjectId} into its working copy")]
+    private static partial void LogCloned(ILogger logger, Guid projectId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Pushed branch {Branch} of project {ProjectId}")]
+    private static partial void LogPushed(ILogger logger, Guid projectId, string branch);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Committed step {StepId} of project {ProjectId} as {Sha} on {Branch}")]
     private static partial void LogCommitted(ILogger logger, Guid projectId, Guid stepId, string sha, string branch);

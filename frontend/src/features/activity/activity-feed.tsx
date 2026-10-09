@@ -1,38 +1,61 @@
-import { useState } from 'react'
+import { useState } from "react";
 
-import { Button } from '../../components/ui/button'
-import { SelectField } from '../../components/ui/select-field'
-import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
-import { errorMessage } from '../../lib/errors'
-import { eventCategories, eventCategoryLabels } from '../projects/labels'
-import { RelativeTime } from '../projects/relative-time'
-import { useActivity, type ActivityItem, type EventCategory } from './activity-api'
-import { describeActivity } from './activity-summary'
+import { Button } from "../../components/ui/button";
+import { SelectField } from "../../components/ui/select-field";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "../../components/ui/states";
+import { errorMessage } from "../../lib/errors";
+import { eventCategories, eventCategoryLabels } from "../projects/labels";
+import { RelativeTime } from "../projects/relative-time";
+import {
+  useActivity,
+  type ActivityItem,
+  type EventCategory,
+} from "./activity-api";
+import { describeActivity } from "./activity-summary";
 
 function ActivityRow({ item }: { item: ActivityItem }) {
   return (
     <li className="flex flex-col gap-0.5 py-2 text-sm sm:flex-row sm:items-baseline sm:gap-3">
       <span className="break-words sm:flex-1">{describeActivity(item)}</span>
       <span className="text-muted">
-        {item.actor.isSystem ? 'System' : item.actor.name} · <RelativeTime iso={item.occurredAt} />
+        {item.actor.isSystem ? "System" : item.actor.name} ·{" "}
+        <RelativeTime iso={item.occurredAt} />
       </span>
     </li>
-  )
+  );
 }
 
 /** Overview → Activity (FR-50): newest first, 50 per page with "Load more", filterable by category. */
 export function ActivityFeed({ projectId }: { projectId: string }) {
-  const [category, setCategory] = useState<EventCategory | null>(null)
-  const activity = useActivity(projectId, category)
-  const items = activity.data?.pages.flatMap((page) => page.items) ?? []
+  const [category, setCategory] = useState<EventCategory | null>(null);
+  const activity = useActivity(projectId, category);
+  const items = activity.data?.pages.flatMap((page) => page.items) ?? [];
 
-  let body
+  let body;
   if (activity.isPending) {
-    body = <LoadingState label="Loading activity…" />
+    body = <LoadingState label="Loading activity…" />;
   } else if (activity.isLoadingError) {
-    body = <ErrorState error={activity.error} onRetry={() => void activity.refetch()} title="The activity couldn't load" />
+    body = (
+      <ErrorState
+        error={activity.error}
+        onRetry={() => void activity.refetch()}
+        title="The activity couldn't load"
+      />
+    );
   } else if (items.length === 0) {
-    body = <EmptyState title={category ? `No ${eventCategoryLabels[category].toLowerCase()} yet` : 'No activity yet'} />
+    body = (
+      <EmptyState
+        title={
+          category
+            ? `No ${eventCategoryLabels[category].toLowerCase()} yet`
+            : "No activity yet"
+        }
+      />
+    );
   } else {
     body = (
       <>
@@ -58,7 +81,7 @@ export function ActivityFeed({ projectId }: { projectId: string }) {
           </Button>
         )}
       </>
-    )
+    );
   }
 
   return (
@@ -66,10 +89,10 @@ export function ActivityFeed({ projectId }: { projectId: string }) {
       <SelectField
         label="Show"
         className="max-w-xs"
-        value={category ?? ''}
+        value={category ?? ""}
         onChange={(e) => {
-          const value = e.target.value
-          setCategory(eventCategories.find((c) => c === value) ?? null)
+          const value = e.target.value;
+          setCategory(eventCategories.find((c) => c === value) ?? null);
         }}
       >
         <option value="">All activity</option>
@@ -80,9 +103,11 @@ export function ActivityFeed({ projectId }: { projectId: string }) {
         ))}
       </SelectField>
       <p aria-live="polite" className="sr-only">
-        {activity.isSuccess ? `${String(items.length)} ${items.length === 1 ? 'event' : 'events'} shown` : ''}
+        {activity.isSuccess
+          ? `${String(items.length)} ${items.length === 1 ? "event" : "events"} shown`
+          : ""}
       </p>
       {body}
     </div>
-  )
+  );
 }

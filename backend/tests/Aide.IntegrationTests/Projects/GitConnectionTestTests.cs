@@ -236,5 +236,8 @@ public sealed class GitConnectionTestTests(AideApiFactory factory)
 
         public Task<GitCommandResult> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken cancellationToken) =>
             throw new GitCommandException("The fake git CLI runs no commands.");
+
+        public Task<GitCommandResult> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, IReadOnlyDictionary<string, string>? configEnvironment, CancellationToken cancellationToken) =>
+            throw new GitCommandException("The fake git CLI runs no commands.");
     }
 }

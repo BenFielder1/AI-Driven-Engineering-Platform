@@ -210,6 +210,16 @@ export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {
   local: 'Local repository',
 }
 
+/** FR-36: how a file differs between the default branch and the project branch. */
+export const pullRequestFileStatusLabels: Record<Schemas['PullRequestFileStatus'], string> = {
+  added: 'Added',
+  modified: 'Modified',
+  deleted: 'Deleted',
+  renamed: 'Renamed',
+  copied: 'Copied',
+  changed: 'Changed',
+}
+
 export const llmProviderLabels: Record<Schemas['LlmProvider'], string> = {
   anthropic: 'Anthropic',
   openai: 'OpenAI',

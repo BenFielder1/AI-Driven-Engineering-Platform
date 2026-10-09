@@ -1,5 +1,6 @@
 using Aide.Api.Auth;
 using Aide.Api.Errors;
+using Aide.Api.Features.Git;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -89,6 +90,7 @@ public static partial class ProjectSettingsEndpoints
         ICurrentUser currentUser,
         AideDbContext db,
         ISecretProtector secrets,
+        PullRequestJobs pullRequests,
         TimeProvider time,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
@@ -130,6 +132,20 @@ public static partial class ProjectSettingsEndpoints
             changes.Add("defaultBranch");
         }
 
+        var now = time.GetUtcNow();
+        var forget = changes.Contains("provider") || changes.Contains("repoUrl");
+        if (forget)
+        {
+            // The recorded PR belongs to the old repository (FR-36): the PR summary, GET /git/pull-request and the pull
+            // request job all honour PULL_REQUEST_FORGOTTEN, so a new PR is opened in the new repository.
+            settings.PullRequestNumber = null;
+            settings.PullRequestUrl = null;
+            if (await PullRequestQueries.LatestOpenedAsync(db, id, cancellationToken) is not null)
+            {
+                db.AddEvent(EventTypes.PullRequestForgotten, id, new { projectId = id, changes = changes.ToArray() }, currentUser.Actor, now);
+            }
+        }
+
         if (request.Token is { } token)
         {
             settings.TokenEncrypted = secrets.Protect(token);
@@ -139,6 +155,18 @@ public static partial class ProjectSettingsEndpoints
         {
             settings.TokenEncrypted = null;
             changes.Add("token");
+        }
+
+        if (changes.Count > 0 && await db.Projects.FirstOrDefaultAsync(p => p.Id == id, cancellationToken) is { } project)
+        {
+            // FR-36: with no PR recorded for the current plan (e.g. the job failed for a bad token, or the repository just
+            // changed), new settings queue the pull request job again; RequestAsync applies the same rule as the retry
+            // endpoint and does nothing otherwise. The project is touched so its xmin guards the forget and the queueing.
+            var requeued = await pullRequests.RequestAsync(project, PullRequestJobPayload.SettingsChanged, now, cancellationToken);
+            if (forget || requeued.IsSuccess)
+            {
+                project.UpdatedAt = now;
+            }
         }
 
         await SaveChangesAsync(db, id, "git", changes, currentUser, time, loggers, cancellationToken);

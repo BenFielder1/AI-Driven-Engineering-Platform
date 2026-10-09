@@ -20,19 +20,12 @@ namespace Aide.Api.Agents;
 
 /// <summary>
 /// Follow-up when every step of the current plan is completed (FR-36), called in the same unit of work as the last step's
-/// completion and its <c>EXECUTION_COMPLETED</c> event (the caller saves). The default records nothing more; the Git
-/// provider phase replaces it with one that queues the pull request and the advance to review.
+/// completion and its <c>EXECUTION_COMPLETED</c> event (the caller saves): <see cref="Features.Git.GitCompletionHook"/>
+/// queues the pull request job, which opens the PR and advances the project to review.
 /// </summary>
 public interface IExecutionCompletionHook
 {
     Task OnExecutionCompletedAsync(AideDbContext db, Project project, Guid planArtifactId, DateTimeOffset now, CancellationToken cancellationToken);
-}
-
-/// <summary>The default <see cref="IExecutionCompletionHook"/>: the <c>EXECUTION_COMPLETED</c> event is the whole outcome.</summary>
-public sealed class EventOnlyExecutionCompletion : IExecutionCompletionHook
-{
-    public Task OnExecutionCompletedAsync(AideDbContext db, Project project, Guid planArtifactId, DateTimeOffset now, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
 }
 
 /// <summary>
@@ -49,8 +42,9 @@ public sealed class EventOnlyExecutionCompletion : IExecutionCompletionHook
 /// <item>Run the Code Generator with the project request, spec, plan with step statuses, project rules, the declared files'
 /// current content and, on a retry, the previous violations as feedback. The run id derives from the job and attempt, so a
 /// redelivered job reuses a succeeded run instead of calling the provider again.</item>
-/// <item>The Guardian checks the reply (§4.6, all checks). Accepted: write and commit the files (FR-34), publish the branch,
-/// record branch, SHA and manifest, <c>STEP_COMPLETED</c> (warnings kept on the step); the last step also writes
+/// <item>The Guardian checks the reply (§4.6, all checks). Accepted: write and commit the files (FR-34), publish the branch
+/// (a failed push is recorded as <c>GIT_PUSH_FAILED</c>, never undoes the step), record branch, SHA and manifest,
+/// <c>STEP_COMPLETED</c> (warnings kept on the step); the last step also writes
 /// <c>EXECUTION_COMPLETED</c> and calls <see cref="IExecutionCompletionHook"/>. Rejected: <c>STEP_REJECTED</c> with every
 /// violation; the fourth rejection blocks the step (<c>STEP_BLOCKED</c>) and raises an escalation gate (FR-33).</item>
 /// </list>
@@ -240,12 +234,9 @@ public sealed partial class ExecutionJobHandler(
         PreparedWorkingCopy working,
         CancellationToken cancellationToken)
     {
+        // FR-34: push after the commit (GitHub). A failed push doesn't undo the step: the commit is on the project branch,
+        // the next step's push or the pull request job pushes it again, and GIT_PUSH_FAILED tells the users why.
         var published = await working.Provider.PublishBranchAsync(working.Connection, working.Branch, working.Token, cancellationToken);
-        if (!published.Ok)
-        {
-            throw new JobFailedException($"The project branch could not be published: {published.Reason}", transient: true);
-        }
-
         var completed = StepRules.Complete(step.Status);
         if (completed.IsFailure || !completed.Value.Changed)
         {
@@ -253,6 +244,17 @@ public sealed partial class ExecutionJobHandler(
         }
 
         var now = time.GetUtcNow();
+        if (!published.Ok)
+        {
+            LogPushFailed(logger, step.StepNumber, published.Transient);
+            db.AddEvent(
+                EventTypes.GitPushFailed,
+                projectId,
+                new { stepId = step.Id, stepNumber = step.StepNumber, branch = working.Branch, reason = published.Reason, transient = published.Transient },
+                SystemActor.Name,
+                now);
+        }
+
         step.Status = StepStatus.Completed;
         step.CommitSha = commit.Sha;
         step.BranchName = working.Branch;
@@ -269,6 +271,7 @@ public sealed partial class ExecutionJobHandler(
                 attempt = step.Attempt,
                 branch = working.Branch,
                 commitSha = commit.Sha,
+                pushed = published.Ok,
                 fileCount = step.FileManifest.Count,
                 warningCount = warnings.Count,
             },
@@ -402,6 +405,9 @@ public sealed partial class ExecutionJobHandler(
     [LoggerMessage(Level = LogLevel.Warning, Message = "Step {StepNumber} attempt {Attempt} rejected by the Guardian with {ErrorCount} errors; now {Status}")]
     private static partial void LogStepRejected(ILogger logger, int stepNumber, int attempt, StepStatus status, int errorCount);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Step {StepNumber} is committed but the branch could not be pushed (transient {Transient}); it is pushed again later")]
+    private static partial void LogPushFailed(ILogger logger, int stepNumber, bool transient);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "The step's commit {Sha} already exists; completing the step from it")]
     private static partial void LogAlreadyCommitted(ILogger logger, string sha);
 
@@ -508,12 +514,11 @@ public sealed partial class ExecutionJobEndedHook(TimeProvider time, ILogger<Exe
 
 public static class ExecutionJobServiceCollectionExtensions
 {
-    /// <summary>The execution runner (FR-31–FR-37): job handler, continuation, completion seam and the endpoints' services.</summary>
+    /// <summary>The execution runner (FR-31–FR-37): job handler, continuation and the endpoints' services (the completion hook is registered by <c>AddPullRequests</c>).</summary>
     public static IServiceCollection AddExecution(this IServiceCollection services)
     {
         services.AddScoped<WorkingCopyPreparer>();
         services.AddScoped<ExecutionService>();
-        services.AddScoped<IExecutionCompletionHook, EventOnlyExecutionCompletion>();
         services.AddScoped<IJobSucceededHook, ExecutionContinuationHook>();
         services.AddScoped<IJobEndedHook, ExecutionJobEndedHook>();
         services.AddJobHandler<ExecutionJobHandler>(JobTypes.Execution);

@@ -57,6 +57,10 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
    * an in_progress or rejected step implies queued work; `false` means no job is queued (an interrupted runner).
    */
   executionStarted?: boolean
+  /** The recorded pull request and its branch comparison (FR-36); unset or null until opened. See mocks/handlers/execution.ts. */
+  pullRequest?: Schemas['PullRequestDto'] | null
+  /** A pull request job is queued or running (FR-36): POST /git/pull-request sets it and refuses with 409 CONFLICT while set. */
+  pullRequestJobQueued?: boolean
   /** Phase recorded at each project version (rollback restores it, §4.8). */
   phaseAtVersion: Record<number, Project['currentPhase']>
 }
@@ -311,6 +315,15 @@ export function executionRunStatus(p: StoredProject): Schemas['ExecutionRunStatu
   return (p.executionStarted ?? (c.inProgress > 0 || c.rejected > 0)) ? 'running' : 'idle'
 }
 
+/** FR-36: /state's pull request summary, or null until one is recorded. */
+function pullRequestSummary(pr: Schemas['PullRequestDto'] | null | undefined): Schemas['PullRequestSummaryDto'] | null {
+  if (!pr) {
+    return null
+  }
+  const { provider, baseBranch, headBranch, number, url, openedAt } = pr
+  return { provider, baseBranch, headBranch, number, url, openedAt }
+}
+
 /** GET /state for a stored project; `pendingGates` comes from its gates. */
 export function stateDto(p: StoredProject): State {
   return {
@@ -326,6 +339,7 @@ export function stateDto(p: StoredProject): State {
       .map(({ id, type, createdAt, overdue }) => ({ id, type, createdAt, overdue })),
     tokensUsed: p.tokensUsed,
     tokenBudget: p.tokenBudget,
+    pullRequest: pullRequestSummary(p.pullRequest),
   }
 }
 

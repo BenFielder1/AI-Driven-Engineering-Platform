@@ -3670,6 +3670,121 @@
           }
         }
       }
+    },
+    "/api/projects/{id}/git/pull-request": {
+      "get": {
+        "tags": [
+          "Git"
+        ],
+        "summary": "The project pull request (members, FR-36): provider, base and head branch, GitHub number and URL (null for Local), and the branch comparison read from the working copy — commits (newest first, at most 250) and changed files (at most 1000). For a Local project the comparison is the \"PR\". 404 NOT_FOUND until AIDE has opened it (when every step of the plan is completed).",
+        "operationId": "GetPullRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PullRequestDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or no pull request has been opened yet.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Git"
+        ],
+        "summary": "Open the project pull request again (Contributor or Owner, FR-36), e.g. after the pull request job failed or its retries ran out: queues the pull request job. Allowed in execution once every step of the current plan is completed, or in review, while no pull request is recorded for the current plan. In review the job only records the PR; in execution it then advances to review. Returns 202; the outcome arrives as PULL_REQUEST_OPENED or PULL_REQUEST_FAILED on the live channel.",
+        "operationId": "RetryPullRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted"
+          },
+          "403": {
+            "description": "FORBIDDEN: Viewers can't open the pull request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PHASE_PRECONDITION_FAILED (not in execution or review, steps not all completed, or the PR for the current plan is already recorded) or CONFLICT (a pull request job is already queued or running, or a concurrent change).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5998,7 +6113,8 @@
           "pendingGates",
           "tokensUsed",
           "tokenBudget",
-          "executionStatus"
+          "executionStatus",
+          "pullRequest"
         ],
         "type": "object",
         "properties": {
@@ -6050,9 +6166,19 @@
           },
           "executionStatus": {
             "$ref": "#/components/schemas/ExecutionRunStatus"
+          },
+          "pullRequest": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PullRequestSummaryDto"
+              }
+            ]
           }
         },
-        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37)."
+        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened it (FR-36), else `null`."
       },
       "ProjectStatus": {
         "enum": [
@@ -6123,6 +6249,172 @@
           }
         },
         "description": "A row of the projects list (FR-6). `myRole` is `null` for an Admin who isn't a member."
+      },
+      "PullRequestCommitDto": {
+        "required": [
+          "sha",
+          "subject",
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "sha": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A commit on the project branch that isn't on the default branch; `url` links it on GitHub (`null` for Local)."
+      },
+      "PullRequestDto": {
+        "required": [
+          "provider",
+          "baseBranch",
+          "headBranch",
+          "number",
+          "url",
+          "openedAt",
+          "comparisonAvailable",
+          "baseSha",
+          "headSha",
+          "commits",
+          "files",
+          "truncated"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/GitProvider"
+          },
+          "baseBranch": {
+            "type": "string"
+          },
+          "headBranch": {
+            "type": "string"
+          },
+          "number": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "openedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "comparisonAvailable": {
+            "type": "boolean"
+          },
+          "baseSha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "headSha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "commits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PullRequestCommitDto"
+            }
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PullRequestFileDto"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "description": "The project PR with its branch comparison (FR-35, FR-36), read live from the working copy: the commits (newest first, at\nmost 250) and changed files (at most 1000; `truncated` when either list was cut). `comparisonAvailable` is\n`false` when the working copy or a branch is missing (then both lists are empty)."
+      },
+      "PullRequestFileDto": {
+        "required": [
+          "path",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PullRequestFileStatus"
+          }
+        },
+        "description": "A file changed on the project branch since it left the default branch."
+      },
+      "PullRequestFileStatus": {
+        "enum": [
+          "added",
+          "modified",
+          "deleted",
+          "renamed",
+          "copied",
+          "changed"
+        ],
+        "description": "How a file differs between the default branch and the project branch (lowercase on the wire, like every enum)."
+      },
+      "PullRequestSummaryDto": {
+        "required": [
+          "provider",
+          "baseBranch",
+          "headBranch",
+          "number",
+          "url",
+          "openedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/GitProvider"
+          },
+          "baseBranch": {
+            "type": "string"
+          },
+          "headBranch": {
+            "type": "string"
+          },
+          "number": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "openedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "The project PR once recorded (FR-36): provider, base (default) and head (project) branch, and for GitHub its number and\nweb URL (both `null` for Local, whose \"PR\" is the recorded branch comparison). `openedAt` is when AIDE last\nopened or reused it."
       },
       "RefinementAnswerDto": {
         "required": [
@@ -6760,6 +7052,9 @@
     },
     {
       "name": "Execution"
+    },
+    {
+      "name": "Git"
     }
   ]
 }

@@ -168,6 +168,12 @@ internal static class ActivitySummary
             EventTypes.ExecutionPaused => "Execution paused",
             EventTypes.ExecutionResumed => "Execution resumed",
             EventTypes.ExecutionCompleted => "Execution completed: every step is done",
+            EventTypes.GitPushFailed => $"Pushing the project branch after step {Get("stepNumber") ?? "?"} failed; it will be pushed again",
+            EventTypes.PullRequestOpened => Get("number") is { } number
+                ? $"Pull request #{number} {(Get("reused") == "true" ? "reused" : "opened")}"
+                : "Branch comparison recorded (local pull request)",
+            EventTypes.PullRequestFailed => "Opening the pull request failed",
+            EventTypes.PullRequestForgotten => "The recorded pull request was forgotten: the Git repository changed",
             EventTypes.ProjectCreated => "Project created",
             EventTypes.ProjectUpdated => "Project updated",
             EventTypes.MemberAdded => "Member added",

@@ -792,6 +792,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/git/pull-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project pull request (members, FR-36): provider, base and head branch, GitHub number and URL (null for Local), and the branch comparison read from the working copy — commits (newest first, at most 250) and changed files (at most 1000). For a Local project the comparison is the "PR". 404 NOT_FOUND until AIDE has opened it (when every step of the plan is completed). */
+        get: operations["GetPullRequest"];
+        put?: never;
+        /** Open the project pull request again (Contributor or Owner, FR-36), e.g. after the pull request job failed or its retries ran out: queues the pull request job. Allowed in execution once every step of the current plan is completed, or in review, while no pull request is recorded for the current plan. In review the job only records the PR; in execution it then advances to review. Returns 202; the outcome arrives as PULL_REQUEST_OPENED or PULL_REQUEST_FAILED on the live channel. */
+        post: operations["RetryPullRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1551,7 +1569,7 @@ export interface components {
             llm: components["schemas"]["LlmSettingsDto"];
             notifications: components["schemas"]["NotificationSettingsDto"];
         };
-        /** @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37). */
+        /** @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened it (FR-36), else `null`. */
         ProjectStateDto: {
             /** Format: uuid */
             projectId: string;
@@ -1569,6 +1587,7 @@ export interface components {
             /** Format: int64 */
             tokenBudget: null | number;
             executionStatus: components["schemas"]["ExecutionRunStatus"];
+            pullRequest: null | components["schemas"]["PullRequestSummaryDto"];
         };
         /**
          * @description Project status (§4.1: status follows phase; `released` and `rolled_back` are special).
@@ -1591,6 +1610,58 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /** @description A commit on the project branch that isn't on the default branch; `url` links it on GitHub (`null` for Local). */
+        PullRequestCommitDto: {
+            sha: string;
+            subject: string;
+            url: null | string;
+        };
+        /**
+         * @description The project PR with its branch comparison (FR-35, FR-36), read live from the working copy: the commits (newest first, at
+         *     most 250) and changed files (at most 1000; `truncated` when either list was cut). `comparisonAvailable` is
+         *     `false` when the working copy or a branch is missing (then both lists are empty).
+         */
+        PullRequestDto: {
+            provider: components["schemas"]["GitProvider"];
+            baseBranch: string;
+            headBranch: string;
+            /** Format: int32 */
+            number: null | number;
+            url: null | string;
+            /** Format: date-time */
+            openedAt: string;
+            comparisonAvailable: boolean;
+            baseSha: null | string;
+            headSha: null | string;
+            commits: components["schemas"]["PullRequestCommitDto"][];
+            files: components["schemas"]["PullRequestFileDto"][];
+            truncated: boolean;
+        };
+        /** @description A file changed on the project branch since it left the default branch. */
+        PullRequestFileDto: {
+            path: string;
+            status: components["schemas"]["PullRequestFileStatus"];
+        };
+        /**
+         * @description How a file differs between the default branch and the project branch (lowercase on the wire, like every enum).
+         * @enum {unknown}
+         */
+        PullRequestFileStatus: "added" | "modified" | "deleted" | "renamed" | "copied" | "changed";
+        /**
+         * @description The project PR once recorded (FR-36): provider, base (default) and head (project) branch, and for GitHub its number and
+         *     web URL (both `null` for Local, whose "PR" is the recorded branch comparison). `openedAt` is when AIDE last
+         *     opened or reused it.
+         */
+        PullRequestSummaryDto: {
+            provider: components["schemas"]["GitProvider"];
+            baseBranch: string;
+            headBranch: string;
+            /** Format: int32 */
+            number: null | number;
+            url: null | string;
+            /** Format: date-time */
+            openedAt: string;
         };
         /** @description An answer given to the agent: `questionId` when it answered a question of a round, and the question text. */
         RefinementAnswerDto: {
@@ -4406,6 +4477,102 @@ export interface operations {
                 };
             };
             /** @description PHASE_PRECONDITION_FAILED (not in execution), BUDGET_EXCEEDED (token budget used up) or CONFLICT (a concurrent change). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPullRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PullRequestDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or no pull request has been opened yet. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RetryPullRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't open the pull request. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PHASE_PRECONDITION_FAILED (not in execution or review, steps not all completed, or the PR for the current plan is already recorded) or CONFLICT (a pull request job is already queued or running, or a concurrent change). */
             409: {
                 headers: {
                     [name: string]: unknown;

@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states
 import { errorMessage, errorReasons } from '../../lib/errors'
 import { canInProject } from '../../lib/permissions'
 import { useDocumentTitle } from '../../lib/use-document-title'
+import { PullRequestSection } from '../git/pull-request-section'
 import { useGates } from '../gates/gates-api'
 import type { ArtifactType } from '../artifacts/artifacts-api'
 import { artifactTypeLabels, executionRunStatusLabels, phaseLabels } from '../projects/labels'
@@ -161,8 +162,8 @@ function ProgressSummary({
 
 /**
  * /projects/:id/execution (SPEC §7; FR-31–FR-34, FR-37): progress summary, start/pause/resume for writers, and the
- * current plan's steps with status, attempt, Guardian violations, commit and file manifest. Live `step` events
- * refresh the steps and /state (FR-46).
+ * current plan's steps with status, attempt, Guardian violations, commit and file manifest, and once every step
+ * completed the pull request or branch comparison (FR-36). Live `step` events refresh the steps, /state and the PR (FR-46).
  */
 export function ExecutionPage() {
   const { project, user, role } = useProjectAccess()
@@ -273,6 +274,8 @@ export function ExecutionPage() {
         </div>
 
         <ProgressSummary status={status} state={s} current={current} />
+
+        <PullRequestSection projectId={project.id} state={s} writer={writer} />
 
         {plan === null || list.length === 0 ? (
           <EmptyState title="No execution steps yet">

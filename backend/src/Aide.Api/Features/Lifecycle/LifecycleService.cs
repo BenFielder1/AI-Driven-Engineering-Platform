@@ -1,4 +1,5 @@
 using Aide.Api.Features.Execution;
+using Aide.Api.Features.Git;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -22,15 +23,28 @@ public sealed partial class LifecycleService(
     LifecycleSnapshotLoader snapshots,
     LifecycleWriter writer,
     WorkingCopyPreparer workingCopies,
+    PullRequestJobs pullRequests,
     TimeProvider time,
     ILogger<LifecycleService> logger)
 {
-    public async Task<Result<AdvanceResult>> AdvanceAsync(Guid projectId, string? reason, string actor, CancellationToken cancellationToken)
+    /// <summary>
+    /// Advances the project to its next phase, or creates the gate its approval mode requires. With
+    /// <paramref name="expectedFrom"/> (system callers that checked the phase before slow work, e.g. the pull request job),
+    /// a project no longer in that phase is refused with <c>WRONG_PHASE</c> and nothing is applied.
+    /// </summary>
+    public async Task<Result<AdvanceResult>> AdvanceAsync(Guid projectId, string? reason, string actor, CancellationToken cancellationToken, Phase? expectedFrom = null)
     {
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
         if (project is null)
         {
             return Result.Failure<AdvanceResult>(new DomainError(ErrorCodes.NotFound, "The project was not found."));
+        }
+
+        if (expectedFrom is { } expected && project.CurrentPhase != expected)
+        {
+            LogAdvanceRefused(logger, project.Id, ErrorCodes.WrongPhase);
+            return Result.Failure<AdvanceResult>(new DomainError(
+                ErrorCodes.WrongPhase, $"The project is in {project.CurrentPhase.ToWire()}, not {expected.ToWire()}; nothing was advanced."));
         }
 
         bool? prepared = null;
@@ -73,6 +87,13 @@ public sealed partial class LifecycleService(
 
         var transition = outcome.Value.Transition!;
         await writer.ApplyAsync(project, transition, actor, now, cancellationToken);
+        if (transition.From == Phase.Execution && transition.To == Phase.Review
+            && await ExecutionQueries.CurrentPlanIdAsync(db, project.Id, cancellationToken) is { } planId)
+        {
+            // FR-36: a writer may advance before the pull request job ran (or after it failed): the job opens the PR in
+            // review. When the job itself advances, it is running, so nothing more is queued.
+            await pullRequests.EnqueueAsync(project.Id, planId, PullRequestJobPayload.PhaseAdvanced, now, cancellationToken);
+        }
         var result = await LifecyclePersistence.SaveAsync(db, cancellationToken);
         if (result.IsFailure)
         {

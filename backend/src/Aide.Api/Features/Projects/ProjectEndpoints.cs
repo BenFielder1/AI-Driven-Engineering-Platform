@@ -412,7 +412,8 @@ public static partial class ProjectEndpoints
             ExecutionRules.Status(
                 [.. stepCounts.Where(c => c.Key != StepStatus.Invalidated).SelectMany(c => Enumerable.Repeat(c.Key, c.Value))],
                 project.ExecutionPaused,
-                await Execution.ExecutionQueries.JobActiveAsync(db, id, cancellationToken)));
+                await Execution.ExecutionQueries.JobActiveAsync(db, id, cancellationToken)),
+            await Git.PullRequestReader.SummaryAsync(db, id, cancellationToken));
     }
 
     internal static ProblemHttpResult ConcurrentEdit() =>

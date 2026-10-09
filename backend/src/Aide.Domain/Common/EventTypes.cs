@@ -94,6 +94,24 @@ public static class EventTypes
     /// <summary>Every step of the current plan is completed (the PR and the advance to review follow, FR-36).</summary>
     public const string ExecutionCompleted = "EXECUTION_COMPLETED";
 
+    /// <summary>
+    /// FR-34: pushing the project branch after a step commit failed. The step stays completed; the next step's push or the
+    /// pull request job pushes the branch again. The payload carries a reason that never contains a token.
+    /// </summary>
+    public const string GitPushFailed = "GIT_PUSH_FAILED";
+
+    /// <summary>FR-36: the project PR was opened or reused (GitHub), or the branch comparison was recorded (Local).</summary>
+    public const string PullRequestOpened = "PULL_REQUEST_OPENED";
+
+    /// <summary>FR-36: opening the project PR failed for good (a permanent error, or its retries ran out).</summary>
+    public const string PullRequestFailed = "PULL_REQUEST_FAILED";
+
+    /// <summary>
+    /// FR-36: the project's Git provider or repository changed, so the recorded PR belongs to the old repository and is
+    /// forgotten: earlier <see cref="PullRequestOpened"/> events no longer count, and the next pull request job opens a new one.
+    /// </summary>
+    public const string PullRequestForgotten = "PULL_REQUEST_FORGOTTEN";
+
     // Review (FR-38–FR-41)
     public const string ReviewStarted = "REVIEW_STARTED";
     public const string ReviewCompleted = "REVIEW_COMPLETED";
@@ -112,7 +130,7 @@ public static class EventTypes
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
         [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted],
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded],
-        [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted],
+        [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted],
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed],
         [EventCategory.Rollback] = [RollbackCompleted],
