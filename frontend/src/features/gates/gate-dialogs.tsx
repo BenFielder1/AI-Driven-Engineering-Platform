@@ -11,7 +11,7 @@ import { RadioGroup } from '../../components/ui/radio-group'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { TextField } from '../../components/ui/text-field'
 import { applyFieldErrors, errorMessage } from '../../lib/errors'
-import { escalationDecisionLabels, escalationOptionsFor, gateTypeLabels, phaseLabels } from '../projects/labels'
+import { escalationDecisionLabels, escalationOptionsFor, escalationReasonLabels, gateTypeLabels, phaseLabels } from '../projects/labels'
 import { commentSchema, escalationSchema } from './gate-schemas'
 import { useApproveGate, useRejectGate, type Gate } from './gates-api'
 
@@ -201,7 +201,9 @@ export function EscalationDialog({
       description={
         stepBlocked
           ? `${stepLabel} was rejected by the Execution Guardian on every attempt and is blocked. Continue retries it with fresh attempts; roll back returns the project to an earlier version.`
-          : 'Review needs a human decision before the project can continue.'
+          : gate.escalationReason
+            ? `Review needs a human decision before the project can continue. Reason: ${escalationReasonLabels[gate.escalationReason]}.`
+            : 'Review needs a human decision before the project can continue.'
       }
       role={isRollback ? 'alertdialog' : 'dialog'}
       busy={approve.isPending}

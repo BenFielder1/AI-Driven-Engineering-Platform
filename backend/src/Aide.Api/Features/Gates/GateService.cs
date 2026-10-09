@@ -100,13 +100,29 @@ public sealed partial class GateService(
                 {
                     project.ExtraReviewCycles = ReviewCycleRules.ExtraAfterContinue(project.ExtraReviewCycles);
 
-                    // FR-14: execution re-enters for the optimisation plan as soon as it is approved. If it already is, the
-                    // cycle starts now; otherwise approving it later starts the cycle (Decisions: review cycle).
+                    // FR-14: execution re-enters for the latest review's optimisation plan as soon as it is approved (with
+                    // steps still to run). If it already is, the cycle starts now; if its draft is waiting, approving it
+                    // starts the cycle (Decisions: review cycle); with no plan at all, the extra cycle is a new review.
                     var snapshot = await snapshots.LoadAsync(project, cancellationToken) with { EscalationOutcome = EscalationDecision.Continue };
                     var cycle = LifecycleStateMachine.Apply(state, TransitionRequest.ReviewCycle("Escalation: continue with another review cycle"), snapshot);
                     if (cycle.IsSuccess)
                     {
                         await writer.ApplyAsync(project, cycle.Value, actor, now, cancellationToken);
+                        if (!project.ExecutionPaused)
+                        {
+                            await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.ReviewCycle), project.Id, cancellationToken, now);
+                        }
+                    }
+                    else if (!await snapshots.CyclePlanDraftPendingAsync(project, cancellationToken)
+                        && !await Review.ReviewService.ActiveAsync(db, project.Id, cancellationToken))
+                    {
+                        // The escalated review proposed no optimisation plan to approve: the extra cycle is a new review.
+                        await jobs.EnqueueAsync(
+                            JobTypes.Review,
+                            new LifecycleJobPayload(project.Id, project.ProjectVersion, LifecycleJobPayload.UserRequested, "Escalation decision: continue with another review cycle."),
+                            project.Id,
+                            cancellationToken,
+                            now);
                     }
 
                     break;

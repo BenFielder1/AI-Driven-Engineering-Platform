@@ -12,8 +12,21 @@ public sealed record FileManifestEntry(string Path, FileAction Action, string Co
 /// <summary>An artifact version an agent run used as input (FR-23).</summary>
 public sealed record InputArtifactRef(Guid ArtifactId, ArtifactType Type, int Version);
 
-/// <summary>A compliance category score with the agent's evidence (FR-38, §4.7).</summary>
-public sealed record CategoryScoreEntry(ReviewCategory Category, decimal Score, string? Evidence = null);
+/// <summary>A compliance category score (FR-38, §4.7): the agent's 0–1 score, the deterministic penalty applied to it,
+/// the resulting <see cref="Score"/> (floored at 0) and the agent's evidence. Reports written before the breakdown existed
+/// read with <see cref="AgentScore"/> and <see cref="Penalty"/> 0 and their evidence string as one reason.</summary>
+public sealed record CategoryScoreEntry(
+    ReviewCategory Category,
+    decimal Score,
+    decimal AgentScore = 0m,
+    decimal Penalty = 0m,
+    IReadOnlyList<ScoreEvidence>? Evidence = null)
+{
+    public IReadOnlyList<ScoreEvidence> Evidence { get; init; } = Evidence ?? [];
+}
+
+/// <summary>One piece of evidence for a category score (FR-38): the file it refers to, if any, and why.</summary>
+public sealed record ScoreEvidence(string? File, string Reason);
 
 /// <summary>A drift area reported by the review agent (§4.7).</summary>
 public sealed record DriftAreaEntry(string Area, Severity Severity, string Description);

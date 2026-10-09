@@ -74,6 +74,7 @@ export const escalationReasonLabels: Record<NonNullable<Schemas['EscalationReaso
   max_cycles: 'Maximum review cycles reached',
   no_improvement: 'No improvement since the last review cycle',
   step_blocked: 'An execution step was rejected 4 times and is blocked',
+  no_optimization_plan: 'Another cycle was needed but the review proposed no optimisation steps',
 }
 
 /** FR-14: the three escalation decisions. */
@@ -88,9 +89,11 @@ export const escalationDecisionLabels: Record<NonNullable<Schemas['EscalationDec
 }
 
 export const escalationDecisionDescriptions: Record<NonNullable<Schemas['EscalationDecision']>, string> = {
-  continue: 'Start another review cycle: execution re-enters for an optimisation plan.',
+  continue:
+    'Allow one more review cycle: execution re-enters to run the optimisation plan (once it is approved), then review runs again.',
   rollback: 'Return the project to an earlier version. Later artifacts are invalidated; history is kept.',
-  accept: 'Mark the project release-eligible as it is. Any comment is recorded with the decision.',
+  accept:
+    'Accept the risks and mark the project release-eligible as it is; the release still goes through the pre-release gate. Any comment is recorded with the decision.',
 }
 
 /**
@@ -112,6 +115,17 @@ export function escalationOptionsFor(reason: Schemas['EscalationReason'] | undef
         description: 'Return the project to an earlier version instead. Later artifacts and steps are invalidated; history is kept.',
       },
     ]
+  }
+  if (reason === 'no_optimization_plan') {
+    // The review proposed nothing to execute, so continue starts a fresh review rather than re-entering execution.
+    return escalationDecisions.map((d) => ({
+      value: d,
+      label: escalationDecisionLabels[d],
+      description:
+        d === 'continue'
+          ? 'Allow one more review cycle: there is no optimisation plan to execute, so review runs again on the current code.'
+          : escalationDecisionDescriptions[d],
+    }))
   }
   return escalationDecisions.map((d) => ({
     value: d,
@@ -343,3 +357,93 @@ export function formatDuration(ms: number): string {
 const costFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 })
 /** Estimated USD cost of a run (D15: an estimate from configured prices; unpriced models cost $0.00). */
 export const formatCost = (usd: number) => costFormat.format(usd)
+
+// ---- Review (FR-38–FR-41, §4.5, §4.7) ---------------------------------------------------------------------------
+
+/** §4.7: compliance categories, in the spec's weight order. */
+export const reviewCategories = [
+  'feature_coverage',
+  'api_contracts',
+  'data_model',
+  'architecture',
+  'security',
+  'testing',
+] as const satisfies readonly Schemas['ReviewCategory'][]
+
+export const reviewCategoryLabels: Record<Schemas['ReviewCategory'], string> = {
+  feature_coverage: 'Feature coverage',
+  api_contracts: 'API contracts',
+  data_model: 'Data model',
+  architecture: 'Architecture',
+  security: 'Security',
+  testing: 'Testing',
+}
+
+export const reviewDecisions = ['release_eligible', 'review_required', 'escalation_required'] as const satisfies readonly NonNullable<
+  Schemas['ReviewDecision']
+>[]
+
+/** §4.5: the review decision. */
+export const reviewDecisionLabels: Record<NonNullable<Schemas['ReviewDecision']>, string> = {
+  release_eligible: 'Release eligible',
+  review_required: 'Another cycle needed',
+  escalation_required: 'Escalated to an Owner',
+}
+
+/** FR-39: what each decision leads to, in plain words. */
+export const reviewDecisionDescriptions: Record<NonNullable<Schemas['ReviewDecision']>, string> = {
+  release_eligible: 'The score meets the threshold. A pre-release gate asks an Owner to approve the release.',
+  review_required:
+    'The score is below the threshold. Execution re-enters with the optimisation plan once it is approved, then review runs again.',
+  escalation_required: 'Review needs a human decision: an Owner continues, rolls back or accepts the risks in the escalation gate.',
+}
+
+/** §4.5: why a review escalated, as a sentence about the report (the gate labels are `escalationReasonLabels`). */
+export const reviewEscalationReasonDescriptions: Record<
+  'low_score' | 'severe_drift' | 'max_cycles' | 'no_improvement' | 'no_optimization_plan',
+  string
+> = {
+  low_score: 'The compliance score is below 75%, too low for another automatic cycle.',
+  severe_drift: 'The code has drifted severely from the specification.',
+  max_cycles: 'Every allowed review cycle has been used without reaching the threshold.',
+  no_improvement: 'The score did not improve on the previous review cycle.',
+  no_optimization_plan:
+    'The score is below the threshold, but even after a corrective re-run the review proposed no optimisation steps to execute.',
+}
+
+export const driftLevels = ['none', 'low', 'moderate', 'severe'] as const satisfies readonly NonNullable<Schemas['DriftLevel']>[]
+
+/** §4.7: drift from the specification. */
+export const driftLevelLabels: Record<NonNullable<Schemas['DriftLevel']>, string> = {
+  none: 'No drift',
+  low: 'Low drift',
+  moderate: 'Moderate drift',
+  severe: 'Severe drift',
+}
+
+export const findingSeverities = ['critical', 'major', 'minor'] as const satisfies readonly Schemas['Severity'][]
+
+/** §4.7: review finding / drift area severity. */
+export const findingSeverityLabels: Record<Schemas['Severity'], string> = {
+  critical: 'Critical',
+  major: 'Major',
+  minor: 'Minor',
+}
+
+/** §4.7: where a violation came from. */
+export const findingSourceLabels: Record<Schemas['FindingSource'], string> = {
+  deterministic: 'Deterministic check',
+  agent: 'Code review agent',
+}
+
+/** FR-38: the review job's state. */
+export const reviewRunStatusLabels: Record<Schemas['ReviewRunStatus'], string> = {
+  idle: 'Not running',
+  running: 'Running',
+  completed: 'Completed',
+  failed: 'Failed',
+}
+
+const percentFormat = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 })
+/** A 0–1 score as a percentage ("82.5%"). */
+export const formatPercent = (score: number) => percentFormat.format(score)

@@ -347,7 +347,9 @@ describe('Overview → Escalation decision (FR-14)', () => {
   it('NFR-A11Y: the escalation dialog is labelled and keeps focus inside', async () => {
     const { user, dialog } = await openEscalation()
 
-    expect(dialog).toHaveAccessibleDescription('Review needs a human decision before the project can continue.')
+    expect(dialog).toHaveAccessibleDescription(
+      'Review needs a human decision before the project can continue. Reason: No improvement since the last review cycle.',
+    )
     expect(within(dialog).getByRole('group', { name: 'Decision' })).toBeInTheDocument()
     expect(within(dialog).getByLabelText('Continue')).toHaveFocus()
     const submit = within(dialog).getByRole('button', { name: 'Record decision' })

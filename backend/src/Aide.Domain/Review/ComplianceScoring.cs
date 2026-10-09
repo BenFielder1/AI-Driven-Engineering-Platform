@@ -1,7 +1,14 @@
 namespace Aide.Domain.Review;
 
-/// <summary>A deterministic-check finding that penalises a category (§4.7).</summary>
-public sealed record ReviewFinding(ReviewCategory Category, Severity Severity, string Message, string? Path = null);
+/// <summary>A review violation (§4.7): from a deterministic check (penalises its category) or the Code Review agent.
+/// Reports written before <see cref="Source"/> existed read as <see cref="FindingSource.Deterministic"/>.</summary>
+public sealed record ReviewFinding(
+    ReviewCategory Category,
+    Severity Severity,
+    string Message,
+    string? Path = null,
+    FindingSource Source = FindingSource.Deterministic,
+    string? Evidence = null);
 
 /// <summary>Category scores after penalties, and the weighted overall score.</summary>
 public sealed record ComplianceScore(IReadOnlyDictionary<ReviewCategory, decimal> CategoryScores, decimal Overall);

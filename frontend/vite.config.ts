@@ -38,5 +38,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     restoreMocks: true,
+    // Page-level tests with MSW take several seconds under parallel load.
+    testTimeout: 20_000,
   },
 })

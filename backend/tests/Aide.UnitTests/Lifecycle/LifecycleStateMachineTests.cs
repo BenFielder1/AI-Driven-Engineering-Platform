@@ -485,4 +485,16 @@ public class LifecycleStateMachineTests
         Assert.False(string.IsNullOrWhiteSpace(result.Value.Reason));
         Assert.Equal(TransitionKind.InvalidationFallback, result.Value.Kind);
     }
+
+    [Fact]
+    public void S4_8_Rollback_and_cascade_fallback_clear_the_review_state_other_transitions_keep_it()
+    {
+        var reviewing = At(Phase.Review, 7);
+        var cycleMet = AllMet with { LatestReviewDecision = ReviewDecision.ReviewRequired, LatestReviewProjectVersion = 7 };
+
+        Assert.True(LifecycleStateMachine.Apply(reviewing, TransitionRequest.Rollback(Phase.Planning, 4), LifecycleSnapshot.Empty).Value.ClearsReviewState);
+        Assert.True(LifecycleStateMachine.Apply(reviewing, TransitionRequest.Fallback(Phase.Planning), LifecycleSnapshot.Empty).Value.ClearsReviewState);
+        Assert.False(LifecycleStateMachine.Apply(reviewing, TransitionRequest.ReviewCycle(), cycleMet).Value.ClearsReviewState);
+        Assert.False(LifecycleStateMachine.Apply(At(Phase.Planning, 3), TransitionRequest.Advance(), AllMet).Value.ClearsReviewState);
+    }
 }

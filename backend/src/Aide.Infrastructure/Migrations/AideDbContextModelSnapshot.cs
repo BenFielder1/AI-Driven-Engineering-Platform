@@ -503,6 +503,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("missing_features");
 
+                    b.Property<Guid?>("OptimizationPlanArtifactId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("optimization_plan_artifact_id");
+
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
@@ -520,6 +524,11 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("numeric(4,3)")
                         .HasColumnName("score");
 
+                    b.Property<decimal>("Threshold")
+                        .HasPrecision(4, 3)
+                        .HasColumnType("numeric(4,3)")
+                        .HasColumnName("threshold");
+
                     b.Property<string>("Violations")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -530,6 +539,9 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasIndex("AgentRunId")
                         .HasDatabaseName("ix_compliance_reports_agent_run_id");
+
+                    b.HasIndex("OptimizationPlanArtifactId")
+                        .HasDatabaseName("ix_compliance_reports_optimization_plan_artifact_id");
 
                     b.HasIndex("ProjectId", "ReviewCycle")
                         .HasDatabaseName("ix_compliance_reports_project_id_review_cycle");
@@ -1597,6 +1609,12 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired()
                         .HasConstraintName("fk_compliance_reports_agent_runs_agent_run_id");
+
+                    b.HasOne("Aide.Domain.Entities.Artifact", null)
+                        .WithMany()
+                        .HasForeignKey("OptimizationPlanArtifactId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_compliance_reports_artifacts_optimization_plan_artifact_id");
 
                     b.HasOne("Aide.Domain.Entities.Project", null)
                         .WithMany()

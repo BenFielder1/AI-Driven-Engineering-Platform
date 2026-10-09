@@ -344,12 +344,17 @@ public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
         }
 
         var extension = Path.GetExtension(fileName).ToLowerInvariant();
+
+        // A routes file names its endpoints, so the review's endpoint check (§4.7) finds the specification's paths.
+        var routes = path.Contains("routes/", StringComparison.Ordinal) && Path.GetFileNameWithoutExtension(fileName) is { Length: > 0 } resource
+            ? $"// Routes: GET/POST /api/{resource}, GET/PUT/DELETE /api/{resource}/:id\n"
+            : string.Empty;
         return extension switch
         {
             ".md" => $"# {title}\n\n{verb} by AIDE in step {step} of the {project} plan.\n",
             ".json" => JsonSerializer.Serialize(new { step, title }) + "\n",
             ".js" or ".ts" or ".mjs" or ".cjs" or ".jsx" or ".tsx" or ".cs" or ".java" or ".go" or ".rs" or ".c" or ".cpp" =>
-                $"// {title}\n// {verb} by AIDE in step {step} of the {project} plan.\n\nexport const step{step} = '{fileName}';\n",
+                $"// {title}\n// {verb} by AIDE in step {step} of the {project} plan.\n{routes}\nexport const step{step} = '{fileName}';\n",
             ".py" or ".rb" or ".sh" or ".yml" or ".yaml" or ".toml" => $"# {title}\n# {verb} by AIDE in step {step} of the {project} plan.\n",
             _ => $"{title}\n{verb} by AIDE in step {step} of the {project} plan.\n",
         };
@@ -359,5 +364,92 @@ public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
     private static partial Regex StepPattern();
 
     [GeneratedRegex(@"^- (?<path>.+) \((?<action>create|modify)\)\s*$", RegexOptions.CultureInvariant | RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex FilePattern();
+}
+
+/// <summary>
+/// What the Fake Code Review agent answers (D13), by review cycle (<c>&lt;review_cycle&gt;</c> in the prompt): the score
+/// given to every category, drift areas, and how many optimisation steps it proposes. Lists are indexed by cycle − 1; the
+/// last entry repeats. The default demonstrates the loop: cycle 1 scores 0.86 (review_required with a one-step optimisation
+/// plan at the default 0.90 threshold), later cycles 0.93 (release_eligible).
+/// </summary>
+public sealed record FakeCodeReviewScript
+{
+    public static FakeCodeReviewScript Default { get; } = new();
+
+    public IReadOnlyList<decimal> ScoresByCycle { get; init; } = [0.86m, 0.93m];
+
+    /// <summary>Drift area severities per cycle (wire values <c>minor</c>, <c>major</c>, <c>critical</c>).</summary>
+    public IReadOnlyList<IReadOnlyList<string>> DriftByCycle { get; init; } = [[]];
+
+    public IReadOnlyList<int> OptimizationStepsByCycle { get; init; } = [1];
+
+    /// <summary>When set, the reply for every cycle (e.g. invalid output to exercise the corrective re-run).</summary>
+    public string? RawReply { get; init; }
+}
+
+/// <summary>
+/// Fake Code Review (FR-38, D13): a valid, deterministic review reply driven by <see cref="FakeCodeReviewScript"/>. Every
+/// category gets the cycle's score with evidence naming a reviewed file; optimisation steps create
+/// <c>docs/review/cycle-&lt;n&gt;-step-&lt;k&gt;.md</c> (each depending on the previous one), which the Fake Code Generator
+/// writes, so the optimisation loop runs end to end with the Fake and Local providers. Tests register their own instance.
+/// </summary>
+public sealed partial class FakeCodeReviewResponder(FakeCodeReviewScript script) : IFakeAgentResponder
+{
+    public FakeCodeReviewResponder()
+        : this(FakeCodeReviewScript.Default)
+    {
+    }
+
+    public AgentKind Agent => AgentKind.CodeReview;
+
+    public string Respond(LlmRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (script.RawReply is { } raw)
+        {
+            return raw;
+        }
+
+        var cycle = int.TryParse(FakePrompt.Tag(request, "review_cycle"), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var c) && c > 0 ? c : 1;
+        var score = At(script.ScoresByCycle, cycle, 0.9m);
+        var drift = At(script.DriftByCycle, cycle, []);
+        var stepCount = At(script.OptimizationStepsByCycle, cycle, 0);
+        var file = FilePattern().Match(FakePrompt.Tag(request, "code")) is { Success: true } m ? m.Groups["path"].Value.Trim() : null;
+
+        var categories = new[] { "feature_coverage", "api_contracts", "data_model", "architecture", "security", "testing" };
+        return JsonSerializer.Serialize(new
+        {
+            categoryScores = categories.Select(category => new
+            {
+                category,
+                score,
+                evidence = new[] { new { file, reason = $"Fake review of cycle {cycle}: {category.Replace('_', ' ')} scored {score.ToString(System.Globalization.CultureInfo.InvariantCulture)}." } },
+            }),
+            violations = score < 0.9m
+                ? new[] { new { category = "testing", severity = "minor", message = "Some edge cases are not covered by tests.", path = file } }
+                : [],
+            missingFeatures = Array.Empty<object>(),
+            driftAreas = drift.Select((severity, i) => new { area = $"Area {i + 1}", severity, description = $"Fake drift area {i + 1} in cycle {cycle}." }),
+            optimizationPlan = new
+            {
+                steps = Enumerable.Range(1, stepCount).Select(k => new
+                {
+                    number = k,
+                    title = $"Review cycle {cycle} fix {k}",
+                    task = $"Address finding {k} of review cycle {cycle} and document it.",
+                    files = new[] { new { path = $"docs/review/cycle-{cycle}-step-{k}.md", action = "create" } },
+                    dependencies = k == 1 ? Array.Empty<int>() : [k - 1],
+                    userInstructions = (string?)null,
+                }),
+            },
+            summary = $"Fake review, cycle {cycle}: every category scored {score.ToString(System.Globalization.CultureInfo.InvariantCulture)}.",
+        });
+    }
+
+    private static T At<T>(IReadOnlyList<T> values, int cycle, T fallback) =>
+        values.Count == 0 ? fallback : values[Math.Min(cycle, values.Count) - 1];
+
+    [GeneratedRegex(@"^- (?<path>[^\s(]+)", RegexOptions.CultureInvariant | RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex FilePattern();
 }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Aide.Domain.Common;
+using Aide.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -13,7 +14,7 @@ public static class AideJson
 {
     public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web)
     {
-        Converters = { new EnumWireJsonConverterFactory() },
+        Converters = { new EnumWireJsonConverterFactory(), new ScoreEvidenceListJsonConverter() },
     };
 
     public static string Serialize<T>(T value) => JsonSerializer.Serialize(value, Options);
@@ -58,4 +59,17 @@ internal sealed class EnumWireJsonConverter<TEnum> : JsonConverter<TEnum>
         ArgumentNullException.ThrowIfNull(writer);
         writer.WriteStringValue(value.ToWire());
     }
+}
+
+/// <summary>Reads category-score evidence as a list of <see cref="ScoreEvidence"/>, or a legacy single string (reports
+/// written before FR-38's evidence list) as one reason without a file. Always writes the list form.</summary>
+internal sealed class ScoreEvidenceListJsonConverter : JsonConverter<IReadOnlyList<ScoreEvidence>>
+{
+    public override IReadOnlyList<ScoreEvidence> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        reader.TokenType == JsonTokenType.String
+            ? [new ScoreEvidence(null, reader.GetString() ?? string.Empty)]
+            : JsonSerializer.Deserialize<List<ScoreEvidence>>(ref reader, options) ?? [];
+
+    public override void Write(Utf8JsonWriter writer, IReadOnlyList<ScoreEvidence> value, JsonSerializerOptions options) =>
+        JsonSerializer.Serialize(writer, value.ToList(), options);
 }

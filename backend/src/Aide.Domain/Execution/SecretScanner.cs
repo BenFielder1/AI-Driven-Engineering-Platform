@@ -61,6 +61,53 @@ public static partial class SecretScanner
         return findings;
     }
 
+    /// <summary>
+    /// <paramref name="content"/> with every secret-pattern match replaced by <c>[REDACTED:&lt;pattern&gt;]</c>, so it can be
+    /// shown to an LLM (the review prompt). Lines are kept one for one (line numbers in findings still point at the right
+    /// line): a private key's body lines up to its <c>-----END … PRIVATE KEY-----</c> line become the marker, and a line too
+    /// pathological to scan in time is replaced whole.
+    /// </summary>
+    public static string Redact(string content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        var lines = content.Split('\n');
+        var inPrivateKey = false;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (inPrivateKey)
+            {
+                inPrivateKey = !lines[i].Contains("-----END ", StringComparison.Ordinal);
+                lines[i] = Marker("private_key");
+                continue;
+            }
+
+            foreach (var (name, regex) in Patterns)
+            {
+                try
+                {
+                    if (name == "private_key" && regex.IsMatch(lines[i]))
+                    {
+                        // The header line and the key body that follows it.
+                        inPrivateKey = !lines[i].Contains("-----END ", StringComparison.Ordinal);
+                        lines[i] = Marker(name);
+                        break;
+                    }
+
+                    lines[i] = regex.Replace(lines[i], Marker(name));
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    lines[i] = Marker("scan_timeout");
+                    break;
+                }
+            }
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    private static string Marker(string pattern) => $"[REDACTED:{pattern}]";
+
     private const int TimeoutMs = 250;
 
     [GeneratedRegex(@"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b", RegexOptions.None, TimeoutMs)]

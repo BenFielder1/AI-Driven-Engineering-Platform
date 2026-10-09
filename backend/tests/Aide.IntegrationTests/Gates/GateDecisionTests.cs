@@ -267,6 +267,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         var optimisationSteps = await LifecycleSeed.AddStepsAsync(factory, id, optimisation.Id, 2);
         var gate = await EscalatedReviewAsync(id);
         var otherGate = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
+        await ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(s => s.SetProperty(p => p.ExtraReviewCycles, 2), Ct));
         await ProjectApi.WithDbAsync(factory, async db =>
         {
             db.Jobs.Add(new Aide.Domain.Entities.Job { Type = JobTypes.Review, ProjectId = id, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
@@ -278,7 +279,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
 
         Assert.Equal(((EscalationDecision?)EscalationDecision.Rollback, (int?)3), (decided.Decision, decided.TargetVersion));
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Planning, ProjectStatus.RolledBack, 3, 0), (project.CurrentPhase, project.Status, project.ProjectVersion, project.ReviewCycle));
+        Assert.Equal((Phase.Planning, ProjectStatus.RolledBack, 3, 0, 0), (project.CurrentPhase, project.Status, project.ProjectVersion, project.ReviewCycle, project.ExtraReviewCycles));
         Assert.NotNull(project.LastRollbackAt);
 
         await ProjectApi.WithDbAsync(factory, async db =>

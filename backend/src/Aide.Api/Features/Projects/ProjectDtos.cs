@@ -139,13 +139,14 @@ public sealed record ArtifactStateDto(
 /// <summary>Step counts of the current plan version.</summary>
 public sealed record ExecutionCountsDto(int Total, int Pending, int InProgress, int Completed, int Rejected, int Blocked);
 
-/// <summary>Review cycle progress and the latest compliance result. <c>maxCycles</c> includes extra cycles granted by escalations.</summary>
+/// <summary>Review cycle progress and the latest compliance result (FR-38). <c>maxCycles</c> includes extra cycles granted by escalations (FR-14 continue). <c>status</c> is the review job's state: <c>running</c> while a review is queued or running, then <c>completed</c> or <c>failed</c>; <c>idle</c> before the first cycle or after a rollback cleared the review state (§4.8).</summary>
 public sealed record ReviewStateDto(
     int Cycle,
     int MaxCycles,
     decimal? LatestScore,
     ReviewDecision? LatestDecision,
-    DriftLevel? DriftLevel);
+    DriftLevel? DriftLevel,
+    ReviewRunStatus Status);
 
 /// <summary>A pending approval gate.</summary>
 public sealed record GateSummaryDto(Guid Id, GateType Type, DateTimeOffset CreatedAt, bool Overdue);

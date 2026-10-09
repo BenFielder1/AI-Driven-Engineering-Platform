@@ -5,12 +5,15 @@ import {
   artifactTypes,
   escalationDecisionLabels,
   escalationDecisions,
+  escalationReasonLabels,
+  formatPercent,
   formatDuration,
   formatNumber,
   gateTypeLabels,
   gateTypes,
   phaseLabels,
   phases,
+  reviewDecisions,
 } from "../projects/labels";
 import type { ActivityItem } from "./activity-api";
 
@@ -250,6 +253,58 @@ function describePullRequest(type: string, payload: Payload): string | null {
   return `Pull request #${String(n)} ${payload.reused === true ? "reused" : "opened"}${branches}`;
 }
 
+/** A 0–1 score, or `null`. */
+function score(payload: Payload, key: string): number | null {
+  const value = payload[key];
+  return typeof value === "number" && value >= 0 && value <= 1 ? value : null;
+}
+
+const decisionPhrases: Record<(typeof reviewDecisions)[number], string> = {
+  release_eligible: "release eligible",
+  review_required: "another cycle needed",
+  escalation_required: "escalated to an Owner",
+};
+
+const reviewEscalationReasons = [
+  "low_score",
+  "severe_drift",
+  "max_cycles",
+  "no_improvement",
+  "no_optimization_plan",
+] as const;
+
+/**
+ * Review events (FR-38, FR-39). Assumed payload: `cycle`, and on completion `overallScore`, `decision` and
+ * `decisionReason`; anything missing falls back to a shorter line (or the server's summary).
+ */
+function describeReview(type: string, payload: Payload): string | null {
+  const cycle = count(payload, "cycle");
+  const review = cycle === null ? "Review" : `Review cycle ${String(cycle)}`;
+  switch (type) {
+    case "REVIEW_STARTED":
+      return `${review} started`;
+    case "REVIEW_FAILED": {
+      const reason = str(payload, "reason");
+      return reason ? `${review} failed: ${reason}` : `${review} failed`;
+    }
+    case "REVIEW_COMPLETED":
+    case "COMPLIANCE_REPORT_CREATED": {
+      const s = score(payload, "overallScore");
+      const decision = oneOf(payload, "decision", reviewDecisions);
+      const reason = oneOf(payload, "decisionReason", reviewEscalationReasons);
+      const parts = [
+        s === null ? null : `score ${formatPercent(s)}`,
+        decision === null ? null : decisionPhrases[decision],
+      ].filter((p): p is string => p !== null);
+      const base =
+        parts.length === 0 ? `${review} completed` : `${review} completed: ${parts.join(", ")}`;
+      return reason ? `${base} (${escalationReasonLabels[reason].toLowerCase()})` : base;
+    }
+    default:
+      return null;
+  }
+}
+
 /** Events whose payload names an artifact type and version (e.g. `ARTIFACT_APPROVED`). */
 function describeArtifact(type: string, payload: Payload): string | null {
   const artifactType = oneOf(payload, "type", artifactTypes);
@@ -300,6 +355,12 @@ export function describeActivity(
     case "EXECUTION_COMPLETED":
     case "GIT_PUSH_FAILED":
       text = describeStep(type, payload);
+      break;
+    case "REVIEW_STARTED":
+    case "REVIEW_COMPLETED":
+    case "REVIEW_FAILED":
+    case "COMPLIANCE_REPORT_CREATED":
+      text = describeReview(type, payload);
       break;
     case "PULL_REQUEST_OPENED":
     case "PULL_REQUEST_FAILED":

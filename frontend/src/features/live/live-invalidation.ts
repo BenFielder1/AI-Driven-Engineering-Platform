@@ -19,6 +19,7 @@ const runs = (id: string): Target => ({ queryKey: projectKeys.runs(id) })
 const refinement = (id: string): Target => ({ queryKey: projectKeys.refinement(id) })
 const execution = (id: string): Target => ({ queryKey: projectKeys.execution(id) })
 const pullRequest = (id: string): Target => ({ queryKey: projectKeys.pullRequest(id) })
+const review = (id: string): Target => ({ queryKey: projectKeys.review(id) })
 const lists = (): Target => ({ queryKey: projectKeys.lists() })
 /** Everything about the project (the detail key prefixes all of its queries). */
 const everything = (id: string): Target => ({ queryKey: projectKeys.detail(id) })
@@ -43,7 +44,10 @@ export const liveInvalidation: Record<EventCategory, (id: string) => Target[]> =
   // (on both /state and the project). A blocked step's escalation gate arrives as a gate event. PULL_REQUEST_OPENED/
   // FAILED and GIT_PUSH_FAILED are step events too: /state's pullRequest summary and the PR comparison change (FR-36).
   step: (id) => [project(id), state(id), activity(id), execution(id), pullRequest(id)],
-  review: (id) => [state(id), activity(id)],
+  // REVIEW_STARTED/REVIEW_COMPLETED (FR-38, FR-39): the review status on /state and the compliance report, trend and
+  // drift change; a review_required cycle drafts an optimisation plan (FR-40). The decision's gate (pre_release or
+  // escalation) arrives as a gate event and a re-entry to execution as a transition event.
+  review: (id) => [project(id), state(id), activity(id), review(id), artifacts(id)],
   release: (id) => [project(id), state(id), activity(id), lists()],
   // A rollback changes version, phase, artifacts and steps (§4.8).
   rollback: (id) => [everything(id), lists()],

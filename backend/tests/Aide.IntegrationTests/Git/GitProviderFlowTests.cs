@@ -56,7 +56,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         var transition = (await LifecycleSeed.TransitionsAsync(factory, id)).Single(t => t.ToPhase == Phase.Review);
         Assert.Equal((Phase.Execution, SystemActor.Name, PullRequestJobHandler.AdvanceReason), (transition.FromPhase, transition.Actor, transition.Reason));
         Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.PullRequest).Status);
-        Assert.Equal(JobStatus.Queued, Assert.Single(jobs, j => j.Type == JobTypes.Review).Status);
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.Review).Status); // entering review runs cycle 1 (FR-38)
 
         var opened = Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PullRequestOpened));
         var payload = LifecycleSeed.Payload(opened.Payload);

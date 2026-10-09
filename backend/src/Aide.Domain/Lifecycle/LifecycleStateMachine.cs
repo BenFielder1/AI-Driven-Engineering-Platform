@@ -155,12 +155,12 @@ public static class LifecycleStateMachine
 
         if (!snapshot.OptimizationPlanLocked)
         {
-            unmet.Add("The optimization plan is not approved.");
+            unmet.Add("The latest review's optimization plan is not approved.");
         }
 
         if (snapshot.OptimizationPlanStepCount < 1)
         {
-            unmet.Add("The optimization plan has no steps.");
+            unmet.Add("The optimization plan has no steps left to run.");
         }
 
         if (!snapshot.WorkingCopyPrepared)

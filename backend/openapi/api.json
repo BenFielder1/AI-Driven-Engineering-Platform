@@ -3375,7 +3375,7 @@
         "tags": [
           "Execution"
         ],
-        "summary": "The execution steps of a plan version, in step order (members). planType defaults to implementation_plan and planVersion to its current (highest locked) version; with no locked plan the result has no plan and no steps.",
+        "summary": "The execution steps of a plan version, in step order (members). Without planType and planVersion this is the current plan: the most recently locked plan that owns steps (the implementation plan, or the optimisation plan of a review cycle); `plan` names its type and version. With planType only, that type's highest locked version; with planVersion, that version of planType (default implementation_plan). With no locked plan the result has no plan and no steps.",
         "operationId": "ListExecutionSteps",
         "parameters": [
           {
@@ -3775,6 +3775,234 @@
           },
           "409": {
             "description": "PHASE_PRECONDITION_FAILED (not in execution or review, steps not all completed, or the PR for the current plan is already recorded) or CONFLICT (a pull request job is already queued or running, or a concurrent change).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/review": {
+      "post": {
+        "tags": [
+          "Review"
+        ],
+        "summary": "Run a review cycle now (Contributor or Owner, FR-38): queues the review job (deterministic checks plus the Code Review agent), which records a compliance report, applies the §4.5 decision and, on review_required, drafts the optimisation plan. Only in the review phase. Returns 202 with the job id and the cycle the review will record; progress arrives as REVIEW_STARTED and REVIEW_COMPLETED on the live channel.",
+        "operationId": "StartReview",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The review job was queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewStartedDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: Viewers can't start a review.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "WRONG_PHASE (the project isn't in the review phase), REVIEW_IN_PROGRESS (a review job is already queued or running) or CONFLICT (a concurrent change).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/compliance/latest": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "summary": "The latest compliance report (members, FR-38, FR-41): overall score vs threshold, category breakdown with weights, agent scores, penalties and evidence, violations, missing features, drift level and areas, the §4.5 decision and its reason, and the optimisation plan it produced. Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version.",
+        "operationId": "GetLatestCompliance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComplianceReportDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or no review has completed yet.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/compliance/trend": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "summary": "The compliance score across review cycles, oldest first, with the project's threshold (members, FR-41). The series is empty before the first review. Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version.",
+        "operationId": "GetComplianceTrend",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComplianceTrendDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/compliance/drift": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "summary": "The drift level and areas of the latest compliance report (members, FR-41, §4.7). Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version.",
+        "operationId": "GetComplianceDrift",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComplianceDriftDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or no review has completed yet.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4576,6 +4804,45 @@
         },
         "description": "Which sign-in providers are available (the frontend hides GitHub when it isn't configured)."
       },
+      "CategoryScoreDto": {
+        "required": [
+          "category",
+          "weight",
+          "agentScore",
+          "penalty",
+          "score",
+          "evidence"
+        ],
+        "type": "object",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/ReviewCategory"
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "agentScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "penalty": {
+            "type": "number",
+            "format": "double"
+          },
+          "score": {
+            "type": "number",
+            "format": "double"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceDto"
+            }
+          }
+        },
+        "description": "One compliance category (§4.7): its weight, the agent's score (0–1), the deterministic penalty (sum of the fixed\ncritical/major/minor penalties of its deterministic violations) and the final score (agent score − penalty, floored\nat 0), with the agent's evidence."
+      },
       "ChangeSystemRoleRequest": {
         "required": [
           "systemRole"
@@ -4586,6 +4853,189 @@
             "$ref": "#/components/schemas/SystemRole"
           }
         }
+      },
+      "ComplianceDriftDto": {
+        "required": [
+          "driftLevel",
+          "areas",
+          "projectVersion",
+          "cycle"
+        ],
+        "type": "object",
+        "properties": {
+          "driftLevel": {
+            "$ref": "#/components/schemas/DriftLevel"
+          },
+          "areas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriftAreaDto"
+            }
+          },
+          "projectVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cycle": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "The drift level and areas of the latest compliance report (FR-41, §4.7)."
+      },
+      "ComplianceReportDto": {
+        "required": [
+          "id",
+          "projectVersion",
+          "cycle",
+          "overallScore",
+          "threshold",
+          "categoryScores",
+          "violations",
+          "missingFeatures",
+          "driftLevel",
+          "driftAreas",
+          "decision",
+          "decisionReason",
+          "optimizationPlanArtifactId",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cycle": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "overallScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "threshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "categoryScores": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryScoreDto"
+            }
+          },
+          "violations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViolationDto"
+            }
+          },
+          "missingFeatures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "driftLevel": {
+            "$ref": "#/components/schemas/DriftLevel"
+          },
+          "driftAreas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriftAreaDto"
+            }
+          },
+          "decision": {
+            "$ref": "#/components/schemas/ReviewDecision"
+          },
+          "decisionReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EscalationReason"
+              }
+            ]
+          },
+          "optimizationPlanArtifactId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "The compliance report of one review cycle (FR-38, FR-41). `overallScore` is Σ category score × weight (3 dp);\n`threshold` is the project's compliance threshold. `decision` follows §4.5; `decisionReason` is set\nwhen the decision is `escalation_required` (`low_score`, `severe_drift`, `max_cycles`,\n`no_improvement` or `no_optimization_plan` — another cycle was required but the review proposed no\noptimisation steps), else `null`. `optimizationPlanArtifactId` is the optimisation plan draft the review\nproduced (FR-40), if any."
+      },
+      "ComplianceTrendDto": {
+        "required": [
+          "threshold",
+          "series"
+        ],
+        "type": "object",
+        "properties": {
+          "threshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComplianceTrendPointDto"
+            }
+          }
+        },
+        "description": "The compliance score across review cycles, oldest first (FR-41), with the project's threshold. Empty before the first review."
+      },
+      "ComplianceTrendPointDto": {
+        "required": [
+          "cycle",
+          "projectVersion",
+          "overallScore",
+          "driftLevel",
+          "decision",
+          "createdAt",
+          "threshold"
+        ],
+        "type": "object",
+        "properties": {
+          "cycle": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "projectVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "overallScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "driftLevel": {
+            "$ref": "#/components/schemas/DriftLevel"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/ReviewDecision"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "threshold": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "description": "One review cycle's result in the compliance trend (FR-41). `threshold` is the compliance threshold that cycle was\ndecided against (the report's snapshot; the project's threshold may have changed since)."
       },
       "CreateApiTokenRequest": {
         "required": [
@@ -4862,6 +5312,26 @@
         ],
         "description": "The kind of one line of a line diff between two artifact versions (FR-21)."
       },
+      "DriftAreaDto": {
+        "required": [
+          "area",
+          "severity",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "area": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "description": "A drift area reported by the review agent (§4.7)."
+      },
       "DriftLevel": {
         "enum": [
           "none",
@@ -4886,6 +5356,7 @@
           "max_cycles",
           "no_improvement",
           "step_blocked",
+          "no_optimization_plan",
           null
         ]
       },
@@ -4903,6 +5374,25 @@
           "integrity",
           null
         ]
+      },
+      "EvidenceDto": {
+        "required": [
+          "file",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "description": "Why the review agent scored a category as it did: a file (when the evidence points at one) and the reason."
       },
       "ExecutionCountsDto": {
         "required": [
@@ -5172,6 +5662,13 @@
           }
         },
         "description": "A file an accepted step wrote (FR-34), with the SHA-256 of its content."
+      },
+      "FindingSource": {
+        "enum": [
+          "deterministic",
+          "agent"
+        ],
+        "description": "Where a review violation came from (§4.7): a deterministic check or the Code Review agent."
       },
       "GateDto": {
         "required": [
@@ -6650,6 +7147,17 @@
         },
         "description": "FR-1 registration."
       },
+      "ReviewCategory": {
+        "enum": [
+          "feature_coverage",
+          "api_contracts",
+          "data_model",
+          "architecture",
+          "security",
+          "testing"
+        ],
+        "description": "Compliance categories (§4.7)."
+      },
       "ReviewDecision": {
         "enum": [
           "release_eligible",
@@ -6658,13 +7166,41 @@
           null
         ]
       },
+      "ReviewRunStatus": {
+        "enum": [
+          "idle",
+          "running",
+          "completed",
+          "failed"
+        ],
+        "description": "The review job's state for the project (FR-38): no review in the current cycle, queued or running, finished, or failed."
+      },
+      "ReviewStartedDto": {
+        "required": [
+          "jobId",
+          "cycle"
+        ],
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cycle": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "A review was queued (FR-38): the review job's id and the cycle number the review will record."
+      },
       "ReviewStateDto": {
         "required": [
           "cycle",
           "maxCycles",
           "latestScore",
           "latestDecision",
-          "driftLevel"
+          "driftLevel",
+          "status"
         ],
         "type": "object",
         "properties": {
@@ -6702,9 +7238,12 @@
                 "$ref": "#/components/schemas/DriftLevel"
               }
             ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReviewRunStatus"
           }
         },
-        "description": "Review cycle progress and the latest compliance result. `maxCycles` includes extra cycles granted by escalations."
+        "description": "Review cycle progress and the latest compliance result (FR-38). `maxCycles` includes extra cycles granted by escalations (FR-14 continue). `status` is the review job's state: `running` while a review is queued or running, then `completed` or `failed`; `idle` before the first cycle or after a rollback cleared the review state (§4.8)."
       },
       "RunInputArtifactDto": {
         "required": [
@@ -6722,6 +7261,14 @@
           }
         },
         "description": "An artifact version a run used as input (FR-23)."
+      },
+      "Severity": {
+        "enum": [
+          "minor",
+          "major",
+          "critical"
+        ],
+        "description": "Severity of a review finding or drift area (§4.7)."
       },
       "StartRefinementRequest": {
         "type": "object",
@@ -7002,6 +7549,44 @@
         },
         "description": "The signed-in user (or a user, for admins)."
       },
+      "ViolationDto": {
+        "required": [
+          "category",
+          "severity",
+          "source",
+          "message",
+          "file",
+          "evidence"
+        ],
+        "type": "object",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/ReviewCategory"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "source": {
+            "$ref": "#/components/schemas/FindingSource"
+          },
+          "message": {
+            "type": "string"
+          },
+          "file": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evidence": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known."
+      },
       "ViolationSeverity": {
         "enum": [
           "error",
@@ -7055,6 +7640,9 @@
     },
     {
       "name": "Git"
+    },
+    {
+      "name": "Review"
     }
   ]
 }

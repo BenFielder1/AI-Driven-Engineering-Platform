@@ -63,6 +63,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
         var plan = planned.Value;
         await writer.ApplyAsync(project, plan.Transition, actor, now, cancellationToken);
         project.ReviewCycle = plan.ReviewCycle;
+        project.ExtraReviewCycles = 0; // §4.8: the review state is cleared, including cycles granted by escalation continue
         project.LastRollbackAt = now;
 
         var invalidated = plan.InvalidatedArtifactIds.ToHashSet();

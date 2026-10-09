@@ -1,3 +1,4 @@
+using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Jobs;
 using Aide.Domain.Artifacts;
@@ -399,15 +400,20 @@ public sealed partial class ArtifactService(
 
     /// <summary>
     /// Decisions (review cycle): approving the optimisation plan during review applies review → execution through the
-    /// state machine when its conditions hold (review_required or escalation continue, plan has steps, working copy).
+    /// state machine when its conditions hold (review_required or escalation continue, the plan is the latest review's and
+    /// has steps to run, working copy).
     /// </summary>
     private async Task StartReviewCycleAsync(
         Project project, Artifact plan, IReadOnlyList<ExecutionStep> steps, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        // Only the latest review's plan (its draft or a later version of it) starts the cycle; its new steps are all to run.
+        var ofCycle = await snapshots.IsCyclePlanAsync(project, plan, cancellationToken);
         var snapshot = await snapshots.LoadAsync(project, cancellationToken) with
         {
-            OptimizationPlanLocked = true,
-            OptimizationPlanStepCount = steps.Count(s => s.PlanArtifactId == plan.Id && s.Status != StepStatus.Invalidated),
+            OptimizationPlanLocked = ofCycle,
+            OptimizationPlanStepCount = ofCycle
+                ? steps.Count(s => s.PlanArtifactId == plan.Id && s.Status is not StepStatus.Invalidated and not StepStatus.Completed)
+                : 0,
         };
         var state = new LifecycleState(project.CurrentPhase, project.Status, project.ProjectVersion);
         var cycle = LifecycleStateMachine.Apply(
@@ -417,6 +423,12 @@ public sealed partial class ArtifactService(
         if (cycle.IsSuccess)
         {
             await writer.ApplyAsync(project, cycle.Value, actor, now, cancellationToken);
+
+            // FR-40: the optimisation steps run on the same branch straight away (unless execution is paused, FR-37).
+            if (!project.ExecutionPaused)
+            {
+                await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.ReviewCycle), project.Id, cancellationToken, now);
+            }
         }
     }
 

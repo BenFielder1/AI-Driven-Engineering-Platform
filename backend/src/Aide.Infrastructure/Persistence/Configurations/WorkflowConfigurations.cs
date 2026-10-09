@@ -106,6 +106,7 @@ internal sealed class ComplianceReportConfiguration : IEntityTypeConfiguration<C
         builder.HasKey(r => r.Id);
         builder.Property(r => r.Id).ValueGeneratedNever();
         builder.Property(r => r.Score).HasPrecision(4, 3);
+        builder.Property(r => r.Threshold).HasPrecision(4, 3);
         builder.Property(r => r.CategoryScores).HasJsonbConversion().IsRequired();
         builder.Property(r => r.Violations).HasJsonbConversion().IsRequired();
         builder.Property(r => r.MissingFeatures).HasJsonbConversion().IsRequired();
@@ -113,7 +114,9 @@ internal sealed class ComplianceReportConfiguration : IEntityTypeConfiguration<C
 
         builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<AgentRun>().WithMany().HasForeignKey(r => r.AgentRunId).OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<Artifact>().WithMany().HasForeignKey(r => r.OptimizationPlanArtifactId).OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(r => new { r.ProjectId, r.ReviewCycle });
+        builder.HasIndex(r => r.OptimizationPlanArtifactId);
     }
 }

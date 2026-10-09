@@ -113,8 +113,15 @@ public static class EventTypes
     public const string PullRequestForgotten = "PULL_REQUEST_FORGOTTEN";
 
     // Review (FR-38–FR-41)
+
+    /// <summary>A review cycle started: <c>{jobId, cycle, trigger, projectVersion}</c>.</summary>
     public const string ReviewStarted = "REVIEW_STARTED";
+
+    /// <summary>A review cycle recorded its report: <c>{jobId, reportId, cycle, projectVersion, overallScore, threshold, driftLevel, decision, decisionReason, optimizationPlanArtifactId}</c>.</summary>
     public const string ReviewCompleted = "REVIEW_COMPLETED";
+
+    /// <summary>A review job ended without a report (failed for good or dead-lettered): <c>{jobId, cycle, reason, deadLettered}</c>; the reason is redacted.</summary>
+    public const string ReviewFailed = "REVIEW_FAILED";
 
     // Release (FR-42, FR-43)
     public const string ReleaseStarted = "RELEASE_STARTED";
@@ -131,7 +138,7 @@ public static class EventTypes
         [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted],
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
-        [EventCategory.Review] = [ReviewStarted, ReviewCompleted],
+        [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed],
         [EventCategory.Rollback] = [RollbackCompleted],
         [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated],

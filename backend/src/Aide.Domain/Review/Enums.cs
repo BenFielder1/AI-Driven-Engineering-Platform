@@ -7,7 +7,7 @@ public enum ReviewDecision
     EscalationRequired = 2,
 }
 
-/// <summary>Why a review escalated (§4.5 rows 1, 3, 4).</summary>
+/// <summary>Why a review escalated (§4.5 rows 1, 3, 4; a blocked step; a review_required reply without an optimisation plan).</summary>
 public enum EscalationReason
 {
     LowScore = 0,
@@ -17,6 +17,12 @@ public enum EscalationReason
 
     /// <summary>FR-33: an execution step was rejected on its fourth attempt and is blocked.</summary>
     StepBlocked = 4,
+
+    /// <summary>
+    /// The review required another cycle but the Code Review agent proposed no optimisation steps, even after the
+    /// corrective re-run: nothing could re-enter execution, so a human decides (FR-38, FR-39).
+    /// </summary>
+    NoOptimizationPlan = 5,
 }
 
 public enum DriftLevel
@@ -44,4 +50,20 @@ public enum ReviewCategory
     Architecture = 3,
     Security = 4,
     Testing = 5,
+}
+
+/// <summary>Where a review violation came from (§4.7): a deterministic check or the Code Review agent.</summary>
+public enum FindingSource
+{
+    Deterministic = 0,
+    Agent = 1,
+}
+
+/// <summary>The review job's state for the project (FR-38): no review in the current cycle, queued or running, finished, or failed.</summary>
+public enum ReviewRunStatus
+{
+    Idle = 0,
+    Running = 1,
+    Completed = 2,
+    Failed = 3,
 }

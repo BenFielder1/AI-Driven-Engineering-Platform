@@ -121,6 +121,16 @@ export const contextualErrorMessages = {
     FORBIDDEN:
       "Only Contributors and Owners can start, pause or resume execution.",
   },
+  /** POST /api/projects/:id/review — run a review cycle now (FR-38). */
+  startReview: {
+    WRONG_PHASE:
+      "A review can run only while the project is in the Review phase. The page now shows the latest state.",
+    REVIEW_IN_PROGRESS:
+      "A review is already queued or running. The page shows its result when it finishes.",
+    CONFLICT:
+      "Someone else changed the project at the same time. The page now shows the latest state; try again if a review is still needed.",
+    FORBIDDEN: "Only Contributors and Owners can run a review.",
+  },
   /** POST /api/projects/:id/git/pull-request — queue the pull request job again (FR-36). */
   retryPullRequest: {
     PHASE_PRECONDITION_FAILED:

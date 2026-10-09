@@ -32,7 +32,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
         Assert.Equal(ArtifactRules.All, state.Artifacts.Select(a => a.Type));
         Assert.All(state.Artifacts, a => Assert.Equal((null, null, null), (a.LatestVersion, a.LatestStatus, a.CurrentLockedVersion)));
         Assert.Equal(new ExecutionCountsDto(0, 0, 0, 0, 0, 0), state.Execution);
-        Assert.Equal(new ReviewStateDto(0, 3, null, null, null), state.Review);
+        Assert.Equal(new ReviewStateDto(0, 3, null, null, null, ReviewRunStatus.Idle), state.Review);
         Assert.Empty(state.PendingGates);
     }
 
@@ -58,7 +58,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
         Assert.Equal(new ExecutionCountsDto(4, 1, 0, 2, 0, 1), state.Execution);
 
         // The v5 report was undone by a rollback to v4, so the v3 report is the latest that counts.
-        Assert.Equal(new ReviewStateDto(1, 4, 0.820m, ReviewDecision.ReviewRequired, DriftLevel.Low), state.Review);
+        Assert.Equal(new ReviewStateDto(1, 4, 0.820m, ReviewDecision.ReviewRequired, DriftLevel.Low, ReviewRunStatus.Idle), state.Review);
 
         Assert.Equal([GateType.SpecApproval, GateType.PreRelease], state.PendingGates.Select(g => g.Type));
         Assert.True(state.PendingGates[0].Overdue);

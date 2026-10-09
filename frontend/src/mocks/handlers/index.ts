@@ -5,6 +5,7 @@ import { refinementHandlers } from './refinement'
 import { healthHandlers } from './health'
 import { lifecycleHandlers } from './lifecycle'
 import { projectHandlers } from './projects'
+import { reviewHandlers } from './review'
 import { runHandlers } from './runs'
 
 export const handlers = [
@@ -16,4 +17,5 @@ export const handlers = [
   ...runHandlers,
   ...refinementHandlers,
   ...executionHandlers,
+  ...reviewHandlers,
 ]

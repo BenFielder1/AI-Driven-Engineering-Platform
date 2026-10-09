@@ -20,6 +20,9 @@ public sealed record ExecutionJobPayload(Guid ProjectId, string Trigger)
 
     /// <summary>Queued by an escalation <c>continue</c> decision on a blocked step (FR-14, FR-33).</summary>
     public const string EscalationContinue = "escalation_continue";
+
+    /// <summary>Queued when a review cycle re-enters execution for the approved optimisation plan (FR-39, FR-40).</summary>
+    public const string ReviewCycle = "review_cycle";
 }
 
 /// <summary>

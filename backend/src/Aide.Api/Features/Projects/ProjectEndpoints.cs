@@ -2,13 +2,16 @@ using System.ComponentModel.DataAnnotations;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Admin;
+using Aide.Api.Features.Review;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
+using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
+using Aide.Domain.Review;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -373,11 +376,9 @@ public static partial class ProjectEndpoints
             Count(StepStatus.Rejected),
             Count(StepStatus.Blocked));
 
-        // Reports from versions above the current one were undone by a rollback (§4.8).
-        var report = await db.ComplianceReports.AsNoTracking()
-            .Where(r => r.ProjectId == id && r.ProjectVersion <= project.ProjectVersion)
-            .OrderByDescending(r => r.CreatedAt)
-            .ThenByDescending(r => r.Id)
+        // Reports undone by a rollback are not in the current review timeline (§4.8).
+        var report = await ReviewTimeline.Current(db, project)
+            .NewestFirst()
             .Select(r => new { r.Score, r.Decision, r.DriftLevel })
             .FirstOrDefaultAsync(cancellationToken);
         var review = new ReviewStateDto(
@@ -385,7 +386,15 @@ public static partial class ProjectEndpoints
             project.MaxReviewCycles + project.ExtraReviewCycles,
             report?.Score,
             report?.Decision,
-            report?.DriftLevel);
+            report?.DriftLevel,
+            ReviewStatusRules.Status(
+                await db.Jobs.AsNoTracking()
+                    .Where(j => j.ProjectId == id && j.Type == JobTypes.Review)
+                    .OrderByDescending(j => j.CreatedAt)
+                    .ThenByDescending(j => j.Id)
+                    .Select(j => (JobStatus?)j.Status)
+                    .FirstOrDefaultAsync(cancellationToken),
+                project.ReviewCycle));
 
         var now = time.GetUtcNow();
         var gates = await db.ApprovalGates.AsNoTracking()

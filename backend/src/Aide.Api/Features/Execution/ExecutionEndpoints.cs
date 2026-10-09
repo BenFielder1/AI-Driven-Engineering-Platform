@@ -77,7 +77,7 @@ public static class ExecutionEndpoints
 
         group.MapGet("/steps", ListExecutionSteps)
             .WithName("ListExecutionSteps")
-            .WithSummary("The execution steps of a plan version, in step order (members). planType defaults to implementation_plan and planVersion to its current (highest locked) version; with no locked plan the result has no plan and no steps.")
+            .WithSummary("The execution steps of a plan version, in step order (members). Without planType and planVersion this is the current plan: the most recently locked plan that owns steps (the implementation plan, or the optimisation plan of a review cycle); `plan` names its type and version. With planType only, that type's highest locked version; with planVersion, that version of planType (default implementation_plan). With no locked plan the result has no plan and no steps.")
             .Produces<ExecutionStepsDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -117,6 +117,16 @@ public static class ExecutionEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
+        if (planType is null && planVersion is null)
+        {
+            // The current plan (FR-30, FR-40): the newest locked plan of either type, as the execution runner sees it.
+            var currentId = await ExecutionQueries.CurrentPlanIdAsync(db, id, cancellationToken);
+            var current = currentId is { } cid ? await db.Artifacts.AsNoTracking().FirstAsync(a => a.Id == cid, cancellationToken) : null;
+            return current is null
+                ? TypedResults.Ok(new ExecutionStepsDto(null, []))
+                : TypedResults.Ok(await StepsAsync(db, id, current, cancellationToken));
+        }
+
         var type = planType is null ? ArtifactType.ImplementationPlan : EnumStrings.Parse<ArtifactType>(planType);
         if (type is not (ArtifactType.ImplementationPlan or ArtifactType.OptimizationPlan))
         {
@@ -134,6 +144,11 @@ public static class ExecutionEndpoints
                 : ApiProblems.NotFound($"Version {planVersion} of the {type.ToWire()} was not found.");
         }
 
+        return TypedResults.Ok(await StepsAsync(db, id, plan, cancellationToken));
+    }
+
+    private static async Task<ExecutionStepsDto> StepsAsync(AideDbContext db, Guid id, Artifact plan, CancellationToken cancellationToken)
+    {
         var steps = await db.ExecutionSteps.AsNoTracking()
             .Where(s => s.ProjectId == id && s.PlanArtifactId == plan.Id)
             .OrderBy(s => s.StepNumber)
@@ -142,9 +157,9 @@ public static class ExecutionEndpoints
             .Where(g => g.ProjectId == id)
             .Select(g => new { g.Provider, g.RepoUrl })
             .FirstOrDefaultAsync(cancellationToken);
-        return TypedResults.Ok(new ExecutionStepsDto(
+        return new ExecutionStepsDto(
             new ExecutionPlanDto(plan.Id, plan.Type, plan.Version, plan.Status),
-            [.. steps.Select(s => ToDto(s, git is null ? null : ExecutionQueries.CommitUrl(git.Provider, git.RepoUrl, s.CommitSha)))]));
+            [.. steps.Select(s => ToDto(s, git is null ? null : ExecutionQueries.CommitUrl(git.Provider, git.RepoUrl, s.CommitSha)))]);
     }
 
     private static RouteHandlerBuilder WithExecutionControlResponses(this RouteHandlerBuilder builder, string conflicts) => builder

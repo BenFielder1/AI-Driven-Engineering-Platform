@@ -26,7 +26,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-11 | Phase changes only via state machine + transition + event | 3, 4.1 | backend | 1, 4 | done | LifecycleService/Writer: transition + PHASE_CHANGED + follow-up job in one SaveChanges, xmin → CONFLICT; FR11_* tests |
 | FR-12 | Advance request; gate per approval mode | 3, 4.2 | both | 1, 4 | done | POST …/phase/advance (state or pending gate, GATE_PENDING); reason kept through gate; lifecycle card; FR12_* tests |
 | FR-13 | Approve/reject gates; rejection re-runs producer | 3, 4.2 | both | 4 | done | gates approve/reject (owner), GATE_NOT_PENDING; rejection enqueues producer job (handlers arrive phase 6–7); pending-gates panel; FR13_* tests |
-| FR-14 | Escalation gate decisions | 3, 4.5 | both | 4, 10 | partial | continue/rollback/accept decisions + validation + dialog (phase 4); escalation creation by review in phase 10 |
+| FR-14 | Escalation gate decisions | 3, 4.5 | both | 4, 8, 10 | done | continue/rollback/accept; step_blocked (phase 8); review reasons low_score/severe_drift/max_cycles/no_improvement/no_optimization_plan, continue = extra cycle, accept = pre_release gate; FR14_* tests |
 | FR-15 | Gate reminders 24h, overdue 72h | 3 | both | 12 | todo | — |
 | FR-16 | Versioned artifacts with hash, parent, status | 3, 4.3 | backend | 1, 5 | done | artifact endpoints (latest/history/versions), version+parent+hash+status; FR16_* tests |
 | FR-17 | Approve/reject drafts; locking | 3, 4.3 | both | 5 | done | approve/reject (owner), no-op on locked, producer re-run on agent drafts; detail page actions; FR17_* tests |
@@ -50,10 +50,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-35 | GitHub and Local Git providers | 3 | backend | 8, 9 | done | Local repo on the data volume; GitHub clone/fetch over HTTPS with the token only in per-command env headers, host from config; FR35_* tests (local bare repo + fake API) |
 | FR-36 | PR on completion, advance to review | 3 | both | 9 | done | pull_request job: find-or-create PR (description template), Local branch comparison, PULL_REQUEST_OPENED, advance to review with phase re-check; RetryPullRequest; PR section + overview summary; FR36_* tests; verified on k8s (Local) |
 | FR-37 | Pause / resume execution | 3 | both | 8 | done | start/pause/resume endpoints (202 ExecutionStateDto), running step finishes, no new step; executionStatus on /state; page controls; FR37_* tests |
-| FR-38 | Review cycle: checks + review agent | 3, 4.7 | backend | 1, 10 | todo | — |
-| FR-39 | Release decision | 3, 4.5 | backend | 1, 10 | todo | — |
-| FR-40 | Optimisation loop | 3 | backend | 10 | todo | — |
-| FR-41 | Review page | 3 | frontend | 10 | todo | — |
+| FR-38 | Review cycle: checks + review agent | 3, 4.7 | backend | 1, 10 | done | review job: deterministic checks + code_review agent, §4.7 scoring, report with evidence + optimisation draft; StartReview; FR38_*/S4_7_* tests; verified on k8s |
+| FR-39 | Release decision | 3, 4.5 | backend | 1, 10 | done | §4.5 table incl. worked examples; pre_release gate / optimisation loop / escalation; FR39_* tests |
+| FR-40 | Optimisation loop | 3 | backend | 10 | done | approved optimisation plan re-enters execution on the same branch, PR reused, next cycle automatic; FR40_* tests; 2-cycle loop on k8s |
+| FR-41 | Review page | 3 | frontend | 10 | done | score vs threshold, categories + evidence, accessible SVG trend + table, drift, violations, decision copy; FR41_* tests |
 | FR-42 | Release: merge, tag, idempotent | 3 | both | 11 | todo | — |
 | FR-43 | Merge conflict blocks release; retry | 3 | both | 11 | todo | — |
 | FR-44 | Rollback | 3, 4.8 | both | 1, 11 | todo | — |
@@ -108,7 +108,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 9 M4 Git providers, commits, PR (base: 32dbd64) — IDs: FR-34–FR-36
   - [x] aspnet-engineer (GitHub clone/push, PR job, Local comparison, advance to review) → vite-react-engineer (PR section, overview summary, activity copy)
   - [x] gate · review (0 Critical, 2 Major, 4 Minor + enum casing — all fixed) · redeploy (smoke ✓, Fake+Local project reached review with a 4-commit comparison on k8s ✓) · commit
-- [ ] 10 M5 Review — IDs: FR-38–FR-41, FR-14 (escalation continue)
+- [x] 10 M5 Review (base: bd10238) — IDs: FR-38–FR-41, FR-14
+  - [x] aspnet-engineer (contract stubs) → ef-data-engineer (migration ReviewReportDetails) ‖ vite-react-engineer (Review page) → aspnet-engineer (review job, decisions, loop; resumed once after a usage-limit stop)
+  - [x] gate · review (1 Critical, 3 Major, 5 Minor — all fixed) · redeploy (migration applied, smoke ✓, 2-cycle review loop → pre_release gate on k8s ✓) · commit
 - [ ] 11 M6 Release + rollback — IDs: FR-42–FR-45
 - [ ] 12 M7 Notifications — IDs: FR-47–FR-49, FR-15
 - [ ] 13 M8 Admin + CLI — IDs: FR-51, FR-52
@@ -222,6 +224,16 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-09 — The PR job re-checks the phase after the slow git/GitHub work (AdvanceAsync takes `expectedFrom`); a job superseded by a rollback/new plan records nothing and ends succeeded (logged skipped); a mid-job Git settings change retries it. PULL_REQUEST_OPENED is written once per plan — review finding — SPEC updated: no
 - 2026-10-09 — New `POST /api/projects/{id}/git/pull-request` (RetryPullRequest, writer, 202) re-queues the PR job when no PR is recorded for the current plan (execution with all steps completed, or review); any Git settings change does the same automatically. Prepare failures (no token, bad URL, 401/404, missing default branch) are permanent — SPEC updated: no
 - 2026-10-09 — PR description neutralises issue references (`#n`, `owner/repo#n`, `GH-n`) with U+200D so agent text can't link/close issues; the file list fence is longer than any backtick run; a reused open PR gets its title/body PATCHed to the current description (permanent PATCH failure logged and ignored) — SPEC updated: no
+- 2026-10-09 — compliance_reports gains `optimization_plan_artifact_id` (FK, set null) and a `threshold` snapshot (migration ReviewReportDetails); category scores store agentScore, penalty and evidence {file, reason}; findings store source (deterministic|agent) and evidence — FR-41 evidence/trend — SPEC updated: no
+- 2026-10-09 — Review job: raises review_cycle once per job (a failed review keeps its cycle, REVIEW_FAILED), cancels pending pre_release/escalation gates from the previous decision, reads the committed branch within fixed limits (changed files first), runs deterministic checks + code_review agent (one corrective re-run), saves report + optimisation draft + gate + REVIEW_COMPLETED in one transaction; redelivery-idempotent — SPEC updated: no
+- 2026-10-09 — Only deterministic findings carry §4.7 penalties; the agent's own violations are reported without one. The dependency-allowlist check is skipped when the spec has no Dependencies list. Row 4's previous score is the previous cycle's report at or below the current version — §4.7/§4.5 silent — SPEC updated: no
+- 2026-10-09 — An optimisation plan is drafted for review_required and escalation_required (if it has steps), never release_eligible; rejecting/corrupting it revises the plan for the same cycle (report kept, re-pointed). Approving it queues execution unless paused; completion reuses the PR (description updated) and returns to review, which starts the next cycle (FR-40) — SPEC updated: no
+- 2026-10-09 — release_eligible always creates a pre_release gate (every approval mode). Escalation in review: continue = one extra cycle (re-enter execution via the draft, or queue a new review if no plan); accept = pre_release gate — FR-14/§4.2 — SPEC updated: no
+- 2026-10-09 — A review cycle re-enters execution only with the latest current-timeline report's optimisation plan (its draft or a later version) when locked with steps left; escalation continue with an unapproved draft grants the extra cycle and waits for approval; with no plan it queues a new review. An execution job with nothing to run and every step completed runs the completion hook (no project can sit in execution without a job) — review finding (Critical) — SPEC updated: no
+- 2026-10-09 — Rollback and cascade fallback out of review clear review_cycle and extra_review_cycles. The "current review timeline" for latest/drift/trend/state/decisions is project_version ≤ current AND created_at > last_rollback_at; after a cascade fallback (no rollback timestamp) earlier reports still show in the trend — §4.8 — SPEC updated: no
+- 2026-10-09 — review_required without optimisation steps gets one corrective re-run, then escalates with new reason `no_optimization_plan`; §4.5 row 4's previous score is the latest earlier-cycle report in the timeline (a failed cycle doesn't skip the row); trend points carry their report's threshold — SPEC updated: no
+- 2026-10-09 — Lines the secret scan flags are redacted (`[REDACTED:<pattern>]`, line numbers kept) before code is sent to the review agent — NFR-SEC — SPEC updated: no
+- 2026-10-09 — GET …/execution/steps without planType/planVersion returns the current plan (newest locked plan of either type) — closes the phase 8 known issue — SPEC updated: no
 - 2026-10-09 — Unsafe paths also include Windows aliases: `.git` with trailing dots/spaces, `~<digit>` short names, `:` and `<>"|?*`, device names (CON/NUL/AUX/PRN/COM/LPT), segments ending in dot/space; resolved paths must stay under the root and outside `<root>/.git`; git runs with an allow-listed environment (not the API's) — review finding (RCE via .git/config on Windows) — SPEC updated: no
 - 2026-10-09 — Nothing under `.aide/` is ever writable by agents (Guardian error even if declared) and no plan may declare it; humans edit `.aide/rules.md` directly. §4.6 allowed protected paths "if declared" — persistent prompt-injection route — SPEC updated: no
 - 2026-10-09 — "accept" on a step_blocked escalation → 400 INVALID_DECISION (replaces "accept has no effect", which deadlocked the project) — review finding — SPEC updated: no
@@ -246,7 +258,6 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - k8s DB holds a check user (k8s-check-*@example.com) and project "K8s refinement check" from the phase 7 deploy check — delete if unwanted — Ben
 - Frontend mock `isProtectedPath()` mirrors only part of PathRules.IsProtected (mocks only); the plan draft preview doesn't flag protected paths (agent plans can't declare them; Owner edits can) — orchestrator
 - `scripts/ci/check-generated.sh` needs an argument and fails locally without one (`$1: unbound variable`) — check in Final CI pass — orchestrator
-- GET …/execution/steps without planType returns the implementation plan; the Execution page picks the current plan type from /state (optimisation plan if locked). Make the endpoint default to the current plan, or expose the current plan type/version, in phase 10 — orchestrator (phase 10)
-- Frontend Vitest suites occasionally time out at the 5 s default under load (3 failures in one full-gate run on 2026-10-09, green on re-run); raise testTimeout or split heavy page tests — orchestrator (Final)
+- Frontend Vitest suites timed out at the 5 s default under parallel load — testTimeout raised to 20 s in vite.config.ts (phase 10) — —
 - GitHub Enterprise: `GitHub:GitBaseUrl`/`ApiBaseUrl` are configurable but project repo URLs are still validated as `https://github.com/…` only (GHE not in v1 scope) — orchestrator
 - Two users writing the very first version of a type concurrently aren't warned (baseVersion null) — accepted

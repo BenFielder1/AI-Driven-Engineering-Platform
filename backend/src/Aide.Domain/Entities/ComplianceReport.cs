@@ -32,5 +32,12 @@ public sealed class ComplianceReport
 
     public Guid AgentRunId { get; set; }
 
+    /// <summary>The project's compliance threshold when the review ran (FR-39), so later settings changes don't
+    /// reinterpret past decisions.</summary>
+    public decimal Threshold { get; set; }
+
+    /// <summary>The optimisation plan artifact the review produced (FR-38), if any. Cleared if that artifact row is deleted.</summary>
+    public Guid? OptimizationPlanArtifactId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }

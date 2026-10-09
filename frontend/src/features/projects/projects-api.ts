@@ -47,6 +47,8 @@ export const projectKeys = {
   execution: (id: string) => [...projectKeys.detail(id), 'execution'] as const,
   /** GET /git/pull-request: the recorded PR and its branch comparison (FR-36; see features/git/pull-request-api.ts). */
   pullRequest: (id: string) => [...projectKeys.detail(id), 'git', 'pull-request'] as const,
+  /** Every compliance query of the project: latest report, trend and drift (FR-38–FR-41; see features/review/review-api.ts). */
+  review: (id: string) => [...projectKeys.detail(id), 'review'] as const,
 }
 
 /** Unwraps an openapi-fetch result: the body on success, an ApiError otherwise. */

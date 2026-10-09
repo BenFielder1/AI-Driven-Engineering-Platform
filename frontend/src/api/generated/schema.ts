@@ -731,7 +731,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The execution steps of a plan version, in step order (members). planType defaults to implementation_plan and planVersion to its current (highest locked) version; with no locked plan the result has no plan and no steps. */
+        /** The execution steps of a plan version, in step order (members). Without planType and planVersion this is the current plan: the most recently locked plan that owns steps (the implementation plan, or the optimisation plan of a review cycle); `plan` names its type and version. With planType only, that type's highest locked version; with planVersion, that version of planType (default implementation_plan). With no locked plan the result has no plan and no steps. */
         get: operations["ListExecutionSteps"];
         put?: never;
         post?: never;
@@ -804,6 +804,74 @@ export interface paths {
         put?: never;
         /** Open the project pull request again (Contributor or Owner, FR-36), e.g. after the pull request job failed or its retries ran out: queues the pull request job. Allowed in execution once every step of the current plan is completed, or in review, while no pull request is recorded for the current plan. In review the job only records the PR; in execution it then advances to review. Returns 202; the outcome arrives as PULL_REQUEST_OPENED or PULL_REQUEST_FAILED on the live channel. */
         post: operations["RetryPullRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run a review cycle now (Contributor or Owner, FR-38): queues the review job (deterministic checks plus the Code Review agent), which records a compliance report, applies the §4.5 decision and, on review_required, drafts the optimisation plan. Only in the review phase. Returns 202 with the job id and the cycle the review will record; progress arrives as REVIEW_STARTED and REVIEW_COMPLETED on the live channel. */
+        post: operations["StartReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/compliance/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The latest compliance report (members, FR-38, FR-41): overall score vs threshold, category breakdown with weights, agent scores, penalties and evidence, violations, missing features, drift level and areas, the §4.5 decision and its reason, and the optimisation plan it produced. Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version. */
+        get: operations["GetLatestCompliance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/compliance/trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The compliance score across review cycles, oldest first, with the project's threshold (members, FR-41). The series is empty before the first review. Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version. */
+        get: operations["GetComplianceTrend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/compliance/drift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The drift level and areas of the latest compliance report (members, FR-41, §4.7). Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version. */
+        get: operations["GetComplianceDrift"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1069,8 +1137,89 @@ export interface components {
         AuthProvidersDto: {
             github: boolean;
         };
+        /**
+         * @description One compliance category (§4.7): its weight, the agent's score (0–1), the deterministic penalty (sum of the fixed
+         *     critical/major/minor penalties of its deterministic violations) and the final score (agent score − penalty, floored
+         *     at 0), with the agent's evidence.
+         */
+        CategoryScoreDto: {
+            category: components["schemas"]["ReviewCategory"];
+            /** Format: double */
+            weight: number;
+            /** Format: double */
+            agentScore: number;
+            /** Format: double */
+            penalty: number;
+            /** Format: double */
+            score: number;
+            evidence: components["schemas"]["EvidenceDto"][];
+        };
         ChangeSystemRoleRequest: {
             systemRole: components["schemas"]["SystemRole"];
+        };
+        /** @description The drift level and areas of the latest compliance report (FR-41, §4.7). */
+        ComplianceDriftDto: {
+            driftLevel: components["schemas"]["DriftLevel"];
+            areas: components["schemas"]["DriftAreaDto"][];
+            /** Format: int32 */
+            projectVersion: number;
+            /** Format: int32 */
+            cycle: number;
+        };
+        /**
+         * @description The compliance report of one review cycle (FR-38, FR-41). `overallScore` is Σ category score × weight (3 dp);
+         *     `threshold` is the project's compliance threshold. `decision` follows §4.5; `decisionReason` is set
+         *     when the decision is `escalation_required` (`low_score`, `severe_drift`, `max_cycles`,
+         *     `no_improvement` or `no_optimization_plan` — another cycle was required but the review proposed no
+         *     optimisation steps), else `null`. `optimizationPlanArtifactId` is the optimisation plan draft the review
+         *     produced (FR-40), if any.
+         */
+        ComplianceReportDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            projectVersion: number;
+            /** Format: int32 */
+            cycle: number;
+            /** Format: double */
+            overallScore: number;
+            /** Format: double */
+            threshold: number;
+            categoryScores: components["schemas"]["CategoryScoreDto"][];
+            violations: components["schemas"]["ViolationDto"][];
+            missingFeatures: string[];
+            driftLevel: components["schemas"]["DriftLevel"];
+            driftAreas: components["schemas"]["DriftAreaDto"][];
+            decision: components["schemas"]["ReviewDecision"];
+            decisionReason: null | components["schemas"]["EscalationReason"];
+            /** Format: uuid */
+            optimizationPlanArtifactId: null | string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @description The compliance score across review cycles, oldest first (FR-41), with the project's threshold. Empty before the first review. */
+        ComplianceTrendDto: {
+            /** Format: double */
+            threshold: number;
+            series: components["schemas"]["ComplianceTrendPointDto"][];
+        };
+        /**
+         * @description One review cycle's result in the compliance trend (FR-41). `threshold` is the compliance threshold that cycle was
+         *     decided against (the report's snapshot; the project's threshold may have changed since).
+         */
+        ComplianceTrendPointDto: {
+            /** Format: int32 */
+            cycle: number;
+            /** Format: int32 */
+            projectVersion: number;
+            /** Format: double */
+            overallScore: number;
+            driftLevel: components["schemas"]["DriftLevel"];
+            decision: components["schemas"]["ReviewDecision"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: double */
+            threshold: number;
         };
         CreateApiTokenRequest: {
             name: string;
@@ -1174,14 +1323,25 @@ export interface components {
          * @enum {unknown}
          */
         DiffLineKind: "context" | "added" | "removed" | "skipped";
+        /** @description A drift area reported by the review agent (§4.7). */
+        DriftAreaDto: {
+            area: string;
+            severity: components["schemas"]["Severity"];
+            description: string;
+        };
         /** @enum {unknown} */
         DriftLevel: "none" | "low" | "moderate" | "severe" | null;
         /** @enum {unknown} */
         EscalationDecision: "continue" | "rollback" | "accept" | null;
         /** @enum {unknown} */
-        EscalationReason: "low_score" | "severe_drift" | "max_cycles" | "no_improvement" | "step_blocked" | null;
+        EscalationReason: "low_score" | "severe_drift" | "max_cycles" | "no_improvement" | "step_blocked" | "no_optimization_plan" | null;
         /** @enum {unknown} */
         EventCategory: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project" | "integrity" | null;
+        /** @description Why the review agent scored a category as it did: a file (when the evidence points at one) and the reason. */
+        EvidenceDto: {
+            file: null | string;
+            reason: string;
+        };
         /** @description Step counts of the current plan version. */
         ExecutionCountsDto: {
             /** Format: int32 */
@@ -1269,6 +1429,11 @@ export interface components {
             action: components["schemas"]["FileAction"];
             contentHash: string;
         };
+        /**
+         * @description Where a review violation came from (§4.7): a deterministic check or the Code Review agent.
+         * @enum {unknown}
+         */
+        FindingSource: "deterministic" | "agent";
         /**
          * @description An approval gate (§4.2, FR-12–FR-15). `artifactId`, `artifactType` and `artifactVersion` identify
          *     the gated artifact (spec and plan gates). Escalation gates carry `escalationReason` and, once decided,
@@ -1734,9 +1899,26 @@ export interface components {
             /** @description At least 8 characters with a letter and a digit. */
             password: string;
         };
+        /**
+         * @description Compliance categories (§4.7).
+         * @enum {unknown}
+         */
+        ReviewCategory: "feature_coverage" | "api_contracts" | "data_model" | "architecture" | "security" | "testing";
         /** @enum {unknown} */
         ReviewDecision: "release_eligible" | "review_required" | "escalation_required" | null;
-        /** @description Review cycle progress and the latest compliance result. `maxCycles` includes extra cycles granted by escalations. */
+        /**
+         * @description The review job's state for the project (FR-38): no review in the current cycle, queued or running, finished, or failed.
+         * @enum {unknown}
+         */
+        ReviewRunStatus: "idle" | "running" | "completed" | "failed";
+        /** @description A review was queued (FR-38): the review job's id and the cycle number the review will record. */
+        ReviewStartedDto: {
+            /** Format: uuid */
+            jobId: string;
+            /** Format: int32 */
+            cycle: number;
+        };
+        /** @description Review cycle progress and the latest compliance result (FR-38). `maxCycles` includes extra cycles granted by escalations (FR-14 continue). `status` is the review job's state: `running` while a review is queued or running, then `completed` or `failed`; `idle` before the first cycle or after a rollback cleared the review state (§4.8). */
         ReviewStateDto: {
             /** Format: int32 */
             cycle: number;
@@ -1746,6 +1928,7 @@ export interface components {
             latestScore: null | number;
             latestDecision: null | components["schemas"]["ReviewDecision"];
             driftLevel: null | components["schemas"]["DriftLevel"];
+            status: components["schemas"]["ReviewRunStatus"];
         };
         /** @description An artifact version a run used as input (FR-23). */
         RunInputArtifactDto: {
@@ -1753,6 +1936,11 @@ export interface components {
             /** Format: int32 */
             version: number;
         };
+        /**
+         * @description Severity of a review finding or drift area (§4.7).
+         * @enum {unknown}
+         */
+        Severity: "minor" | "major" | "critical";
         /** @description Start a refinement round (FR-27), optionally answering some or all clarifying questions of the latest round. */
         StartRefinementRequest: {
             answers?: null | components["schemas"]["RefinementAnswerRequest"][];
@@ -1822,6 +2010,15 @@ export interface components {
             systemRole: components["schemas"]["SystemRole"];
             avatarUrl: null | string;
             githubLinked: boolean;
+        };
+        /** @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known. */
+        ViolationDto: {
+            category: components["schemas"]["ReviewCategory"];
+            severity: components["schemas"]["Severity"];
+            source: components["schemas"]["FindingSource"];
+            message: string;
+            file: null | string;
+            evidence: null | string;
         };
         /** @enum {unknown} */
         ViolationSeverity: "error" | "warning";
@@ -4574,6 +4771,184 @@ export interface operations {
             };
             /** @description PHASE_PRECONDITION_FAILED (not in execution or review, steps not all completed, or the PR for the current plan is already recorded) or CONFLICT (a pull request job is already queued or running, or a concurrent change). */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StartReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The review job was queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewStartedDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't start a review. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description WRONG_PHASE (the project isn't in the review phase), REVIEW_IN_PROGRESS (a review job is already queued or running) or CONFLICT (a concurrent change). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetLatestCompliance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceReportDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or no review has completed yet. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetComplianceTrend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceTrendDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetComplianceDrift: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceDriftDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or no review has completed yet. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -120,6 +120,18 @@ public interface IWorkingCopies
     /// </summary>
     Task<BranchComparison?> CompareAsync(Guid projectId, string baseRef, string branch, int maxCommits, int maxFiles, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// FR-38: the files committed on <paramref name="branch"/> (path and size, path order, at most
+    /// <paramref name="maxEntries"/>; unsafe paths skipped), or <c>null</c> when there is no repository or no such branch.
+    /// </summary>
+    Task<IReadOnlyList<Domain.Review.RepositoryFile>?> ListFilesAsync(Guid projectId, string branch, int maxEntries, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-38: the committed content of <paramref name="paths"/> on <paramref name="branch"/> (not the working tree, so
+    /// uncommitted leftovers are never reviewed). Missing and binary files (a NUL byte) are left out.
+    /// </summary>
+    Task<IReadOnlyList<Domain.Review.SourceFile>> ReadCommittedAsync(Guid projectId, string branch, IReadOnlyList<string> paths, CancellationToken cancellationToken);
+
     /// <summary>FR-31: the current content of <paramref name="paths"/> in the working copy.</summary>
     Task<IReadOnlyList<WorkingFileContent>> ReadAsync(Guid projectId, IEnumerable<string> paths, CancellationToken cancellationToken);
 
@@ -367,6 +379,78 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
             var error = remote.Redact(result.StandardError.Trim());
             throw new GitCommandException($"git {arguments[0]} failed (exit {result.ExitCode}): {(error.Length > 500 ? error[..500] : error)}");
         }
+    }
+
+    public Task<IReadOnlyList<Domain.Review.RepositoryFile>?> ListFilesAsync(Guid projectId, string branch, int maxEntries, CancellationToken cancellationToken)
+    {
+        RequireBranchName(branch);
+        if (!IsRepository(projectId))
+        {
+            return Task.FromResult<IReadOnlyList<Domain.Review.RepositoryFile>?>(null);
+        }
+
+        return WithLockAsync<IReadOnlyList<Domain.Review.RepositoryFile>?>(projectId, async () =>
+        {
+            var root = PathFor(projectId);
+            if (!await RefExistsAsync(root, branch, cancellationToken))
+            {
+                return null;
+            }
+
+            var listing = await RunAsync(root, ["ls-tree", "-r", "-z", "--long", "--full-tree", $"refs/heads/{branch}"], cancellationToken);
+            var files = new List<Domain.Review.RepositoryFile>();
+            foreach (var entry in listing.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+            {
+                // "<mode> <type> <object> <size>\t<path>"
+                var tab = entry.IndexOf('\t', StringComparison.Ordinal);
+                if (tab < 0)
+                {
+                    continue;
+                }
+
+                var meta = entry[..tab].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var path = entry[(tab + 1)..];
+                if (meta.Length < 4 || meta[1] != "blob" || !long.TryParse(meta[3], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var size)
+                    || PathRules.IsUnsafe(PathRules.Normalize(path)))
+                {
+                    continue;
+                }
+
+                files.Add(new Domain.Review.RepositoryFile(path, size));
+                if (files.Count >= maxEntries)
+                {
+                    break;
+                }
+            }
+
+            return files;
+        });
+    }
+
+    public Task<IReadOnlyList<Domain.Review.SourceFile>> ReadCommittedAsync(Guid projectId, string branch, IReadOnlyList<string> paths, CancellationToken cancellationToken)
+    {
+        RequireBranchName(branch);
+        ArgumentNullException.ThrowIfNull(paths);
+        return WithLockAsync<IReadOnlyList<Domain.Review.SourceFile>>(projectId, async () =>
+        {
+            var root = RequireRepository(projectId);
+            var files = new List<Domain.Review.SourceFile>();
+            foreach (var path in paths.Distinct(StringComparer.Ordinal))
+            {
+                if (PathRules.IsUnsafe(PathRules.Normalize(path)))
+                {
+                    continue;
+                }
+
+                var shown = await RunAsync(root, ["cat-file", "blob", $"refs/heads/{branch}:{path}"], cancellationToken, allowFailure: true);
+                if (shown.Succeeded && shown.StandardOutput.IndexOf('\0', StringComparison.Ordinal) < 0)
+                {
+                    files.Add(new Domain.Review.SourceFile(path, shown.StandardOutput));
+                }
+            }
+
+            return files;
+        });
     }
 
     public async Task<IReadOnlyList<WorkingFileContent>> ReadAsync(Guid projectId, IEnumerable<string> paths, CancellationToken cancellationToken)

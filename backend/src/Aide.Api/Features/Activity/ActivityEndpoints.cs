@@ -174,6 +174,11 @@ internal static class ActivitySummary
                 : "Branch comparison recorded (local pull request)",
             EventTypes.PullRequestFailed => "Opening the pull request failed",
             EventTypes.PullRequestForgotten => "The recorded pull request was forgotten: the Git repository changed",
+            EventTypes.ReviewStarted => $"Review cycle {Get("cycle") ?? "?"} started",
+            EventTypes.ReviewCompleted => Get("decisionReason") is { } why
+                ? $"Review cycle {Get("cycle") ?? "?"} completed: score {Get("overallScore") ?? "?"}, {Get("decision") ?? "?"} ({why})"
+                : $"Review cycle {Get("cycle") ?? "?"} completed: score {Get("overallScore") ?? "?"}, {Get("decision") ?? "?"}",
+            EventTypes.ReviewFailed => $"Review cycle {Get("cycle") ?? "?"} failed",
             EventTypes.ProjectCreated => "Project created",
             EventTypes.ProjectUpdated => "Project updated",
             EventTypes.MemberAdded => "Member added",

@@ -373,6 +373,24 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task S4_8_A_cascade_fallback_out_of_review_clears_the_review_cycle_and_the_extra_cycles()
+    {
+        using var fixture = await ProjectApi.FixtureAsync(factory);
+        var id = fixture.Project.Id;
+        await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 5, ApprovalMode.Advisory, reviewCycle: 2);
+        await ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(s => s.SetProperty(p => p.ExtraReviewCycles, 1), Ct));
+        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 3, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 3);
+
+        var spec4 = await ArtifactApi.ReadAsync(await ArtifactApi.CreateDraftAsync(fixture.Contributor.Client, id, Spec, "# Spec v4"), HttpStatusCode.Created);
+        await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, spec4.Id, "approve"));
+
+        var project = await LifecycleSeed.ProjectAsync(factory, id);
+        Assert.Equal((Phase.Planning, 0, 0), (project.CurrentPhase, project.ReviewCycle, project.ExtraReviewCycles));
+    }
+
+    [Fact]
     public async Task FR19_Approving_a_plan_in_planning_invalidates_only_the_optimisation_plan_and_older_plan_steps_without_fallback()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);

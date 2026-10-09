@@ -29,6 +29,11 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
         project.Status = transition.Status;
         project.ProjectVersion = transition.Version;
         project.UpdatedAt = now;
+        if (transition.ClearsReviewState)
+        {
+            project.ReviewCycle = ReviewCycleRules.CycleAfterRollback;
+            project.ExtraReviewCycles = 0;
+        }
 
         db.StateTransitions.Add(new StateTransition
         {
@@ -76,7 +81,19 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
     /// records <c>stepId</c>, <c>stepNumber</c> and <c>escalationReason = step_blocked</c>, which the gate list reads back
     /// (no gate column is needed).
     /// </remarks>
-    public ApprovalGate AddGate(Project project, GateType type, Guid? artifactId, string actor, DateTimeOffset now, string? reason = null, ExecutionStep? blockedStep = null)
+    /// <remarks>
+    /// <paramref name="escalationReason"/> is the §4.5 reason of an escalation raised by a review (FR-39); it is recorded as
+    /// <c>escalationReason</c> in the payload.
+    /// </remarks>
+    public ApprovalGate AddGate(
+        Project project,
+        GateType type,
+        Guid? artifactId,
+        string actor,
+        DateTimeOffset now,
+        string? reason = null,
+        ExecutionStep? blockedStep = null,
+        EscalationReason? escalationReason = null)
     {
         ArgumentNullException.ThrowIfNull(project);
         var gate = new ApprovalGate
@@ -90,7 +107,9 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
         db.ApprovalGates.Add(gate);
         project.UpdatedAt = now;
         object payload = blockedStep is null
-            ? new { gateId = gate.Id, type, artifactId, projectVersion = project.ProjectVersion, reason }
+            ? escalationReason is { } review
+                ? new { gateId = gate.Id, type, artifactId, projectVersion = project.ProjectVersion, reason, escalationReason = review }
+                : new { gateId = gate.Id, type, artifactId, projectVersion = project.ProjectVersion, reason }
             : new
             {
                 gateId = gate.Id,

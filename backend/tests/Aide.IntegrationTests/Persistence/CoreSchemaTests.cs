@@ -119,9 +119,15 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
                 ReviewCycle = 1,
                 ProjectVersion = 5,
                 Score = 0.825m,
-                CategoryScores = [new CategoryScoreEntry(ReviewCategory.ApiContracts, 0.8m, "src/api.cs: missing route")],
-                Violations = [new ReviewFinding(ReviewCategory.Security, Severity.Critical, "Secret found", "src/x.cs")],
+                CategoryScores = [new CategoryScoreEntry(ReviewCategory.ApiContracts, 0.8m, 0.9m, 0.1m, [new ScoreEvidence("src/api.cs", "missing route")])],
+                Violations =
+                [
+                    new ReviewFinding(ReviewCategory.Security, Severity.Critical, "Secret found", "src/x.cs"),
+                    new ReviewFinding(ReviewCategory.DataModel, Severity.Minor, "Missing index", Source: FindingSource.Agent, Evidence: "orders.customer_id"),
+                ],
                 MissingFeatures = ["FR-9 settings"],
+                Threshold = 0.85m,
+                OptimizationPlanArtifactId = plan.Id,
                 DriftLevel = DriftLevel.Low,
                 DriftAreas = [new DriftAreaEntry("api", Severity.Minor, "Extra route")],
                 Decision = ReviewDecision.ReviewRequired,
@@ -180,8 +186,15 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
             var report = await db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == project.Id, Ct);
             Assert.Equal(0.825m, report.Score);
             Assert.Equal(5, report.ProjectVersion);
-            Assert.Equal(ReviewCategory.ApiContracts, Assert.Single(report.CategoryScores).Category);
-            Assert.Equal(Severity.Critical, Assert.Single(report.Violations).Severity);
+            var category = Assert.Single(report.CategoryScores);
+            Assert.Equal(ReviewCategory.ApiContracts, category.Category);
+            Assert.Equal((0.9m, 0.1m), (category.AgentScore, category.Penalty));
+            Assert.Equal([new ScoreEvidence("src/api.cs", "missing route")], category.Evidence);
+            Assert.Equal(Severity.Critical, report.Violations[0].Severity);
+            Assert.Equal(FindingSource.Deterministic, report.Violations[0].Source);
+            Assert.Equal((FindingSource.Agent, "orders.customer_id"), (report.Violations[1].Source, report.Violations[1].Evidence));
+            Assert.Equal(0.85m, report.Threshold);
+            Assert.Equal(plan.Id, report.OptimizationPlanArtifactId);
             Assert.Equal(["FR-9 settings"], report.MissingFeatures);
 
             var rollback = await db.RollbackEvents.AsNoTracking().SingleAsync(r => r.ProjectId == project.Id, Ct);

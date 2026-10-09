@@ -150,6 +150,7 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
                 EscalationReason.SevereDrift => "The code drifts severely from the specification. Continue, roll back or accept.",
                 EscalationReason.MaxCycles => "The maximum number of review cycles was reached. Continue, roll back or accept.",
                 EscalationReason.NoImprovement => "The review score did not improve on the previous cycle. Continue, roll back or accept.",
+                EscalationReason.NoOptimizationPlan => "The review requires another cycle but proposed no optimisation plan. Continue (run another review), roll back or accept.",
                 EscalationReason.StepBlocked => "An execution step was rejected four times and is blocked. Continue (retry the step with fresh attempts) or roll back.",
                 _ => $"A human decision is needed ({GateType.Escalation.ToWire()}). Continue, roll back or accept.",
             },

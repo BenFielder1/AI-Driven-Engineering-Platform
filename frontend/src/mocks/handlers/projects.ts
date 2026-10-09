@@ -61,6 +61,8 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
   pullRequest?: Schemas['PullRequestDto'] | null
   /** A pull request job is queued or running (FR-36): POST /git/pull-request sets it and refuses with 409 CONFLICT while set. */
   pullRequestJobQueued?: boolean
+  /** Compliance reports, oldest first (FR-38, FR-41); see mocks/handlers/review.ts. */
+  complianceReports?: Schemas['ComplianceReportDto'][]
   /** Phase recorded at each project version (rollback restores it, §4.8). */
   phaseAtVersion: Record<number, Project['currentPhase']>
 }
@@ -112,7 +114,7 @@ const emptyState = (): StoredProject['state'] => ({
     { type: 'implementation_plan', latestVersion: null, latestStatus: null, currentLockedVersion: null },
   ],
   execution: { total: 0, pending: 0, inProgress: 0, completed: 0, rejected: 0, blocked: 0 },
-  review: { cycle: 0, maxCycles: 3, latestScore: null, latestDecision: null, driftLevel: null },
+  review: { cycle: 0, maxCycles: 3, latestScore: null, latestDecision: null, driftLevel: null, status: 'idle' },
 })
 
 /**

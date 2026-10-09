@@ -83,6 +83,7 @@ public sealed partial class ExecutionJobHandler(
         step ??= await NextStepAsync(project, steps, cancellationToken);
         if (step is null)
         {
+            await CompleteIfAllDoneAsync(project.Id, planId, steps, cancellationToken);
             return;
         }
 
@@ -162,6 +163,29 @@ public sealed partial class ExecutionJobHandler(
         }
 
         return steps.Single(s => s.StepNumber == number);
+    }
+
+    /// <summary>
+    /// Nothing to run and every step of the current plan is completed (e.g. execution re-entered for a plan whose steps all
+    /// ran): run the completion follow-up (FR-36, the pull request job that advances to review) so the project is never left
+    /// in execution with no job. The pull request job is queued at most once and skips a superseded plan.
+    /// </summary>
+    private async Task CompleteIfAllDoneAsync(Guid projectId, Guid planId, List<ExecutionStep> steps, CancellationToken cancellationToken)
+    {
+        if (!ExecutionRules.AllCompleted([.. steps.Select(s => s.Status)]))
+        {
+            return;
+        }
+
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
+        if (project is null || project.CurrentPhase != Phase.Execution)
+        {
+            return;
+        }
+
+        await completion.OnExecutionCompletedAsync(db, project, planId, time.GetUtcNow(), cancellationToken);
+        await SaveStepAsync(cancellationToken);
+        LogExecutionCompleted(logger, steps.Count);
     }
 
     /// <summary>Starts a new attempt of <paramref name="step"/> (<c>STEP_STARTED</c>); <c>false</c> if it can't start.</summary>

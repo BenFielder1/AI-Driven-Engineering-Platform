@@ -64,10 +64,13 @@ public sealed record LifecycleSnapshot
     /// <summary>Decision of the escalation gate raised for the latest report, if one was decided.</summary>
     public EscalationDecision? EscalationOutcome { get; init; }
 
-    /// <summary>The optimisation plan for the next review cycle is approved (locked).</summary>
+    /// <summary>
+    /// The optimisation plan of the latest review's cycle (that report's draft, or a later version of it) is approved
+    /// (locked). An optimisation plan of an earlier cycle doesn't count.
+    /// </summary>
     public bool OptimizationPlanLocked { get; init; }
 
-    /// <summary>Steps of the approved optimisation plan.</summary>
+    /// <summary>Steps of that optimisation plan still to run (neither completed nor invalidated).</summary>
     public int OptimizationPlanStepCount { get; init; }
 
     /// <summary>The latest review decision and escalation outcome, or nulls when the report isn't for <paramref name="projectVersion"/>.</summary>
@@ -90,6 +93,12 @@ public sealed record PhaseTransition(
     string Reason)
 {
     public LifecycleState NewState => new(To, Status, Version);
+
+    /// <summary>
+    /// §4.8: a rollback clears the review state (review cycle and the extra cycles granted by escalation <c>continue</c>);
+    /// so does a cascade fallback (§4.4), whose new upstream artifacts make the earlier review cycles moot.
+    /// </summary>
+    public bool ClearsReviewState => Kind is TransitionKind.Rollback or TransitionKind.InvalidationFallback;
 }
 
 /// <summary>Result of "advance to next phase": either the move was applied, or a gate must be created first.</summary>
