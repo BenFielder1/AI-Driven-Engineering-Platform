@@ -117,7 +117,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 12 M7 Notifications (base: 01ebe33 → 10b774a) — IDs: FR-47–FR-49, FR-15
   - [x] aspnet-engineer (domain rules, outbox, dispatcher/sweeper, channels, approval links) → ef-data-engineer (migration NotificationDetails) ‖ vite-react-engineer (bell, notifications page, preferences, approval page) — resumed from an uncommitted tree; gate green except 2 flaky frontend tests
   - [x] gate · review (0 Critical, 2 Major, 6 Minor — all fixed; frontend flake root-caused: lazy route chunks under Vitest) · redeploy (migration applied, smoke ✓, notifications + approval-link 404 + token redaction checked on k8s) · commit
-- [x] 13 M8 Admin + CLI (base: 32634f0) — IDs: FR-51, FR-52, FR-3 (admin UI), FR-23 (admin runs)
+- [x] 13 M8 Admin + CLI (base: 32634f0 → f2b3172) — IDs: FR-51, FR-52, FR-3 (admin UI), FR-23 (admin runs)
   - [x] aspnet-engineer (admin API, contract) → vite-react-engineer (admin pages) ‖ aspnet-engineer (aide CLI)
   - [x] gate · review (0 Critical, 0 Major, 7 Minor — all fixed; migration AdminListIndexes) · redeploy (migration applied, smoke ✓, non-admin 403, CLI login/projects/init/status/logs exit 0 and 404 → 1 on k8s) · commit
 - [ ] 14 Integrate & deploy — full-lifecycle E2E (Fake + Local) → redeploy → E2E on k8s, NFR-PERF
