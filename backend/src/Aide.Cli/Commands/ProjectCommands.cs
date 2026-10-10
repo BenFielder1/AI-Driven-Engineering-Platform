@@ -81,7 +81,7 @@ internal static class ProjectCommands
         var name = new Option<string?>("--name", "-n") { Description = "Project name (1-100 characters)." };
         var idea = new Option<string?>("--idea") { Description = "The idea to refine (1-10000 characters)." };
         var ideaFile = new Option<string?>("--idea-file") { Description = "Read the idea from a file ('-' for stdin)." };
-        var approvalMode = new Option<string?>("--approval-mode") { Description = "strict (default), advisory or autonomous." };
+        var approvalMode = new Option<string?>("--approval-mode") { Description = "advisory (default), strict or autonomous." };
         approvalMode.AcceptOnlyFromAmong("strict", "advisory", "autonomous");
         var compliance = new Option<double?>("--compliance-threshold") { Description = "Minimum compliance score to release (0.5-1)." };
         var maxFiles = new Option<int?>("--max-files-per-step") { Description = "Files an execution step may change (1-100)." };
@@ -143,7 +143,7 @@ internal static class ProjectCommands
                 ? ReadText(file, terminal)
                 : Required(context.Get(idea), "--idea", "Idea (one line; use --idea-file for more): ");
 
-            var mode = Optional(context.Get(approvalMode), "Approval mode [strict/advisory/autonomous] (strict): ")?.ToLowerInvariant();
+            var mode = Optional(context.Get(approvalMode), "Approval mode [advisory/strict/autonomous] (advisory): ")?.ToLowerInvariant();
             if (mode is not null and not ("strict" or "advisory" or "autonomous"))
             {
                 throw new UsageException($"Unknown approval mode '{mode}'.");
