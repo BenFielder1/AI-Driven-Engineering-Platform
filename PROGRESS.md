@@ -114,7 +114,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 11 M6 Release + rollback (base: bf8229d) — IDs: FR-42–FR-45
   - [x] aspnet-engineer (contract stubs) → ef-data-engineer (migration ReleaseAndRollbackDetails) ‖ vite-react-engineer (release panel, rollback dialog/history) → aspnet-engineer (release job, rollback endpoint)
   - [x] gate · review (0 Critical, 1 Major, 4 Minor + tag-reuse gap — all fixed; migration rebuilt as 20261009195805) · redeploy (migration applied, smoke ✓, release → v7-aide tag + merge, rollback + 429 on k8s ✓) · commit
-- [x] 12 M7 Notifications (base: 01ebe33) — IDs: FR-47–FR-49, FR-15
+- [x] 12 M7 Notifications (base: 01ebe33 → 10b774a) — IDs: FR-47–FR-49, FR-15
   - [x] aspnet-engineer (domain rules, outbox, dispatcher/sweeper, channels, approval links) → ef-data-engineer (migration NotificationDetails) ‖ vite-react-engineer (bell, notifications page, preferences, approval page) — resumed from an uncommitted tree; gate green except 2 flaky frontend tests
   - [x] gate · review (0 Critical, 2 Major, 6 Minor — all fixed; frontend flake root-caused: lazy route chunks under Vitest) · redeploy (migration applied, smoke ✓, notifications + approval-link 404 + token redaction checked on k8s) · commit
 - [ ] 13 M8 Admin + CLI — IDs: FR-51, FR-52
