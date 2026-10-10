@@ -120,7 +120,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 13 M8 Admin + CLI (base: 32634f0 → f2b3172) — IDs: FR-51, FR-52, FR-3 (admin UI), FR-23 (admin runs)
   - [x] aspnet-engineer (admin API, contract) → vite-react-engineer (admin pages) ‖ aspnet-engineer (aide CLI)
   - [x] gate · review (0 Critical, 0 Major, 7 Minor — all fixed; migration AdminListIndexes) · redeploy (migration applied, smoke ✓, non-admin 403, CLI login/projects/init/status/logs exit 0 and 404 → 1 on k8s) · commit
-- [x] 14 Integrate & deploy (base: 0582334) — IDs: NFR-PERF, NFR-OBS, NFR-A11Y, NFR-TEST, NFR-SEC, FR-46 (browser), DEP-1
+- [x] 14 Integrate & deploy (base: 0582334 → 01cdc8a) — IDs: NFR-PERF, NFR-OBS, NFR-A11Y, NFR-TEST, NFR-SEC, FR-46 (browser), DEP-1
   - [x] e2e-qa-engineer (full lifecycle, permissions, artifacts, admin, axe a11y, perf script) ‖ aspnet-engineer (log scopes, trace spans) → vite-react-engineer (3 a11y fixes, live unread refresh)
   - [x] gate · review (0 Critical, 2 Major, 3 Minor — all fixed) · redeploy · E2E on k8s 48/48 · commit
 - [ ] Final — spec-verifier → fixes → github-ci-engineer → readme-writer
