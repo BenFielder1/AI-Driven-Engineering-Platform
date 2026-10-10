@@ -123,7 +123,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 14 Integrate & deploy (base: 0582334 → 01cdc8a) — IDs: NFR-PERF, NFR-OBS, NFR-A11Y, NFR-TEST, NFR-SEC, FR-46 (browser), DEP-1
   - [x] e2e-qa-engineer (full lifecycle, permissions, artifacts, admin, axe a11y, perf script) ‖ aspnet-engineer (log scopes, trace spans) → vite-react-engineer (3 a11y fixes, live unread refresh)
   - [x] gate · review (0 Critical, 2 Major, 3 Minor — all fixed) · redeploy · E2E on k8s 48/48 · commit
-- [x] Final (base: 3d9c178) — spec-verifier (72 Done, 4 Partial, 0 Missing) → e2e-qa-engineer (Firefox/WebKit/Edge projects, 75/75) ‖ github-ci-engineer (CI: CLI pack, EF drift, kubeconform, images, chromium E2E; actionlint clean) → aspnet-engineer (span test race) → readme-writer (README + config reference, SPEC sync)
+- [x] Final (base: 3d9c178 → 6835ddf) — spec-verifier (72 Done, 4 Partial, 0 Missing) → e2e-qa-engineer (Firefox/WebKit/Edge projects, 75/75) ‖ github-ci-engineer (CI: CLI pack, EF drift, kubeconform, images, chromium E2E; actionlint clean) → aspnet-engineer (span test race) → readme-writer (README + config reference, SPEC sync)
 
 ## Decisions
 - 2026-10-07 — §11 Q1: GitLab provider is out of v1; the Git provider abstraction stays so it can be added later — Ben's answer — SPEC updated: yes (§11)
