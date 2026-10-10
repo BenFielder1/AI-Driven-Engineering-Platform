@@ -119,6 +119,7 @@ public static partial class AuthSetup
                 return;
             }
 
+            System.Diagnostics.Activity.Current?.SetTag(AideTelemetry.UserIdTag, userId.ToString());
             var logger = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Aide.Api.Request");
             using (logger.BeginScope(new Dictionary<string, object> { ["UserId"] = userId }))
             {

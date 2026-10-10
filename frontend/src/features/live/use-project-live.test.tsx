@@ -1,17 +1,18 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { renderHook, screen, waitFor, within } from '@testing-library/react'
+import { type QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, renderHook, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { seedGate } from '../../mocks/handlers/lifecycle'
 import { FakeLiveHub, projectEvent } from '../../test/fake-live'
 import { openOverviewAs } from '../../test/overview'
 import { createTestQueryClient } from '../../test/render'
 import { artifactKeys } from '../artifacts/artifacts-api'
+import { notificationKeys } from '../notifications/notifications-api'
 import { projectKeys } from '../projects/projects-api'
 import { runKeys } from '../runs/runs-api'
 import { LiveConnectionContext } from './live-connection'
-import { useProjectLive } from './use-project-live'
+import { NOTIFICATION_REFRESH_DEBOUNCE_MS, useProjectLive } from './use-project-live'
 
 const PROJECT = '00000000-0000-7000-8000-000000000001'
 const OTHER = '00000000-0000-7000-8000-000000000002'
@@ -33,6 +34,15 @@ function setup(hub = new FakeLiveHub()) {
   const utils = renderHook(() => useProjectLive(PROJECT), { wrapper })
   const stale = (key: readonly unknown[]) => queryClient.getQueryState(key)?.isInvalidated ?? false
   return { ...utils, hub, queryClient, stale }
+}
+
+interface InvalidateSpy {
+  mock: { calls: Parameters<QueryClient['invalidateQueries']>[] }
+}
+
+/** The calls that refreshed the notification tree (FR-47). */
+function notificationRefreshes(invalidate: InvalidateSpy) {
+  return invalidate.mock.calls.filter(([filters]) => filters?.queryKey === notificationKeys.all)
 }
 
 describe('useProjectLive (FR-46)', () => {
@@ -122,6 +132,93 @@ describe('useProjectLive (FR-46)', () => {
       expect(hub.latest.stopped).toBe(true)
     })
     expect(hub.latest.calls.at(-1)).toEqual({ method: 'Leave', projectId: PROJECT })
+  })
+
+  it('FR47_live_event_refreshes_the_unread_count_and_notification_lists', async () => {
+    const { hub, result, stale, queryClient } = setup()
+    queryClient.setQueryData(notificationKeys.unreadCount(), 0)
+    queryClient.setQueryData(notificationKeys.latest(), { items: [] })
+    queryClient.setQueryData(notificationKeys.list(false), { pages: [] })
+    queryClient.setQueryData(notificationKeys.preferences(), { mutedTypes: [] })
+    await waitFor(() => {
+      expect(result.current).toBe('live')
+    })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      hub.latest.emit(projectEvent(OTHER, 'gate', { type: 'GATE_CREATED' }))
+      // A burst (a draft emits two events, execution emits many) refreshes once, after the burst settles.
+      hub.latest.emit(projectEvent(PROJECT, 'artifact', { type: 'ARTIFACT_CREATED' }))
+      act(() => {
+        vi.advanceTimersByTime(NOTIFICATION_REFRESH_DEBOUNCE_MS - 100)
+      })
+      hub.latest.emit(projectEvent(PROJECT, 'gate', { type: 'GATE_CREATED' }))
+      hub.latest.emit(projectEvent(PROJECT, 'step', { type: 'STEP_BLOCKED' }))
+      act(() => {
+        vi.advanceTimersByTime(NOTIFICATION_REFRESH_DEBOUNCE_MS - 1)
+      })
+      expect(notificationRefreshes(invalidate)).toHaveLength(0)
+      expect(stale(notificationKeys.unreadCount())).toBe(false)
+
+      act(() => {
+        vi.advanceTimersByTime(1)
+      })
+      expect(notificationRefreshes(invalidate)).toHaveLength(1)
+      // An in-flight unread-count/latest fetch is reused, not aborted and restarted.
+      expect(notificationRefreshes(invalidate)[0]?.[1]).toEqual({ cancelRefetch: false })
+      expect(stale(notificationKeys.unreadCount())).toBe(true)
+      expect(stale(notificationKeys.latest())).toBe(true)
+      expect(stale(notificationKeys.list(false))).toBe(true)
+      expect(stale(notificationKeys.preferences())).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('FR47_live_event_that_cannot_notify_does_not_refresh_notifications', async () => {
+    const { hub, result, stale, queryClient } = setup()
+    queryClient.setQueryData(notificationKeys.unreadCount(), 0)
+    await waitFor(() => {
+      expect(result.current).toBe('live')
+    })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      hub.latest.emit(projectEvent(PROJECT, 'gate', { type: 'GATE_APPROVED' }))
+      hub.latest.emit(projectEvent(PROJECT, 'run', { type: 'RUN_STARTED' }))
+      hub.latest.emit(projectEvent(PROJECT, 'step', { type: 'STEP_COMPLETED' }))
+      act(() => {
+        vi.advanceTimersByTime(NOTIFICATION_REFRESH_DEBOUNCE_MS * 2)
+      })
+      expect(notificationRefreshes(invalidate)).toHaveLength(0)
+      expect(stale(notificationKeys.unreadCount())).toBe(false)
+      // The project's own queries still refresh.
+      expect(stale(projectKeys.gates(PROJECT))).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('FR47_pending_notification_refresh_is_cancelled_on_unmount', async () => {
+    const { hub, result, queryClient, unmount } = setup()
+    await waitFor(() => {
+      expect(result.current).toBe('live')
+    })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      hub.latest.emit(projectEvent(PROJECT, 'gate', { type: 'GATE_CREATED' }))
+      unmount()
+      act(() => {
+        vi.advanceTimersByTime(NOTIFICATION_REFRESH_DEBOUNCE_MS * 2)
+      })
+      expect(notificationRefreshes(invalidate)).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('FR-46: a failed join (e.g. FORBIDDEN) reports offline instead of failing silently', async () => {

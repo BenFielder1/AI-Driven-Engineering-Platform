@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef } from 'react'
+import { isValidElement, type ComponentPropsWithoutRef } from 'react'
 import Markdown, { defaultUrlTransform, type Components, type UrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -34,6 +34,29 @@ const components: Components = {
   h6: shifted('h6'),
   a: (props) => <a {...withoutNode(props)} rel="noopener noreferrer nofollow" />,
   img: SafeImage,
+  pre: CodeBlock,
+}
+
+type PreProps = ComponentPropsWithoutRef<'pre'> & { node?: unknown }
+
+/** The fenced block's language, from the `language-xxx` class react-markdown puts on the inner `<code>`. */
+function codeLanguage(children: unknown): string | undefined {
+  if (!isValidElement<{ className?: unknown }>(children)) {
+    return undefined
+  }
+  const { className } = children.props
+  return typeof className === 'string' ? /(?:^|\s)language-([\w+#.-]+)/.exec(className)?.[1] : undefined
+}
+
+/**
+ * NFR-A11Y (axe `scrollable-region-focusable`, WCAG 2.1.1): a code block scrolls horizontally, so it must be reachable
+ * by keyboard to scroll it. It's a named group (not a landmark, so several blocks don't need unique names) in the tab
+ * order; the global `:focus-visible` outline shows focus.
+ */
+function CodeBlock(props: PreProps) {
+  const rest = withoutNode(props)
+  const language = codeLanguage(rest.children)
+  return <pre {...rest} role="group" tabIndex={0} aria-label={language ? `Code block (${language})` : 'Code block'} />
 }
 
 /**

@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Aide.Api.Jobs;
+using Aide.Api.Logging;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
@@ -98,9 +100,45 @@ public sealed partial class AgentRunner(
         {
             ["RunId"] = runId,
             ["Agent"] = request.Agent.ToWire(),
-            ["ProjectId"] = request.ProjectId,
+            [ProjectLogScope.ProjectIdKey] = request.ProjectId,
         });
+        using var activity = AideTelemetry.Source.StartActivity("agent run", ActivityKind.Internal);
+        activity?.SetTag(AideTelemetry.RunIdTag, runId.ToString());
+        activity?.SetTag(AideTelemetry.AgentTag, request.Agent.ToWire());
+        activity?.SetTag(AideTelemetry.ProjectIdTag, request.ProjectId.ToString());
+        try
+        {
+            var outcome = await RunCoreAsync(request, runId, cancellationToken);
+            activity?.SetTag(AideTelemetry.RunStatusTag, AgentRunStatus.Succeeded.ToWire());
+            activity?.SetStatus(ActivityStatusCode.Ok);
+            return outcome;
+        }
+        catch (JobFailedException ex)
+        {
+            // NFR-OBS: a failed (or retried) run is an error span, described by its error code — never the message.
+            activity?.SetTag(AideTelemetry.RunStatusTag, TrackedStatus(runId));
+            AideTelemetry.SetError(activity, ex.ErrorCode ?? nameof(JobFailedException));
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            activity?.SetTag(AideTelemetry.RunStatusTag, TrackedStatus(runId));
+            throw;
+        }
+        catch (Exception ex)
+        {
+            activity?.SetTag(AideTelemetry.RunStatusTag, TrackedStatus(runId));
+            AideTelemetry.SetError(activity, ex.GetType().Name);
+            throw;
+        }
+    }
 
+    /// <summary>The run's status as this runner last left it, or <c>not_started</c> when it has no row.</summary>
+    private string TrackedStatus(Guid runId) =>
+        db.AgentRuns.Local.FirstOrDefault(r => r.Id == runId)?.Status.ToWire() ?? "not_started";
+
+    private async Task<AgentRunOutcome> RunCoreAsync(AgentRunRequest request, Guid runId, CancellationToken cancellationToken)
+    {
         var template = prompts.Template(request.Agent);
         var run = await db.AgentRuns.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
         if (run is { Status: AgentRunStatus.Succeeded })

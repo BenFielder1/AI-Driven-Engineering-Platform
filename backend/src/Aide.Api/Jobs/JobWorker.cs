@@ -1,4 +1,6 @@
 using System.Data.Common;
+using System.Diagnostics;
+using Aide.Api.Logging;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
@@ -28,6 +30,9 @@ namespace Aide.Api.Jobs;
 public sealed partial class JobWorker : BackgroundService
 {
     public const int MaxErrorLength = 2000;
+
+    /// <summary>NFR-OBS: the span error of an attempt whose lease was lost (its outcome is not recorded by this worker).</summary>
+    public const string LeaseLostError = "LEASE_LOST";
     private const int ReapBatchSize = 100;
 
     private readonly IServiceScopeFactory _scopes;
@@ -237,6 +242,7 @@ public sealed partial class JobWorker : BackgroundService
     private async Task RunAsync(Job job, CancellationToken stoppingToken)
     {
         using var logScope = BeginJobScope(job);
+        using var activity = StartJobActivity(job);
         LogRunning(_logger, job.Type, job.Attempts);
 
         using var leaseLost = new CancellationTokenSource();
@@ -248,6 +254,7 @@ public sealed partial class JobWorker : BackgroundService
         var released = false;
         var transient = true;
         string? error = null;
+        string? spanError = null; // an error code or exception type name, never a message (NFR-SEC)
         try
         {
             await using var scope = _scopes.CreateAsyncScope();
@@ -268,6 +275,7 @@ public sealed partial class JobWorker : BackgroundService
         {
             transient = ex.Transient;
             error = ex.ErrorCode is null ? ex.Message : $"{ex.ErrorCode}: {ex.Message}";
+            spanError = ex.ErrorCode ?? nameof(JobFailedException);
             LogHandlerFailed(_logger, ex, transient);
         }
 #pragma warning disable CA1031 // A handler bug must become a recorded, retried job failure, not crash the worker.
@@ -275,6 +283,7 @@ public sealed partial class JobWorker : BackgroundService
 #pragma warning restore CA1031
         {
             error = $"{ex.GetType().Name}: {ex.Message}";
+            spanError = ex.GetType().Name;
             LogHandlerFailed(_logger, ex, transient);
         }
         finally
@@ -286,17 +295,48 @@ public sealed partial class JobWorker : BackgroundService
         if (leaseLost.IsCancellationRequested && !released)
         {
             LogLeaseLost(_logger);
+            activity?.SetTag(AideTelemetry.JobOutcomeTag, JobOutcomes.Cancelled);
+            AideTelemetry.SetError(activity, LeaseLostError);
             return;
         }
 
         try
         {
-            await CompleteAsync(job, succeeded, released, transient, error);
+            var outcome = await CompleteAsync(job, succeeded, released, transient, error);
+            TagOutcome(activity, outcome, spanError);
         }
         catch (Exception ex) when (ex is DbException or DbUpdateException or InvalidOperationException or TimeoutException)
         {
             // The job stays running until its lease expires; then the reaper re-queues it.
             LogCompleteFailed(_logger, ex);
+            AideTelemetry.SetError(activity, spanError ?? ex.GetType().Name);
+        }
+    }
+
+    /// <summary>NFR-OBS: tags the job's span with how the attempt ended; anything but success (or a shutdown hand-back)
+    /// is an error span. <paramref name="outcome"/> is <c>null</c> when the lease was lost before the outcome was saved.</summary>
+    private static void TagOutcome(Activity? activity, string? outcome, string? spanError)
+    {
+        if (activity is null)
+        {
+            return;
+        }
+
+        if (outcome is null)
+        {
+            activity.SetTag(AideTelemetry.JobOutcomeTag, JobOutcomes.Cancelled);
+            AideTelemetry.SetError(activity, LeaseLostError);
+            return;
+        }
+
+        activity.SetTag(AideTelemetry.JobOutcomeTag, outcome);
+        if (outcome is JobOutcomes.Retry or JobOutcomes.Failed or JobOutcomes.Dead)
+        {
+            AideTelemetry.SetError(activity, spanError ?? outcome);
+        }
+        else if (outcome == JobOutcomes.Succeeded)
+        {
+            activity.SetStatus(ActivityStatusCode.Ok);
         }
     }
 
@@ -342,7 +382,9 @@ public sealed partial class JobWorker : BackgroundService
         }
     }
 
-    private async Task CompleteAsync(Job job, bool succeeded, bool released, bool transient, string? error)
+    /// <summary>Records the attempt's outcome and returns it (one of <see cref="JobOutcomes"/>), or <c>null</c> when the
+    /// lease was lost and nothing was recorded.</summary>
+    private async Task<string?> CompleteAsync(Job job, bool succeeded, bool released, bool transient, string? error)
     {
         // The outcome is recorded even while shutting down, so the job isn't left running until its lease expires.
         await using var scope = _scopes.CreateAsyncScope();
@@ -351,13 +393,16 @@ public sealed partial class JobWorker : BackgroundService
         var mine = db.Jobs.Where(j => j.Id == job.Id && j.Status == JobStatus.Running && j.LockedBy == WorkerId);
 
         int updated;
+        string outcomeTag;
         if (succeeded)
         {
             updated = await MarkSucceededAsync(scope.ServiceProvider, db, job, now, withHooks: true);
             LogSucceeded(_logger);
+            outcomeTag = JobOutcomes.Succeeded;
         }
         else if (released)
         {
+            outcomeTag = JobOutcomes.Cancelled;
             updated = await mine.ExecuteUpdateAsync(
                 s => s.SetProperty(j => j.Status, JobStatus.Queued)
                     .SetProperty(j => j.Attempts, Math.Max(0, job.Attempts - 1))
@@ -390,21 +435,27 @@ public sealed partial class JobWorker : BackgroundService
             if (outcome.IsDeadLetter)
             {
                 LogDeadLettered(_logger, job.Attempts);
+                outcomeTag = JobOutcomes.Dead;
             }
             else if (outcome.Status == JobStatus.Queued)
             {
                 LogRetryScheduled(_logger, job.Attempts, outcome.RunAfter);
+                outcomeTag = JobOutcomes.Retry;
             }
             else
             {
                 LogFailedPermanently(_logger, job.Attempts);
+                outcomeTag = JobOutcomes.Failed;
             }
         }
 
         if (updated == 0)
         {
             LogLeaseLost(_logger);
+            return null;
         }
+
+        return outcomeTag;
     }
 
     /// <summary>
@@ -449,12 +500,43 @@ public sealed partial class JobWorker : BackgroundService
         return updated;
     }
 
-    private IDisposable? BeginJobScope(Job job) => _logger.BeginScope(new Dictionary<string, object?>
+    /// <summary>NFR-OBS: the scope every log entry written while the job runs carries (handlers' own loggers included —
+    /// scopes flow with the async context). <c>ProjectId</c> is present only for project jobs.</summary>
+    private IDisposable? BeginJobScope(Job job)
     {
-        ["JobId"] = job.Id,
-        ["JobType"] = job.Type,
-        ["ProjectId"] = job.ProjectId,
-    });
+        var values = new Dictionary<string, object?>
+        {
+            [JobScopeKeys.JobId] = job.Id,
+            [JobScopeKeys.JobType] = job.Type,
+            [JobScopeKeys.Attempt] = job.Attempts,
+        };
+        if (job.ProjectId is { } projectId)
+        {
+            values[ProjectLogScope.ProjectIdKey] = projectId;
+        }
+
+        return _logger.BeginScope(values);
+    }
+
+    /// <summary>NFR-OBS: the job's span, tagged with the same ids as its log scope.</summary>
+    private static Activity? StartJobActivity(Job job)
+    {
+        var activity = AideTelemetry.Source.StartActivity($"job {job.Type}", ActivityKind.Internal);
+        if (activity is null)
+        {
+            return null;
+        }
+
+        activity.SetTag(AideTelemetry.JobIdTag, job.Id.ToString());
+        activity.SetTag(AideTelemetry.JobTypeTag, job.Type);
+        activity.SetTag(AideTelemetry.JobAttemptTag, job.Attempts);
+        if (job.ProjectId is { } projectId)
+        {
+            activity.SetTag(AideTelemetry.ProjectIdTag, projectId.ToString());
+        }
+
+        return activity;
+    }
 
     private static string? Truncate(string? value) =>
         value is { Length: > MaxErrorLength } ? value[..MaxErrorLength] : value;

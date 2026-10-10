@@ -58,20 +58,20 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-43 | Merge conflict blocks release; retry | 3 | both | 11 | done | MERGE_CONFLICT with files, stays releasing, RELEASE_FAILED (notification phase 12); POST /release retry (NOT_RELEASING, RELEASE_IN_PROGRESS); FR43_* tests |
 | FR-44 | Rollback | 3 | both | 1, 8, 10, 11 | done | POST /rollback (owner) via RollbackWriter in one transaction with job-row locks; record lists invalidated/reset/requeued/cancelled ids; versions picker + confirmation dialog; FR44_* tests; verified on k8s |
 | FR-45 | Rollback rate limit and blocking | 3 | backend | 11 | done | 1/min per project → 429 + Retry-After; blocked by in-progress step/agent run/running or partially applied release with reason details; FR45_* tests; 429 verified on k8s |
-| FR-46 | Live updates (SignalR) | 3 | both | 5 | done | /api/hubs/projects, post-commit publisher, origin check; useProjectLive invalidation; FR46_* tests (browser E2E in phase 14) |
+| FR-46 | Live updates (SignalR) | 3 | both | 5, 14 | done | /api/hubs/projects, post-commit publisher, origin check; useProjectLive invalidation; FR46_* tests; browser E2E (viewer sees gate + phase change < 2 s) |
 | FR-47 | Notifications: in-app + channels | 3 | both | 12 | done | 10 event types → in-app centre (bell, unread count, read/read-all, per-user muted types) + email/Slack/Teams/HMAC-signed webhook via outbox interceptor + notification job; SSRF-safe connector; FR47_* tests |
 | FR-48 | Signed single-use approval links | 3 | both | 12 | done | HMAC tokens (hash stored), 72h expiry, single use, Owner + browser session, /approvals/$token confirmation page; tokens redacted from logs; FR48_* tests |
 | FR-49 | Per-channel delivery retry | 3 | backend | 12 | done | one delivery row per channel, 5 attempts (1m/5m/30m/2h), sent never re-sent, 60s send cap < 2 min claim lease; FR49_* tests |
 | FR-50 | Activity feed | 3 | both | 4 | done | GET …/activity (type filter, keyset `before`, 50/page); activity feed with load more, humanised copy; FR50_* tests |
 | FR-51 | Admin pages, dead-letter retry | 3 | both | 13 | done | GET /api/admin/events·runs·dead-letters (filters, paging), POST …/dead-letters/{jobId}/retry (FOR UPDATE, retried + new job, DEAD_LETTER_RETRIED); /admin pages; FR51_* tests |
 | FR-52 | `aide` CLI | 3 | backend | 13 | done | Aide.Cli (System.CommandLine, PackAsTool `aide`): full FR-52 command set, --json, exit codes 0/1/2/3/4; Aide.Cli.Tests FR52_* (fake handler) |
-| NFR-PERF | p95 < 300 ms reads; live events < 2 s | 8 | both | 14 | todo | — |
+| NFR-PERF | p95 < 300 ms reads; live events < 2 s | 8 | both | 14 | done | scripts/perf/nfr-perf.mjs on k8s (50 projects, 1,000 artifact versions): read p95 ≤ 12 ms (8 clients ≤ 13 ms), live event p95 9.7 ms, 0 errors |
 | NFR-REL | Job lease expiry re-queue (5 min) | 8, 4.9 | backend | 1, 4 | done | JobWorker: SKIP LOCKED claim, continuous slots, lease renewal, reaper, 2/8/32 s backoff → dead letter; NFR_REL_* tests |
-| NFR-SEC | Cookies, antiforgery, rate limits, Data Protection, no secret logging | 8 | backend | 2–3 | todo | — |
-| NFR-OBS | JSON logs, OTel console, ready check incl. migrations | 8 | backend | 0, 2 | partial | health live/ready + JSON logs + OTel (phase 0); project/run/job ids in logs later |
-| NFR-A11Y | WCAG 2.2 AA core flows, both themes | 8 | frontend | 2+ | todo | — |
-| NFR-TEST | Domain unit tests, endpoint integration tests, Fake+Local E2E | 8 | both | all | todo | — |
-| DEP-1 | Docker Desktop k8s deploy at :8080, ns `aide`, db/api/web/db-migrate, aide-data PVC, WS proxy | 9 | deploy | 0, 14 | partial | skeleton deployed, smoke ✓ (phase 0) |
+| NFR-SEC | Cookies, antiforgery, rate limits, Data Protection, no secret logging | 8 | backend | 2–3, 12 | done | HttpOnly SameSite=Lax cookies (Secure SameAsRequest), antiforgery, login/register rate limits, Data Protection keys on /data, secrets redacted, HMAC webhooks + approval tokens, token redaction in logs |
+| NFR-OBS | JSON logs, OTel console, ready check incl. migrations | 8 | backend | 0, 2, 14 | done | JSON logs with JobId/JobType/Attempt/ProjectId/RunId/UserId scopes, `Aide` trace source (job + agent-run spans, error status), ready = DB + migrations; NFR_OBS_* tests |
+| NFR-A11Y | WCAG 2.2 AA core flows, both themes | 8 | frontend | 2+, 14 | done | axe WCAG 2.2 AA scans of 12 pages × light/dark + 375 px checks in e2e/a11y.spec.ts, all green |
+| NFR-TEST | Domain unit tests, endpoint integration tests, Fake+Local E2E | 8 | both | all | done | ~2,190 backend tests (unit + Testcontainers integration + CLI), 335 Vitest, 48 Playwright incl. full lifecycle with Fake + Local on k8s |
+| DEP-1 | Docker Desktop k8s deploy at :8080, ns `aide`, db/api/web/db-migrate, aide-data PVC, WS proxy | 9 | deploy | 0, 14 | done | deploy-local.sh: migration Job, api/web rollout, smoke; full E2E (incl. SignalR through nginx) green on k8s |
 | DEP-2 | Dev seed: admin + demo project (Fake + Local) | 9 | backend | 3 | done | DevSeeder (admin@aide.local + Fake/Local demo, marker event); on in dev + k8s overlay; DEP2_* tests; verified on k8s |
 
 ## Phases
@@ -120,7 +120,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 13 M8 Admin + CLI (base: 32634f0 → f2b3172) — IDs: FR-51, FR-52, FR-3 (admin UI), FR-23 (admin runs)
   - [x] aspnet-engineer (admin API, contract) → vite-react-engineer (admin pages) ‖ aspnet-engineer (aide CLI)
   - [x] gate · review (0 Critical, 0 Major, 7 Minor — all fixed; migration AdminListIndexes) · redeploy (migration applied, smoke ✓, non-admin 403, CLI login/projects/init/status/logs exit 0 and 404 → 1 on k8s) · commit
-- [ ] 14 Integrate & deploy — full-lifecycle E2E (Fake + Local) → redeploy → E2E on k8s, NFR-PERF
+- [x] 14 Integrate & deploy (base: 0582334) — IDs: NFR-PERF, NFR-OBS, NFR-A11Y, NFR-TEST, NFR-SEC, FR-46 (browser), DEP-1
+  - [x] e2e-qa-engineer (full lifecycle, permissions, artifacts, admin, axe a11y, perf script) ‖ aspnet-engineer (log scopes, trace spans) → vite-react-engineer (3 a11y fixes, live unread refresh)
+  - [x] gate · review (0 Critical, 2 Major, 3 Minor — all fixed) · redeploy · E2E on k8s 48/48 · commit
 - [ ] Final — spec-verifier → fixes → github-ci-engineer → readme-writer
 
 ## Decisions
@@ -266,6 +268,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-10 — Dead-letter retry: 409 CONFLICT when an execution job is already queued/running for the project (unique index); 404 when the job isn't `dead` (incl. already retried); requires a browser session (an Admin API token can read the admin lists but not retry, like role changes); writes DEAD_LETTER_RETRIED {deadJobId, jobId, jobType} with no category — §6 lists only NOT_FOUND — SPEC updated: no
 - 2026-10-10 — CLI: `release <id>` approves the pending pre_release gate, else POST /release (retry); extras beyond FR-52: `logout`, `artifact list|history`, type aliases (spec, plan); `config get` without a key lists all (old `config list`); the token is set only via `aide login` (prompt/stdin), stored per API URL and sent only to that URL; http is refused for non-loopback hosts; config at %APPDATA%\aide\config.json or ~/.config/aide/config.json (0600), precedence flag > env (AIDE_API_URL, AIDE_TOKEN, AIDE_CONFIG) > file > http://localhost:8080 — SPEC updated: no
 
+- 2026-10-10 — Any live project event that can notify (NotificationRules.ForEvent types, mirrored in the SPA) refreshes the unread count after a 500 ms debounce; the 30 s poll stays as fallback (gate reminders have no live event) — SPEC updated: no
+- 2026-10-10 — E2E registrations are serialised through a cross-worker file lock and honour Retry-After, so the suite fits the 5/min/IP register limit without relaxing it — NFR-TEST — SPEC updated: no
+- 2026-10-10 — Traces: trace source `Aide` with `job <type>` and `agent run` spans tagged aide.project_id/job_id/job_type/job_attempt/job_outcome/run_id/agent/run_status/error_code; error status carries codes only, never messages — NFR-OBS — SPEC updated: no
+
 ## Known issues
 - kubeconform, oasdiff, actionlint not installed locally — schema validation skipped locally (CI runs kubeconform; actionlint was run via Docker) — install optionally — Ben
 - CI not yet run on GitHub (nothing pushed): Testcontainers on ubuntu-latest, SDK 10.0.401 install, Docker cache unverified — verify on first push — orchestrator
@@ -287,5 +293,5 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - Frontend Vitest suites timed out at the 5 s default under parallel load — testTimeout raised to 20 s in vite.config.ts (phase 10) — —
 - GitHub Enterprise: `GitHub:GitBaseUrl`/`ApiBaseUrl` are configurable but project repo URLs are still validated as `https://github.com/…` only (GHE not in v1 scope) — orchestrator
 - rollback_events.restored_phase is nullable in the DB (deploy-window safety); add a hand-written migration that re-runs the backfill and sets NOT NULL in a later release. The `releases.error → error_message` rename isn't rolling-update safe (fine here: Recreate strategy, releases new in phase 11) — orchestrator
-- k8s DB also holds deploy-check users (phases 12–13), an unexpiring API token and project "Deploy check" — delete if unwanted — Ben
+- k8s DB also holds deploy-check users (phases 12–13), E2E users and the perf user nfr-perf@perf.aide.local with 51 "NFR-PERF" projects, an unexpiring API token and project "Deploy check" — delete if unwanted — Ben
 - Two users writing the very first version of a type concurrently aren't warned (baseVersion null) — accepted

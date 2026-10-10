@@ -52,6 +52,8 @@ builder.Services.AddOpenTelemetry()
     .WithTracing(tracing =>
     {
         tracing
+            // NFR-OBS: job and agent-run spans, tagged aide.project_id / aide.job_id / aide.run_id like their log scopes.
+            .AddSource(AideTelemetry.SourceName)
             .AddAspNetCoreInstrumentation(o =>
             {
                 o.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/api/health");

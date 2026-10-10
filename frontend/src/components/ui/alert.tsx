@@ -35,7 +35,7 @@ export interface SummaryError {
 
 /**
  * Form error summary: announced through an always-present live region so screen readers hear new errors
- * after submit; each field error links to its input.
+ * after submit; each field error links to its input. The links are at least 24 by 24 CSS px (WCAG 2.2 SC 2.5.8).
  */
 export function ErrorSummary({ title, errors }: { title: string; errors: SummaryError[] }) {
   return (
@@ -46,7 +46,7 @@ export function ErrorSummary({ title, errors }: { title: string; errors: Summary
             {errors.map((e) => (
               <li key={`${e.fieldId ?? ''}:${e.message}`}>
                 {e.fieldId ? (
-                  <a href={`#${e.fieldId}`} className="underline">
+                  <a href={`#${e.fieldId}`} className="inline-block min-h-6 min-w-6 py-0.5 underline">
                     {e.message}
                   </a>
                 ) : (

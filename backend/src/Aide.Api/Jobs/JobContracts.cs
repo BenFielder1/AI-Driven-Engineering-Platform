@@ -121,3 +121,12 @@ public static class JobServiceCollectionExtensions
         return services;
     }
 }
+
+/// <summary>NFR-OBS: the log scope keys every log entry written while a job runs carries (plus <c>ProjectId</c> for
+/// project jobs).</summary>
+public static class JobScopeKeys
+{
+    public const string JobId = "JobId";
+    public const string JobType = "JobType";
+    public const string Attempt = "Attempt";
+}

@@ -339,8 +339,9 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
     {
         using var admin = await ApiSession.AdminAsync(factory);
         var (projectId, projectName) = await NewProjectAsync();
-        var dead = await AddJobAsync(_jobType, JobStatus.Dead, projectId, payload: """{"x":1}""", attempts: 4, lastError: "boom");
-        var retried = await AddJobAsync(_jobType, JobStatus.Retried, projectId);
+        // Distinct dead-lettered times so the expected order doesn't hinge on the id tiebreak.
+        var dead = await AddJobAsync(_jobType, JobStatus.Dead, projectId, payload: """{"x":1}""", attempts: 4, lastError: "boom", completedAgo: TimeSpan.FromMinutes(2));
+        var retried = await AddJobAsync(_jobType, JobStatus.Retried, projectId, completedAgo: TimeSpan.FromMinutes(1));
         await AddJobAsync(_jobType, JobStatus.Failed, projectId);
         await AddJobAsync(_jobType, JobStatus.Dead);
         var path = $"/api/admin/dead-letters?type={_jobType}";
@@ -356,7 +357,7 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
         Assert.Equal((dead.Id, _jobType, (Guid?)projectId, projectName, 4, "boom"), (item.Id, item.Type, item.ProjectId, item.ProjectName, item.Attempts, item.LastError));
         Assert.Equal(1, item.Payload["x"]!.GetValue<int>());
         Assert.NotNull(item.DeadLetteredAt);
-        Assert.Equal([dead.Id, retried.Id], withRetried.Items.Select(d => d.Id).Order());
+        Assert.Equal([retried.Id, dead.Id], withRetried.Items.Select(d => d.Id)); // newest dead-lettered first
         Assert.Equal((2, 1), (paged.Total, paged.Items.Count));
         Assert.Null(byType.Items.Single(d => d.ProjectId is null).ProjectName);
     }
@@ -393,7 +394,8 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
     }
 
     private Task<Job> AddJobAsync(
-        string type, JobStatus status, Guid? projectId = null, string payload = "{}", int attempts = 0, string? lastError = null) =>
+        string type, JobStatus status, Guid? projectId = null, string payload = "{}", int attempts = 0, string? lastError = null,
+        TimeSpan? completedAgo = null) =>
         ProjectApi.WithDbAsync(factory, async db =>
         {
             var now = DateTimeOffset.UtcNow;
@@ -409,7 +411,7 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
                 CreatedAt = now.AddMinutes(-5),
                 LockedBy = status == JobStatus.Running ? "worker" : null,
                 LockedAt = status == JobStatus.Running ? now : null,
-                CompletedAt = status is JobStatus.Queued or JobStatus.Running ? null : now,
+                CompletedAt = status is JobStatus.Queued or JobStatus.Running ? null : now - (completedAgo ?? TimeSpan.Zero),
             };
             db.Jobs.Add(job);
             await db.SaveChangesAsync(Ct);

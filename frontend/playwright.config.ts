@@ -10,11 +10,18 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  expect: { timeout: 10_000 },
   use: {
     baseURL,
+    actionTimeout: 15_000,
     trace: 'on-first-retry',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /a11y\.(spec|setup)\.ts$/ },
+    // NFR-A11Y: axe scans run against data created once by the setup project.
+    { name: 'a11y-setup', use: { ...devices['Desktop Chrome'] }, testMatch: /a11y\.setup\.ts$/ },
+    { name: 'a11y', use: { ...devices['Desktop Chrome'] }, testMatch: /a11y\.spec\.ts$/, dependencies: ['a11y-setup'] },
+  ],
   ...(startDevServer
     ? {
         webServer: {

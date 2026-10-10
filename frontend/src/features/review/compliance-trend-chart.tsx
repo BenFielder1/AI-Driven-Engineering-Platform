@@ -132,36 +132,46 @@ export function ComplianceTrendChart({ trend }: { trend: ComplianceTrend }) {
           ))}
         </g>
       </svg>
-      <table className="w-full max-w-xl text-left text-sm">
-        <caption className="mb-1 text-left text-sm text-muted">Compliance score by review cycle, oldest first</caption>
-        <thead>
-          <tr className="border-b border-border">
-            <th scope="col" className="py-1 pr-3 font-medium">Cycle</th>
-            <th scope="col" className="py-1 pr-3 font-medium">Version</th>
-            <th scope="col" className="py-1 pr-3 font-medium">Score</th>
-            <th scope="col" className="py-1 pr-3 font-medium">Threshold</th>
-            <th scope="col" className="py-1 pr-3 font-medium">Drift</th>
-            <th scope="col" className="py-1 font-medium">Decision</th>
-          </tr>
-        </thead>
-        <tbody>
-          {points.map((p) => (
-            <tr key={p.key} className="border-b border-border last:border-0">
-              <th scope="row" className="py-1 pr-3 font-normal">
-                {p.cycle}
-              </th>
-              <td className="py-1 pr-3">v{p.projectVersion}</td>
-              <td className="py-1 pr-3">
-                {formatPercent(p.overallScore)}{' '}
-                <span className="text-muted">({p.meets ? 'meets threshold' : 'below threshold'})</span>
-              </td>
-              <td className="py-1 pr-3">{formatPercent(p.threshold)}</td>
-              <td className="py-1 pr-3">{p.driftLevel ? driftLevelLabels[p.driftLevel] : '—'}</td>
-              <td className="py-1">{p.decision ? reviewDecisionLabels[p.decision] : '—'}</td>
+      {/* NFR-A11Y: at 375 px the table may be wider than the page; it scrolls inside a keyboard-reachable region
+          instead of the page scrolling horizontally. */}
+      <div
+        role="region"
+        aria-label="Compliance score table"
+        tabIndex={0}
+        data-testid="trend-table-region"
+        className="max-w-xl overflow-x-auto"
+      >
+        <table className="w-full text-left text-sm">
+          <caption className="mb-1 text-left text-sm text-muted">Compliance score by review cycle, oldest first</caption>
+          <thead>
+            <tr className="border-b border-border">
+              <th scope="col" className="py-1 pr-3 font-medium">Cycle</th>
+              <th scope="col" className="py-1 pr-3 font-medium">Version</th>
+              <th scope="col" className="py-1 pr-3 font-medium">Score</th>
+              <th scope="col" className="py-1 pr-3 font-medium">Threshold</th>
+              <th scope="col" className="py-1 pr-3 font-medium">Drift</th>
+              <th scope="col" className="py-1 font-medium">Decision</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {points.map((p) => (
+              <tr key={p.key} className="border-b border-border last:border-0">
+                <th scope="row" className="py-1 pr-3 font-normal">
+                  {p.cycle}
+                </th>
+                <td className="py-1 pr-3">v{p.projectVersion}</td>
+                <td className="py-1 pr-3">
+                  {formatPercent(p.overallScore)}{' '}
+                  <span className="text-muted">({p.meets ? 'meets threshold' : 'below threshold'})</span>
+                </td>
+                <td className="py-1 pr-3">{formatPercent(p.threshold)}</td>
+                <td className="py-1 pr-3">{p.driftLevel ? driftLevelLabels[p.driftLevel] : '—'}</td>
+                <td className="py-1">{p.decision ? reviewDecisionLabels[p.decision] : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
