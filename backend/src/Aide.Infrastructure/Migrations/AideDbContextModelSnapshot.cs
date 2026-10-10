@@ -131,6 +131,10 @@ namespace Aide.Infrastructure.Migrations
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_agent_runs_status_created_at");
 
+                    b.HasIndex(new[] { "CreatedAt", "Id" }, "ix_agent_runs_created_at_id")
+                        .IsDescending()
+                        .HasDatabaseName("ix_agent_runs_created_at_id");
+
                     b.ToTable("agent_runs", (string)null);
                 });
 
@@ -453,6 +457,10 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasIndex("ProjectId", "CreatedAt")
                         .HasDatabaseName("ix_events_project_id_created_at");
+
+                    b.HasIndex(new[] { "CreatedAt", "Id" }, "ix_events_created_at_id")
+                        .IsDescending()
+                        .HasDatabaseName("ix_events_created_at_id");
 
                     b.ToTable("events", (string)null);
                 });

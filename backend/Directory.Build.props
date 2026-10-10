@@ -15,7 +15,7 @@
     <Deterministic>true</Deterministic>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Aide.UnitTests' Or '$(MSBuildProjectName)' == 'Aide.IntegrationTests'">
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Aide.UnitTests' Or '$(MSBuildProjectName)' == 'Aide.IntegrationTests' Or '$(MSBuildProjectName)' == 'Aide.Cli.Tests'">
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <!-- Test names follow the requirement-ID convention (FR3_locking_a_shipped_order_fails);

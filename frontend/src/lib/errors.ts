@@ -191,6 +191,21 @@ export const contextualErrorMessages = {
   markNotificationRead: {
     NOT_FOUND: "That notification no longer exists. The list now shows the latest.",
   },
+  /** POST /api/admin/dead-letters/:jobId/retry (FR-51). */
+  retryDeadLetter: {
+    NOT_FOUND:
+      "That job is no longer a dead letter: someone already retried it. The list now shows the latest.",
+    CONFLICT:
+      "The project already has an execution job queued or running. Retry this dead letter after it finishes.",
+    FORBIDDEN: "Only administrators can retry dead letters, and only from a browser session.",
+  },
+  /** PATCH /api/admin/users/:id/role (FR-3). */
+  changeSystemRole: {
+    CONFLICT:
+      "AIDE needs at least one Admin, so the last Admin can't become a User. Make someone else an Admin first.",
+    NOT_FOUND: "That user no longer exists. The list now shows the latest.",
+    FORBIDDEN: "Only administrators can change system roles, and only from a browser session.",
+  },
 } as const satisfies Record<string, Partial<Record<ErrorCode, string>>>;
 
 export type ErrorContext = keyof typeof contextualErrorMessages;

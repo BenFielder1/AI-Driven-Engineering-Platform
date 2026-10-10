@@ -695,6 +695,447 @@
         }
       }
     },
+    "/api/admin/events": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Audit events of every project, newest first, paged. Filter by projectId, type (exact event type, e.g. RUN_FAILED), category, outcome (ok or failure) and createdAt range from/to (inclusive).",
+        "operationId": "ListAdminEvents",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "pattern": "^[A-Z][A-Z0-9_]*$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "transition",
+                "gate",
+                "artifact",
+                "run",
+                "step",
+                "review",
+                "release",
+                "rollback",
+                "project",
+                "integrity"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "ok",
+                "failure"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfAdminEventDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/runs": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Agent runs of every project, newest first, paged. Filter by projectId, agent, status, provider and model (exact).",
+        "operationId": "ListAdminRuns",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "idea_refinement",
+                "spec_generator",
+                "plan_generator",
+                "code_generator",
+                "code_review"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "queued",
+                "running",
+                "succeeded",
+                "failed",
+                "cancelled"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "anthropic",
+                "openai",
+                "ollama",
+                "fake"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfAdminAgentRunDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/dead-letters": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Dead-lettered jobs, most recently dead-lettered first, paged. Filter by projectId and job type; includeRetried also lists dead letters already retried.",
+        "operationId": "ListDeadLetters",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeRetried",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfDeadLetterDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/dead-letters/{jobId}/retry": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Re-enqueue a dead letter's job (browser session only): the dead letter is marked retried and a new queued job with the same type and payload is returned. 404 NOT_FOUND if the job isn't a dead letter; 409 CONFLICT if the project already has a queued or running execution job.",
+        "operationId": "RetryDeadLetter",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects": {
       "get": {
         "tags": [
@@ -4963,6 +5404,169 @@
         },
         "description": "Adds an existing user by email (FR-8)."
       },
+      "AdminAgentRunDto": {
+        "required": [
+          "id",
+          "projectId",
+          "projectName",
+          "agent",
+          "phase",
+          "stepId",
+          "provider",
+          "model",
+          "promptVersion",
+          "status",
+          "attempts",
+          "inputTokens",
+          "outputTokens",
+          "costEstimate",
+          "durationMs",
+          "error",
+          "createdAt",
+          "completedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectName": {
+            "type": "string"
+          },
+          "agent": {
+            "$ref": "#/components/schemas/AgentKind"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/Phase"
+          },
+          "stepId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/LlmProvider"
+          },
+          "model": {
+            "type": "string"
+          },
+          "promptVersion": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentRunStatus"
+          },
+          "attempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inputTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "outputTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "costEstimate": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "One agent run in the cross-project admin run log (FR-23, FR-51): the project, agent, phase, step, provider, model,\nprompt template version, status, provider attempts, token counts, estimated cost in USD, duration and error. Input\nartifacts, feedback and output are on the project's run detail (`GET /api/projects/{id}/runs/{runId}`)."
+      },
+      "AdminEventDto": {
+        "required": [
+          "id",
+          "projectId",
+          "projectName",
+          "type",
+          "category",
+          "outcome",
+          "actor",
+          "summary",
+          "payload",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "projectName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "category": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventCategory"
+              }
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/EventOutcome"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/ActorDto"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/JsonObject"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "One entry of the cross-project admin event log (FR-51). `projectId`/`projectName` are `null` for events\nwithout a project (e.g. `PROJECT_DELETED`, whose project id is in the payload). `type` is the stored event\ntype, `category` its activity-feed category (`null` for operations markers such as\n`DEAD_LETTER_RETRIED`), `outcome` whether it records a failure or alert, `summary` a one-line\ndescription and `payload` the raw event payload."
+      },
       "AdminUserDto": {
         "required": [
           "id",
@@ -6139,6 +6743,71 @@
         },
         "description": "A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again."
       },
+      "DeadLetterDto": {
+        "required": [
+          "id",
+          "type",
+          "projectId",
+          "projectName",
+          "status",
+          "attempts",
+          "lastError",
+          "payload",
+          "createdAt",
+          "deadLetteredAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "projectName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "attempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/JsonObject"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deadLetteredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "A dead-lettered job (FR-51, §4.9): its type, project, status (`dead`, or `retried` once an Admin retried\nit), attempts made, last error and payload; `deadLetteredAt` is when it ran out of attempts."
+      },
       "DecideArtifactRequest": {
         "type": "object",
         "properties": {
@@ -6315,6 +6984,13 @@
           "integrity",
           null
         ]
+      },
+      "EventOutcome": {
+        "enum": [
+          "ok",
+          "failure"
+        ],
+        "description": "Whether an event records something going wrong (FR-51 admin event log \"status\" filter). Events are append-only facts\nwith no delivery status of their own, so the admin log filters on this outcome instead."
       },
       "EvidenceDto": {
         "required": [
@@ -6987,6 +7663,61 @@
           }
         }
       },
+      "JobDto": {
+        "required": [
+          "id",
+          "type",
+          "projectId",
+          "status",
+          "attempts",
+          "runAfter",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "attempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "runAfter": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "A background job (§4.9): the job queued by a dead-letter retry (FR-51)."
+      },
+      "JobStatus": {
+        "enum": [
+          "queued",
+          "running",
+          "succeeded",
+          "failed",
+          "dead",
+          "cancelled",
+          "retried"
+        ]
+      },
       "JsonObject": {
         "type": "object",
         "additionalProperties": { }
@@ -7338,6 +8069,66 @@
         ],
         "description": "The kind of an in-app notification (FR-47, FR-15). The project channel events (`NotificationEvent`) plus\n`gate_reminder`, the 24-hour reminder of a pending gate. Wire values are snake_case."
       },
+      "PagedResultOfAdminAgentRunDto": {
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminAgentRunDto"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "One page of results. int PagedResult&lt;T&gt;.Page is 1-based."
+      },
+      "PagedResultOfAdminEventDto": {
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminEventDto"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "One page of results. int PagedResult&lt;T&gt;.Page is 1-based."
+      },
       "PagedResultOfAdminUserDto": {
         "required": [
           "items",
@@ -7381,6 +8172,36 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AgentRunDto"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "One page of results. int PagedResult&lt;T&gt;.Page is 1-based."
+      },
+      "PagedResultOfDeadLetterDto": {
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeadLetterDto"
             }
           },
           "page": {

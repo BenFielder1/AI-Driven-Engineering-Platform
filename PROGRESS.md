@@ -15,7 +15,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | --- | --- | --- | --- | --- | --- | --- |
 | FR-1 | Register, sign in/out, cookie session | 3 | both | 2 | done | auth endpoints + /login,/register; FR1_* tests; e2e/auth.spec |
 | FR-2 | GitHub sign-in and linking | 3 | both | 2 | done | GitHub OAuth (fake handler tests), hidden when unconfigured |
-| FR-3 | First user Admin; admins change roles | 3 | both | 2 | partial | first-user admin + PATCH /api/admin/users/{id}/role (admin UI phase 13) |
+| FR-3 | First user Admin; admins change roles | 3 | both | 2, 13 | done | first-user admin + PATCH /api/admin/users/{id}/role; /admin/users page with confirmation and last-admin 409; FR3_* tests |
 | FR-4 | Personal API tokens (hash stored) | 3 | both | 2 | done | /api/me/tokens + bearer scheme + Account page; e2e |
 | FR-5 | Project wizard, defaults, PROJECT_CREATED | 3 | both | 3 | done | POST /api/projects + wizard; slug/defaults/PROJECT_CREATED; FR5_* tests |
 | FR-6 | Projects list: paging, search, filters, sort, membership | 3 | both | 3 | done | GET /api/projects paging/search/filters/sort; list page; FR6_* tests |
@@ -35,7 +35,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-20 | Integrity re-check, corrupted, alert, regenerate | 3 | both | 5 | done | every read re-hashes; corrupted + INTEGRITY_ALERT; re-run for current agent version; FR20_* tests |
 | FR-21 | Artifact history and diff | 3 | both | 5 | done | Myers diff (collapsed context, 100k-line cap), side-by-side view; FR21_* tests |
 | FR-22 | LLM provider abstraction (Anthropic/OpenAI/Ollama/Fake) | 3 | backend | 6 | done | ILlmProvider + typed HttpClients, resolver (project → config), Fake responder seam; FR22_* tests (fake handlers only) |
-| FR-23 | Agent run records | 3 | both | 6 | done | AgentRunner run rows (tokens, cost, duration, inputs, prompt version); GET …/runs[/:id]; runs page + drawer; FR23_* tests (admin list phase 13) |
+| FR-23 | Agent run records | 3 | both | 6, 13 | done | AgentRunner run rows (tokens, cost, duration, inputs, prompt version); GET …/runs[/:id]; runs page + drawer; GET /api/admin/runs + /admin/runs; FR23_*/FR51_* tests |
 | FR-24 | Versioned prompt templates, MISSING_INPUT | 3 | backend | 6 | done | embedded Prompts/*.md with front-matter version, delimited data tags, MISSING_INPUT before provider call; FR24_* tests |
 | FR-25 | Provider retries, dead letter | 3, 4.9 | backend | 6 | done | transient classification, 4 job attempts, run failed + dead letter + RUN_FAILED (incl. reaper path); FR25_* tests (owner notification phase 12) |
 | FR-26 | Token budget | 3 | both | 6 | done | TokenBudget rule, BUDGET_EXCEEDED event, Owner raises via PATCH project; budget meter; FR26_* tests (execution start check phase 8) |
@@ -63,8 +63,8 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-48 | Signed single-use approval links | 3 | both | 12 | done | HMAC tokens (hash stored), 72h expiry, single use, Owner + browser session, /approvals/$token confirmation page; tokens redacted from logs; FR48_* tests |
 | FR-49 | Per-channel delivery retry | 3 | backend | 12 | done | one delivery row per channel, 5 attempts (1m/5m/30m/2h), sent never re-sent, 60s send cap < 2 min claim lease; FR49_* tests |
 | FR-50 | Activity feed | 3 | both | 4 | done | GET …/activity (type filter, keyset `before`, 50/page); activity feed with load more, humanised copy; FR50_* tests |
-| FR-51 | Admin pages, dead-letter retry | 3 | both | 13 | todo | — |
-| FR-52 | `aide` CLI | 3 | backend | 13 | todo | — |
+| FR-51 | Admin pages, dead-letter retry | 3 | both | 13 | done | GET /api/admin/events·runs·dead-letters (filters, paging), POST …/dead-letters/{jobId}/retry (FOR UPDATE, retried + new job, DEAD_LETTER_RETRIED); /admin pages; FR51_* tests |
+| FR-52 | `aide` CLI | 3 | backend | 13 | done | Aide.Cli (System.CommandLine, PackAsTool `aide`): full FR-52 command set, --json, exit codes 0/1/2/3/4; Aide.Cli.Tests FR52_* (fake handler) |
 | NFR-PERF | p95 < 300 ms reads; live events < 2 s | 8 | both | 14 | todo | — |
 | NFR-REL | Job lease expiry re-queue (5 min) | 8, 4.9 | backend | 1, 4 | done | JobWorker: SKIP LOCKED claim, continuous slots, lease renewal, reaper, 2/8/32 s backoff → dead letter; NFR_REL_* tests |
 | NFR-SEC | Cookies, antiforgery, rate limits, Data Protection, no secret logging | 8 | backend | 2–3 | todo | — |
@@ -117,7 +117,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 12 M7 Notifications (base: 01ebe33 → 10b774a) — IDs: FR-47–FR-49, FR-15
   - [x] aspnet-engineer (domain rules, outbox, dispatcher/sweeper, channels, approval links) → ef-data-engineer (migration NotificationDetails) ‖ vite-react-engineer (bell, notifications page, preferences, approval page) — resumed from an uncommitted tree; gate green except 2 flaky frontend tests
   - [x] gate · review (0 Critical, 2 Major, 6 Minor — all fixed; frontend flake root-caused: lazy route chunks under Vitest) · redeploy (migration applied, smoke ✓, notifications + approval-link 404 + token redaction checked on k8s) · commit
-- [ ] 13 M8 Admin + CLI — IDs: FR-51, FR-52
+- [x] 13 M8 Admin + CLI (base: 32634f0) — IDs: FR-51, FR-52, FR-3 (admin UI), FR-23 (admin runs)
+  - [x] aspnet-engineer (admin API, contract) → vite-react-engineer (admin pages) ‖ aspnet-engineer (aide CLI)
+  - [x] gate · review (0 Critical, 0 Major, 7 Minor — all fixed; migration AdminListIndexes) · redeploy (migration applied, smoke ✓, non-admin 403, CLI login/projects/init/status/logs exit 0 and 404 → 1 on k8s) · commit
 - [ ] 14 Integrate & deploy — full-lifecycle E2E (Fake + Local) → redeploy → E2E on k8s, NFR-PERF
 - [ ] Final — spec-verifier → fixes → github-ci-engineer → readme-writer
 
@@ -260,6 +262,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-10 — Channel messages use absolute links built from `App:PublicBaseUrl` (default http://localhost:8080); without a ≥32-char `Approvals:SigningKey` no one-click links are created (fail closed, warning logged) — SPEC updated: no
 - 2026-10-10 — Vitest builds routes without code splitting (`autoCodeSplitting: !process.env.VITEST`); lazy chunk loading inside findBy timeouts caused flaky route tests — NFR-TEST — SPEC updated: no
 
+- 2026-10-10 — FR-51 "status" filter on the admin event log is the event outcome (`ok` | `failure`; failure = RUN_FAILED, BUDGET_EXCEEDED, STEP_REJECTED/BLOCKED, GIT_PUSH_FAILED, PULL_REQUEST_FAILED, REVIEW_FAILED, RELEASE_FAILED, ARTIFACT_CORRUPTED, INTEGRITY_ALERT) — our events are append-only, the old stack's pending/consumed/dead_letter event status doesn't exist; admin lists use page/limit/total like /api/admin/users — SPEC updated: no
+- 2026-10-10 — Dead-letter retry: 409 CONFLICT when an execution job is already queued/running for the project (unique index); 404 when the job isn't `dead` (incl. already retried); requires a browser session (an Admin API token can read the admin lists but not retry, like role changes); writes DEAD_LETTER_RETRIED {deadJobId, jobId, jobType} with no category — §6 lists only NOT_FOUND — SPEC updated: no
+- 2026-10-10 — CLI: `release <id>` approves the pending pre_release gate, else POST /release (retry); extras beyond FR-52: `logout`, `artifact list|history`, type aliases (spec, plan); `config get` without a key lists all (old `config list`); the token is set only via `aide login` (prompt/stdin), stored per API URL and sent only to that URL; http is refused for non-loopback hosts; config at %APPDATA%\aide\config.json or ~/.config/aide/config.json (0600), precedence flag > env (AIDE_API_URL, AIDE_TOKEN, AIDE_CONFIG) > file > http://localhost:8080 — SPEC updated: no
+
 ## Known issues
 - kubeconform, oasdiff, actionlint not installed locally — schema validation skipped locally (CI runs kubeconform; actionlint was run via Docker) — install optionally — Ben
 - CI not yet run on GitHub (nothing pushed): Testcontainers on ubuntu-latest, SDK 10.0.401 install, Docker cache unverified — verify on first push — orchestrator
@@ -281,4 +287,5 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - Frontend Vitest suites timed out at the 5 s default under parallel load — testTimeout raised to 20 s in vite.config.ts (phase 10) — —
 - GitHub Enterprise: `GitHub:GitBaseUrl`/`ApiBaseUrl` are configurable but project repo URLs are still validated as `https://github.com/…` only (GHE not in v1 scope) — orchestrator
 - rollback_events.restored_phase is nullable in the DB (deploy-window safety); add a hand-written migration that re-runs the backfill and sets NOT NULL in a later release. The `releases.error → error_message` rename isn't rolling-update safe (fine here: Recreate strategy, releases new in phase 11) — orchestrator
+- k8s DB also holds deploy-check users (phases 12–13), an unexpiring API token and project "Deploy check" — delete if unwanted — Ben
 - Two users writing the very first version of a type concurrently aren't warned (baseVersion null) — accepted

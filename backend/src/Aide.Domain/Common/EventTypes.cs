@@ -20,6 +20,19 @@ public enum EventCategory
 }
 
 /// <summary>
+/// Whether an event records something going wrong (FR-51 admin event log "status" filter). Events are append-only facts
+/// with no delivery status of their own, so the admin log filters on this outcome instead.
+/// </summary>
+public enum EventOutcome
+{
+    /// <summary>A normal state change or decision.</summary>
+    Ok = 0,
+
+    /// <summary>A failure or alert that may need attention: failed runs and jobs, rejected or blocked steps, integrity alerts.</summary>
+    Failure = 1,
+}
+
+/// <summary>
 /// Types of the append-only audit events (table <c>events</c>, FR-50, FR-51). Values are SCREAMING_SNAKE strings
 /// and are part of the stored data and the live/activity feeds, so they never change once used.
 /// </summary>
@@ -131,6 +144,13 @@ public static class EventTypes
     // Rollback (FR-44, FR-45)
     public const string RollbackCompleted = "ROLLBACK_COMPLETED";
 
+    /// <summary>
+    /// FR-51: an Admin retried a dead-lettered job: <c>{deadJobId, jobId, jobType}</c> (<c>jobId</c> is the new queued job).
+    /// Written with the job's <c>project_id</c> (null for jobs without a project). Uncategorised: it is an operations
+    /// record, not a lifecycle change, so it has no activity-feed category.
+    /// </summary>
+    public const string DeadLetterRetried = "DEAD_LETTER_RETRIED";
+
     private static readonly Dictionary<EventCategory, IReadOnlyList<string>> ByCategory = new()
     {
         [EventCategory.Transition] = [PhaseChanged],
@@ -145,6 +165,20 @@ public static class EventTypes
         [EventCategory.Integrity] = [IntegrityAlert],
     };
 
+    private static readonly HashSet<string> FailureTypes = new(StringComparer.Ordinal)
+    {
+        RunFailed,
+        BudgetExceeded,
+        StepRejected,
+        StepBlocked,
+        GitPushFailed,
+        PullRequestFailed,
+        ReviewFailed,
+        ReleaseFailed,
+        ArtifactCorrupted,
+        IntegrityAlert,
+    };
+
     private static readonly Dictionary<string, EventCategory> CategoryByType = ByCategory
         .SelectMany(kv => kv.Value.Select(type => (type, kv.Key)))
         .ToDictionary(x => x.type, x => x.Key, StringComparer.Ordinal);
@@ -156,6 +190,13 @@ public static class EventTypes
     /// <summary>The category of an event type; <c>null</c> for internal markers such as <see cref="DemoProjectSeeded"/>.</summary>
     public static EventCategory? CategoryOf(string type) =>
         CategoryByType.TryGetValue(type, out var category) ? category : null;
+
+    /// <summary>FR-51: the outcome of an event type; unknown and uncategorised types are <see cref="EventOutcome.Ok"/>.</summary>
+    public static EventOutcome OutcomeOf(string type) =>
+        FailureTypes.Contains(type) ? EventOutcome.Failure : EventOutcome.Ok;
+
+    /// <summary>FR-51: the event types whose outcome is <see cref="EventOutcome.Failure"/>.</summary>
+    public static IReadOnlyCollection<string> Failures => FailureTypes;
 
     /// <summary>Every categorised event type.</summary>
     public static IReadOnlyCollection<string> AllCategorised => CategoryByType.Keys;

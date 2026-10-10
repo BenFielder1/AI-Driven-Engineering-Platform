@@ -260,6 +260,74 @@ export interface paths {
         patch: operations["ChangeUserSystemRole"];
         trace?: never;
     };
+    "/api/admin/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audit events of every project, newest first, paged. Filter by projectId, type (exact event type, e.g. RUN_FAILED), category, outcome (ok or failure) and createdAt range from/to (inclusive). */
+        get: operations["ListAdminEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Agent runs of every project, newest first, paged. Filter by projectId, agent, status, provider and model (exact). */
+        get: operations["ListAdminRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/dead-letters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dead-lettered jobs, most recently dead-lettered first, paged. Filter by projectId and job type; includeRetried also lists dead letters already retried. */
+        get: operations["ListDeadLetters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/dead-letters/{jobId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Re-enqueue a dead letter's job (browser session only): the dead letter is marked retried and a new queued job with the same type and payload is returned. 404 NOT_FOUND if the job isn't a dead letter; 409 CONFLICT if the project already has a queued or running execution job. */
+        post: operations["RetryDeadLetter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects": {
         parameters: {
             query?: never;
@@ -1121,6 +1189,63 @@ export interface components {
             email: string;
             role: components["schemas"]["ProjectRole"];
         };
+        /**
+         * @description One agent run in the cross-project admin run log (FR-23, FR-51): the project, agent, phase, step, provider, model,
+         *     prompt template version, status, provider attempts, token counts, estimated cost in USD, duration and error. Input
+         *     artifacts, feedback and output are on the project's run detail (`GET /api/projects/{id}/runs/{runId}`).
+         */
+        AdminAgentRunDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            projectName: string;
+            agent: components["schemas"]["AgentKind"];
+            phase: components["schemas"]["Phase"];
+            /** Format: uuid */
+            stepId: null | string;
+            provider: components["schemas"]["LlmProvider"];
+            model: string;
+            promptVersion: string;
+            status: components["schemas"]["AgentRunStatus"];
+            /** Format: int32 */
+            attempts: number;
+            /** Format: int32 */
+            inputTokens: number;
+            /** Format: int32 */
+            outputTokens: number;
+            /** Format: double */
+            costEstimate: number;
+            /** Format: int64 */
+            durationMs: number;
+            error: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+        };
+        /**
+         * @description One entry of the cross-project admin event log (FR-51). `projectId`/`projectName` are `null` for events
+         *     without a project (e.g. `PROJECT_DELETED`, whose project id is in the payload). `type` is the stored event
+         *     type, `category` its activity-feed category (`null` for operations markers such as
+         *     `DEAD_LETTER_RETRIED`), `outcome` whether it records a failure or alert, `summary` a one-line
+         *     description and `payload` the raw event payload.
+         */
+        AdminEventDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: null | string;
+            projectName: null | string;
+            type: string;
+            category: null | components["schemas"]["EventCategory"];
+            outcome: components["schemas"]["EventOutcome"];
+            actor: components["schemas"]["ActorDto"];
+            summary: string;
+            payload: components["schemas"]["JsonObject"];
+            /** Format: date-time */
+            createdAt: string;
+        };
         /** @description A user as shown on the admin users page. */
         AdminUserDto: {
             /** Format: uuid */
@@ -1523,6 +1648,27 @@ export interface components {
             /** Format: date-time */
             expiresAt: null | string;
         };
+        /**
+         * @description A dead-lettered job (FR-51, §4.9): its type, project, status (`dead`, or `retried` once an Admin retried
+         *     it), attempts made, last error and payload; `deadLetteredAt` is when it ran out of attempts.
+         */
+        DeadLetterDto: {
+            /** Format: uuid */
+            id: string;
+            type: string;
+            /** Format: uuid */
+            projectId: null | string;
+            projectName: null | string;
+            status: components["schemas"]["JobStatus"];
+            /** Format: int32 */
+            attempts: number;
+            lastError: null | string;
+            payload: components["schemas"]["JsonObject"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            deadLetteredAt: null | string;
+        };
         /** @description Approve or reject a draft (FR-17). On reject, `comment` is recorded and fed to the re-run agent. */
         DecideArtifactRequest: {
             comment?: null | string;
@@ -1584,6 +1730,12 @@ export interface components {
         EscalationReason: "low_score" | "severe_drift" | "max_cycles" | "no_improvement" | "step_blocked" | "no_optimization_plan" | null;
         /** @enum {unknown} */
         EventCategory: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project" | "integrity" | null;
+        /**
+         * @description Whether an event records something going wrong (FR-51 admin event log "status" filter). Events are append-only facts
+         *     with no delivery status of their own, so the admin log filters on this outcome instead.
+         * @enum {unknown}
+         */
+        EventOutcome: "ok" | "failure";
         /** @description Why the review agent scored a category as it did: a file (when the evidence points at one) and the reason. */
         EvidenceDto: {
             file: null | string;
@@ -1786,6 +1938,23 @@ export interface components {
             /** @description Individual reasons, when there are several. */
             details?: string[];
         };
+        /** @description A background job (§4.9): the job queued by a dead-letter retry (FR-51). */
+        JobDto: {
+            /** Format: uuid */
+            id: string;
+            type: string;
+            /** Format: uuid */
+            projectId: null | string;
+            status: components["schemas"]["JobStatus"];
+            /** Format: int32 */
+            attempts: number;
+            /** Format: date-time */
+            runAfter: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @enum {unknown} */
+        JobStatus: "queued" | "running" | "succeeded" | "failed" | "dead" | "cancelled" | "retried";
         JsonObject: {
             [key: string]: unknown;
         };
@@ -1921,6 +2090,26 @@ export interface components {
          */
         NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback";
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
+        PagedResultOfAdminAgentRunDto: {
+            items: components["schemas"]["AdminAgentRunDto"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            limit: number;
+            /** Format: int32 */
+            total: number;
+        };
+        /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
+        PagedResultOfAdminEventDto: {
+            items: components["schemas"]["AdminEventDto"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            limit: number;
+            /** Format: int32 */
+            total: number;
+        };
+        /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfAdminUserDto: {
             items: components["schemas"]["AdminUserDto"][];
             /** Format: int32 */
@@ -1933,6 +2122,16 @@ export interface components {
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfAgentRunDto: {
             items: components["schemas"]["AgentRunDto"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            limit: number;
+            /** Format: int32 */
+            total: number;
+        };
+        /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
+        PagedResultOfDeadLetterDto: {
+            items: components["schemas"]["DeadLetterDto"][];
             /** Format: int32 */
             page: number;
             /** Format: int32 */
@@ -2988,6 +3187,228 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListAdminEvents: {
+        parameters: {
+            query?: {
+                projectId?: string;
+                type?: string;
+                category?: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project" | "integrity";
+                outcome?: "ok" | "failure";
+                from?: string;
+                to?: string;
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagedResultOfAdminEventDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListAdminRuns: {
+        parameters: {
+            query?: {
+                projectId?: string;
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review";
+                status?: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+                provider?: "anthropic" | "openai" | "ollama" | "fake";
+                model?: string;
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagedResultOfAdminAgentRunDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListDeadLetters: {
+        parameters: {
+            query?: {
+                projectId?: string;
+                type?: string;
+                includeRetried?: boolean;
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagedResultOfDeadLetterDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RetryDeadLetter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDto"];
                 };
             };
             /** @description Unauthorized */

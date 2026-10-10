@@ -74,13 +74,22 @@ public static class JobPolicy
     /// <summary>
     /// FR-51: retrying a dead letter marks it <c>retried</c> and creates a new queued job with the same type,
     /// payload and project, a fresh attempt count, runnable now. The dead row stays as history.
+    /// <paramref name="executionJobActive"/>: for an execution job, whether the project already has a queued or running
+    /// execution job (§4.9 allows one); then the retry is refused with <c>CONFLICT</c> and nothing changes.
     /// </summary>
-    public static Result<DeadLetterRetry> RetryDeadLetter(JobSnapshot deadJob, DateTimeOffset now)
+    public static Result<DeadLetterRetry> RetryDeadLetter(JobSnapshot deadJob, DateTimeOffset now, bool executionJobActive = false)
     {
         ArgumentNullException.ThrowIfNull(deadJob);
         if (deadJob.Status != JobStatus.Dead)
         {
             return Result.Failure<DeadLetterRetry>(new DomainError(ErrorCodes.Conflict, $"Only dead jobs can be retried; this one is {deadJob.Status.ToWire()}."));
+        }
+
+        if (executionJobActive && deadJob.Type == JobTypes.Execution)
+        {
+            return Result.Failure<DeadLetterRetry>(new DomainError(
+                ErrorCodes.Conflict,
+                "An execution job is already queued or running for this project; retry this dead letter after it finishes."));
         }
 
         return Result.Success(new DeadLetterRetry(

@@ -17,6 +17,11 @@ import { Route as AppAdminRouteImport } from './routes/_app/admin'
 import { Route as AppNotificationsRouteImport } from './routes/_app/notifications'
 import { Route as PublicLoginRouteImport } from './routes/_public/login'
 import { Route as PublicRegisterRouteImport } from './routes/_public/register'
+import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
+import { Route as AppAdminDeadLettersRouteImport } from './routes/_app/admin/dead-letters'
+import { Route as AppAdminEventsRouteImport } from './routes/_app/admin/events'
+import { Route as AppAdminRunsRouteImport } from './routes/_app/admin/runs'
+import { Route as AppAdminUsersRouteImport } from './routes/_app/admin/users'
 import { Route as AppApprovalsTokenRouteImport } from './routes/_app/approvals/$token'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app/projects/index'
 import { Route as AppProjectsProjectIdRouteImport } from './routes/_app/projects/$projectId'
@@ -67,6 +72,31 @@ const PublicRegisterRoute = PublicRegisterRouteImport.update({
   id: '/register',
   path: '/register',
   getParentRoute: () => PublicRoute,
+} as any)
+const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminDeadLettersRoute = AppAdminDeadLettersRouteImport.update({
+  id: '/dead-letters',
+  path: '/dead-letters',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminEventsRoute = AppAdminEventsRouteImport.update({
+  id: '/events',
+  path: '/events',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminRunsRoute = AppAdminRunsRouteImport.update({
+  id: '/runs',
+  path: '/runs',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AppAdminRoute,
 } as any)
 const AppApprovalsTokenRoute = AppApprovalsTokenRouteImport.update({
   id: '/approvals/$token',
@@ -140,13 +170,18 @@ const AppProjectsProjectIdArtifactsTypeRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AppAccountRoute
-  '/admin': typeof AppAdminRoute
+  '/admin': typeof AppAdminRouteWithChildren
   '/notifications': typeof AppNotificationsRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/admin/dead-letters': typeof AppAdminDeadLettersRoute
+  '/admin/events': typeof AppAdminEventsRoute
+  '/admin/runs': typeof AppAdminRunsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/approvals/$token': typeof AppApprovalsTokenRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/projects/new': typeof AppProjectsNewRoute
+  '/admin/': typeof AppAdminIndexRoute
   '/projects/': typeof AppProjectsIndexRoute
   '/projects/$projectId/execution': typeof AppProjectsProjectIdExecutionRoute
   '/projects/$projectId/refinement': typeof AppProjectsProjectIdRefinementRoute
@@ -160,12 +195,16 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AppAccountRoute
-  '/admin': typeof AppAdminRoute
   '/notifications': typeof AppNotificationsRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/admin/dead-letters': typeof AppAdminDeadLettersRoute
+  '/admin/events': typeof AppAdminEventsRoute
+  '/admin/runs': typeof AppAdminRunsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/approvals/$token': typeof AppApprovalsTokenRoute
   '/projects/new': typeof AppProjectsNewRoute
+  '/admin': typeof AppAdminIndexRoute
   '/projects': typeof AppProjectsIndexRoute
   '/projects/$projectId/execution': typeof AppProjectsProjectIdExecutionRoute
   '/projects/$projectId/refinement': typeof AppProjectsProjectIdRefinementRoute
@@ -182,13 +221,18 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/_public': typeof PublicRouteWithChildren
   '/_app/account': typeof AppAccountRoute
-  '/_app/admin': typeof AppAdminRoute
+  '/_app/admin': typeof AppAdminRouteWithChildren
   '/_app/notifications': typeof AppNotificationsRoute
   '/_public/login': typeof PublicLoginRoute
   '/_public/register': typeof PublicRegisterRoute
+  '/_app/admin/dead-letters': typeof AppAdminDeadLettersRoute
+  '/_app/admin/events': typeof AppAdminEventsRoute
+  '/_app/admin/runs': typeof AppAdminRunsRoute
+  '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/approvals/$token': typeof AppApprovalsTokenRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/_app/projects/new': typeof AppProjectsNewRoute
+  '/_app/admin/': typeof AppAdminIndexRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/projects/$projectId/execution': typeof AppProjectsProjectIdExecutionRoute
   '/_app/projects/$projectId/refinement': typeof AppProjectsProjectIdRefinementRoute
@@ -208,9 +252,14 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/login'
     | '/register'
+    | '/admin/dead-letters'
+    | '/admin/events'
+    | '/admin/runs'
+    | '/admin/users'
     | '/approvals/$token'
     | '/projects/$projectId'
     | '/projects/new'
+    | '/admin/'
     | '/projects/'
     | '/projects/$projectId/execution'
     | '/projects/$projectId/refinement'
@@ -224,12 +273,16 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/account'
-    | '/admin'
     | '/notifications'
     | '/login'
     | '/register'
+    | '/admin/dead-letters'
+    | '/admin/events'
+    | '/admin/runs'
+    | '/admin/users'
     | '/approvals/$token'
     | '/projects/new'
+    | '/admin'
     | '/projects'
     | '/projects/$projectId/execution'
     | '/projects/$projectId/refinement'
@@ -249,9 +302,14 @@ export interface FileRouteTypes {
     | '/_app/notifications'
     | '/_public/login'
     | '/_public/register'
+    | '/_app/admin/dead-letters'
+    | '/_app/admin/events'
+    | '/_app/admin/runs'
+    | '/_app/admin/users'
     | '/_app/approvals/$token'
     | '/_app/projects/$projectId'
     | '/_app/projects/new'
+    | '/_app/admin/'
     | '/_app/projects/'
     | '/_app/projects/$projectId/execution'
     | '/_app/projects/$projectId/refinement'
@@ -326,6 +384,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/register'
       preLoaderRoute: typeof PublicRegisterRouteImport
       parentRoute: typeof PublicRoute
+    }
+    '/_app/admin/': {
+      id: '/_app/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AppAdminIndexRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/dead-letters': {
+      id: '/_app/admin/dead-letters'
+      path: '/dead-letters'
+      fullPath: '/admin/dead-letters'
+      preLoaderRoute: typeof AppAdminDeadLettersRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/events': {
+      id: '/_app/admin/events'
+      path: '/events'
+      fullPath: '/admin/events'
+      preLoaderRoute: typeof AppAdminEventsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/runs': {
+      id: '/_app/admin/runs'
+      path: '/runs'
+      fullPath: '/admin/runs'
+      preLoaderRoute: typeof AppAdminRunsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/users': {
+      id: '/_app/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppAdminRoute
     }
     '/_app/approvals/$token': {
       id: '/_app/approvals/$token'
@@ -414,6 +507,26 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppAdminRouteChildren {
+  AppAdminDeadLettersRoute: typeof AppAdminDeadLettersRoute
+  AppAdminEventsRoute: typeof AppAdminEventsRoute
+  AppAdminRunsRoute: typeof AppAdminRunsRoute
+  AppAdminUsersRoute: typeof AppAdminUsersRoute
+  AppAdminIndexRoute: typeof AppAdminIndexRoute
+}
+
+const AppAdminRouteChildren: AppAdminRouteChildren = {
+  AppAdminDeadLettersRoute: AppAdminDeadLettersRoute,
+  AppAdminEventsRoute: AppAdminEventsRoute,
+  AppAdminRunsRoute: AppAdminRunsRoute,
+  AppAdminUsersRoute: AppAdminUsersRoute,
+  AppAdminIndexRoute: AppAdminIndexRoute,
+}
+
+const AppAdminRouteWithChildren = AppAdminRoute._addFileChildren(
+  AppAdminRouteChildren,
+)
+
 interface AppProjectsProjectIdRouteChildren {
   AppProjectsProjectIdExecutionRoute: typeof AppProjectsProjectIdExecutionRoute
   AppProjectsProjectIdRefinementRoute: typeof AppProjectsProjectIdRefinementRoute
@@ -443,7 +556,7 @@ const AppProjectsProjectIdRouteWithChildren =
 
 interface AppRouteChildren {
   AppAccountRoute: typeof AppAccountRoute
-  AppAdminRoute: typeof AppAdminRoute
+  AppAdminRoute: typeof AppAdminRouteWithChildren
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppApprovalsTokenRoute: typeof AppApprovalsTokenRoute
   AppProjectsProjectIdRoute: typeof AppProjectsProjectIdRouteWithChildren
@@ -453,7 +566,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAccountRoute: AppAccountRoute,
-  AppAdminRoute: AppAdminRoute,
+  AppAdminRoute: AppAdminRouteWithChildren,
   AppNotificationsRoute: AppNotificationsRoute,
   AppApprovalsTokenRoute: AppApprovalsTokenRoute,
   AppProjectsProjectIdRoute: AppProjectsProjectIdRouteWithChildren,

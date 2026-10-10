@@ -95,6 +95,9 @@ internal sealed class AgentRunConfiguration : IEntityTypeConfiguration<AgentRun>
 
         builder.HasIndex(r => new { r.ProjectId, r.CreatedAt });
         builder.HasIndex(r => new { r.Status, r.CreatedAt });
+
+        // FR-51 cross-project admin list: ORDER BY created_at DESC, id DESC.
+        builder.HasIndex(r => new { r.CreatedAt, r.Id }, "ix_agent_runs_created_at_id").IsDescending(true, true);
     }
 }
 

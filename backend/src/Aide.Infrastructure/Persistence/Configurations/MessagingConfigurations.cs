@@ -23,6 +23,9 @@ internal sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEv
 
         builder.HasIndex(e => new { e.ProjectId, e.CreatedAt });
         builder.HasIndex(e => e.Type);
+
+        // FR-51 cross-project admin list: ORDER BY created_at DESC, id DESC.
+        builder.HasIndex(e => new { e.CreatedAt, e.Id }, "ix_events_created_at_id").IsDescending(true, true);
     }
 }
 

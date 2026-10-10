@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, configure } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll } from 'vitest'
 
+import { resetAdminDb } from '../mocks/handlers/admin'
 import { resetAuthDb } from '../mocks/handlers/auth'
 import { resetNotificationsDb } from '../mocks/handlers/notifications'
 import { resetProjectsDb } from '../mocks/handlers/projects'
@@ -21,6 +22,7 @@ afterEach(() => {
   resetAuthDb()
   resetProjectsDb()
   resetNotificationsDb()
+  resetAdminDb()
   localStorage.clear()
 })
 afterAll(() => {

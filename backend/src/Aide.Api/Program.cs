@@ -122,6 +122,7 @@ builder.Services.AddAideInfrastructure();
 builder.Services.AddAideDataProtection(builder.Configuration);
 builder.AddAideAuth();
 builder.Services.AddScoped<ProjectCreator>();
+builder.Services.AddScoped<DeadLetterService>();
 
 // Lifecycle, gates and background work (FR-11–FR-14, §4.9).
 builder.Services.AddScoped<LifecycleSnapshotLoader>();
@@ -184,6 +185,7 @@ app.MapHealthEndpoints();
 app.MapAuthEndpoints();
 app.MapApiTokenEndpoints();
 app.MapAdminUserEndpoints();
+app.MapAdminOperationsEndpoints();
 app.MapProjectEndpoints();
 app.MapProjectMemberEndpoints();
 app.MapProjectSettingsEndpoints();

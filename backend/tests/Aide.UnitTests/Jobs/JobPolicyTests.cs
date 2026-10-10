@@ -82,6 +82,37 @@ public class JobPolicyTests
     public void FR51_Only_dead_jobs_can_be_retried(JobStatus status) =>
         Assert.Equal(ErrorCodes.Conflict, JobPolicy.RetryDeadLetter(new JobSnapshot(Guid.NewGuid(), "t", "{}", null, status), Now).Error!.Code);
 
+    [Fact]
+    public void FR51_Retrying_a_dead_execution_job_while_another_is_active_is_a_conflict()
+    {
+        var dead = new JobSnapshot(Guid.NewGuid(), JobTypes.Execution, "{}", Guid.NewGuid(), JobStatus.Dead);
+
+        var result = JobPolicy.RetryDeadLetter(dead, Now, executionJobActive: true);
+
+        Assert.Equal(ErrorCodes.Conflict, result.Error!.Code);
+    }
+
+    [Fact]
+    public void FR51_An_active_execution_job_does_not_block_retrying_other_job_types()
+    {
+        var dead = new JobSnapshot(Guid.NewGuid(), JobTypes.Review, "{}", Guid.NewGuid(), JobStatus.Dead);
+
+        var result = JobPolicy.RetryDeadLetter(dead, Now, executionJobActive: true);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(JobTypes.Review, result.Value.Replacement.Type);
+    }
+
+    [Fact]
+    public void FR51_A_dead_execution_job_is_retried_when_none_is_active()
+    {
+        var dead = new JobSnapshot(Guid.NewGuid(), JobTypes.Execution, "{\"trigger\":\"start\"}", Guid.NewGuid(), JobStatus.Dead);
+
+        var result = JobPolicy.RetryDeadLetter(dead, Now, executionJobActive: false);
+
+        Assert.Equal((JobStatus.Retried, JobStatus.Queued, 0), (result.Value.DeadJobStatus, result.Value.Replacement.Status, result.Value.Replacement.Attempts));
+    }
+
     [Theory]
     [InlineData(JobStatus.Queued, JobStatus.Cancelled)]
     [InlineData(JobStatus.Running, JobStatus.Running)]

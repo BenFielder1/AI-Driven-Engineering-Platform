@@ -30,9 +30,10 @@ public partial class EventTypesTests
         Assert.All(Enum.GetValues<EventCategory>(), c => Assert.NotEmpty(EventTypes.InCategory(c)));
 
     [Fact]
-    public void FR50_Every_event_type_except_the_seed_marker_has_exactly_one_category()
+    public void FR50_Every_event_type_except_the_operations_markers_has_exactly_one_category()
     {
-        foreach (var type in AllTypes.Where(t => t != EventTypes.DemoProjectSeeded))
+        string[] uncategorised = [EventTypes.DemoProjectSeeded, EventTypes.DeadLetterRetried];
+        foreach (var type in AllTypes.Except(uncategorised))
         {
             var category = EventTypes.CategoryOf(type);
             Assert.NotNull(category);
@@ -40,8 +41,34 @@ public partial class EventTypesTests
             Assert.Contains(type, EventTypes.InCategory(category.Value));
         }
 
-        Assert.Null(EventTypes.CategoryOf(EventTypes.DemoProjectSeeded));
-        Assert.Equal(AllTypes.Length - 1, EventTypes.AllCategorised.Count);
+        Assert.All(uncategorised, t => Assert.Null(EventTypes.CategoryOf(t)));
+        Assert.Equal(AllTypes.Length - uncategorised.Length, EventTypes.AllCategorised.Count);
+    }
+
+    [Fact]
+    public void FR51_Event_outcome_wire_values() =>
+        Assert.Equal(["ok", "failure"], EnumStrings.Values<EventOutcome>());
+
+    [Theory]
+    [InlineData(EventTypes.RunFailed)]
+    [InlineData(EventTypes.BudgetExceeded)]
+    [InlineData(EventTypes.StepRejected)]
+    [InlineData(EventTypes.StepBlocked)]
+    [InlineData(EventTypes.GitPushFailed)]
+    [InlineData(EventTypes.PullRequestFailed)]
+    [InlineData(EventTypes.ReviewFailed)]
+    [InlineData(EventTypes.ReleaseFailed)]
+    [InlineData(EventTypes.ArtifactCorrupted)]
+    [InlineData(EventTypes.IntegrityAlert)]
+    public void FR51_Failure_and_alert_events_have_outcome_failure(string type) =>
+        Assert.Equal(EventOutcome.Failure, EventTypes.OutcomeOf(type));
+
+    [Fact]
+    public void FR51_Every_other_event_type_has_outcome_ok()
+    {
+        Assert.Equal(10, EventTypes.Failures.Count);
+        Assert.All(AllTypes.Except(EventTypes.Failures), t => Assert.Equal(EventOutcome.Ok, EventTypes.OutcomeOf(t)));
+        Assert.Equal(EventOutcome.Ok, EventTypes.OutcomeOf("NOT_AN_EVENT"));
     }
 
     [Theory]

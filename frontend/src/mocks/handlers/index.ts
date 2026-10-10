@@ -1,3 +1,4 @@
+import { adminHandlers } from './admin'
 import { artifactHandlers } from './artifacts'
 import { authHandlers } from './auth'
 import { executionHandlers } from './execution'
@@ -22,4 +23,5 @@ export const handlers = [
   ...reviewHandlers,
   ...releaseHandlers,
   ...notificationHandlers,
+  ...adminHandlers,
 ]

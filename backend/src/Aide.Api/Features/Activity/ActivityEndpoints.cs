@@ -96,7 +96,8 @@ public static class ActivityEndpoints
         return new ActivityItemDto(e.Id, e.Type, EventTypes.CategoryOf(e.Type), e.CreatedAt, actor, ActivitySummary.For(e.Type, payload), payload);
     }
 
-    private static JsonObject ParsePayload(string json)
+    /// <summary>An event or job payload as a JSON object; an unreadable or non-object payload is <c>{}</c>.</summary>
+    internal static JsonObject ParsePayload(string json)
     {
         try
         {
@@ -185,6 +186,7 @@ internal static class ActivitySummary
             EventTypes.MemberRoleChanged => "Member role changed",
             EventTypes.MemberRemoved => "Member removed",
             EventTypes.SettingsUpdated => "Settings updated",
+            EventTypes.DeadLetterRetried => $"Dead-lettered {Get("jobType") ?? "?"} job retried by an Admin",
             _ when Get("type") is { } artifactType && Get("version") is { } version
                 => $"{Humanize(type)}: {artifactType} v{version}",
             _ => Humanize(type),

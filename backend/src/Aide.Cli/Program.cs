@@ -1,9 +1,5 @@
-using System.Reflection;
+using Aide.Cli;
+using Aide.Cli.Hosting;
 
-// `aide` CLI (SPEC FR-52). Stub: prints its version until the commands are built.
-var informational = typeof(Program).Assembly
-    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
-var version = informational.Split('+')[0];
-
-Console.WriteLine($"aide {version}");
-return 0;
+// `aide` CLI (SPEC FR-52). All behaviour lives in CliApp so the tests can run it against fakes.
+return await CliApp.RunAsync(args, CliHost.CreateDefault()).ConfigureAwait(false);
