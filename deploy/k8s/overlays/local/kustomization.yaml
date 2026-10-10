@@ -1,0 +1,31 @@
+# Docker Desktop overlay. Apply via ./deploy/scripts/deploy-local.sh, which builds the images, generates
+# secrets.env if it's missing, and pins the image tags (git SHA) in a generated, git-ignored wrapper overlay
+# (deploy/k8s/.generated/). The "dev" tags below are placeholders so this overlay renders offline.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aide
+
+# Also labels the generated Secret (teardown-local.sh deletes by this label).
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: aide
+    includeSelectors: false
+
+resources:
+  - ../../base
+
+# Local-only settings (DEP-2 seed) merged into base app-config.
+patches:
+  - path: app-config-local.yaml
+
+images:
+  - name: aide-api
+    newTag: dev
+  - name: aide-web
+    newTag: dev
+
+secretGenerator:
+  - name: app-secrets
+    envs:
+      - secrets.env

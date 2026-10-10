@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The `aide` .NET global tool (SPEC FR-52). Talks to the AIDE API with a personal API token. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>aide</AssemblyName>
+    <RootNamespace>Aide.Cli</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>aide</ToolCommandName>
+    <PackageId>Aide.Cli</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Command-line client for the AIDE Platform.</Description>
+    <!-- InvariantGlobalization is on, so localized System.CommandLine resources are never used. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Aide.Cli.Tests" />
+  </ItemGroup>
+
+</Project>

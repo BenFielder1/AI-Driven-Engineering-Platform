@@ -1,0 +1,10 @@
+# Local (Docker Desktop) settings merged into base app-config. Not in base: other environments never seed.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  # DEP-2: seed admin@aide.local (generated password logged once at Warning by the api) and the demo project.
+  Seed__Enabled: "true"
+  # FR-47/FR-48: browser-facing base URL for absolute links in notifications (web Service on localhost:8080).
+  App__PublicBaseUrl: "http://localhost:8080"

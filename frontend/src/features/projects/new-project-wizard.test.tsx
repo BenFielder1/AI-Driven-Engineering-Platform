@@ -1,0 +1,170 @@
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { http } from 'msw'
+import { describe, expect, it } from 'vitest'
+
+import type { Schemas } from '../../api/client'
+import { signInAs } from '../../mocks/handlers/auth'
+import { problem } from '../../mocks/handlers/problem'
+import { projectsDb } from '../../mocks/handlers/projects'
+import { server } from '../../mocks/server'
+import { renderRoute } from '../../test/render'
+
+const TOKEN = 'ghp_supersecretvalue123'
+
+async function startWizard() {
+  signInAs({ systemRole: 'user' })
+  const utils = renderRoute('/projects/new')
+  await screen.findByRole('heading', { level: 2, name: /Step 1 of 4: Project idea/ })
+  return { ...utils, user: userEvent.setup() }
+}
+
+async function fillIdea(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText('Project name'), 'Inventory tracker')
+  await user.type(screen.getByLabelText('Your idea'), 'Track stock across warehouses.')
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+  await screen.findByRole('heading', { level: 2, name: /Step 2 of 4: Configuration/ })
+}
+
+describe('New project wizard (FR-5)', () => {
+  it('FR-5: step 1 requires a name and an idea, and focuses the first invalid field', async () => {
+    const { user } = await startWizard()
+
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(await screen.findAllByText('Enter a project name.')).not.toHaveLength(0)
+    expect(screen.getAllByText('Describe your idea: what should the software do, and for whom?')).not.toHaveLength(0)
+    expect(screen.getByLabelText('Project name')).toHaveFocus()
+    expect(screen.getByLabelText('Project name')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('heading', { level: 2, name: /Step 1 of 4/ })).toBeInTheDocument()
+  })
+
+  it('FR-5: the step indicator marks the current step, and focus moves to the new step heading', async () => {
+    const { user } = await startWizard()
+    const steps = screen.getByRole('list', { name: 'Wizard steps' })
+    expect(within(steps).getByText(/1\. Project idea/).closest('li')).toHaveAttribute('aria-current', 'step')
+
+    await fillIdea(user)
+
+    expect(screen.getByRole('heading', { level: 2, name: /Step 2 of 4/ })).toHaveFocus()
+    expect(within(steps).getByText(/2\. Configuration/).closest('li')).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('FR-5: step 2 shows the defaults (advisory, 0.90, 20, 3) and validates the ranges', async () => {
+    const { user } = await startWizard()
+    await fillIdea(user)
+
+    expect(screen.getByRole('radio', { name: 'Advisory' })).toBeChecked()
+    expect(screen.getByLabelText('Compliance threshold')).toHaveValue(0.9)
+    expect(screen.getByLabelText('Max files per step')).toHaveValue(20)
+    expect(screen.getByLabelText('Max review cycles')).toHaveValue(3)
+    expect(screen.getByRole('radio', { name: 'Strict' })).toHaveAccessibleDescription(
+      'An Owner approves the spec, the plan and the release before each phase starts.',
+    )
+
+    await user.clear(screen.getByLabelText('Compliance threshold'))
+    await user.type(screen.getByLabelText('Compliance threshold'), '1.5')
+    await user.type(screen.getByLabelText('Token budget (optional)'), '500')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(
+      await screen.findAllByText('Enter a compliance threshold from 0.50 to 1.00 (two decimal places at most).'),
+    ).not.toHaveLength(0)
+    expect(
+      screen.getAllByText('Enter a whole number of at least 1,000 tokens, or leave it empty for no limit.'),
+    ).not.toHaveLength(0)
+    expect(screen.getByRole('heading', { level: 2, name: /Step 2 of 4/ })).toBeInTheDocument()
+  })
+
+  it('FR-5: step 3 requires a GitHub URL; Local explains the managed repository instead', async () => {
+    const { user } = await startWizard()
+    await fillIdea(user)
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByRole('heading', { level: 2, name: /Step 3 of 4: Git repository/ })
+
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findAllByText('Enter the GitHub repository URL.')).not.toHaveLength(0)
+
+    await user.type(screen.getByLabelText('Repository URL'), 'https://gitlab.com/a/b')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findAllByText('Enter a URL like https://github.com/owner/repo.')).not.toHaveLength(0)
+
+    await user.click(screen.getByRole('radio', { name: 'Local repository' }))
+    expect(screen.queryByLabelText('Repository URL')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Access token (optional)')).not.toBeInTheDocument()
+    expect(screen.getByText(/AIDE creates and keeps a local Git repository/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByRole('heading', { level: 2, name: /Step 4 of 4: Review & create/ })).toBeInTheDocument()
+  })
+
+  it('FR-5: Back keeps the entered values', async () => {
+    const { user } = await startWizard()
+    await fillIdea(user)
+
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+
+    expect(await screen.findByLabelText('Project name')).toHaveValue('Inventory tracker')
+    expect(screen.getByRole('heading', { level: 2, name: /Step 1 of 4/ })).toHaveFocus()
+  })
+
+  it('FR-5: review shows a summary without the token, and Create navigates to the new project', async () => {
+    const { user, router } = await startWizard()
+    await fillIdea(user)
+    await user.click(screen.getByRole('radio', { name: 'Strict' }))
+    await user.type(screen.getByLabelText('Token budget (optional)'), '50000')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.type(await screen.findByLabelText('Repository URL'), 'https://github.com/acme/inventory')
+    const tokenInput = screen.getByLabelText('Access token (optional)')
+    expect(tokenInput).toHaveAttribute('type', 'password')
+    await user.type(tokenInput, TOKEN)
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    const git = await screen.findByRole('region', { name: 'Git repository' })
+    expect(within(git).getByText('https://github.com/acme/inventory')).toBeInTheDocument()
+    expect(within(git).getByText('Provided')).toBeInTheDocument()
+    expect(screen.queryByText(TOKEN)).not.toBeInTheDocument()
+    const config = screen.getByRole('region', { name: 'Configuration' })
+    expect(within(config).getByText('Strict')).toBeInTheDocument()
+    expect(within(config).getByText('50,000 tokens')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Inventory tracker' })).toBeInTheDocument()
+    const created = projectsDb.projects[0]
+    expect(router.state.location.pathname).toBe(`/projects/${created?.id ?? ''}`)
+    const body = projectsDb.requests.find((r) => r.method === 'POST')?.body as Schemas['CreateProjectRequest']
+    expect(body).toEqual({
+      name: 'Inventory tracker',
+      idea: 'Track stock across warehouses.',
+      approvalMode: 'strict',
+      complianceThreshold: 0.9,
+      maxFilesPerStep: 20,
+      maxReviewCycles: 3,
+      tokenBudget: 50000,
+      git: { provider: 'github', repoUrl: 'https://github.com/acme/inventory', defaultBranch: 'main', token: TOKEN },
+    })
+  })
+
+  it('FR-5: server validation errors send the user back to the step with the field', async () => {
+    server.use(
+      http.post('*/api/projects', () =>
+        problem(400, 'VALIDATION', 'Invalid', { errors: { name: ['A project with this name already exists.'] } }),
+      ),
+    )
+    const { user } = await startWizard()
+    await user.type(screen.getByLabelText('Project name'), 'Inventory tracker')
+    await user.type(screen.getByLabelText('Your idea'), 'An idea')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(await screen.findByRole('button', { name: 'Next' }))
+    await user.click(await screen.findByRole('radio', { name: 'Local repository' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(await screen.findByRole('button', { name: 'Create project' }))
+
+    expect(await screen.findByRole('heading', { level: 2, name: /Step 1 of 4/ })).toBeInTheDocument()
+    expect(screen.getAllByText('A project with this name already exists.')).not.toHaveLength(0)
+    await waitFor(() => {
+      expect(screen.getByLabelText('Project name')).toHaveAttribute('aria-invalid', 'true')
+    })
+  })
+})

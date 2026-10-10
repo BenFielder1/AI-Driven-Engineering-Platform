@@ -1,0 +1,11 @@
+# SPEC §9: aide-data (5Gi) mounted at /data on the api — Git working copies, local Git repos, Data Protection keys.
+# Kept by teardown-local.sh unless --wipe-data.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aide-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi

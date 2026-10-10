@@ -1,0 +1,42 @@
+# --- .NET ---
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+*.rsuser
+.vs/
+/artifacts/
+*.nupkg
+efbundle
+efbundle.exe
+
+# --- Node / frontend ---
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.tsbuildinfo
+.vite/
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+npm-debug.log*
+
+# --- Secrets (only *.example files are committed) ---
+.env
+.env.*
+!.env.example
+!**/*.example
+deploy/k8s/overlays/local/secrets.env
+*.pfx
+*.pem
+
+# --- Editors / OS ---
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.swp

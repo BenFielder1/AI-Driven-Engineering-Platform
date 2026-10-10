@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-ssr
+coverage
+*.local
+*.log
+playwright-report
+test-results
+blob-report
+playwright/.cache

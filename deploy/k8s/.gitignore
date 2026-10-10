@@ -1,0 +1,4 @@
+# Wrapper overlay written by deploy/scripts/deploy-local.sh (pins image tags per deploy).
+.generated/
+# Real local secrets (also ignored at the repo root).
+overlays/local/secrets.env

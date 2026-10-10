@@ -1,0 +1,3 @@
+# Inside the backend/ Docker build context, where the repo-root .editorconfig is not copied.
+[*.cs]
+generated_code = true
