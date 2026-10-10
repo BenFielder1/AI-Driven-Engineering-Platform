@@ -2,7 +2,7 @@
 # AIDE web image: Vite build served by unprivileged nginx, which also proxies /api to the api Service.
 # Build context: frontend/   (docker build -f frontend/Dockerfile frontend)
 
-FROM node:24-slim AS build
+FROM node:25-slim AS build
 WORKDIR /app
 ENV CI=true
 COPY package.json package-lock.json ./
