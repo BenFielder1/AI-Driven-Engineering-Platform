@@ -1,4 +1,5 @@
 using Aide.Api.Errors;
+using Aide.Api.Logging;
 using Aide.Domain.Common;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
@@ -60,7 +61,8 @@ public static partial class AntiforgeryProtection
                 catch (AntiforgeryValidationException)
                 {
                     var logger = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(AntiforgeryProtection));
-                    LogRejected(logger, context.Request.Method, context.Request.Path);
+                    // The approval route carries its token in the path (NFR-SEC): never log it.
+                    LogRejected(logger, context.Request.Method, LogPaths.Redact(context.Request.Path));
                     await ApiProblems.WriteAsync(context, ErrorCodes.Antiforgery,
                         "The request is missing a valid antiforgery token. Reload the page and try again.");
                     return;
@@ -89,5 +91,5 @@ public static partial class AntiforgeryProtection
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Antiforgery validation failed for {Method} {Path}")]
-    private static partial void LogRejected(ILogger logger, string method, PathString path);
+    private static partial void LogRejected(ILogger logger, string method, string path);
 }

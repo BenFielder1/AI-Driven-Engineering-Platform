@@ -282,7 +282,11 @@ function planChannels(
       if (!isHttpsUrl(target)) {
         fail('target', 'Use an https:// URL.')
       }
+      // FR-47, NFR-SEC: webhook bodies are always signed, so a webhook needs a sent or kept signing secret.
       stored.secret = sent ?? (keepable ? (existing.secret ?? null) : null)
+      if (sent === null && !keepable) {
+        fail('secret', 'Enter a signing secret: webhook bodies are always HMAC-signed.')
+      }
     } else {
       const label = c.type === 'slack' ? 'Slack' : 'Teams'
       stored.target = ''

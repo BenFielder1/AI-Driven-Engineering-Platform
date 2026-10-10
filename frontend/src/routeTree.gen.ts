@@ -17,6 +17,7 @@ import { Route as AppAdminRouteImport } from './routes/_app/admin'
 import { Route as AppNotificationsRouteImport } from './routes/_app/notifications'
 import { Route as PublicLoginRouteImport } from './routes/_public/login'
 import { Route as PublicRegisterRouteImport } from './routes/_public/register'
+import { Route as AppApprovalsTokenRouteImport } from './routes/_app/approvals/$token'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app/projects/index'
 import { Route as AppProjectsProjectIdRouteImport } from './routes/_app/projects/$projectId'
 import { Route as AppProjectsNewRouteImport } from './routes/_app/projects/new'
@@ -66,6 +67,11 @@ const PublicRegisterRoute = PublicRegisterRouteImport.update({
   id: '/register',
   path: '/register',
   getParentRoute: () => PublicRoute,
+} as any)
+const AppApprovalsTokenRoute = AppApprovalsTokenRouteImport.update({
+  id: '/approvals/$token',
+  path: '/approvals/$token',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
   id: '/projects/',
@@ -138,6 +144,7 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof AppNotificationsRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/approvals/$token': typeof AppApprovalsTokenRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/projects/new': typeof AppProjectsNewRoute
   '/projects/': typeof AppProjectsIndexRoute
@@ -157,6 +164,7 @@ export interface FileRoutesByTo {
   '/notifications': typeof AppNotificationsRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/approvals/$token': typeof AppApprovalsTokenRoute
   '/projects/new': typeof AppProjectsNewRoute
   '/projects': typeof AppProjectsIndexRoute
   '/projects/$projectId/execution': typeof AppProjectsProjectIdExecutionRoute
@@ -178,6 +186,7 @@ export interface FileRoutesById {
   '/_app/notifications': typeof AppNotificationsRoute
   '/_public/login': typeof PublicLoginRoute
   '/_public/register': typeof PublicRegisterRoute
+  '/_app/approvals/$token': typeof AppApprovalsTokenRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/_app/projects/new': typeof AppProjectsNewRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
@@ -199,6 +208,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/login'
     | '/register'
+    | '/approvals/$token'
     | '/projects/$projectId'
     | '/projects/new'
     | '/projects/'
@@ -218,6 +228,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/login'
     | '/register'
+    | '/approvals/$token'
     | '/projects/new'
     | '/projects'
     | '/projects/$projectId/execution'
@@ -238,6 +249,7 @@ export interface FileRouteTypes {
     | '/_app/notifications'
     | '/_public/login'
     | '/_public/register'
+    | '/_app/approvals/$token'
     | '/_app/projects/$projectId'
     | '/_app/projects/new'
     | '/_app/projects/'
@@ -314,6 +326,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/register'
       preLoaderRoute: typeof PublicRegisterRouteImport
       parentRoute: typeof PublicRoute
+    }
+    '/_app/approvals/$token': {
+      id: '/_app/approvals/$token'
+      path: '/approvals/$token'
+      fullPath: '/approvals/$token'
+      preLoaderRoute: typeof AppApprovalsTokenRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/projects/': {
       id: '/_app/projects/'
@@ -426,6 +445,7 @@ interface AppRouteChildren {
   AppAccountRoute: typeof AppAccountRoute
   AppAdminRoute: typeof AppAdminRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
+  AppApprovalsTokenRoute: typeof AppApprovalsTokenRoute
   AppProjectsProjectIdRoute: typeof AppProjectsProjectIdRouteWithChildren
   AppProjectsNewRoute: typeof AppProjectsNewRoute
   AppProjectsIndexRoute: typeof AppProjectsIndexRoute
@@ -435,6 +455,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAccountRoute: AppAccountRoute,
   AppAdminRoute: AppAdminRoute,
   AppNotificationsRoute: AppNotificationsRoute,
+  AppApprovalsTokenRoute: AppApprovalsTokenRoute,
   AppProjectsProjectIdRoute: AppProjectsProjectIdRouteWithChildren,
   AppProjectsNewRoute: AppProjectsNewRoute,
   AppProjectsIndexRoute: AppProjectsIndexRoute,

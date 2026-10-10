@@ -43,9 +43,9 @@ const channelSchema = z
     const add = (path: string, message: string) => {
       ctx.addIssue({ code: 'custom', path: [path], message })
     }
+    const entering = !secretIsSet(c) || c.secretAction === 'replace'
     if (urlIsSecret(c.type)) {
       const label = channelTypeLabels[c.type]
-      const entering = !secretIsSet(c) || c.secretAction === 'replace'
       const url = c.secret.trim()
       if (entering && !url) {
         add('secret', `Enter the ${label} incoming-webhook URL.`)
@@ -65,7 +65,10 @@ const channelSchema = z
       } else if (target.length > limits.urlMax) {
         add('target', `The target is at most ${String(limits.urlMax)} characters.`)
       }
-      if (c.type === 'webhook' && c.secret.length > limits.secretMax) {
+      // FR-47, NFR-SEC: webhook bodies are always HMAC-signed, so a key is required unless one is saved and kept.
+      if (c.type === 'webhook' && entering && !c.secret.trim()) {
+        add('secret', 'Enter a signing key: webhook bodies are always HMAC-signed.')
+      } else if (c.type === 'webhook' && c.secret.length > limits.secretMax) {
         add('secret', `The signing key is at most ${String(limits.secretMax)} characters.`)
       }
     }
@@ -99,13 +102,13 @@ const toValues = (s: NotificationSettings): NotificationValues => ({
 })
 
 /**
- * Builds the API input. Email: target only. Webhook: target plus an optional HMAC key (keep / replace / clear).
- * Slack/Teams: the URL goes in `secret`; omitting it keeps the saved URL (same id and type); never `clearSecret`.
+ * Builds the API input. Email: target only. Webhook: target plus the required HMAC key (FR-47); omitting it keeps the
+ * saved key (same id and type). Slack/Teams: the URL goes in `secret`; omitting it keeps the saved URL (same id and
+ * type). Neither sends `clearSecret`: a webhook, Slack or Teams channel always has a secret.
  */
 function toInput(c: ChannelValues): Schemas['NotificationChannelInput'] {
   const input: Schemas['NotificationChannelInput'] = { id: c.id || null, type: c.type, events: c.events }
-  const isSet = secretIsSet(c)
-  const entered = c.secretAction === 'replace' || !isSet
+  const entered = c.secretAction === 'replace' || !secretIsSet(c)
   if (urlIsSecret(c.type)) {
     if (entered) {
       input.secret = c.secret.trim()
@@ -113,12 +116,8 @@ function toInput(c: ChannelValues): Schemas['NotificationChannelInput'] {
     return input
   }
   input.target = c.target.trim()
-  if (c.type === 'webhook') {
-    if (isSet && c.secretAction === 'clear') {
-      input.clearSecret = true
-    } else if (c.secret && entered) {
-      input.secret = c.secret
-    }
+  if (c.type === 'webhook' && entered) {
+    input.secret = c.secret
   }
   return input
 }
@@ -215,7 +214,11 @@ export function NotificationsTab({ projectId, notifications }: { projectId: stri
       <h2 id="notifications-title" className="mb-1 text-xl font-semibold">
         Notifications
       </h2>
-      <p className="mb-4 text-sm text-muted">Send project events to email, Slack, Teams or a signed webhook.</p>
+      <p className="mb-4 text-sm text-muted">
+        Send this project&apos;s events to email, Slack, Microsoft Teams or a generic webhook. Webhook bodies are always
+        signed with HMAC using the channel&apos;s signing key. Failed deliveries are retried per channel. Your own
+        in-app notifications are set on your Account page.
+      </p>
       <ErrorSummary
         title="We couldn't save the notification settings"
         errors={[...serverErrors.map((message) => ({ message })), ...(isSubmitted ? summaryErrors(errors) : [])]}
@@ -301,7 +304,9 @@ export function NotificationsTab({ projectId, notifications }: { projectId: stri
                     isSet={isSet}
                     action={channel?.secretAction ?? 'keep'}
                     onActionChange={setSecretAction}
-                    hint="HMAC key used to sign webhook bodies. Stored encrypted; it's never shown again."
+                    allowClear={false}
+                    required
+                    hint="HMAC key used to sign each webhook body so the receiver can verify it came from AIDE. Stored encrypted; it's never shown again."
                     maxLength={limits.secretMax}
                     error={chErrors?.secret?.message}
                     inputProps={secretField}

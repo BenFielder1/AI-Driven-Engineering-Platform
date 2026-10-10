@@ -48,10 +48,11 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
         // Lock the project's queued and running jobs until the rollback commits. Claiming takes queued rows with SKIP LOCKED,
         // so none of them can start meanwhile; a claim already in flight holds its rows, so this waits for it and then sees
         // the job running (PostgreSQL re-checks the row it waited for). The decision below and the cancellations use these rows.
+        // Notification jobs (FR-47) are left alone: notifications about what happened before the rollback still go out.
         var activeJobs = await db.Jobs
             .FromSql($"""
                 SELECT * FROM jobs
-                WHERE project_id = {id} AND status IN ('queued', 'running')
+                WHERE project_id = {id} AND status IN ('queued', 'running') AND type <> {JobTypes.Notification}
                 ORDER BY id
                 FOR UPDATE
                 """)

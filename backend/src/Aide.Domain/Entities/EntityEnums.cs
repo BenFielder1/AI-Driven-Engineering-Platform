@@ -43,6 +43,9 @@ public enum NotificationDeliveryStatus
     Sent = 1,
     Failed = 2,
     Dead = 3,
+
+    /// <summary>Not attempted: the channel can't send in this deployment (e.g. email without SMTP settings). Never retried.</summary>
+    Skipped = 4,
 }
 
 /// <summary>Project notification channel types (FR-47).</summary>

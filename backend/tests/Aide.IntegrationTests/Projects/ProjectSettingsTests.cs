@@ -221,10 +221,13 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
         {
             channels = new object[] { new { id = webhook.Id, type = "webhook", target = "https://hooks.example.com/v2", events = (string[])["rollback"] } },
         }));
-        var cleared = await ProjectApi.ReadAsync<NotificationSettingsDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, path, new
+        // NFR-SEC: webhook bodies are always signed, so the signing secret can be replaced but not cleared.
+        var cleared = await ProjectApi.PatchAsync(fixture.Owner.Client, path, new
         {
             channels = new object[] { new { id = webhook.Id, type = "webhook", target = "https://hooks.example.com/v2", clearSecret = true, events = (string[])["rollback"] } },
-        }));
+        });
+        var clearedProblem = await Problems.AssertAsync(cleared, HttpStatusCode.BadRequest, ErrorCodes.Validation);
+        Assert.True(clearedProblem.GetProperty("errors").TryGetProperty("channels[0].secret", out _), clearedProblem.ToString());
 
         var email = first.Channels.Single(c => c.Type == NotificationChannelType.Email);
         Assert.Equal([NotificationEvent.GateRequired, NotificationEvent.ReleaseCompleted], email.Events);
@@ -232,7 +235,6 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
         Assert.True(webhook.HasSecret);
         var keptChannel = Assert.Single(kept.Channels);
         Assert.Equal((webhook.Id, "https://hooks.example.com/v2", true), (keptChannel.Id, keptChannel.Target, keptChannel.HasSecret));
-        Assert.False(Assert.Single(cleared.Channels).HasSecret);
         await AssertSecretNowhereAsync(fixture.Project.Id, HmacSecret);
     }
 
@@ -318,6 +320,7 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
     [InlineData("""{"channels":[{"type":"teams","target":"https://x.webhook.office.com/a","secret":"s","events":[]}]}""", "channels[0].secret")]
     [InlineData("""{"channels":[{"id":"0199aaaa-0000-7000-8000-000000000000","type":"email","target":"a@example.com","events":[]}]}""", "channels[0].id")]
     [InlineData("""{"channels":[{"type":"webhook","target":"https://h.example.com","secret":" ","events":[]}]}""", "channels[0].secret")]
+    [InlineData("""{"channels":[{"type":"webhook","target":"https://h.example.com","events":[]}]}""", "channels[0].secret")]
     [InlineData("""{"channels":[{"type":"email","target":"a@example.com","events":["everything"]}]}""", null)]
     [InlineData("""{"channels":[{"type":"sms","target":"+44","events":[]}]}""", null)]
     public async Task FR9_Invalid_notification_channels_are_VALIDATION(string json, string? field)

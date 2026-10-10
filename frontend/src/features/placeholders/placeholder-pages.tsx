@@ -2,16 +2,6 @@ import { EmptyState, ForbiddenState, PageHeader } from '../../components/ui/stat
 import { canViewAdmin } from '../../lib/permissions'
 import { useCurrentUser } from '../auth/auth-api'
 
-/** /notifications. Placeholder until notifications land. */
-export function NotificationsPage() {
-  return (
-    <>
-      <PageHeader title="Notifications" />
-      <EmptyState title="No notifications yet">Notifications arrive in a later phase.</EmptyState>
-    </>
-  )
-}
-
 /** /admin. Forbidden for non-admins (SPEC §7); the admin pages arrive in a later phase. */
 export function AdminPage() {
   const user = useCurrentUser()

@@ -4,6 +4,7 @@ using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Admin;
+using Aide.Api.Features.Approvals;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
 using Aide.Api.Features.Execution;
@@ -11,6 +12,7 @@ using Aide.Api.Features.Gates;
 using Aide.Api.Features.Git;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Live;
+using Aide.Api.Features.Notifications;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Refinement;
 using Aide.Api.Features.Release;
@@ -40,6 +42,8 @@ builder.Logging.AddJsonConsole(options =>
     options.UseUtcTimestamp = true;
     options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
 });
+// The request scope (RequestId, RequestPath) comes from UseRequestLogScope, with approval tokens redacted (NFR-SEC).
+builder.Logging.AddRedactedRequestScope();
 
 // Tracing and metrics (OpenTelemetry). Console exporter only when Telemetry:ConsoleExporter=true (Development).
 var consoleExporter = builder.Configuration.GetValue("Telemetry:ConsoleExporter", false);
@@ -48,8 +52,15 @@ builder.Services.AddOpenTelemetry()
     .WithTracing(tracing =>
     {
         tracing
-            .AddAspNetCoreInstrumentation(o => o.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/api/health"))
-            .AddHttpClientInstrumentation()
+            .AddAspNetCoreInstrumentation(o =>
+            {
+                o.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/api/health");
+                // Approval links carry their token in the path (FR-48, NFR-SEC): spans record the redacted path.
+                o.EnrichWithHttpRequest = TracePaths.Redact;
+                o.EnrichWithHttpResponse = (activity, response) => TracePaths.Redact(activity, response.HttpContext.Request);
+            })
+            // Notification requests are left out: Slack and Teams webhook URLs are credentials (NFR-SEC).
+            .AddHttpClientInstrumentation(o => o.FilterHttpRequestMessage = request => !NotificationHttp.IsNotificationRequest(request))
             .AddNpgsql();
         if (consoleExporter)
         {
@@ -144,6 +155,9 @@ builder.Services.AddReview();
 builder.Services.AddReleases();
 builder.Services.AddScoped<RollbackService>();
 
+// Notifications (FR-47–FR-49, FR-15): fan-out job, channels, delivery retries, gate reminders, one-click approval links.
+builder.Services.AddNotifications();
+
 // Live project updates over SignalR (FR-46).
 builder.Services.AddAideLive();
 builder.Services.AddLiveOriginCheck();
@@ -154,6 +168,7 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+app.UseRequestLogScope();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseLiveOriginCheck();
@@ -183,6 +198,8 @@ app.MapGitEndpoints();
 app.MapReviewEndpoints();
 app.MapReleaseEndpoints();
 app.MapRollbackEndpoints();
+app.MapNotificationEndpoints();
+app.MapApprovalEndpoints();
 app.MapLiveEndpoints();
 
 await app.RunAsync();

@@ -414,7 +414,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Replace the notification channels (Owner). Slack/Teams webhook URLs are secrets (sent in secret, returned masked). A channel sent with its id and no secret keeps its saved secret. */
+        /** Replace the notification channels (Owner). Slack/Teams webhook URLs are secrets (sent in secret, returned masked); webhook channels need an HMAC signing secret. A channel sent with its id and no secret keeps its saved secret. */
         patch: operations["UpdateNotificationSettings"];
         trace?: never;
     };
@@ -980,6 +980,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's notifications, newest first, with the total unread count. unreadOnly=true lists unread ones only; load more with before = the previous page's nextBefore. limit defaults to 50 (max 100). */
+        get: operations["ListMyNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The number of the caller's unread notifications. */
+        get: operations["GetUnreadNotificationCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notifications/{id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mark one of the caller's notifications as read (idempotent: an already read notification keeps its readAt). */
+        patch: operations["MarkNotificationRead"];
+        trace?: never;
+    };
+    "/api/me/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark all the caller's unread notifications as read. */
+        post: operations["MarkAllNotificationsRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's in-app notification preferences (muted types). Project channels are project settings. */
+        get: operations["GetNotificationPreferences"];
+        /** Replace the caller's muted notification types. Muted types are not added to the caller's notification centre; already created notifications are kept. */
+        put: operations["UpdateNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What a one-click approval link would decide (Owner of the gate's project, browser session): the gate, project, decision and gated artifact. Reading never uses the link. */
+        get: operations["GetApprovalLink"];
+        put?: never;
+        /** Confirm the link's decision (Owner of the gate's project, browser session): approves or rejects the gate exactly as the gate endpoints do, and uses up the link (and its sibling link for the same gate). */
+        post: operations["ConfirmApprovalLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1144,6 +1248,43 @@ export interface components {
             expiresAt: null | string;
             /** Format: date-time */
             revokedAt: null | string;
+        };
+        /** @description The artifact a gate approves (spec and plan gates); `title` is its first heading, when it has one. */
+        ApprovalArtifactSummaryDto: {
+            type: components["schemas"]["ArtifactType"];
+            /** Format: int32 */
+            version: number;
+            title: null | string;
+        };
+        /**
+         * @description The decision a one-click approval link carries (FR-48).
+         * @enum {unknown}
+         */
+        ApprovalLinkDecision: "approve" | "reject";
+        /**
+         * @description The state of a one-click approval link (FR-48). A 200 from `GetApprovalLink` carries `valid` (the link can
+         *     be confirmed) or `gate_closed` (the gate was decided or cancelled elsewhere; confirming answers
+         *     `GATE_NOT_PENDING`). `expired` and `used` name the states behind `LINK_EXPIRED` (410) and
+         *     `LINK_USED` (409), which are returned as ProblemDetails.
+         * @enum {unknown}
+         */
+        ApprovalLinkStatus: "valid" | "expired" | "used" | "gate_closed";
+        /**
+         * @description What the approval confirmation page shows (FR-48): the gate, its project, the decision the link carries and, for spec
+         *     and plan gates, the gated artifact. One-click links exist only for spec_approval, plan_approval and pre_release gates.
+         */
+        ApprovalLinkViewDto: {
+            /** Format: uuid */
+            gateId: string;
+            /** Format: uuid */
+            projectId: string;
+            projectName: string;
+            gateType: components["schemas"]["GateType"];
+            decision: components["schemas"]["ApprovalLinkDecision"];
+            artifactSummary: null | components["schemas"]["ApprovalArtifactSummaryDto"];
+            /** Format: date-time */
+            expiresAt: string;
+            status: components["schemas"]["ApprovalLinkStatus"];
         };
         /**
          * @description Project approval mode (§4.2).
@@ -1322,6 +1463,10 @@ export interface components {
             createdAt: string;
             /** Format: double */
             threshold: number;
+        };
+        /** @description Confirms the decision of a one-click approval link; `comment` is optional (feedback on reject). */
+        ConfirmApprovalLinkRequest: {
+            comment?: null | string;
         };
         CreateApiTokenRequest: {
             name: string;
@@ -1541,7 +1686,7 @@ export interface components {
          *     the gated artifact (spec and plan gates). Escalation gates carry `escalationReason` and, once decided,
          *     `decision` (and `targetVersion` for a rollback). `reason` is a human-readable context line.
          *     `decidedBy`, `decidedAt` and `comment` are set once the gate is decided. `overdue` is true
-         *     72 hours after creation while pending (FR-15). An escalation raised by a blocked execution step (FR-33) has
+         *     72 hours after creation while pending (FR-15); `remindedAt` is when its 24-hour reminder was sent. An escalation raised by a blocked execution step (FR-33) has
          *     `escalationReason` `step_blocked` and names the step in `executionStepId` and `stepNumber`
          *     (both `null` otherwise).
          */
@@ -1567,6 +1712,8 @@ export interface components {
             /** Format: int32 */
             targetVersion: null | number;
             overdue: boolean;
+            /** Format: date-time */
+            remindedAt: null | string;
             /** Format: uuid */
             executionStepId: null | string;
             /** Format: int32 */
@@ -1708,7 +1855,9 @@ export interface components {
             target?: null | string;
             /**
              * @description The channel secret, stored encrypted and never returned: the HMAC signing key (webhook) or the https
-             *     incoming-webhook URL (slack, teams; required for a new channel). Email channels have none.
+             *     incoming-webhook URL (slack, teams). Required for a new webhook, slack or teams channel; omit it to keep the saved
+             *     one of the same channel (same id and type). Webhook, slack and teams channels can't clear it without sending a new
+             *     one. Email channels have none.
              */
             secret?: null | string;
             clearSecret?: boolean;
@@ -1720,13 +1869,57 @@ export interface components {
          */
         NotificationChannelType: "email" | "slack" | "teams" | "webhook";
         /**
+         * @description An in-app notification of the caller (FR-47). `projectId` and `projectName` are `null` for
+         *     notifications not tied to a project (or whose project was deleted). `link` is a relative app page path (e.g.
+         *     `/projects/&lt;id&gt;`, `/projects/&lt;id&gt;/runs` or `/projects/&lt;id&gt;/artifacts/&lt;type&gt;`); it never
+         *     carries an approval token (one-click approval links go only to project channels). `readAt` is `null` while unread.
+         */
+        NotificationDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: null | string;
+            projectName: null | string;
+            type: components["schemas"]["NotificationType"];
+            title: string;
+            body: string;
+            link: string;
+            /** Format: date-time */
+            readAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /**
          * @description Events a notification channel can subscribe to (FR-47). Wire values are snake_case.
          * @enum {unknown}
          */
         NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback";
+        /**
+         * @description A page of the caller's notifications, newest first. `unreadCount` counts all the caller's unread notifications
+         *     (not just this page). Load more with `before` = `nextBefore`; `null` on the last page.
+         */
+        NotificationPageDto: {
+            items: components["schemas"]["NotificationDto"][];
+            /** Format: int32 */
+            unreadCount: number;
+            nextBefore: null | string;
+        };
+        /**
+         * @description The caller's in-app notification preferences (§2): notification types they don't want in their notification centre.
+         *     Project channels (email, Slack, Teams, webhook) are configured per project by Owners, not here.
+         */
+        NotificationPreferencesDto: {
+            mutedTypes: components["schemas"]["NotificationType"][];
+        };
         NotificationSettingsDto: {
             channels: components["schemas"]["NotificationChannelDto"][];
         };
+        /**
+         * @description The kind of an in-app notification (FR-47, FR-15). The project channel events (`NotificationEvent`) plus
+         *     `gate_reminder`, the 24-hour reminder of a pending gate. Wire values are snake_case.
+         * @enum {unknown}
+         */
+        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback";
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfAdminUserDto: {
             items: components["schemas"]["AdminUserDto"][];
@@ -2157,6 +2350,11 @@ export interface components {
         };
         /** @enum {unknown} */
         SystemRole: "user" | "admin";
+        /** @description The number of the caller's unread notifications (the bell badge). */
+        UnreadNotificationCountDto: {
+            /** Format: int32 */
+            unreadCount: number;
+        };
         /** @description Partial update of the Git settings. Omitted fields are unchanged. */
         UpdateGitSettingsRequest: {
             provider?: null | components["schemas"]["GitProvider"];
@@ -2178,6 +2376,10 @@ export interface components {
         };
         UpdateMemberRoleRequest: {
             role: components["schemas"]["ProjectRole"];
+        };
+        /** @description Replaces the caller's muted notification types. An empty list mutes nothing. */
+        UpdateNotificationPreferencesRequest: {
+            mutedTypes: components["schemas"]["NotificationType"][];
         };
         /** @description Replaces the project's notification channels (FR-47). */
         UpdateNotificationSettingsRequest: {
@@ -5449,6 +5651,360 @@ export interface operations {
             };
             /** @description NOT_FOUND: the project. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListMyNotifications: {
+        parameters: {
+            query?: {
+                unreadOnly?: boolean;
+                before?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPageDto"];
+                };
+            };
+            /** @description VALIDATION: limit out of range or before is not a nextBefore value. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetUnreadNotificationCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadNotificationCountDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarkNotificationRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The notification is read. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: no such notification for the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarkAllNotificationsRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every notification of the caller is read. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateNotificationPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesDto"];
+                };
+            };
+            /** @description VALIDATION: an unknown type or too many entries. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetApprovalLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The link is valid, or its gate is no longer pending (status gate_closed). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalLinkViewDto"];
+                };
+            };
+            /** @description UNAUTHENTICATED: sign in, then open the link again. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: the caller is not an Owner of the gate's project (or used an API token). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: unknown or malformed token. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description LINK_USED: the link was already used. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description LINK_EXPIRED: the link is older than 72 hours. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ConfirmApprovalLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["ConfirmApprovalLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description The gate as decided. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GateDto"];
+                };
+            };
+            /** @description VALIDATION: comment too long. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description UNAUTHENTICATED: sign in, then open the link again. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: the caller is not an Owner of the gate's project (or used an API token); ANTIFORGERY: missing X-XSRF-TOKEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: unknown or malformed token. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description LINK_USED (the link was already used), GATE_NOT_PENDING (the gate was decided or cancelled elsewhere) or CONFLICT (a concurrent change). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description LINK_EXPIRED: the link is older than 72 hours. */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };

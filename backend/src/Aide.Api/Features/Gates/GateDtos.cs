@@ -11,7 +11,7 @@ namespace Aide.Api.Features.Gates;
 /// the gated artifact (spec and plan gates). Escalation gates carry <c>escalationReason</c> and, once decided,
 /// <c>decision</c> (and <c>targetVersion</c> for a rollback). <c>reason</c> is a human-readable context line.
 /// <c>decidedBy</c>, <c>decidedAt</c> and <c>comment</c> are set once the gate is decided. <c>overdue</c> is true
-/// 72 hours after creation while pending (FR-15). An escalation raised by a blocked execution step (FR-33) has
+/// 72 hours after creation while pending (FR-15); <c>remindedAt</c> is when its 24-hour reminder was sent. An escalation raised by a blocked execution step (FR-33) has
 /// <c>escalationReason</c> <c>step_blocked</c> and names the step in <c>executionStepId</c> and <c>stepNumber</c>
 /// (both <c>null</c> otherwise).
 /// </summary>
@@ -31,6 +31,7 @@ public sealed record GateDto(
     EscalationDecision? Decision,
     int? TargetVersion,
     bool Overdue,
+    DateTimeOffset? RemindedAt,
     Guid? ExecutionStepId,
     int? StepNumber);
 

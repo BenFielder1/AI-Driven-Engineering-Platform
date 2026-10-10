@@ -173,6 +173,24 @@ export const contextualErrorMessages = {
     RATE_LIMITED:
       "A rollback ran less than a minute ago. Only one rollback per minute is allowed.",
   },
+  /** GET/POST /api/approvals/:token — the one-click approval link confirmation page (FR-48). */
+  approvalLink: {
+    LINK_USED: "This approval link has already been used, so nothing changed.",
+    LINK_EXPIRED:
+      "This approval link has expired (links last 72 hours), so nothing changed. Open the project to decide the gate there.",
+    FORBIDDEN:
+      "Only Owners of this project can use this approval link. Sign in as an Owner, or ask one to decide the gate.",
+    NOT_FOUND:
+      "This approval link isn't valid. Check that you opened the whole link from the notification.",
+    GATE_NOT_PENDING:
+      "This gate was already decided or cancelled, so the link no longer does anything. Nothing changed.",
+    CONFLICT:
+      "Someone else changed the project at the same time. Reload the page and try again.",
+  },
+  /** PATCH /api/me/notifications/:id/read — the notification was deleted with its project. */
+  markNotificationRead: {
+    NOT_FOUND: "That notification no longer exists. The list now shows the latest.",
+  },
 } as const satisfies Record<string, Partial<Record<ErrorCode, string>>>;
 
 export type ErrorContext = keyof typeof contextualErrorMessages;

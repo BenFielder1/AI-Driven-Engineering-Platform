@@ -27,7 +27,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-12 | Advance request; gate per approval mode | 3, 4.2 | both | 1, 4 | done | POST …/phase/advance (state or pending gate, GATE_PENDING); reason kept through gate; lifecycle card; FR12_* tests |
 | FR-13 | Approve/reject gates; rejection re-runs producer | 3, 4.2 | both | 4 | done | gates approve/reject (owner), GATE_NOT_PENDING; rejection enqueues producer job (handlers arrive phase 6–7); pending-gates panel; FR13_* tests |
 | FR-14 | Escalation gate decisions | 3, 4.5 | both | 4, 8, 10 | done | continue/rollback/accept; step_blocked (phase 8); review reasons low_score/severe_drift/max_cycles/no_improvement/no_optimization_plan, continue = extra cycle, accept = pre_release gate; FR14_* tests |
-| FR-15 | Gate reminders 24h, overdue 72h | 3 | both | 12 | todo | — |
+| FR-15 | Gate reminders 24h, overdue 72h | 3 | both | 12 | done | NotificationSweeper gate timers: one reminder at 24h, GATE_OVERDUE at 72h, never decides; starvation-safe batch; overdue badge; FR15_* tests |
 | FR-16 | Versioned artifacts with hash, parent, status | 3, 4.3 | backend | 1, 5 | done | artifact endpoints (latest/history/versions), version+parent+hash+status; FR16_* tests |
 | FR-17 | Approve/reject drafts; locking | 3, 4.3 | both | 5 | done | approve/reject (owner), no-op on locked, producer re-run on agent drafts; detail page actions; FR17_* tests |
 | FR-18 | Human-edited drafts | 3 | both | 5 | done | POST …/artifacts/{type} with baseVersion (stale → CONFLICT); editor; FR18_* tests |
@@ -59,9 +59,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 | FR-44 | Rollback | 3 | both | 1, 8, 10, 11 | done | POST /rollback (owner) via RollbackWriter in one transaction with job-row locks; record lists invalidated/reset/requeued/cancelled ids; versions picker + confirmation dialog; FR44_* tests; verified on k8s |
 | FR-45 | Rollback rate limit and blocking | 3 | backend | 11 | done | 1/min per project → 429 + Retry-After; blocked by in-progress step/agent run/running or partially applied release with reason details; FR45_* tests; 429 verified on k8s |
 | FR-46 | Live updates (SignalR) | 3 | both | 5 | done | /api/hubs/projects, post-commit publisher, origin check; useProjectLive invalidation; FR46_* tests (browser E2E in phase 14) |
-| FR-47 | Notifications: in-app + channels | 3 | both | 12 | todo | — |
-| FR-48 | Signed single-use approval links | 3 | both | 12 | todo | — |
-| FR-49 | Per-channel delivery retry | 3 | backend | 12 | todo | — |
+| FR-47 | Notifications: in-app + channels | 3 | both | 12 | done | 10 event types → in-app centre (bell, unread count, read/read-all, per-user muted types) + email/Slack/Teams/HMAC-signed webhook via outbox interceptor + notification job; SSRF-safe connector; FR47_* tests |
+| FR-48 | Signed single-use approval links | 3 | both | 12 | done | HMAC tokens (hash stored), 72h expiry, single use, Owner + browser session, /approvals/$token confirmation page; tokens redacted from logs; FR48_* tests |
+| FR-49 | Per-channel delivery retry | 3 | backend | 12 | done | one delivery row per channel, 5 attempts (1m/5m/30m/2h), sent never re-sent, 60s send cap < 2 min claim lease; FR49_* tests |
 | FR-50 | Activity feed | 3 | both | 4 | done | GET …/activity (type filter, keyset `before`, 50/page); activity feed with load more, humanised copy; FR50_* tests |
 | FR-51 | Admin pages, dead-letter retry | 3 | both | 13 | todo | — |
 | FR-52 | `aide` CLI | 3 | backend | 13 | todo | — |
@@ -114,7 +114,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - [x] 11 M6 Release + rollback (base: bf8229d) — IDs: FR-42–FR-45
   - [x] aspnet-engineer (contract stubs) → ef-data-engineer (migration ReleaseAndRollbackDetails) ‖ vite-react-engineer (release panel, rollback dialog/history) → aspnet-engineer (release job, rollback endpoint)
   - [x] gate · review (0 Critical, 1 Major, 4 Minor + tag-reuse gap — all fixed; migration rebuilt as 20261009195805) · redeploy (migration applied, smoke ✓, release → v7-aide tag + merge, rollback + 429 on k8s ✓) · commit
-- [ ] 12 M7 Notifications — IDs: FR-47–FR-49, FR-15
+- [x] 12 M7 Notifications (base: 01ebe33) — IDs: FR-47–FR-49, FR-15
+  - [x] aspnet-engineer (domain rules, outbox, dispatcher/sweeper, channels, approval links) → ef-data-engineer (migration NotificationDetails) ‖ vite-react-engineer (bell, notifications page, preferences, approval page) — resumed from an uncommitted tree; gate green except 2 flaky frontend tests
+  - [x] gate · review (0 Critical, 2 Major, 6 Minor — all fixed; frontend flake root-caused: lazy route chunks under Vitest) · redeploy (migration applied, smoke ✓, notifications + approval-link 404 + token redaction checked on k8s) · commit
 - [ ] 13 M8 Admin + CLI — IDs: FR-51, FR-52
 - [ ] 14 Integrate & deploy — full-lifecycle E2E (Fake + Local) → redeploy → E2E on k8s, NFR-PERF
 - [ ] Final — spec-verifier → fixes → github-ci-engineer → readme-writer
@@ -248,14 +250,24 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section.
 - 2026-10-09 — Rollback re-queues blocked/rejected steps of surviving plans (pending, attempt 0); completed steps stay completed because their commits stay on the branch (§4.8) — otherwise rolling back to the planning version left execution unstartable — SPEC updated: no
 - 2026-10-09 — The working copy is prepared before a step attempt starts; an execution job that dies or fails returns its in_progress step to `rejected` (attempt kept, STEP_REJECTED interrupted=true), so a dead 4th attempt allows a 5th before blocking. Uncommitted leftovers are discarded (reset --hard + clean) before every step, so prompts see only committed content. The empty initial commit is made only on a fresh repo — SPEC updated: no
 
+- 2026-10-10 — §2 notification preferences: table `user_notification_preferences` holds muted notification types per user (in-app only; project channels are configured by Owners). Recipients: Owners for actionable types (gates, drafts, blocked steps, failed runs, budget, failed release), all members for review/release completed and rollback — §5 had no preferences table — SPEC updated: no
+- 2026-10-10 — Notifications are raised by an EF interceptor that queues a `notification` job in the same transaction as the audit event; a logical notification is keyed `<type>:<sourceId>` (`notifications.notification_key`, unique per user), so redelivery never duplicates. Unread count is polled every 30 s (paused while the tab is hidden, refetched on focus) rather than pushed — the SignalR hub is per project, notifications are per user — SPEC updated: no
+- 2026-10-10 — FR-49: one `notification_deliveries` row per channel; 5 attempts with 1m/5m/30m/2h backoff; new `skipped` status (email without SMTP, gate decided before a retry); every send capped at 60 s, below the 2-min claim lease, so an in-flight send is never claimed twice — SPEC updated: no
+- 2026-10-10 — Webhook channels require a signing secret (VALIDATION otherwise; a channel without one fails permanently, never sent unsigned) — FR-47/NFR-SEC — SPEC updated: no
+- 2026-10-10 — Channel delivery is SSRF-safe: targets resolved and vetted at connect time (private, loopback, link-local, CGNAT, IPv4-mapped/6to4/NAT64 refused), connection made to the vetted IP, no redirects/proxy; `Notifications:AllowPrivateTargets` for local testing only — closes the phase 3 Known issue — SPEC updated: no
+- 2026-10-10 — BUDGET_EXCEEDED is still written on every refusal but notifies only on the first refusal since the token budget was last changed — review finding (notification flood) — SPEC updated: no
+- 2026-10-10 — Approval tokens never reach logs: ASP.NET's hosting request scope is replaced by an equivalent redacted scope (`Microsoft.AspNetCore.Hosting.Diagnostics=None`), OTel spans use the redacted path, nginx access log redacts URI/Referer and `/api/approvals/` logs errors at `crit` only (nginx error-log format can't be redacted) — NFR-SEC — SPEC updated: no
+- 2026-10-10 — Channel messages use absolute links built from `App:PublicBaseUrl` (default http://localhost:8080); without a ≥32-char `Approvals:SigningKey` no one-click links are created (fail closed, warning logged) — SPEC updated: no
+- 2026-10-10 — Vitest builds routes without code splitting (`autoCodeSplitting: !process.env.VITEST`); lazy chunk loading inside findBy timeouts caused flaky route tests — NFR-TEST — SPEC updated: no
+
 ## Known issues
 - kubeconform, oasdiff, actionlint not installed locally — schema validation skipped locally (CI runs kubeconform; actionlint was run via Docker) — install optionally — Ben
 - CI not yet run on GitHub (nothing pushed): Testcontainers on ubuntu-latest, SDK 10.0.401 install, Docker cache unverified — verify on first push — orchestrator
-- §2 mentions per-user notification preferences but §5 has no table — to be designed in phase 12 — orchestrator
+- §2 mentions per-user notification preferences but §5 has no table — designed in phase 12 (user_notification_preferences) — —
 - Migrations need their own .editorconfig (generated_code) because the API image's build context is backend/ — fixed in phase 1 — —
 - E2E on k8s registers users in the persistent k8s DB; the first one became Admin there. Phase 3 dev seed must cope with an existing admin; E2E may need higher auth rate limits as specs grow — orchestrator
 - Migration Job logs a harmless "Cannot load library libgssapi_krb5.so.2" (Npgsql Kerberos probe) — ignore — —
-- Webhook/Slack/Teams targets accept any https host (incl. private/loopback ranges); notification delivery (phase 12) must block private/link-local addresses at send time to avoid SSRF from the API pod — orchestrator (phase 12)
+- Webhook/Slack/Teams targets accept any https host (incl. private/loopback ranges); blocked at send time since phase 12 (SafeTargetConnector) — —
 - appsettings.json LLM model IDs are placeholders until phase 6 confirms them from provider docs and picks one naming style — orchestrator (phase 6)
 - The seed admin password is logged only by the pod that creates the account; after a redeploy the log line is gone, so note it on first deploy — documented in deploy-local.sh output — —
 - GET /api/projects/:id/gates is unpaged (spec doesn't require paging); add a limit/cursor if gate counts grow — orchestrator

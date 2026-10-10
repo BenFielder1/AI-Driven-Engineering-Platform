@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Threading.RateLimiting;
 using Aide.Api.Errors;
+using Aide.Api.Logging;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Infrastructure.Persistence;
@@ -169,7 +170,7 @@ public static partial class AuthSetup
             }
 
             var logger = http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(AuthSetup));
-            LogRateLimited(logger, http.Request.Path);
+            LogRateLimited(logger, LogPaths.Redact(http.Request.Path));
             await ApiProblems.WriteAsync(http, ErrorCodes.RateLimited, "Too many attempts. Try again shortly.");
         };
     }
@@ -191,5 +192,5 @@ public static partial class AuthSetup
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Rate limit exceeded for {Path}")]
-    private static partial void LogRateLimited(ILogger logger, PathString path);
+    private static partial void LogRateLimited(ILogger logger, string path);
 }

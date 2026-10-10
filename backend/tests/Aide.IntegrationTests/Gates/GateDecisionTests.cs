@@ -303,7 +303,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
 
             Assert.Equal(GateStatus.Cancelled, (await db.ApprovalGates.SingleAsync(g => g.Id == otherGate.Id, Ct)).Status);
             Assert.Equal(GateStatus.Approved, (await db.ApprovalGates.SingleAsync(g => g.Id == gate.Id, Ct)).Status);
-            Assert.All(await db.Jobs.Where(j => j.ProjectId == id).ToListAsync(Ct), j => Assert.Equal(JobStatus.Cancelled, j.Status));
+            Assert.All(await db.Jobs.Where(j => j.ProjectId == id && j.Type != JobTypes.Notification).ToListAsync(Ct), j => Assert.Equal(JobStatus.Cancelled, j.Status));
         });
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.RollbackCompleted));
         Assert.Equal(Phase.Planning, (await LifecycleSeed.TransitionsAsync(factory, id))[^1].ToPhase);

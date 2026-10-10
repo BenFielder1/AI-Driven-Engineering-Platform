@@ -8,3 +8,9 @@ export function safeReturnUrl(value: unknown, fallback = '/projects'): string {
   }
   return value
 }
+
+/** A notification `link` (a relative app path from the API) when it's a safe same-origin path, else `null`. */
+export function safeAppPath(value: unknown): string | null {
+  const path = safeReturnUrl(value, '')
+  return path === '' ? null : path
+}

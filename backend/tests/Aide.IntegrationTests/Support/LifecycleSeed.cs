@@ -5,6 +5,7 @@ using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
+using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -166,8 +167,15 @@ public static class LifecycleSeed
     public static Task<Project> ProjectAsync(WebApplicationFactory<Program> factory, Guid projectId) =>
         ProjectApi.WithDbAsync(factory, db => db.Projects.AsNoTracking().SingleAsync(p => p.Id == projectId, Ct));
 
+    /// <summary>The project's jobs, oldest first, without <c>notification</c> jobs (FR-47 outbox; see <see cref="NotificationJobsAsync"/>).</summary>
     public static Task<List<Job>> JobsAsync(WebApplicationFactory<Program> factory, Guid projectId) =>
-        ProjectApi.WithDbAsync(factory, db => db.Jobs.AsNoTracking().Where(j => j.ProjectId == projectId).OrderBy(j => j.CreatedAt).ToListAsync(Ct));
+        ProjectApi.WithDbAsync(factory, db => db.Jobs.AsNoTracking()
+            .Where(j => j.ProjectId == projectId && j.Type != JobTypes.Notification).OrderBy(j => j.CreatedAt).ToListAsync(Ct));
+
+    /// <summary>The project's <c>notification</c> jobs (FR-47), oldest first.</summary>
+    public static Task<List<Job>> NotificationJobsAsync(WebApplicationFactory<Program> factory, Guid projectId) =>
+        ProjectApi.WithDbAsync(factory, db => db.Jobs.AsNoTracking()
+            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.Notification).OrderBy(j => j.CreatedAt).ToListAsync(Ct));
 
     public static Task<List<AuditEvent>> EventsAsync(WebApplicationFactory<Program> factory, Guid projectId, string type) =>
         ProjectApi.WithDbAsync(factory, db => db.Events.AsNoTracking()

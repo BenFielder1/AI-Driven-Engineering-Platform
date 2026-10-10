@@ -195,6 +195,22 @@ public class ProjectSettingsRulesTests
     }
 
     [Fact]
+    public void FR47_NFR_SEC_Webhook_channels_need_a_signing_secret_sent_or_kept_by_id()
+    {
+        var saved = new SavedChannel(NotificationChannelType.Webhook, "https://h.example.com", HasSecret: true);
+        var savedWithout = new SavedChannel(NotificationChannelType.Webhook, "https://h.example.com", HasSecret: false);
+        var fromSlack = new SavedChannel(NotificationChannelType.Slack, "hooks.slack.com/…", HasSecret: true);
+
+        Assert.True(Channels(new ChannelCandidate(NotificationChannelType.Webhook, "https://h.example.com", "k")).IsSuccess);
+        Assert.True(Channels(new ChannelCandidate(NotificationChannelType.Webhook, "https://h.example.com", Saved: saved)).IsSuccess);
+        Assert.True(Channels(new ChannelCandidate(NotificationChannelType.Webhook, "https://h.example.com", "new", Saved: saved)).IsSuccess);
+        AssertProblem(Channels(new ChannelCandidate(NotificationChannelType.Webhook, "https://h.example.com")), "channels[0].secret");
+        AssertProblem(Channels(new ChannelCandidate(NotificationChannelType.Webhook, "https://h.example.com", ClearSecret: true, Saved: saved)), "channels[0].secret");
+        AssertProblem(Channels(new ChannelCandidate(NotificationChannelType.Webhook, "https://h.example.com", Saved: savedWithout)), "channels[0].secret");
+        AssertProblem(Channels(new ChannelCandidate(NotificationChannelType.Webhook, "https://h.example.com", Saved: fromSlack)), "channels[0].secret");
+    }
+
+    [Fact]
     public void FR9_Secret_cannot_be_blank_or_sent_with_clearSecret()
     {
         AssertProblem(Channels(new ChannelCandidate(NotificationChannelType.Webhook, "https://h.example.com", " ")), "channels[0].secret");

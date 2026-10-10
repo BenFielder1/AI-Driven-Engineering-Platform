@@ -18,7 +18,10 @@ const apiProxy = {
 export default defineConfig({
   plugins: [
     // Must come before react(): generates src/routeTree.gen.ts from src/routes/.
-    tanstackRouter({ target: 'react', autoCodeSplitting: true }),
+    // No code splitting under Vitest: split route chunks are imported lazily on the first navigation, i.e. inside each
+    // test's findBy timeout, and transforming them under parallel load left whole-app renders stuck on the router's
+    // pending "Loading…" (NFR-TEST). Unsplit, route components load with routeTree.gen.ts at import time instead.
+    tanstackRouter({ target: 'react', autoCodeSplitting: !process.env.VITEST }),
     react(),
     tailwindcss(),
   ],

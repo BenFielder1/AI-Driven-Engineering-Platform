@@ -1,6 +1,9 @@
+using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Aide.Infrastructure.Persistence.Configurations;
@@ -62,11 +65,24 @@ internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notif
         builder.Property(n => n.Title).HasMaxLength(300).IsRequired();
         builder.Property(n => n.Body).IsRequired();
         builder.Property(n => n.Link).HasMaxLength(1000).IsRequired();
+        builder.Property(n => n.NotificationKey).HasMaxLength(300);
 
         builder.HasOne<AppUser>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Project>().WithMany().HasForeignKey(n => n.ProjectId).OnDelete(DeleteBehavior.Cascade);
 
+        // Unread count: WHERE user_id = @u AND read_at IS NULL.
         builder.HasIndex(n => new { n.UserId, n.ReadAt });
+
+        // Keyset paging, newest first: WHERE user_id = @u AND (created_at, id) < (@c, @i) ORDER BY created_at DESC, id DESC.
+        builder.HasIndex(n => new { n.UserId, n.CreatedAt, n.Id }, "ix_notifications_user_id_created_at_id")
+            .IsDescending(false, true, true)
+            .HasDatabaseName("ix_notifications_user_id_created_at_id");
+
+        // FR-49: one in-app notification per (user, logical notification); keyless notifications are not deduplicated.
+        builder.HasIndex(n => new { n.UserId, n.NotificationKey }, "ux_notifications_user_id_notification_key")
+            .IsUnique()
+            .HasFilter("notification_key IS NOT NULL")
+            .HasDatabaseName("ux_notifications_user_id_notification_key");
     }
 }
 
@@ -83,6 +99,34 @@ internal sealed class NotificationDeliveryConfiguration : IEntityTypeConfigurati
         builder.HasOne<Project>().WithMany().HasForeignKey(d => d.ProjectId).OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(d => new { d.NotificationKey, d.Channel }).IsUnique();
+
+        // Retry sweep: WHERE status = 'pending' AND next_attempt_at <= now ORDER BY next_attempt_at.
+        builder.HasIndex(d => new { d.Status, d.NextAttemptAt });
+    }
+}
+
+internal sealed class UserNotificationPreferencesConfiguration : IEntityTypeConfiguration<UserNotificationPreferences>
+{
+    public void Configure(EntityTypeBuilder<UserNotificationPreferences> builder)
+    {
+        builder.ToTable("user_notification_preferences");
+        builder.HasKey(p => p.UserId);
+        builder.Property(p => p.UserId).ValueGeneratedNever();
+        // A text[] of snake_case wire values. Npgsql ignores element converters on enum collections (it would store
+        // "GateReminder"), so the whole list is converted; filter by type in memory after loading the row.
+        builder.Property(p => p.MutedTypes)
+            .HasConversion(
+                v => v.Select(t => t.ToWire()).ToArray(),
+                v => v.Select(EnumStrings.Parse<NotificationType>).ToList(),
+                new ValueComparer<List<NotificationType>>(
+                    (a, b) => a!.SequenceEqual(b!),
+                    v => v.Aggregate(0, (h, t) => HashCode.Combine(h, t)),
+                    v => v.ToList()))
+            .HasColumnType("text[]")
+            .HasDefaultValueSql("'{}'::text[]")
+            .IsRequired();
+
+        builder.HasOne<AppUser>().WithOne().HasForeignKey<UserNotificationPreferences>(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }
 

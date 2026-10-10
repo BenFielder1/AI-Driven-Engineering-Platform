@@ -1,5 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { seedUser, signInAs } from '../../mocks/handlers/auth'
 import { seedProject, type StoredProject } from '../../mocks/handlers/projects'
@@ -30,6 +30,10 @@ async function fillAndContinue(utils: Awaited<ReturnType<typeof openRollbackDial
 }
 
 describe('Settings → Danger zone → Roll back (FR-44, FR-45)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('FR44_disabled_versions_show_reason', async () => {
     const { picker } = await openRollbackDialog()
 
@@ -101,7 +105,11 @@ describe('Settings → Danger zone → Roll back (FR-44, FR-45)', () => {
   })
 
   it('FR45_rate_limited_shows_countdown', async () => {
-    const utils = await openRollbackDialog({ lastRollbackAt: Date.now() - 58_500 })
+    // Pin the clock (only Date; timers stay real) so the mock's one-minute window and the dialog's countdown don't
+    // depend on how long opening the dialog takes under load.
+    const now = Date.now()
+    vi.useFakeTimers({ toFake: ['Date'], now })
+    const utils = await openRollbackDialog({ lastRollbackAt: now - 58_000 })
     const confirm = await fillAndContinue(utils)
 
     await utils.user.click(confirm)
@@ -109,10 +117,11 @@ describe('Settings → Danger zone → Roll back (FR-44, FR-45)', () => {
     expect(
       await within(utils.dialog).findByText('A rollback ran less than a minute ago. Only one rollback per minute is allowed.'),
     ).toBeInTheDocument()
-    expect(within(utils.dialog).getByText(/^Try again in [12]s\.$/)).toBeInTheDocument()
+    expect(within(utils.dialog).getByText('Try again in 2s.')).toBeInTheDocument()
     expect(confirm).toBeDisabled()
 
     // The countdown ends and the rollback can be confirmed again.
+    vi.setSystemTime(now + 2_000)
     await waitFor(() => {
       expect(confirm).toBeEnabled()
     })

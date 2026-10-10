@@ -6,6 +6,7 @@ using Aide.Domain.Execution;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
+using Aide.Domain.Notifications;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Persistence.Identity;
@@ -62,6 +63,8 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<ApprovalLink> ApprovalLinks => Set<ApprovalLink>();
 
+    public DbSet<UserNotificationPreferences> UserNotificationPreferences => Set<UserNotificationPreferences>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         ArgumentNullException.ThrowIfNull(configurationBuilder);
@@ -89,6 +92,7 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<JobStatus>(configurationBuilder);
         MapEnum<NotificationDeliveryStatus>(configurationBuilder);
         MapEnum<ApprovalLinkDecision>(configurationBuilder);
+        MapEnum<NotificationType>(configurationBuilder);
 
         // UTC timestamptz everywhere.
         configurationBuilder.Properties<DateTimeOffset>().HaveColumnType("timestamp with time zone");

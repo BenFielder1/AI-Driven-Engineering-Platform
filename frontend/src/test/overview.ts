@@ -11,8 +11,7 @@ type SeedOverrides = Omit<NonNullable<Parameters<typeof seedProject>[0]>, 'membe
 /** Renders /projects/:id (Overview) and waits for the lifecycle card and the pending gates. */
 export async function openOverview(project: StoredProject) {
   const utils = renderRoute(`/projects/${project.id}`)
-  // The first render loads the lazy route chunks, which can be slow when the whole suite runs in parallel; findBy and
-  // waitFor use the suite-wide asyncUtilTimeout (src/test/setup.ts).
+  // findBy and waitFor use the suite-wide asyncUtilTimeout (src/test/setup.ts).
   await screen.findByRole('heading', { name: 'Lifecycle' })
   await waitFor(() => {
     if (screen.queryByText('Loading gates…')) {

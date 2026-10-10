@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import { canViewAdmin } from '../../lib/permissions'
 import type { User } from '../auth/auth-api'
+import { NotificationBell } from '../notifications/notification-bell'
 import { HealthIndicator } from './health-indicator'
 import { ThemeToggle } from './theme-toggle'
 import { UserMenu } from './user-menu'
@@ -63,6 +64,7 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
             <MainNav user={user} />
           </div>
           <div className="ml-auto flex items-center gap-2 sm:ml-0">
+            <NotificationBell />
             <ThemeToggle />
             <UserMenu user={user} />
           </div>

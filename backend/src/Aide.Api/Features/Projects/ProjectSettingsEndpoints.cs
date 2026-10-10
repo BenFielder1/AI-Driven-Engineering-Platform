@@ -49,7 +49,7 @@ public static partial class ProjectSettingsEndpoints
 
         group.MapPatch("/notifications", UpdateNotificationSettings)
             .WithName("UpdateNotificationSettings")
-            .WithSummary("Replace the notification channels (Owner). Slack/Teams webhook URLs are secrets (sent in secret, returned masked). A channel sent with its id and no secret keeps its saved secret.")
+            .WithSummary("Replace the notification channels (Owner). Slack/Teams webhook URLs are secrets (sent in secret, returned masked); webhook channels need an HMAC signing secret. A channel sent with its id and no secret keeps its saved secret.")
             .Produces<NotificationSettingsDto>()
             .ProducesValidationProblem();
 

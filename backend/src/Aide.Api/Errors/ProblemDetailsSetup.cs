@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Aide.Api.Logging;
 using Aide.Domain.Common;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -73,13 +74,14 @@ public sealed partial class GlobalExceptionHandler(IProblemDetailsService proble
             _ => (StatusCodes.Status500InternalServerError, (string?)null, "An unexpected error occurred."),
         };
 
+        var path = LogPaths.Redact(httpContext.Request.Path);
         if (status >= StatusCodes.Status500InternalServerError)
         {
-            LogUnhandled(logger, exception, httpContext.Request.Method, httpContext.Request.Path);
+            LogUnhandled(logger, exception, httpContext.Request.Method, path);
         }
         else
         {
-            LogHandled(logger, exception, status, httpContext.Request.Method, httpContext.Request.Path);
+            LogHandled(logger, exception, status, httpContext.Request.Method, path);
         }
 
         httpContext.Response.StatusCode = status;
@@ -97,8 +99,8 @@ public sealed partial class GlobalExceptionHandler(IProblemDetailsService proble
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled exception for {Method} {Path}")]
-    private static partial void LogUnhandled(ILogger logger, Exception exception, string method, PathString path);
+    private static partial void LogUnhandled(ILogger logger, Exception exception, string method, string path);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Exception mapped to {Status} for {Method} {Path}")]
-    private static partial void LogHandled(ILogger logger, Exception exception, int status, string method, PathString path);
+    private static partial void LogHandled(ILogger logger, Exception exception, int status, string method, string path);
 }

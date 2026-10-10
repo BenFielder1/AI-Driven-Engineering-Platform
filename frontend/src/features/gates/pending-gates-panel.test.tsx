@@ -39,6 +39,22 @@ describe('Overview → Pending gates (FR-13, FR-15)', () => {
     expect(time?.getAttribute('title')).toBeTruthy()
   })
 
+  it('FR-15: an overdue gate shows a text "Overdue" badge and when its reminder was sent', async () => {
+    await openOverviewAs('viewer', { currentPhase: 'specification' }, (p) => {
+      seedGate(p, { type: 'spec_approval', overdue: true, remindedAt: '2026-09-02T09:00:00Z' })
+      seedGate(p, { type: 'pre_release', artifactType: null, overdue: false, remindedAt: null })
+    })
+
+    const overdue = pendingGate('Specification approval')
+    expect(within(overdue).getByText('Overdue')).toBeInTheDocument()
+    expect(within(overdue).getByText(/^Reminded/)).toBeInTheDocument()
+    expect(overdue.querySelector('time[datetime="2026-09-02T09:00:00Z"]')).not.toBeNull()
+
+    const fresh = pendingGate('Release approval')
+    expect(within(fresh).queryByText('Overdue')).not.toBeInTheDocument()
+    expect(within(fresh).queryByText(/^Reminded/)).not.toBeInTheDocument()
+  })
+
   it('FR-13: an Owner approves with a comment, and the phase and timeline update', async () => {
     const { user, project } = await openOverviewAs('owner', { currentPhase: 'specification' }, (p) => {
       lockArtifact(p, 'technical_specification')

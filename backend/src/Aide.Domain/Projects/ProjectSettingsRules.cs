@@ -240,8 +240,9 @@ public static partial class ProjectSettingsRules
     /// Validates notification channels (FR-9, FR-47):
     /// <list type="bullet">
     /// <item>email: the target is an email address; no secret.</item>
-    /// <item>webhook: the target is an absolute <c>https</c> URL without credentials; the secret is an optional HMAC
-    /// signing key.</item>
+    /// <item>webhook: the target is an absolute <c>https</c> URL without credentials; the secret is the required HMAC
+    /// signing key (NFR-SEC: webhook bodies are always signed). It is sent in <c>secret</c>, or the saved key of the same
+    /// channel (same id and type) is kept; <c>clearSecret</c> without a new key isn't allowed.</item>
     /// <item>slack / teams: the incoming-webhook URL is a bearer credential, so it is the channel's <em>secret</em>
     /// (an <c>https</c> URL). It is sent in <c>secret</c>, or, for older clients, as an absolute URL in
     /// <c>target</c>; otherwise the saved URL of the same channel (same id and type) is kept. A channel without a URL
@@ -346,6 +347,11 @@ public static partial class ProjectSettingsRules
                 if (!IsHttpsUrl(target))
                 {
                     problems.Add($"{field}.target: Use an https:// URL.");
+                }
+
+                if (!secretSent && !KeepableSecret(channel))
+                {
+                    problems.Add($"{field}.secret: Enter a signing secret: webhook bodies are always HMAC-signed.");
                 }
 
                 break;

@@ -34,6 +34,12 @@ public static class JobTypes
     /// <summary>FR-42: merge and tag the release.</summary>
     public const string Release = "release";
 
+    /// <summary>
+    /// FR-47: fan out one notification-worthy event (or a gate reminder, FR-15): in-app notifications for its recipients,
+    /// one delivery row per subscribed project channel, then a first delivery attempt. Queued in the event's transaction.
+    /// </summary>
+    public const string Notification = "notification";
+
     /// <summary>The job that runs <paramref name="agent"/>.</summary>
     public static string ForAgent(AgentKind agent) => agent switch
     {

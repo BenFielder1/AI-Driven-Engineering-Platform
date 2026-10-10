@@ -21,7 +21,8 @@ public static class GateTimers
 
         var age = now - createdAt;
         var markOverdue = !overdue && age >= OverdueAfter;
-        var remind = !markOverdue && remindedAt is null && age >= ReminderAfter;
+        // An overdue gate has had its 72-hour notification; a reminder after it would be a late duplicate.
+        var remind = !overdue && !markOverdue && remindedAt is null && age >= ReminderAfter;
         return new GateTimerActions(remind, markOverdue);
     }
 }

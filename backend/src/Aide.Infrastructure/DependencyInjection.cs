@@ -46,9 +46,14 @@ public static class DependencyInjection
 
             // FR-46: committed project events are pushed live (the API replaces the no-op publisher).
             options.AddInterceptors(sp.GetRequiredService<ProjectEventPublishingInterceptor>());
+
+            // FR-47 outbox: notification-worthy events queue their notification job in the same transaction.
+            options.AddInterceptors(sp.GetRequiredService<NotificationOutboxInterceptor>());
         });
         services.TryAddSingleton<IProjectEventPublisher, NullProjectEventPublisher>();
         services.TryAddSingleton<ProjectEventPublishingInterceptor>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<NotificationOutboxInterceptor>();
 
         // LLM provider configuration (FR-22): defaults and which providers have a system key.
         services.AddOptions<LlmOptions>()

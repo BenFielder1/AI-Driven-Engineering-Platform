@@ -80,18 +80,98 @@ describe('Settings → Notifications: webhook signing key (FR-9)', () => {
     expect(document.body).not.toHaveTextContent(HMAC)
   })
 
-  it('FR-9: Clear sends clearSecret and the key shows "Not set" afterwards', async () => {
+  it('FR-47: a saved signing key can be replaced but not cleared (webhook bodies are always signed)', async () => {
+    await openNotifications([webhookChannel])
+    const group = channelGroup(1)
+
+    expect(within(group).getByRole('button', { name: 'Replace channel 1 signing key' })).toBeInTheDocument()
+    expect(within(group).queryByRole('button', { name: /^Clear/ })).not.toBeInTheDocument()
+  })
+
+  it('FR-47: replacing with a blank signing key is rejected before saving', async () => {
     const { user, project } = await openNotifications([webhookChannel])
 
-    await user.click(screen.getByRole('button', { name: 'Clear channel 1 signing key' }))
-    expect(within(channelGroup(1)).getByText('will be removed when you save')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Replace channel 1 signing key' }))
+    const input = screen.getByLabelText('New channel 1 signing key')
+    await user.type(input, '   ')
+    await save(user)
+
+    expect(
+      await screen.findByRole('link', { name: 'Channel 1: Enter a signing key: webhook bodies are always HMAC-signed.' }),
+    ).toHaveAttribute('href', `#${input.id}`)
+    expect(requestsTo('PATCH', '/settings/notifications')).toHaveLength(0)
+    expect(project.channels[0]?.secret).toBe('old-hmac-key')
+  })
+
+  it('FR-47: a new webhook channel requires a signing key, reported in the error summary and linked to the field', async () => {
+    const { user, project } = await openNotifications([])
+
+    await user.click(screen.getByRole('button', { name: 'Add channel' }))
+    await user.selectOptions(screen.getByLabelText('Channel 1 type'), 'webhook')
+    await user.type(screen.getByLabelText('Channel 1 webhook URL'), 'https://example.com/hook')
+    const input = screen.getByLabelText('Channel 1 signing key')
+    expect(input).toHaveAttribute('aria-required', 'true')
+    expect(input).toHaveAttribute('type', 'password')
+    expect(screen.queryByLabelText(/signing key \(optional\)/)).not.toBeInTheDocument()
+
+    await save(user)
+    const link = await screen.findByRole('link', {
+      name: 'Channel 1: Enter a signing key: webhook bodies are always HMAC-signed.',
+    })
+    expect(link).toHaveAttribute('href', `#${input.id}`)
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(requestsTo('PATCH', '/settings/notifications')).toHaveLength(0)
+
+    await user.type(input, HMAC)
     await save(user)
 
     await screen.findByText('Notification settings saved.')
-    expect(lastSentChannels()[0]).toMatchObject({ clearSecret: true })
-    expect(lastSentChannels()[0]).not.toHaveProperty('secret')
-    expect(project.channels[0]?.secret).toBeNull()
+    expect(lastSentChannels()[0]).toMatchObject({ id: null, type: 'webhook', target: 'https://example.com/hook', secret: HMAC })
+    expect(project.channels[0]?.secret).toBe(HMAC)
+    await waitFor(() => {
+      expect(within(channelGroup(1)).getByText('Channel 1 signing key:').parentElement).toHaveTextContent('Set')
+    })
+  })
+
+  it('FR-47: a saved webhook channel without a key (hasSecret false) must be given one', async () => {
+    const { user } = await openNotifications([{ ...webhookChannel, secret: null }])
+
     expect(within(channelGroup(1)).getByText('Channel 1 signing key:').parentElement).toHaveTextContent('Not set')
+    const input = screen.getByLabelText('Channel 1 signing key')
+    expect(input).toHaveAttribute('aria-required', 'true')
+    await save(user)
+
+    expect(
+      await screen.findByRole('link', { name: 'Channel 1: Enter a signing key: webhook bodies are always HMAC-signed.' }),
+    ).toBeInTheDocument()
+    expect(requestsTo('PATCH', '/settings/notifications')).toHaveLength(0)
+
+    await user.type(input, HMAC)
+    await save(user)
+    await screen.findByText('Notification settings saved.')
+    expect(lastSentChannels()[0]).toMatchObject({ id: webhookChannel.id, secret: HMAC })
+  })
+
+  it('FR-47: server VALIDATION for a missing signing key is shown on the field', async () => {
+    server.use(
+      http.patch('*/api/projects/:id/settings/notifications', () =>
+        problem(400, 'VALIDATION', 'The notification settings are invalid.', {
+          errors: { 'channels[0].secret': ['Enter a signing secret: webhook bodies are always HMAC-signed.'] },
+        }),
+      ),
+    )
+    const { user } = await openNotifications([webhookChannel])
+
+    await user.click(screen.getByRole('button', { name: 'Replace channel 1 signing key' }))
+    const input = screen.getByLabelText('New channel 1 signing key')
+    await user.type(input, HMAC)
+    await save(user)
+
+    const link = await screen.findByRole('link', {
+      name: 'Channel 1: Enter a signing secret: webhook bodies are always HMAC-signed.',
+    })
+    expect(link).toHaveAttribute('href', `#${input.id}`)
+    expect(input).toHaveAttribute('aria-invalid', 'true')
   })
 })
 
@@ -191,6 +271,7 @@ describe('Settings → Notifications: Slack/Microsoft Teams webhook URL is a sec
     await user.click(screen.getByRole('button', { name: 'Add channel' }))
     await user.selectOptions(screen.getByLabelText('Channel 1 type'), 'webhook')
     await user.type(screen.getByLabelText('Channel 1 webhook URL'), 'https://example.com/hook')
+    await user.type(screen.getByLabelText('Channel 1 signing key'), HMAC)
     await user.click(screen.getByRole('button', { name: 'Add channel' }))
     await user.selectOptions(screen.getByLabelText('Channel 2 type'), 'teams')
     await user.type(screen.getByLabelText('Channel 2 Microsoft Teams webhook URL'), 'https://contoso.webhook.office.com/x')
@@ -198,8 +279,7 @@ describe('Settings → Notifications: Slack/Microsoft Teams webhook URL is a sec
 
     await screen.findByText('Notification settings saved.')
     const sent = lastSentChannels()
-    expect(sent[0]).toMatchObject({ type: 'webhook', target: 'https://example.com/hook' })
-    expect(sent[0]).not.toHaveProperty('secret')
+    expect(sent[0]).toMatchObject({ type: 'webhook', target: 'https://example.com/hook', secret: HMAC })
     expect(sent[1]).toMatchObject({ type: 'teams', secret: 'https://contoso.webhook.office.com/x' })
     expect(sent[1]).not.toHaveProperty('target')
     expect(within(channelGroup(2)).getByText('Channel 2 Microsoft Teams webhook URL:').parentElement).toHaveTextContent(

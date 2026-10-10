@@ -97,6 +97,7 @@ export function seedGate(project: StoredProject, overrides: Partial<Gate> = {}):
     decision: null,
     targetVersion: null,
     overdue: false,
+    remindedAt: null,
     executionStepId: null,
     stepNumber: null,
     ...overrides,

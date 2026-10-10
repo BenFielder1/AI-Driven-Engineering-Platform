@@ -1,3 +1,5 @@
+using Aide.Domain.Notifications;
+
 namespace Aide.Domain.Entities;
 
 /// <summary>An in-app notification (FR-47).</summary>
@@ -16,6 +18,12 @@ public sealed class Notification
     public string Body { get; set; } = string.Empty;
 
     public string Link { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional idempotency key of the logical notification (e.g. <c>gate_required:&lt;gate id&gt;</c>), unique per user,
+    /// so a retried job doesn't notify the same user twice (FR-49). <c>null</c> for notifications that needn't dedupe.
+    /// </summary>
+    public string? NotificationKey { get; set; }
 
     public DateTimeOffset? ReadAt { get; set; }
 
@@ -40,6 +48,9 @@ public sealed class NotificationDelivery
 
     public string? LastError { get; set; }
 
+    /// <summary>When a <see cref="NotificationDeliveryStatus.Pending"/> or failed delivery is next due (backoff); <c>null</c> once settled.</summary>
+    public DateTimeOffset? NextAttemptAt { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset? SentAt { get; set; }
@@ -61,4 +72,15 @@ public sealed class ApprovalLink
     public DateTimeOffset? UsedAt { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>A user's in-app notification preferences (§2, FR-47): the notification types muted in their notification centre.</summary>
+public sealed class UserNotificationPreferences
+{
+    public Guid UserId { get; set; }
+
+    /// <summary>Muted types, stored as a <c>text[]</c> of snake_case wire values. Empty mutes nothing.</summary>
+    public List<NotificationType> MutedTypes { get; set; } = [];
+
+    public DateTimeOffset UpdatedAt { get; set; }
 }

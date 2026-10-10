@@ -3,11 +3,12 @@ import { buttonClasses } from '../../components/ui/button-classes'
 import { PageHeader } from '../../components/ui/states'
 import { githubFailureMessage } from '../../lib/errors'
 import { githubLinkHref, useAuthProviders, useCurrentUser } from '../auth/auth-api'
+import { NotificationPreferencesSection } from '../notifications/notification-preferences-section'
 import { ApiTokensSection } from './api-tokens-section'
 
 const roleLabel = { admin: 'Admin', user: 'User' } as const
 
-/** /account: profile and system role (FR-3), linked GitHub (FR-2), API tokens (FR-4). */
+/** /account: profile and system role (FR-3), linked GitHub (FR-2), notification preferences (§2, FR-47), API tokens (FR-4). */
 export function AccountPage({ githubError }: { githubError?: { reason?: string } }) {
   const user = useCurrentUser()
   const providers = useAuthProviders()
@@ -60,6 +61,8 @@ export function AccountPage({ githubError }: { githubError?: { reason?: string }
           <p className="text-sm text-muted">GitHub sign-in isn&apos;t configured on this server.</p>
         )}
       </section>
+
+      <NotificationPreferencesSection />
 
       <ApiTokensSection />
     </div>

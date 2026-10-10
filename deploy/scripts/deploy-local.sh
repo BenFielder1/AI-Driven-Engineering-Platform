@@ -38,7 +38,7 @@ if [[ ! -f "$SECRETS_FILE" ]]; then
   unset db_password signing_key
   info "Created $SECRETS_FILE (git-ignored) from the example."
   info "Generated: POSTGRES_PASSWORD, ConnectionStrings__Aide (matching password), Approvals__SigningKey."
-  info "Optional keys (LLM, GitHub OAuth, SMTP) are blank; edit the file and re-run to set them."
+  info "Optional keys (LLM, GitHub OAuth, SMTP) are blank or commented out; edit the file and re-run to set them."
 else
   info "Using existing $SECRETS_FILE"
 fi
@@ -48,8 +48,36 @@ fi
 for key in POSTGRES_PASSWORD ConnectionStrings__Aide; do
   grep -qE "^${key}=.+" "$SECRETS_FILE" || die "$SECRETS_FILE: $key is missing or empty."
 done
-grep -qE '^(POSTGRES_PASSWORD=change-me|Approvals__SigningKey=change-me)$' "$SECRETS_FILE" \
-  && die "$SECRETS_FILE still contains 'change-me' placeholders. Set real values (POSTGRES_PASSWORD must match the password in ConnectionStrings__Aide and, if the DB volume exists, the database's current password)."
+grep -qE '^POSTGRES_PASSWORD=change-me$' "$SECRETS_FILE" \
+  && die "$SECRETS_FILE still contains the 'change-me' POSTGRES_PASSWORD placeholder. Set a real value (it must match the password in ConnectionStrings__Aide and, if the DB volume exists, the database's current password)."
+
+# FR-48: Approvals__SigningKey must be >= 32 characters (after trimming). Replace a missing, 'change-me' or too-short
+# key with a random one; every other line of the file is kept byte-for-byte. Values are never printed.
+signing_key_value="$(sed -n 's/^Approvals__SigningKey=//p' "$SECRETS_FILE" | tail -n 1 | tr -d '[:space:]')"
+if [[ "$signing_key_value" == "change-me" || ${#signing_key_value} -lt 32 ]]; then
+  new_key="$(rand_hex 32)"
+  tmp="$(mktemp "$SECRETS_FILE.XXXXXX")"
+  if grep -q '^Approvals__SigningKey=' "$SECRETS_FILE"; then
+    sed -e "s|^Approvals__SigningKey=.*|Approvals__SigningKey=${new_key}|" "$SECRETS_FILE" > "$tmp"
+  else
+    { cat "$SECRETS_FILE"; [[ -z "$(tail -c 1 "$SECRETS_FILE")" ]] || echo; echo "Approvals__SigningKey=${new_key}"; } > "$tmp"
+  fi
+  mv -f "$tmp" "$SECRETS_FILE"
+  unset new_key tmp
+  info "Generated a new Approvals__SigningKey (was missing, a placeholder or shorter than 32 characters)."
+fi
+unset signing_key_value
+
+# Non-string options with a blank value (KEY=) bind an empty string and fail config binding/validation at startup.
+# Comment such lines out so the backend default applies (only blank lines are changed; set values are kept).
+BLANK_UNSAFE_KEYS='Smtp__Port|Smtp__EnableSsl|Smtp__Timeout|Smtp__From|App__PublicBaseUrl'
+if grep -qE "^(${BLANK_UNSAFE_KEYS})=[[:space:]]*$" "$SECRETS_FILE"; then
+  tmp="$(mktemp "$SECRETS_FILE.XXXXXX")"
+  sed -E "s/^((${BLANK_UNSAFE_KEYS})=[[:space:]]*)$/# \1  (blank: commented out by deploy-local.sh, default applies)/" "$SECRETS_FILE" > "$tmp"
+  mv -f "$tmp" "$SECRETS_FILE"
+  unset tmp
+  warn "Commented out blank non-string keys in $SECRETS_FILE (backend defaults apply). Set a value to override."
+fi
 # Pre-phase-3 key names bind to nothing (the backend reads Llm:Providers:<Name>:ApiKey). Warn, never rewrite values.
 if grep -qE '^Llm__(Anthropic|OpenAI)__ApiKey=' "$SECRETS_FILE"; then
   warn "$SECRETS_FILE uses old LLM key names (Llm__Anthropic__ApiKey / Llm__OpenAI__ApiKey), which the API ignores.

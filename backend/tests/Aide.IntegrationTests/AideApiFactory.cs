@@ -26,6 +26,9 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
     public const string AdminEmail = "bootstrap-admin@aide.test";
     public const string Password = "Passw0rd-test";
 
+    /// <summary>Approvals:SigningKey in tests (FR-48).</summary>
+    public const string TestSigningKey = "test-approval-signing-key-0123456789abcdef";
+
     /// <summary>Requests go to https://localhost so Secure cookies round-trip like in a browser.</summary>
     public static readonly Uri BaseUri = new("https://localhost");
 
@@ -84,6 +87,11 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
 
         // The background job worker doesn't run in tests; job tests drive JobWorker.RunOnceAsync with their own clock.
         builder.UseSetting("Jobs:Enabled", "false");
+        // Likewise the notification sweep (FR-15, FR-49): notification tests call NotificationSweeper's passes directly.
+        builder.UseSetting("Notifications:SweepEnabled", "false");
+        // FR-48 links are signed with a test key; no SMTP server: email channels are skipped unless a test fakes the transport.
+        builder.UseSetting("Approvals:SigningKey", TestSigningKey);
+        builder.UseSetting("Smtp:Host", string.Empty);
         // Capture logs for assertions instead of writing JSON to the test console.
         builder.ConfigureLogging(logging =>
         {

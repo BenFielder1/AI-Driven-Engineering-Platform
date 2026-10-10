@@ -301,6 +301,32 @@ export const notificationEventLabels: Record<Schemas['NotificationEvent'], strin
   rollback: 'Rollback',
 }
 
+/** In-app notification types (FR-47, FR-15): the channel events plus the 24-hour gate reminder. */
+export const notificationTypes = [
+  'gate_required',
+  'gate_reminder',
+  'gate_overdue',
+  'artifact_ready',
+  'step_blocked',
+  'run_failed',
+  'budget_exceeded',
+  'review_completed',
+  'release_completed',
+  'release_failed',
+  'rollback',
+] as const satisfies readonly Schemas['NotificationType'][]
+
+export const notificationTypeLabels: Record<Schemas['NotificationType'], string> = {
+  ...notificationEventLabels,
+  gate_reminder: 'Gate reminder (after 24 hours)',
+}
+
+/** FR-48: the decision a one-click approval link carries. */
+export const approvalDecisionLabels: Record<Schemas['ApprovalLinkDecision'], string> = {
+  approve: 'Approve',
+  reject: 'Reject',
+}
+
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 export const formatDateTime = (iso: string) => dateTimeFormat.format(new Date(iso))
 

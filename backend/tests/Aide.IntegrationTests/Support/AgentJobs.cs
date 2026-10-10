@@ -26,7 +26,8 @@ public static class AgentJobs
     public static async Task<List<Job>> RunQueuedAsync(WebApplicationFactory<Program> app, Guid projectId)
     {
         ArgumentNullException.ThrowIfNull(app);
-        var types = app.Services.GetServices<JobHandlerRegistration>().Select(r => r.JobType).ToArray();
+        // Notification jobs (FR-47 outbox) are left queued: notification tests run them explicitly.
+        var types = app.Services.GetServices<JobHandlerRegistration>().Select(r => r.JobType).Where(t => t != JobTypes.Notification).ToArray();
         for (var round = 0; round < 25; round++)
         {
             var queued = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()

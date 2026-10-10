@@ -67,6 +67,11 @@ function PendingGateItem({
         <span className="text-muted">
           Created <RelativeTime iso={gate.createdAt} /> ({formatDateTime(gate.createdAt)})
         </span>
+        {gate.remindedAt && (
+          <span className="text-muted">
+            Reminded <RelativeTime iso={gate.remindedAt} /> ({formatDateTime(gate.remindedAt)})
+          </span>
+        )}
         <GateArtifactRef projectId={projectId} gate={gate} />
         <GateStepRef projectId={projectId} gate={gate} />
         {gate.escalationReason && <span>Reason: {escalationReasonLabels[gate.escalationReason]}</span>}
@@ -108,7 +113,7 @@ function PendingGateItem({
 }
 
 /**
- * Overview → Pending gates (FR-12–FR-15): type, age, overdue flag and gated artifact. Owners approve or reject
+ * Overview → Pending gates (FR-12–FR-15): type, age, reminder time, overdue flag and gated artifact. Owners approve or reject
  * (escalations get the decision dialog); other roles see the gates without actions.
  */
 export function PendingGatesPanel({

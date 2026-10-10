@@ -294,7 +294,9 @@ public sealed record NotificationChannelInput
 
     /// <summary>
     /// The channel secret, stored encrypted and never returned: the HMAC signing key (webhook) or the https
-    /// incoming-webhook URL (slack, teams; required for a new channel). Email channels have none.
+    /// incoming-webhook URL (slack, teams). Required for a new webhook, slack or teams channel; omit it to keep the saved
+    /// one of the same channel (same id and type). Webhook, slack and teams channels can't clear it without sending a new
+    /// one. Email channels have none.
     /// </summary>
     [MaxLength(ProjectLimits.UrlMaxLength)]
     public string? Secret { get; init; }

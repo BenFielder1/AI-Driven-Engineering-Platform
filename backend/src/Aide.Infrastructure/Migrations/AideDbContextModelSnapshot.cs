@@ -741,6 +741,11 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("link");
 
+                    b.Property<string>("NotificationKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("notification_key");
+
                     b.Property<Guid?>("ProjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
@@ -774,6 +779,15 @@ namespace Aide.Infrastructure.Migrations
                     b.HasIndex("UserId", "ReadAt")
                         .HasDatabaseName("ix_notifications_user_id_read_at");
 
+                    b.HasIndex(new[] { "UserId", "CreatedAt", "Id" }, "ix_notifications_user_id_created_at_id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_notifications_user_id_created_at_id");
+
+                    b.HasIndex(new[] { "UserId", "NotificationKey" }, "ux_notifications_user_id_notification_key")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notifications_user_id_notification_key")
+                        .HasFilter("notification_key IS NOT NULL");
+
                     b.ToTable("notifications", (string)null);
                 });
 
@@ -800,6 +814,10 @@ namespace Aide.Infrastructure.Migrations
                     b.Property<string>("LastError")
                         .HasColumnType("text")
                         .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
 
                     b.Property<string>("NotificationKey")
                         .IsRequired()
@@ -830,6 +848,9 @@ namespace Aide.Infrastructure.Migrations
                     b.HasIndex("NotificationKey", "Channel")
                         .IsUnique()
                         .HasDatabaseName("ix_notification_deliveries_notification_key_channel");
+
+                    b.HasIndex("Status", "NextAttemptAt")
+                        .HasDatabaseName("ix_notification_deliveries_status_next_attempt_at");
 
                     b.ToTable("notification_deliveries", (string)null);
                 });
@@ -1269,6 +1290,29 @@ namespace Aide.Infrastructure.Migrations
                         .HasDatabaseName("ix_state_transitions_project_id_created_at");
 
                     b.ToTable("state_transitions", (string)null);
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.UserNotificationPreferences", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<string[]>("MutedTypes")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("muted_types")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_user_notification_preferences");
+
+                    b.ToTable("user_notification_preferences", (string)null);
                 });
 
             modelBuilder.Entity("Aide.Infrastructure.Persistence.Identity.AppUser", b =>
@@ -1791,6 +1835,16 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_state_transitions_projects_project_id");
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.UserNotificationPreferences", b =>
+                {
+                    b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
+                        .WithOne()
+                        .HasForeignKey("Aide.Domain.Entities.UserNotificationPreferences", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_notification_preferences_users_user_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
