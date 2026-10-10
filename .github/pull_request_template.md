@@ -8,7 +8,8 @@
 
 ## How it was tested
 
-- [ ] Gate passes (backend build/test/format, frontend typecheck/lint/test/build, `kubectl kustomize deploy/k8s/overlays/local`)
+- [ ] Gate passes (backend build/test/format, frontend typecheck/lint/test/build, `./deploy/scripts/validate-manifests.sh`)
+- [ ] `scripts/ci/check-generated.sh` passes after regenerating (contract, client, route tree)
 - [ ] New behaviour has tests named after the requirement IDs
 - [ ] Redeployed to Docker Desktop (`./deploy/scripts/deploy-local.sh`) and the smoke test passes (if Kubernetes is available)
 - [ ] E2E (`npm run test:e2e`), if UI flows changed

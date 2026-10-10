@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# kubeconform from its pinned container image, so CI and a local machine without the binary run the same version.
+# Put scripts/ci/shims on PATH to let deploy/scripts/validate-manifests.sh pick it up (it pipes the render on stdin):
+#   PATH="$PWD/scripts/ci/shims:$PATH" ./deploy/scripts/validate-manifests.sh
+# Only stdin input is supported (file paths would need a volume mount).
+set -euo pipefail
+exec docker run --rm -i ghcr.io/yannh/kubeconform:v0.8.0 "$@"

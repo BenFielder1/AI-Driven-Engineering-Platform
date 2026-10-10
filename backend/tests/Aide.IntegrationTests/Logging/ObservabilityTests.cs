@@ -66,7 +66,7 @@ public sealed partial class ObservabilityTests(AideApiFactory factory)
 
         Assert.Equal(1, await NewWorker().RunOnceAsync(Ct));
 
-        var span = Assert.Single(spans.Stopped, a => Equals(a.GetTagItem(AideTelemetry.JobIdTag), jobId));
+        var span = await spans.WaitForSingleAsync(a => Equals(a.GetTagItem(AideTelemetry.JobIdTag), jobId));
         Assert.Equal(fixture.Project.Id.ToString(), span.GetTagItem(AideTelemetry.ProjectIdTag));
         Assert.Equal(_type, span.GetTagItem(AideTelemetry.JobTypeTag));
         Assert.Equal(1, span.GetTagItem(AideTelemetry.JobAttemptTag));
@@ -80,7 +80,7 @@ public sealed partial class ObservabilityTests(AideApiFactory factory)
 
         Assert.Equal(1, await NewWorker().RunOnceAsync(Ct));
 
-        var span = JobSpan(spans, job);
+        var span = await JobSpanAsync(spans, job);
         Assert.Equal(JobOutcomes.Succeeded, span.GetTagItem(AideTelemetry.JobOutcomeTag));
         Assert.NotEqual(ActivityStatusCode.Error, span.Status);
     }
@@ -95,7 +95,7 @@ public sealed partial class ObservabilityTests(AideApiFactory factory)
 
         Assert.Equal(1, await NewWorker(new ThrowingHandler(new JobFailedException(SecretMessage, transient, ErrorCodes.ProviderError))).RunOnceAsync(Ct));
 
-        var span = JobSpan(spans, job);
+        var span = await JobSpanAsync(spans, job);
         Assert.Equal(outcome, span.GetTagItem(AideTelemetry.JobOutcomeTag));
         Assert.Equal((ActivityStatusCode.Error, ErrorCodes.ProviderError), (span.Status, span.StatusDescription));
         Assert.Equal(ErrorCodes.ProviderError, span.GetTagItem(AideTelemetry.ErrorCodeTag));
@@ -110,7 +110,7 @@ public sealed partial class ObservabilityTests(AideApiFactory factory)
 
         Assert.Equal(1, await NewWorker(new ThrowingHandler(new InvalidOperationException(SecretMessage))).RunOnceAsync(Ct));
 
-        var span = JobSpan(spans, job);
+        var span = await JobSpanAsync(spans, job);
         Assert.Equal(JobOutcomes.Dead, span.GetTagItem(AideTelemetry.JobOutcomeTag));
         Assert.Equal((ActivityStatusCode.Error, nameof(InvalidOperationException)), (span.Status, span.StatusDescription));
         AssertNoSecret(span);
@@ -132,7 +132,7 @@ public sealed partial class ObservabilityTests(AideApiFactory factory)
         }
 
         var runId = AgentRunRules.RunId(job.Id, null).ToString();
-        var span = Assert.Single(spans.Stopped, a => Equals(a.GetTagItem(AideTelemetry.RunIdTag), runId));
+        var span = await spans.WaitForSingleAsync(a => Equals(a.GetTagItem(AideTelemetry.RunIdTag), runId));
         Assert.Equal((ActivityStatusCode.Error, ErrorCodes.MissingInput), (span.Status, span.StatusDescription));
         Assert.Equal(AgentRunStatus.Failed.ToWire(), span.GetTagItem(AideTelemetry.RunStatusTag));
         Assert.Equal(ErrorCodes.MissingInput, span.GetTagItem(AideTelemetry.ErrorCodeTag));
@@ -203,8 +203,10 @@ public sealed partial class ObservabilityTests(AideApiFactory factory)
         using var response = await fixture.Owner.Client.GetAsync(new Uri($"{fixture.Path}/state", UriKind.Relative), Ct);
         response.EnsureSuccessStatusCode();
 
+        // The server stops its request activity after the client has the response, and other tests in the
+        // collection produce request spans concurrently: match this request's span by its project id and wait for it.
         var projectId = fixture.Project.Id.ToString();
-        var span = Assert.Single(spans.Stopped, a => Equals(a.GetTagItem(AideTelemetry.ProjectIdTag), projectId));
+        var span = await spans.WaitForSingleAsync(a => Equals(a.GetTagItem(AideTelemetry.ProjectIdTag), projectId));
         Assert.Equal(fixture.Owner.User!.Id.ToString(), span.GetTagItem(AideTelemetry.UserIdTag));
     }
 
@@ -223,10 +225,10 @@ public sealed partial class ObservabilityTests(AideApiFactory factory)
     private WebApplicationFactory<Program> WithRoutingLogs() =>
         factory.WithWebHostBuilder(b => b.UseSetting("Logging:LogLevel:Microsoft.AspNetCore.Routing", "Information"));
 
-    private static System.Diagnostics.Activity JobSpan(SpanRecorder spans, Job job)
+    private static Task<System.Diagnostics.Activity> JobSpanAsync(SpanRecorder spans, Job job)
     {
         var jobId = job.Id.ToString();
-        return Assert.Single(spans.Stopped, a => Equals(a.GetTagItem(AideTelemetry.JobIdTag), jobId));
+        return spans.WaitForSingleAsync(a => Equals(a.GetTagItem(AideTelemetry.JobIdTag), jobId));
     }
 
     private static void AssertNoSecret(System.Diagnostics.Activity span)
@@ -307,6 +309,21 @@ public sealed partial class ObservabilityTests(AideApiFactory factory)
         }
 
         public IReadOnlyList<System.Diagnostics.Activity> Stopped => [.. _stopped];
+
+        /// <summary>
+        /// Waits (bounded) until a stopped span matches <paramref name="match"/> and returns the only one. Spans can stop
+        /// after the awaited call returns (the server ends its request activity after the client has the response).
+        /// </summary>
+        public async Task<System.Diagnostics.Activity> WaitForSingleAsync(Func<System.Diagnostics.Activity, bool> match)
+        {
+            var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 5;
+            while (!Stopped.Any(match) && Stopwatch.GetTimestamp() < deadline)
+            {
+                await Task.Delay(20, TestContext.Current.CancellationToken);
+            }
+
+            return Assert.Single(Stopped, a => match(a));
+        }
 
         public void Dispose() => _listener.Dispose();
     }
