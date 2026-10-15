@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
 import { describe, expect, it } from 'vitest'
@@ -34,7 +34,8 @@ describe('RegisterPage', () => {
 
     await fillAndSubmit({ email: 'first@x.com', name: 'First', password: 'password1' })
 
-    expect(await screen.findByRole('link', { name: 'Admin' })).toBeInTheDocument()
+    const nav = await screen.findByRole('navigation', { name: 'Main' })
+    expect(within(nav).getByRole('list', { name: 'Admin' })).toBeInTheDocument()
   })
 
   it('FR-1: EMAIL_TAKEN marks the email field and keeps the user on the page', async () => {

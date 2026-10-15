@@ -122,7 +122,7 @@ describe('Overview → Release (FR-42, FR-43)', () => {
     expect(within(panel).getByText('An Owner can retry the release once the problem is fixed.')).toBeInTheDocument()
   })
 
-  it.each(['TAG_CONFLICT', 'GIT_ERROR', 'RELEASE_CANCELLED'] as const)(
+  it.each(['TAG_EXISTS', 'GIT_ERROR', 'RELEASE_CANCELLED'] as const)(
     'FR43_failed_release_copy_%s',
     async (code) => {
       await openOverviewAs('owner', { projectVersion: 6 }, (p) => {

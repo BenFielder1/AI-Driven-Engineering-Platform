@@ -1,5 +1,7 @@
 import { useId, type InputHTMLAttributes, type Ref } from 'react'
 
+import { fieldClass } from './field-classes'
+
 export interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> {
   label: string
   hint?: string
@@ -23,7 +25,7 @@ export function TextField({ label, hint, error, id, className = '', ref, ...inpu
         {label}
       </label>
       {hint && (
-        <p id={hintId} className="text-sm text-muted">
+        <p id={hintId} className="text-sm text-muted-foreground">
           {hint}
         </p>
       )}
@@ -32,14 +34,11 @@ export function TextField({ label, hint, error, id, className = '', ref, ...inpu
         id={inputId}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={
-          'min-h-10 rounded-md border bg-canvas px-3 py-2 text-base text-fg ' +
-          (error ? 'border-danger' : 'border-field-border')
-        }
+        className={fieldClass(Boolean(error))}
         {...inputProps}
       />
       {error && (
-        <p id={errorId} className="text-sm text-danger">
+        <p id={errorId} className="text-sm text-destructive">
           {error}
         </p>
       )}

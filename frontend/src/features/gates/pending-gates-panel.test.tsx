@@ -237,7 +237,7 @@ describe('Overview → Escalation decision (FR-14)', () => {
     await user.clear(target)
     await user.type(target, '2')
     const submit = within(dialog).getByRole('button', { name: 'Roll back to v2' })
-    expect(submit.className).toMatch(/danger/)
+    expect(submit.className).toMatch(/destructive/)
     await user.click(submit)
 
     expect(await screen.findByText('Escalation decided: roll back to version 2.')).toBeInTheDocument()

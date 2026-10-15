@@ -21,7 +21,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
   return (
     <li className="flex flex-col gap-0.5 py-2 text-sm sm:flex-row sm:items-baseline sm:gap-3">
       <span className="break-words sm:flex-1">{describeActivity(item)}</span>
-      <span className="text-muted">
+      <span className="text-muted-foreground">
         {item.actor.isSystem ? "System" : item.actor.name} ·{" "}
         <RelativeTime iso={item.occurredAt} />
       </span>
@@ -59,13 +59,13 @@ export function ActivityFeed({ projectId }: { projectId: string }) {
   } else {
     body = (
       <>
-        <ul aria-label="Activity" className="divide-y divide-border">
+        <ul aria-label="Activity" className="divide-y divide-border/60">
           {items.map((item) => (
             <ActivityRow key={item.id} item={item} />
           ))}
         </ul>
         {activity.isError && (
-          <p role="alert" className="mt-2 text-sm text-danger">
+          <p role="alert" className="mt-2 text-sm text-destructive">
             {errorMessage(activity.error)}
           </p>
         )}

@@ -23,7 +23,7 @@ export function ReleaseStatusBadge({ status }: { status: ReleaseStatus }) {
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="flex flex-wrap justify-between gap-x-3 py-1 text-sm">
-      <dt className="text-muted">{term}</dt>
+      <dt className="text-muted-foreground">{term}</dt>
       <dd className="break-all text-right font-medium">{children}</dd>
     </div>
   )
@@ -76,8 +76,8 @@ function ReleaseHistory({ releases }: { releases: Release[] }) {
               Version {r.projectVersion}, attempt {r.attempt}
             </span>
             <code className="font-mono">{r.tag}</code>
-            {r.errorCode && <span className="text-muted">{r.errorCode}</span>}
-            <span className="text-muted">
+            {r.errorCode && <span className="text-muted-foreground">{r.errorCode}</span>}
+            <span className="text-muted-foreground">
               <RelativeTime iso={r.startedAt} />
             </span>
           </li>
@@ -124,7 +124,7 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
             </Button>
           </div>
         ) : (
-          <p className="text-sm text-muted">An Owner can retry the release once the problem is fixed.</p>
+          <p className="text-sm text-muted-foreground">An Owner can retry the release once the problem is fixed.</p>
         ))}
       <div role="alert" aria-live="assertive">
         {retry.isError && <Alert tone="error" title={errorMessage(retry.error, 'retryRelease')} />}
@@ -181,7 +181,7 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
           </Row>
           {latest.pullRequestUrl && (
             <Row term="Pull request">
-              <a href={latest.pullRequestUrl} target="_blank" rel="noopener noreferrer" className="text-link underline">
+              <a href={latest.pullRequestUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">
                 View on GitHub
               </a>
             </Row>
@@ -206,9 +206,9 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
     <section
       id="release"
       aria-labelledby="release-title"
-      className="flex scroll-mt-4 flex-col gap-3 rounded-lg border border-border bg-surface-raised p-4"
+      className="flex scroll-mt-4 flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4"
     >
-      <h2 id="release-title" className="text-lg font-semibold">
+      <h2 id="release-title" className="text-lg">
         Release
       </h2>
       {body}

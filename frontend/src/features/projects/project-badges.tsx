@@ -1,51 +1,23 @@
-import { Badge, type BadgeTone } from '../../components/ui/badge'
-import { phaseLabels, phases, statusLabels } from './labels'
-import type { Phase, ProjectStatus } from './projects-api'
+import { StatusBadge as SharedStatusBadge, type StatusTone } from '../../components/shared/status-badge'
+import { statusLabels } from './labels'
+import type { ProjectStatus } from './projects-api'
 
-export function PhaseBadge({ phase }: { phase: Phase }) {
-  return <Badge tone="info">{phaseLabels[phase]}</Badge>
-}
+export { PhaseBadge } from '../../components/shared/phase-badge'
 
-const statusTones: Record<ProjectStatus, BadgeTone> = {
+const statusTones: Record<ProjectStatus, StatusTone> = {
   active: 'neutral',
   building: 'info',
-  reviewing: 'info',
+  reviewing: 'warning',
   releasing: 'warning',
   released: 'success',
-  rolled_back: 'danger',
+  rolled_back: 'destructive',
 }
 
+/** The project status as a StatusBadge (SPEC §7.1); running states pulse. */
 export function StatusBadge({ status }: { status: ProjectStatus }) {
-  return <Badge tone={statusTones[status]}>{statusLabels[status]}</Badge>
-}
-
-/** The six lifecycle phases in order, with the current one marked (aria-current="step"). */
-export function PhaseTimeline({ current }: { current: Phase }) {
-  const currentIndex = phases.indexOf(current)
   return (
-    <ol aria-label="Lifecycle phases" className="flex flex-wrap gap-1 text-xs sm:text-sm">
-      {phases.map((phase, index) => {
-        const state = index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming'
-        return (
-          <li
-            key={phase}
-            aria-current={state === 'current' ? 'step' : undefined}
-            className={
-              'rounded-md border px-2 py-1 ' +
-              (state === 'current'
-                ? 'border-primary bg-primary font-semibold text-on-primary'
-                : state === 'done'
-                  ? 'border-border bg-surface text-fg'
-                  : 'border-border text-muted')
-            }
-          >
-            <span className="sr-only">
-              {state === 'done' ? 'Completed: ' : state === 'current' ? 'Current: ' : 'Upcoming: '}
-            </span>
-            {phaseLabels[phase]}
-          </li>
-        )
-      })}
-    </ol>
+    <SharedStatusBadge tone={statusTones[status]} pulse={status === 'building' || status === 'reviewing' || status === 'releasing'}>
+      {statusLabels[status]}
+    </SharedStatusBadge>
   )
 }

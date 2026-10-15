@@ -1,121 +1,95 @@
 import { Link, useRouter } from '@tanstack/react-router'
-import { useEffect, useId, useRef, useState } from 'react'
+import { LogOut, Plug, User as UserIcon } from 'lucide-react'
+import { toast } from 'sonner'
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu'
 import { errorMessage } from '../../lib/errors'
+import { cn } from '../../lib/utils'
 import { useLogout, type User } from '../auth/auth-api'
+import { whenCollapsed } from './collapse-classes'
+import { initials } from './initials'
+import type { SidebarMode } from './use-sidebar-preference'
 
 const roleLabel = { admin: 'Admin', user: 'User' } as const
 
-/** User menu (disclosure): who is signed in, their system role (FR-3), Account and Sign out (FR-1). */
-export function UserMenu({ user }: { user: User }) {
-  const [open, setOpen] = useState(false)
-  const panelId = useId()
-  const containerRef = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
+/**
+ * The user menu in the sidebar footer (SPEC §7.1): avatar initials, name and email; Account, Connections, Sign out
+ * (FR-1). Shows the system role (FR-3).
+ */
+export function UserMenu({ user, mode = 'expanded' }: { user: User; mode?: SidebarMode }) {
   const router = useRouter()
   const logout = useLogout()
-
-  useEffect(() => {
-    if (!open) {
-      return undefined
-    }
-    function onPointerDown(event: PointerEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-    }
-  }, [open])
 
   function signOut() {
     logout.mutate(undefined, {
       onSuccess: () => {
         void router.navigate({ to: '/login' })
       },
+      onError: (error) => {
+        toast.error(errorMessage(error))
+      },
     })
   }
 
-  const initial = user.name.trim().charAt(0).toUpperCase() || '?'
-
   return (
-    <div
-      ref={containerRef}
-      className="relative"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape' && open) {
-          setOpen(false)
-          buttonRef.current?.focus()
-        }
-      }}
-    >
-      <button
-        ref={buttonRef}
-        type="button"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => {
-          setOpen((v) => !v)
-        }}
-        className="flex min-h-9 items-center gap-2 rounded-md px-2 text-sm hover:bg-surface"
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={`Account menu for ${user.name}`}
+        className={cn(
+          'flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left hover:bg-sidebar-accent/60',
+          whenCollapsed.center[mode],
+        )}
       >
         {user.avatarUrl ? (
-          <img src={user.avatarUrl} alt="" className="h-7 w-7 rounded-full" />
+          <img src={user.avatarUrl} alt="" className="size-8 shrink-0 rounded-full" />
         ) : (
           <span
-            aria-hidden="true"
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-on-primary"
+            aria-hidden
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary"
           >
-            {initial}
+            {initials(user.name, user.email)}
           </span>
         )}
-        <span className="sr-only">Account menu for </span>
-        <span className="hidden max-w-40 truncate sm:inline">{user.name}</span>
-        <span className="sr-only sm:hidden">{user.name}</span>
-      </button>
-
-      {open && (
-        <div
-          id={panelId}
-          className="absolute right-0 z-40 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-surface-raised p-2 shadow-lg"
+        <span className={cn('flex min-w-0 flex-1 flex-col leading-tight', whenCollapsed.hidden[mode])} aria-hidden>
+          <span className="truncate text-sm font-medium">{user.name}</span>
+          <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+        </span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side="top" className="w-64">
+        <DropdownMenuLabel className="font-normal">
+          <span className="block truncate font-medium">{user.name}</span>
+          <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+          <span className="mt-1 block text-xs text-muted-foreground">Role: {roleLabel[user.systemRole]}</span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/account">
+            <UserIcon aria-hidden /> Account
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/connections">
+            <Plug aria-hidden /> Connections
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={logout.isPending}
+          onSelect={(e) => {
+            e.preventDefault()
+            signOut()
+          }}
         >
-          <div className="border-b border-border px-2 pb-2">
-            <p className="truncate font-medium">{user.name}</p>
-            <p className="truncate text-sm text-muted">{user.email}</p>
-            <p className="mt-1 text-xs text-muted">Role: {roleLabel[user.systemRole]}</p>
-          </div>
-          <ul className="mt-2 flex flex-col">
-            <li>
-              <Link
-                to="/account"
-                onClick={() => {
-                  setOpen(false)
-                }}
-                className="block rounded-md px-2 py-2 text-sm hover:bg-surface"
-              >
-                Account
-              </Link>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={signOut}
-                disabled={logout.isPending}
-                className="block w-full rounded-md px-2 py-2 text-left text-sm hover:bg-surface"
-              >
-                {logout.isPending ? 'Signing out…' : 'Sign out'}
-              </button>
-            </li>
-          </ul>
-          {logout.isError && (
-            <p role="alert" className="px-2 pt-1 text-sm text-danger">
-              {errorMessage(logout.error)}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
+          <LogOut aria-hidden /> {logout.isPending ? 'Signing out…' : 'Sign out'}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

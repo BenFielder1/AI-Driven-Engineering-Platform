@@ -1,7 +1,8 @@
-import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
+import { toast } from 'sonner'
 
 import type { Schemas } from '../../../api/client'
 import { Alert, ErrorSummary } from '../../../components/ui/alert'
@@ -59,7 +60,6 @@ export function LlmTab({ projectId, llm }: { projectId: string; llm: LlmSettings
   const update = useUpdateLlmSettings(projectId)
   const [keyAction, setKeyAction] = useState<SecretAction>('keep')
   const [serverErrors, setServerErrors] = useState<string[]>([])
-  const [saved, setSaved] = useState(false)
   const {
     register,
     handleSubmit,
@@ -80,7 +80,6 @@ export function LlmTab({ projectId, llm }: { projectId: string; llm: LlmSettings
 
   const onSubmit = handleSubmit((v) => {
     setServerErrors([])
-    setSaved(false)
     if (!isUsable(v.provider) && !(llm.hasApiKey && keyAction !== 'clear')) {
       setError('provider', {
         type: 'manual',
@@ -106,7 +105,7 @@ export function LlmTab({ projectId, llm }: { projectId: string; llm: LlmSettings
       onSuccess: (next) => {
         reset(toValues(next))
         setKeyAction('keep')
-        setSaved(true)
+        toast.success('LLM settings saved.')
       },
       onError: (error) => {
         const unmatched = applyFieldErrors(error, setError, ['provider', 'defaultModel', 'apiKey'])
@@ -119,20 +118,13 @@ export function LlmTab({ projectId, llm }: { projectId: string; llm: LlmSettings
 
   return (
     <form noValidate onSubmit={(e) => void onSubmit(e)} aria-labelledby="llm-title" className="max-w-2xl">
-      <h2 id="llm-title" className="mb-4 text-xl font-semibold">
+      <h2 id="llm-title" className="mb-4 text-xl">
         LLM
       </h2>
       <ErrorSummary
         title="We couldn't save the LLM settings"
         errors={[...serverErrors.map((message) => ({ message })), ...(isSubmitted ? fieldErrorSummary(errors, fieldIds) : [])]}
       />
-      <div role="status" aria-live="polite">
-        {saved && (
-          <Alert tone="success" className="mb-4">
-            LLM settings saved.
-          </Alert>
-        )}
-      </div>
       <div className="mt-2 flex flex-col gap-5">
         <SelectField
           id={fieldIds.provider}
@@ -176,9 +168,9 @@ export function LlmTab({ projectId, llm }: { projectId: string; llm: LlmSettings
           error={errors.defaultModel?.message}
           {...register('defaultModel')}
         />
-        <fieldset className="flex flex-col gap-3 rounded-md border border-border p-4">
+        <fieldset className="flex flex-col gap-3 rounded-lg border border-border/60 p-4">
           <legend className="px-1 text-sm font-medium">Model per agent (optional)</legend>
-          <p className="text-sm text-muted">Leave a field empty to use the default model.</p>
+          <p className="text-sm text-muted-foreground">Leave a field empty to use the default model.</p>
           {agentKeys.map((agent) => (
             <TextField
               key={agent}

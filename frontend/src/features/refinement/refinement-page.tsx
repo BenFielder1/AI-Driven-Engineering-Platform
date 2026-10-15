@@ -41,9 +41,9 @@ const triggerLabels: Record<Trigger, string> = {
 
 function Card({ id, title, children, actions }: { id: string; title: string; children: ReactNode; actions?: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-lg border border-border bg-surface-raised p-4">
+    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id={id} className="text-lg font-semibold">
+        <h3 id={id} className="text-lg">
           {title}
         </h3>
         {actions}
@@ -58,7 +58,7 @@ function AnswerList({ answers }: { answers: { question: string; answer: string }
   return (
     <dl className="flex flex-col gap-2">
       {answers.map((a) => (
-        <div key={`${a.question}:${a.answer}`} className="rounded-md border border-border p-2">
+        <div key={`${a.question}:${a.answer}`} className="rounded-lg border border-border/60 p-2">
           <dt className="text-sm font-medium break-words">{a.question}</dt>
           <dd className="mt-1 text-sm whitespace-pre-wrap break-words">{a.answer}</dd>
         </div>
@@ -78,7 +78,7 @@ function RoundStatus({ projectId, round }: { projectId: string; round: Refinemen
       title="Latest round"
       actions={
         round.status !== 'queued' && (
-          <Link to="/projects/$projectId/runs" params={{ projectId }} search={{ run: round.runId }} className="text-sm text-link underline">
+          <Link to="/projects/$projectId/runs" params={{ projectId }} search={{ run: round.runId }} className="text-sm text-primary underline">
             View the agent run
           </Link>
         )
@@ -86,33 +86,33 @@ function RoundStatus({ projectId, round }: { projectId: string; round: Refinemen
     >
       <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
         <div className="flex items-center gap-2">
-          <dt className="text-muted">Status</dt>
+          <dt className="text-muted-foreground">Status</dt>
           <dd>
             <RunStatusBadge status={round.status} />
           </dd>
         </div>
         <div className="flex items-center gap-2">
-          <dt className="text-muted">Started</dt>
+          <dt className="text-muted-foreground">Started</dt>
           <dd>
             <RelativeTime iso={round.createdAt} />
           </dd>
         </div>
         {round.trigger && (
           <div className="flex items-center gap-2">
-            <dt className="text-muted">Trigger</dt>
+            <dt className="text-muted-foreground">Trigger</dt>
             <dd>{triggerLabels[round.trigger]}</dd>
           </div>
         )}
         {round.draftVersion !== null && (
           <div className="flex items-center gap-2">
-            <dt className="text-muted">Draft</dt>
+            <dt className="text-muted-foreground">Draft</dt>
             <dd>v{round.draftVersion}</dd>
           </div>
         )}
       </dl>
 
       {isRoundPending(round) && (
-        <p role="status" aria-busy="true" className="rounded-md border border-border bg-surface p-3 text-sm">
+        <p role="status" aria-busy="true" className="rounded-lg border border-border/60 bg-muted/60 p-3 text-sm">
           <span aria-hidden="true" className="mr-2 inline-block size-3 animate-pulse rounded-full bg-primary align-middle" />
           The Idea Refinement agent is {round.status === 'queued' ? 'about to start' : 'working'} on this round. The new draft and
           any clarifying questions appear here when it&apos;s done.
@@ -159,7 +159,7 @@ function CurrentDraft({ projectId, draft }: { projectId: string; draft: NonNulla
           to="/projects/$projectId/artifacts/$type"
           params={{ projectId, type: 'project_request' }}
           search={{ version: draft.version }}
-          className="text-sm text-link underline"
+          className="text-sm text-primary underline"
         >
           Open in Artifacts
         </Link>
@@ -185,9 +185,9 @@ function QuestionList({ questions }: { questions: RefinementQuestion[] }) {
   return (
     <ol className="flex flex-col gap-3">
       {questions.map((q) => (
-        <li key={q.id} className="rounded-md border border-border p-3">
+        <li key={q.id} className="rounded-lg border border-border/60 p-3">
           <p className="font-medium break-words">{q.question}</p>
-          {q.reason && <p className="mt-1 text-sm text-muted break-words">{q.reason}</p>}
+          {q.reason && <p className="mt-1 text-sm text-muted-foreground break-words">{q.reason}</p>}
           {q.answer !== null && (
             <p className="mt-2 text-sm whitespace-pre-wrap break-words">
               <span className="font-medium">Your answer: </span>
@@ -249,7 +249,7 @@ function RoundForm({
       <ErrorSummary title="We couldn't start the round" errors={summary} />
       {questions.length > 0 ? (
         <>
-          <p className="text-sm text-muted">
+          <p className="text-sm text-muted-foreground">
             Answer as many as you like; questions left blank stay unanswered. Your answers go to the agent with the current
             draft, and the next round creates a new draft version.
           </p>
@@ -269,7 +269,7 @@ function RoundForm({
           </ol>
         </>
       ) : (
-        <p className="text-sm text-muted">
+        <p className="text-sm text-muted-foreground">
           {hasDraft
             ? 'The agent asked no clarifying questions. You can still run another round to refine the draft.'
             : 'The Idea Refinement agent turns the idea into a first project request draft and may ask clarifying questions.'}
@@ -300,7 +300,7 @@ export function RefinementPage() {
   const inPhase = project.currentPhase === 'refinement'
 
   const header = (
-    <h2 className="mb-4 text-xl font-semibold" id="refinement-title">
+    <h2 className="mb-4 text-xl" id="refinement-title">
       Refinement
     </h2>
   )
@@ -357,7 +357,7 @@ export function RefinementPage() {
         ) : (
           <EmptyState title="No draft yet">
             <p>Refinement turns the project idea into a project request.</p>
-            <blockquote className="mt-2 text-fg whitespace-pre-wrap break-words">{project.idea}</blockquote>
+            <blockquote className="mt-2 text-foreground whitespace-pre-wrap break-words">{project.idea}</blockquote>
           </EmptyState>
         )}
 
@@ -378,11 +378,11 @@ export function RefinementPage() {
               />
             ) : questions.length > 0 ? (
               <>
-                {pending && <p className="text-sm text-muted">These answers were sent with the round in progress.</p>}
+                {pending && <p className="text-sm text-muted-foreground">These answers were sent with the round in progress.</p>}
                 <QuestionList questions={questions} />
               </>
             ) : (
-              <p className="text-sm text-muted">{pending ? 'The round in progress may bring new questions.' : 'No questions to answer.'}</p>
+              <p className="text-sm text-muted-foreground">{pending ? 'The round in progress may bring new questions.' : 'No questions to answer.'}</p>
             )}
           </Card>
         )}

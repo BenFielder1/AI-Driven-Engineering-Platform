@@ -6,9 +6,10 @@ import { canViewAdmin } from '../../lib/permissions'
 import { useCurrentUser } from '../auth/auth-api'
 import { adminSections } from './admin-sections'
 
-const linkClass = '-mb-px inline-flex min-h-10 items-center border-b-2 px-3 py-2 text-sm font-medium'
-const activeLinkClass = 'border-primary text-fg'
-const inactiveLinkClass = 'border-transparent text-muted hover:text-fg'
+const linkClass =
+  'inline-flex min-h-11 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50'
+const activeLinkClass = 'border-primary/50 bg-primary/10 text-foreground'
+const inactiveLinkClass = 'border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground'
 
 /**
  * /admin/* (FR-51, FR-3): a route guard that shows the forbidden view to non-admins (no admin request is made), then the
@@ -21,13 +22,18 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   }
   return (
     <>
-      <h1 className="mb-4 text-2xl font-semibold tracking-tight">Admin</h1>
-      <nav aria-label="Admin sections" className="mb-6">
-        <ul className="flex flex-wrap gap-1 border-b border-border">
+      {/* Not PageHeader: it would set the document title after each section page sets its own. */}
+      <header className="mb-4">
+        <h1 className="text-2xl sm:text-3xl">Admin</h1>
+        <p className="mt-1 text-sm text-muted-foreground">System-wide events, agent runs, jobs, users and integrations.</p>
+      </header>
+      <nav aria-label="Admin sections" className="mb-6 min-w-0">
+        <ul className="flex gap-2 overflow-x-auto pb-1">
           {adminSections.map((s) => (
-            <li key={s.to}>
+            <li key={s.key}>
               <Link
                 to={s.to}
+                activeOptions={{ exact: s.exact }}
                 className={linkClass}
                 activeProps={{ className: activeLinkClass }}
                 inactiveProps={{ className: inactiveLinkClass }}

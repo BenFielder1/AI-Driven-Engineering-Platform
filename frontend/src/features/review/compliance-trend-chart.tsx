@@ -1,177 +1,207 @@
 import { useId } from 'react'
+import { CartesianGrid, Line, LineChart, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts'
 
+import { ChartTooltip } from '../../components/charts/chart-tooltip'
+import { chartTheme, cssVar } from '../../components/charts/chart-theme'
+import { useChartWidth } from '../../components/charts/use-chart-width'
+import { ChartCard, type ChartTableData } from '../../components/shared/chart-card'
 import { driftLevelLabels, formatPercent, reviewDecisionLabels } from '../projects/labels'
-import type { ComplianceTrend } from './review-api'
+import type { ComplianceTrend, ComplianceTrendPoint } from './review-api'
 
-const W = 480
-const H = 200
-const PAD = { top: 12, right: 16, bottom: 32, left: 44 }
-const plotW = W - PAD.left - PAD.right
-const plotH = H - PAD.top - PAD.bottom
-const yTicks = [0, 0.25, 0.5, 0.75, 1]
+type Decision = NonNullable<ComplianceTrendPoint['decision']>
 
-const y = (score: number) => PAD.top + (1 - Math.min(Math.max(score, 0), 1)) * plotH
-const x = (index: number, count: number) => PAD.left + (count <= 1 ? plotW / 2 : (index / (count - 1)) * plotW)
+/** SPEC 7.1: points are coloured by the review decision (the legend and the table say it in words too). */
+const decisionColor: Record<Decision, string> = {
+  release_eligible: cssVar('success'),
+  review_required: cssVar('warning'),
+  escalation_required: cssVar('destructive'),
+}
+const noDecisionColor = cssVar('chart-1')
 
 /** A stable key per trend point: cycle numbers restart after a rollback, so the cycle alone can repeat. */
 const pointKey = (p: { projectVersion: number; cycle: number; createdAt: string }) =>
   `${String(p.projectVersion)}-${String(p.cycle)}-${p.createdAt}`
 
+interface Point extends ComplianceTrendPoint {
+  key: string
+  label: string
+  meets: boolean
+}
+
+interface DotProps {
+  cx?: number
+  cy?: number
+  payload?: Point
+}
+
+function DecisionDot({ cx, cy, payload }: DotProps) {
+  if (cx === undefined || cy === undefined || !payload) {
+    return null
+  }
+  return (
+    <circle
+      data-cycle={payload.cycle}
+      data-meets={payload.meets}
+      data-decision={payload.decision ?? 'none'}
+      cx={cx}
+      cy={cy}
+      r={5}
+      fill={payload.decision ? decisionColor[payload.decision] : noDecisionColor}
+      stroke={cssVar('background')}
+      strokeWidth={2}
+    />
+  )
+}
+
 /**
- * FR-41: the overall compliance score per review cycle (one point each) against the threshold. Each point is judged
- * against the threshold its report was decided with (the project's threshold may have changed since): a constant
- * threshold is one dashed line, a changing one is a dashed step line. The SVG is an image with a title and a text
- * description; the table under it carries the same data, threshold included, for every reader. Colours come from the
- * theme tokens, so it follows light and dark mode; the threshold line is also dashed, so it doesn't rely on colour.
+ * FR-41 compliance trend on recharts (SPEC 7.1): the overall score per review cycle, a threshold line and points
+ * coloured by decision. Each point is judged against the threshold its report was decided with: a constant threshold
+ * is a dashed reference line, a changing one a dashed step line. The chart is a described image (its text names every
+ * point); "View as table" swaps in the same data, threshold, drift and decision included.
  */
-export function ComplianceTrendChart({ trend }: { trend: ComplianceTrend }) {
+export function ComplianceTrendChart({ trend, headingLevel = 3 }: { trend: ComplianceTrend; headingLevel?: 2 | 3 }) {
   const titleId = useId()
   const descId = useId()
+  const { setElement, width } = useChartWidth()
   const { series } = trend
-  const n = series.length
-  const points = series.map((p, i) => ({
+  const points: Point[] = series.map((p) => ({
     ...p,
     key: pointKey(p),
+    label: `Cycle ${String(p.cycle)}`,
     meets: p.overallScore >= p.threshold,
-    cx: x(i, n),
-    cy: y(p.overallScore),
   }))
-  const distinct = new Set(series.map((p) => p.threshold))
-  const varies = distinct.size > 1
+  const varies = new Set(series.map((p) => p.threshold)).size > 1
   // With one threshold across the series (or none yet), that is the line; it falls back to the project's current one.
   const threshold = series[0]?.threshold ?? trend.threshold
-  const lastThreshold = series.at(-1)?.threshold ?? trend.threshold
   const description = varies
     ? `${series
         .map((p) => `Cycle ${String(p.cycle)}: ${formatPercent(p.overallScore)} against a ${formatPercent(p.threshold)} threshold`)
         .join(', ')}.`
     : `${series.map((p) => `Cycle ${String(p.cycle)}: ${formatPercent(p.overallScore)}`).join(', ')}. Threshold ${formatPercent(threshold)}.`
-  // The step line: each point's threshold spans halfway to its neighbours.
-  const stepPath = points
-    .map((p, i) => {
-      const start = i === 0 ? PAD.left : ((points[i - 1]?.cx ?? p.cx) + p.cx) / 2
-      const end = i === n - 1 ? W - PAD.right : (p.cx + (points[i + 1]?.cx ?? p.cx)) / 2
-      const ty = y(p.threshold)
-      return `${i === 0 ? 'M' : 'L'}${String(start)},${String(ty)} H${String(end)}`
-    })
-    .join(' ')
+
+  const table: ChartTableData = {
+    caption: 'Compliance score by review cycle, oldest first',
+    columns: [
+      { key: 'cycle', header: 'Cycle' },
+      { key: 'version', header: 'Version' },
+      { key: 'score', header: 'Score' },
+      { key: 'threshold', header: 'Threshold' },
+      { key: 'drift', header: 'Drift' },
+      { key: 'decision', header: 'Decision' },
+    ],
+    rows: points.map((p) => ({
+      cycle: p.cycle,
+      version: `v${String(p.projectVersion)}`,
+      score: (
+        <>
+          {formatPercent(p.overallScore)}{' '}
+          <span className="text-muted-foreground">({p.meets ? 'meets threshold' : 'below threshold'})</span>
+        </>
+      ),
+      threshold: formatPercent(p.threshold),
+      drift: p.driftLevel ? driftLevelLabels[p.driftLevel] : '—',
+      decision: p.decision ? reviewDecisionLabels[p.decision] : '—',
+    })),
+  }
+
+  const legend: { label: string; color: string }[] = [
+    { label: reviewDecisionLabels.release_eligible, color: decisionColor.release_eligible },
+    { label: reviewDecisionLabels.review_required, color: decisionColor.review_required },
+    { label: reviewDecisionLabels.escalation_required, color: decisionColor.escalation_required },
+  ]
 
   return (
-    <div className="flex flex-col gap-3">
-      <svg
-        role="img"
-        aria-labelledby={`${titleId} ${descId}`}
-        viewBox={`0 0 ${String(W)} ${String(H)}`}
-        className="h-auto w-full max-w-xl text-fg"
-      >
-        <title id={titleId}>Compliance score by review cycle</title>
-        <desc id={descId}>{description}</desc>
-        <g aria-hidden="true">
-          {yTicks.map((t) => (
-            <g key={t}>
-              <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} className="stroke-border" strokeWidth={1} />
-              <text x={PAD.left - 6} y={y(t)} textAnchor="end" dominantBaseline="middle" className="fill-muted text-[11px]">
-                {formatPercent(t)}
-              </text>
-            </g>
-          ))}
-          {points.map((p) => (
-            <text key={p.key} x={p.cx} y={H - PAD.bottom + 16} textAnchor="middle" className="fill-muted text-[11px]">
-              {`Cycle ${String(p.cycle)}`}
-            </text>
-          ))}
-          {varies ? (
-            <>
-              <path
-                data-testid="threshold-steps"
-                d={stepPath}
-                fill="none"
-                className="stroke-warning"
-                strokeWidth={2}
-                strokeDasharray="6 4"
+    <ChartCard
+      title="Compliance trend"
+      description="Overall score per review cycle against the threshold."
+      table={table}
+      headingLevel={headingLevel}
+      className="bg-transparent"
+    >
+      <div role="img" aria-labelledby={`${titleId} ${descId}`} data-testid="compliance-trend-chart" className="min-w-0">
+        <span id={titleId} className="sr-only">
+          Compliance score by review cycle
+        </span>
+        <span id={descId} className="sr-only">
+          {description}
+        </span>
+        <div ref={setElement} aria-hidden className="w-full overflow-hidden" style={{ height: chartTheme.height }}>
+          <LineChart
+            width={width}
+            height={chartTheme.height}
+            data={points}
+            margin={{ ...chartTheme.margin, right: 16 }}
+            accessibilityLayer={false}
+          >
+              <CartesianGrid {...chartTheme.grid} />
+              <XAxis dataKey="label" {...chartTheme.axis} allowDuplicatedCategory />
+              <YAxis
+                domain={[0, 1]}
+                ticks={[0, 0.25, 0.5, 0.75, 1]}
+                tickFormatter={(v: number) => formatPercent(v)}
+                width={chartTheme.yAxisWidth}
+                {...chartTheme.axis}
               />
-              <text x={W - PAD.right} y={y(lastThreshold) - 6} textAnchor="end" className="fill-fg text-[11px]">
-                {`Threshold ${formatPercent(lastThreshold)} (varies by cycle)`}
-              </text>
-            </>
-          ) : (
-            <>
-              <line
-                x1={PAD.left}
-                x2={W - PAD.right}
-                y1={y(threshold)}
-                y2={y(threshold)}
-                className="stroke-warning"
-                strokeWidth={2}
-                strokeDasharray="6 4"
+              <Tooltip
+                cursor={chartTheme.lineCursor}
+                content={<ChartTooltip valueFormatter={formatPercent} />}
+                isAnimationActive={false}
               />
-              <text x={W - PAD.right} y={y(threshold) - 6} textAnchor="end" className="fill-fg text-[11px]">
-                {`Threshold ${formatPercent(threshold)}`}
-              </text>
-            </>
-          )}
-          {n > 1 && (
-            <polyline
-              points={points.map((p) => `${String(p.cx)},${String(p.cy)}`).join(' ')}
-              fill="none"
-              className="stroke-primary"
-              strokeWidth={2}
-            />
-          )}
-          {points.map((p) => (
-            <circle
-              key={p.key}
-              data-cycle={p.cycle}
-              data-meets={p.meets}
-              cx={p.cx}
-              cy={p.cy}
-              r={5}
-              className={p.meets ? 'fill-success stroke-fg' : 'fill-primary stroke-fg'}
-              strokeWidth={1}
-            />
-          ))}
-        </g>
-      </svg>
-      {/* NFR-A11Y: at 375 px the table may be wider than the page; it scrolls inside a keyboard-reachable region
-          instead of the page scrolling horizontally. */}
-      <div
-        role="region"
-        aria-label="Compliance score table"
-        tabIndex={0}
-        data-testid="trend-table-region"
-        className="max-w-xl overflow-x-auto"
-      >
-        <table className="w-full text-left text-sm">
-          <caption className="mb-1 text-left text-sm text-muted">Compliance score by review cycle, oldest first</caption>
-          <thead>
-            <tr className="border-b border-border">
-              <th scope="col" className="py-1 pr-3 font-medium">Cycle</th>
-              <th scope="col" className="py-1 pr-3 font-medium">Version</th>
-              <th scope="col" className="py-1 pr-3 font-medium">Score</th>
-              <th scope="col" className="py-1 pr-3 font-medium">Threshold</th>
-              <th scope="col" className="py-1 pr-3 font-medium">Drift</th>
-              <th scope="col" className="py-1 font-medium">Decision</th>
-            </tr>
-          </thead>
-          <tbody>
-            {points.map((p) => (
-              <tr key={p.key} className="border-b border-border last:border-0">
-                <th scope="row" className="py-1 pr-3 font-normal">
-                  {p.cycle}
-                </th>
-                <td className="py-1 pr-3">v{p.projectVersion}</td>
-                <td className="py-1 pr-3">
-                  {formatPercent(p.overallScore)}{' '}
-                  <span className="text-muted">({p.meets ? 'meets threshold' : 'below threshold'})</span>
-                </td>
-                <td className="py-1 pr-3">{formatPercent(p.threshold)}</td>
-                <td className="py-1 pr-3">{p.driftLevel ? driftLevelLabels[p.driftLevel] : '—'}</td>
-                <td className="py-1">{p.decision ? reviewDecisionLabels[p.decision] : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              {varies ? (
+                <Line
+                  data-testid="threshold-steps"
+                  name="Threshold"
+                  dataKey="threshold"
+                  type="stepAfter"
+                  stroke={cssVar('warning')}
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                  dot={false}
+                  activeDot={false}
+                  isAnimationActive={false}
+                />
+              ) : (
+                <ReferenceLine
+                  y={threshold}
+                  stroke={cssVar('warning')}
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                  label={{
+                    value: `Threshold ${formatPercent(threshold)}`,
+                    position: 'insideTopRight',
+                    fill: cssVar('foreground'),
+                    fontSize: 11,
+                  }}
+                />
+              )}
+              <Line
+                name="Score"
+                dataKey="overallScore"
+                type="monotone"
+                stroke={cssVar('chart-1')}
+                strokeWidth={2}
+                dot={(props) => {
+                const dot = props as DotProps
+                return <DecisionDot key={dot.payload?.key} {...dot} />
+              }}
+                activeDot={{ r: 6 }}
+                isAnimationActive={false}
+              />
+          </LineChart>
+        </div>
       </div>
-    </div>
+      <ul aria-label="Decision colours" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        {legend.map((l) => (
+          <li key={l.label} className="flex items-center gap-1.5">
+            <span aria-hidden className="size-2.5 rounded-full" style={{ backgroundColor: l.color }} />
+            {l.label}
+          </li>
+        ))}
+        <li className="flex items-center gap-1.5">
+          <span aria-hidden className="h-0 w-4 border-t-2 border-dashed border-warning" />
+          Threshold{varies ? ' (varies by cycle)' : ''}
+        </li>
+      </ul>
+    </ChartCard>
   )
 }

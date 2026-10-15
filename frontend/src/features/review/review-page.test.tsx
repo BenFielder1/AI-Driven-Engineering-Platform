@@ -48,10 +48,18 @@ describe('Review page (FR-38–FR-41)', () => {
     expect(chart).toHaveAccessibleName(
       'Compliance score by review cycle Cycle 1: 82%, Cycle 2: 86%, Cycle 3: 93%. Threshold 90%.',
     )
-    expect([...chart.querySelectorAll('circle')].map((c) => c.getAttribute('data-cycle'))).toEqual(['1', '2', '3'])
-    // The threshold is a dashed line labelled with its value.
-    expect(chart.querySelector('line[stroke-dasharray]')).not.toBeNull()
+    expect([...chart.querySelectorAll('circle[data-cycle]')].map((c) => c.getAttribute('data-cycle'))).toEqual(['1', '2', '3'])
+    // SPEC 7.1: points are coloured by decision.
+    expect([...chart.querySelectorAll('circle[data-cycle]')].map((c) => c.getAttribute('data-decision'))).toEqual([
+      'review_required',
+      'review_required',
+      'release_eligible',
+    ])
+    // The threshold is a dashed reference line labelled with its value.
+    expect(chart.querySelector('.recharts-reference-line line[stroke-dasharray]')).not.toBeNull()
 
+    // FR53_trend_chart: the data table is one toggle away ("View as table").
+    await userEvent.setup().click(within(trend).getByRole('button', { name: 'View as table' }))
     const table = within(trend).getByRole('table', { name: 'Compliance score by review cycle, oldest first' })
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(3)
@@ -80,9 +88,11 @@ describe('Review page (FR-38–FR-41)', () => {
       'Compliance score by review cycle Cycle 1: 86% against a 85% threshold, Cycle 2: 88% against a 90% threshold.',
     )
     // A changing threshold is drawn as a dashed step line, and each point is judged against its own report's threshold.
-    expect(chart.querySelector('path[data-testid="threshold-steps"][stroke-dasharray]')).not.toBeNull()
-    expect([...chart.querySelectorAll('circle')].map((c) => c.getAttribute('data-meets'))).toEqual(['true', 'false'])
+    expect(chart.querySelector('.recharts-line-curve[stroke-dasharray]')).not.toBeNull()
+    expect(chart.querySelector('.recharts-reference-line')).toBeNull()
+    expect([...chart.querySelectorAll('circle[data-cycle]')].map((c) => c.getAttribute('data-meets'))).toEqual(['true', 'false'])
 
+    await userEvent.setup().click(within(trend).getByRole('button', { name: 'View as table' }))
     const rows = within(within(trend).getByRole('table')).getAllByRole('row').slice(1)
     expect(rows.map((r) => within(r).getAllByRole('cell')[1]?.textContent)).toEqual(['86% (meets threshold)', '88% (below threshold)'])
     expect(rows.map((r) => within(r).getAllByRole('cell')[2]?.textContent)).toEqual(['85%', '90%'])

@@ -44,15 +44,15 @@ export function DangerZoneTab({ project }: { project: Project }) {
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
-      <h2 className="text-xl font-semibold">Danger zone</h2>
+      <h2 className="text-xl">Danger zone</h2>
 
       <RollbackSection projectId={project.id} currentVersion={project.projectVersion} />
 
-      <section aria-labelledby="delete-title" className="rounded-lg border border-danger p-4">
+      <section aria-labelledby="delete-title" className="rounded-lg border border-destructive p-4">
         <h3 id="delete-title" className="font-semibold">
           Delete this project
         </h3>
-        <p className="mb-3 mt-1 text-sm text-muted">
+        <p className="mb-3 mt-1 text-sm text-muted-foreground">
           Deletes the project and everything it owns: artifacts, gates, runs, reviews and settings. This can&apos;t be
           undone.
         </p>
@@ -92,7 +92,7 @@ export function DangerZoneTab({ project }: { project: Project }) {
           id="delete-confirm-name"
           label={`Type the project name (${project.name}) to confirm`}
           autoComplete="off"
-          className="mt-3 text-fg"
+          className="mt-3 text-foreground"
           value={typed}
           onChange={(e) => {
             setTyped(e.target.value)

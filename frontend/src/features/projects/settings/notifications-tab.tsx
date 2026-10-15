@@ -1,10 +1,11 @@
-import { zodResolver } from '@hookform/resolvers/zod'
 import { useRef, useState } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useFieldArray, useForm, useWatch, type FieldErrors, type UseFormSetError } from 'react-hook-form'
 import { z } from 'zod'
+import { toast } from 'sonner'
 
 import type { Schemas } from '../../../api/client'
-import { Alert, ErrorSummary, type SummaryError } from '../../../components/ui/alert'
+import { ErrorSummary, type SummaryError } from '../../../components/ui/alert'
 import { Button } from '../../../components/ui/button'
 import { SelectField } from '../../../components/ui/select-field'
 import { EmptyState } from '../../../components/ui/states'
@@ -174,7 +175,6 @@ function applyChannelErrors(error: unknown, setError: UseFormSetError<Notificati
 export function NotificationsTab({ projectId, notifications }: { projectId: string; notifications: NotificationSettings }) {
   const update = useUpdateNotificationSettings(projectId)
   const [serverErrors, setServerErrors] = useState<string[]>([])
-  const [saved, setSaved] = useState(false)
   const addRef = useRef<HTMLButtonElement>(null)
   const {
     register,
@@ -193,13 +193,12 @@ export function NotificationsTab({ projectId, notifications }: { projectId: stri
 
   const onSubmit = handleSubmit((v) => {
     setServerErrors([])
-    setSaved(false)
     update.mutate(
       { channels: v.channels.map(toInput) },
       {
         onSuccess: (next) => {
           reset(toValues(next))
-          setSaved(true)
+          toast.success('Notification settings saved.')
         },
         onError: (error) => {
           const unmatched = applyChannelErrors(error, setError, v.channels.length)
@@ -211,10 +210,10 @@ export function NotificationsTab({ projectId, notifications }: { projectId: stri
 
   return (
     <form noValidate onSubmit={(e) => void onSubmit(e)} aria-labelledby="notifications-title" className="max-w-3xl">
-      <h2 id="notifications-title" className="mb-1 text-xl font-semibold">
+      <h2 id="notifications-title" className="mb-1 text-xl">
         Notifications
       </h2>
-      <p className="mb-4 text-sm text-muted">
+      <p className="mb-4 text-sm text-muted-foreground">
         Send this project&apos;s events to email, Slack, Microsoft Teams or a generic webhook. Webhook bodies are always
         signed with HMAC using the channel&apos;s signing key. Failed deliveries are retried per channel. Your own
         in-app notifications are set on your Account page.
@@ -223,13 +222,6 @@ export function NotificationsTab({ projectId, notifications }: { projectId: stri
         title="We couldn't save the notification settings"
         errors={[...serverErrors.map((message) => ({ message })), ...(isSubmitted ? summaryErrors(errors) : [])]}
       />
-      <div role="status" aria-live="polite">
-        {saved && (
-          <Alert tone="success" className="mb-4">
-            Notification settings saved.
-          </Alert>
-        )}
-      </div>
 
       {fields.length === 0 && (
         <EmptyState title="No channels yet">Add a channel to get notified about this project.</EmptyState>
@@ -250,7 +242,7 @@ export function NotificationsTab({ projectId, notifications }: { projectId: stri
           const isSet = channel ? secretIsSet(channel) : false
           return (
             <li key={field.id}>
-              <fieldset className="flex flex-col gap-4 rounded-lg border border-border p-4">
+              <fieldset className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background/40 p-4">
                 <legend className="px-1 font-semibold">Channel {n}</legend>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <SelectField
@@ -330,7 +322,7 @@ export function NotificationsTab({ projectId, notifications }: { projectId: stri
                     })}
                   </div>
                   {chErrors?.events?.message && (
-                    <p id={`channel-${String(i)}-events-error`} className="mt-1 text-sm text-danger">
+                    <p id={`channel-${String(i)}-events-error`} className="mt-1 text-sm text-destructive">
                       {chErrors.events.message}
                     </p>
                   )}

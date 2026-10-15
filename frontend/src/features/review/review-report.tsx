@@ -28,8 +28,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${String(n)} ${n =
 
 export function ReportSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-lg border border-border bg-surface-raised p-4">
-      <h3 id={id} className="text-lg font-semibold">
+    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4">
+      <h3 id={id} className="text-lg">
         {title}
       </h3>
       {children}
@@ -44,7 +44,7 @@ function CategoryRow({ score }: { score: CategoryScore }) {
   const count = score.evidence.length
   return (
     <>
-      <tr className="border-b border-border">
+      <tr className="border-b border-border/60 text-muted-foreground">
         <th scope="row" className="py-2 pr-3 font-medium">
           {label}
         </th>
@@ -54,11 +54,11 @@ function CategoryRow({ score }: { score: CategoryScore }) {
         <td className="py-2 pr-3 font-semibold">{formatPercent(score.score)}</td>
         <td className="py-2">
           {count === 0 ? (
-            <span className="text-muted">No evidence</span>
+            <span className="text-muted-foreground">No evidence</span>
           ) : (
             <button
               type="button"
-              className="text-link underline"
+              className="text-primary underline"
               aria-expanded={open}
               aria-controls={evidenceId}
               onClick={() => {
@@ -100,7 +100,7 @@ export function CategoryBreakdown({ report }: { report: ComplianceReport }) {
             score
           </caption>
           <thead>
-            <tr className="border-b border-border">
+            <tr className="border-b border-border/60 text-muted-foreground">
               <th scope="col" className="py-1 pr-3 font-medium">Category</th>
               <th scope="col" className="py-1 pr-3 font-medium">Weight</th>
               <th scope="col" className="py-1 pr-3 font-medium">Agent score</th>
@@ -116,7 +116,7 @@ export function CategoryBreakdown({ report }: { report: ComplianceReport }) {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-muted">
+      <p className="text-xs text-muted-foreground">
         Penalties come from deterministic checks: critical −20%, major −10%, minor −3% each, never below 0.
       </p>
     </ReportSection>
@@ -130,10 +130,10 @@ export function DriftSection({ report }: { report: ComplianceReport }) {
     <ReportSection id="review-drift" title="Drift from the specification">
       <p className="text-sm">
         Drift level:{' '}
-        {level ? <Badge tone={driftTones[level]}>{driftLevelLabels[level]}</Badge> : <span className="text-muted">Not reported</span>}
+        {level ? <Badge tone={driftTones[level]}>{driftLevelLabels[level]}</Badge> : <span className="text-muted-foreground">Not reported</span>}
       </p>
       {report.driftAreas.length === 0 ? (
-        <p className="text-sm text-muted">No drift areas were reported.</p>
+        <p className="text-sm text-muted-foreground">No drift areas were reported.</p>
       ) : (
         <ul aria-label="Drift areas" className="flex flex-col gap-2">
           {report.driftAreas.map((a, i) => (
@@ -142,7 +142,7 @@ export function DriftSection({ report }: { report: ComplianceReport }) {
                 <span className="font-medium">{a.area}</span>
                 <Badge tone={severityTones[a.severity]}>{findingSeverityLabels[a.severity]}</Badge>
               </span>
-              <span className="text-muted">{a.description}</span>
+              <span className="text-muted-foreground">{a.description}</span>
             </li>
           ))}
         </ul>
@@ -159,7 +159,7 @@ export function ViolationsSection({ report }: { report: ComplianceReport }) {
   return (
     <ReportSection id="review-violations" title={`Violations (${String(report.violations.length)})`}>
       {groups.length === 0 ? (
-        <p className="text-sm text-muted">No violations were found.</p>
+        <p className="text-sm text-muted-foreground">No violations were found.</p>
       ) : (
         groups.map(({ severity, items }) => (
           <section key={severity} aria-labelledby={`violations-${severity}`} className="flex flex-col gap-2">
@@ -170,7 +170,7 @@ export function ViolationsSection({ report }: { report: ComplianceReport }) {
               {items.map((v, i) => (
                 <li key={`${v.message}-${String(i)}`} className="flex flex-col gap-0.5 border-l-2 border-border pl-3 text-sm">
                   <span>{v.message}</span>
-                  <span className="flex flex-wrap gap-x-3 text-xs text-muted">
+                  <span className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                     <span>Category: {reviewCategoryLabels[v.category]}</span>
                     <span>Source: {findingSourceLabels[v.source]}</span>
                     {v.file && (
@@ -195,7 +195,7 @@ export function MissingFeaturesSection({ report }: { report: ComplianceReport })
   return (
     <ReportSection id="review-missing" title={`Missing features (${String(report.missingFeatures.length)})`}>
       {report.missingFeatures.length === 0 ? (
-        <p className="text-sm text-muted">Every specified feature was found.</p>
+        <p className="text-sm text-muted-foreground">Every specified feature was found.</p>
       ) : (
         <ul aria-label="Missing features" className="list-disc pl-5 text-sm">
           {report.missingFeatures.map((f) => (

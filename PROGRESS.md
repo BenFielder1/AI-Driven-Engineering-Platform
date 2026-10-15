@@ -13,8 +13,8 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 
 | ID | Summary | Spec § | Area | Phase | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| FR-53 | Design system + app shell (sidebar, header, ⌘K, logo) | 3.1, 7.1 | frontend | 1 | todo | — |
-| FR-54 | Project-mode sidebar, stage stepper, next action | 3.1 | frontend | 1 | todo | — |
+| FR-53 | Design system + app shell (sidebar, header, ⌘K, logo) | 3.1, 7.1 | frontend | 1 | done | tokens + contrast test, shell/nav-config, restyled pages; FR53_* tests; e2e/a11y.spec |
+| FR-54 | Project-mode sidebar, stage stepper, next action | 3.1 | frontend | 1 | done (badges wired in phase 2) | stage-states.ts, StageStepper, next-action.ts; FR54_* tests |
 | FR-55 | One page per stage, `?version=` read-only | 3.1 | both | 3 | todo | — |
 | FR-56 | Review page: every cycle, cycle picker, recharts trend | 3.1 | both | 3 | todo | — |
 | FR-57 | Execution page: every run, attempt history | 3.1 | both | 3 | todo | — |
@@ -66,11 +66,15 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 
 ## Phases
 - [x] 0 M0 Baseline (base: af23fae) — gate green (backend 2193 tests, frontend 335 tests, manifests OK) · deploy-local + smoke ✓ on docker-desktop
-- [ ] 1 M9 Design system + shell — IDs: FR-53, FR-54, NFR-A11Y2 (tokens)
-  - [ ] vite-react-engineer (tokens, fonts, shadcn primitives, logo, shell, nav config, ⌘K)
-  - [ ] vite-react-engineer (restyle v1 pages, project-mode sidebar, stage stepper)
-  - [ ] gate · review · redeploy · commit
+- [x] 1 M9 Design system + shell (base: 8d174d0) — IDs: FR-53, FR-54, NFR-A11Y2 (tokens)
+  - [x] vite-react-engineer (tokens, fonts, shadcn primitives, logo, shell, nav config, ⌘K — 427 frontend tests; placeholder routes connections, admin/integrations, specification, planning, release, activity)
+  - [x] vite-react-engineer (restyle v1 pages, stage stepper, next-action helper, settings sub-routes, recharts trend, axe e2e specs — 453 frontend tests)
+  - [x] gate (frontend ✓) · review (0 Critical, 1 Major, 6 Minor — all fixed or logged) · commit — redeploy deferred to end of phase 2 (backend M10 in flight in the same tree)
 - [ ] 2 M10 Versions + checkpoints — IDs: FR-60–FR-64 (Local), FR-66, FR-67, §4.10
+  - [x] ef-data-engineer (migration ReleaseVersions + FR-67 backfill; SQL reviewed — see Decisions; 4 FR67_* migration tests; checked on a scratch copy of the k8s DB, 172 projects)
+  - [ ] aspnet-engineer (domain §4.10, checkpoint API rename D-V2-11, versions endpoints, Local semver release)
+  - [ ] vite-react-engineer (badges, version switcher, start-version dialog, read-only past views)
+  - [ ] gate · review · redeploy · commit
 - [ ] 3 M11 Stage pages + history — IDs: FR-55–FR-59
 - [ ] 4 M12a LLM connections — IDs: FR-78, FR-79
 - [ ] 5 M12b GitHub App — IDs: FR-80–FR-83, FR-86
@@ -83,6 +87,16 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 
 ## Decisions
 - 2026-10-15 — M12 and M13 are each split into two phases (connections/GitHub App; iteration/merge) — keeps phases at 2–5 tasks — SPEC updated: no
+- 2026-10-15 — M10 migration `20261015174144_ReleaseVersions`: v1 rows are assigned to release versions by `created_at` window (version i = (released_at[i-1], released_at[i]]) instead of checkpoint range, because projects rolled back after a release have overlapping checkpoint ranges; live state at checkpoint ≤ the first post-release rollback target moves to the in-development version — FR-67 — SPEC updated: no
+- 2026-10-15 — `projects.current_release_version_id` points at the latest released version when nothing is in development (spec said nullable when only released) — lets every version-scoped read resolve a default version — SPEC updated: no
+- 2026-10-15 — FK `projects.current_release_version_id` is DEFERRABLE INITIALLY DEFERRED and created in SQL (not mapped in EF): project and its first version reference each other and are inserted in one save — SPEC updated: no
+- 2026-10-15 — Releases uniqueness is (release_version_id, checkpoint, attempt), was (project_id, version, attempt): checkpoints restart per version — SPEC updated: no
+- 2026-10-15 — Branch/PR fields moved from project_git_settings to release_versions (per §5); `ReleaseVersionStampingInterceptor` stamps missing release_version_id with the project's current version as a safety net — to be removed once all writers set it explicitly — SPEC updated: no
+- 2026-10-15 — ReleaseVersions migration is not rolling-update safe (renames/drops); fine with the Recreate strategy, but the migrate Job runs while v1 pods are up — expect transient errors until the rollout — SPEC updated: no
+- 2026-10-15 — Three Space Worm token values were adjusted to pass WCAG AA (dark muted-foreground L 0.57→0.59, dark destructive-foreground near-black, light success 0.50/0.15) and a `field-border` token added for 3:1 form-field borders; reasons in `frontend/src/lib/ui/tokens.ts` — NFR-A11Y2 — SPEC updated: no
+- 2026-10-15 — Theme class is set before first paint by same-origin `public/theme-init.js` (no inline script) so the v1 CSP is unchanged — SPEC updated: no
+- 2026-10-15 — Projects-list "Awaiting gates" KPI shows "—": the list API returns no gate counts; add a count to the list DTO if wanted — §7.2 — SPEC updated: no
 
 ## Known issues
+- M9a screenshot check left a test user and project "Shell check" in the k8s DB — delete if unwanted — Ben
 - Carried from v1 (see `docs/v1/PROGRESS.md`): rollback_events.restored_phase nullable (folded into the M10 versions migration per SPEC §5); TAG_CONFLICT cleanup; gates list unpaged — orchestrator

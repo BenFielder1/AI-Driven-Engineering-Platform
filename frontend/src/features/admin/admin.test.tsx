@@ -43,7 +43,7 @@ describe('Admin area access (FR-3, FR-51)', () => {
     seedUser({ systemRole: 'admin', email: 'root@example.com' })
     signInAs({ systemRole: 'user', email: 'bob@example.com', name: 'Bob' })
 
-    for (const path of ['/admin', '/admin/events', '/admin/runs', '/admin/dead-letters', '/admin/users']) {
+    for (const path of ['/admin', '/admin/events', '/admin/runs', '/admin/dead-letters', '/admin/users', '/admin/integrations']) {
       const { unmount } = renderRoute(path)
       expect(await screen.findByRole('heading', { level: 1, name: "You don't have access to this page" })).toBeInTheDocument()
       expect(screen.queryByRole('navigation', { name: 'Admin sections' })).not.toBeInTheDocument()
@@ -52,24 +52,29 @@ describe('Admin area access (FR-3, FR-51)', () => {
     expect(adminDb.requests).toHaveLength(0)
   })
 
-  it('FR51_ landing: /admin links to the four sections, and the section nav marks the current one', async () => {
+  it('FR51_ landing: /admin links to every section, and the section nav marks the current one', async () => {
     signInAdmin()
     renderRoute('/admin')
     const user = userEvent.setup()
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument()
     const sections = screen.getByRole('navigation', { name: 'Admin sections' })
+    // FR53: the same items, in the same order, as the sidebar's Admin section (nav-config).
     expect(within(sections).getAllByRole('link').map((l) => l.textContent)).toEqual([
+      'Overview',
+      'Users',
       'Events',
       'Agent runs',
       'Dead letters',
-      'Users',
+      'Integrations',
     ])
+    expect(within(sections).getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('heading', { level: 3, name: 'Dead letters' })).toBeInTheDocument()
 
     await user.click(within(sections).getByRole('link', { name: 'Users' }))
     expect(await screen.findByRole('heading', { level: 2, name: 'Users' })).toBeInTheDocument()
     expect(within(sections).getByRole('link', { name: 'Users' })).toHaveAttribute('aria-current', 'page')
+    expect(within(sections).getByRole('link', { name: 'Overview' })).not.toHaveAttribute('aria-current')
   })
 })
 
@@ -426,7 +431,7 @@ describe('Admin users (FR-3)', () => {
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Make User' }))
 
     expect(await screen.findByRole('heading', { level: 1, name: "You don't have access to this page" })).toBeInTheDocument()
-    expect(within(screen.getByRole('navigation', { name: 'Main' })).queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Main' })).queryByRole('list', { name: 'Admin' })).not.toBeInTheDocument()
   })
 
   it('FR3_ search: searching by name or email goes to the URL and filters the list', async () => {

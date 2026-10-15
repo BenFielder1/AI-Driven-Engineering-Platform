@@ -1,7 +1,8 @@
-import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
+import { toast } from 'sonner'
 
 import type { Schemas } from '../../../api/client'
 import { Alert, ErrorSummary } from '../../../components/ui/alert'
@@ -56,7 +57,6 @@ export function GitTab({ projectId, git }: { projectId: string; git: GitSettings
   const update = useUpdateGitSettings(projectId)
   const [tokenAction, setTokenAction] = useState<SecretAction>('keep')
   const [serverErrors, setServerErrors] = useState<string[]>([])
-  const [saved, setSaved] = useState(false)
   const {
     register,
     handleSubmit,
@@ -71,7 +71,6 @@ export function GitTab({ projectId, git }: { projectId: string; git: GitSettings
 
   const onSubmit = handleSubmit((v) => {
     setServerErrors([])
-    setSaved(false)
     const github = v.provider === 'github'
     const body: Schemas['UpdateGitSettingsRequest'] = {
       provider: v.provider,
@@ -87,7 +86,7 @@ export function GitTab({ projectId, git }: { projectId: string; git: GitSettings
       onSuccess: (next) => {
         reset(toValues(next))
         setTokenAction('keep')
-        setSaved(true)
+        toast.success('Git settings saved.')
       },
       onError: (error) => {
         const unmatched = applyFieldErrors(error, setError, ['provider', 'repoUrl', 'defaultBranch', 'token'])
@@ -99,20 +98,13 @@ export function GitTab({ projectId, git }: { projectId: string; git: GitSettings
   return (
     <div className="flex max-w-2xl flex-col gap-8">
       <form noValidate onSubmit={(e) => void onSubmit(e)} aria-labelledby="git-title">
-        <h2 id="git-title" className="mb-4 text-xl font-semibold">
+        <h2 id="git-title" className="mb-4 text-xl">
           Git repository
         </h2>
         <ErrorSummary
           title="We couldn't save the Git settings"
           errors={[...serverErrors.map((message) => ({ message })), ...(isSubmitted ? fieldErrorSummary(errors, fieldIds) : [])]}
         />
-        <div role="status" aria-live="polite">
-          {saved && (
-            <Alert tone="success" className="mb-4">
-              Git settings saved.
-            </Alert>
-          )}
-        </div>
         <div className="mt-2 flex flex-col gap-5">
           <SelectField id={fieldIds.provider} label="Provider" error={errors.provider?.message} {...register('provider')}>
             <option value="github">{gitProviderLabels.github}</option>
@@ -159,7 +151,7 @@ export function GitTab({ projectId, git }: { projectId: string; git: GitSettings
             {...register('defaultBranch')}
           />
           {git.branchName && (
-            <p className="text-sm text-muted">
+            <p className="text-sm text-muted-foreground">
               Project branch: <code>{git.branchName}</code>
             </p>
           )}
@@ -180,7 +172,7 @@ function Check({ label, ok }: { label: string; ok: boolean }) {
   return (
     <li className="flex justify-between gap-3 py-1">
       <span>{label}</span>
-      <span className={ok ? 'font-medium text-success' : 'font-medium text-danger'}>{ok ? 'Yes' : 'No'}</span>
+      <span className={ok ? 'font-medium text-success' : 'font-medium text-destructive'}>{ok ? 'Yes' : 'No'}</span>
     </li>
   )
 }
@@ -192,11 +184,11 @@ function TestConnection({ projectId }: { projectId: string }) {
   const [error, setError] = useState<unknown>(null)
 
   return (
-    <section aria-labelledby="git-test-title" className="rounded-lg border border-border p-4">
+    <section aria-labelledby="git-test-title" className="rounded-lg border border-border/60 bg-background/40 p-4">
       <h3 id="git-test-title" className="font-semibold">
         Test connection
       </h3>
-      <p className="mb-3 mt-1 text-sm text-muted">Checks the saved settings. Save any changes first.</p>
+      <p className="mb-3 mt-1 text-sm text-muted-foreground">Checks the saved settings. Save any changes first.</p>
       <Button
         variant="secondary"
         pending={test.isPending}
@@ -213,7 +205,7 @@ function TestConnection({ projectId }: { projectId: string }) {
         {result && (
           <Alert tone={result.ok ? 'success' : 'error'} title={result.ok ? 'Connection OK' : 'Connection failed'}>
             {!result.ok && result.reason && <p className="mt-1">{result.reason}</p>}
-            <ul aria-label="Connection checks" className="mt-2 divide-y divide-border">
+            <ul aria-label="Connection checks" className="mt-2 divide-y divide-border/60">
               <Check label="Repository reachable" ok={result.reachable} />
               <Check label="Write access" ok={result.writable} />
               <Check label="Default branch exists" ok={result.defaultBranchExists} />

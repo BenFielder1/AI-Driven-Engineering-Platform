@@ -1,15 +1,25 @@
 import { Link } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 
+import { Plus } from 'lucide-react'
+
+import { DataTable, type DataTableColumn, type TableSort } from '../../components/shared/data-table'
+import { EmptyState } from '../../components/shared/empty-state'
+import { MetricCard } from '../../components/shared/metric-card'
+import { PageHeader } from '../../components/shared/page-header'
+import { panelClass } from '../../components/shared/panel-class'
+import { SkeletonCards, SkeletonTable } from '../../components/shared/skeletons'
+import { VersionBadge } from '../../components/shared/version-badge'
 import { Button } from '../../components/ui/button'
 import { buttonClasses } from '../../components/ui/button-classes'
-import { Pagination } from '../../components/ui/pagination'
 import { resultSummary } from '../../components/ui/result-summary'
-import { EmptyState, ErrorState, LoadingState, PageHeader } from '../../components/ui/states'
+import { ErrorState } from '../../components/ui/states'
 import { SelectField } from '../../components/ui/select-field'
 import { TextField } from '../../components/ui/text-field'
-import { formatDateTime, phaseLabels, phases, roleLabels, statusLabels, statuses } from './labels'
+import { cn } from '../../lib/utils'
+import { formatDateTime, formatNumber, phaseLabels, phases, roleLabels, statusLabels, statuses } from './labels'
 import { PhaseBadge, StatusBadge } from './project-badges'
+import { KPI_SAMPLE_SIZE, projectKpis } from './project-kpis'
 import { PROJECTS_PAGE_SIZE, useProjects, type ProjectSortBy, type ProjectSummary, type SortOrder } from './projects-api'
 import { oneOf, SEARCH_DEBOUNCE_MS, type ProjectsSearch } from './projects-search'
 
@@ -21,17 +31,91 @@ interface ProjectsListPageProps {
   onSearchChange: (next: ProjectsSearch) => void
 }
 
-/** /projects (FR-6): the caller's projects with search, filters, sort and paging kept in the URL. */
+/**
+ * Where a project's released / in-development VersionBadges go (FR-54, SPEC 7.2). The list API doesn't return release
+ * versions yet (FR-60), so the list passes nothing and this renders nothing until it does.
+ */
+function ProjectVersionBadges({ released, inDevelopment }: { released?: string | null; inDevelopment?: string | null }) {
+  if (!released && !inDevelopment) {
+    return null
+  }
+  return (
+    <span className="flex flex-wrap gap-1">
+      {released && <VersionBadge version={released} kind="released" />}
+      {inDevelopment && <VersionBadge version={inDevelopment} kind="development" />}
+    </span>
+  )
+}
+
+/** SPEC 7.2 KPI row: active, in review, awaiting gates, released, from the newest projects the list returns. */
+function ProjectKpiRow() {
+  const sample = useProjects({ page: 1, limit: KPI_SAMPLE_SIZE, sortBy: 'updated', sortOrder: 'desc' })
+  if (sample.isPending) {
+    return <SkeletonCards className="mb-5" />
+  }
+  // The list itself reports load errors; the tiles just stay empty.
+  const kpis = sample.data ? projectKpis(sample.data.items, sample.data.total) : null
+  const value = (n: number | null | undefined) => (n === null || n === undefined ? '—' : formatNumber(n))
+  const footer = kpis?.partial ? `Of your ${String(KPI_SAMPLE_SIZE)} most recently updated projects` : undefined
+  return (
+    <section aria-label="Project totals" className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <MetricCard label="Active" value={value(kpis?.active)} footer={footer} />
+      <MetricCard label="In review" value={value(kpis?.inReview)} footer={footer} />
+      <MetricCard label="Awaiting gates" value={value(kpis?.awaitingGates)} footer="Shown on each project's overview" />
+      <MetricCard label="Released" value={value(kpis?.released)} footer={footer} />
+    </section>
+  )
+}
+
+const sortKeys: Partial<Record<string, ProjectSortBy>> = { name: 'name', updated: 'updated' }
+
+const columns: DataTableColumn<ProjectSummary>[] = [
+  {
+    key: 'name',
+    header: 'Project',
+    primary: true,
+    sortValue: (p) => p.name,
+    cell: (p) => (
+      <span className="flex min-w-0 flex-wrap items-center gap-2">
+        <Link
+          to="/projects/$projectId"
+          params={{ projectId: p.id }}
+          className="font-medium break-words whitespace-normal text-primary underline-offset-4 hover:underline"
+        >
+          {p.name}
+        </Link>
+        <ProjectVersionBadges />
+      </span>
+    ),
+  },
+  { key: 'phase', header: 'Phase', cell: (p) => <PhaseBadge phase={p.currentPhase} /> },
+  { key: 'status', header: 'Status', cell: (p) => <StatusBadge status={p.status} /> },
+  { key: 'version', header: 'Version', numeric: true, cell: (p) => p.projectVersion },
+  { key: 'role', header: 'Your role', cell: (p) => (p.myRole ? roleLabels[p.myRole] : 'Admin (not a member)') },
+  {
+    key: 'updated',
+    header: 'Updated',
+    sortValue: (p) => p.updatedAt,
+    cell: (p) => <time dateTime={p.updatedAt}>{formatDateTime(p.updatedAt)}</time>,
+  },
+]
+
+/**
+ * /projects (FR-6, SPEC 7.2): the KPI row, then the caller's projects as a DataTable (stacked cards below md) with
+ * search, filters, sort and paging kept in the URL.
+ */
 export function ProjectsListPage({ search, onSearchChange }: ProjectsListPageProps) {
   const page = search.page ?? 1
+  const sortBy = search.sortBy ?? 'updated'
+  const sortOrder = search.sortOrder ?? 'desc'
   const projects = useProjects({
     page,
     limit: PROJECTS_PAGE_SIZE,
     search: search.search,
     phase: search.phase,
     status: search.status,
-    sortBy: search.sortBy ?? 'updated',
-    sortOrder: search.sortOrder ?? 'desc',
+    sortBy,
+    sortOrder,
   })
   const filtered = Boolean(search.search ?? search.phase ?? search.status)
 
@@ -40,53 +124,76 @@ export function ProjectsListPage({ search, onSearchChange }: ProjectsListPagePro
     onSearchChange({ ...search, ...patch, page: undefined })
   }
 
+  const tableSort: TableSort | null = sortBy === 'created' ? null : { key: sortBy, dir: sortOrder }
+
   return (
     <>
-      <PageHeader title="Projects">
-        <Link to="/projects/new" className={buttonClasses('primary')}>
-          New project
-        </Link>
-      </PageHeader>
+      <PageHeader
+        title="Projects"
+        description="Every project you're a member of, from idea to release."
+        className="mb-6"
+        actions={
+          <Link to="/projects/new" className={buttonClasses('primary')}>
+            <Plus className="size-4" aria-hidden />
+            New project
+          </Link>
+        }
+      />
+
+      <ProjectKpiRow />
 
       <ProjectFilters search={search} onChange={update} />
 
-      {projects.isPending && <LoadingState label="Loading projects…" />}
+      {projects.isPending && <SkeletonTable />}
       {projects.isError && <ErrorState error={projects.error} onRetry={() => void projects.refetch()} />}
       {projects.isSuccess && projects.data.total === 0 && !filtered && (
-        <EmptyState title="No projects yet">
-          <p>Turn an idea into released software: start with a project.</p>
-          <Link to="/projects/new" className={buttonClasses('primary', 'mt-3')}>
-            New project
-          </Link>
-        </EmptyState>
+        <EmptyState
+          variant="no_data"
+          title="No projects yet"
+          description="Turn an idea into released software: start with a project."
+          action={
+            <Link to="/projects/new" className={buttonClasses('primary')}>
+              New project
+            </Link>
+          }
+        />
       )}
       {projects.isSuccess && projects.data.total === 0 && filtered && (
-        <EmptyState title="No projects match your filters">
-          <Button
-            variant="secondary"
-            className="mt-3"
-            onClick={() => {
-              onSearchChange({ sortBy: search.sortBy, sortOrder: search.sortOrder })
-            }}
-          >
-            Clear filters
-          </Button>
-        </EmptyState>
+        <EmptyState
+          variant="no_data"
+          title="No projects match your filters"
+          action={
+            <Button
+              variant="secondary"
+              onClick={() => {
+                onSearchChange({ sortBy: search.sortBy, sortOrder: search.sortOrder })
+              }}
+            >
+              Clear filters
+            </Button>
+          }
+        />
       )}
       {projects.isSuccess && projects.data.total > 0 && (
         <>
-          <p role="status" aria-live="polite" className="mb-3 text-sm text-muted">
+          <p role="status" aria-live="polite" className="mb-3 text-sm text-muted-foreground">
             {resultSummary(projects.data.page, projects.data.limit, projects.data.items.length, projects.data.total, 'project')}
           </p>
-          <ul aria-label="Projects" aria-busy={projects.isPlaceholderData || undefined} className="flex flex-col gap-3">
-            {projects.data.items.map((p) => (
-              <ProjectCard key={p.id} project={p} />
-            ))}
-          </ul>
-          <Pagination
+          <DataTable
+            caption="Projects"
+            columns={columns}
+            rows={projects.data.items}
+            rowKey={(p) => p.id}
+            busy={projects.isPlaceholderData}
+            sort={tableSort}
+            onSortChange={(next) => {
+              const key = sortKeys[next.key] ?? 'updated'
+              update({ sortBy: key === 'updated' ? undefined : key, sortOrder: next.dir === 'desc' ? undefined : next.dir })
+            }}
+            pageSize={projects.data.limit}
             page={projects.data.page}
-            pageCount={Math.max(1, Math.ceil(projects.data.total / projects.data.limit))}
-            onPage={(next) => {
+            total={projects.data.total}
+            onPageChange={(next) => {
               onSearchChange({ ...search, page: next > 1 ? next : undefined })
             }}
           />
@@ -132,7 +239,7 @@ function ProjectFilters({ search, onChange }: { search: ProjectsSearch; onChange
         e.preventDefault()
         onChange({ search: text.trim() || undefined })
       }}
-      className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      className={cn(panelClass, 'mb-5 grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5')}>
       <TextField
         id="projects-search"
         label="Search by name"
@@ -205,43 +312,5 @@ function ProjectFilters({ search, onChange }: { search: ProjectsSearch; onChange
         ))}
       </SelectField>
     </form>
-  )
-}
-
-function ProjectCard({ project }: { project: ProjectSummary }) {
-  return (
-    <li className="rounded-lg border border-border bg-surface-raised p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <h2 className="min-w-0 break-words text-base font-semibold">
-          <Link
-            to="/projects/$projectId"
-            params={{ projectId: project.id }}
-            className="text-link underline-offset-4 hover:underline"
-          >
-            {project.name}
-          </Link>
-        </h2>
-        <div className="flex flex-wrap items-center gap-1">
-          <PhaseBadge phase={project.currentPhase} />
-          <StatusBadge status={project.status} />
-        </div>
-      </div>
-      <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
-        <div className="flex gap-1">
-          <dt>Version</dt>
-          <dd className="text-fg">{project.projectVersion}</dd>
-        </div>
-        <div className="flex gap-1">
-          <dt>Your role</dt>
-          <dd className="text-fg">{project.myRole ? roleLabels[project.myRole] : 'Admin (not a member)'}</dd>
-        </div>
-        <div className="flex gap-1">
-          <dt>Updated</dt>
-          <dd className="text-fg">
-            <time dateTime={project.updatedAt}>{formatDateTime(project.updatedAt)}</time>
-          </dd>
-        </div>
-      </dl>
-    </li>
   )
 }

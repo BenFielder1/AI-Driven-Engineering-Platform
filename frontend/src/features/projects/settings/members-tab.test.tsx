@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { contextualErrorMessages, errorMessages } from '../../../lib/errors'
 import { seedUser, signInAs } from '../../../mocks/handlers/auth'
 import { projectsDb, seedProject } from '../../../mocks/handlers/projects'
-import { openOwnerSettings, openSettings, requestsTo } from '../../../test/project-settings'
+import { openOwnerSettings, openSettings, requestsTo, settingsSectionLinks } from '../../../test/project-settings'
 
 function seedGrace() {
   return seedUser({ email: 'grace@example.com', name: 'Grace Hopper', systemRole: 'user' })
@@ -149,6 +149,6 @@ describe('Settings → Members (FR-8)', () => {
     expect(within(list).queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Leave project' })).toBeInTheDocument()
     // Only General and Members are visible to non-owners.
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['General', 'Members'])
+    expect(settingsSectionLinks().map((t) => t.textContent)).toEqual(['General', 'Members'])
   })
 })

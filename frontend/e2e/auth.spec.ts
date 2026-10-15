@@ -24,13 +24,13 @@ test('FR-1: register, see yourself, sign out, sign back in', async ({ page }) =>
 
   // Account page shows the profile.
   await openUserMenu(page)
-  await page.getByRole('link', { name: 'Account' }).click()
+  await page.getByRole('menuitem', { name: 'Account' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Account', exact: true })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Profile' }).getByText(email)).toBeVisible()
 
   // Sign out → /login; the session is gone.
   await openUserMenu(page)
-  await page.getByRole('button', { name: 'Sign out' }).click()
+  await page.getByRole('menuitem', { name: 'Sign out' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in to AIDE', exact: true })).toBeVisible()
   expect((await page.request.get('/api/auth/me')).status()).toBe(401)
 

@@ -47,7 +47,7 @@ export function NotificationItem({
   }
 
   return (
-    <li aria-labelledby={titleId} className={`flex gap-3 px-3 py-3 ${unread ? 'bg-surface' : ''}`}>
+    <li aria-labelledby={titleId} className={`flex gap-3 px-3 py-3 ${unread ? 'bg-muted' : ''}`}>
       <span
         aria-hidden="true"
         className={`mt-1.5 size-2 shrink-0 rounded-full ${unread ? 'bg-primary' : 'bg-transparent'}`}
@@ -59,7 +59,7 @@ export function NotificationItem({
               id={titleId}
               href={href}
               onClick={open}
-              className={`break-words text-link underline ${unread ? 'font-semibold' : ''}`}
+              className={`break-words text-primary underline ${unread ? 'font-semibold' : ''}`}
             >
               {n.title}
             </a>
@@ -71,7 +71,7 @@ export function NotificationItem({
           {unread && <Badge tone="info">Unread</Badge>}
         </div>
         {n.body && <p className="break-words">{n.body}</p>}
-        <p className="text-xs text-muted">
+        <p className="text-xs text-muted-foreground">
           {notificationTypeLabels[n.type]}
           {n.projectName && <> · {n.projectName}</>} · <RelativeTime iso={n.createdAt} />
         </p>

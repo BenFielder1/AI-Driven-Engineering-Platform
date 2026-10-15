@@ -61,7 +61,7 @@ describe('Token budget (FR-26)', () => {
     expect(within(card).getByText(budgetCopy)).toBeInTheDocument()
     expect(within(card).getByRole('link', { name: 'Raise the token budget' })).toHaveAttribute(
       'href',
-      `/projects/${project.id}/settings`,
+      `/projects/${project.id}/settings/general`,
     )
   })
 
@@ -86,7 +86,7 @@ describe('Token budget (FR-26)', () => {
     const { user } = await openOverviewAs('owner', { tokenBudget: 100_000, tokensUsed: 100_000 })
     await user.click(screen.getByRole('button', { name: 'Advance to Specification' }))
 
-    const lifecycle = screen.getByRole('heading', { name: 'Lifecycle' }).closest('section')
+    const lifecycle = screen.getByRole('heading', { name: 'Next action' }).closest('section')
     if (!lifecycle) {
       throw new Error('No lifecycle card')
     }

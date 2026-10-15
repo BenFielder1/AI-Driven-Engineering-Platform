@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { useRef, useState, type SyntheticEvent, type ReactNode } from 'react'
+import { toast } from 'sonner'
 
 import { Alert } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
@@ -36,7 +37,7 @@ const versionOption = (a: ArtifactSummary) =>
 function Meta({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <dt className="text-xs text-muted">{term}</dt>
+      <dt className="text-xs text-muted-foreground">{term}</dt>
       <dd className="text-sm font-medium break-words">{children}</dd>
     </div>
   )
@@ -44,7 +45,7 @@ function Meta({ term, children }: { term: string; children: ReactNode }) {
 
 function VersionDetails({ artifact }: { artifact: Artifact }) {
   return (
-    <dl className="grid grid-cols-2 gap-3 rounded-lg border border-border p-3 sm:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-3 rounded-lg border border-border/60 bg-background/40 p-3 sm:grid-cols-4">
       <Meta term="Status">
         <ArtifactStatusBadge status={artifact.status} />
       </Meta>
@@ -70,7 +71,7 @@ function VersionDetails({ artifact }: { artifact: Artifact }) {
       </Meta>
       {artifact.rejectionComment && (
         <div className="col-span-full flex flex-col gap-0.5">
-          <dt className="text-xs text-muted">Rejection comment</dt>
+          <dt className="text-xs text-muted-foreground">Rejection comment</dt>
           <dd className="text-sm whitespace-pre-wrap">{artifact.rejectionComment}</dd>
         </div>
       )}
@@ -90,18 +91,18 @@ function HistoryTable({
   selected: number
 }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md">
       <table className="w-full border-collapse text-sm">
         <caption className="sr-only">Version history, newest first</caption>
         <thead>
-          <tr className="border-b border-border text-left text-xs text-muted">
-            <th scope="col" className="py-2 pr-3">
+          <tr className="border-b border-border/60 text-left text-xs text-muted-foreground">
+            <th scope="col" className="px-3 py-2">
               Version
             </th>
-            <th scope="col" className="py-2 pr-3">
+            <th scope="col" className="px-3 py-2">
               Status
             </th>
-            <th scope="col" className="py-2 pr-3">
+            <th scope="col" className="px-3 py-2">
               Author
             </th>
             <th scope="col" className="py-2">
@@ -112,25 +113,25 @@ function HistoryTable({
         <tbody>
           {history.map((a) => (
             <tr key={a.id} className="border-b border-border last:border-b-0">
-              <th scope="row" className="py-2 pr-3 text-left font-medium">
+              <th scope="row" className="px-3 py-2 text-left font-medium">
                 <Link
                   to="/projects/$projectId/artifacts/$type"
                   params={{ projectId, type }}
                   search={{ version: a.version }}
                   aria-current={a.version === selected ? 'true' : undefined}
-                  className="text-link underline"
+                  className="text-primary underline"
                 >
                   v{a.version}
                 </Link>
-                {a.version === selected && <span className="ml-1 text-xs font-normal text-muted">(shown)</span>}
+                {a.version === selected && <span className="ml-1 text-xs font-normal text-muted-foreground">(shown)</span>}
               </th>
-              <td className="py-2 pr-3">
+              <td className="px-3 py-2">
                 <span className="flex flex-wrap gap-1">
                   <ArtifactStatusBadge status={a.status} />
                   {a.integrity === 'corrupted' && <IntegrityBadge integrity={a.integrity} />}
                 </span>
               </td>
-              <td className="py-2 pr-3">{authorName(a.author)}</td>
+              <td className="px-3 py-2">{authorName(a.author)}</td>
               <td className="py-2">
                 <RelativeTime iso={a.createdAt} />
               </td>
@@ -152,7 +153,7 @@ function ComparePanel({ projectId, type, history }: { projectId: string; type: A
   const diff = useArtifactDiff(projectId, type, pair)
 
   if (history.length < 2) {
-    return <p className="text-sm text-muted">There is only one version so far. Comparing needs at least two.</p>
+    return <p className="text-sm text-muted-foreground">There is only one version so far. Comparing needs at least two.</p>
   }
 
   const onSubmit = (event: SyntheticEvent<HTMLFormElement>) => {
@@ -228,7 +229,7 @@ function CorruptedAlert({ artifact, current }: { artifact: Artifact; current: bo
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section aria-labelledby={id} className="flex flex-col gap-3">
-      <h3 id={id} className="text-lg font-semibold">
+      <h3 id={id} className="text-lg">
         {title}
       </h3>
       {children}
@@ -297,27 +298,21 @@ export function ArtifactDetailPage({
 
   const [editing, setEditing] = useState(false)
   const [decision, setDecision] = useState<ArtifactDecision | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
   /** §7: after rejecting an agent's draft, show "regenerating" until a newer version arrives (live event or refetch). */
   const [regeneratingAfter, setRegeneratingAfter] = useState<number | null>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   const header = (
     <div className="mb-4 flex flex-col gap-1">
-      <Link to="/projects/$projectId/artifacts" params={{ projectId: project.id }} className="text-sm text-link underline">
+      <Link to="/projects/$projectId/artifacts" params={{ projectId: project.id }} className="text-sm text-primary underline">
         All artifacts
       </Link>
-      <h2 ref={headingRef} tabIndex={-1} className="text-xl font-semibold">
+      <h2 ref={headingRef} tabIndex={-1} className="text-xl">
         {label}
       </h2>
     </div>
   )
 
-  const status = (
-    <div role="status" aria-live="polite" className="empty:hidden">
-      {message && <Alert tone="success">{message}</Alert>}
-    </div>
-  )
 
   if (history.isPending) {
     return (
@@ -340,7 +335,7 @@ export function ArtifactDetailPage({
   const openDraft = versions.find((a) => a.status === 'draft')?.version ?? null
   const onSaved = (created: Artifact) => {
     setEditing(false)
-    setMessage(`Saved as draft v${String(created.version)}. An Owner can now approve or reject it.`)
+    toast.success(`Saved as draft v${String(created.version)}. An Owner can now approve or reject it.`)
     onVersionChange(created.version)
     headingRef.current?.focus()
   }
@@ -349,7 +344,6 @@ export function ArtifactDetailPage({
     return (
       <>
         {header}
-        {status}
         {editing ? (
           <EditLatest
             projectId={project.id}
@@ -368,7 +362,6 @@ export function ArtifactDetailPage({
                 variant="secondary"
                 className="mt-3"
                 onClick={() => {
-                  setMessage(null)
                   setEditing(true)
                 }}
               >
@@ -388,9 +381,9 @@ export function ArtifactDetailPage({
   const onDecided = (action: ArtifactDecision, decided: Artifact) => {
     setDecision(null)
     if (action === 'approve') {
-      setMessage(`v${String(decided.version)} approved and locked.`)
+      toast.success(`v${String(decided.version)} approved and locked.`)
     } else {
-      setMessage(`v${String(decided.version)} rejected.`)
+      toast.success(`v${String(decided.version)} rejected.`)
       if (isAgentAuthored(decided.author)) {
         setRegeneratingAfter(Math.max(newest ?? decided.version, decided.version))
       }
@@ -401,9 +394,8 @@ export function ArtifactDetailPage({
     <>
       {header}
       <div className="flex flex-col gap-6">
-        {status}
         {regenerating && (
-          <p role="status" className="rounded-md border border-border bg-surface p-3 text-sm" aria-busy="true">
+          <p role="status" className="rounded-lg border border-border/60 bg-muted/60 p-3 text-sm" aria-busy="true">
             <span aria-hidden="true" className="mr-2 inline-block size-3 animate-pulse rounded-full bg-primary align-middle" />
             The agent is regenerating the {label.toLowerCase()} with your feedback. The new draft appears here when it&apos;s
             ready.
@@ -415,7 +407,6 @@ export function ArtifactDetailPage({
             label="Version"
             value={selected === null ? '' : String(selected)}
             onChange={(e) => {
-              setMessage(null)
               onVersionChange(Number(e.target.value) === newest ? undefined : Number(e.target.value))
             }}
           >
@@ -432,7 +423,6 @@ export function ArtifactDetailPage({
                 <Button
                   variant="secondary"
                   onClick={() => {
-                    setMessage(null)
                     setEditing(true)
                   }}
                 >
@@ -443,7 +433,6 @@ export function ArtifactDetailPage({
                 <>
                   <Button
                     onClick={() => {
-                      setMessage(null)
                       setDecision('approve')
                     }}
                   >
@@ -452,7 +441,6 @@ export function ArtifactDetailPage({
                   <Button
                     variant="danger"
                     onClick={() => {
-                      setMessage(null)
                       setDecision('reject')
                     }}
                   >

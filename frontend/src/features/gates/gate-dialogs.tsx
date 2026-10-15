@@ -5,7 +5,7 @@ import type { z } from 'zod'
 
 import { ErrorSummary } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
-import { Dialog } from '../../components/ui/dialog'
+import { ModalDialog } from '../../components/ui/modal-dialog'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
 import { RadioGroup } from '../../components/ui/radio-group'
 import { TextAreaField } from '../../components/ui/textarea-field'
@@ -62,7 +62,7 @@ export function GateCommentDialog({ projectId, gate, action, onClose, onDecided,
 
   const commentId = `gate-${gate.id}-comment`
   return (
-    <Dialog
+    <ModalDialog
       open
       role={action === 'reject' ? 'alertdialog' : 'dialog'}
       title={`${action === 'approve' ? 'Approve' : 'Reject'} ${label.toLowerCase()}?`}
@@ -101,7 +101,7 @@ export function GateCommentDialog({ projectId, gate, action, onClose, onDecided,
           </Button>
         </div>
       </form>
-    </Dialog>
+    </ModalDialog>
   )
 }
 
@@ -182,7 +182,7 @@ export function EscalationDialog({
   })
 
   return (
-    <Dialog
+    <ModalDialog
       open
       title="Decide the escalation"
       description={
@@ -248,6 +248,6 @@ export function EscalationDialog({
           </Button>
         </div>
       </form>
-    </Dialog>
+    </ModalDialog>
   )
 }

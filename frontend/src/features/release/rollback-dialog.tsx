@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 
 import { Alert, ErrorSummary } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
-import { Dialog } from '../../components/ui/dialog'
+import { ModalDialog } from '../../components/ui/modal-dialog'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
 import { SelectField } from '../../components/ui/select-field'
 import { ErrorState, LoadingState } from '../../components/ui/states'
@@ -184,7 +184,7 @@ export function RollbackDialog({
         </ul>
         <div className="text-sm">
           <p className="font-medium">Reason</p>
-          <p className="whitespace-pre-wrap break-words text-muted">{confirmed.reason}</p>
+          <p className="whitespace-pre-wrap break-words text-muted-foreground">{confirmed.reason}</p>
         </div>
         <div role="alert" aria-live="assertive">
           {errorCopy && <Alert tone="error" title="We couldn't roll back the project">
@@ -267,7 +267,7 @@ export function RollbackDialog({
   }
 
   return (
-    <Dialog
+    <ModalDialog
       open
       role="alertdialog"
       title="Roll back the project"
@@ -276,6 +276,6 @@ export function RollbackDialog({
       onClose={onClose}
     >
       {content}
-    </Dialog>
+    </ModalDialog>
   )
 }

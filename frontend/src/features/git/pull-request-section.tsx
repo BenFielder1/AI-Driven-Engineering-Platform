@@ -197,7 +197,7 @@ function Comparison({ pr }: { pr: PullRequest }) {
           Commits ({pr.commits.length})
         </h4>
         {pr.commits.length === 0 ? (
-          <p className="text-sm text-muted">
+          <p className="text-sm text-muted-foreground">
             No commits differ from {pr.baseBranch}.
           </p>
         ) : (
@@ -209,7 +209,7 @@ function Comparison({ pr }: { pr: PullRequest }) {
                     href={c.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-link underline"
+                    className="font-mono text-primary underline"
                     title={c.sha}
                   >
                     {c.sha.slice(0, 7)}
@@ -233,7 +233,7 @@ function Comparison({ pr }: { pr: PullRequest }) {
           Files changed ({pr.files.length})
         </h4>
         {pr.files.length === 0 ? (
-          <p className="text-sm text-muted">
+          <p className="text-sm text-muted-foreground">
             No files differ from {pr.baseBranch}.
           </p>
         ) : (
@@ -269,7 +269,7 @@ function PullRequestDetails({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         <span>{gitProviderLabels[summary.provider]}</span>
         <BranchPair pr={summary} />
-        <span className="text-muted">
+        <span className="text-muted-foreground">
           Recorded <RelativeTime iso={summary.openedAt} />
         </span>
         {summary.url && (
@@ -277,7 +277,7 @@ function PullRequestDetails({
             href={summary.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-link underline"
+            className="text-primary underline"
           >
             View on GitHub
           </a>
@@ -322,9 +322,9 @@ export function PullRequestSection({
     <section
       id="pull-request"
       aria-labelledby="pull-request-title"
-      className="flex scroll-mt-4 flex-col gap-3 rounded-lg border border-border bg-surface-raised p-4"
+      className="flex scroll-mt-4 flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4"
     >
-      <h3 id="pull-request-title" className="text-lg font-semibold">
+      <h3 id="pull-request-title" className="text-lg">
         {summary ? pullRequestTitle(summary) : "Pull request"}
       </h3>
       {summary ? (

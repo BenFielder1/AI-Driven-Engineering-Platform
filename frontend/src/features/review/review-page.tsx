@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
+import { toast } from 'sonner'
 
 import { Alert } from '../../components/ui/alert'
 import { Badge, type BadgeTone } from '../../components/ui/badge'
@@ -88,7 +89,7 @@ function OptimisationPlanNote({
         <Link
           to="/projects/$projectId/artifacts/$type"
           params={{ projectId, type: 'optimization_plan' }}
-          className="font-medium text-link underline"
+          className="font-medium text-primary underline"
         >
           Open the optimisation plan
         </Link>
@@ -105,7 +106,7 @@ function ReportSummary({ report, state, projectId }: { report: ComplianceReport;
     <ReportSection id="review-latest" title={`Latest report: cycle ${String(report.cycle)}, version ${String(report.projectVersion)}`}>
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="flex flex-col">
-          <dt className="text-xs text-muted">Compliance score</dt>
+          <dt className="text-xs text-muted-foreground">Compliance score</dt>
           <dd>
             <span className="text-2xl font-semibold">{formatPercent(report.overallScore)}</span>{' '}
             <span className="text-sm">
@@ -114,7 +115,7 @@ function ReportSummary({ report, state, projectId }: { report: ComplianceReport;
           </dd>
         </div>
         <div className="flex flex-col">
-          <dt className="text-xs text-muted">Decision</dt>
+          <dt className="text-xs text-muted-foreground">Decision</dt>
           <dd className="flex flex-col gap-1">
             {report.decision ? (
               <>
@@ -124,12 +125,12 @@ function ReportSummary({ report, state, projectId }: { report: ComplianceReport;
                 <span className="text-sm">{reviewDecisionDescriptions[report.decision]}</span>
               </>
             ) : (
-              <span className="text-muted">Not decided</span>
+              <span className="text-muted-foreground">Not decided</span>
             )}
           </dd>
         </div>
         <div className="flex flex-col">
-          <dt className="text-xs text-muted">Reviewed</dt>
+          <dt className="text-xs text-muted-foreground">Reviewed</dt>
           <dd className="text-sm">{formatDateTime(report.createdAt)}</dd>
         </div>
       </dl>
@@ -162,7 +163,7 @@ export function ReviewPage() {
   const [queued, setQueued] = useState<number | null>(null)
 
   const header = (
-    <h2 id="review-title" className="mb-4 text-xl font-semibold">
+    <h2 id="review-title" className="mb-4 text-xl">
       Review
     </h2>
   )
@@ -203,6 +204,7 @@ export function ReviewPage() {
     start.mutate(undefined, {
       onSuccess: (started) => {
         setQueued(started.cycle)
+        toast.success('Review queued.')
       },
       onError: (error) => {
         setStartError(error)
@@ -228,7 +230,7 @@ export function ReviewPage() {
               </Button>
             </div>
             {disabledReason && (
-              <p id="review-run-reason" className="text-sm text-muted">
+              <p id="review-run-reason" className="text-sm text-muted-foreground">
                 {disabledReason}
               </p>
             )}
@@ -242,10 +244,10 @@ export function ReviewPage() {
 
         <section
           aria-labelledby="review-status"
-          className="flex flex-col gap-2 rounded-lg border border-border bg-surface-raised p-4"
+          className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <h3 id="review-status" className="text-lg font-semibold">
+            <h3 id="review-status" className="text-lg">
               Review status
             </h3>
             <Badge tone={statusTones[review.status]}>{reviewRunStatusLabels[review.status]}</Badge>
@@ -268,7 +270,7 @@ export function ReviewPage() {
             <Alert tone="error" title="The last review failed">
               <p>
                 No report was recorded for it.{' '}
-                <Link to="/projects/$projectId/runs" params={{ projectId: project.id }} className="font-medium text-link underline">
+                <Link to="/projects/$projectId/runs" params={{ projectId: project.id }} className="font-medium text-primary underline">
                   See the agent runs
                 </Link>{' '}
                 for the reason{writer ? ', then run the review again.' : '.'}
@@ -289,13 +291,13 @@ export function ReviewPage() {
           <>
             <ReportSummary report={report} state={s} projectId={project.id} />
             <CategoryBreakdown report={report} />
-            <ReportSection id="review-trend" title="Compliance trend">
-              {trend.data.series.length === 0 ? (
-                <p className="text-sm text-muted">No review cycles to compare yet.</p>
-              ) : (
-                <ComplianceTrendChart trend={trend.data} />
-              )}
-            </ReportSection>
+            {trend.data.series.length === 0 ? (
+              <ReportSection id="review-trend" title="Compliance trend">
+                <p className="text-sm text-muted-foreground">No review cycles to compare yet.</p>
+              </ReportSection>
+            ) : (
+              <ComplianceTrendChart trend={trend.data} />
+            )}
             <DriftSection report={report} />
             <ViolationsSection report={report} />
             <MissingFeaturesSection report={report} />

@@ -129,4 +129,48 @@ describe('Projects list (FR-6)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
+
+  it('FR53_projects_list: a KPI row counts active, in review and released projects; awaiting gates is not reported yet', async () => {
+    signInAsUser()
+    seedProject({ name: 'Alpha', status: 'active' })
+    seedProject({ name: 'Beta', currentPhase: 'review', status: 'reviewing' })
+    seedProject({ name: 'Gamma', currentPhase: 'release', status: 'released' })
+    renderRoute('/projects')
+
+    const totals = await screen.findByRole('region', { name: 'Project totals' })
+    const tile = (label: string) => within(totals).getByText(label).nextElementSibling
+    await waitFor(() => {
+      expect(tile('Active')).toHaveTextContent('2')
+    })
+    expect(tile('In review')).toHaveTextContent('1')
+    expect(tile('Released')).toHaveTextContent('1')
+    expect(tile('Awaiting gates')).toHaveTextContent('—')
+  })
+
+  it('FR53_projects_list: from md up the projects are a sortable table; the header sort is kept in the URL', async () => {
+    const original = globalThis.matchMedia
+    globalThis.matchMedia = (query: string) => {
+      const list = original(query)
+      Object.defineProperty(list, 'matches', { value: query.includes('48rem') })
+      return list
+    }
+    try {
+      signInAsUser()
+      seedProject({ name: 'Alpha' })
+      const { router } = renderRoute('/projects')
+      const user = userEvent.setup()
+
+      const table = await screen.findByRole('table', { name: 'Projects' })
+      expect(within(table).getByRole('link', { name: 'Alpha' })).toBeInTheDocument()
+      expect(screen.queryByRole('list', { name: 'Projects' })).not.toBeInTheDocument()
+      expect(within(table).getByRole('columnheader', { name: /Updated/ })).toHaveAttribute('aria-sort', 'descending')
+
+      await user.click(within(table).getByRole('button', { name: 'Project' }))
+      await waitFor(() => {
+        expect(router.state.location.search).toEqual({ sortBy: 'name', sortOrder: 'asc' })
+      })
+    } finally {
+      globalThis.matchMedia = original
+    }
+  })
 })

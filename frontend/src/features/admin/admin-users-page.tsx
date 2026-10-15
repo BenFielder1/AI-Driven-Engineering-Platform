@@ -40,10 +40,10 @@ const otherRole = (role: SystemRole): SystemRole => (role === 'admin' ? 'user' :
 function UserRow({ user, isMe, canChange, onChangeRole }: { user: AdminUser; isMe: boolean; canChange: boolean; onChangeRole: () => void }) {
   const target = otherRole(user.systemRole)
   return (
-    <tr className="border-b border-border last:border-b-0">
+    <tr className="border-b border-border/40 transition-colors last:border-b-0 hover:bg-muted/40">
       <th scope="row" className={`${bodyCell} text-left font-medium`}>
         {user.name}
-        {isMe && <span className="ml-1 text-xs font-normal text-muted">(you)</span>}
+        {isMe && <span className="ml-1 text-xs font-normal text-muted-foreground">(you)</span>}
       </th>
       <td className={`${bodyCell} break-all`}>{user.email}</td>
       <td className={bodyCell}>
@@ -122,7 +122,7 @@ export function AdminUsersPage({
 
   return (
     <section aria-labelledby="admin-users-title">
-      <h2 id="admin-users-title" className="mb-4 text-xl font-semibold">
+      <h2 id="admin-users-title" className="mb-4 text-xl">
         Users
       </h2>
       <FilterForm label="Search users" onSubmit={(e) => void onSubmit(e)} onClear={clear}>

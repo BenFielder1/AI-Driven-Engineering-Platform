@@ -68,7 +68,7 @@ export function NotificationsPage({
           </label>
         </div>
         {list.isSuccess && (
-          <p className="text-sm text-muted">
+          <p className="text-sm text-muted-foreground">
             {unreadCount === 0 ? 'No unread notifications' : `${formatNumber(unreadCount)} unread`}
           </p>
         )}
@@ -95,7 +95,7 @@ export function NotificationsPage({
         </EmptyState>
       )}
       {items.length > 0 && (
-        <ul aria-label="Notifications" className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+        <ul aria-label="Notifications" className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/60">
           {items.map((n) => (
             <NotificationItem key={n.id} notification={n} onMarkReadError={setActionError} />
           ))}

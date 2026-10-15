@@ -29,13 +29,13 @@ export function RadioGroup({ legend, options, inputProps, id, error, disabled }:
         const inputId = index === 0 && id ? id : `${base}-${option.value}`
         const descId = option.description ? `${inputId}-desc` : undefined
         return (
-          <div key={option.value} className="flex items-start gap-2 rounded-md border border-border p-3">
+          <div key={option.value} className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/40 p-3 transition-colors has-checked:border-primary/60 has-checked:bg-primary/10">
             <input
               type="radio"
               id={inputId}
               value={option.value}
               aria-describedby={descId}
-              className="mt-1 size-4"
+              className="mt-1 size-4 accent-primary"
               {...inputProps}
             />
             <div>
@@ -43,7 +43,7 @@ export function RadioGroup({ legend, options, inputProps, id, error, disabled }:
                 {option.label}
               </label>
               {option.description && (
-                <p id={descId} className="text-sm text-muted">
+                <p id={descId} className="text-sm text-muted-foreground">
                   {option.description}
                 </p>
               )}
@@ -52,7 +52,7 @@ export function RadioGroup({ legend, options, inputProps, id, error, disabled }:
         )
       })}
       {error && (
-        <p id={errorId} className="text-sm text-danger">
+        <p id={errorId} className="text-sm text-destructive">
           {error}
         </p>
       )}

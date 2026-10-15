@@ -47,9 +47,17 @@ export const errorMessages = {
   ROLLBACK_BLOCKED:
     "A rollback isn't possible while an execution step or agent run is in progress. Wait for it to finish (or pause execution), then try again.",
   RATE_LIMITED: "Too many attempts. Wait a moment and try again.",
-  // Recorded on a failed release attempt (not returned by an endpoint)
-  TAG_CONFLICT:
-    "The release tag already exists in the repository and points at a different commit. Tags are never moved.",
+  // Recorded on a failed release attempt, and returned when starting a version (FR-60, FR-61; replaces v1 TAG_CONFLICT)
+  TAG_EXISTS: "A tag for this version already exists in the repository.",
+  // Release versions (FR-60, FR-61)
+  VERSION_INVALID: "Enter a version as MAJOR.MINOR.PATCH, for example 1.2.0.",
+  VERSION_NOT_GREATER: "The version must be greater than the latest released version.",
+  VERSION_IN_PROGRESS: "A version is already in development. Release it before starting another.",
+  RELEASE_NOT_MERGED: "The latest release is waiting for its pull request to be merged. Merge it first.",
+  NOT_RELEASED: "Release the current version before starting a new one.",
+  // External services and presets
+  UPSTREAM_ERROR: "An external service (such as GitHub) failed or couldn't be reached. Try again in a moment.",
+  PRESET_NOT_FOUND: "That tech stack preset doesn't exist.",
   GIT_ERROR: "Git or GitHub refused the operation.",
   RELEASE_CANCELLED: "A rollback cancelled this release before it ran.",
   // Approval links
@@ -158,7 +166,7 @@ export const contextualErrorMessages = {
   },
   /** A failed release attempt's recorded `errorCode` (FR-42, FR-43), shown on Overview → Release. */
   releaseAttempt: {
-    TAG_CONFLICT:
+    TAG_EXISTS:
       "The release tag already exists in the repository and points at a different commit, so it wasn't moved. Check the tag on the repository, then retry the release.",
     GIT_ERROR:
       "Git or GitHub refused the merge, tag or push. Check the repository access and the project branch, then retry the release.",

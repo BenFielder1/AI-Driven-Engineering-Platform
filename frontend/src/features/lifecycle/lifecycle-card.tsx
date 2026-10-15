@@ -1,50 +1,20 @@
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
+import { panelClass } from '../../components/shared/panel-class'
 import { Alert } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { buttonClasses } from '../../components/ui/button-classes'
 import { errorMessage, errorReasons } from '../../lib/errors'
+import { cn } from '../../lib/utils'
 import { BranchPair } from '../git/pull-request-section'
 import type { PullRequestSummary } from '../git/pull-request-api'
-import { StatusBadge } from '../projects/project-badges'
-import { gateTypeLabels, nextPhase, phaseLabels, phases } from '../projects/labels'
+import { PhaseBadge, StatusBadge } from '../projects/project-badges'
+import { gateTypeLabels, nextPhase, phaseLabels } from '../projects/labels'
 import type { ProjectState } from '../projects/projects-api'
 import { useAdvancePhase, type AdvanceResult } from './lifecycle-api'
-
-/**
- * The six lifecycle phases in order (SPEC §4.1), as an ordered list with the current phase marked
- * `aria-current="step"`; earlier phases read as completed.
- */
-export function PhaseTimelineDetailed({ current }: { current: ProjectState['phase'] }) {
-  const currentIndex = phases.indexOf(current)
-  return (
-    <ol aria-label="Phase timeline" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-      {phases.map((phase, index) => {
-        const step = index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming'
-        return (
-          <li
-            key={phase}
-            aria-current={step === 'current' ? 'step' : undefined}
-            className={
-              'flex flex-col rounded-md border px-3 py-2 text-sm ' +
-              (step === 'current'
-                ? 'border-primary bg-primary text-on-primary'
-                : step === 'done'
-                  ? 'border-border bg-surface text-fg'
-                  : 'border-dashed border-border text-muted')
-            }
-          >
-            <span className="text-xs">
-              {String(index + 1)}. {step === 'done' ? 'Completed' : step === 'current' ? 'Current' : 'Upcoming'}
-            </span>
-            <span className="font-semibold">{phaseLabels[phase]}</span>
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
+import type { NextAction } from './next-action'
+import { NextActionButton } from './next-action-button'
 
 /**
  * FR-36: the recorded pull request. GitHub links out to the PR; a Local project's "PR" is the recorded branch
@@ -57,7 +27,7 @@ function PullRequestSummaryLine({ projectId, pr }: { projectId: string; pr: Pull
         Pull request
       </h3>
       {pr.number !== null && pr.url ? (
-        <a href={pr.url} target="_blank" rel="noopener noreferrer" className="text-link underline">
+        <a href={pr.url} target="_blank" rel="noopener noreferrer" className="text-primary underline">
           #{pr.number}
           <span className="sr-only"> (opens on GitHub)</span>
         </a>
@@ -70,7 +40,7 @@ function PullRequestSummaryLine({ projectId, pr }: { projectId: string; pr: Pull
           to="/projects/$projectId/execution"
           params={{ projectId }}
           hash="pull-request"
-          className="text-link underline"
+          className="text-primary underline"
         >
           View the comparison
         </Link>
@@ -98,23 +68,27 @@ function AdvanceOutcome({ result }: { result: AdvanceResult }) {
 }
 
 /**
- * Overview → Lifecycle (FR-11, FR-12): phase timeline, status and version, and "Advance to <next phase>" for writers.
- * An advance either moves the phase or creates the gate the approval mode requires; precondition failures list the
- * server's reasons.
+ * Overview → next-action card (FR-54, with v1 FR-11/FR-12): what the user can do next (from the next-action helper),
+ * status and version, and "Advance to <next phase>" for writers. An advance either moves the phase or creates the
+ * gate the approval mode requires; precondition failures list the server's reasons. Results are also toasted.
  */
 export function LifecycleCard({
   projectId,
   state,
   canAdvance,
+  action,
 }: {
   projectId: string
   state: ProjectState
   canAdvance: boolean
+  action: NextAction | null
 }) {
   const advance = useAdvancePhase(projectId)
   const [outcome, setOutcome] = useState<AdvanceResult | null>(null)
   const next = nextPhase(state.phase)
   const reasons = errorReasons(advance.error)
+  // The advance button below already is the action when the next step is an advance.
+  const linkAction = action && action.key !== 'advance' ? action : null
 
   function onAdvance() {
     setOutcome(null)
@@ -129,53 +103,76 @@ export function LifecycleCard({
   }
 
   return (
-    <section aria-labelledby="lifecycle-title" className="rounded-lg border border-primary bg-surface p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 id="lifecycle-title" className="text-lg font-semibold">
-          Lifecycle
-        </h2>
+    <section aria-labelledby="lifecycle-title" className={cn(panelClass, 'relative overflow-hidden border-primary/40 p-5')}>
+      <div aria-hidden className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full bg-primary/15 blur-3xl" />
+      <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h2 id="lifecycle-title" className="text-sm font-medium tracking-wider text-muted-foreground uppercase">
+            Next action
+          </h2>
+          {action ? (
+            <>
+              <p className="font-heading text-xl">{action.label}</p>
+              <p className="text-sm text-muted-foreground">{action.description}</p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {state.status === 'released'
+                ? 'This version is released.'
+                : canAdvance
+                  ? 'Nothing is waiting on you right now: agents are working, or the next step needs an artifact first.'
+                  : 'Nothing for you to do here: you can follow the project as it moves.'}
+            </p>
+          )}
+        </div>
         <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <div className="flex items-center gap-2">
-            <dt className="text-muted">Status</dt>
+            <dt className="text-muted-foreground">Phase</dt>
+            <dd>
+              <PhaseBadge phase={state.phase} />
+            </dd>
+          </div>
+          <div className="flex items-center gap-2">
+            <dt className="text-muted-foreground">Status</dt>
             <dd>
               <StatusBadge status={state.status} />
             </dd>
           </div>
           <div className="flex items-center gap-2">
-            <dt className="text-muted">Version</dt>
-            <dd className="font-medium">{state.projectVersion}</dd>
+            <dt className="text-muted-foreground">Version</dt>
+            <dd className="font-mono font-medium tabular-nums">{state.projectVersion}</dd>
           </div>
         </dl>
       </div>
 
-      <PhaseTimelineDetailed current={state.phase} />
-
-      {state.pullRequest && <PullRequestSummaryLine projectId={projectId} pr={state.pullRequest} />}
-
-      {state.phase === 'refinement' && (
-        <div className="mt-4">
+      <div className="relative mt-4 flex flex-wrap items-start gap-3">
+        {linkAction && <NextActionButton projectId={projectId} action={linkAction} />}
+        {state.phase === 'refinement' && linkAction?.key !== 'refine' && (
           <Link
             to="/projects/$projectId/refinement"
             params={{ projectId }}
-            className={buttonClasses(canAdvance ? 'primary' : 'secondary')}
+            className={buttonClasses(canAdvance && !linkAction ? 'primary' : 'secondary')}
           >
             {canAdvance ? 'Refine the idea' : 'Follow refinement'}
           </Link>
-        </div>
-      )}
-
-      {canAdvance && (
-        <div className="mt-4">
-          {next ? (
-            <Button onClick={onAdvance} pending={advance.isPending} pendingLabel="Advancing…">
+        )}
+        {canAdvance &&
+          (next ? (
+            <Button
+              variant={linkAction ? 'secondary' : 'primary'}
+              onClick={onAdvance}
+              pending={advance.isPending}
+              pendingLabel="Advancing…"
+            >
               Advance to {phaseLabels[next]}
             </Button>
           ) : (
-            <p className="text-sm text-muted">Release is the last phase.</p>
-          )}
-        </div>
-      )}
-      {state.executionPaused && <p className="mt-2 text-sm text-muted">Execution is paused.</p>}
+            <p className="self-center text-sm text-muted-foreground">Release is the last phase.</p>
+          ))}
+      </div>
+
+      {state.pullRequest && <PullRequestSummaryLine projectId={projectId} pr={state.pullRequest} />}
+      {state.executionPaused && <p className="mt-2 text-sm text-muted-foreground">Execution is paused.</p>}
 
       <div role="status" aria-live="polite">
         {outcome && !advance.isPending && <AdvanceOutcome result={outcome} />}

@@ -15,6 +15,8 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+    /* shadcn/ui CLI aliases (components.json); app code imports relatively */
+    "paths": { "@/*": ["./src/*"] },
 
     /* Type safety */
     "strict": true,

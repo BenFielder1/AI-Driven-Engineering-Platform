@@ -53,11 +53,13 @@ async function approvePendingGate(page: Page, gateLabel: string) {
   const decided = page.waitForResponse((r) => /\/gates\/[^/]+\/approve$/.test(r.url()) && r.request().method() === 'POST')
   await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
   expect((await decided).status()).toBe(200)
-  await expect(pendingGates(page).getByText(`${gateLabel} approved.`)).toBeVisible()
+  // SPEC 7.1: the decision's result is a toast.
+  await expect(page.getByText(`${gateLabel} approved.`)).toBeVisible()
 }
 
+/** FR-54: the project's current stage in the header's stage stepper. */
 function currentPhase(page: Page): Locator {
-  return page.getByRole('list', { name: 'Phase timeline' }).locator('[aria-current="step"]')
+  return page.getByRole('navigation', { name: 'Lifecycle stages' }).locator('[data-stage-state="current"]')
 }
 
 test('NFR-TEST, FR-5–FR-50: an idea becomes a tagged release, is rolled back, and the history and notifications show it', async ({
@@ -203,7 +205,7 @@ test('NFR-TEST, FR-5–FR-50: an idea becomes a tagged release, is rolled back, 
 
     // FR-44: roll back to the Planning version with a reason and an explicit confirmation step.
     await openSection(page, 'Settings')
-    await page.getByRole('tab', { name: 'Danger zone' }).click()
+    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Danger zone' }).click()
     await page.getByRole('button', { name: 'Roll back…' }).click()
     const dialog = page.getByRole('alertdialog', { name: 'Roll back the project' })
     const versionSelect = dialog.getByLabel('Version to restore')

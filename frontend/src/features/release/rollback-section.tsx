@@ -18,20 +18,20 @@ function RollbackHistory({ projectId }: { projectId: string }) {
     return <ErrorState error={rollbacks.error} title="The rollbacks couldn't load" onRetry={() => void rollbacks.refetch()} />
   }
   if (rollbacks.data.length === 0) {
-    return <p className="text-sm text-muted">No rollbacks yet.</p>
+    return <p className="text-sm text-muted-foreground">No rollbacks yet.</p>
   }
   return (
     <ol aria-label="Rollbacks" className="flex flex-col gap-3 text-sm">
       {rollbacks.data.map((r) => (
-        <li key={r.id} className="rounded-md border border-border p-3">
+        <li key={r.id} className="rounded-lg border border-border/60 p-3">
           <p className="font-medium">
             Version {r.fromVersion} → version {r.toVersion}, restored {phaseLabels[r.restoredPhase]}
           </p>
-          <p className="text-muted">
+          <p className="text-muted-foreground">
             {r.createdBy.name} · <RelativeTime iso={r.createdAt} />
           </p>
           <p className="mt-1 whitespace-pre-wrap break-words">{r.reason}</p>
-          <p className="mt-1 text-muted">{rollbackEffects(r).join(' · ')}</p>
+          <p className="mt-1 text-muted-foreground">{rollbackEffects(r).join(' · ')}</p>
         </li>
       ))}
     </ol>
@@ -47,12 +47,12 @@ export function RollbackSection({ projectId, currentVersion }: { projectId: stri
   const [done, setDone] = useState<Rollback | null>(null)
 
   return (
-    <section aria-labelledby="rollback-title" className="flex flex-col gap-3 rounded-lg border border-danger p-4">
+    <section aria-labelledby="rollback-title" className="flex flex-col gap-3 rounded-lg border border-destructive p-4">
       <div>
         <h3 id="rollback-title" className="font-semibold">
           Roll back
         </h3>
-        <p className="mt-1 text-sm text-muted">
+        <p className="mt-1 text-sm text-muted-foreground">
           Restores the phase of an earlier project version. Later artifacts are invalidated and pending gates and queued
           jobs are cancelled; nothing is deleted and the Git branch isn&apos;t rewritten. One rollback per minute, and not
           while a step or agent run is in progress.

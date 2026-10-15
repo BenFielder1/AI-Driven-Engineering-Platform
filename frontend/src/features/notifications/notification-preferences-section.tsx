@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
+import { toast } from 'sonner'
 
 import { Alert } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
@@ -24,20 +24,18 @@ const toValues = (p: NotificationPreferences): PreferencesValues => ({
 
 function PreferencesForm({ preferences }: { preferences: NotificationPreferences }) {
   const update = useUpdateNotificationPreferences()
-  const [saved, setSaved] = useState(false)
   const { register, handleSubmit, reset } = useForm<PreferencesValues>({
     resolver: zodResolver(preferencesSchema),
     defaultValues: toValues(preferences),
   })
 
   const onSubmit = handleSubmit(({ shown }) => {
-    setSaved(false)
     update.mutate(
       { mutedTypes: notificationTypes.filter((t) => !shown.includes(t)) },
       {
         onSuccess: (next) => {
           reset(toValues(next))
-          setSaved(true)
+          toast.success('Notification preferences saved.')
         },
       },
     )
@@ -52,7 +50,7 @@ function PreferencesForm({ preferences }: { preferences: NotificationPreferences
             const id = `notification-pref-${type}`
             return (
               <div key={type} className="flex items-center gap-2">
-                <input id={id} type="checkbox" value={type} className="size-4" {...register('shown')} />
+                <input id={id} type="checkbox" value={type} className="size-4 accent-primary" {...register('shown')} />
                 <label htmlFor={id} className="text-sm">
                   {notificationTypeLabels[type]}
                 </label>
@@ -61,9 +59,6 @@ function PreferencesForm({ preferences }: { preferences: NotificationPreferences
           })}
         </div>
       </fieldset>
-      <div role="status" aria-live="polite" className="mt-3">
-        {saved && <Alert tone="success">Notification preferences saved.</Alert>}
-      </div>
       {update.isError && (
         <Alert tone="error" role="alert" title="We couldn't save your preferences" className="mt-3">
           <p>{errorMessage(update.error)}</p>
@@ -83,11 +78,11 @@ function PreferencesForm({ preferences }: { preferences: NotificationPreferences
 export function NotificationPreferencesSection() {
   const preferences = useNotificationPreferences()
   return (
-    <section aria-labelledby="notification-prefs-title" className="rounded-lg border border-border bg-surface-raised p-5">
-      <h2 id="notification-prefs-title" className="text-lg font-semibold">
+    <section aria-labelledby="notification-prefs-title" className="rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-5">
+      <h2 id="notification-prefs-title" className="text-lg">
         Notification preferences
       </h2>
-      <p className="mb-4 mt-1 text-sm text-muted">
+      <p className="mb-4 mt-1 text-sm text-muted-foreground">
         Choose what appears in your in-app notifications. Email, Slack, Teams and webhook channels are set per project by
         its Owners in Settings → Notifications.
       </p>

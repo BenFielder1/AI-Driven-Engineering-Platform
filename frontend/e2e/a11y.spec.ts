@@ -103,13 +103,13 @@ const targets: Target[] = [
   },
   {
     name: 'settings (general)',
-    path: () => `/projects/${fixture().projectId}/settings`,
+    path: () => `/projects/${fixture().projectId}/settings/general`,
     signedIn: true,
-    ready: (p) => p.getByRole('tab', { name: 'General' }),
+    ready: (p) => p.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'General' }),
   },
   {
     name: 'settings (danger zone)',
-    path: () => `/projects/${fixture().projectId}/settings?tab=danger`,
+    path: () => `/projects/${fixture().projectId}/settings/danger`,
     signedIn: true,
     ready: (p) => p.getByRole('button', { name: 'Roll back…' }),
   },
@@ -119,7 +119,137 @@ const targets: Target[] = [
     signedIn: true,
     ready: (p) => p.getByRole('list', { name: 'Notifications' }),
   },
+  {
+    name: 'register',
+    path: () => '/register',
+    signedIn: false,
+    ready: (p) => p.getByRole('heading', { level: 1, name: 'Create your AIDE account' }),
+  },
+  {
+    name: 'account',
+    path: () => '/account',
+    signedIn: true,
+    ready: (p) => p.getByRole('region', { name: 'Profile' }),
+  },
+  {
+    name: 'agent runs',
+    path: () => `/projects/${fixture().projectId}/runs`,
+    signedIn: true,
+    ready: (p) => p.getByRole('table', { name: /^Agent runs, newest first/ }),
+  },
 ]
+
+/**
+ * NFR-A11Y2 (FR-53, FR-54): the v2 shell in its interactive states: the sidebar in project mode with the header's
+ * live indicator and stage stepper (1440 px), the drawer opened at 375 px, the command palette, and the user and theme
+ * menus. Each state is checked in both themes.
+ */
+interface ShellState {
+  name: string
+  path: () => string
+  width: number
+  ready: (page: Page) => Locator
+  /** Opens the state under test; returns the element that must be visible when it is open. */
+  open?: (page: Page) => Promise<Locator>
+}
+
+const shellStates: ShellState[] = [
+  {
+    name: 'sidebar in project mode, header and stage stepper (1440 px)',
+    path: () => `/projects/${fixture().projectId}/review`,
+    width: 1440,
+    ready: (p) => p.getByRole('navigation', { name: 'Lifecycle stages' }),
+  },
+  {
+    name: 'mobile drawer open (375 px)',
+    path: () => `/projects/${fixture().projectId}`,
+    width: 375,
+    ready: (p) => p.getByRole('button', { name: 'Open navigation' }),
+    open: async (p) => {
+      await p.getByRole('button', { name: 'Open navigation' }).click()
+      return p.getByTestId('mobile-drawer')
+    },
+  },
+  {
+    name: 'command palette open',
+    path: () => '/projects',
+    width: 1440,
+    ready: (p) => p.getByRole('heading', { level: 1, name: 'Projects', exact: true }),
+    open: async (p) => {
+      await p.getByRole('complementary', { name: 'Sidebar' }).getByRole('button', { name: 'Search pages' }).click()
+      return p.getByRole('dialog', { name: 'Command palette' })
+    },
+  },
+  {
+    name: 'user menu open',
+    path: () => '/projects',
+    width: 1440,
+    ready: (p) => p.getByRole('heading', { level: 1, name: 'Projects', exact: true }),
+    open: async (p) => {
+      await p.getByRole('complementary', { name: 'Sidebar' }).getByRole('button', { name: /Account menu for/ }).click()
+      return p.getByRole('menu')
+    },
+  },
+]
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  for (const state of shellStates) {
+    test(`NFR-A11Y2: shell — ${state.name} has no WCAG 2.2 AA violations (${colorScheme} theme)`, async ({ browser }, testInfo) => {
+      const context = await browser.newContext({
+        colorScheme,
+        storageState: fixture().storageState,
+        viewport: { width: state.width, height: 900 },
+      })
+      try {
+        const page = await context.newPage()
+        await page.goto(state.path())
+        await expect(state.ready(page)).toBeVisible({ timeout: 20_000 })
+        if (state.open) {
+          await expect(await state.open(page)).toBeVisible()
+        }
+        await expect(page.getByRole('status').filter({ hasText: /^Loading/ })).toHaveCount(0)
+        const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
+        const violations = results.violations.map((v) => ({
+          id: v.id,
+          impact: v.impact,
+          help: v.help,
+          nodes: v.nodes.map((n) => ({ target: n.target.join(' '), summary: n.failureSummary })),
+        }))
+        await testInfo.attach('axe-violations.json', {
+          body: JSON.stringify({ state: state.name, colorScheme, violations }, null, 2),
+          contentType: 'application/json',
+        })
+        expect(violations, JSON.stringify(violations, null, 2)).toEqual([])
+        if (state.width === 375) {
+          const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+          expect(overflow).toBeLessThanOrEqual(0)
+        }
+      } finally {
+        await context.close()
+      }
+    })
+  }
+}
+
+test('FR54: the stage stepper is keyboard navigable and marks the current stage', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: fixture().storageState, viewport: { width: 1440, height: 900 } })
+  try {
+    const page = await context.newPage()
+    await page.goto(`/projects/${fixture().projectId}/review`)
+    const stepper = page.getByRole('navigation', { name: 'Lifecycle stages' })
+    await expect(stepper).toBeVisible({ timeout: 20_000 })
+    await expect(stepper.locator('[aria-current="page"]')).toContainText('Review')
+    const links = stepper.getByRole('link')
+    await expect(links).toHaveCount(6)
+    await links.first().focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(links.nth(1)).toBeFocused()
+    await page.keyboard.press('End')
+    await expect(links.nth(5)).toBeFocused()
+  } finally {
+    await context.close()
+  }
+})
 
 async function open(browser: Browser, target: Target, colorScheme: 'light' | 'dark', width?: number) {
   const context = await browser.newContext({

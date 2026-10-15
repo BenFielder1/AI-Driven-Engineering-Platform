@@ -3,6 +3,7 @@ import { createMemoryHistory, RouterProvider } from '@tanstack/react-router'
 import { render, type RenderOptions } from '@testing-library/react'
 import type { ReactElement } from 'react'
 
+import { Toaster } from '../components/ui/sonner'
 import { LiveConnectionContext } from '../features/live/live-connection'
 import { createAppRouter } from '../router'
 import { FakeLiveHub } from './fake-live'
@@ -13,7 +14,10 @@ export function createTestQueryClient() {
   })
 }
 
-/** Renders with a fresh, retry-free QueryClient per test and a fake live hub (no real SignalR connection). */
+/**
+ * Renders with a fresh, retry-free QueryClient per test, a fake live hub (no real SignalR connection) and the toast
+ * region (async results are toasts, SPEC 7.1), like the root layout.
+ */
 export function renderWithProviders(ui: ReactElement, options?: RenderOptions) {
   const queryClient = createTestQueryClient()
   const live = new FakeLiveHub()
@@ -22,7 +26,10 @@ export function renderWithProviders(ui: ReactElement, options?: RenderOptions) {
     live,
     ...render(
       <QueryClientProvider client={queryClient}>
-        <LiveConnectionContext value={live.factory}>{ui}</LiveConnectionContext>
+        <LiveConnectionContext value={live.factory}>
+          {ui}
+          <Toaster />
+        </LiveConnectionContext>
       </QueryClientProvider>,
       options,
     ),

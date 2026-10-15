@@ -30,30 +30,30 @@ function ArtifactCard({ projectId, type, latest }: { projectId: string; type: Ar
       <section
         aria-labelledby={headingId}
         className={
-          'flex h-full flex-col gap-3 rounded-lg border bg-surface-raised p-4 ' +
-          (latest?.integrity === 'corrupted' ? 'border-danger' : 'border-border')
+          'flex h-full flex-col gap-3 rounded-xl border bg-card/70 p-4 shadow-sm backdrop-blur-md ' +
+          (latest?.integrity === 'corrupted' ? 'border-destructive' : 'border-border/60')
         }
       >
-        <h2 id={headingId} className="text-lg font-semibold">
+        <h2 id={headingId} className="text-lg">
           {artifactTypeLabels[type]}
         </h2>
         {latest ? (
           <>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">Version {latest.version}</span>
+              <span className="font-mono font-medium tabular-nums">Version {latest.version}</span>
               <ArtifactStatusBadge status={latest.status} />
               <IntegrityBadge integrity={latest.integrity} />
             </div>
             {latest.integrity === 'corrupted' && (
               <Alert tone="error">{corruptedCopy(latest, true).body}</Alert>
             )}
-            <p className="text-sm text-muted">
+            <p className="text-sm text-muted-foreground">
               By {authorName(latest.author)} · <RelativeTime iso={latest.createdAt} />
             </p>
             <Link
               to="/projects/$projectId/artifacts/$type"
               params={{ projectId, type }}
-              className="mt-auto self-start text-sm font-medium text-link underline"
+              className="mt-auto self-start text-sm font-medium text-primary underline"
             >
               Open {artifactTypeLabels[type].toLowerCase()}
             </Link>

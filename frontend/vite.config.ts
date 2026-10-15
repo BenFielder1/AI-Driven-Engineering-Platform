@@ -2,6 +2,7 @@
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 
 // Same-origin /api: in dev Vite proxies to the API (5080); in Kubernetes the web container's nginx does.
@@ -25,6 +26,8 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  // shadcn/ui CLI alias (components.json, tsconfig.app.json paths).
+  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: {
     port: 5173,
     strictPort: true,
@@ -41,6 +44,8 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     restoreMocks: true,
+    // src/lib/ui/tokens.test.ts reads index.css?raw to check it against tokens.ts; other CSS stays stubbed.
+    css: { include: [/src[\\/]index\.css(\?|$)/] },
     // Page-level tests with MSW take several seconds under parallel load.
     testTimeout: 20_000,
   },

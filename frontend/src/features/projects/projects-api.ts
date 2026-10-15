@@ -96,12 +96,15 @@ export function useProject(id: string) {
   return useQuery(projectQueryOptions(id))
 }
 
-export function useProjectState(id: string) {
-  return useQuery({
+export const projectStateQueryOptions = (id: string) =>
+  queryOptions({
     queryKey: projectKeys.state(id),
     queryFn: async ({ signal }) =>
       unwrap(await api.GET('/api/projects/{id}/state', { params: { path: { id } }, signal })),
   })
+
+export function useProjectState(id: string) {
+  return useQuery(projectStateQueryOptions(id))
 }
 
 /** FR-8: members are visible to every member. */

@@ -20,7 +20,7 @@ import { useRun, type AgentRun } from './runs-api'
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="grid gap-1 py-1.5 text-sm sm:grid-cols-3">
-      <dt className="font-medium text-muted">{term}</dt>
+      <dt className="font-medium text-muted-foreground">{term}</dt>
       <dd className="break-words sm:col-span-2">{children}</dd>
     </div>
   )
@@ -72,7 +72,7 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
 
       <Section title="Input artifacts">
         {run.inputArtifacts.length === 0 ? (
-          <p className="text-sm text-muted">This run used no artifacts as input.</p>
+          <p className="text-sm text-muted-foreground">This run used no artifacts as input.</p>
         ) : (
           <ul className="flex flex-col gap-1 text-sm">
             {run.inputArtifacts.map((a) => (
@@ -81,7 +81,7 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
                   to="/projects/$projectId/artifacts/$type"
                   params={{ projectId, type: a.type }}
                   search={{ version: a.version }}
-                  className="text-link underline"
+                  className="text-primary underline"
                 >
                   {artifactTypeLabels[a.type]} v{a.version}
                 </Link>
@@ -93,7 +93,7 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
 
       {run.userFeedback && (
         <Section title="Feedback and answers given to the agent">
-          <p className="whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 text-sm">
+          <p className="whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-muted/60 p-3 text-sm">
             {run.userFeedback}
           </p>
         </Section>
@@ -116,7 +116,7 @@ function RunError({ error, attempts, retrying }: { error: string; attempts: numb
         <Alert tone="info" title="Last attempt failed — retrying">
           {title && <p>{title}</p>}
           <p className="whitespace-pre-wrap break-words">{message}</p>
-          <p className="mt-1 text-muted">
+          <p className="mt-1 text-muted-foreground">
             {attempts} attempt{attempts === 1 ? '' : 's'} so far.
           </p>
         </Alert>
@@ -127,7 +127,7 @@ function RunError({ error, attempts, retrying }: { error: string; attempts: numb
     <Section title="Error">
       <Alert tone="error" title={title ?? 'The run failed'}>
         <p className="whitespace-pre-wrap break-words">{message}</p>
-        <p className="mt-1 text-muted">
+        <p className="mt-1 text-muted-foreground">
           After {attempts} attempt{attempts === 1 ? '' : 's'}.
         </p>
       </Alert>
@@ -147,7 +147,7 @@ function RunOutput({ projectId, runId, run }: { projectId: string; runId: string
   const status = run.status
   if (d.output === null) {
     return (
-      <p className="text-sm text-muted">
+      <p className="text-sm text-muted-foreground">
         {status === 'running' || status === 'queued'
           ? 'Running… The output appears here when the run finishes (agent output isn’t streamed).'
           : 'This run produced no output.'}
@@ -164,7 +164,7 @@ function RunOutput({ projectId, runId, run }: { projectId: string; runId: string
       <pre
         tabIndex={0}
         aria-label="Run output"
-        className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 text-xs"
+        className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-muted/60 p-3 text-xs"
       >
         {d.output}
       </pre>

@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 
 import { Button } from '../../components/ui/button'
-import { Drawer } from '../../components/ui/drawer'
+import { DetailSheet } from '../../components/ui/modal-dialog'
 import { Pagination } from '../../components/ui/pagination'
 import { resultSummary } from '../../components/ui/result-summary'
 import { SelectField } from '../../components/ui/select-field'
@@ -39,26 +39,26 @@ function RunRow({ run, onOpen }: { run: AgentRun; onOpen: () => void }) {
   const unfinished = isUnfinished(run)
   return (
     <tr className="border-b border-border last:border-b-0">
-      <th scope="row" className="py-2 pr-3 text-left font-medium">
+      <th scope="row" className="px-3 py-2 text-left font-medium">
         <button
           type="button"
           onClick={onOpen}
           aria-label={`${agentKindLabels[run.agent]} run, started ${formatDateTime(run.createdAt)}`}
-          className="min-h-8 text-left text-link underline underline-offset-4"
+          className="min-h-8 text-left text-primary underline underline-offset-4"
         >
           {agentKindLabels[run.agent]}
         </button>
       </th>
-      <td className="py-2 pr-3">
+      <td className="px-3 py-2">
         <code className="text-xs">{run.model}</code>
       </td>
-      <td className="py-2 pr-3">{llmProviderLabels[run.provider]}</td>
-      <td className="py-2 pr-3 text-right tabular-nums">
+      <td className="px-3 py-2">{llmProviderLabels[run.provider]}</td>
+      <td className="px-3 py-2 text-right tabular-nums">
         {unfinished ? '—' : `${formatNumber(run.inputTokens)} / ${formatNumber(run.outputTokens)}`}
       </td>
-      <td className="py-2 pr-3 text-right tabular-nums">{unfinished ? '—' : formatCost(run.costEstimate)}</td>
-      <td className="py-2 pr-3 text-right tabular-nums">{unfinished ? 'Running…' : formatDuration(run.durationMs)}</td>
-      <td className="py-2 pr-3">
+      <td className="px-3 py-2 text-right tabular-nums">{unfinished ? '—' : formatCost(run.costEstimate)}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{unfinished ? 'Running…' : formatDuration(run.durationMs)}</td>
+      <td className="px-3 py-2">
         <RunStatusBadge status={run.status} />
       </td>
       <td className="py-2">
@@ -69,13 +69,13 @@ function RunRow({ run, onOpen }: { run: AgentRun; onOpen: () => void }) {
 }
 
 function RunsTable({ runs, onOpen }: { runs: AgentRun[]; onOpen: (run: AgentRun) => void }) {
-  const head = 'py-2 pr-3 font-medium'
+  const head = 'px-3 py-2 font-medium'
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md">
       <table className="w-full min-w-[44rem] border-collapse text-sm">
         <caption className="sr-only">Agent runs, newest first. Open a run to see all its details.</caption>
         <thead>
-          <tr className="border-b border-border text-left text-xs text-muted">
+          <tr className="border-b border-border/60 text-left text-xs text-muted-foreground">
             <th scope="col" className={head}>
               Agent
             </th>
@@ -97,7 +97,7 @@ function RunsTable({ runs, onOpen }: { runs: AgentRun[]; onOpen: (run: AgentRun)
             <th scope="col" className={head}>
               Status
             </th>
-            <th scope="col" className="py-2 font-medium">
+            <th scope="col" className="px-3 py-2 font-medium">
               Started
             </th>
           </tr>
@@ -166,7 +166,7 @@ export function RunsPage({ search, onSearchChange, onOpenRun, onCloseRun }: Runs
     const d = runs.data
     body = (
       <>
-        <p role="status" aria-live="polite" className="mb-3 text-sm text-muted">
+        <p role="status" aria-live="polite" className="mb-3 text-sm text-muted-foreground">
           {resultSummary(d.page, d.limit, d.items.length, d.total, 'run')}
         </p>
         <div aria-busy={runs.isPlaceholderData || undefined}>
@@ -191,7 +191,7 @@ export function RunsPage({ search, onSearchChange, onOpenRun, onCloseRun }: Runs
   return (
     <section aria-labelledby="runs-title">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <h2 id="runs-title" ref={headingRef} tabIndex={-1} className="text-xl font-semibold">
+        <h2 id="runs-title" ref={headingRef} tabIndex={-1} className="text-xl">
           Agent runs
         </h2>
         <SelectField
@@ -212,14 +212,14 @@ export function RunsPage({ search, onSearchChange, onOpenRun, onCloseRun }: Runs
         </SelectField>
       </div>
       {body}
-      <Drawer
+      <DetailSheet
         open={openRunId !== null}
         title={openRun ? `${agentKindLabels[openRun.agent]} run` : 'Agent run'}
         fallbackFocusRef={headingRef}
         onClose={onCloseRun}
       >
         {openRunId && <RunDetails projectId={project.id} runId={openRunId} summary={openSummary} />}
-      </Drawer>
+      </DetailSheet>
     </section>
   )
 }

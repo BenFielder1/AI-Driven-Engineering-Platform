@@ -3,10 +3,10 @@ import type { ReactNode } from 'react'
 export type AlertTone = 'error' | 'success' | 'warning' | 'info'
 
 const tones: Record<AlertTone, string> = {
-  error: 'border-danger bg-danger-bg text-fg',
-  success: 'border-success bg-success-bg text-fg',
-  warning: 'border-warning bg-warning-bg text-fg',
-  info: 'border-border bg-surface text-fg',
+  error: 'border-destructive bg-destructive/10 text-foreground',
+  success: 'border-success bg-success/10 text-foreground',
+  warning: 'border-warning bg-warning/10 text-foreground',
+  info: 'border-primary/50 bg-primary/10 text-foreground',
 }
 
 interface AlertProps {
@@ -20,7 +20,7 @@ interface AlertProps {
 
 export function Alert({ tone = 'info', title, children, role, className = '' }: AlertProps) {
   return (
-    <div role={role} className={`rounded-md border-l-4 p-3 text-sm ${tones[tone]} ${className}`}>
+    <div role={role} className={`rounded-lg border border-l-4 p-3 text-sm backdrop-blur-sm ${tones[tone]} ${className}`}>
       {title && <p className="font-semibold">{title}</p>}
       {children}
     </div>

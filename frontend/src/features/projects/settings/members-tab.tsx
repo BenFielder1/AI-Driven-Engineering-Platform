@@ -179,7 +179,7 @@ export function MembersTab() {
   return (
     <section aria-labelledby="members-title">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 id="members-title" className="text-xl font-semibold">
+        <h2 id="members-title" className="text-xl">
           Members
         </h2>
         {isMember && (
@@ -206,7 +206,7 @@ export function MembersTab() {
       {members.isError && <ErrorState error={members.error} onRetry={() => void members.refetch()} />}
       {members.isSuccess && members.data.length === 0 && <EmptyState title="No members" />}
       {members.isSuccess && members.data.length > 0 && (
-        <ul aria-label="Project members" className="divide-y divide-border rounded-md border border-border">
+        <ul aria-label="Project members" className="divide-y divide-border/60 rounded-lg border border-border/60">
           {members.data.map((m) => {
             const isMe = m.userId === user?.id
             return (
@@ -214,9 +214,9 @@ export function MembersTab() {
                 <div className="min-w-0">
                   <p className="break-words font-medium">
                     {m.name}
-                    {isMe && <span className="text-muted"> (you)</span>}
+                    {isMe && <span className="text-muted-foreground"> (you)</span>}
                   </p>
-                  <p className="break-words text-sm text-muted">{m.email}</p>
+                  <p className="break-words text-sm text-muted-foreground">{m.email}</p>
                 </div>
                 {canManage ? (
                   <div className="flex flex-wrap items-end gap-2">

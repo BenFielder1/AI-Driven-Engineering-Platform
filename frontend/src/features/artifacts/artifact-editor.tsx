@@ -74,7 +74,7 @@ export function ArtifactEditor({
       noValidate
       aria-label={`Edit ${label}`}
       onSubmit={(e) => void onSubmit(e)}
-      className="flex flex-col gap-4 rounded-lg border border-border bg-surface-raised p-4"
+      className="flex flex-col gap-4 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4"
     >
       <ErrorSummary
         title="We couldn't save the draft"

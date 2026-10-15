@@ -27,7 +27,7 @@ export function TokenBudget({
     return (
       <div className="text-sm">
         <p className="font-medium">No budget</p>
-        <p className="mt-1 text-muted">{formatNumber(tokensUsed)} tokens used. Agent runs aren&apos;t capped on this project.</p>
+        <p className="mt-1 text-muted-foreground">{formatNumber(tokensUsed)} tokens used. Agent runs aren&apos;t capped on this project.</p>
       </div>
     )
   }
@@ -52,14 +52,14 @@ export function TokenBudget({
         aria-valuemax={tokenBudget}
         aria-valuenow={Math.min(tokensUsed, tokenBudget)}
         aria-valuetext={state ? `${text}, ${state.toLowerCase()}` : text}
-        className="mt-2 h-3 w-full overflow-hidden rounded-full border border-border bg-surface"
+        className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-muted"
       >
         <div
-          className={`h-full ${exhausted ? 'bg-danger' : nearly ? 'bg-warning' : 'bg-primary'}`}
+          className={`h-full rounded-full ${exhausted ? 'bg-destructive' : nearly ? 'bg-warning' : 'bg-primary'}`}
           style={{ width: `${String(percent)}%` }}
         />
       </div>
-      <p className="mt-1 text-muted">
+      <p className="mt-1 text-muted-foreground">
         {exhausted
           ? 'No tokens left.'
           : `${formatNumber(tokenBudget - tokensUsed)} tokens left.`}
@@ -69,9 +69,9 @@ export function TokenBudget({
           <p>{messageFor('BUDGET_EXCEEDED')}</p>
           {canRaise && (
             <Link
-              to="/projects/$projectId/settings"
-              params={{ projectId }}
-              className="mt-1 inline-block font-medium text-link underline"
+              to="/projects/$projectId/settings/$section"
+              params={{ projectId, section: 'general' }}
+              className="mt-1 inline-block font-medium text-primary underline"
             >
               Raise the token budget
             </Link>

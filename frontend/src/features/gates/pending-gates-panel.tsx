@@ -1,7 +1,9 @@
 import { Link } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
-import { Alert } from '../../components/ui/alert'
+import { panelClass } from '../../components/shared/panel-class'
+
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
@@ -56,7 +58,10 @@ function PendingGateItem({
 }) {
   const titleId = `pending-gate-${gate.id}`
   return (
-    <li aria-labelledby={titleId} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
+    <li
+      aria-labelledby={titleId}
+      className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between"
+    >
       <div className="flex flex-col gap-1 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <h3 id={titleId} className="text-base font-semibold">
@@ -64,18 +69,18 @@ function PendingGateItem({
           </h3>
           {gate.overdue && <Badge tone="warning">Overdue</Badge>}
         </div>
-        <span className="text-muted">
+        <span className="text-muted-foreground">
           Created <RelativeTime iso={gate.createdAt} /> ({formatDateTime(gate.createdAt)})
         </span>
         {gate.remindedAt && (
-          <span className="text-muted">
+          <span className="text-muted-foreground">
             Reminded <RelativeTime iso={gate.remindedAt} /> ({formatDateTime(gate.remindedAt)})
           </span>
         )}
         <GateArtifactRef projectId={projectId} gate={gate} />
         <GateStepRef projectId={projectId} gate={gate} />
         {gate.escalationReason && <span>Reason: {escalationReasonLabels[gate.escalationReason]}</span>}
-        {gate.reason && <span className="text-muted">{gate.reason}</span>}
+        {gate.reason && <span className="text-muted-foreground">{gate.reason}</span>}
       </div>
       {canDecide && (
         <div className="flex flex-wrap gap-2">
@@ -127,13 +132,14 @@ export function PendingGatesPanel({
 }) {
   const gates = useGates(projectId)
   const [dialog, setDialog] = useState<OpenDialog>(null)
-  const [decided, setDecided] = useState<string | null>(null)
+  // Bumped on every decision, so focus moves even when two gates are decided in a row.
+  const [decided, setDecided] = useState(0)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   // NFR-A11Y: the decided gate's item (and its buttons) leaves the list, so focus moves to the panel heading,
   // after the dialog's own focus restore has run.
   useEffect(() => {
-    if (decided) {
+    if (decided > 0) {
       headingRef.current?.focus()
     }
   }, [decided])
@@ -142,9 +148,11 @@ export function PendingGatesPanel({
     setDialog(null)
   }
 
+  // SPEC §7.1: async results are toasts (sonner announces them politely).
   function onDecided(message: string) {
     setDialog(null)
-    setDecided(message)
+    setDecided((n) => n + 1)
+    toast.success(message)
   }
 
   let body
@@ -158,7 +166,7 @@ export function PendingGatesPanel({
       pending.length === 0 ? (
         <EmptyState title="No gates are waiting for a decision" />
       ) : (
-        <ul className="divide-y divide-border" aria-label="Pending gates">
+        <ul className="divide-y divide-border/60" aria-label="Pending gates">
           {pending.map((gate) => (
             <PendingGateItem
               key={gate.id}
@@ -166,7 +174,6 @@ export function PendingGatesPanel({
               gate={gate}
               canDecide={canDecide}
               onOpen={(d) => {
-                setDecided(null)
                 setDialog(d)
               }}
             />
@@ -176,20 +183,13 @@ export function PendingGatesPanel({
   }
 
   return (
-    <section aria-labelledby="pending-gates-title" className="rounded-lg border border-border bg-surface-raised p-4">
-      <h2 id="pending-gates-title" ref={headingRef} tabIndex={-1} className="mb-3 text-lg font-semibold focus:outline-none">
+    <section id="pending-gates" aria-labelledby="pending-gates-title" className={`${panelClass} scroll-mt-24 p-4`}>
+      <h2 id="pending-gates-title" ref={headingRef} tabIndex={-1} className="mb-3 text-base focus:outline-none">
         Pending gates
       </h2>
       {!canDecide && gates.data?.some((g) => g.status === 'pending') && (
-        <p className="mb-2 text-sm text-muted">Only project Owners can decide gates.</p>
+        <p className="mb-2 text-sm text-muted-foreground">Only project Owners can decide gates.</p>
       )}
-      <div role="status" aria-live="polite">
-        {decided && (
-          <Alert tone="success" className="mb-3">
-            {decided}
-          </Alert>
-        )}
-      </div>
       {body}
 
       {dialog?.kind === 'escalation' && (

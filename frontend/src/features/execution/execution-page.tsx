@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { toast } from 'sonner'
 
 import { Alert } from '../../components/ui/alert'
 import { Badge, type BadgeTone } from '../../components/ui/badge'
@@ -34,6 +35,13 @@ const actionLabels: Record<ExecutionAction, { label: string; pending: string }> 
   start: { label: 'Start execution', pending: 'Starting…' },
   pause: { label: 'Pause execution', pending: 'Pausing…' },
   resume: { label: 'Resume execution', pending: 'Resuming…' },
+}
+
+/** SPEC 7.1: the async result of a control call, as a toast. */
+const controlToasts: Record<ExecutionAction, string> = {
+  start: 'Execution started.',
+  pause: 'Execution will pause after the current step.',
+  resume: 'Execution resumed.',
 }
 
 interface Control {
@@ -95,8 +103,8 @@ function controlFor(status: ExecutionRunStatus, state: ProjectState, hasPlan: bo
 function Stat({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="flex flex-col">
-      <dt className="text-xs text-muted">{term}</dt>
-      <dd className="text-lg font-semibold">{children}</dd>
+      <dt className="text-xs text-muted-foreground">{term}</dt>
+      <dd className="font-mono text-lg font-medium tabular-nums">{children}</dd>
     </div>
   )
 }
@@ -113,9 +121,9 @@ function ProgressSummary({
 }) {
   const c = state.execution
   return (
-    <section aria-labelledby="execution-progress" className="flex flex-col gap-3 rounded-lg border border-border bg-surface-raised p-4">
+    <section aria-labelledby="execution-progress" className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 id="execution-progress" className="text-lg font-semibold">
+        <h3 id="execution-progress" className="text-lg">
           Progress
         </h3>
         <Badge tone={runTones[status]}>{executionRunStatusLabels[status]}</Badge>
@@ -178,7 +186,7 @@ export function ExecutionPage() {
   const [controlError, setControlError] = useState<unknown>(null)
 
   const header = (
-    <h2 id="execution-title" className="mb-4 text-xl font-semibold">
+    <h2 id="execution-title" className="mb-4 text-xl">
       Execution
     </h2>
   )
@@ -221,6 +229,9 @@ export function ExecutionPage() {
   const run = (action: ExecutionAction) => {
     setControlError(null)
     control.mutate(action, {
+      onSuccess: () => {
+        toast.success(controlToasts[action])
+      },
       onError: (error) => {
         setControlError(error)
       },
@@ -250,7 +261,7 @@ export function ExecutionPage() {
               </Button>
             </div>
             {ctl.disabledReason && (
-              <p id="execution-control-reason" className="text-sm text-muted">
+              <p id="execution-control-reason" className="text-sm text-muted-foreground">
                 {ctl.disabledReason}
               </p>
             )}
@@ -283,7 +294,7 @@ export function ExecutionPage() {
           </EmptyState>
         ) : (
           <section aria-labelledby="execution-steps-title" className="flex flex-col gap-3">
-            <h3 id="execution-steps-title" className="text-lg font-semibold">
+            <h3 id="execution-steps-title" className="text-lg">
               Steps of {artifactTypeLabels[plan.type].toLowerCase()} v{plan.version}
             </h3>
             <ol aria-label="Execution steps" className="flex flex-col gap-3">

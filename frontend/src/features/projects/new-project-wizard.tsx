@@ -2,13 +2,16 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useForm, useWatch, type Path } from 'react-hook-form'
+import { Check } from 'lucide-react'
 
 import type { Schemas } from '../../api/client'
 import { Alert, ErrorSummary } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
 import { RadioGroup } from '../../components/ui/radio-group'
+import { panelClass } from '../../components/shared/panel-class'
 import { PageHeader } from '../../components/ui/states'
+import { cn } from '../../lib/utils'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { TextField } from '../../components/ui/text-field'
 import { errorMessage, isApiError } from '../../lib/errors'
@@ -185,7 +188,7 @@ export function NewProjectWizard() {
       <form
         noValidate
         aria-labelledby="wizard-step-title"
-        className="max-w-2xl"
+        className={cn(panelClass, 'max-w-2xl p-4 sm:p-6')}
         onSubmit={(e) => {
           if (step < LAST_STEP) {
             e.preventDefault()
@@ -199,7 +202,7 @@ export function NewProjectWizard() {
           id="wizard-step-title"
           ref={headingRef}
           tabIndex={-1}
-          className="mb-4 text-xl font-semibold focus:outline-none"
+          className="mb-4 text-xl focus:outline-none"
         >
           Step {step + 1} of {steps.length}: {current?.title}
         </h2>
@@ -388,20 +391,37 @@ export function NewProjectWizard() {
 
 function StepIndicator({ current }: { current: number }) {
   return (
-    <ol aria-label="Wizard steps" className="mb-6 flex flex-wrap gap-2 text-sm">
+    <ol aria-label="Wizard steps" className="mb-6 flex flex-wrap items-center gap-2 text-sm">
       {steps.map((s, index) => (
         <li
           key={s.title}
           aria-current={index === current ? 'step' : undefined}
-          className={
-            'rounded-md border px-3 py-1 ' +
-            (index === current
-              ? 'border-primary bg-primary font-semibold text-on-primary'
+          className={cn(
+            'flex min-h-9 items-center gap-2 rounded-full border px-3',
+            index === current
+              ? 'border-primary/60 bg-primary/10 font-medium text-foreground'
               : index < current
-                ? 'border-border bg-surface text-fg'
-                : 'border-border text-muted')
-          }
+                ? 'border-border/60 bg-card/60 text-foreground'
+                : 'border-dashed border-border/60 text-muted-foreground',
+          )}
         >
+          <span
+            aria-hidden
+            className={cn(
+              'flex size-5 items-center justify-center rounded-full font-mono text-[11px]',
+              index === current
+                ? 'bg-primary text-primary-foreground'
+                : index < current
+                  ? 'bg-success/20 text-success'
+                  : 'bg-muted text-muted-foreground',
+            )}
+          >
+            {index < current ? (
+              <Check className="size-3" />
+            ) : index === current ? (
+              <span className="size-1.5 rounded-full bg-primary-foreground" />
+            ) : null}
+          </span>
           <span className="sr-only">{index < current ? 'Completed: ' : ''}</span>
           {index + 1}. {s.title}
         </li>
@@ -413,7 +433,7 @@ function StepIndicator({ current }: { current: number }) {
 function SummaryRow({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="grid gap-1 py-2 sm:grid-cols-3">
-      <dt className="text-sm font-medium text-muted">{term}</dt>
+      <dt className="text-sm font-medium text-muted-foreground">{term}</dt>
       <dd className="whitespace-pre-wrap break-words sm:col-span-2">{children}</dd>
     </div>
   )
@@ -426,7 +446,7 @@ function SummarySection({ title, step, onEdit, children }: {
   children: ReactNode
 }) {
   return (
-    <section aria-label={title} className="rounded-lg border border-border p-4">
+    <section aria-label={title} className="rounded-lg border border-border/60 bg-background/40 p-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-semibold">{title}</h3>
         <Button
@@ -439,7 +459,7 @@ function SummarySection({ title, step, onEdit, children }: {
           Edit
         </Button>
       </div>
-      <dl className="divide-y divide-border">{children}</dl>
+      <dl className="divide-y divide-border/60">{children}</dl>
     </section>
   )
 }

@@ -1,50 +1,96 @@
-import { Link, useMatchRoute } from '@tanstack/react-router'
+import { Link, useMatchRoute, useRouterState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
+import { EmptyState } from '../../components/shared/empty-state'
+import { panelClass } from '../../components/shared/panel-class'
+import { SkeletonPage } from '../../components/shared/skeletons'
 import { buttonClasses } from '../../components/ui/button-classes'
-import { ErrorState, ForbiddenState, LoadingState } from '../../components/ui/states'
+import { Skeleton } from '../../components/ui/skeleton'
+import { ErrorState, ForbiddenState } from '../../components/ui/states'
 import { isApiError } from '../../lib/errors'
-import { ProjectLive } from '../live/live-indicator'
+import { canInProject, effectiveProjectRole } from '../../lib/permissions'
 import { useDocumentTitle } from '../../lib/use-document-title'
-import { PhaseTimeline, StatusBadge } from './project-badges'
+import { cn } from '../../lib/utils'
+import { useCurrentUser } from '../auth/auth-api'
+import { actionHref, nextAction } from '../lifecycle/next-action'
+import { NextActionButton } from '../lifecycle/next-action-button'
+import { stageFromPath } from '../lifecycle/stage-nav'
+import { StageNavButtons, StageStepper } from '../lifecycle/stage-stepper'
+import { matchesHref } from '../shell/nav-config'
+import { stageStatuses } from '../shell/stage-states'
+import { PhaseBadge, StatusBadge } from './project-badges'
 import { ProjectContext } from './project-context'
-import { useProject } from './projects-api'
-
-const tabs = [
-  { to: '/projects/$projectId', label: 'Overview', exact: true },
-  { to: '/projects/$projectId/refinement', label: 'Refinement', exact: false },
-  { to: '/projects/$projectId/artifacts', label: 'Artifacts', exact: false },
-  { to: '/projects/$projectId/execution', label: 'Execution', exact: false },
-  { to: '/projects/$projectId/review', label: 'Review', exact: false },
-  { to: '/projects/$projectId/runs', label: 'Runs', exact: false },
-  { to: '/projects/$projectId/settings', label: 'Settings', exact: false },
-] as const
+import { useProject, useProjectState, type Project } from './projects-api'
 
 function ProjectNotFound() {
   useDocumentTitle('Project not found')
   return (
-    <section aria-labelledby="project-not-found" className="py-6">
-      <h1 id="project-not-found" className="text-2xl font-semibold tracking-tight">
-        Project not found
-      </h1>
-      <p className="mt-2 text-muted">
-        It may have been deleted, or you may not be a member. Ask a project Owner to add you.
-      </p>
-      <Link to="/projects" className={buttonClasses('secondary', 'mt-4')}>
-        Back to projects
-      </Link>
-    </section>
+    <EmptyState
+      variant="no_data"
+      headingLevel={1}
+      title="Project not found"
+      description="It may have been deleted, or you may not be a member. Ask a project Owner to add you."
+      action={
+        <Link to="/projects" className={buttonClasses('secondary')}>
+          Back to projects
+        </Link>
+      }
+      className="my-6"
+    />
   )
 }
 
-/** /projects/:id layout: loads the project, shows its header and section links, and handles 403/404. */
+/**
+ * FR-54 project header: name, phase and status, the version (the version switcher joins here with FR-62), the
+ * primary next-action button, and the horizontal stage stepper with Previous / Next stage. The Overview shows the
+ * next action in its own card, so the header leaves the button out there.
+ */
+function ProjectHeader({ project, onOverview }: { project: Project; onOverview: boolean }) {
+  const state = useProjectState(project.id)
+  const user = useCurrentUser()
+  const role = effectiveProjectRole(user, project.myRole)
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const viewing = stageFromPath(pathname)
+  const action = state.data ? nextAction(state.data, (c) => canInProject(user, role, c)) : null
+  // The page on screen already holds the control the action links to (e.g. "Start execution" on Execution).
+  const actionHere =
+    action !== null && action.key !== 'advance' && matchesHref(pathname, actionHref(action, project.id), true)
+
+  return (
+    <header className="mb-6 flex flex-col gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl break-words sm:text-3xl">{project.name}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <PhaseBadge phase={project.currentPhase} />
+            <StatusBadge status={project.status} />
+            <span className="font-mono tabular-nums">{`Version ${String(project.projectVersion)}`}</span>
+          </div>
+        </div>
+        {!onOverview && action && !actionHere && <NextActionButton projectId={project.id} action={action} className="shrink-0" />}
+      </div>
+      <div className={cn(panelClass, 'flex flex-col gap-2 p-2 md:flex-row md:items-center md:justify-between')}>
+        {state.data ? (
+          <StageStepper projectId={project.id} stages={stageStatuses(state.data)} viewing={viewing} />
+        ) : (
+          <Skeleton className="h-11 w-full max-w-2xl" />
+        )}
+        <StageNavButtons projectId={project.id} from={viewing ?? state.data?.phase ?? project.currentPhase} />
+      </div>
+    </header>
+  )
+}
+
+/**
+ * /projects/:id layout: loads the project, shows its header (FR-54) and handles 403/404. The section links live in
+ * the sidebar project mode; the live indicator sits in the shell header.
+ */
 export function ProjectLayout({ projectId, children }: { projectId: string; children: ReactNode }) {
   const project = useProject(projectId)
-  // The Overview renders the detailed phase timeline itself, so the compact one is shown on the other sections only.
   const onOverview = Boolean(useMatchRoute()({ to: '/projects/$projectId', params: { projectId } }))
 
   if (project.isPending) {
-    return <LoadingState label="Loading project…" />
+    return <SkeletonPage />
   }
   if (project.isError) {
     if (isApiError(project.error, 'NOT_FOUND')) {
@@ -56,35 +102,9 @@ export function ProjectLayout({ projectId, children }: { projectId: string; chil
     return <ErrorState error={project.error} onRetry={() => void project.refetch()} title="The project couldn't load" />
   }
 
-  const p = project.data
   return (
-    <ProjectContext value={p}>
-      <header className="mb-6 flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="break-words text-2xl font-semibold tracking-tight">{p.name}</h1>
-          <StatusBadge status={p.status} />
-          <span className="text-sm text-muted">Version {p.projectVersion}</span>
-          <ProjectLive projectId={projectId} />
-        </div>
-        {!onOverview && <PhaseTimeline current={p.currentPhase} />}
-        <nav aria-label="Project sections">
-          <ul className="flex flex-wrap gap-1 border-b border-border">
-            {tabs.map((tab) => (
-              <li key={tab.to}>
-                <Link
-                  to={tab.to}
-                  params={{ projectId }}
-                  activeOptions={{ exact: tab.exact, includeSearch: false }}
-                  className="-mb-px inline-flex min-h-10 items-center border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted hover:text-fg"
-                  activeProps={{ className: 'border-primary! text-fg!', 'aria-current': 'page' }}
-                >
-                  {tab.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      </header>
+    <ProjectContext value={project.data}>
+      <ProjectHeader project={project.data} onOverview={onOverview} />
       {children}
     </ProjectContext>
   )

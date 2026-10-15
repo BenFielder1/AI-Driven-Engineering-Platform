@@ -42,13 +42,13 @@ function DeadLetterRow({ item, onRetry }: { item: DeadLetter; onRetry: () => voi
   const label = jobTypeLabel(item.type)
   const deadAt = item.deadLetteredAt ?? item.createdAt
   return (
-    <tr className="border-b border-border last:border-b-0">
+    <tr className="border-b border-border/40 transition-colors last:border-b-0 hover:bg-muted/40">
       <th scope="row" className={`${bodyCell} text-left font-normal`}>
         <span className="font-medium">{label}</span>
-        <code className="mt-0.5 block text-xs text-muted">{item.id}</code>
+        <code className="mt-0.5 block text-xs text-muted-foreground">{item.id}</code>
         <details className="mt-1">
-          <summary className="cursor-pointer text-xs text-link underline underline-offset-4">Payload</summary>
-          <pre className="mt-1 max-h-60 max-w-md overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-canvas p-2 text-xs">
+          <summary className="cursor-pointer text-xs text-primary underline underline-offset-4">Payload</summary>
+          <pre className="mt-1 max-h-60 max-w-md overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-background/60 p-2 font-mono text-xs">
             {JSON.stringify(item.payload, null, 2)}
           </pre>
         </details>
@@ -64,7 +64,7 @@ function DeadLetterRow({ item, onRetry }: { item: DeadLetter; onRetry: () => voi
         {item.lastError ? (
           <p className="whitespace-pre-wrap break-words text-xs">{item.lastError}</p>
         ) : (
-          <span className="text-muted">No error recorded</span>
+          <span className="text-muted-foreground">No error recorded</span>
         )}
       </td>
       <td className={bodyCell}>
@@ -76,7 +76,7 @@ function DeadLetterRow({ item, onRetry }: { item: DeadLetter; onRetry: () => voi
             Retry
           </Button>
         ) : (
-          <span className="text-xs text-muted">Already retried</span>
+          <span className="text-xs text-muted-foreground">Already retried</span>
         )}
       </td>
     </tr>
@@ -141,7 +141,7 @@ export function AdminDeadLettersPage({
 
   return (
     <section aria-labelledby="admin-dead-letters-title">
-      <h2 id="admin-dead-letters-title" className="mb-4 text-xl font-semibold">
+      <h2 id="admin-dead-letters-title" className="mb-4 text-xl">
         Dead letters
       </h2>
       <FilterForm label="Filter dead letters" onSubmit={(e) => void onSubmit(e)} onClear={clear}>
@@ -160,7 +160,7 @@ export function AdminDeadLettersPage({
         </SelectField>
         <div className="flex items-end">
           <label className="flex min-h-10 items-center gap-2 text-sm font-medium">
-            <input type="checkbox" className="h-4 w-4" {...register('includeRetried')} />
+            <input type="checkbox" className="size-4 accent-primary" {...register('includeRetried')} />
             Include dead letters already retried
           </label>
         </div>

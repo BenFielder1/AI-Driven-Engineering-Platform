@@ -90,7 +90,7 @@ function NewTokenNotice({ token, onDone }: { token: CreatedApiToken; onDone: () 
             onFocus={(e) => {
               e.currentTarget.select()
             }}
-            className="min-h-10 w-full rounded-md border border-field-border bg-canvas px-3 py-2 font-mono text-sm text-fg"
+            className="min-h-10 w-full rounded-md border border-field-border bg-background px-3 py-2 font-mono text-sm text-foreground"
           />
         </div>
         <Button variant="secondary" onClick={() => void copy()}>
@@ -209,11 +209,11 @@ export function ApiTokensSection() {
   }
 
   return (
-    <section aria-labelledby="tokens-title" className="rounded-lg border border-border bg-surface-raised p-5">
-      <h2 id="tokens-title" className="text-lg font-semibold">
+    <section aria-labelledby="tokens-title" className="rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-5">
+      <h2 id="tokens-title" className="text-lg">
         API tokens
       </h2>
-      <p className="mb-4 mt-1 text-sm text-muted">
+      <p className="mb-4 mt-1 text-sm text-muted-foreground">
         Personal tokens let the <code>aide</code> CLI act as you. Treat them like passwords.
       </p>
 
@@ -240,7 +240,7 @@ export function ApiTokensSection() {
         <EmptyState title="No tokens yet">Create one above to use the CLI.</EmptyState>
       )}
       {tokens.isSuccess && tokens.data.length > 0 && (
-        <ul className="divide-y divide-border rounded-md border border-border" aria-label="API tokens">
+        <ul className="divide-y divide-border/60 rounded-lg border border-border/60" aria-label="API tokens">
           {tokens.data.map((token) => {
             const status = tokenStatus(token)
             return (
@@ -251,13 +251,13 @@ export function ApiTokensSection() {
                     <span
                       className={
                         'ml-1 rounded px-1.5 py-0.5 text-xs font-medium ' +
-                        (status === 'Active' ? 'bg-success-bg text-success' : 'bg-surface text-muted')
+                        (status === 'Active' ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground')
                       }
                     >
                       {status}
                     </span>
                   </p>
-                  <p className="text-sm text-muted">
+                  <p className="text-sm text-muted-foreground">
                     Created {formatDate(token.createdAt)} · Last used {formatDate(token.lastUsedAt)} · Expires{' '}
                     {token.expiresAt ? formatDate(token.expiresAt) : 'never'}
                   </p>
