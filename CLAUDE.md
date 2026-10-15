@@ -4,6 +4,18 @@ AIDE (AI-Driven Engineering Framework) coordinates specialised AI agents through
 
 **`SPEC.md` is the source of truth.** Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
 
+## Versions
+
+| Version | Spec | Build log | Status |
+| --- | --- | --- | --- |
+| v1 | [`docs/v1/SPEC.md`](docs/v1/SPEC.md) | [`docs/v1/PROGRESS.md`](docs/v1/PROGRESS.md) | Built and merged (PR #1). Frozen; never edit except to fix links |
+| v2 | [`SPEC.md`](SPEC.md) | `PROGRESS.md` (root; created by build-from-spec) | Current |
+
+- The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/v<N>/` and add a row here.
+- **v2 is an increment on the v1 codebase:** v1 requirements (FR-1–FR-52) stay in force unless `SPEC.md` amends them (its §3.0 lists the amendments). Requirement IDs continue across versions (v2 starts at FR-53), and the spec-verifier checks both versions' requirements.
+- v2 M0 is a baseline check (gate + deploy on `build/aide-v2`), not a scaffold. Never re-scaffold the repo.
+- Version assets (e.g. the logo in `docs/v2/brand/`) live under `docs/v<N>/`.
+
 This is a rewrite of the previous implementation in `../AIDE-Platform-old-stack/` (read-only; see `../WORKSPACE.md` for the rewrite rules and a map of where things live in the old code).
 
 ## Stack
@@ -47,7 +59,9 @@ deploy/
 scripts/ci/check-generated.sh  CI: fails if generated files differ from what is committed
 docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml
-SPEC.md · PROGRESS.md · CLAUDE.md
+SPEC.md · PROGRESS.md · CLAUDE.md   current version (v2)
+docs/v1/                    v1 SPEC.md + PROGRESS.md (frozen)
+docs/v2/brand/              AIDE logo source (aide-mark.svg, aide-logo.svg)
 ```
 
 ## Commands

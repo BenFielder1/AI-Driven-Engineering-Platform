@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 32" width="176" height="32" role="img" aria-labelledby="aide-logo-title">
+  <title id="aide-logo-title">AIDE — AI-Driven Engineering</title>
+  <!--
+    Horizontal lockup: the mark (see aide-mark.svg) plus a two-line wordmark.
+    The text colour follows prefers-color-scheme, so the file works on light and dark
+    backgrounds when used as an <img>. The in-app lockup is a React component (SPEC §7.1).
+  -->
+  <style>
+    .word { fill: #0b1020; font-family: Outfit, "DM Sans", system-ui, sans-serif; font-weight: 600; letter-spacing: -0.02em; }
+    .sub  { fill: #5b6275; font-family: "DM Sans", system-ui, sans-serif; font-weight: 500; }
+    @media (prefers-color-scheme: dark) {
+      .word { fill: #f4f6fb; }
+      .sub  { fill: #8a90a2; }
+    }
+  </style>
+  <defs>
+    <linearGradient id="aide-logo-gradient" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.5" y="0.5" width="31" height="31" rx="9" fill="url(#aide-logo-gradient)" fill-opacity="0.16"/>
+  <g fill="none" stroke="url(#aide-logo-gradient)" stroke-width="2.2" stroke-linecap="round">
+    <path d="M17.43 5.83 L24.10 9.68"/>
+    <path d="M25.53 12.15 L25.53 19.85"/>
+    <path d="M24.10 22.33 L17.43 26.18"/>
+    <path d="M14.57 26.18 L7.90 22.33"/>
+    <path d="M6.47 19.85 L6.47 12.15"/>
+    <path d="M7.90 9.68 L14.57 5.83"/>
+  </g>
+  <g fill="none" stroke="url(#aide-logo-gradient)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11.5 21 L16 10.5 L20.5 21"/>
+    <path d="M13.3 17.3 L18.7 17.3"/>
+  </g>
+  <circle cx="16" cy="5" r="1.9" fill="#22d3ee"/>
+  <text class="word" x="42" y="16" font-size="17">AIDE</text>
+  <text class="sub" x="42" y="28" font-size="9.5">AI-Driven Engineering</text>
+</svg>
