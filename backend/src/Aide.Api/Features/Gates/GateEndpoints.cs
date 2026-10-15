@@ -31,7 +31,7 @@ public static class GateEndpoints
 
         group.MapPost("/{gateId:guid}/approve", ApproveGate)
             .WithName("ApproveGate")
-            .WithSummary("Approve a pending gate (Owner). Applies the gated transition; escalation gates need a decision (continue, rollback with targetVersion, or accept). 409 GATE_NOT_PENDING, 400 INVALID_DECISION.")
+            .WithSummary("Approve a pending gate (Owner). Applies the gated transition; escalation gates need a decision (continue, rollback with targetCheckpoint, or accept). 409 GATE_NOT_PENDING, 400 INVALID_DECISION.")
             .Produces<GateDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status403Forbidden)

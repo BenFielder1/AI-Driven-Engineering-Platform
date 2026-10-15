@@ -14,13 +14,14 @@ public static class ExecutionQueries
 {
     /// <summary>
     /// The current plan: the most recently created locked plan (the implementation plan, or the optimisation plan of a
-    /// review cycle), as the lifecycle snapshot defines it.
+    /// review cycle) of the project's current release version (§4.10), as the lifecycle snapshot defines it.
     /// </summary>
-    public static Task<Guid?> CurrentPlanIdAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
+    public static async Task<Guid?> CurrentPlanIdAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Status == ArtifactStatus.Locked
+        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
+        return await db.Artifacts.AsNoTracking()
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Status == ArtifactStatus.Locked
                 && (a.Type == ArtifactType.ImplementationPlan || a.Type == ArtifactType.OptimizationPlan))
             .OrderByDescending(a => a.CreatedAt)
             .ThenByDescending(a => a.Id)

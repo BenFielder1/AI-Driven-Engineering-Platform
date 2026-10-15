@@ -112,8 +112,8 @@ public sealed class NotificationComposer(AideDbContext db)
                 : null,
             Decision = Text(root, "decision"),
             Tag = Text(root, "tag"),
-            FromVersion = Int(root, "fromVersion"),
-            TargetVersion = Int(root, "targetVersion"),
+            FromVersion = Int(root, "fromCheckpoint") ?? Int(root, "fromVersion"),
+            TargetVersion = Int(root, "targetCheckpoint") ?? Int(root, "targetVersion"),
             Reason = type == NotificationType.Rollback ? Text(root, "reason") : null,
         };
     }

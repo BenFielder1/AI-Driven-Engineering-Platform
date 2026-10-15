@@ -1,10 +1,15 @@
 using System.Security.Cryptography;
 using Aide.Api.Auth;
+using Aide.Api.Features.Execution;
 using Aide.Api.Features.Projects;
+using Aide.Api.Features.Release;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Gates;
+using Aide.Domain.Lifecycle;
+using Aide.Domain.Releases;
+using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Identity;
@@ -23,10 +28,11 @@ public sealed class SeedOptions
 }
 
 /// <summary>
-/// DEP-2 (§9): when <c>Seed:Enabled</c>, after the migrations have been applied (skipped while any are pending),
+/// DEP-2, DEP-V2 (§9): when <c>Seed:Enabled</c>, after the migrations have been applied (skipped while any are pending),
 /// idempotently creates the Admin <c>admin@aide.local</c> with a generated password, logged once at Warning (the
-/// only secret ever logged, so the operator can sign in), and a demo project in refinement using the Fake LLM
-/// provider and Local Git, owned by that Admin. An existing account with the seed email is left untouched (its
+/// only secret ever logged, so the operator can sign in), and a demo project using the Fake LLM provider and Local Git,
+/// owned by that Admin and <b>released at <see cref="DemoReleasedVersion"/></b> (its Local repository tagged
+/// <c>v0.1.0</c>), so "Start new version" (FR-60) can be tried at once. An existing account with the seed email is left untouched (its
 /// password is never reset); other Admins don't matter. The demo project is created once per database: a
 /// <see cref="EventTypes.DemoProjectSeeded"/> marker event records it, so deleting the demo doesn't bring it back.
 /// </summary>
@@ -36,6 +42,12 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     public const string AdminName = "AIDE Admin";
     public const string DemoProjectName = "Demo: Todo API";
     public const int PasswordLength = 20;
+
+    /// <summary>DEP-V2: the version the demo project is seeded as released at.</summary>
+    public const string DemoReleasedVersion = "0.1.0";
+
+    /// <summary>The reason recorded on the demo's seeded transition into release.</summary>
+    public const string DemoReleasedReason = "Demo project seeded as released 0.1.0";
 
     public const string DemoIdea =
         "A small REST API for a personal todo list. Users can create, list, update, complete and delete todos; each todo has a title, optional notes, an optional due date and a done flag. Lists can be filtered by done/not done and sorted by due date. Data is stored in a relational database, and the API is documented with OpenAPI.";
@@ -174,7 +186,80 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
 
         AddMarker(services, db, created.Value.Id);
         await db.SaveChangesAsync(cancellationToken);
+        await MarkDemoReleasedAsync(services, db, created.Value, cancellationToken);
         return created.Value.Id;
+    }
+
+    /// <summary>
+    /// DEP-V2: the demo starts released at 0.1.0. Its Local repository is created (initial commit on the default branch)
+    /// and tagged <c>v0.1.0</c>; the first release version becomes <c>released</c> with that tag and commit, a succeeded
+    /// release attempt is recorded, and the project is put in release / released with one seeded state transition (a seed
+    /// shortcut: no agent work is faked). If the repository can't be created (no git CLI), the version is still released
+    /// without a commit, so the database stays consistent.
+    /// </summary>
+    private static async Task MarkDemoReleasedAsync(IServiceProvider services, AideDbContext db, Project project, CancellationToken cancellationToken)
+    {
+        var now = services.GetRequiredService<TimeProvider>().GetUtcNow();
+        var version = await db.ReleaseVersions.FirstAsync(v => v.Id == project.CurrentReleaseVersionId, cancellationToken);
+        var tag = ReleaseRecords.TagFor(version.TagPrefix, DemoReleasedVersion);
+        string? commit = null;
+        try
+        {
+            var prepared = await services.GetRequiredService<WorkingCopyPreparer>().PrepareAsync(project.Id, cancellationToken);
+            if (prepared.IsSuccess)
+            {
+                var workingCopies = services.GetRequiredService<IWorkingCopies>();
+                var settings = await db.ProjectGitSettings.AsNoTracking().FirstAsync(s => s.ProjectId == project.Id, cancellationToken);
+                commit = await workingCopies.ResolveCommitAsync(project.Id, $"refs/heads/{settings.DefaultBranch}", cancellationToken);
+                if (commit is not null)
+                {
+                    await workingCopies.CreateTagAsync(project.Id, tag, commit, ReleaseRules.TagMessage(project.Name, tag, DemoReleasedVersion), cancellationToken);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException or UnauthorizedAccessException)
+        {
+            LogDemoRepositoryFailed(services.GetRequiredService<ILogger<DevSeeder>>(), ex, project.Id);
+            commit = null;
+        }
+
+        await db.Entry(version).ReloadAsync(cancellationToken);
+        version.Version = DemoReleasedVersion;
+        version.Status = ReleaseVersionStatus.Released;
+        version.Tag = tag;
+        version.MergeCommitSha = commit;
+        version.ReleasedAt = now;
+
+        var tracked = await db.Projects.FirstAsync(p => p.Id == project.Id, cancellationToken);
+        tracked.CurrentPhase = Phase.Release;
+        tracked.Status = ProjectStatus.Released;
+        tracked.ReleasedVersion = DemoReleasedVersion;
+        tracked.DevelopmentVersion = null;
+        tracked.UpdatedAt = now;
+        db.StateTransitions.Add(new StateTransition
+        {
+            ProjectId = project.Id,
+            ReleaseVersionId = version.Id,
+            FromPhase = Phase.Refinement,
+            ToPhase = Phase.Release,
+            Actor = SystemActor.Name,
+            Reason = DemoReleasedReason,
+            Checkpoint = tracked.Checkpoint,
+            CreatedAt = now,
+        });
+        db.Releases.Add(new Release
+        {
+            ProjectId = project.Id,
+            ReleaseVersionId = version.Id,
+            Checkpoint = tracked.Checkpoint,
+            Tag = tag,
+            MergeCommitSha = commit,
+            Status = ReleaseStatus.Succeeded,
+            Attempt = 1,
+            CreatedAt = now,
+            CompletedAt = now,
+        });
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static void AddMarker(IServiceProvider services, AideDbContext db, Guid projectId) =>
@@ -234,6 +319,9 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Dev seed could not create the admin account ({Errors})")]
     private static partial void LogAdminFailed(ILogger logger, string errors);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Dev seed could not create the Local repository of demo project {ProjectId}; it is released without a tagged commit")]
+    private static partial void LogDemoRepositoryFailed(ILogger logger, Exception exception, Guid projectId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Dev seed failed")]
     private static partial void LogSeedFailed(ILogger logger, Exception exception);

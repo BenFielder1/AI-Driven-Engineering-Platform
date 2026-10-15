@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Projects;
+using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
@@ -109,7 +110,8 @@ public static class ExecutionEndpoints
         AideDbContext db,
         CancellationToken cancellationToken,
         [Range(1, int.MaxValue)] int? planVersion = null,
-        [WireEnum(typeof(ArtifactType))] string? planType = null)
+        [WireEnum(typeof(ArtifactType))] string? planType = null,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -117,7 +119,13 @@ public static class ExecutionEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        if (planType is null && planVersion is null)
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
+        if (planType is null && planVersion is null && releaseVersionId is null)
         {
             // The current plan (FR-30, FR-40): the newest locked plan of either type, as the execution runner sees it.
             var currentId = await ExecutionQueries.CurrentPlanIdAsync(db, id, cancellationToken);
@@ -133,7 +141,10 @@ public static class ExecutionEndpoints
             return ApiProblems.Validation(new Dictionary<string, string[]> { ["planType"] = ["Steps belong to implementation_plan or optimization_plan versions."] });
         }
 
-        var plans = db.Artifacts.AsNoTracking().Where(a => a.ProjectId == id && a.Type == type);
+        // A plan version number names one plan (numbers are per project); without one, the latest locked plan of the release
+        // version (§6 Notes: default the version in development, else the latest released).
+        var versionId = scope.Value;
+        var plans = db.Artifacts.AsNoTracking().Where(a => a.ProjectId == id && a.Type == type && (planVersion != null || a.ReleaseVersionId == versionId));
         var plan = planVersion is { } version
             ? await plans.FirstOrDefaultAsync(a => a.Version == version, cancellationToken)
             : await plans.Where(a => a.Status == ArtifactStatus.Locked).OrderByDescending(a => a.Version).FirstOrDefaultAsync(cancellationToken);

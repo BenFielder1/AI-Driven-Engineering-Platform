@@ -89,7 +89,7 @@ public sealed partial class RefinementService(
 
         var job = await jobs.EnqueueAsync(
             JobTypes.IdeaRefinement,
-            new LifecycleJobPayload(projectId, project.ProjectVersion, LifecycleJobPayload.UserRequested, Answers: resolved.Value),
+            new LifecycleJobPayload(projectId, project.Checkpoint, LifecycleJobPayload.UserRequested, Answers: resolved.Value),
             projectId,
             cancellationToken,
             now);
@@ -143,8 +143,14 @@ public sealed partial class RefinementService(
     /// <summary>The project's latest refinement rounds, newest first, with their runs, answers and drafts.</summary>
     private async Task<IReadOnlyList<Round>> LoadRoundsAsync(Guid projectId, CancellationToken cancellationToken)
     {
+        // §4.10: the rounds of the current release version only (they started after it did).
+        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
+        var since = await db.ReleaseVersions.AsNoTracking()
+            .Where(v => v.Id == versionId)
+            .Select(v => (DateTimeOffset?)v.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken) ?? DateTimeOffset.MinValue;
         var roundJobs = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.IdeaRefinement)
+            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.IdeaRefinement && j.CreatedAt >= since)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
             .Take(RoundsRead)

@@ -99,12 +99,60 @@ public class RollbackRulesTests
     }
 
     [Fact]
-    public void FR44_Released_project_can_roll_back_to_review()
+    public void FR44_amended_by_FR63_A_released_version_is_closed_ROLLBACK_BLOCKED_version_released()
     {
-        RecordedTransition[] history = [.. History, new(8, Phase.Release, T0.AddMinutes(9)), new(9, Phase.Release, T0.AddMinutes(10))];
-        var request = Request(7) with { Current = new LifecycleState(Phase.Release, ProjectStatus.Released, 9), Transitions = history };
+        // v1 allowed rolling a released project back to review; since v2 (D-V2-3) a released version is closed.
+        RecordedTransition[] history = [.. History, new(8, Phase.Release, T0.AddMinutes(9))];
+        var request = Request(7) with { Current = new LifecycleState(Phase.Release, ProjectStatus.Released, 8), Transitions = history, VersionReleased = true };
 
-        Assert.Equal(Phase.Review, RollbackRules.Plan(request).Value.Transition.To);
+        var error = RollbackRules.Plan(request).Error!;
+        Assert.Equal((ErrorCodes.RollbackBlocked, "reason: version_released"), (error.Code, Assert.Single(error.Details)));
+    }
+
+    [Fact]
+    public void S4_10_A_version_awaiting_merge_is_ROLLBACK_BLOCKED_release_partially_applied()
+    {
+        var error = RollbackRules.Plan(Request() with { AwaitingMerge = true }).Error!;
+
+        Assert.Equal((ErrorCodes.RollbackBlocked, "reason: release_partially_applied"), (error.Code, Assert.Single(error.Details)));
+    }
+
+    [Fact]
+    public void S4_10_A_closed_version_is_refused_before_the_target_is_checked()
+    {
+        // Even an invalid target reports the useful reason: start a new version.
+        Assert.Equal("reason: version_released", Assert.Single(RollbackRules.Plan(Request(99) with { VersionReleased = true }).Error!.Details));
+        Assert.Equal(ErrorCodes.InvalidTargetVersion, RollbackRules.Plan(Request(99)).Error!.Code);
+    }
+
+    [Fact]
+    public void FR63_Version_1_2_0_at_checkpoint_5_in_review_offers_checkpoints_1_to_4()
+    {
+        // The caller passes only the transitions of the version in development (1.2.0).
+        RecordedTransition[] v120 =
+        [
+            new(1, Phase.Refinement, T0),
+            new(2, Phase.Specification, T0.AddMinutes(1)),
+            new(3, Phase.Planning, T0.AddMinutes(2)),
+            new(4, Phase.Execution, T0.AddMinutes(3)),
+            new(5, Phase.Review, T0.AddMinutes(4)),
+        ];
+
+        var checkpoints = RollbackRules.Versions(v120, 5, Phase.Review, T0);
+
+        Assert.Equal([1, 2, 3, 4], checkpoints.Where(c => c.RollbackAllowed).Select(c => c.Version).Order());
+        Assert.Equal(VersionBlock.CurrentVersion, checkpoints[0].Block);
+    }
+
+    [Fact]
+    public void FR63_Every_checkpoint_of_a_released_version_is_blocked()
+    {
+        RecordedTransition[] released = [.. History, new(8, Phase.Release, T0.AddMinutes(9))];
+
+        var checkpoints = RollbackRules.Versions(released, 8, Phase.Release, T0, versionReleased: true);
+
+        Assert.All(checkpoints, c => Assert.False(c.RollbackAllowed));
+        Assert.Equal(VersionBlock.VersionReleased, checkpoints.Single(c => c.Version == 7).Block);
     }
 
     [Fact]

@@ -111,14 +111,14 @@ type EscalationFormValues = z.input<ReturnType<typeof escalationSchema>>
 export function EscalationDialog({
   projectId,
   gate,
-  currentVersion,
+  currentCheckpoint,
   onClose,
   onDecided,
   fallbackFocusRef,
 }: {
   projectId: string
   gate: Gate
-  currentVersion: number
+  currentCheckpoint: number
   onClose: () => void
   onDecided: (message: string) => void
   fallbackFocusRef?: RefObject<HTMLElement | null>
@@ -127,7 +127,7 @@ export function EscalationDialog({
   const [serverError, setServerError] = useState<string | null>(null)
   const ids = {
     decision: `gate-${gate.id}-decision`,
-    targetVersion: `gate-${gate.id}-target`,
+    targetCheckpoint: `gate-${gate.id}-target`,
     comment: `gate-${gate.id}-comment`,
   } as const
   const {
@@ -137,14 +137,14 @@ export function EscalationDialog({
     control,
     formState: { errors, isSubmitted },
   } = useForm<EscalationFormValues, unknown, EscalationValues>({
-    resolver: zodResolver(escalationSchema(currentVersion)),
-    defaultValues: { decision: '', targetVersion: '', comment: '' },
+    resolver: zodResolver(escalationSchema(currentCheckpoint)),
+    defaultValues: { decision: '', targetCheckpoint: '', comment: '' },
   })
   const decision = useWatch({ control, name: 'decision' })
-  const target = useWatch({ control, name: 'targetVersion' }).trim()
-  // §7: rollback is destructive, so the dialog becomes an alertdialog with a danger submit naming the version.
+  const target = useWatch({ control, name: 'targetCheckpoint' }).trim()
+  // §7: rollback is destructive, so the dialog becomes an alertdialog with a danger submit naming the checkpoint.
   const isRollback = decision === 'rollback'
-  const rollbackLabel = /^\d+$/.test(target) ? `Roll back to v${target}` : 'Roll back'
+  const rollbackLabel = /^\d+$/.test(target) ? `Roll back to checkpoint ${target}` : 'Roll back'
   // FR-33: a blocked execution step can be retried (continue) or rolled back; accept does nothing there, so it's hidden.
   const stepBlocked = gate.escalationReason === 'step_blocked'
   const stepLabel = gate.stepNumber === null ? 'An execution step' : `Step ${String(gate.stepNumber)}`
@@ -155,7 +155,7 @@ export function EscalationDialog({
     const body = {
       decision: values.decision,
       comment,
-      targetVersion: values.decision === 'rollback' ? Number(values.targetVersion.trim()) : null,
+      targetCheckpoint: values.decision === 'rollback' ? Number(values.targetCheckpoint.trim()) : null,
     }
     approve.mutate(
       { gateId: gate.id, body },
@@ -165,12 +165,12 @@ export function EscalationDialog({
             stepBlocked && values.decision === 'continue'
               ? `Escalation decided: ${stepLabel.toLowerCase()} will be retried.`
               : values.decision === 'rollback'
-              ? `Escalation decided: roll back to version ${values.targetVersion.trim()}.`
+              ? `Escalation decided: roll back to checkpoint ${values.targetCheckpoint.trim()}.`
               : `Escalation decided: ${escalationDecisionLabels[values.decision].toLowerCase()}.`,
           )
         },
         onError: (error) => {
-          const unmatched = applyFieldErrors(error, setError, ['targetVersion', 'comment', 'decision'])
+          const unmatched = applyFieldErrors(error, setError, ['targetCheckpoint', 'comment', 'decision'])
           setServerError(
             unmatched.length > 0
               ? unmatched.join(' ')
@@ -187,7 +187,7 @@ export function EscalationDialog({
       title="Decide the escalation"
       description={
         stepBlocked
-          ? `${stepLabel} was rejected by the Execution Guardian on every attempt and is blocked. Continue retries it with fresh attempts; roll back returns the project to an earlier version.`
+          ? `${stepLabel} was rejected by the Execution Guardian on every attempt and is blocked. Continue retries it with fresh attempts; roll back returns the project to an earlier checkpoint.`
           : gate.escalationReason
             ? `Review needs a human decision before the project can continue. Reason: ${escalationReasonLabels[gate.escalationReason]}.`
             : 'Review needs a human decision before the project can continue.'
@@ -214,17 +214,17 @@ export function EscalationDialog({
         />
         {decision === 'rollback' && (
           <TextField
-            id={ids.targetVersion}
-            label="Roll back to version"
+            id={ids.targetCheckpoint}
+            label="Roll back to checkpoint"
             hint={
-              currentVersion > 1
-                ? `A version from 1 to ${String(currentVersion - 1)} (the project is at version ${String(currentVersion)}).`
-                : 'The project is at version 1, so there is nothing earlier.'
+              currentCheckpoint > 1
+                ? `A checkpoint from 1 to ${String(currentCheckpoint - 1)} (the project is at checkpoint ${String(currentCheckpoint)}).`
+                : 'The project is at checkpoint 1, so there is nothing earlier.'
             }
             inputMode="numeric"
             autoComplete="off"
-            error={errors.targetVersion?.message}
-            {...register('targetVersion')}
+            error={errors.targetCheckpoint?.message}
+            {...register('targetCheckpoint')}
           />
         )}
         <TextAreaField

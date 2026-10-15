@@ -20,6 +20,7 @@ using Aide.Api.Features.Review;
 using Aide.Api.Features.Rollback;
 using Aide.Api.Features.Runs;
 using Aide.Api.Features.Tokens;
+using Aide.Api.Features.Versions;
 using Aide.Api.Health;
 using Aide.Api.Jobs;
 using Aide.Api.Json;
@@ -157,6 +158,7 @@ builder.Services.AddReview();
 // Release and rollback (FR-42–FR-45): the release job, retries, rollback, history and versions.
 builder.Services.AddReleases();
 builder.Services.AddScoped<RollbackService>();
+builder.Services.AddReleaseVersions();
 
 // Notifications (FR-47–FR-49, FR-15): fan-out job, channels, delivery retries, gate reminders, one-click approval links.
 builder.Services.AddNotifications();
@@ -202,6 +204,7 @@ app.MapGitEndpoints();
 app.MapReviewEndpoints();
 app.MapReleaseEndpoints();
 app.MapRollbackEndpoints();
+app.MapVersionEndpoints();
 app.MapNotificationEndpoints();
 app.MapApprovalEndpoints();
 app.MapLiveEndpoints();

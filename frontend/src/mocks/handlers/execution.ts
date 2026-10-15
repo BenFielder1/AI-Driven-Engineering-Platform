@@ -5,6 +5,7 @@ import { antiforgeryFailure, nextId } from "./auth";
 import { problem } from "./problem";
 import {
   access,
+  currentVersionId,
   executionRunStatus,
   record,
   type Access,
@@ -257,7 +258,8 @@ export function seedExecution(
     content: planMarkdown(steps),
     contentHash: "sha256:plan",
     status: "locked",
-    projectVersionAtCreation: project.projectVersion,
+    releaseVersionId: currentVersionId(project),
+    checkpointAtCreation: project.checkpoint,
     author: { user: null, agentRunId: nextId() },
     approvedBy: null,
     approvedAt: "2026-09-01T10:00:00Z",
@@ -297,7 +299,8 @@ export function seedOptimizationPlan(
     content: planMarkdown(steps, "Optimisation plan"),
     contentHash: "sha256:optimisation-plan",
     status: "locked",
-    projectVersionAtCreation: project.projectVersion,
+    releaseVersionId: currentVersionId(project),
+    checkpointAtCreation: project.checkpoint,
     author: { user: null, agentRunId: nextId() },
     approvedBy: null,
     approvedAt: "2026-09-02T10:00:00Z",
@@ -520,7 +523,8 @@ export const executionHandlers = [
       );
     }
     const versionParam = q.get("planVersion");
-    const plans = a.project.artifacts.filter((x) => x.type === type);
+    const scope = q.get("releaseVersionId") ?? currentVersionId(a.project);
+    const plans = a.project.artifacts.filter((x) => x.type === type && x.releaseVersionId === scope);
     const plan =
       versionParam === null
         ? plans

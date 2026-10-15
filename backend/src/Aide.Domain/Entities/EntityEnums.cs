@@ -34,6 +34,35 @@ public enum ReleaseStatus
 
     /// <summary>The release job is queued or running (stored as <c>in_progress</c>; no schema change: enums are strings).</summary>
     InProgress = 2,
+
+    /// <summary>FR-65: the merge was refused (branch protection, reviews, checks); the merge poll completes it.</summary>
+    AwaitingMerge = 3,
+}
+
+/// <summary>Status of a release version (§4.10). Wire values: <c>in_development</c>, <c>awaiting_merge</c>, <c>released</c>, <c>imported</c>.</summary>
+public enum ReleaseVersionStatus
+{
+    InDevelopment = 0,
+    AwaitingMerge = 1,
+    Released = 2,
+
+    /// <summary>A baseline from import or migration; never developed in AIDE.</summary>
+    Imported = 3,
+}
+
+/// <summary>FR-65 merge strategy. Wire values: <c>aide_merges</c>, <c>manual</c>.</summary>
+public enum MergeStrategy
+{
+    AideMerges = 0,
+    Manual = 1,
+}
+
+/// <summary>Outcome of an execution step attempt (FR-57). Wire values: <c>accepted</c>, <c>rejected</c>, <c>error</c>.</summary>
+public enum StepAttemptOutcome
+{
+    Accepted = 0,
+    Rejected = 1,
+    Error = 2,
 }
 
 /// <summary>Per-channel delivery state of a notification (FR-49).</summary>

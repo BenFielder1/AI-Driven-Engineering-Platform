@@ -78,8 +78,10 @@ public sealed partial class ArtifactService(
 
         if (numbering.SupersededVersions.Count > 0)
         {
+            // §4.10, D-V2-3: only open drafts of the current release version are superseded; a closed version's drafts are
+            // history. Version numbers stay project-wide.
             var drafts = await db.Artifacts
-                .Where(a => a.ProjectId == projectId && a.Type == type && numbering.SupersededVersions.Contains(a.Version))
+                .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == project.CurrentReleaseVersionId && a.Type == type && numbering.SupersededVersions.Contains(a.Version))
                 .ToListAsync(cancellationToken);
             foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
             {
@@ -102,7 +104,8 @@ public sealed partial class ArtifactService(
             Content = content,
             ContentHash = ContentHash.Compute(content),
             Status = ArtifactStatus.Draft,
-            ProjectVersionAtCreation = project.ProjectVersion,
+            CheckpointAtCreation = project.Checkpoint,
+            ReleaseVersionId = project.CurrentReleaseVersionId ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = now,
         };
@@ -151,7 +154,15 @@ public sealed partial class ArtifactService(
         }
 
         var project = await db.Projects.FirstAsync(p => p.Id == projectId, cancellationToken);
-        var artifacts = await db.Artifacts.Where(a => a.ProjectId == projectId).ToListAsync(cancellationToken);
+        if (InOtherVersion(project, checkedArtifact) is { } baseline)
+        {
+            return Result.Failure<Artifact>(baseline);
+        }
+
+        // §4.10: the cascade works on the release version in development only; earlier versions' artifacts are baseline
+        // inputs and are never invalidated.
+        var versionId = checkedArtifact.ReleaseVersionId;
+        var artifacts = await db.Artifacts.Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId).ToListAsync(cancellationToken);
         var artifact = artifacts.Single(a => a.Id == artifactId);
         decided = ArtifactRules.Approve(artifact.Status);
         if (decided.IsFailure || !decided.Value.Changed)
@@ -161,7 +172,7 @@ public sealed partial class ArtifactService(
 
         // A draft written after the version the project was rolled back to is discarded work (the rollback's own
         // invalidation and the project's xmin normally catch it; this closes any gap).
-        var current = ArtifactRules.EnsureNotStale(artifact.ProjectVersionAtCreation, project.ProjectVersion);
+        var current = ArtifactRules.EnsureNotStale(artifact.CheckpointAtCreation, project.Checkpoint);
         if (current.IsFailure)
         {
             return Result.Failure<Artifact>(current.Error!);
@@ -169,7 +180,7 @@ public sealed partial class ArtifactService(
 
         // FR-30: a plan's execution steps are created from its aide-plan block when it is locked (once per plan version),
         // checked against the project's current files-per-step limit.
-        var steps = await db.ExecutionSteps.Where(s => s.ProjectId == projectId).ToListAsync(cancellationToken);
+        var steps = await db.ExecutionSteps.Where(s => s.ProjectId == projectId && s.ReleaseVersionId == versionId).ToListAsync(cancellationToken);
         IReadOnlyList<PlanStep> planSteps = [];
         if (IsPlan(artifact.Type) && !steps.Any(s => s.PlanArtifactId == artifact.Id))
         {
@@ -196,7 +207,7 @@ public sealed partial class ArtifactService(
             artifact.Id,
             artifact.Type,
             project.CurrentPhase,
-            [.. artifacts.Select(a => new ArtifactRef(a.Id, a.Type, a.Status, a.ProjectVersionAtCreation))],
+            [.. artifacts.Select(a => new ArtifactRef(a.Id, a.Type, a.Status, a.CheckpointAtCreation))],
             [.. steps.Select(s => new StepRef(s.Id, s.PlanArtifactId, s.Status))]);
 
         db.AddEvent(
@@ -245,7 +256,7 @@ public sealed partial class ArtifactService(
         var fellBack = false;
         if (cascade.Effect.FallbackPhase is { } fallback)
         {
-            var state = new LifecycleState(project.CurrentPhase, project.Status, project.ProjectVersion);
+            var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
             var reason = $"{artifact.Type.ToWire()} v{artifact.Version} approved; downstream work invalidated";
             var transition = LifecycleStateMachine.Apply(state, TransitionRequest.Fallback(fallback, reason), LifecycleSnapshot.Empty);
             if (transition.IsFailure)
@@ -265,7 +276,7 @@ public sealed partial class ArtifactService(
 
         foreach (var planStep in planSteps)
         {
-            var step = NewStep(projectId, artifact.Id, planStep);
+            var step = NewStep(projectId, artifact.ReleaseVersionId, artifact.Id, planStep);
             db.ExecutionSteps.Add(step);
             steps.Add(step);
         }
@@ -305,6 +316,11 @@ public sealed partial class ArtifactService(
         }
 
         var project = await db.Projects.FirstAsync(p => p.Id == projectId, cancellationToken);
+        if (InOtherVersion(project, checkedArtifact) is { } baseline)
+        {
+            return Result.Failure<Artifact>(baseline);
+        }
+
         var artifact = await db.Artifacts.FirstAsync(a => a.Id == artifactId, cancellationToken);
         decided = ArtifactRules.Reject(artifact.Type, artifact.Status, authoredByAgent);
         if (decided.IsFailure)
@@ -323,7 +339,7 @@ public sealed partial class ArtifactService(
         {
             var job = await jobs.EnqueueAsync(
                 JobTypes.ForAgent(agent),
-                new LifecycleJobPayload(projectId, project.ProjectVersion, LifecycleJobPayload.ArtifactRejected, cleanComment, ArtifactId: artifact.Id),
+                new LifecycleJobPayload(projectId, project.Checkpoint, LifecycleJobPayload.ArtifactRejected, cleanComment, ArtifactId: artifact.Id),
                 projectId,
                 cancellationToken,
                 now);
@@ -415,7 +431,7 @@ public sealed partial class ArtifactService(
                 ? steps.Count(s => s.PlanArtifactId == plan.Id && s.Status is not StepStatus.Invalidated and not StepStatus.Completed)
                 : 0,
         };
-        var state = new LifecycleState(project.CurrentPhase, project.Status, project.ProjectVersion);
+        var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
         var cycle = LifecycleStateMachine.Apply(
             state,
             TransitionRequest.ReviewCycle($"optimization_plan v{plan.Version} approved: re-entering execution"),
@@ -432,12 +448,24 @@ public sealed partial class ArtifactService(
         }
     }
 
+    /// <summary>
+    /// §4.10: only artifacts of the release version in development can be decided. Those of earlier versions are baseline
+    /// inputs (read-only, never approvable), and a released project has nothing in development: <c>WRONG_PHASE</c>.
+    /// </summary>
+    private static DomainError? InOtherVersion(Project project, Artifact artifact) =>
+        project.DevelopmentVersion is not null && artifact.ReleaseVersionId == project.CurrentReleaseVersionId
+            ? null
+            : new DomainError(
+                ErrorCodes.WrongPhase,
+                $"{artifact.Type.ToWire()} v{artifact.Version} belongs to a released version and is read-only. Start a new version to change it.");
+
     private static bool IsPlan(ArtifactType type) => type is ArtifactType.ImplementationPlan or ArtifactType.OptimizationPlan;
 
     /// <summary>FR-30: a <c>pending</c> execution step of a locked plan version.</summary>
-    private static ExecutionStep NewStep(Guid projectId, Guid planArtifactId, PlanStep step) => new()
+    private static ExecutionStep NewStep(Guid projectId, Guid releaseVersionId, Guid planArtifactId, PlanStep step) => new()
     {
         ProjectId = projectId,
+        ReleaseVersionId = releaseVersionId,
         PlanArtifactId = planArtifactId,
         StepNumber = step.Number,
         Title = step.Title,

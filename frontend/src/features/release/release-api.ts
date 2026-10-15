@@ -8,15 +8,21 @@ export type ReleaseSummary = Schemas['ReleaseSummaryDto']
 export type ReleaseStatus = Schemas['ReleaseStatus']
 export type Rollback = Schemas['RollbackDto']
 export type RollbackRequest = Schemas['RollbackRequest']
-export type ProjectVersion = Schemas['ProjectVersionDto']
-export type RollbackTargetBlock = NonNullable<Schemas['RollbackTargetBlock']>
 
-/** FR-42, FR-43: every release attempt, newest first. Live `release` events refresh it (FR-46). */
-export function useReleases(id: string, enabled = true) {
+/**
+ * FR-42, FR-43, FR-64: the release attempts of a release version (default: the current one), newest first. Live
+ * `release` events refresh it (FR-46).
+ */
+export function useReleases(id: string, enabled = true, releaseVersionId?: string) {
   return useQuery({
-    queryKey: projectKeys.releases(id),
+    queryKey: [...projectKeys.releases(id), releaseVersionId ?? 'current'] as const,
     queryFn: async ({ signal }) =>
-      unwrap(await api.GET('/api/projects/{id}/releases', { params: { path: { id } }, signal })),
+      unwrap(
+        await api.GET('/api/projects/{id}/releases', {
+          params: { path: { id }, query: releaseVersionId ? { releaseVersionId } : {} },
+          signal,
+        }),
+      ),
     enabled,
   })
 }
@@ -31,7 +37,7 @@ export function useRetryRelease(id: string) {
   return useMutation({
     mutationFn: async () => unwrap(await api.POST('/api/projects/{id}/release', { params: { path: { id } } })),
     onSuccess: (release) => {
-      queryClient.setQueryData<Release[]>(projectKeys.releases(id), (old) =>
+      queryClient.setQueryData<Release[]>([...projectKeys.releases(id), 'current'], (old) =>
         old ? [release, ...old.filter((r) => r.id !== release.id)] : old,
       )
       return Promise.all([
@@ -48,16 +54,6 @@ export function useRetryRelease(id: string) {
   })
 }
 
-/** FR-44: project versions with their rollback eligibility, for the target picker (Owner dialog). */
-export function useProjectVersions(id: string, enabled: boolean) {
-  return useQuery({
-    queryKey: projectKeys.versions(id),
-    queryFn: async ({ signal }) =>
-      unwrap(await api.GET('/api/projects/{id}/versions', { params: { path: { id } }, signal })),
-    enabled,
-  })
-}
-
 /** FR-44: recorded rollbacks. */
 export function useRollbacks(id: string) {
   return useQuery({
@@ -68,7 +64,8 @@ export function useRollbacks(id: string) {
 }
 
 /**
- * FR-44, FR-45: rolls the project back (Owner). On success the phase, version, artifacts, steps, gates and review all
+ * FR-44, FR-45, FR-63: rolls the project back to a checkpoint of the version in development (Owner). On success the
+ * phase, checkpoint, artifacts, steps, gates and review all
  * change (§4.8), so every query of the project and the projects list are invalidated. 400 VALIDATION /
  * INVALID_TARGET_VERSION, 409 ROLLBACK_BLOCKED / CONFLICT, 429 RATE_LIMITED (Retry-After).
  */

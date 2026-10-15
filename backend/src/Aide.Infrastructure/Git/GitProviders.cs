@@ -249,8 +249,9 @@ internal sealed partial class GitHubGitProvider(
     }
 
     /// <summary>
-    /// FR-42, FR-43: reads the project PR; a release tag of the version already on GitHub that contains the project branch (or
-    /// the PR's merge) is a no-op; tags elsewhere are never moved (the first free <c>v&lt;N&gt;-aide[.k]</c> is used). Otherwise merges the PR through the API (<c>GitHub:ReleaseMergeMethod</c>,
+    /// FR-42 amended by FR-64, FR-43: reads the version's PR; the release tag already on GitHub that contains the branch (or
+    /// the PR's merge) is a no-op; the tag on another commit fails the release with <c>TAG_EXISTS</c> before anything is
+    /// merged (tags are never moved). Otherwise merges the PR through the API (<c>GitHub:ReleaseMergeMethod</c>,
     /// pinned to the fetched branch head, which must be the PR head GitHub reports), fetches the merge commit, tags it (annotated) in the working copy and pushes the
     /// tag with the token in the per-command header. A PR GitHub can't merge because of conflicts is listed with a trial
     /// merge in the working copy (<c>MERGE_CONFLICT</c>). The working copy was fetched by the caller's prepare.
@@ -292,31 +293,36 @@ internal sealed partial class GitHubGitProvider(
                 return unreadable;
             }
 
-            var listed = await workingCopies.RemoteReleaseTagsAsync(id, request.ProjectVersion, remote, cancellationToken);
+            var listed = await workingCopies.RemoteTagAsync(id, request.Tag, remote, cancellationToken);
             if (!listed.Ok)
             {
-                var reason = Scrub(remote, id, $"Reading the release tags of version {request.ProjectVersion} failed: {listed.Failure!.StandardError.Trim()}");
+                var reason = Scrub(remote, id, $"Reading the release tag {request.Tag} failed: {listed.Failure!.StandardError.Trim()}");
                 LogGitFailed(logger, id, "ls-remote", reason);
                 return ReleaseOutcome.Failed(ErrorCodes.GitError, reason, GitHubFailures.IsTransientGitError(reason));
             }
 
-            // A release tag of this version that holds the branch head (or the PR's merge) is the release already made; tags
-            // elsewhere (an earlier release of a version number reused after a rollback) are never moved: the next free one is used.
-            var existing = new List<ExistingReleaseTag>();
-            foreach (var found in listed.Tags)
+            // The tag holding the branch head (or the PR's merge) is the release already made; on another commit it is a
+            // TAG_EXISTS failure before anything is merged (FR-64: tags are never moved).
+            ExistingReleaseTag? existing = null;
+            if (listed.Tags.Count > 0 && listed.Tags[0] is { } found)
             {
                 var contains = await workingCopies.IsAncestorAsync(id, head, found.Commit, cancellationToken)
                     || (pr.Merged && pr.MergeCommitSha is { } prMerge && IsCommitId(prMerge) && await workingCopies.IsAncestorAsync(id, prMerge, found.Commit, cancellationToken));
-                existing.Add(new ExistingReleaseTag(found.Tag, contains));
+                existing = new ExistingReleaseTag(found.Tag, contains);
             }
 
-            var choice = ReleaseRules.ChooseTag(request.ProjectVersion, existing);
-            if (choice.AlreadyReleased)
+            var decision = ReleaseRules.DecideTag(request.Tag, existing);
+            if (decision.IsFailure)
             {
-                return ReleaseOutcome.Released(listed.Tags.Single(t => t.Tag == choice.Tag).Commit, choice.Tag, alreadyTagged: true);
+                return ReleaseOutcome.Failed(decision.Error!.Code, decision.Error.Message, transient: false);
             }
 
-            var tagName = choice.Tag;
+            if (decision.Value)
+            {
+                return ReleaseOutcome.Released(listed.Tags[0].Commit, request.Tag, alreadyTagged: true);
+            }
+
+            var tagName = request.Tag;
             string mergeSha;
             if (pr.Merged)
             {
@@ -351,7 +357,7 @@ internal sealed partial class GitHubGitProvider(
                         transient: true);
                 }
 
-                var merge = await MergePullAsync(client, pull, number, ReleaseRules.MergeTitle(request.ProjectName, request.ProjectVersion, tagName), head, token!, cancellationToken);
+                var merge = await MergePullAsync(client, pull, number, ReleaseRules.MergeTitle(request.ProjectName, tagName), head, token!, cancellationToken);
                 if (merge.Sha is not { } sha)
                 {
                     if (merge.NotMergeable)
@@ -378,7 +384,7 @@ internal sealed partial class GitHubGitProvider(
                 return ReleaseOutcome.Failed(ErrorCodes.GitError, $"The merge commit {mergeSha[..12]} isn't visible in the repository yet.", transient: true);
             }
 
-            await workingCopies.CreateTagAsync(id, tagName, mergeSha, ReleaseRules.TagMessage(request.ProjectName, request.ProjectVersion, tagName), cancellationToken);
+            await workingCopies.CreateTagAsync(id, tagName, mergeSha, ReleaseRules.TagMessage(request.ProjectName, tagName, request.Version), cancellationToken);
             var pushed = await workingCopies.PushTagAsync(id, tagName, remote, cancellationToken);
             if (!pushed.Succeeded)
             {
@@ -406,6 +412,53 @@ internal sealed partial class GitHubGitProvider(
         {
             LogGitFailed(logger, id, "release", ex.GetType().Name);
             return ReleaseOutcome.Failed(ErrorCodes.GitError, "The working copy could not be written on the AIDE server. Ask an admin to check the server log.", transient: true);
+        }
+    }
+
+    /// <summary>FR-61: looks the tag up through the API (<c>GET /repos/{owner}/{repo}/git/ref/tags/{tag}</c>; 404 = no such tag).</summary>
+    public async Task<TagLookup> FindTagAsync(GitConnectionSettings settings, string tag, string? token, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentException.ThrowIfNullOrEmpty(tag);
+        if (!ProjectSettingsRules.TryParseGitHubRepo(settings.RepoUrl, out var repo))
+        {
+            return TagLookup.Failed("The repository URL isn't a GitHub repository URL (https://github.com/owner/repo).", transient: false);
+        }
+
+        var refPath = string.Join('/', tag.Split('/').Select(Uri.EscapeDataString));
+        var client = clients.CreateClient(HttpClientName);
+        using var sent = await SendAsync(client, $"repos/{Uri.EscapeDataString(repo.Owner)}/{Uri.EscapeDataString(repo.Name)}/git/ref/tags/{refPath}", token, cancellationToken);
+        if (sent.Error is { } unreachable)
+        {
+            return TagLookup.Failed(unreachable, transient: true);
+        }
+
+        var response = sent.Message!;
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return TagLookup.Missing;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return TagLookup.Failed(await DescribeFailureAsync(response, cancellationToken), GitHubFailures.IsTransientStatus(response.StatusCode, IsRateLimited(response)));
+        }
+
+        // Only an object naming exactly this ref is the tag (older API versions answered prefix matches with an array).
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            return json.RootElement.ValueKind == JsonValueKind.Object
+                && json.RootElement.TryGetProperty("ref", out var found)
+                && found.ValueKind == JsonValueKind.String
+                && found.GetString() == $"refs/tags/{tag}"
+                ? TagLookup.Found
+                : TagLookup.Missing;
+        }
+        catch (JsonException)
+        {
+            return TagLookup.Failed("GitHub returned an unreadable tag reference.", transient: true);
         }
     }
 
@@ -835,10 +888,10 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
     }
 
     /// <summary>
-    /// FR-42, FR-43 (D12): the repository is the working copy, so the release is local Git work: a release tag of the version
-    /// that contains the project branch is a no-op; otherwise (tags elsewhere are never moved: the first free
-    /// <c>v&lt;N&gt;-aide[.k]</c> is used) merge the branch into the default branch
-    /// (<c>--no-ff</c>, hooks off; a conflict is listed and aborted) and create the annotated tag on the merge commit.
+    /// FR-42 amended by FR-64, FR-43 (D12): the repository is the working copy, so the release is local Git work: the release
+    /// tag already containing the version branch is a no-op; the tag on another commit fails with <c>TAG_EXISTS</c> and
+    /// nothing is merged; otherwise merge the branch into the default branch (<c>--no-ff</c>, hooks off; a conflict is listed
+    /// and aborted) and create the annotated tag on the merge commit.
     /// </summary>
     public async Task<ReleaseOutcome> ReleaseAsync(GitConnectionSettings settings, ReleaseRequest request, string? token, CancellationToken cancellationToken)
     {
@@ -852,21 +905,23 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
                 return ReleaseOutcome.Failed(ErrorCodes.GitError, $"The project branch '{request.Branch}' doesn't exist in the local repository.", transient: false);
             }
 
-            var tags = await workingCopies.ReleaseTagsAsync(id, request.ProjectVersion, cancellationToken);
-            var existing = new List<ExistingReleaseTag>();
-            foreach (var found in tags)
+            var found = await workingCopies.TagAsync(id, request.Tag, cancellationToken);
+            var existing = found is null
+                ? null
+                : new ExistingReleaseTag(found.Tag, await workingCopies.IsAncestorAsync(id, head, found.Commit, cancellationToken));
+            var decision = ReleaseRules.DecideTag(request.Tag, existing);
+            if (decision.IsFailure)
             {
-                existing.Add(new ExistingReleaseTag(found.Tag, await workingCopies.IsAncestorAsync(id, head, found.Commit, cancellationToken)));
+                return ReleaseOutcome.Failed(decision.Error!.Code, decision.Error.Message, transient: false);
             }
 
-            var choice = ReleaseRules.ChooseTag(request.ProjectVersion, existing);
-            if (choice.AlreadyReleased)
+            if (decision.Value)
             {
-                return ReleaseOutcome.Released(tags.Single(t => t.Tag == choice.Tag).Commit, choice.Tag, alreadyTagged: true);
+                return ReleaseOutcome.Released(found!.Commit, request.Tag, alreadyTagged: true);
             }
 
             var merged = await workingCopies.MergeIntoDefaultAsync(
-                id, settings.DefaultBranch, request.Branch, ReleaseRules.MergeTitle(request.ProjectName, request.ProjectVersion, choice.Tag), cancellationToken);
+                id, settings.DefaultBranch, request.Branch, ReleaseRules.MergeTitle(request.ProjectName, request.Tag), cancellationToken);
             if (!merged.Merged)
             {
                 return ReleaseOutcome.Conflicted(
@@ -880,8 +935,8 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
             }
 
             await workingCopies.CreateTagAsync(
-                id, choice.Tag, merged.Sha!, ReleaseRules.TagMessage(request.ProjectName, request.ProjectVersion, choice.Tag), cancellationToken);
-            return ReleaseOutcome.Released(merged.Sha!, choice.Tag, alreadyTagged: false);
+                id, request.Tag, merged.Sha!, ReleaseRules.TagMessage(request.ProjectName, request.Tag, request.Version), cancellationToken);
+            return ReleaseOutcome.Released(merged.Sha!, request.Tag, alreadyTagged: false);
         }
         catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException or UnauthorizedAccessException)
         {
@@ -892,6 +947,21 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
                 ErrorCodes.GitError,
                 "The local repository could not be merged or tagged on the AIDE server. Ask an admin to check the server log.",
                 transient: ex is GitCommandException or IOException);
+        }
+    }
+
+    /// <summary>FR-61: the tag in the local repository on the data volume; a project whose repository doesn't exist yet has no tags.</summary>
+    public async Task<TagLookup> FindTagAsync(GitConnectionSettings settings, string tag, string? token, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        try
+        {
+            return await workingCopies.TagAsync(settings.ProjectId, tag, cancellationToken) is null ? TagLookup.Missing : TagLookup.Found;
+        }
+        catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException or UnauthorizedAccessException)
+        {
+            LogReleaseFailed(logger, ex, settings.ProjectId);
+            return TagLookup.Failed("The local repository could not be read on the AIDE server. Ask an admin to check the server log.", transient: true);
         }
     }
 

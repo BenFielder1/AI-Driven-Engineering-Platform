@@ -6,6 +6,8 @@ export interface ProjectsSearch {
   search?: string
   phase?: Phase
   status?: ProjectStatus
+  /** FR-62: only projects with (true) or without (false) a version in development. */
+  hasDevelopmentVersion?: boolean
   sortBy?: ProjectSortBy
   sortOrder?: SortOrder
   page?: number
@@ -22,6 +24,12 @@ export function parseProjectsSearch(search: Record<string, unknown>): ProjectsSe
     search: text || undefined,
     phase: oneOf(phases, search.phase),
     status: oneOf(statuses, search.status),
+    hasDevelopmentVersion:
+      search.hasDevelopmentVersion === true || search.hasDevelopmentVersion === 'true'
+        ? true
+        : search.hasDevelopmentVersion === false || search.hasDevelopmentVersion === 'false'
+          ? false
+          : undefined,
     sortBy: oneOf(['created', 'updated', 'name'] as const, search.sortBy),
     sortOrder: oneOf(['asc', 'desc'] as const, search.sortOrder),
     page: Number.isInteger(page) && page > 1 ? page : undefined,

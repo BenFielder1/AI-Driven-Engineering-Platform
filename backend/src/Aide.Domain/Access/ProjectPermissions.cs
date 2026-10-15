@@ -18,7 +18,8 @@ public static class ProjectPermissions
             or ProjectAction.Rollback
             or ProjectAction.ChangeSettings
             or ProjectAction.ManageMembers
-            or ProjectAction.DeleteProject => ProjectRole.Owner,
+            or ProjectAction.DeleteProject
+            or ProjectAction.StartVersion => ProjectRole.Owner,
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
     };
 

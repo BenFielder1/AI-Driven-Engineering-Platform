@@ -20,14 +20,14 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | FR-57 | Execution page: every run, attempt history | 3.1 | both | 3 | todo | — |
 | FR-58 | Restore artifact version as new draft | 3.1 | both | 3 | todo | — |
 | FR-59 | Artifacts page per release version; cross-version diff | 3.1 | both | 3 | todo | — |
-| FR-60 | Start new version after merged release | 3.2 | both | 2 | todo | — |
-| FR-61 | Version validation errors | 3.2, 4.10 | backend | 2 | todo | — |
-| FR-62 | Released + in-development badges, version switcher, read-only past | 3.2 | both | 2 | todo | — |
-| FR-63 | Checkpoints per release version; rollback scoped; released closed | 3.2, 4.10 | both | 2 | todo | — |
-| FR-64 | Release tags user semver; GitHub Release (GitHub part phase 7) | 3.2 | backend | 2, 7 | todo | — |
+| FR-60 | Start new version after merged release | 3.2 | both | 2 | done | POST /versions, start dialog; FR60_* tests |
+| FR-61 | Version validation errors | 3.2, 4.10 | backend | 2 | done | SemVer + VERSION_* errors; FR61_* tests |
+| FR-62 | Released + in-development badges, version switcher, read-only past | 3.2 | both | 2 | done | badges, switcher, ?release= read-only, list filter; FR62_* tests |
+| FR-63 | Checkpoints per release version; rollback scoped; released closed | 3.2, 4.10 | both | 2 | done | checkpoints, scoped rollback, version_released; FR63_*/FR44_amended_* tests |
+| FR-64 | Release tags user semver; GitHub Release (GitHub part phase 7) | 3.2 | backend | 2, 7 | partial (Local/tag done; GitHub Release phase 7) | DecideTag, FR42_amended_by_FR64_* |
 | FR-65 | Merge strategy, awaiting_merge, merge poll | 3.2, 4.14 | both | 7 | todo | — |
-| FR-66 | Initial version for new projects | 3.2 | both | 2 | todo | — |
-| FR-67 | v1 project migration to release versions | 3.2, 4.10 | backend | 2 | todo | — |
+| FR-66 | Initial version for new projects | 3.2 | both | 2 | done | initialVersion + wizard Version step; FR66_* tests |
+| FR-67 | v1 project migration to release versions | 3.2, 4.10 | backend | 2 | done | migration ReleaseVersions backfill; FR67_* migration tests; applied on k8s |
 | FR-70 | Repository Analyst → codebase_summary (auto-locked) | 3.3 | backend | 6 | todo | — |
 | FR-71 | Read-only repo tools (tool use, limits, path safety, redaction) | 3.3 | backend | 6 | todo | — |
 | FR-72 | Iteration refinement inputs | 3.3 | backend | 6 | todo | — |
@@ -52,7 +52,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | FR-91 | Production deployments, promote, Deployments page | 3.8 | both | 9 | todo | — |
 | FR-92 | New events + notification types | 3.9 | both | 10 | todo | — |
 | FR-93 | CLI additions | 3.9 | backend | 10 | todo | — |
-| §4.10 | Release versions, semver, checkpoints, rollback scope, migration | 4.10 | backend | 2 | todo | — |
+| §4.10 | Release versions, semver, checkpoints, rollback scope, migration | 4.10 | backend | 2 | done | SemVer, ReleaseVersionRules, NewVersion transition matrix; S4_10_* tests |
 | §4.11–4.12 | Preset format and the two presets | 4.11 | backend | 8 | todo | — |
 | §4.13 | Iteration specs, review scope, plan scope | 4.13 | backend | 6 | todo | — |
 | §4.14 | GitHub permissions, tokens, polling, merge detection | 4.14 | backend | 5, 7 | todo | — |
@@ -70,11 +70,11 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
   - [x] vite-react-engineer (tokens, fonts, shadcn primitives, logo, shell, nav config, ⌘K — 427 frontend tests; placeholder routes connections, admin/integrations, specification, planning, release, activity)
   - [x] vite-react-engineer (restyle v1 pages, stage stepper, next-action helper, settings sub-routes, recharts trend, axe e2e specs — 453 frontend tests)
   - [x] gate (frontend ✓) · review (0 Critical, 1 Major, 6 Minor — all fixed or logged) · commit — redeploy deferred to end of phase 2 (backend M10 in flight in the same tree)
-- [ ] 2 M10 Versions + checkpoints — IDs: FR-60–FR-64 (Local), FR-66, FR-67, §4.10
+- [x] 2 M10 Versions + checkpoints (base: e8a957e) — IDs: FR-60–FR-64 (Local), FR-66, FR-67, §4.10
   - [x] ef-data-engineer (migration ReleaseVersions + FR-67 backfill; SQL reviewed — see Decisions; 4 FR67_* migration tests; checked on a scratch copy of the k8s DB, 172 projects)
-  - [ ] aspnet-engineer (domain §4.10, checkpoint API rename D-V2-11, versions endpoints, Local semver release)
-  - [ ] vite-react-engineer (badges, version switcher, start-version dialog, read-only past views)
-  - [ ] gate · review · redeploy · commit
+  - [x] aspnet-engineer (SemVer + ReleaseVersionRules, NewVersion transition, scoped rollback, /versions + /checkpoints, D-V2-11 renames incl. rollback/gate targetCheckpoint, Local+GitHub tag lookup, seed released at 0.1.0 — 2441 backend tests)
+  - [x] vite-react-engineer (client regen, D-V2-11 renames, badges, switcher + read-only, start-version dialog, checkpoint rollback, wizard Version step — 479 frontend tests)
+  - [x] gate (backend 2444, frontend 481, manifests, contract fresh) · review (0 Critical, 0 Major, 2 Minor — both fixed) · redeploy (migration ReleaseVersions applied on k8s: 56 released + 152 in-development versions, every project has a current version; smoke ✓) · commit
 - [ ] 3 M11 Stage pages + history — IDs: FR-55–FR-59
 - [ ] 4 M12a LLM connections — IDs: FR-78, FR-79
 - [ ] 5 M12b GitHub App — IDs: FR-80–FR-83, FR-86
@@ -96,7 +96,18 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 - 2026-10-15 — Three Space Worm token values were adjusted to pass WCAG AA (dark muted-foreground L 0.57→0.59, dark destructive-foreground near-black, light success 0.50/0.15) and a `field-border` token added for 3:1 form-field borders; reasons in `frontend/src/lib/ui/tokens.ts` — NFR-A11Y2 — SPEC updated: no
 - 2026-10-15 — Theme class is set before first paint by same-origin `public/theme-init.js` (no inline script) so the v1 CSP is unchanged — SPEC updated: no
 - 2026-10-15 — Projects-list "Awaiting gates" KPI shows "—": the list API returns no gate counts; add a count to the list DTO if wanted — §7.2 — SPEC updated: no
+- 2026-10-15 — D-V2-11 renames also cover rollback/gate fields (`targetVersion`→`targetCheckpoint`, `fromVersion/toVersion`→`fromCheckpoint/toCheckpoint`); oasdiff (Docker): 58 errors + 3 warnings, all from D-V2-11 renames, `/versions` meaning change and new enum values (`codebase_summary`, `awaiting_merge`) — accepted per D-V2-11 — SPEC updated: no
+- 2026-10-15 — `repository_analysis` job is a placeholder (logs and completes) until FR-70 lands in phase 6; non-null `presetId` → PRESET_NOT_FOUND until presets land in phase 8 — SPEC updated: no
+- 2026-10-15 — Activity `releaseVersionId` filter is a time window (version start → next version start); events have no version column — SPEC updated: no
+- 2026-10-15 — Closed-version rollback checks (`version_released`) run before INVALID_TARGET_VERSION so callers get the useful reason; the two v1 re-release-after-rollback tests were removed (behaviour removed by D-V2-3) — SPEC updated: no
+- 2026-10-15 — UPSTREAM_ERROR 502 on POST /versions when the repo's tags can't be checked — SPEC updated: no
+- 2026-10-15 — Per-version branch `aide/<slug>/v<version>` (all new versions incl. first) is stored on release_versions.branch_name when the working copy is first prepared, not at version start: a stored branch name is the lifecycle's "working copy prepared" fact; VERSION_STARTED records the intended name — FR-82 — SPEC updated: no
+- 2026-10-15 — Past-version selection uses `?release=<semver>` (spec FR-55 says `?version=`) because artifact pages already use `?version=N` for the artifact version; kept across project navigation — SPEC updated: no (sync in Final)
+- 2026-10-15 — Settings pages stay editable while viewing a past version (settings aren't versioned) — SPEC updated: no
 
 ## Known issues
+- E2E lifecycle spec lost its rollback-after-release scenario (FR-63 blocks it); add a rollback-before-release scenario — e2e-qa-engineer (phase 10)
+- Past-version views are partial until M11: Refinement shows the latest request (GET /refinement lacks releaseVersionId), Execution shows only the implementation plan steps; AgentRunDto lacks `checkpoint` — phase 3
+- ReleaseVersionStampingInterceptor still needed by integration-test seeds (LifecycleSeed, direct inserts); remove once they set release_version_id — ef-data-engineer
 - M9a screenshot check left a test user and project "Shell check" in the k8s DB — delete if unwanted — Ben
 - Carried from v1 (see `docs/v1/PROGRESS.md`): rollback_events.restored_phase nullable (folded into the M10 versions migration per SPEC §5); TAG_CONFLICT cleanup; gates list unpaged — orchestrator

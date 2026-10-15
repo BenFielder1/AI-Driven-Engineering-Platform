@@ -1,6 +1,8 @@
 using Aide.Api.Auth;
 using Aide.Api.Errors;
+using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
+using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Aide.Api.Features.Review;
@@ -77,7 +79,9 @@ public static class ReviewEndpoints
         Guid id,
         IProjectAccess access,
         ReviewReader reader,
-        CancellationToken cancellationToken)
+        AideDbContext db,
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -85,7 +89,13 @@ public static class ReviewEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        return await reader.LatestAsync(id, cancellationToken) is { } report
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
+        return await reader.LatestAsync(id, cancellationToken, scope.Value) is { } report
             ? TypedResults.Ok(report)
             : ApiProblems.NotFound("No review has completed yet.");
     }
@@ -94,7 +104,9 @@ public static class ReviewEndpoints
         Guid id,
         IProjectAccess access,
         ReviewReader reader,
-        CancellationToken cancellationToken)
+        AideDbContext db,
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -102,7 +114,13 @@ public static class ReviewEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        return await reader.TrendAsync(id, cancellationToken) is { } trend
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
+        return await reader.TrendAsync(id, cancellationToken, scope.Value) is { } trend
             ? TypedResults.Ok(trend)
             : ApiProblems.NotFound("The project was not found.");
     }
@@ -111,7 +129,9 @@ public static class ReviewEndpoints
         Guid id,
         IProjectAccess access,
         ReviewReader reader,
-        CancellationToken cancellationToken)
+        AideDbContext db,
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -119,7 +139,13 @@ public static class ReviewEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        return await reader.DriftAsync(id, cancellationToken) is { } drift
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
+        return await reader.DriftAsync(id, cancellationToken, scope.Value) is { } drift
             ? TypedResults.Ok(drift)
             : ApiProblems.NotFound("No review has completed yet.");
     }

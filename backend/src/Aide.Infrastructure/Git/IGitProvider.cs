@@ -48,24 +48,42 @@ public interface IGitProvider
     string ComparisonBaseRef(GitConnectionSettings settings);
 
     /// <summary>
-    /// FR-42, FR-43: releases the project branch: merges it into the default branch (GitHub: merges the project PR through the
-    /// API; Local: <c>git merge --no-ff</c> in the working copy) and creates the annotated tag (GitHub: pushed). Idempotent: a
-    /// release tag of the version that already contains the branch is a no-op success; tags elsewhere are never moved, the
-    /// release uses the first free <c>v&lt;N&gt;-aide.&lt;k&gt;</c> instead (<see cref="Domain.Releases.ReleaseRules.ChooseTag"/>). A
-    /// merge conflict is returned with the conflicting files, never thrown. The working copy must be prepared first.
+    /// FR-42 amended by FR-64, FR-43: releases the version branch: merges it into the default branch (GitHub: merges the PR
+    /// through the API; Local: <c>git merge --no-ff</c> in the working copy) and creates the annotated tag
+    /// <see cref="ReleaseRequest.Tag"/> on the merge commit (GitHub: pushed). Idempotent: the tag already holding the branch is
+    /// a no-op success; the tag on another commit fails with <c>TAG_EXISTS</c> before anything is merged
+    /// (<see cref="Domain.Releases.ReleaseRules.DecideTag"/>). A merge conflict is returned with the conflicting files, never
+    /// thrown. The working copy must be prepared first.
     /// </summary>
     Task<ReleaseOutcome> ReleaseAsync(GitConnectionSettings settings, ReleaseRequest request, string? token, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-61: whether the tag <paramref name="tag"/> exists in the repository (GitHub: through the API; Local: in the
+    /// repository on the data volume, which may not exist yet). Changes nothing.
+    /// </summary>
+    Task<TagLookup> FindTagAsync(GitConnectionSettings settings, string tag, string? token, CancellationToken cancellationToken);
+}
+
+/// <summary>The outcome of <see cref="IGitProvider.FindTagAsync"/>: whether the tag exists, or a token-free failure reason.</summary>
+public sealed record TagLookup(bool Ok, bool Exists, string? Reason, bool Transient)
+{
+    public static TagLookup Found { get; } = new(true, true, null, false);
+
+    public static TagLookup Missing { get; } = new(true, false, null, false);
+
+    public static TagLookup Failed(string reason, bool transient) => new(false, false, reason, transient);
 }
 
 /// <summary>
-/// A release to perform (FR-42): the project branch, the project version and name (the tag, its message and the merge title
-/// come from <see cref="Domain.Releases.ReleaseRules"/> once the provider has chosen the tag), the project PR (GitHub), and
-/// <see cref="OnMerged"/>, called with the merge commit as soon as the merge exists (before tagging), so the merge is on
-/// record even if tagging fails. An exception from it ends the release (nothing is tagged).
+/// A release to perform (FR-42, FR-64): the version branch, the release tag (<c>&lt;tagPrefix&gt;&lt;version&gt;</c>) and version,
+/// the project name (the tag message and the merge title come from <see cref="Domain.Releases.ReleaseRules"/>), the version's
+/// PR (GitHub), and <see cref="OnMerged"/>, called with the merge commit as soon as the merge exists (before tagging), so the
+/// merge is on record even if tagging fails. An exception from it ends the release (nothing is tagged).
 /// </summary>
 public sealed record ReleaseRequest(
     string Branch,
-    int ProjectVersion,
+    string Tag,
+    string Version,
     string ProjectName,
     int? PullRequestNumber,
     Func<string, CancellationToken, Task>? OnMerged = null);
@@ -96,7 +114,7 @@ public sealed record ReleaseOutcome(
     string? Reason,
     bool Transient)
 {
-    /// <summary>The release tag (base or suffixed) the release was recorded with; set when released.</summary>
+    /// <summary>The release tag the release was recorded with; set when released.</summary>
     public string? Tag { get; init; }
 
     public static ReleaseOutcome Released(string mergeCommitSha, string tag, bool alreadyTagged) =>

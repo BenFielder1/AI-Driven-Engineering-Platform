@@ -8,10 +8,12 @@ import { copyForCode, errorMessage } from '../../lib/errors'
 import { releaseStatusLabels } from '../projects/labels'
 import type { ProjectState } from '../projects/projects-api'
 import { RelativeTime } from '../projects/relative-time'
+import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
 import { useReleases, useRetryRelease, type Release, type ReleaseStatus } from './release-api'
 
 const statusTones: Record<ReleaseStatus, BadgeTone> = {
   in_progress: 'info',
+  awaiting_merge: 'warning',
   succeeded: 'success',
   failed: 'danger',
 }
@@ -62,7 +64,7 @@ function ReleaseFailure({ release, branch }: { release: Release; branch: string 
   )
 }
 
-function ReleaseHistory({ releases }: { releases: Release[] }) {
+export function ReleaseHistory({ releases, versionOf }: { releases: Release[]; versionOf: (id: string) => string | undefined }) {
   return (
     <section aria-labelledby="release-history-title" className="flex flex-col gap-2">
       <h3 id="release-history-title" className="font-semibold">
@@ -73,7 +75,7 @@ function ReleaseHistory({ releases }: { releases: Release[] }) {
           <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <ReleaseStatusBadge status={r.status} />
             <span>
-              Version {r.projectVersion}, attempt {r.attempt}
+              {checkpointLabel(versionOf(r.releaseVersionId), r.checkpoint)}, attempt {r.attempt}
             </span>
             <code className="font-mono">{r.tag}</code>
             {r.errorCode && <span className="text-muted-foreground">{r.errorCode}</span>}
@@ -95,10 +97,15 @@ function ReleaseHistory({ releases }: { releases: Release[] }) {
 export function ReleasePanel({ projectId, state, canRelease }: { projectId: string; state: ProjectState; canRelease: boolean }) {
   const releases = useReleases(projectId)
   const retry = useRetryRelease(projectId)
+  const names = useReleaseVersionNames(projectId)
+  const versionOf = (id: string) => names(id)
+  const version = state.developmentVersion ?? state.releasedVersion
 
   const inReleasing = state.phase === 'release' && state.status === 'releasing'
-  // The attempt at the current project version (newest first); an older version's attempt doesn't release this one.
-  const current = releases.data?.find((r) => r.projectVersion === state.projectVersion) ?? null
+  // The attempt at the current checkpoint of the current release version (newest first); an older attempt (e.g. before
+  // a rollback) doesn't release this one.
+  const current =
+    releases.data?.find((r) => r.releaseVersionId === state.releaseVersionId && r.checkpoint === state.checkpoint) ?? null
   const latest = current ?? releases.data?.[0] ?? null
   // FR-43: no attempt at all while releasing (e.g. its job was lost) — the Owner may start one. Only while /state
   // reports an in-progress attempt that the list hasn't caught up with is the release "starting".
@@ -147,10 +154,10 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
     body = (
       <div className="flex flex-col gap-3">
         <p role="status" className="text-sm">
-          No release attempt is running for version {state.projectVersion}.
+          No release attempt is running for {checkpointLabel(version, state.checkpoint)}.
         </p>
         {retryControls}
-        {releases.data.length > 0 && <ReleaseHistory releases={releases.data} />}
+        {releases.data.length > 0 && <ReleaseHistory releases={releases.data} versionOf={versionOf} />}
       </div>
     )
   } else {
@@ -163,12 +170,17 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
               Merging and tagging…
             </span>
           )}
+          {latest.status === 'awaiting_merge' && (
+            <span role="status" className="text-sm">
+              Waiting for the pull request to be merged…
+            </span>
+          )}
         </div>
         <dl>
           <Row term="Tag">
             <code className="font-mono">{latest.tag}</code>
           </Row>
-          <Row term="Project version">{latest.projectVersion}</Row>
+          <Row term="Version">{checkpointLabel(versionOf(latest.releaseVersionId), latest.checkpoint)}</Row>
           <Row term="Attempt">{latest.attempt}</Row>
           <Row term="Merge commit">
             {latest.mergeCommitSha ? (
@@ -197,7 +209,7 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
         </dl>
         {latest.status === 'failed' && <ReleaseFailure release={latest} branch={branch} />}
         {retryControls}
-        {releases.data.length > 1 && <ReleaseHistory releases={releases.data} />}
+        {releases.data.length > 1 && <ReleaseHistory releases={releases.data} versionOf={versionOf} />}
       </div>
     )
   }

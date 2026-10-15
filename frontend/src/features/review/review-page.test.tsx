@@ -203,7 +203,7 @@ describe('Review page (FR-38–FR-41)', () => {
     seedComplianceReport(project, { categoryScores: categoryScores(0.93) })
     live.latest.emit(projectEvent(project.id, 'review', { type: 'REVIEW_COMPLETED' }))
     expect(await within(statusRegion()).findByText('Completed')).toBeInTheDocument()
-    expect(await screen.findByRole('region', { name: 'Latest report: cycle 1, version 1' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Latest report: cycle 1, 0.1.0 · checkpoint 1' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Run review' })).toBeEnabled()
 
     // Failed.
@@ -353,7 +353,7 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
 
     for (const name of [
       'Review status',
-      'Latest report: cycle 1, version 1',
+      'Latest report: cycle 1, 0.1.0 · checkpoint 1',
       'Category breakdown',
       'Compliance trend',
       'Drift from the specification',

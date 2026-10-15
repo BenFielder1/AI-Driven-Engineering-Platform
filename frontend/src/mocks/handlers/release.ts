@@ -4,11 +4,11 @@ import type { Schemas } from '../../api/client'
 import { authDb, nextId } from './auth'
 import { addEvent } from './lifecycle'
 import { problem } from './problem'
-import { access, ownerMutation, record, type StoredProject } from './projects'
+import { access, currentVersionId, currentVersionOf, developmentVersionOf, ownerMutation, record, type StoredProject } from './projects'
 
 type Release = Schemas['ReleaseDto']
 type Rollback = Schemas['RollbackDto']
-type ProjectVersion = Schemas['ProjectVersionDto']
+type Checkpoint = Schemas['CheckpointDto']
 type Phase = Schemas['Phase']
 
 /** One rollback per project per minute (FR-45). */
@@ -20,7 +20,7 @@ const ROLLBACK_WINDOW_MS = 60_000
 export function seedReleasePhase(p: StoredProject) {
   p.currentPhase = 'release'
   p.status = 'releasing'
-  p.phaseAtVersion[p.projectVersion] = 'release'
+  p.phaseAtVersion[p.checkpoint] = 'release'
 }
 
 /** Appends a release attempt (newest last). Defaults: a succeeded, merged and tagged release of the current version. */
@@ -28,15 +28,16 @@ export function seedRelease(p: StoredProject, overrides: Partial<Release> = {}):
   const releases = (p.releases ??= [])
   const release: Release = {
     id: nextId(),
-    projectVersion: p.projectVersion,
+    releaseVersionId: currentVersionId(p),
+    checkpoint: p.checkpoint,
     status: 'succeeded',
-    tag: `v${String(p.projectVersion)}-aide`,
+    tag: `v${currentVersionOf(p)?.version ?? '0.1.0'}`,
     mergeCommitSha: '3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f',
     pullRequestUrl: 'https://github.com/acme/inventory/pull/42',
     conflictingFiles: [],
     errorCode: null,
     errorMessage: null,
-    attempt: releases.filter((r) => r.projectVersion === (overrides.projectVersion ?? p.projectVersion)).length + 1,
+    attempt: releases.filter((r) => r.checkpoint === (overrides.checkpoint ?? p.checkpoint)).length + 1,
     startedAt: new Date(Date.parse('2026-09-05T10:00:00Z') + releases.length * 3_600_000).toISOString(),
     completedAt: new Date(Date.parse('2026-09-05T10:05:00Z') + releases.length * 3_600_000).toISOString(),
     ...overrides,
@@ -45,12 +46,12 @@ export function seedRelease(p: StoredProject, overrides: Partial<Release> = {}):
   return release
 }
 
-/** Records the phase entered at each version 1…N (FR-44 version picker), e.g. `['refinement', 'specification', …]`. */
+/** Records the phase entered at each checkpoint 1…N (FR-44, FR-63 picker), e.g. `['refinement', 'specification', …]`. */
 export function seedVersions(p: StoredProject, phasesByVersion: readonly Phase[]) {
   phasesByVersion.forEach((phase, index) => {
     p.phaseAtVersion[index + 1] = phase
   })
-  p.projectVersion = phasesByVersion.length
+  p.checkpoint = phasesByVersion.length
   const current = phasesByVersion.at(-1)
   if (current) {
     p.currentPhase = current
@@ -64,17 +65,23 @@ function actorFor(userId: string): Schemas['ActorDto'] {
   return { id: userId, name: user?.name ?? 'Unknown', isSystem: false }
 }
 
-/** §4.8: versions as /versions reports them, with their rollback eligibility. */
-export function versionsOf(p: StoredProject): ProjectVersion[] {
+/** §4.8, §4.10: the current version's checkpoints as /checkpoints reports them, with their rollback eligibility. */
+export function checkpointsOf(p: StoredProject): Checkpoint[] {
+  const closed = developmentVersionOf(p) === undefined
   return Object.entries(p.phaseAtVersion)
     .map(([v, phase]) => ({ version: Number(v), phase }))
-    .filter((v) => v.version <= p.projectVersion)
+    .filter((v) => v.version <= p.checkpoint)
     .sort((a, b) => a.version - b.version)
     .map(({ version, phase }) => {
-      const blocked =
-        version >= p.projectVersion ? ('current_version' as const) : phase === 'release' ? ('release_phase' as const) : null
+      const blocked = closed
+        ? ('version_released' as const)
+        : version >= p.checkpoint
+          ? ('current_checkpoint' as const)
+          : phase === 'release'
+            ? ('release_phase' as const)
+            : null
       return {
-        version,
+        checkpoint: version,
         phase,
         enteredAt: new Date(Date.parse('2026-09-01T10:00:00Z') + version * 3_600_000).toISOString(),
         rollbackAllowed: blocked === null,
@@ -86,13 +93,16 @@ export function versionsOf(p: StoredProject): ProjectVersion[] {
 const notFound = () => problem(404, 'NOT_FOUND', 'No release has started yet.')
 
 export const releaseHandlers = [
-  // FR-42, FR-43: release attempts, newest first.
-  http.get('*/api/projects/:id/releases', ({ params }) => {
+  // FR-42, FR-43, FR-64: release attempts of a release version (default: the current one), newest first.
+  http.get('*/api/projects/:id/releases', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
-    return HttpResponse.json<Release[]>([...(a.project.releases ?? [])].reverse())
+    const versionId = new URL(request.url).searchParams.get('releaseVersionId') ?? currentVersionId(a.project)
+    return HttpResponse.json<Release[]>(
+      [...(a.project.releases ?? [])].filter((r) => r.releaseVersionId === versionId).reverse(),
+    )
   }),
 
   http.get('*/api/projects/:id/releases/latest', ({ params }) => {
@@ -129,19 +139,26 @@ export const releaseHandlers = [
       type: 'RELEASE_STARTED',
       category: 'release',
       summary: `Release ${release.tag} started`,
-      payload: { releaseId: release.id, projectVersion: release.projectVersion, tag: release.tag, attempt: release.attempt },
+      payload: { releaseId: release.id, checkpoint: release.checkpoint, tag: release.tag, attempt: release.attempt },
       actor: actorFor(a.userId),
     })
     return HttpResponse.json<Release>(release, { status: 202 })
   }),
 
-  // FR-44: project versions for the rollback picker.
-  http.get('*/api/projects/:id/versions', ({ params }) => {
+  // FR-44, FR-63: checkpoints of the current release version for the rollback picker (a past version has none here:
+  // the mock only records the current version's checkpoints).
+  http.get('*/api/projects/:id/checkpoints', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
-    return HttpResponse.json<ProjectVersion[]>(versionsOf(a.project))
+    const requested = new URL(request.url).searchParams.get('releaseVersionId')
+    if (requested && !a.project.releaseVersions.some((v) => v.id === requested)) {
+      return problem(404, 'NOT_FOUND', 'The release version was not found.')
+    }
+    return HttpResponse.json<Checkpoint[]>(
+      requested && requested !== currentVersionId(a.project) ? [] : [...checkpointsOf(a.project)].reverse(),
+    )
   }),
 
   // FR-44: recorded rollbacks, newest first.
@@ -153,8 +170,8 @@ export const releaseHandlers = [
     return HttpResponse.json<Rollback[]>([...(a.project.rollbacks ?? [])].reverse())
   }),
 
-  // FR-44, FR-45, §4.8: roll back (Owner). Checks in the API's order: VALIDATION, INVALID_TARGET_VERSION,
-  // ROLLBACK_BLOCKED, RATE_LIMITED.
+  // FR-44, FR-45, FR-63, §4.8: roll back (Owner). Checks in the API's order: VALIDATION, ROLLBACK_BLOCKED
+  // (version_released / release_partially_applied), INVALID_TARGET_VERSION, ROLLBACK_BLOCKED (running work), RATE_LIMITED.
   http.post('*/api/projects/:id/rollback', async ({ request, params }) => {
     const a = ownerMutation(request, params.id)
     if (a instanceof Response) {
@@ -162,11 +179,11 @@ export const releaseHandlers = [
     }
     const body = (await record(request)) as Partial<Schemas['RollbackRequest']> | null
     const p = a.project
-    const target = body?.targetVersion
+    const target = body?.targetCheckpoint
     const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
     const errors: Record<string, string[]> = {}
     if (typeof target !== 'number' || !Number.isInteger(target) || target < 1) {
-      errors.targetVersion = ['The target version must be 1 or more.']
+      errors.targetCheckpoint = ['The target version must be 1 or more.']
     }
     if (reason.length < 1 || reason.length > 500) {
       errors.reason = ['The reason must be 1 to 500 characters.']
@@ -174,7 +191,16 @@ export const releaseHandlers = [
     if (Object.keys(errors).length > 0 || typeof target !== 'number') {
       return problem(400, 'VALIDATION', 'One or more validation errors occurred.', { errors })
     }
-    const version = versionsOf(p).find((v) => v.version === target)
+    const development = developmentVersionOf(p)
+    if (!development) {
+      return problem(409, 'ROLLBACK_BLOCKED', 'The version is released.', { details: ['reason: version_released'] })
+    }
+    if (development.status === 'awaiting_merge') {
+      return problem(409, 'ROLLBACK_BLOCKED', 'The release is awaiting merge.', {
+        details: ['reason: release_partially_applied'],
+      })
+    }
+    const version = checkpointsOf(p).find((v) => v.checkpoint === target)
     if (!version?.rollbackAllowed) {
       return problem(400, 'INVALID_TARGET_VERSION', 'The project cannot be rolled back to that version.')
     }
@@ -189,8 +215,8 @@ export const releaseHandlers = [
       })
     }
 
-    const fromVersion = p.projectVersion
-    const invalidated = p.artifacts.filter((x) => x.projectVersionAtCreation > target && x.status !== 'invalidated')
+    const fromCheckpoint = p.checkpoint
+    const invalidated = p.artifacts.filter((x) => x.checkpointAtCreation > target && x.status !== 'invalidated')
     for (const artifact of invalidated) {
       artifact.status = 'invalidated'
     }
@@ -198,7 +224,7 @@ export const releaseHandlers = [
     for (const gate of cancelledGates) {
       gate.status = 'cancelled'
     }
-    p.projectVersion = target
+    p.checkpoint = target
     p.currentPhase = version.phase
     p.status = 'rolled_back'
     p.lastRollbackAt = now
@@ -206,8 +232,9 @@ export const releaseHandlers = [
     p.state.review = { ...p.state.review, cycle: 0, latestScore: null, latestDecision: null, driftLevel: null, status: 'idle' }
     const rollback: Rollback = {
       id: nextId(),
-      fromVersion,
-      toVersion: target,
+      releaseVersionId: development.id,
+      fromCheckpoint,
+      toCheckpoint: target,
       restoredPhase: version.phase,
       reason,
       invalidatedArtifactIds: invalidated.map((x) => x.id),
@@ -222,8 +249,8 @@ export const releaseHandlers = [
     addEvent(p, {
       type: 'ROLLBACK_COMPLETED',
       category: 'rollback',
-      summary: `Rolled back from version ${String(fromVersion)} to version ${String(target)}`,
-      payload: { rollbackId: rollback.id, fromVersion, targetVersion: target, reason },
+      summary: `Rolled back from checkpoint ${String(fromCheckpoint)} to checkpoint ${String(target)}`,
+      payload: { rollbackId: rollback.id, releaseVersionId: development.id, fromCheckpoint, targetCheckpoint: target, reason },
       actor: rollback.createdBy,
     })
     return HttpResponse.json<Rollback>(rollback)

@@ -49,11 +49,15 @@ public static class DependencyInjection
 
             // FR-47 outbox: notification-worthy events queue their notification job in the same transaction.
             options.AddInterceptors(sp.GetRequiredService<NotificationOutboxInterceptor>());
+
+            // §4.10: new projects get their first release version; version-scoped rows left unstamped get the current one.
+            options.AddInterceptors(sp.GetRequiredService<ReleaseVersionStampingInterceptor>());
         });
         services.TryAddSingleton<IProjectEventPublisher, NullProjectEventPublisher>();
         services.TryAddSingleton<ProjectEventPublishingInterceptor>();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<NotificationOutboxInterceptor>();
+        services.TryAddSingleton<ReleaseVersionStampingInterceptor>();
 
         // LLM provider configuration (FR-22): defaults and which providers have a system key.
         services.AddOptions<LlmOptions>()

@@ -205,7 +205,7 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR51_Event_log_filters_by_type_category_outcome_and_time_range()
+    public async Task FR51_amended_by_S4_10_Event_log_filters_by_type_category_outcome_and_time_range()
     {
         using var admin = await ApiSession.AdminAsync(factory);
         var (projectId, _) = await NewProjectAsync();
@@ -230,7 +230,7 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
         Assert.DoesNotContain(ok.Items, e => e.Type is EventTypes.RunFailed or EventTypes.IntegrityAlert);
         Assert.Contains(ok.Items, e => e.Type == EventTypes.ProjectCreated);
         var phase = Assert.Single(byType.Items);
-        Assert.Equal("Phase changed from refinement to specification (version 2)", phase.Summary);
+        Assert.Equal("Phase changed from refinement to specification (checkpoint 2)", phase.Summary);
         Assert.True(phase.Actor.IsSystem);
         Assert.Equal(2, phase.Payload["projectVersion"]!.GetValue<int>());
         Assert.Equal([EventTypes.RunFailed], byCategory.Items.Select(e => e.Type));

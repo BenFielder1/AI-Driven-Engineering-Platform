@@ -1,6 +1,8 @@
 using Aide.Api.Auth;
 using Aide.Api.Errors;
+using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
+using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Aide.Api.Features.Release;
@@ -30,7 +32,7 @@ public static class ReleaseEndpoints
 
         group.MapGet("/releases", ListReleases)
             .WithName("ListReleases")
-            .WithSummary("Every release attempt of the project, newest first (members, FR-42, FR-43). Empty before the first release.")
+            .WithSummary("The release attempts of a release version (default: the version in development, else the latest released), newest first (members, FR-42, FR-43, FR-64). Empty before the first release.")
             .Produces<IReadOnlyList<ReleaseDto>>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project."));
@@ -68,7 +70,9 @@ public static class ReleaseEndpoints
         Guid id,
         IProjectAccess access,
         ReleaseService releases,
-        CancellationToken cancellationToken)
+        AideDbContext db,
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -76,7 +80,13 @@ public static class ReleaseEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        return TypedResults.Ok(await releases.ListAsync(id, cancellationToken));
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
+        return TypedResults.Ok(await releases.ListAsync(id, cancellationToken, scope.Value));
     }
 
     private static async Task<Results<Ok<ReleaseDto>, ProblemHttpResult>> GetLatestRelease(

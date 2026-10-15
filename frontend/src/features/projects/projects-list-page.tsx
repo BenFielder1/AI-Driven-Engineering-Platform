@@ -9,7 +9,7 @@ import { MetricCard } from '../../components/shared/metric-card'
 import { PageHeader } from '../../components/shared/page-header'
 import { panelClass } from '../../components/shared/panel-class'
 import { SkeletonCards, SkeletonTable } from '../../components/shared/skeletons'
-import { VersionBadge } from '../../components/shared/version-badge'
+import { ProjectVersionBadges } from '../../components/shared/version-badge'
 import { Button } from '../../components/ui/button'
 import { buttonClasses } from '../../components/ui/button-classes'
 import { resultSummary } from '../../components/ui/result-summary'
@@ -29,22 +29,6 @@ const sortOrderOptions: Record<SortOrder, string> = { desc: 'Descending', asc: '
 interface ProjectsListPageProps {
   search: ProjectsSearch
   onSearchChange: (next: ProjectsSearch) => void
-}
-
-/**
- * Where a project's released / in-development VersionBadges go (FR-54, SPEC 7.2). The list API doesn't return release
- * versions yet (FR-60), so the list passes nothing and this renders nothing until it does.
- */
-function ProjectVersionBadges({ released, inDevelopment }: { released?: string | null; inDevelopment?: string | null }) {
-  if (!released && !inDevelopment) {
-    return null
-  }
-  return (
-    <span className="flex flex-wrap gap-1">
-      {released && <VersionBadge version={released} kind="released" />}
-      {inDevelopment && <VersionBadge version={inDevelopment} kind="development" />}
-    </span>
-  )
 }
 
 /** SPEC 7.2 KPI row: active, in review, awaiting gates, released, from the newest projects the list returns. */
@@ -76,21 +60,23 @@ const columns: DataTableColumn<ProjectSummary>[] = [
     primary: true,
     sortValue: (p) => p.name,
     cell: (p) => (
-      <span className="flex min-w-0 flex-wrap items-center gap-2">
-        <Link
-          to="/projects/$projectId"
-          params={{ projectId: p.id }}
-          className="font-medium break-words whitespace-normal text-primary underline-offset-4 hover:underline"
-        >
-          {p.name}
-        </Link>
-        <ProjectVersionBadges />
-      </span>
+      <Link
+        to="/projects/$projectId"
+        params={{ projectId: p.id }}
+        search={{ release: undefined }}
+        className="font-medium break-words whitespace-normal text-primary underline-offset-4 hover:underline"
+      >
+        {p.name}
+      </Link>
     ),
   },
   { key: 'phase', header: 'Phase', cell: (p) => <PhaseBadge phase={p.currentPhase} /> },
   { key: 'status', header: 'Status', cell: (p) => <StatusBadge status={p.status} /> },
-  { key: 'version', header: 'Version', numeric: true, cell: (p) => p.projectVersion },
+  {
+    key: 'versions',
+    header: 'Versions',
+    cell: (p) => <ProjectVersionBadges released={p.releasedVersion} development={p.developmentVersion} />,
+  },
   { key: 'role', header: 'Your role', cell: (p) => (p.myRole ? roleLabels[p.myRole] : 'Admin (not a member)') },
   {
     key: 'updated',
@@ -114,10 +100,11 @@ export function ProjectsListPage({ search, onSearchChange }: ProjectsListPagePro
     search: search.search,
     phase: search.phase,
     status: search.status,
+    hasDevelopmentVersion: search.hasDevelopmentVersion,
     sortBy,
     sortOrder,
   })
-  const filtered = Boolean(search.search ?? search.phase ?? search.status)
+  const filtered = Boolean(search.search ?? search.phase ?? search.status) || search.hasDevelopmentVersion !== undefined
 
   /** Any filter change goes back to page 1. */
   const update = (patch: Partial<ProjectsSearch>) => {
@@ -239,7 +226,7 @@ function ProjectFilters({ search, onChange }: { search: ProjectsSearch; onChange
         e.preventDefault()
         onChange({ search: text.trim() || undefined })
       }}
-      className={cn(panelClass, 'mb-5 grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5')}>
+      className={cn(panelClass, 'mb-5 grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6')}>
       <TextField
         id="projects-search"
         label="Search by name"
@@ -280,6 +267,19 @@ function ProjectFilters({ search, onChange }: { search: ProjectsSearch; onChange
             {statusLabels[s]}
           </option>
         ))}
+      </SelectField>
+      <SelectField
+        id="projects-development"
+        label="Has a version in development"
+        value={search.hasDevelopmentVersion === undefined ? '' : String(search.hasDevelopmentVersion)}
+        onChange={(e) => {
+          const v = e.target.value
+          onChange({ hasDevelopmentVersion: v === 'true' ? true : v === 'false' ? false : undefined })
+        }}
+      >
+        <option value="">Any</option>
+        <option value="true">Yes</option>
+        <option value="false">No</option>
       </SelectField>
       <SelectField
         id="projects-sort-by"

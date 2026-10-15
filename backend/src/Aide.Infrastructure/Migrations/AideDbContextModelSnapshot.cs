@@ -35,6 +35,11 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("agent");
 
+                    b.Property<string>("AgentKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("agent_key");
+
                     b.Property<int>("Attempts")
                         .HasColumnType("integer")
                         .HasColumnName("attempts");
@@ -51,6 +56,10 @@ namespace Aide.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CredentialId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("credential_id");
 
                     b.Property<long>("DurationMs")
                         .HasColumnType("bigint")
@@ -89,6 +98,16 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("phase");
 
+                    b.Property<string>("PresetId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("preset_id");
+
+                    b.Property<string>("PresetVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("preset_version");
+
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
@@ -105,6 +124,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("provider");
 
+                    b.Property<Guid?>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -115,6 +138,13 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("step_id");
 
+                    b.Property<string>("ToolCalls")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tool_calls")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<string>("UserFeedback")
                         .HasColumnType("text")
                         .HasColumnName("user_feedback");
@@ -122,11 +152,17 @@ namespace Aide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_agent_runs");
 
+                    b.HasIndex("ReleaseVersionId")
+                        .HasDatabaseName("ix_agent_runs_release_version_id");
+
                     b.HasIndex("StepId")
                         .HasDatabaseName("ix_agent_runs_step_id");
 
                     b.HasIndex("ProjectId", "CreatedAt")
                         .HasDatabaseName("ix_agent_runs_project_id_created_at");
+
+                    b.HasIndex("ProjectId", "ReleaseVersionId")
+                        .HasDatabaseName("ix_agent_runs_project_id_release_version_id");
 
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_agent_runs_status_created_at");
@@ -224,6 +260,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
 
+                    b.Property<Guid>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
+
                     b.Property<DateTimeOffset?>("RemindedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("reminded_at");
@@ -244,9 +284,9 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("status");
 
-                    b.Property<int?>("TargetVersion")
+                    b.Property<int?>("TargetCheckpoint")
                         .HasColumnType("integer")
-                        .HasColumnName("target_version");
+                        .HasColumnName("target_checkpoint");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -260,8 +300,14 @@ namespace Aide.Infrastructure.Migrations
                     b.HasIndex("ArtifactId")
                         .HasDatabaseName("ix_approval_gates_artifact_id");
 
+                    b.HasIndex("ReleaseVersionId")
+                        .HasDatabaseName("ix_approval_gates_release_version_id");
+
                     b.HasIndex("ReviewerId")
                         .HasDatabaseName("ix_approval_gates_reviewer_id");
+
+                    b.HasIndex("ProjectId", "ReleaseVersionId")
+                        .HasDatabaseName("ix_approval_gates_project_id_release_version_id");
 
                     b.HasIndex("ProjectId", "Status")
                         .HasDatabaseName("ix_approval_gates_project_id_status");
@@ -339,6 +385,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("approved_by");
 
+                    b.Property<int>("CheckpointAtCreation")
+                        .HasColumnType("integer")
+                        .HasColumnName("checkpoint_at_creation");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text")
@@ -366,13 +416,17 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
 
-                    b.Property<int>("ProjectVersionAtCreation")
-                        .HasColumnType("integer")
-                        .HasColumnName("project_version_at_creation");
-
                     b.Property<string>("RejectionComment")
                         .HasColumnType("text")
                         .HasColumnName("rejection_comment");
+
+                    b.Property<Guid>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
+
+                    b.Property<int?>("RestoredFromVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("restored_from_version");
 
                     b.Property<uint>("RowVersion")
                         .IsConcurrencyToken()
@@ -407,6 +461,12 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasIndex("CreatedByUserId")
                         .HasDatabaseName("ix_artifacts_created_by_user_id");
+
+                    b.HasIndex("ReleaseVersionId")
+                        .HasDatabaseName("ix_artifacts_release_version_id");
+
+                    b.HasIndex("ProjectId", "ReleaseVersionId")
+                        .HasDatabaseName("ix_artifacts_project_id_release_version_id");
 
                     b.HasIndex("ProjectId", "Type", "Status")
                         .HasDatabaseName("ix_artifacts_project_id_type_status");
@@ -480,6 +540,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("category_scores");
 
+                    b.Property<int>("Checkpoint")
+                        .HasColumnType("integer")
+                        .HasColumnName("checkpoint");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -506,6 +570,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("escalation_reason");
 
+                    b.Property<string>("ExternalChecks")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("external_checks");
+
                     b.Property<string>("MissingFeatures")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -519,9 +587,16 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
 
-                    b.Property<int>("ProjectVersion")
-                        .HasColumnType("integer")
-                        .HasColumnName("project_version");
+                    b.Property<string>("Regressions")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("regressions")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<Guid>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
 
                     b.Property<int>("ReviewCycle")
                         .HasColumnType("integer")
@@ -551,6 +626,12 @@ namespace Aide.Infrastructure.Migrations
                     b.HasIndex("OptimizationPlanArtifactId")
                         .HasDatabaseName("ix_compliance_reports_optimization_plan_artifact_id");
 
+                    b.HasIndex("ReleaseVersionId")
+                        .HasDatabaseName("ix_compliance_reports_release_version_id");
+
+                    b.HasIndex("ProjectId", "ReleaseVersionId")
+                        .HasDatabaseName("ix_compliance_reports_project_id_release_version_id");
+
                     b.HasIndex("ProjectId", "ReviewCycle")
                         .HasDatabaseName("ix_compliance_reports_project_id_review_cycle");
 
@@ -562,6 +643,11 @@ namespace Aide.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("AgentKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("agent_key");
 
                     b.Property<int>("Attempt")
                         .HasColumnType("integer")
@@ -580,6 +666,13 @@ namespace Aide.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
+
+                    b.PrimitiveCollection<string[]>("Covers")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("covers")
+                        .HasDefaultValueSql("'{}'::text[]");
 
                     b.Property<string>("DeclaredFiles")
                         .IsRequired()
@@ -602,6 +695,10 @@ namespace Aide.Infrastructure.Migrations
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
+
+                    b.Property<Guid>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
 
                     b.Property<uint>("RowVersion")
                         .IsConcurrencyToken()
@@ -645,14 +742,76 @@ namespace Aide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_execution_steps");
 
+                    b.HasIndex("ReleaseVersionId")
+                        .HasDatabaseName("ix_execution_steps_release_version_id");
+
                     b.HasIndex("PlanArtifactId", "StepNumber")
                         .IsUnique()
                         .HasDatabaseName("ix_execution_steps_plan_artifact_id_step_number");
+
+                    b.HasIndex("ProjectId", "ReleaseVersionId")
+                        .HasDatabaseName("ix_execution_steps_project_id_release_version_id");
 
                     b.HasIndex("ProjectId", "Status")
                         .HasDatabaseName("ix_execution_steps_project_id_status");
 
                     b.ToTable("execution_steps", (string)null);
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.ExecutionStepAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AgentRunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agent_run_id");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("ProducedFiles")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("produced_files");
+
+                    b.Property<Guid>("StepId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("step_id");
+
+                    b.Property<string>("Violations")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("violations");
+
+                    b.Property<string>("Warnings")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("warnings");
+
+                    b.HasKey("Id")
+                        .HasName("pk_execution_step_attempts");
+
+                    b.HasIndex("AgentRunId")
+                        .HasDatabaseName("ix_execution_step_attempts_agent_run_id");
+
+                    b.HasIndex("StepId", "Attempt")
+                        .IsUnique()
+                        .HasDatabaseName("ix_execution_step_attempts_step_id_attempt");
+
+                    b.ToTable("execution_step_attempts", (string)null);
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.Job", b =>
@@ -875,6 +1034,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("approval_mode");
 
+                    b.Property<int>("Checkpoint")
+                        .HasColumnType("integer")
+                        .HasColumnName("checkpoint");
+
                     b.Property<decimal>("ComplianceThreshold")
                         .HasPrecision(3, 2)
                         .HasColumnType("numeric(3,2)")
@@ -889,6 +1052,14 @@ namespace Aide.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("current_phase");
+
+                    b.Property<Guid?>("CurrentReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_release_version_id");
+
+                    b.Property<string>("DevelopmentVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("development_version");
 
                     b.Property<bool>("ExecutionPaused")
                         .HasColumnType("boolean")
@@ -917,15 +1088,23 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("max_review_cycles");
 
+                    b.Property<string>("MergeStrategy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("aide_merges")
+                        .HasColumnName("merge_strategy");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name");
 
-                    b.Property<int>("ProjectVersion")
-                        .HasColumnType("integer")
-                        .HasColumnName("project_version");
+                    b.Property<string>("ReleasedVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("released_version");
 
                     b.Property<int>("ReviewCycle")
                         .ValueGeneratedOnAdd()
@@ -951,6 +1130,13 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("status");
 
+                    b.Property<string>("TagPrefix")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("v")
+                        .HasColumnName("tag_prefix");
+
                     b.Property<long?>("TokenBudget")
                         .HasColumnType("bigint")
                         .HasColumnName("token_budget");
@@ -966,6 +1152,9 @@ namespace Aide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_projects");
 
+                    b.HasIndex("CurrentReleaseVersionId")
+                        .HasDatabaseName("ix_projects_current_release_version_id");
+
                     b.HasIndex("Status", "CurrentPhase")
                         .HasDatabaseName("ix_projects_status_current_phase");
 
@@ -978,11 +1167,6 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
 
-                    b.Property<string>("BranchName")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("branch_name");
-
                     b.Property<string>("DefaultBranch")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -994,15 +1178,6 @@ namespace Aide.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("provider");
-
-                    b.Property<int?>("PullRequestNumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("pull_request_number");
-
-                    b.Property<string>("PullRequestUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("pull_request_url");
 
                     b.Property<string>("RepoUrl")
                         .HasMaxLength(500)
@@ -1110,6 +1285,14 @@ namespace Aide.Infrastructure.Migrations
                         .HasDefaultValue(1)
                         .HasColumnName("attempt");
 
+                    b.Property<DateTimeOffset?>("AwaitingMergeSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("awaiting_merge_since");
+
+                    b.Property<int>("Checkpoint")
+                        .HasColumnType("integer")
+                        .HasColumnName("checkpoint");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
@@ -1132,10 +1315,19 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("error_message");
 
+                    b.Property<string>("GithubReleaseUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("github_release_url");
+
                     b.Property<string>("MergeCommitSha")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("merge_commit_sha");
+
+                    b.Property<string>("MergeReasons")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("merge_reasons");
 
                     b.Property<string>("PrUrl")
                         .HasMaxLength(500)
@@ -1146,9 +1338,9 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
 
-                    b.Property<int>("ProjectVersion")
-                        .HasColumnType("integer")
-                        .HasColumnName("project_version");
+                    b.Property<Guid>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1165,11 +1357,132 @@ namespace Aide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_releases");
 
-                    b.HasIndex("ProjectId", "ProjectVersion", "Attempt")
+                    b.HasIndex("ProjectId", "ReleaseVersionId")
+                        .HasDatabaseName("ix_releases_project_id_release_version_id");
+
+                    b.HasIndex("ReleaseVersionId", "Checkpoint", "Attempt")
                         .IsUnique()
-                        .HasDatabaseName("ux_releases_project_id_project_version_attempt");
+                        .HasDatabaseName("ux_releases_release_version_id_checkpoint_attempt");
 
                     b.ToTable("releases", (string)null);
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.ReleaseVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BaseCommitSha")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("base_commit_sha");
+
+                    b.Property<string>("BaseTag")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("base_tag");
+
+                    b.Property<string>("BranchName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("branch_name");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("MergeCommitSha")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("merge_commit_sha");
+
+                    b.Property<string>("PresetHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("preset_hash");
+
+                    b.Property<string>("PresetId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("preset_id");
+
+                    b.Property<string>("PresetVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("preset_version");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<int?>("PullRequestNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("pull_request_number");
+
+                    b.Property<string>("PullRequestUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("pull_request_url");
+
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at");
+
+                    b.Property<string>("Request")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("request");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<Guid?>("StartedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("started_by");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Tag")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("tag");
+
+                    b.Property<string>("TagPrefix")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("v")
+                        .HasColumnName("tag_prefix");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_release_versions");
+
+                    b.HasIndex("ProjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_release_versions_project_id_open")
+                        .HasFilter("status IN ('in_development', 'awaiting_merge')");
+
+                    b.HasIndex("StartedBy")
+                        .HasDatabaseName("ix_release_versions_started_by");
+
+                    b.HasIndex("ProjectId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ix_release_versions_project_id_version");
+
+                    b.ToTable("release_versions", (string)null);
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.RollbackEvent", b =>
@@ -1196,9 +1509,9 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<int>("FromVersion")
+                    b.Property<int>("FromCheckpoint")
                         .HasColumnType("integer")
-                        .HasColumnName("from_version");
+                        .HasColumnName("from_checkpoint");
 
                     b.PrimitiveCollection<Guid[]>("InvalidatedArtifactIds")
                         .IsRequired()
@@ -1213,6 +1526,10 @@ namespace Aide.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("reason");
+
+                    b.Property<Guid>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
 
                     b.PrimitiveCollection<Guid[]>("RequeuedStepIds")
                         .IsRequired()
@@ -1232,9 +1549,9 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("restored_phase");
 
-                    b.Property<int>("TargetVersion")
+                    b.Property<int>("TargetCheckpoint")
                         .HasColumnType("integer")
-                        .HasColumnName("target_version");
+                        .HasColumnName("target_checkpoint");
 
                     b.Property<string>("TriggeredBy")
                         .IsRequired()
@@ -1245,8 +1562,14 @@ namespace Aide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_rollback_events");
 
+                    b.HasIndex("ReleaseVersionId")
+                        .HasDatabaseName("ix_rollback_events_release_version_id");
+
                     b.HasIndex("ProjectId", "CreatedAt")
                         .HasDatabaseName("ix_rollback_events_project_id_created_at");
+
+                    b.HasIndex("ProjectId", "ReleaseVersionId")
+                        .HasDatabaseName("ix_rollback_events_project_id_release_version_id");
 
                     b.ToTable("rollback_events", (string)null);
                 });
@@ -1263,6 +1586,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("actor");
 
+                    b.Property<int>("Checkpoint")
+                        .HasColumnType("integer")
+                        .HasColumnName("checkpoint");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1276,14 +1603,14 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
 
-                    b.Property<int>("ProjectVersion")
-                        .HasColumnType("integer")
-                        .HasColumnName("project_version");
-
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("reason");
+
+                    b.Property<Guid>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
 
                     b.Property<string>("ToPhase")
                         .IsRequired()
@@ -1294,8 +1621,14 @@ namespace Aide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_state_transitions");
 
+                    b.HasIndex("ReleaseVersionId")
+                        .HasDatabaseName("ix_state_transitions_release_version_id");
+
                     b.HasIndex("ProjectId", "CreatedAt")
                         .HasDatabaseName("ix_state_transitions_project_id_created_at");
+
+                    b.HasIndex("ProjectId", "ReleaseVersionId")
+                        .HasDatabaseName("ix_state_transitions_project_id_release_version_id");
 
                     b.ToTable("state_transitions", (string)null);
                 });
@@ -1608,6 +1941,12 @@ namespace Aide.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_agent_runs_projects_project_id");
 
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_agent_runs_release_versions_release_version_id");
+
                     b.HasOne("Aide.Domain.Entities.ExecutionStep", null)
                         .WithMany()
                         .HasForeignKey("StepId")
@@ -1639,6 +1978,13 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_approval_gates_projects_project_id");
+
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_approval_gates_release_versions_release_version_id");
 
                     b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
                         .WithMany()
@@ -1683,6 +2029,13 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_artifacts_projects_project_id");
+
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_artifacts_release_versions_release_version_id");
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.AuditEvent", b =>
@@ -1715,6 +2068,13 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_compliance_reports_projects_project_id");
+
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_compliance_reports_release_versions_release_version_id");
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.ExecutionStep", b =>
@@ -1732,6 +2092,29 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_execution_steps_projects_project_id");
+
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_execution_steps_release_versions_release_version_id");
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.ExecutionStepAttempt", b =>
+                {
+                    b.HasOne("Aide.Domain.Entities.AgentRun", null)
+                        .WithMany()
+                        .HasForeignKey("AgentRunId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_execution_step_attempts_agent_runs_agent_run_id");
+
+                    b.HasOne("Aide.Domain.Entities.ExecutionStep", null)
+                        .WithMany()
+                        .HasForeignKey("StepId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_execution_step_attempts_execution_steps_step_id");
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.Job", b =>
@@ -1823,6 +2206,29 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_releases_projects_project_id");
+
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_releases_release_versions_release_version_id");
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.ReleaseVersion", b =>
+                {
+                    b.HasOne("Aide.Domain.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_release_versions_projects_project_id");
+
+                    b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("StartedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_release_versions_users_started_by");
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.RollbackEvent", b =>
@@ -1833,6 +2239,13 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_rollback_events_projects_project_id");
+
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_rollback_events_release_versions_release_version_id");
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.StateTransition", b =>
@@ -1843,6 +2256,13 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_state_transitions_projects_project_id");
+
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_state_transitions_release_versions_release_version_id");
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.UserNotificationPreferences", b =>

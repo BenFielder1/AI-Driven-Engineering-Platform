@@ -43,7 +43,7 @@ export const errorMessages = {
   MERGE_CONFLICT:
     "The project branch conflicts with the default branch, so it couldn't be merged. Resolve the conflict on the project branch, then retry the release.",
   INVALID_TARGET_VERSION:
-    "You can't roll back to that version: pick a recorded version below the current one that isn't in the Release phase.",
+    "You can't roll back to that checkpoint: pick a recorded checkpoint of the version in development, below the current one and not in the Release phase.",
   ROLLBACK_BLOCKED:
     "A rollback isn't possible while an execution step or agent run is in progress. Wait for it to finish (or pause execution), then try again.",
   RATE_LIMITED: "Too many attempts. Wait a moment and try again.",
@@ -127,7 +127,7 @@ export const contextualErrorMessages = {
   /** POST /api/projects/:id/gates/:gateId/approve on a step_blocked escalation (FR-33): accept is refused there. */
   stepEscalationDecision: {
     INVALID_DECISION:
-      "That decision isn't available for a blocked step. Choose Continue to retry the step, or Roll back to a version below the current one.",
+      "That decision isn't available for a blocked step. Choose Continue to retry the step, or Roll back to a checkpoint below the current one.",
   },
   executionControl: {
     PHASE_PRECONDITION_FAILED:
@@ -172,6 +172,18 @@ export const contextualErrorMessages = {
       "Git or GitHub refused the merge, tag or push. Check the repository access and the project branch, then retry the release.",
     RELEASE_CANCELLED:
       "A rollback cancelled this release before it ran. Retry the release once the project is ready again.",
+  },
+  /** POST /api/projects/:id/versions — Start new version (FR-60, FR-61). */
+  startVersion: {
+    VERSION_INVALID:
+      "Enter a version as MAJOR.MINOR.PATCH with an optional -prerelease, for example 1.2.0 or 2.0.0-beta.1.",
+    TAG_EXISTS:
+      "A tag for this version already exists in the repository. Choose another version.",
+    CONFLICT:
+      "Someone else changed the project at the same time. Close this dialog to see the latest state, then try again.",
+    FORBIDDEN: "Only project Owners can start a new version.",
+    UPSTREAM_ERROR:
+      "We couldn't check the repository's tags (GitHub failed or couldn't be reached). Try again in a moment.",
   },
   /** POST /api/projects/:id/rollback (FR-44, FR-45). */
   rollback: {
@@ -342,6 +354,8 @@ export function detailValue(error: ApiError, key: string): string | null {
  * `reason: …` detail. Only the reasons are matched here, never a tag (tags may carry a suffix such as `v6-aide.2`).
  */
 export const rollbackBlockedMessages = {
+  versionReleased:
+    "This version is released and closed, so it can't be rolled back. Start a new version to make changes.",
   releasePartiallyApplied:
     "A rollback isn't possible because the release was partially applied (merged or tagged, but not finished). Retry the release first.",
   releaseRunning:
@@ -350,6 +364,9 @@ export const rollbackBlockedMessages = {
 
 function rollbackBlockedMessage(error: ApiError): string | null {
   const reason = `${detailValue(error, "reason") ?? ""} ${error.message}`.toLowerCase();
+  if (/version[ _-]released/.test(reason)) {
+    return rollbackBlockedMessages.versionReleased;
+  }
   if (/partially[ _-]applied/.test(reason)) {
     return rollbackBlockedMessages.releasePartiallyApplied;
   }

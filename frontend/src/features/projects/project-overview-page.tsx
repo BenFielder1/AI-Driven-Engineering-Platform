@@ -7,7 +7,6 @@ import { panelClass } from '../../components/shared/panel-class'
 import { SkeletonCards, SkeletonPage } from '../../components/shared/skeletons'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/radix-tabs'
 import { ErrorState } from '../../components/ui/states'
-import { canInProject } from '../../lib/permissions'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { cn } from '../../lib/utils'
 import { ActivityFeed } from '../activity/activity-feed'
@@ -17,6 +16,9 @@ import { LifecycleCard } from '../lifecycle/lifecycle-card'
 import { nextAction } from '../lifecycle/next-action'
 import { ReleasePanel } from '../release/release-panel'
 import { TokenBudget } from '../runs/token-budget'
+import { StartVersionButton } from '../versions/start-version-button'
+import { checkpointLabel } from '../versions/version-label'
+import { VersionSummary } from '../versions/version-summary'
 import {
   artifactStatusLabels,
   artifactTypeLabels,
@@ -71,10 +73,25 @@ type HistoryTab = 'activity' | 'gates'
  * the token budget (FR-26), and the activity preview and gate history (FR-50).
  */
 export function ProjectOverviewPage() {
-  const { project, user, role } = useProjectAccess()
+  const { project, can, readOnly, releaseVersionId, view } = useProjectAccess()
   useDocumentTitle(project.name)
   const state = useProjectState(project.id)
   const [historyTab, setHistoryTab] = useState<HistoryTab>('activity')
+
+  // FR-62: a past release version shows what it was and its activity, read-only.
+  if (readOnly && releaseVersionId && view.version) {
+    return (
+      <div className="grid gap-5 lg:grid-cols-3">
+        <VersionSummary version={view.version} />
+        <section aria-labelledby="history-title" className={cn(panelClass, 'p-4 lg:col-span-2')}>
+          <h2 id="history-title" className="mb-3 text-base">
+            Activity in {view.version.version}
+          </h2>
+          <ActivityFeed projectId={project.id} releaseVersionId={releaseVersionId} />
+        </section>
+      </div>
+    )
+  }
 
   if (state.isPending) {
     return (
@@ -89,7 +106,6 @@ export function ProjectOverviewPage() {
   }
 
   const s = state.data
-  const can = (c: Parameters<typeof canInProject>[2]) => canInProject(user, role, c)
   const { review, execution } = s
   return (
     <div className="flex flex-col gap-5">
@@ -97,9 +113,9 @@ export function ProjectOverviewPage() {
 
       <section aria-label="Key figures" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Project version"
-          value={String(s.projectVersion)}
-          footer="Goes up on every phase change and release."
+          label="Checkpoint"
+          value={String(s.checkpoint)}
+          footer={`${checkpointLabel(s.developmentVersion ?? s.releasedVersion, s.checkpoint)} · goes up on every forward phase change.`}
         />
         <MetricCard
           label="Latest compliance"
@@ -122,7 +138,19 @@ export function ProjectOverviewPage() {
         />
       </section>
 
-      <PendingGatesPanel projectId={project.id} canDecide={can('decideGates')} currentVersion={s.projectVersion} />
+      {s.status === 'released' && s.developmentVersion === null && can('startVersion') && (
+        <section aria-labelledby="next-version-title" className={cn(panelClass, 'flex flex-col gap-3 p-4')}>
+          <h2 id="next-version-title" className="text-base">
+            {s.releasedVersion ? `${s.releasedVersion} is released` : 'Released'}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            A released version is closed. Start a new version to add features, improvements or fixes.
+          </p>
+          <StartVersionButton projectId={project.id} state={s} />
+        </section>
+      )}
+
+      <PendingGatesPanel projectId={project.id} canDecide={can('decideGates')} currentCheckpoint={s.checkpoint} />
 
       {(s.phase === 'release' || s.latestRelease !== null) && (
         <ReleasePanel projectId={project.id} state={s} canRelease={can('requestRelease')} />

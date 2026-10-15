@@ -17,7 +17,10 @@ internal static class ProjectMapping
         p.Idea,
         p.CurrentPhase,
         p.Status,
-        p.ProjectVersion,
+        p.Checkpoint,
+        p.CurrentReleaseVersionId,
+        p.ReleasedVersion,
+        p.DevelopmentVersion,
         p.ApprovalMode,
         p.ComplianceThreshold,
         p.MaxFilesPerStep,
@@ -29,8 +32,10 @@ internal static class ProjectMapping
         p.CreatedAt,
         p.UpdatedAt);
 
-    public static GitSettingsDto ToDto(ProjectGitSettings s) =>
-        new(s.Provider, s.RepoUrl, s.DefaultBranch, s.BranchName, s.TokenEncrypted is not null);
+    /// <param name="s">The project's Git settings.</param>
+    /// <param name="branchName">The working branch of the project's current release version (§4.10), if recorded.</param>
+    public static GitSettingsDto ToDto(ProjectGitSettings s, string? branchName) =>
+        new(s.Provider, s.RepoUrl, s.DefaultBranch, branchName, s.TokenEncrypted is not null);
 
     public static LlmSettingsDto ToDto(ProjectLlmSettings s, ILlmProviderCatalog catalog)
     {

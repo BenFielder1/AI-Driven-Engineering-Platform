@@ -54,10 +54,10 @@ internal static class ProjectCommands
             }
 
             await context.Out.WriteLineAsync(Output.Table(
-                ["ID", "NAME", "PHASE", "STATUS", "VERSION", "ROLE", "UPDATED"],
+                ["ID", "NAME", "PHASE", "STATUS", "RELEASED", "IN DEVELOPMENT", "ROLE", "UPDATED"],
                 paged.Items.Select(p => (IReadOnlyList<string>)
                 [
-                    p.Id.ToString(), p.Name, p.CurrentPhase, p.Status, Output.Num(p.ProjectVersion), p.MyRole ?? "admin", Output.Time(p.UpdatedAt),
+                    p.Id.ToString(), p.Name, p.CurrentPhase, p.Status, p.ReleasedVersion ?? "-", p.DevelopmentVersion ?? "-", p.MyRole ?? "admin", Output.Time(p.UpdatedAt),
                 ]))).ConfigureAwait(false);
             var pages = Math.Max(1, (int)Math.Ceiling(paged.Total / (double)Math.Max(1, paged.Limit)));
             await context.Out.WriteLineAsync(string.Create(CultureInfo.InvariantCulture, $"Page {paged.Page} of {pages} ({paged.Total} projects)")).ConfigureAwait(false);
@@ -230,7 +230,8 @@ internal static class ProjectCommands
             [
                 ("Phase", s.Phase),
                 ("Status", s.Status),
-                ("Version", Output.Num(s.ProjectVersion)),
+                ("Released", s.ReleasedVersion ?? "not released"),
+                ("In development", s.DevelopmentVersion is { } development ? $"{development} (checkpoint {Output.Num(s.Checkpoint)})" : "-"),
                 ("Approval mode", project.ApprovalMode),
                 ("Execution", s.ExecutionPaused ? $"{s.ExecutionStatus} (paused)" : s.ExecutionStatus),
                 ("Steps", string.Create(CultureInfo.InvariantCulture,

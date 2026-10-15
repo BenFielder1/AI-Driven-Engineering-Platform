@@ -39,7 +39,7 @@ public sealed class SpecAndPlanAgentTests(AideApiFactory factory)
 
         Assert.Equal((JobTypes.SpecGeneration, JobStatus.Succeeded), (job.Type, job.Status));
         var spec = Assert.Single(await AgentJobs.ArtifactsAsync(factory, id, ArtifactType.TechnicalSpecification));
-        Assert.Equal((1, ArtifactStatus.Draft, (Guid?)job.Id, (Guid?)null, 2), (spec.Version, spec.Status, spec.AgentRunId, spec.CreatedByUserId, spec.ProjectVersionAtCreation));
+        Assert.Equal((1, ArtifactStatus.Draft, (Guid?)job.Id, (Guid?)null, 2), (spec.Version, spec.Status, spec.AgentRunId, spec.CreatedByUserId, spec.CheckpointAtCreation));
         Assert.Empty(SpecSections.Missing(spec.Content));
         Assert.Contains("/api/todos", spec.Content, StringComparison.Ordinal);
         var run = Assert.Single(await AgentJobs.RunsAsync(factory, id));

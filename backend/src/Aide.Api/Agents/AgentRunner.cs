@@ -267,6 +267,7 @@ public sealed partial class AgentRunner(
         {
             Id = runId,
             ProjectId = project.Id,
+            ReleaseVersionId = project.CurrentReleaseVersionId,
             Agent = request.Agent,
             Phase = project.CurrentPhase,
             StepId = request.StepId,

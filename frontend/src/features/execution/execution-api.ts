@@ -22,8 +22,8 @@ const RUNNING_REFETCH_MS = 15_000
 /** Query keys, all under `projectKeys.execution(id)` so live `step`/`artifact` events refresh every steps view. */
 export const executionKeys = {
   all: (id: string) => projectKeys.execution(id),
-  steps: (id: string, planType: ArtifactType, planVersion: number | null) =>
-    [...projectKeys.execution(id), 'steps', planType, planVersion ?? 'current'] as const,
+  steps: (id: string, planType: ArtifactType, planVersion: number | null, releaseVersionId?: string) =>
+    [...projectKeys.execution(id), 'steps', planType, planVersion ?? 'current', releaseVersionId ?? 'current'] as const,
 }
 
 const isActive = (data: ExecutionSteps | undefined) =>
@@ -34,13 +34,26 @@ const isActive = (data: ExecutionSteps | undefined) =>
  * (highest locked) version; with no locked plan the result has `plan: null` and no steps. Steps exist only for plan
  * versions that were approved.
  */
-export function useExecutionSteps(id: string, planType: ArtifactType, planVersion: number | null, enabled = true) {
+export function useExecutionSteps(
+  id: string,
+  planType: ArtifactType,
+  planVersion: number | null,
+  enabled = true,
+  releaseVersionId?: string,
+) {
   return useQuery({
-    queryKey: executionKeys.steps(id, planType, planVersion),
+    queryKey: executionKeys.steps(id, planType, planVersion, releaseVersionId),
     queryFn: async ({ signal }) =>
       unwrap(
         await api.GET('/api/projects/{id}/execution/steps', {
-          params: { path: { id }, query: { planType, ...(planVersion === null ? {} : { planVersion }) } },
+          params: {
+            path: { id },
+            query: {
+              planType,
+              ...(planVersion === null ? {} : { planVersion }),
+              ...(releaseVersionId ? { releaseVersionId } : {}),
+            },
+          },
           signal,
         }),
       ),

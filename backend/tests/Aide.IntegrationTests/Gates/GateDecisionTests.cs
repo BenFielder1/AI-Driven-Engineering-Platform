@@ -35,7 +35,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         Assert.NotNull(decided.DecidedAt);
 
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Planning, ProjectStatus.Active, 3), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Planning, ProjectStatus.Active, 3), (project.CurrentPhase, project.Status, project.Checkpoint));
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.GateApproved));
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PhaseChanged));
         Assert.Equal([JobTypes.PlanGeneration], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
@@ -88,7 +88,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
 
         Assert.Equal((GateStatus.Rejected, "split step 4"), (decided.Status, decided.Comment));
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Planning, 3), (project.CurrentPhase, project.ProjectVersion));
+        Assert.Equal((Phase.Planning, 3), (project.CurrentPhase, project.Checkpoint));
 
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
         Assert.Equal((JobTypes.PlanGeneration, JobStatus.Queued), (job.Type, job.Status));
@@ -125,7 +125,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve"));
 
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
         Assert.Equal([JobTypes.Release], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
     }
 
@@ -227,7 +227,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve", new { decision = "continue" }));
 
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Execution, ProjectStatus.Building, 5, 1), (project.CurrentPhase, project.Status, project.ProjectVersion, project.ExtraReviewCycles));
+        Assert.Equal((Phase.Execution, ProjectStatus.Building, 5, 1), (project.CurrentPhase, project.Status, project.Checkpoint, project.ExtraReviewCycles));
     }
 
     [Fact]
@@ -247,7 +247,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         // The accepted escalation satisfies the release entry condition (§4.1).
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, preRelease.Id, "approve"));
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
     }
 
     [Fact]
@@ -275,11 +275,11 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         });
 
         var decided = await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(
-            fixture.Owner.Client, id, gate.Id, "approve", new { decision = "rollback", targetVersion = 3, comment = "Plan was wrong" }));
+            fixture.Owner.Client, id, gate.Id, "approve", new { decision = "rollback", targetCheckpoint = 3, comment = "Plan was wrong" }));
 
-        Assert.Equal(((EscalationDecision?)EscalationDecision.Rollback, (int?)3), (decided.Decision, decided.TargetVersion));
+        Assert.Equal(((EscalationDecision?)EscalationDecision.Rollback, (int?)3), (decided.Decision, decided.TargetCheckpoint));
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Planning, ProjectStatus.RolledBack, 3, 0, 0), (project.CurrentPhase, project.Status, project.ProjectVersion, project.ReviewCycle, project.ExtraReviewCycles));
+        Assert.Equal((Phase.Planning, ProjectStatus.RolledBack, 3, 0, 0), (project.CurrentPhase, project.Status, project.Checkpoint, project.ReviewCycle, project.ExtraReviewCycles));
         Assert.NotNull(project.LastRollbackAt);
 
         await ProjectApi.WithDbAsync(factory, async db =>
@@ -294,7 +294,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
             Assert.All(optimisationSteps, s => Assert.Equal(StepStatus.Invalidated, steps[s.Id]));
 
             var record = await db.RollbackEvents.SingleAsync(r => r.ProjectId == id, Ct);
-            Assert.Equal((5, 3, "Plan was wrong"), (record.FromVersion, record.TargetVersion, record.Reason));
+            Assert.Equal((5, 3, "Plan was wrong"), (record.FromCheckpoint, record.TargetCheckpoint, record.Reason));
             Assert.Equal([optimisation.Id], record.InvalidatedArtifactIds);
             Assert.Equal(optimisationSteps.Select(s => s.Id).Order(), record.ResetStepIds.Order());
             Assert.Equal(Phase.Planning, record.RestoredPhase);
@@ -316,11 +316,11 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         var gate = await EscalatedReviewAsync(id);
 
-        var response = await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve", new { decision = "rollback", targetVersion = 5 });
+        var response = await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve", new { decision = "rollback", targetCheckpoint = 5 });
 
         await Problems.AssertAsync(response, HttpStatusCode.BadRequest, ErrorCodes.InvalidTargetVersion);
         Assert.Equal(GateStatus.Pending, (await LifecycleSeed.GatesAsync(factory, id)).Single(g => g.Id == gate.Id).Status);
-        Assert.Equal((Phase.Review, 5), ((await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase, (await LifecycleSeed.ProjectAsync(factory, id)).ProjectVersion));
+        Assert.Equal((Phase.Review, 5), ((await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase, (await LifecycleSeed.ProjectAsync(factory, id)).Checkpoint));
     }
 
     [Fact]
@@ -332,7 +332,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         await ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == id)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.LastRollbackAt, DateTimeOffset.UtcNow.AddSeconds(-30)), Ct));
 
-        var response = await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve", new { decision = "rollback", targetVersion = 1 });
+        var response = await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve", new { decision = "rollback", targetCheckpoint = 1 });
 
         await Problems.AssertAsync(response, HttpStatusCode.TooManyRequests, ErrorCodes.RateLimited);
         var retryAfter = int.Parse(Assert.Single(response.Headers.GetValues("Retry-After")), System.Globalization.CultureInfo.InvariantCulture);
@@ -351,7 +351,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         var gate = await EscalatedReviewAsync(id);
 
-        var response = await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, action, new { decision, targetVersion });
+        var response = await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, action, new { decision, targetCheckpoint = targetVersion });
 
         await Problems.AssertAsync(response, HttpStatusCode.BadRequest, ErrorCodes.InvalidDecision);
         Assert.Equal(GateStatus.Pending, Assert.Single(await LifecycleSeed.GatesAsync(factory, id)).Status);

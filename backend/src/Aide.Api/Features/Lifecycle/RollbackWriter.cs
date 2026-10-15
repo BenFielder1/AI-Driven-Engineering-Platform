@@ -25,8 +25,9 @@ namespace Aide.Api.Features.Lifecycle;
 public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
 {
     /// <summary>
-    /// Rolls the tracked <paramref name="project"/> back to <paramref name="targetVersion"/>. <paramref name="keepGateId"/> is a
-    /// pending gate not to cancel (the escalation gate whose decision is this rollback).
+    /// Rolls the tracked <paramref name="project"/> back to checkpoint <paramref name="targetVersion"/> of its current release
+    /// version (§4.10: only that version's transitions, artifacts and steps are read, so earlier versions' work is never
+    /// touched). <paramref name="keepGateId"/> is a pending gate not to cancel (the escalation gate whose decision is this rollback).
     /// </summary>
     public async Task<Result<RollbackEvent>> ApplyAsync(
         Project project,
@@ -65,21 +66,28 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
             && await db.Releases.AsNoTracking().AnyAsync(
                 r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress && r.MergeCommitSha != null, cancellationToken);
 
+        // §4.10: the rollback works on the release version in development only; a released (closed) version or one awaiting
+        // its merge can't be rolled back at all.
+        var versionId = project.CurrentReleaseVersionId ?? await db.CurrentReleaseVersionIdAsync(id, cancellationToken) ?? Guid.Empty;
+        var versionStatus = await db.ReleaseVersions.AsNoTracking()
+            .Where(v => v.Id == versionId)
+            .Select(v => (ReleaseVersionStatus?)v.Status)
+            .FirstOrDefaultAsync(cancellationToken);
         var transitions = await db.StateTransitions.AsNoTracking()
-            .Where(t => t.ProjectId == id)
-            .Select(t => new RecordedTransition(t.ProjectVersion, t.ToPhase, t.CreatedAt))
+            .Where(t => t.ProjectId == id && t.ReleaseVersionId == versionId)
+            .Select(t => new RecordedTransition(t.Checkpoint, t.ToPhase, t.CreatedAt))
             .ToListAsync(cancellationToken);
-        var artifacts = await db.Artifacts.Where(a => a.ProjectId == id).ToListAsync(cancellationToken);
-        var steps = await db.ExecutionSteps.Where(s => s.ProjectId == id).ToListAsync(cancellationToken);
+        var artifacts = await db.Artifacts.Where(a => a.ProjectId == id && a.ReleaseVersionId == versionId).ToListAsync(cancellationToken);
+        var steps = await db.ExecutionSteps.Where(s => s.ProjectId == id && s.ReleaseVersionId == versionId).ToListAsync(cancellationToken);
         var runInProgress = await db.AgentRuns.AsNoTracking()
             .AnyAsync(r => r.ProjectId == id && (r.Status == AgentRunStatus.Queued || r.Status == AgentRunStatus.Running), cancellationToken);
 
         var planned = RollbackRules.Plan(new RollbackRequest(
-            new LifecycleState(project.CurrentPhase, project.Status, project.ProjectVersion),
+            new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint),
             targetVersion,
             reason,
             transitions,
-            [.. artifacts.Select(a => new ArtifactRef(a.Id, a.Type, a.Status, a.ProjectVersionAtCreation))],
+            [.. artifacts.Select(a => new ArtifactRef(a.Id, a.Type, a.Status, a.CheckpointAtCreation))],
             [.. steps.Select(s => new StepRef(s.Id, s.PlanArtifactId, s.Status))],
             runInProgress,
             now,
@@ -87,6 +95,8 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
         {
             ReleaseRunning = releaseRunning,
             ReleasePartiallyApplied = releasePartiallyApplied,
+            VersionReleased = project.Status == ProjectStatus.Released || versionStatus is ReleaseVersionStatus.Released or ReleaseVersionStatus.Imported,
+            AwaitingMerge = versionStatus == ReleaseVersionStatus.AwaitingMerge,
         });
         if (planned.IsFailure)
         {
@@ -106,7 +116,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
             db.AddEvent(
                 EventTypes.ArtifactInvalidated,
                 id,
-                new { artifactId = artifact.Id, type = artifact.Type, version = artifact.Version, cause = "rollback", targetVersion },
+                new { artifactId = artifact.Id, type = artifact.Type, version = artifact.Version, cause = "rollback", targetCheckpoint = targetVersion },
                 actor,
                 now);
         }
@@ -135,8 +145,8 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
         {
             gate.Status = GateRules.Cancel(gate.Status);
             gate.DecidedAt = now;
-            gate.Comment = $"Cancelled by rollback to version {targetVersion}.";
-            db.AddEvent(EventTypes.GateCancelled, id, new { gateId = gate.Id, type = gate.Type, cause = "rollback", targetVersion }, actor, now);
+            gate.Comment = $"Cancelled by rollback to checkpoint {targetVersion}.";
+            db.AddEvent(EventTypes.GateCancelled, id, new { gateId = gate.Id, type = gate.Type, cause = "rollback", targetCheckpoint = targetVersion }, actor, now);
         }
 
         var queuedJobs = activeJobs.Where(j => j.Status == JobStatus.Queued).ToList();
@@ -151,14 +161,15 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
         foreach (var release in releases)
         {
             Release.ReleaseRecords.Fail(
-                db, release, ErrorCodes.ReleaseCancelled, $"Cancelled by the rollback to version {targetVersion}.", [], actor, now);
+                db, release, ErrorCodes.ReleaseCancelled, $"Cancelled by the rollback to checkpoint {targetVersion}.", [], actor, now);
         }
 
         var record = new RollbackEvent
         {
             ProjectId = id,
-            FromVersion = plan.FromVersion,
-            TargetVersion = plan.TargetVersion,
+            ReleaseVersionId = versionId,
+            FromCheckpoint = plan.FromVersion,
+            TargetCheckpoint = plan.TargetVersion,
             RestoredPhase = plan.Transition.To,
             Reason = reason,
             InvalidatedArtifactIds = plan.InvalidatedArtifactIds,
@@ -176,8 +187,9 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
             new
             {
                 rollbackId = record.Id,
-                fromVersion = plan.FromVersion,
-                targetVersion = plan.TargetVersion,
+                releaseVersionId = versionId,
+                fromCheckpoint = plan.FromVersion,
+                targetCheckpoint = plan.TargetVersion,
                 phase = plan.Transition.To,
                 reason,
                 invalidatedArtifactIds = plan.InvalidatedArtifactIds,

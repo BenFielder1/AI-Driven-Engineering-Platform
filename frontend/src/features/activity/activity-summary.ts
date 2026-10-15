@@ -19,6 +19,9 @@ import type { ActivityItem } from "./activity-api";
 
 type Payload = ActivityItem["payload"];
 
+/** Looks up a release version's semver by id (FR-63: "1.2.0 · checkpoint 4"); may return `undefined`. */
+export type VersionNameLookup = (releaseVersionId: string) => string | undefined;
+
 /** Narrows a free-form payload value to one of `allowed` (the contract's wire values), or `null`. */
 function oneOf<T extends string>(
   payload: Payload,
@@ -39,6 +42,12 @@ function version(payload: Payload, key: string): number | null {
     : null;
 }
 
+/** A non-empty string, or `null`. */
+function str(payload: Payload, key: string): string | null {
+  const value = payload[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 /** `ARTIFACT_APPROVED` → "Artifact approved". */
 function humanizeType(type: string): string {
   const words = type.toLowerCase().replaceAll("_", " ");
@@ -47,18 +56,47 @@ function humanizeType(type: string): string {
     : words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function describePhaseChange(payload: Payload): string | null {
+/**
+ * A checkpoint from the payload as "1.2.0 · checkpoint 4" (FR-63), or "checkpoint 4" when the release version isn't
+ * known. v2 payloads use `key` (e.g. `checkpoint`); events stored before D-V2-11 still carry `legacyKey`
+ * (e.g. `projectVersion`), so that is read as a fallback.
+ */
+function checkpointAt(
+  payload: Payload,
+  key: string,
+  legacyKey: string,
+  names: VersionNameLookup | undefined,
+): string | null {
+  const n = version(payload, key) ?? version(payload, legacyKey);
+  if (n === null) {
+    return null;
+  }
+  const id = str(payload, "releaseVersionId");
+  const name = id && names ? names(id) : undefined;
+  return name ? `${name} · checkpoint ${String(n)}` : `checkpoint ${String(n)}`;
+}
+
+function describePhaseChange(payload: Payload, names: VersionNameLookup | undefined): string | null {
   const from = oneOf(payload, "from", phases);
   const to = oneOf(payload, "to", phases);
   if (!from || !to) {
     return null;
   }
-  const v = version(payload, "projectVersion");
+  const at = checkpointAt(payload, "checkpoint", "projectVersion", names);
   const text = `Phase changed from ${phaseLabels[from]} to ${phaseLabels[to]}`;
-  return v === null ? text : `${text} (version ${String(v)})`;
+  return at === null ? text : `${text} (${at})`;
 }
 
-function describeGate(type: string, payload: Payload): string | null {
+function describeVersionStarted(payload: Payload): string | null {
+  const v = str(payload, "version");
+  if (!v) {
+    return null;
+  }
+  const base = str(payload, "baseTag");
+  return base ? `Version ${v} started from ${base}` : `Version ${v} started`;
+}
+
+function describeGate(type: string, payload: Payload, names: VersionNameLookup | undefined): string | null {
   const gateType = oneOf(payload, "type", gateTypes);
   if (!gateType) {
     return null;
@@ -75,10 +113,10 @@ function describeGate(type: string, payload: Payload): string | null {
       if (!decision) {
         return null;
       }
-      const target = version(payload, "targetVersion");
+      const target = checkpointAt(payload, "targetCheckpoint", "targetVersion", names);
       const label = escalationDecisionLabels[decision];
       return decision === "rollback" && target !== null
-        ? `${gate} decided: ${label} to version ${String(target)}`
+        ? `${gate} decided: ${label} to ${target}`
         : `${gate} decided: ${label}`;
     }
     case "GATE_REJECTED":
@@ -92,12 +130,12 @@ function describeGate(type: string, payload: Payload): string | null {
   }
 }
 
-function describeRollback(payload: Payload): string | null {
-  const from = version(payload, "fromVersion");
-  const target = version(payload, "targetVersion");
+function describeRollback(payload: Payload, names: VersionNameLookup | undefined): string | null {
+  const from = checkpointAt(payload, "fromCheckpoint", "fromVersion", names);
+  const target = version(payload, "targetCheckpoint") ?? version(payload, "targetVersion");
   return from === null || target === null
     ? null
-    : `Rolled back from version ${String(from)} to version ${String(target)}`;
+    : `Rolled back from ${from} to checkpoint ${String(target)}`;
 }
 
 /** A whole, non-negative count (tokens, attempts, milliseconds), or `null`. */
@@ -218,12 +256,6 @@ function describeStep(type: string, payload: Payload): string | null {
     default:
       return null;
   }
-}
-
-/** A non-empty string, or `null`. */
-function str(payload: Payload, key: string): string | null {
-  const value = payload[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 /** Pull request events (FR-36); payloads from PullRequestJob. */
@@ -352,22 +384,26 @@ function describeArtifact(type: string, payload: Payload): string | null {
  */
 export function describeActivity(
   item: Pick<ActivityItem, "type" | "payload" | "summary">,
+  names?: VersionNameLookup,
 ): string {
   const { type, payload } = item;
   let text: string | null;
   switch (type) {
     case "PHASE_CHANGED":
-      text = describePhaseChange(payload);
+      text = describePhaseChange(payload, names);
+      break;
+    case "VERSION_STARTED":
+      text = describeVersionStarted(payload);
       break;
     case "GATE_CREATED":
     case "GATE_APPROVED":
     case "GATE_REJECTED":
     case "GATE_CANCELLED":
     case "GATE_OVERDUE":
-      text = describeGate(type, payload);
+      text = describeGate(type, payload, names);
       break;
     case "ROLLBACK_COMPLETED":
-      text = describeRollback(payload);
+      text = describeRollback(payload, names);
       break;
     case "RELEASE_STARTED":
     case "RELEASE_COMPLETED":

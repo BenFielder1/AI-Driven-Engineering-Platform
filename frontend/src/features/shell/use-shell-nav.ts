@@ -14,6 +14,10 @@ export interface ShellNav {
   projectId: string | undefined
   /** The project's name once loaded (shared cache with the project layout). */
   projectName: string | undefined
+  /** FR-62: the project's released version (`null`: not released) once loaded. */
+  releasedVersion: string | null | undefined
+  /** FR-62: the version in development (`null`: none) once loaded. */
+  developmentVersion: string | null | undefined
   /** Lifecycle stage states once /state has loaded. */
   stages: StageStatus[] | undefined
 }
@@ -30,6 +34,8 @@ export function useShellNav(user: User): ShellNav {
     viewer: { isAdmin: canViewAdmin(user) },
     projectId,
     projectName: projectId ? project.data?.name : undefined,
+    releasedVersion: projectId ? project.data?.releasedVersion : undefined,
+    developmentVersion: projectId ? project.data?.developmentVersion : undefined,
     stages: projectId && state.data ? stageStatuses(state.data) : undefined,
   }
 }

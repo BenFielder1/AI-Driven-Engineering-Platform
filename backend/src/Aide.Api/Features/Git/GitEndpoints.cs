@@ -93,11 +93,14 @@ public sealed partial class PullRequestReader(
             return null;
         }
 
+        var version = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken) is { } versionId
+            ? await db.ReleaseVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == versionId, cancellationToken)
+            : null;
         var (baseBranch, headBranch) = Branches(opened.Payload);
-        var head = headBranch ?? git.BranchName;
+        var head = headBranch ?? version?.BranchName;
         return head is null
             ? null
-            : new PullRequestSummaryDto(git.Provider, baseBranch ?? git.DefaultBranch, head, git.PullRequestNumber, git.PullRequestUrl, opened.CreatedAt);
+            : new PullRequestSummaryDto(git.Provider, baseBranch ?? git.DefaultBranch, head, version?.PullRequestNumber, version?.PullRequestUrl, opened.CreatedAt);
     }
 
     public async Task<PullRequestDto?> GetAsync(Guid projectId, CancellationToken cancellationToken)

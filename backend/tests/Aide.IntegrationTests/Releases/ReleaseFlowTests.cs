@@ -7,6 +7,7 @@ using Aide.Api.Features.Gates;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Release;
 using Aide.Api.Features.Rollback;
+using Aide.Api.Features.Versions;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -24,7 +25,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Aide.IntegrationTests.Releases;
 
 /// <summary>
-/// FR-42, FR-43 end to end with the Fake LLM: execution → PR → a release-eligible review → the Owner approves the
+/// FR-42 (amended by FR-64), FR-43, FR-63 end to end with the Fake LLM: execution → PR → a release-eligible review → the Owner approves the
 /// pre_release gate → the release job merges and tags. Local works in the working copy; GitHub merges through
 /// <see cref="FakeGitHubApi"/> (which merges in a local bare repository) and pushes the tag there. Nothing reaches github.com.
 /// </summary>
@@ -35,7 +36,8 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     private const string Pulls = "/repos/acme/widgets/pulls";
     private const string Pull = Pulls + "/42";
     private const string PrUrl = "https://github.com/acme/widgets/pull/42";
-    private const string Tag = "v6-aide";
+    /// <summary>FR-64, FR-66: the release tags the project's (default initial) version 0.1.0 as <c>v0.1.0</c>.</summary>
+    private const string Tag = "v0.1.0";
 
     private static readonly string Basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"x-access-token:{Token}"));
 
@@ -47,28 +49,30 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     // ---------- Local ----------
 
     [Fact]
-    public async Task FR42_Local_approving_pre_release_merges_the_branch_tags_it_and_marks_the_project_released()
+    public async Task FR42_amended_by_FR64_Local_approving_pre_release_merges_the_branch_tags_the_semver_and_marks_the_version_released()
     {
         var app = ReleaseEligible();
         using var fixture = await ReleasableAsync(app);
         var id = fixture.Project.Id;
-        var branch = ExecutionRules.BranchName(fixture.Project.Slug, id);
+        var branch = Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!));
         var branchHead = await GitAsync(id, "rev-parse", branch);
 
         await ApproveReleaseGateAsync(app, fixture);
 
         // The attempt is visible as soon as the job is queued.
         var queued = await LatestAsync(fixture.Viewer.Client, id);
-        Assert.Equal((ReleaseStatus.InProgress, Tag, 6, 1, (DateTimeOffset?)null), (queued.Status, queued.Tag, queued.ProjectVersion, queued.Attempt, queued.CompletedAt));
+        Assert.Equal((ReleaseStatus.InProgress, Tag, 6, 1, (DateTimeOffset?)null), (queued.Status, queued.Tag, queued.Checkpoint, queued.Attempt, queued.CompletedAt));
         Assert.Equal((ReleaseStatus.InProgress, Tag), ((await StateAsync(fixture.Viewer.Client, id)).LatestRelease!.Status, (await StateAsync(fixture.Viewer.Client, id)).LatestRelease!.Tag));
 
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
 
         Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.Release).Status);
+        // §4.10: release completion doesn't create a checkpoint (v1 incremented the project version to 7).
         var project = await LifecycleSeed.ProjectAsync(app, id);
-        Assert.Equal((Phase.Release, ProjectStatus.Released, 7), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Release, ProjectStatus.Released, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
+        Assert.Equal(("0.1.0", (string?)null), (project.ReleasedVersion, project.DevelopmentVersion));
         var completedTransition = (await LifecycleSeed.TransitionsAsync(app, id)).Last();
-        Assert.Equal((Phase.Release, Phase.Release, 7, ReleaseJobHandler.CompletedReason), (completedTransition.FromPhase, completedTransition.ToPhase, completedTransition.ProjectVersion, completedTransition.Reason));
+        Assert.Equal((Phase.Release, Phase.Release, 6, ReleaseJobHandler.CompletedReason), (completedTransition.FromPhase, completedTransition.ToPhase, completedTransition.Checkpoint, completedTransition.Reason));
 
         // Git: a merge commit on main whose second parent is the branch head, an annotated tag on it, the branch checked out again.
         var main = await GitAsync(id, "rev-parse", "main");
@@ -82,6 +86,9 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         var release = await LatestAsync(fixture.Viewer.Client, id);
         Assert.Equal((ReleaseStatus.Succeeded, main, (string?)null, 1, (string?)null), (release.Status, release.MergeCommitSha, release.PullRequestUrl, release.Attempt, release.ErrorCode));
         Assert.NotNull(release.CompletedAt);
+        var version = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == id, Ct));
+        Assert.Equal((ReleaseVersionStatus.Released, Tag, main, release.ReleaseVersionId), (version.Status, version.Tag, version.MergeCommitSha, version.Id));
+        Assert.NotNull(version.ReleasedAt);
         Assert.Equal(ReleaseStatus.Succeeded, (await StateAsync(fixture.Viewer.Client, id)).LatestRelease!.Status);
 
         var started = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.ReleaseStarted)).Payload);
@@ -91,7 +98,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR42_A_redelivered_release_finds_its_tag_and_is_a_no_op_and_a_tag_elsewhere_is_never_moved()
+    public async Task FR42_amended_by_FR64_A_redelivered_release_finds_its_tag_and_is_a_no_op_and_a_tag_elsewhere_fails_TAG_EXISTS()
     {
         var app = ReleaseEligible();
         using var fixture = await ReleasableAsync(app);
@@ -111,86 +118,103 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         Assert.True(noOp.GetProperty("alreadyTagged").GetBoolean());
         Assert.Equal((ReleaseStatus.Succeeded, main), ((await LatestAsync(fixture.Viewer.Client, id)).Status, (await LatestAsync(fixture.Viewer.Client, id)).MergeCommitSha));
 
-        // A tag of that name on a commit without the branch is never moved: the release takes the next free tag.
+        // A tag of that name on a commit without the branch is never moved: FR-64 fails the release with TAG_EXISTS (v1 took
+        // the next free v<N>-aide.<k>).
         await UnrecordAsync(app, id);
         await GitAsync(id, "tag", "-f", "-a", Tag, "-m", "Someone else's tag", "main^1");
         var elsewhere = await GitAsync(id, "rev-parse", Tag);
         await RedeliverAsync(app, job);
 
-        var suffixed = await LatestAsync(fixture.Viewer.Client, id);
-        Assert.Equal((ReleaseStatus.Succeeded, Tag + ".2", main), (suffixed.Status, suffixed.Tag, suffixed.MergeCommitSha));
-        Assert.Equal(ProjectStatus.Released, (await LifecycleSeed.ProjectAsync(app, id)).Status);
+        var failed = await LatestAsync(fixture.Viewer.Client, id);
+        Assert.Equal((ReleaseStatus.Failed, ErrorCodes.TagExists, Tag), (failed.Status, failed.ErrorCode, failed.Tag));
+        Assert.Equal(ProjectStatus.Releasing, (await LifecycleSeed.ProjectAsync(app, id)).Status);
         Assert.Equal(elsewhere, await GitAsync(id, "rev-parse", Tag));
-        Assert.Equal(main, await GitAsync(id, "rev-parse", $"{Tag}.2^{{commit}}"));
-        Assert.Equal(main, await GitAsync(id, "rev-parse", "main"));
-    }
-
-    [Fact]
-    public async Task FR42_Re_release_after_a_rollback_with_new_commits_tags_the_next_free_v_N_aide_k()
-    {
-        var app = ReleaseEligible();
-        using var fixture = await ReleasableAsync(app);
-        var id = fixture.Project.Id;
-        var branch = ExecutionRules.BranchName(fixture.Project.Slug, id);
-        await ApproveReleaseGateAsync(app, fixture);
-        await AgentJobs.RunQueuedAsync(app, id);
-        var firstRelease = await GitAsync(id, "rev-parse", $"{Tag}^{{commit}}");
-
-        // Roll back to v5 (review), fix something on the branch, pass review again: the release reuses version 6.
-        await ProjectApi.ReadAsync<RollbackDto>(await RollbackAsync(fixture.Owner.Client, id, 5));
-        await File.WriteAllTextAsync(Path.Combine(WorkingCopy(id), "src", "part1.js"), "// fixed after the rollback\n", Ct);
-        await GitAsync(id, "add", "src/part1.js");
-        await GitAsync(id, "commit", "-q", "-m", "Fix after rollback");
-        var newHead = await GitAsync(id, "rev-parse", branch);
-        await ReReleaseAsync(app, fixture);
-
-        var jobs = await AgentJobs.RunQueuedAsync(app, id);
-
-        Assert.All(jobs.Where(j => j.Type == JobTypes.Release), j => Assert.Equal(JobStatus.Succeeded, j.Status));
-        var release = await LatestAsync(fixture.Viewer.Client, id);
-        var main = await GitAsync(id, "rev-parse", "main");
-        Assert.Equal((ReleaseStatus.Succeeded, Tag + ".2", 6, 2, main), (release.Status, release.Tag, release.ProjectVersion, release.Attempt, release.MergeCommitSha));
-        Assert.Equal(newHead, await GitAsync(id, "rev-parse", "main^2"));
-        Assert.Equal(main, await GitAsync(id, "rev-parse", $"{Tag}.2^{{commit}}"));
-        Assert.Equal(firstRelease, await GitAsync(id, "rev-parse", $"{Tag}^{{commit}}")); // never moved
-        Assert.Equal($"[AIDE] Release {Tag}.2: {fixture.Project.Name}", await GitAsync(id, "log", "-1", "--format=%s", "main"));
-        Assert.Equal((Phase.Release, ProjectStatus.Released, 7), ((await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase, (await LifecycleSeed.ProjectAsync(app, id)).Status, (await LifecycleSeed.ProjectAsync(app, id)).ProjectVersion));
-        var completed = LifecycleSeed.Payload((await LifecycleSeed.EventsAsync(app, id, EventTypes.ReleaseCompleted)).Last().Payload);
-        Assert.Equal((Tag + ".2", false), (completed.GetProperty("tag").GetString(), completed.GetProperty("alreadyTagged").GetBoolean()));
-
-        // Delivered again: the suffixed tag holds the release, so it is a no-op.
-        await UnrecordAsync(app, id);
-        await RedeliverAsync(app, (await LifecycleSeed.JobsAsync(app, id)).Where(j => j.Type == JobTypes.Release).OrderBy(j => j.CreatedAt).Last());
-        Assert.Equal(main, await GitAsync(id, "rev-parse", "main"));
-        var again = await LatestAsync(fixture.Viewer.Client, id);
-        Assert.Equal((ReleaseStatus.Succeeded, Tag + ".2"), (again.Status, again.Tag));
-        Assert.True(LifecycleSeed.Payload((await LifecycleSeed.EventsAsync(app, id, EventTypes.ReleaseCompleted)).Last().Payload).GetProperty("alreadyTagged").GetBoolean());
-        Assert.Equal(string.Empty, await GitAsync(id, "tag", "--list", $"{Tag}.3"));
-    }
-
-    [Fact]
-    public async Task FR42_Re_release_after_a_rollback_without_new_commits_succeeds_with_the_existing_tag()
-    {
-        var app = ReleaseEligible();
-        using var fixture = await ReleasableAsync(app);
-        var id = fixture.Project.Id;
-        await ApproveReleaseGateAsync(app, fixture);
-        await AgentJobs.RunQueuedAsync(app, id);
-        var main = await GitAsync(id, "rev-parse", "main");
-        var tagObject = await GitAsync(id, "rev-parse", Tag);
-
-        await ProjectApi.ReadAsync<RollbackDto>(await RollbackAsync(fixture.Owner.Client, id, 5));
-        await ReReleaseAsync(app, fixture);
-        await AgentJobs.RunQueuedAsync(app, id);
-
-        // Nothing new to merge: v6-aide already holds the branch, so the release is recorded with it (no merge, no tag).
-        Assert.Equal((main, tagObject), (await GitAsync(id, "rev-parse", "main"), await GitAsync(id, "rev-parse", Tag)));
         Assert.Equal(string.Empty, await GitAsync(id, "tag", "--list", $"{Tag}.*"));
-        var history = await ProjectApi.ReadAsync<List<ReleaseDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/releases", UriKind.Relative), Ct));
-        Assert.Equal([(2, ReleaseStatus.Succeeded, Tag), (1, ReleaseStatus.Succeeded, Tag)], history.Select(r => (r.Attempt, r.Status, r.Tag)));
-        Assert.All(history, r => Assert.Equal(6, r.ProjectVersion));
-        Assert.True(LifecycleSeed.Payload((await LifecycleSeed.EventsAsync(app, id, EventTypes.ReleaseCompleted)).Last().Payload).GetProperty("alreadyTagged").GetBoolean());
-        Assert.Equal((Phase.Release, ProjectStatus.Released, 7), ((await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase, (await LifecycleSeed.ProjectAsync(app, id)).Status, (await LifecycleSeed.ProjectAsync(app, id)).ProjectVersion));
+    }
+
+    [Fact]
+    public async Task FR64_A_tag_that_already_exists_on_another_commit_fails_the_release_with_TAG_EXISTS_and_merges_nothing()
+    {
+        var app = ReleaseEligible();
+        using var fixture = await ReleasableAsync(app);
+        var id = fixture.Project.Id;
+        await GitAsync(id, "tag", "-a", Tag, "-m", "Tagged by hand", "main");
+        var mainBefore = await GitAsync(id, "rev-parse", "main");
+        await ApproveReleaseGateAsync(app, fixture);
+
+        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == JobTypes.Release);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status); // the job ended; the release failed for good
+        var failed = await LatestAsync(fixture.Viewer.Client, id);
+        Assert.Equal((ReleaseStatus.Failed, ErrorCodes.TagExists, (string?)null), (failed.Status, failed.ErrorCode, failed.MergeCommitSha));
+        Assert.Equal(mainBefore, await GitAsync(id, "rev-parse", "main"));
+        var project = await LifecycleSeed.ProjectAsync(app, id);
+        Assert.Equal((Phase.Release, ProjectStatus.Releasing, (string?)null, "0.1.0"), (project.CurrentPhase, project.Status, project.ReleasedVersion, project.DevelopmentVersion));
+        var failedEvent = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.ReleaseFailed)).Payload);
+        Assert.Equal(ErrorCodes.TagExists, failedEvent.GetProperty("errorCode").GetString());
+    }
+
+    [Fact]
+    public async Task FR42_amended_by_FR63_A_released_version_is_closed_rollback_is_ROLLBACK_BLOCKED_version_released()
+    {
+        var app = ReleaseEligible();
+        using var fixture = await ReleasableAsync(app);
+        var id = fixture.Project.Id;
+        await ApproveReleaseGateAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+        var main = await GitAsync(id, "rev-parse", "main");
+
+        var blocked = await Problems.AssertAsync(await RollbackAsync(fixture.Owner.Client, id, 5), HttpStatusCode.Conflict, ErrorCodes.RollbackBlocked);
+        Assert.Equal(["reason: version_released"], Details(blocked));
+        var checkpoints = await ProjectApi.ReadAsync<List<CheckpointDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/checkpoints", UriKind.Relative), Ct));
+        Assert.All(checkpoints, c => Assert.False(c.RollbackAllowed));
+        Assert.Equal(CheckpointBlock.VersionReleased, checkpoints.Single(c => c.Checkpoint == 5).RollbackBlockedReason);
+
+        var project = await LifecycleSeed.ProjectAsync(app, id);
+        Assert.Equal((Phase.Release, ProjectStatus.Released, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
+        Assert.Equal(main, await GitAsync(id, "rev-parse", $"{Tag}^{{commit}}"));
+    }
+
+    [Fact]
+    public async Task FR66_FR64_Local_release_of_initial_version_1_0_0_tags_v1_0_0_then_1_1_0_can_start_from_it()
+    {
+        var app = ReleaseEligible();
+        using var fixture = await ReleasableAsync(app, initialVersion: "1.0.0");
+        var id = fixture.Project.Id;
+        Assert.Equal(((string?)null, "1.0.0"), (fixture.Project.ReleasedVersion, fixture.Project.DevelopmentVersion));
+        await ApproveReleaseGateAsync(app, fixture);
+
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        var main = await GitAsync(id, "rev-parse", "main");
+        Assert.Equal("tag", await GitAsync(id, "cat-file", "-t", "v1.0.0"));
+        Assert.Equal(main, await GitAsync(id, "rev-parse", "v1.0.0^{commit}"));
+        Assert.Equal(string.Empty, await GitAsync(id, "tag", "--list", "v*-aide*"));
+        var state = await StateAsync(fixture.Viewer.Client, id);
+        Assert.Equal((ProjectStatus.Released, "1.0.0", (string?)null, "1.1.0"), (state.Status, state.ReleasedVersion, state.DevelopmentVersion, state.SuggestedNextVersion));
+        Assert.Equal("v1.0.0", state.LatestRelease!.Tag);
+
+        // The way forward is a new version (FR-60): based on the released tag and its merge commit.
+        await Problems.AssertAsync(await StartVersionAsync(fixture.Owner.Client, id, "1.0.0"), HttpStatusCode.Conflict, ErrorCodes.VersionNotGreater);
+        var started = await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(await StartVersionAsync(fixture.Owner.Client, id, "1.1.0"), HttpStatusCode.Created);
+        Assert.Equal(("1.1.0", "v1.0.0", main), (started.ReleaseVersion.Version, started.ReleaseVersion.BaseTag, started.ReleaseVersion.BaseCommitSha));
+        Assert.Equal((Phase.Refinement, ProjectStatus.Active, 1, "1.0.0", "1.1.0"),
+            (started.State.Phase, started.State.Status, started.State.Checkpoint, started.State.ReleasedVersion, started.State.DevelopmentVersion));
+
+        // §4.10: the released version's artifacts are baseline history, not the new version's current ones.
+        Assert.All(started.State.Artifacts, a => Assert.Null(a.LatestVersion));
+        var versions = await ProjectApi.ReadAsync<List<ReleaseVersionDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/versions", UriKind.Relative), Ct));
+        var released = versions.Single(v => v.Version == "1.0.0");
+        Assert.Equal((ReleaseVersionStatus.Released, "v1.0.0", 6, 6), (released.Status, released.Tag, released.Checkpoints.Current, released.Checkpoints.Max));
+        var baseline = await ProjectApi.ReadAsync<List<Aide.Api.Features.Artifacts.ArtifactSummaryDto>>(
+            await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/artifacts?releaseVersionId={released.Id}", UriKind.Relative), Ct));
+        Assert.Contains(baseline, a => a.Type == ArtifactType.ImplementationPlan && a.Status == ArtifactStatus.Locked);
+        Assert.Empty(await ProjectApi.ReadAsync<List<Aide.Api.Features.Artifacts.ArtifactSummaryDto>>(
+            await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/artifacts", UriKind.Relative), Ct)));
+        var oldReleases = await ProjectApi.ReadAsync<List<ReleaseDto>>(
+            await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/releases?releaseVersionId={released.Id}", UriKind.Relative), Ct));
+        Assert.Equal("v1.0.0", Assert.Single(oldReleases).Tag);
+        Assert.Empty(await ProjectApi.ReadAsync<List<ReleaseDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/releases", UriKind.Relative), Ct)));
     }
 
     [Fact]
@@ -199,7 +223,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         var app = ReleaseEligible();
         using var fixture = await ReleasableAsync(app);
         var id = fixture.Project.Id;
-        var branch = ExecutionRules.BranchName(fixture.Project.Slug, id);
+        var branch = Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!));
 
         // The default branch changed the same lines the project branch wrote.
         await GitAsync(id, "checkout", "-q", "main");
@@ -219,7 +243,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         Assert.Equal(["src/part1.js"], failed.ConflictingFiles);
         Assert.NotNull(failed.CompletedAt);
         var project = await LifecycleSeed.ProjectAsync(app, id);
-        Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
         Assert.Equal(mainBefore, await GitAsync(id, "rev-parse", "main")); // nothing merged
         Assert.False(File.Exists(Path.Combine(WorkingCopy(id), ".git", "MERGE_HEAD")));
         Assert.Equal(branch, await GitAsync(id, "symbolic-ref", "--short", "HEAD"));
@@ -233,7 +257,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         // Resolve on the project branch (keep the branch's version), then retry.
         await GitAsync(id, "merge", "-q", "-s", "ours", "-m", "Resolve conflict with main", "main");
         var retried = await ProjectApi.ReadAsync<ReleaseDto>(await RetryAsync(fixture.Owner.Client, id), HttpStatusCode.Accepted);
-        Assert.Equal((ReleaseStatus.InProgress, 2, Tag, 6), (retried.Status, retried.Attempt, retried.Tag, retried.ProjectVersion));
+        Assert.Equal((ReleaseStatus.InProgress, 2, Tag, 6), (retried.Status, retried.Attempt, retried.Tag, retried.Checkpoint));
         await Problems.AssertAsync(await RetryAsync(fixture.Owner.Client, id), HttpStatusCode.Conflict, ErrorCodes.ReleaseInProgress);
         var retryJob = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Release && j.Status == JobStatus.Queued);
         Assert.Equal(ReleaseRecords.Retried, LifecycleSeed.Payload(retryJob.Payload).GetProperty("trigger").GetString());
@@ -241,7 +265,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
 
         project = await LifecycleSeed.ProjectAsync(app, id);
-        Assert.Equal((Phase.Release, ProjectStatus.Released, 7), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Release, ProjectStatus.Released, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
         Assert.Equal(await GitAsync(id, "rev-parse", "main"), await GitAsync(id, "rev-parse", $"{Tag}^{{commit}}"));
         var history = await ProjectApi.ReadAsync<List<ReleaseDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/releases", UriKind.Relative), Ct));
         Assert.Equal([(2, ReleaseStatus.Succeeded), (1, ReleaseStatus.Failed)], history.Select(r => (r.Attempt, r.Status)));
@@ -288,32 +312,6 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     }
 
     // ---------- Rollback around a release (FR-44 with FR-42) ----------
-
-    [Fact]
-    public async Task FR44_A_released_project_rolls_back_without_rewriting_the_branch_or_the_tag()
-    {
-        var app = ReleaseEligible();
-        using var fixture = await ReleasableAsync(app);
-        var id = fixture.Project.Id;
-        await ApproveReleaseGateAsync(app, fixture);
-        await AgentJobs.RunQueuedAsync(app, id);
-        var main = await GitAsync(id, "rev-parse", "main");
-
-        var versions = await ProjectApi.ReadAsync<List<ProjectVersionDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/versions", UriKind.Relative), Ct));
-        Assert.Equal(
-            [(7, Phase.Release, RollbackTargetBlock.CurrentVersion), (6, Phase.Release, RollbackTargetBlock.ReleasePhase), (5, Phase.Review, (RollbackTargetBlock?)null)],
-            versions.Take(3).Select(v => (v.Version, v.Phase, v.RollbackBlockedReason)));
-        await Problems.AssertAsync(await RollbackAsync(fixture.Owner.Client, id, 6), HttpStatusCode.BadRequest, ErrorCodes.InvalidTargetVersion);
-
-        var rollback = await ProjectApi.ReadAsync<RollbackDto>(await RollbackAsync(fixture.Owner.Client, id, 5));
-
-        Assert.Equal((7, 5, Phase.Review), (rollback.FromVersion, rollback.ToVersion, rollback.RestoredPhase));
-        var project = await LifecycleSeed.ProjectAsync(app, id);
-        Assert.Equal((Phase.Review, ProjectStatus.RolledBack, 5), (project.CurrentPhase, project.Status, project.ProjectVersion));
-        Assert.Equal(main, await GitAsync(id, "rev-parse", "main"));
-        Assert.Equal(main, await GitAsync(id, "rev-parse", $"{Tag}^{{commit}}"));
-        Assert.Equal(ReleaseStatus.Succeeded, (await LatestAsync(fixture.Viewer.Client, id)).Status); // history is kept
-    }
 
     [Fact]
     public async Task FR44_A_rollback_cancels_a_queued_release_and_is_blocked_while_the_release_job_runs()
@@ -368,7 +366,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         var blocked = await Problems.AssertAsync(await rollback, HttpStatusCode.Conflict, ErrorCodes.RollbackBlocked);
         Assert.Equal(["reason: release_running"], Details(blocked));
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6, (DateTimeOffset?)null), (project.CurrentPhase, project.Status, project.ProjectVersion, project.LastRollbackAt));
+        Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6, (DateTimeOffset?)null), (project.CurrentPhase, project.Status, project.Checkpoint, project.LastRollbackAt));
         Assert.Equal(JobStatus.Running, Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Id == job.Id).Status);
         Assert.Equal(ReleaseStatus.InProgress, (await LatestAsync(fixture.Viewer.Client, id)).Status);
         Assert.Empty(await LifecycleSeed.EventsAsync(factory, id, EventTypes.RollbackCompleted));
@@ -413,7 +411,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     // ---------- GitHub ----------
 
     [Fact]
-    public async Task FR42_GitHub_merges_the_PR_through_the_API_and_pushes_the_annotated_tag()
+    public async Task FR42_amended_by_FR64_GitHub_merges_the_PR_through_the_API_and_pushes_the_annotated_semver_tag()
     {
         using var remote = await BareRemote.CreateAsync(Ct);
         var branch = new string[1];
@@ -433,7 +431,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         await using var app = remote.App(ReleaseEligible(), api, out var git);
         using var fixture = await ProjectApi.FixtureAsync(app, git: new { provider = "github", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
         var id = fixture.Project.Id;
-        branch[0] = ExecutionRules.BranchName(fixture.Project.Slug, id);
+        branch[0] = Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!));
         await StartExecutionAsync(app, fixture);
         await AgentJobs.RunQueuedAsync(app, id);
         await ApproveReleaseGateAsync(app, fixture);
@@ -441,7 +439,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
 
         var project = await LifecycleSeed.ProjectAsync(app, id);
-        Assert.Equal((Phase.Release, ProjectStatus.Released, 7), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Release, ProjectStatus.Released, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
         var merge = api.Requests.Single(r => r.Method == "PUT" && r.Path == Pull + "/merge");
         Assert.Equal($"Bearer {Token}", merge.Authorization);
         using (var body = JsonDocument.Parse(merge.Body))
@@ -536,16 +534,6 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve"));
     }
 
-    /// <summary>After a rollback to v5 (review): a new release-eligible review and the pre_release gate approved → release at v6.</summary>
-    private static async Task ReReleaseAsync(WebApplicationFactory<Program> app, ProjectFixture fixture)
-    {
-        var id = fixture.Project.Id;
-        await LifecycleSeed.SetProjectAsync(app, id, Phase.Review, 5, ApprovalMode.Advisory, reviewCycle: 1);
-        await LifecycleSeed.AddReportAsync(app, id, 5, Domain.Review.ReviewDecision.ReleaseEligible);
-        await LifecycleSeed.AddGateAsync(app, id, GateType.PreRelease);
-        await ApproveReleaseGateAsync(app, fixture);
-    }
-
     /// <summary>Waits until the rollback request is blocked on a row lock (its <c>FOR UPDATE</c> on the job rows).</summary>
     private async Task WaitForRollbackLockWaitAsync(Task rollback)
     {
@@ -569,10 +557,10 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
 
     private static List<string?> Details(JsonElement problem) => [.. problem.GetProperty("details").EnumerateArray().Select(d => d.GetString())];
 
-    /// <summary>A Local project (advisory, version 4) whose 2-step plan ran, opened its PR and passed review: a pre_release gate is pending.</summary>
-    private static async Task<ProjectFixture> ReleasableAsync(WebApplicationFactory<Program> app)
+    /// <summary>A Local project (advisory, checkpoint 4) whose 2-step plan ran, opened its PR and passed review: a pre_release gate is pending.</summary>
+    private static async Task<ProjectFixture> ReleasableAsync(WebApplicationFactory<Program> app, string? initialVersion = null)
     {
-        var fixture = await ProjectApi.FixtureAsync(app);
+        var fixture = await ProjectApi.FixtureAsync(app, initialVersion: initialVersion);
         await StartExecutionAsync(app, fixture);
         var jobs = await AgentJobs.RunQueuedAsync(app, fixture.Project.Id);
         Assert.True(jobs.All(j => j.Status == JobStatus.Succeeded), string.Join("; ", jobs.Select(j => $"{j.Type}:{j.Status}:{j.LastError}")));
@@ -610,15 +598,23 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         Assert.Equal(GateType.PreRelease, gate.Type);
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, fixture.Project.Id, gate.Id, "approve"));
         var project = await LifecycleSeed.ProjectAsync(app, fixture.Project.Id);
-        Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
     }
 
-    /// <summary>Puts the project back to release/releasing at version 6 with the latest attempt in progress (the recording was lost).</summary>
+    /// <summary>Puts the project back to release/releasing at checkpoint 6 with the latest attempt in progress and the version in development (the recording was lost).</summary>
     private static async Task UnrecordAsync(WebApplicationFactory<Program> app, Guid id)
     {
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Release, 6, ApprovalMode.Advisory, ProjectStatus.Releasing, reviewCycle: 1);
         await ProjectApi.WithDbAsync(app, async db =>
         {
+            await db.ReleaseVersions.Where(v => v.ProjectId == id).ExecuteUpdateAsync(
+                s => s.SetProperty(v => v.Status, ReleaseVersionStatus.InDevelopment)
+                    .SetProperty(v => v.Tag, (string?)null)
+                    .SetProperty(v => v.MergeCommitSha, (string?)null)
+                    .SetProperty(v => v.ReleasedAt, (DateTimeOffset?)null),
+                Ct);
+            await db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(
+                s => s.SetProperty(p => p.ReleasedVersion, (string?)null).SetProperty(p => p.DevelopmentVersion, "0.1.0"), Ct);
             var latest = await db.Releases.Where(r => r.ProjectId == id).OrderByDescending(r => r.Attempt).FirstAsync(Ct);
             await db.Releases.Where(r => r.Id == latest.Id).ExecuteUpdateAsync(
                 s => s.SetProperty(r => r.Status, ReleaseStatus.InProgress)
@@ -668,11 +664,14 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     private static string Run(string directory, params string[] arguments) =>
         TestGit.RunAsync(directory, CancellationToken.None, arguments).GetAwaiter().GetResult();
 
+    private static Task<HttpResponseMessage> StartVersionAsync(HttpClient client, Guid id, string version) =>
+        client.PostAsJsonAsync($"/api/projects/{id}/versions", new { version, request = "Add CSV export" }, Ct);
+
     private static Task<HttpResponseMessage> RetryAsync(HttpClient client, Guid id) =>
         client.PostAsJsonAsync($"/api/projects/{id}/release", new { }, Ct);
 
     private static Task<HttpResponseMessage> RollbackAsync(HttpClient client, Guid id, int targetVersion) =>
-        client.PostAsJsonAsync($"/api/projects/{id}/rollback", new { targetVersion, reason = "Back to an earlier version" }, Ct);
+        client.PostAsJsonAsync($"/api/projects/{id}/rollback", new { targetCheckpoint = targetVersion, reason = "Back to an earlier version" }, Ct);
 
     private static async Task<ReleaseDto> LatestAsync(HttpClient client, Guid id) =>
         await ProjectApi.ReadAsync<ReleaseDto>(await client.GetAsync(new Uri($"/api/projects/{id}/releases/latest", UriKind.Relative), Ct));

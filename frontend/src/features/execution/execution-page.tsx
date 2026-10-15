@@ -6,7 +6,6 @@ import { Badge, type BadgeTone } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
 import { errorMessage, errorReasons } from '../../lib/errors'
-import { canInProject } from '../../lib/permissions'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { PullRequestSection } from '../git/pull-request-section'
 import { useGates } from '../gates/gates-api'
@@ -174,14 +173,15 @@ function ProgressSummary({
  * completed the pull request or branch comparison (FR-36). Live `step` events refresh the steps, /state and the PR (FR-46).
  */
 export function ExecutionPage() {
-  const { project, user, role } = useProjectAccess()
+  const { project, can, readOnly, releaseVersionId } = useProjectAccess()
   useDocumentTitle(`Execution · ${project.name}`)
   const state = useProjectState(project.id)
-  // The counts and runner status in /state cover the current plan, so the list shows that plan's steps too.
-  const planType = state.data ? currentPlanType(state.data) : 'implementation_plan'
-  const steps = useExecutionSteps(project.id, planType, null, state.data !== undefined)
+  // The counts and runner status in /state cover the current plan, so the list shows that plan's steps too. A past
+  // release version (FR-62) shows its implementation plan's steps, read-only.
+  const planType = readOnly ? 'implementation_plan' : state.data ? currentPlanType(state.data) : 'implementation_plan'
+  const steps = useExecutionSteps(project.id, planType, null, state.data !== undefined, releaseVersionId)
   const gates = useGates(project.id)
-  const writer = canInProject(user, role, 'startExecution')
+  const writer = can('startExecution')
   const control = useExecutionControl(project.id)
   const [controlError, setControlError] = useState<unknown>(null)
 
@@ -267,7 +267,7 @@ export function ExecutionPage() {
             )}
           </div>
         )}
-        {!writer && (
+        {!writer && !readOnly && (
           <Alert tone="info">You can follow execution here. Only Contributors and Owners can start, pause or resume it.</Alert>
         )}
         <div role="alert" aria-live="assertive">
@@ -284,9 +284,9 @@ export function ExecutionPage() {
           )}
         </div>
 
-        <ProgressSummary status={status} state={s} current={current} />
+        {!readOnly && <ProgressSummary status={status} state={s} current={current} />}
 
-        <PullRequestSection projectId={project.id} state={s} writer={writer} />
+        {!readOnly && <PullRequestSection projectId={project.id} state={s} writer={writer} />}
 
         {plan === null || list.length === 0 ? (
           <EmptyState title="No execution steps yet">

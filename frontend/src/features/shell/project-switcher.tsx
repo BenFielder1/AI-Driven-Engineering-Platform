@@ -19,8 +19,8 @@ import type { SidebarMode } from './use-sidebar-preference'
 const SWITCHER_LIMIT = 20
 
 /**
- * FR-54: the project switcher at the top of project mode. Shows the project's name and a slot for its version badges
- * (`badges`; released + in-development arrive with FR-60), and lists the user's projects when opened.
+ * FR-54: the project switcher at the top of project mode. Shows the project's name and its version badges (`badges`,
+ * FR-62), and lists the user's projects when opened.
  */
 export function ProjectSwitcher({
   projectId,
@@ -73,7 +73,7 @@ export function ProjectSwitcher({
           {projects.isSuccess &&
             projects.data.items.map((p) => (
               <DropdownMenuItem key={p.id} asChild>
-                <Link to="/projects/$projectId" params={{ projectId: p.id }} onClick={onNavigate}>
+                <Link to="/projects/$projectId" params={{ projectId: p.id }} search={{ release: undefined }} onClick={onNavigate}>
                   <span className="min-w-0 flex-1 truncate">{p.name}</span>
                   {p.id === projectId ? <Check className="size-4" aria-label="Current project" /> : <span className="size-4" aria-hidden />}
                 </Link>

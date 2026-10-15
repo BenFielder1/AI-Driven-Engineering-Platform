@@ -197,8 +197,12 @@ public sealed partial class PullRequestJobHandler(
                 "The Git settings changed while the pull request was being opened; retrying against the new repository.", transient: true, ErrorCodes.Conflict);
         }
 
-        settings.PullRequestNumber = opened.Number;
-        settings.PullRequestUrl = opened.Url;
+        if (await db.CurrentReleaseVersionAsync(project.Id, cancellationToken) is { } version)
+        {
+            version.PullRequestNumber = opened.Number;
+            version.PullRequestUrl = opened.Url;
+        }
+
         if (!after.Recorded)
         {
             db.AddEvent(
@@ -290,7 +294,7 @@ public sealed partial class PullRequestJobHandler(
         return new PullRequestInput(
             project.Id,
             project.Name,
-            project.ProjectVersion,
+            project.Checkpoint,
             spec?.Content,
             spec?.Version,
             plan.Type,

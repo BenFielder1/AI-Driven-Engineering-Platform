@@ -199,8 +199,9 @@ public sealed class GitConnectionTestTests(AideApiFactory factory)
         ProjectApi.WithDbAsync(factory, async db =>
         {
             var git = await db.ProjectGitSettings.AsNoTracking().SingleAsync(s => s.ProjectId == projectId, Ct);
+            var branch = await db.ReleaseVersions.AsNoTracking().Where(v => v.ProjectId == projectId).Select(v => v.BranchName).SingleAsync(Ct);
             var events = await db.Events.CountAsync(e => e.ProjectId == projectId, Ct);
-            return $"{git.Provider}|{git.RepoUrl}|{git.DefaultBranch}|{git.BranchName}|{git.TokenEncrypted}|{events}";
+            return $"{git.Provider}|{git.RepoUrl}|{git.DefaultBranch}|{branch}|{git.TokenEncrypted}|{events}";
         });
 
     /// <summary>The GitHub REST API, answered in memory per path. Unknown paths are 404.</summary>

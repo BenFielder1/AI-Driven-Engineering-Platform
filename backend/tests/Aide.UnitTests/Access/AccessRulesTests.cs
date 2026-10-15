@@ -12,7 +12,7 @@ public class ProjectPermissionsTests
     private static readonly ProjectAction[] OwnerActions =
     [
         ProjectAction.DecideGate, ProjectAction.DecideArtifact, ProjectAction.RequestRelease, ProjectAction.Rollback,
-        ProjectAction.ChangeSettings, ProjectAction.ManageMembers, ProjectAction.DeleteProject,
+        ProjectAction.ChangeSettings, ProjectAction.ManageMembers, ProjectAction.DeleteProject, ProjectAction.StartVersion,
     ];
 
     public static TheoryData<ProjectRole, ProjectAction> RoleActionMatrix()

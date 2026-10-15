@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
 
 import { BrandLockup } from '../../components/brand'
+import { ProjectVersionBadges } from '../../components/shared/version-badge'
 import { cn } from '../../lib/utils'
 import type { User } from '../auth/auth-api'
 import { whenCollapsed } from './collapse-classes'
@@ -52,7 +53,17 @@ export function ShellNavigation({
   if (nav.projectId) {
     return (
       <div className="flex flex-col gap-4">
-        <ProjectSwitcher projectId={nav.projectId} projectName={nav.projectName} mode={mode} onNavigate={onNavigate} />
+        <ProjectSwitcher
+          projectId={nav.projectId}
+          projectName={nav.projectName}
+          badges={
+            nav.projectName !== undefined ? (
+              <ProjectVersionBadges released={nav.releasedVersion} development={nav.developmentVersion} />
+            ) : undefined
+          }
+          mode={mode}
+          onNavigate={onNavigate}
+        />
         <nav aria-label="Project sections">
           <NavList
             sections={projectSections()}

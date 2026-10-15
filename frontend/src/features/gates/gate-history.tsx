@@ -17,8 +17,8 @@ function decisionText(gate: Gate): string | null {
     return null
   }
   const label = escalationDecisionLabels[gate.decision]
-  return gate.decision === 'rollback' && gate.targetVersion !== null
-    ? `${label} to version ${String(gate.targetVersion)}`
+  return gate.decision === 'rollback' && gate.targetCheckpoint !== null
+    ? `${label} to checkpoint ${String(gate.targetCheckpoint)}`
     : label
 }
 

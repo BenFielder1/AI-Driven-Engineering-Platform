@@ -12,6 +12,7 @@ using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
+using Aide.Domain.Releases;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
@@ -35,15 +36,16 @@ public static partial class ProjectEndpoints
 
         group.MapGet("/", ListProjects)
             .WithName("ListProjects")
-            .WithSummary("The caller's projects (every project for Admins), paged, with search by name, phase and status filters and sorting.")
+            .WithSummary("The caller's projects (every project for Admins), paged, with search by name, phase, status and has-a-version-in-development filters and sorting. Rows carry the released and in-development version badges (FR-62).")
             .Produces<PagedResult<ProjectSummaryDto>>()
             .ProducesValidationProblem();
 
         group.MapPost("/", CreateProject)
             .WithName("CreateProject")
-            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults.")
+            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults; initialVersion (FR-66, default 0.1.0) is the first release version, in development. 400 VERSION_INVALID.")
             .Produces<ProjectDto>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapGet("/{id:guid}", GetProject)
@@ -87,6 +89,7 @@ public static partial class ProjectEndpoints
         [MaxLength(ProjectLimits.SearchMaxLength)] string? search = null,
         [WireEnum(typeof(Phase))] string? phase = null,
         [WireEnum(typeof(ProjectStatus))] string? status = null,
+        bool? hasDevelopmentVersion = null,
         [WireEnum(typeof(ProjectSortBy))] string sortBy = "updated",
         [WireEnum(typeof(SortOrder))] string sortOrder = "desc")
     {
@@ -117,6 +120,12 @@ public static partial class ProjectEndpoints
             query = query.Where(p => p.Status == wanted);
         }
 
+        // FR-62: the denormalised development_version column keeps this filter (and the badges) cheap.
+        if (hasDevelopmentVersion is { } hasDevelopment)
+        {
+            query = hasDevelopment ? query.Where(p => p.DevelopmentVersion != null) : query.Where(p => p.DevelopmentVersion == null);
+        }
+
         var total = await query.CountAsync(cancellationToken);
         var skip = (long)(page - 1) * limit;
         if (skip >= total)
@@ -142,7 +151,9 @@ public static partial class ProjectEndpoints
                 p.Slug,
                 p.CurrentPhase,
                 p.Status,
-                p.ProjectVersion,
+                p.Checkpoint,
+                p.ReleasedVersion,
+                p.DevelopmentVersion,
                 p.ApprovalMode,
                 db.ProjectMembers.Where(m => m.ProjectId == p.Id && m.UserId == userId).Select(m => (ProjectRole?)m.Role).FirstOrDefault(),
                 p.CreatedAt,
@@ -151,7 +162,7 @@ public static partial class ProjectEndpoints
         return TypedResults.Ok(new PagedResult<ProjectSummaryDto>(items, page, limit, total));
     }
 
-    private static async Task<Results<Created<ProjectDto>, ValidationProblem>> CreateProject(
+    private static async Task<Results<Created<ProjectDto>, ValidationProblem, ProblemHttpResult>> CreateProject(
         CreateProjectRequest request,
         ICurrentUser currentUser,
         ProjectCreator creator,
@@ -160,7 +171,7 @@ public static partial class ProjectEndpoints
         var created = await creator.CreateAsync(request, currentUser.RequiredUserId, currentUser.Actor, cancellationToken);
         if (created.IsFailure)
         {
-            return ApiProblems.Validation(created.Error!);
+            return created.Error!.Code == ErrorCodes.Validation ? ApiProblems.Validation(created.Error!) : ApiProblems.FromError(created.Error!);
         }
 
         var project = created.Value;
@@ -336,8 +347,14 @@ public static partial class ProjectEndpoints
             return null;
         }
 
+        // §4.10: the state is that of the current release version (in development, else the latest released).
+        var versionId = project.CurrentReleaseVersionId ?? await db.CurrentReleaseVersionIdAsync(id, cancellationToken);
+        var versionRows = await db.ReleaseVersions.AsNoTracking()
+            .Where(v => v.ProjectId == id)
+            .Select(v => new ReleaseVersionRow(v.Version, v.Status))
+            .ToListAsync(cancellationToken);
         var artifacts = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == id)
+            .Where(a => a.ProjectId == id && a.ReleaseVersionId == versionId)
             .Select(a => new { a.Id, a.Type, a.Version, a.Status, a.CreatedAt })
             .ToListAsync(cancellationToken);
         var artifactStates = ArtifactRules.All
@@ -411,7 +428,11 @@ public static partial class ProjectEndpoints
             project.Id,
             project.CurrentPhase,
             project.Status,
-            project.ProjectVersion,
+            project.Checkpoint,
+            versionId,
+            project.ReleasedVersion,
+            project.DevelopmentVersion,
+            ReleaseVersionRules.SuggestNext(versionRows).ToString(),
             project.ExecutionPaused,
             artifactStates,
             execution,
@@ -425,10 +446,10 @@ public static partial class ProjectEndpoints
                 await Execution.ExecutionQueries.JobActiveAsync(db, id, cancellationToken)),
             await Git.PullRequestReader.SummaryAsync(db, id, cancellationToken),
             await db.Releases.AsNoTracking()
-                .Where(r => r.ProjectId == id)
+                .Where(r => r.ProjectId == id && r.ReleaseVersionId == versionId)
                 .OrderByDescending(r => r.CreatedAt)
                 .ThenByDescending(r => r.Id)
-                .Select(r => new ReleaseSummaryDto(r.Id, r.ProjectVersion, r.Status, r.Tag, r.CreatedAt))
+                .Select(r => new ReleaseSummaryDto(r.Id, r.ReleaseVersionId, r.Checkpoint, r.Status, r.Tag, r.CreatedAt))
                 .FirstOrDefaultAsync(cancellationToken));
     }
 

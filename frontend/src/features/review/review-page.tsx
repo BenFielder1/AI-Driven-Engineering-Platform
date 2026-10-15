@@ -7,7 +7,6 @@ import { Badge, type BadgeTone } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
 import { errorMessage } from '../../lib/errors'
-import { canInProject } from '../../lib/permissions'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import {
   escalationReasonLabels,
@@ -20,6 +19,7 @@ import {
   reviewRunStatusLabels,
 } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
+import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
 import { useProjectState, type ProjectState } from '../projects/projects-api'
 import { ComplianceTrendChart } from './compliance-trend-chart'
 import {
@@ -99,11 +99,21 @@ function OptimisationPlanNote({
 }
 
 /** FR-38, FR-39: score vs threshold, cycle, decision and its reason in plain words. */
-function ReportSummary({ report, state, projectId }: { report: ComplianceReport; state: ProjectState; projectId: string }) {
+function ReportSummary({
+  report,
+  state,
+  projectId,
+  versionName,
+}: {
+  report: ComplianceReport
+  state: ProjectState
+  projectId: string
+  versionName: string | undefined
+}) {
   const meets = report.overallScore >= report.threshold
   const reason = report.decisionReason && report.decisionReason !== 'step_blocked' ? report.decisionReason : null
   return (
-    <ReportSection id="review-latest" title={`Latest report: cycle ${String(report.cycle)}, version ${String(report.projectVersion)}`}>
+    <ReportSection id="review-latest" title={`Latest report: cycle ${String(report.cycle)}, ${checkpointLabel(versionName, report.checkpoint)}`}>
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="flex flex-col">
           <dt className="text-xs text-muted-foreground">Compliance score</dt>
@@ -151,13 +161,14 @@ function ReportSummary({ report, state, projectId }: { report: ComplianceReport;
  * score trend across cycles, and the optimisation plan link. Live `review` events refresh it (FR-46).
  */
 export function ReviewPage() {
-  const { project, user, role } = useProjectAccess()
+  const { project, can, readOnly, releaseVersionId } = useProjectAccess()
+  const versionName = useReleaseVersionNames(project.id)
   useDocumentTitle(`Review · ${project.name}`)
   const state = useProjectState(project.id)
-  const running = state.data?.review.status === 'running'
-  const latest = useLatestCompliance(project.id, running)
-  const trend = useComplianceTrend(project.id)
-  const writer = canInProject(user, role, 'triggerReview')
+  const running = !readOnly && state.data?.review.status === 'running'
+  const latest = useLatestCompliance(project.id, running, releaseVersionId)
+  const trend = useComplianceTrend(project.id, releaseVersionId)
+  const writer = can('triggerReview')
   const start = useStartReview(project.id)
   const [startError, setStartError] = useState<unknown>(null)
   const [queued, setQueued] = useState<number | null>(null)
@@ -216,7 +227,7 @@ export function ReviewPage() {
     <section aria-labelledby="review-title">
       {header}
       <div className="flex flex-col gap-5">
-        {writer ? (
+        {readOnly ? null : writer ? (
           <div className="flex flex-col gap-2">
             <div>
               <Button
@@ -242,6 +253,7 @@ export function ReviewPage() {
           {startError !== null && <Alert tone="error" title={errorMessage(startError, 'startReview')} />}
         </div>
 
+        {!readOnly && (
         <section
           aria-labelledby="review-status"
           className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4"
@@ -278,6 +290,7 @@ export function ReviewPage() {
             </Alert>
           )}
         </section>
+        )}
 
         {report === null ? (
           <EmptyState title="No review yet">
@@ -289,7 +302,12 @@ export function ReviewPage() {
           </EmptyState>
         ) : (
           <>
-            <ReportSummary report={report} state={s} projectId={project.id} />
+            <ReportSummary
+              report={report}
+              state={s}
+              projectId={project.id}
+              versionName={versionName(report.releaseVersionId)}
+            />
             <CategoryBreakdown report={report} />
             {trend.data.series.length === 0 ? (
               <ReportSection id="review-trend" title="Compliance trend">

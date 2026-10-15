@@ -84,7 +84,7 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
                     : null,
                 g.Comment,
                 g.Decision,
-                g.TargetVersion,
+                g.TargetCheckpoint,
                 g.Status == GateStatus.Pending && (g.Overdue || now - g.CreatedAt >= GateTimers.OverdueAfter),
                 g.RemindedAt,
                 blocked?.StepId,

@@ -31,7 +31,7 @@ public static class ActivityEndpoints
 
         group.MapGet("/", ListActivity)
             .WithName("ListProjectActivity")
-            .WithSummary("The project's activity feed, newest first (members). Filter by category with type; load more with before = the previous page's nextBefore. limit defaults to 50 (max 100).")
+            .WithSummary("The project's activity feed, newest first (members). Filter by category with type; load more with before = the previous page's nextBefore. limit defaults to 50 (max 100). releaseVersionId limits it to the events while that release version was current (from its start to the start of the next); without it, the whole history.")
             .Produces<ActivityPageDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound);
@@ -46,7 +46,8 @@ public static class ActivityEndpoints
         CancellationToken cancellationToken,
         [WireEnum(typeof(EventCategory))] string? type = null,
         [MaxLength(ActivityLimits.CursorMaxLength)] string? before = null,
-        [Range(1, ActivityLimits.MaxLimit)] int limit = ActivityLimits.DefaultLimit)
+        [Range(1, ActivityLimits.MaxLimit)] int limit = ActivityLimits.DefaultLimit,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -72,6 +73,33 @@ public static class ActivityEndpoints
             ? db.Events.FromSql($"SELECT * FROM events WHERE (created_at, id) < ({c.OccurredAt}, {c.Id})")
             : db.Events;
         query = query.AsNoTracking().Where(e => e.ProjectId == id);
+        if (releaseVersionId is { } versionId)
+        {
+            // Events carry no release version: a version's activity is the time from its start to the next version's start.
+            var versions = await db.ReleaseVersions.AsNoTracking()
+                .Where(v => v.ProjectId == id)
+                .OrderBy(v => v.CreatedAt)
+                .ThenBy(v => v.Id)
+                .Select(v => new { v.Id, v.CreatedAt })
+                .ToListAsync(cancellationToken);
+            var index = versions.FindIndex(v => v.Id == versionId);
+            if (index < 0)
+            {
+                return ApiProblems.NotFound("The release version was not found in this project.");
+            }
+
+            if (index > 0)
+            {
+                var from = versions[index].CreatedAt;
+                query = query.Where(e => e.CreatedAt >= from);
+            }
+
+            if (index < versions.Count - 1)
+            {
+                var until = versions[index + 1].CreatedAt;
+                query = query.Where(e => e.CreatedAt < until);
+            }
+        }
         if (type is not null)
         {
             var types = EventTypes.InCategory(EnumStrings.Parse<EventCategory>(type)).ToList();
@@ -147,7 +175,7 @@ internal static class ActivitySummary
 
         return type switch
         {
-            EventTypes.PhaseChanged => $"Phase changed from {Get("from") ?? "?"} to {Get("to") ?? "?"} (version {Get("projectVersion") ?? "?"})",
+            EventTypes.PhaseChanged => $"Phase changed from {Get("from") ?? "?"} to {Get("to") ?? "?"} (checkpoint {Get("checkpoint") ?? Get("projectVersion") ?? "?"})",
             EventTypes.GateCreated => $"{Get("type") ?? "Approval"} gate created",
             EventTypes.GateApproved => Get("decision") is { } decision
                 ? $"{Get("type") ?? "Approval"} gate decided: {decision}"
@@ -155,7 +183,8 @@ internal static class ActivitySummary
             EventTypes.GateRejected => $"{Get("type") ?? "Approval"} gate rejected",
             EventTypes.GateCancelled => $"{Get("type") ?? "Approval"} gate cancelled",
             EventTypes.GateOverdue => $"{Get("type") ?? "Approval"} gate is overdue",
-            EventTypes.RollbackCompleted => $"Rolled back from version {Get("fromVersion") ?? "?"} to version {Get("targetVersion") ?? "?"}",
+            EventTypes.RollbackCompleted => $"Rolled back from checkpoint {Get("fromCheckpoint") ?? Get("fromVersion") ?? "?"} to checkpoint {Get("targetCheckpoint") ?? Get("targetVersion") ?? "?"}",
+            EventTypes.VersionStarted => $"Version {Get("version") ?? "?"} started",
             EventTypes.RunStarted => $"{Get("agent") ?? "Agent"} run started on {Get("model") ?? "?"}",
             EventTypes.RunCompleted => $"{Get("agent") ?? "Agent"} run completed ({Get("inputTokens") ?? "?"} in / {Get("outputTokens") ?? "?"} out tokens)",
             EventTypes.RunFailed => $"{Get("agent") ?? "Agent"} run failed: {Get("errorCode") ?? "error"}",

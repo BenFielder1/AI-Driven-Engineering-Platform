@@ -26,7 +26,9 @@ internal sealed record ProjectSummaryDto(
     string Slug,
     string CurrentPhase,
     string Status,
-    int ProjectVersion,
+    int Checkpoint,
+    string? ReleasedVersion,
+    string? DevelopmentVersion,
     string ApprovalMode,
     string? MyRole,
     DateTimeOffset UpdatedAt);
@@ -37,7 +39,9 @@ internal sealed record ProjectDto(
     string Slug,
     string CurrentPhase,
     string Status,
-    int ProjectVersion,
+    int Checkpoint,
+    string? ReleasedVersion,
+    string? DevelopmentVersion,
     string ApprovalMode,
     string? MyRole);
 
@@ -76,13 +80,15 @@ internal sealed record GateSummaryDto(Guid Id, string Type, DateTimeOffset Creat
 
 internal sealed record PullRequestSummaryDto(string Provider, string BaseBranch, string HeadBranch, int? Number, string? Url);
 
-internal sealed record ReleaseSummaryDto(Guid Id, int ProjectVersion, string Status, string Tag, DateTimeOffset StartedAt);
+internal sealed record ReleaseSummaryDto(Guid Id, int Checkpoint, string Status, string Tag, DateTimeOffset StartedAt);
 
 internal sealed record ProjectStateDto(
     Guid ProjectId,
     string Phase,
     string Status,
-    int ProjectVersion,
+    int Checkpoint,
+    string? ReleasedVersion,
+    string? DevelopmentVersion,
     bool ExecutionPaused,
     IReadOnlyList<ArtifactStateDto> Artifacts,
     ExecutionCountsDto Execution,
@@ -106,7 +112,7 @@ internal sealed record ArtifactDto(
     string Content,
     string ContentHash,
     string Status,
-    int ProjectVersionAtCreation,
+    int CheckpointAtCreation,
     ArtifactAuthorDto? Author,
     ActorDto? ApprovedBy,
     DateTimeOffset? ApprovedAt,
@@ -128,7 +134,7 @@ internal sealed record ReviewStartedDto(Guid JobId, int Cycle);
 
 internal sealed record ReleaseDto(
     Guid Id,
-    int ProjectVersion,
+    int Checkpoint,
     string Status,
     string Tag,
     string? MergeCommitSha,
@@ -138,12 +144,12 @@ internal sealed record ReleaseDto(
     string? ErrorMessage,
     int Attempt);
 
-internal sealed record RollbackRequest(int TargetVersion, string Reason);
+internal sealed record RollbackRequest(int TargetCheckpoint, string Reason);
 
 internal sealed record RollbackDto(
     Guid Id,
-    int FromVersion,
-    int ToVersion,
+    int FromCheckpoint,
+    int ToCheckpoint,
     string RestoredPhase,
     string Reason,
     IReadOnlyList<Guid>? InvalidatedArtifactIds,

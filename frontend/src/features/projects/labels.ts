@@ -91,7 +91,7 @@ export const escalationDecisionLabels: Record<NonNullable<Schemas['EscalationDec
 export const escalationDecisionDescriptions: Record<NonNullable<Schemas['EscalationDecision']>, string> = {
   continue:
     'Allow one more review cycle: execution re-enters to run the optimisation plan (once it is approved), then review runs again.',
-  rollback: 'Return the project to an earlier version. Later artifacts are invalidated; history is kept.',
+  rollback: 'Return the project to an earlier checkpoint. Later artifacts are invalidated; history is kept.',
   accept:
     'Accept the risks and mark the project release-eligible as it is; the release still goes through the pre-release gate. Any comment is recorded with the decision.',
 }
@@ -112,7 +112,7 @@ export function escalationOptionsFor(reason: Schemas['EscalationReason'] | undef
       {
         value: 'rollback' as const,
         label: escalationDecisionLabels.rollback,
-        description: 'Return the project to an earlier version instead. Later artifacts and steps are invalidated; history is kept.',
+        description: 'Return the project to an earlier checkpoint instead. Later artifacts and steps are invalidated; history is kept.',
       },
     ]
   }
@@ -171,6 +171,7 @@ export const artifactTypes = [
   'technical_specification',
   'implementation_plan',
   'optimization_plan',
+  'codebase_summary',
 ] as const satisfies readonly Schemas['ArtifactType'][]
 
 export const artifactTypeLabels: Record<Schemas['ArtifactType'], string> = {
@@ -178,6 +179,7 @@ export const artifactTypeLabels: Record<Schemas['ArtifactType'], string> = {
   technical_specification: 'Technical specification',
   implementation_plan: 'Implementation plan',
   optimization_plan: 'Optimisation plan',
+  codebase_summary: 'Codebase summary',
 }
 
 /** SPEC §4.3: artifact statuses. `locked` is what an approved version is stored as. */
@@ -227,14 +229,24 @@ export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {
 /** FR-42, FR-43: a release attempt's outcome. */
 export const releaseStatusLabels: Record<Schemas['ReleaseStatus'], string> = {
   in_progress: 'Releasing',
+  awaiting_merge: 'Awaiting merge',
   succeeded: 'Released',
   failed: 'Failed',
 }
 
-/** FR-44: why a project version can't be a rollback target. */
-export const rollbackBlockLabels: Record<NonNullable<Schemas['RollbackTargetBlock']>, string> = {
-  current_version: 'current version',
-  release_phase: 'release versions can’t be restored',
+/** FR-62, §4.10: a release version's status. */
+export const releaseVersionStatusLabels: Record<Schemas['ReleaseVersionStatus'], string> = {
+  in_development: 'In development',
+  awaiting_merge: 'Awaiting merge',
+  released: 'Released',
+  imported: 'Imported baseline',
+}
+
+/** FR-44, FR-63: why a checkpoint can't be a rollback target. */
+export const rollbackBlockLabels: Record<NonNullable<Schemas['CheckpointBlock']>, string> = {
+  current_checkpoint: 'current checkpoint',
+  release_phase: 'release checkpoints can’t be restored',
+  version_released: 'this version is released and closed',
 }
 
 /** FR-36: how a file differs between the default branch and the project branch. */

@@ -74,7 +74,7 @@ public sealed record MergeResult(bool Merged, string? Sha, IReadOnlyList<string>
 /// <summary>A release tag (FR-42) and the commit it points at (peeled).</summary>
 public sealed record ReleaseTagRef(string Tag, string Commit);
 
-/// <summary>The release tags of one version on a remote (FR-42), or the failed command.</summary>
+/// <summary>A release tag looked up on a remote (FR-64), or the failed command.</summary>
 public sealed record RemoteReleaseTags(bool Ok, IReadOnlyList<ReleaseTagRef> Tags, GitCommandResult? Failure);
 
 /// <summary>A working copy can't be used safely (e.g. a path resolves outside it or through a link).</summary>
@@ -184,8 +184,8 @@ public interface IWorkingCopies
     /// <summary>Whether commit <paramref name="ancestor"/> is <paramref name="descendant"/> or one of its ancestors (false if either is unknown).</summary>
     Task<bool> IsAncestorAsync(Guid projectId, string ancestor, string descendant, CancellationToken cancellationToken);
 
-    /// <summary>The local release tags of <paramref name="projectVersion"/> (base and suffixed) with their commits; empty without a repository.</summary>
-    Task<IReadOnlyList<ReleaseTagRef>> ReleaseTagsAsync(Guid projectId, int projectVersion, CancellationToken cancellationToken);
+    /// <summary>The local tag <paramref name="tag"/> with its (peeled) commit; <c>null</c> when it or the repository doesn't exist.</summary>
+    Task<ReleaseTagRef?> TagAsync(Guid projectId, string tag, CancellationToken cancellationToken);
 
     /// <summary>
     /// FR-42: creates the annotated release tag <paramref name="tag"/> on <paramref name="commit"/>. A local tag of that
@@ -194,10 +194,10 @@ public interface IWorkingCopies
     Task CreateTagAsync(Guid projectId, string tag, string commit, string message, CancellationToken cancellationToken);
 
     /// <summary>
-    /// FR-42 (GitHub): the release tags of <paramref name="projectVersion"/> on <paramref name="remote"/> (base and suffixed,
-    /// peeled commits), or a failure (redacted git output). Tags found there are fetched, so their commits can be inspected locally.
+    /// FR-64 (GitHub): the tag <paramref name="tag"/> on <paramref name="remote"/> (zero or one entry, peeled commit), or a
+    /// failure (redacted git output). A tag found there is fetched, so its commit can be inspected locally.
     /// </summary>
-    Task<RemoteReleaseTags> RemoteReleaseTagsAsync(Guid projectId, int projectVersion, GitRemote remote, CancellationToken cancellationToken);
+    Task<RemoteReleaseTags> RemoteTagAsync(Guid projectId, string tag, GitRemote remote, CancellationToken cancellationToken);
 
     /// <summary>FR-42 (GitHub): pushes the release tag to <paramref name="remote"/>. The result is returned (redacted), not thrown.</summary>
     Task<GitCommandResult> PushTagAsync(Guid projectId, string tag, GitRemote remote, CancellationToken cancellationToken);
@@ -677,30 +677,16 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
             (await RunAsync(PathFor(projectId), ["merge-base", "--is-ancestor", ancestor, descendant], cancellationToken, allowFailure: true)).Succeeded);
     }
 
-    public Task<IReadOnlyList<ReleaseTagRef>> ReleaseTagsAsync(Guid projectId, int projectVersion, CancellationToken cancellationToken)
+    public Task<ReleaseTagRef?> TagAsync(Guid projectId, string tag, CancellationToken cancellationToken)
     {
+        RequireTagName(tag);
         if (!IsRepository(projectId))
         {
-            return Task.FromResult<IReadOnlyList<ReleaseTagRef>>([]);
+            return Task.FromResult<ReleaseTagRef?>(null);
         }
 
-        var pattern = $"refs/tags/{Domain.Releases.ReleaseRules.Tag(projectVersion)}*";
-        return WithLockAsync<IReadOnlyList<ReleaseTagRef>>(projectId, async () =>
-        {
-            var root = PathFor(projectId);
-            var listed = await RunAsync(root, ["for-each-ref", "--format=%(refname:strip=2)", pattern], cancellationToken);
-            var tags = new List<ReleaseTagRef>();
-            foreach (var name in listed.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                if (Domain.Releases.ReleaseRules.IsReleaseTagOf(name, projectVersion)
-                    && await ResolveCoreAsync(root, $"refs/tags/{name}", cancellationToken) is { } commit)
-                {
-                    tags.Add(new ReleaseTagRef(name, commit));
-                }
-            }
-
-            return tags;
-        });
+        return WithLockAsync<ReleaseTagRef?>(projectId, async () =>
+            await ResolveCoreAsync(PathFor(projectId), $"refs/tags/{tag}", cancellationToken) is { } commit ? new ReleaseTagRef(tag, commit) : null);
     }
 
     public Task CreateTagAsync(Guid projectId, string tag, string commit, string message, CancellationToken cancellationToken)
@@ -728,53 +714,50 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
         });
     }
 
-    public Task<RemoteReleaseTags> RemoteReleaseTagsAsync(Guid projectId, int projectVersion, GitRemote remote, CancellationToken cancellationToken)
+    public Task<RemoteReleaseTags> RemoteTagAsync(Guid projectId, string tag, GitRemote remote, CancellationToken cancellationToken)
     {
+        RequireTagName(tag);
         ArgumentNullException.ThrowIfNull(remote);
         return WithLockAsync(projectId, async () =>
         {
             var root = RequireRepository(projectId);
-            var listed = await git.RunAsync(root, ["ls-remote", "--tags", GitRemote.Name], remote.ConfigEnvironment, cancellationToken);
+            var listed = await git.RunAsync(root, ["ls-remote", "--tags", GitRemote.Name, $"refs/tags/{tag}"], remote.ConfigEnvironment, cancellationToken);
             if (!listed.Succeeded)
             {
                 return new RemoteReleaseTags(false, [], Redacted(listed, remote));
             }
 
             // "<sha>\trefs/tags/<tag>" and, for an annotated tag, "<commit>\trefs/tags/<tag>^{}" (the peeled commit).
-            var peeled = new Dictionary<string, string>(StringComparer.Ordinal);
-            var direct = new Dictionary<string, string>(StringComparer.Ordinal);
+            string? direct = null;
+            string? peeled = null;
             foreach (var line in listed.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 var parts = line.Split('\t', 2);
-                if (parts.Length != 2 || !parts[1].StartsWith("refs/tags/", StringComparison.Ordinal))
+                if (parts.Length != 2)
                 {
                     continue;
                 }
 
-                var name = parts[1]["refs/tags/".Length..];
-                var target = name.EndsWith("^{}", StringComparison.Ordinal) ? peeled : direct;
-                name = name.EndsWith("^{}", StringComparison.Ordinal) ? name[..^3] : name;
-                if (Domain.Releases.ReleaseRules.IsReleaseTagOf(name, projectVersion))
+                if (parts[1] == $"refs/tags/{tag}")
                 {
-                    target[name] = parts[0];
+                    direct = parts[0];
+                }
+                else if (parts[1] == $"refs/tags/{tag}^{{}}")
+                {
+                    peeled = parts[0];
                 }
             }
 
-            var tags = direct.Keys
-                .Select(name => new ReleaseTagRef(name, peeled.TryGetValue(name, out var commit) ? commit : direct[name]))
-                .OrderBy(t => t.Tag, StringComparer.Ordinal)
-                .ToList();
-            if (tags.Count == 0)
+            if (direct is null)
             {
                 return new RemoteReleaseTags(true, [], null);
             }
 
             var fetched = await git.RunAsync(
-                root,
-                ["fetch", "-q", "--no-tags", GitRemote.Name, .. tags.Select(t => $"+refs/tags/{t.Tag}:refs/tags/{t.Tag}")],
-                remote.ConfigEnvironment,
-                cancellationToken);
-            return fetched.Succeeded ? new RemoteReleaseTags(true, tags, null) : new RemoteReleaseTags(false, [], Redacted(fetched, remote));
+                root, ["fetch", "-q", "--no-tags", GitRemote.Name, $"+refs/tags/{tag}:refs/tags/{tag}"], remote.ConfigEnvironment, cancellationToken);
+            return fetched.Succeeded
+                ? new RemoteReleaseTags(true, [new ReleaseTagRef(tag, peeled ?? direct)], null)
+                : new RemoteReleaseTags(false, [], Redacted(fetched, remote));
         });
     }
 

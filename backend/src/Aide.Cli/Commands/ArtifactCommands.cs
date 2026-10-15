@@ -320,7 +320,7 @@ internal static class ArtifactCommands
         ("Integrity", a.Integrity),
         ("Parent", Output.Num(a.ParentVersion)),
         ("Hash", a.ContentHash),
-        ("Project version", Output.Num(a.ProjectVersionAtCreation)),
+        ("Checkpoint", Output.Num(a.CheckpointAtCreation)),
         ("Author", a.Author?.User?.Name ?? (a.Author?.AgentRunId is { } run ? $"agent run {run}" : "-")),
         ("Created", Output.Time(a.CreatedAt)),
         ("Approved", a.ApprovedBy is null ? "-" : $"{a.ApprovedBy.Name} at {Output.Time(a.ApprovedAt)}"),

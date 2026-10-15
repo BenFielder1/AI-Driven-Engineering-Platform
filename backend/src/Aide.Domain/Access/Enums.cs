@@ -29,6 +29,9 @@ public enum ProjectAction
     ChangeSettings = 10,
     ManageMembers = 11,
     DeleteProject = 12,
+
+    /// <summary>FR-60: start a new release version.</summary>
+    StartVersion = 13,
 }
 
 public enum AccessDecision

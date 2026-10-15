@@ -43,7 +43,8 @@ public sealed record DriftAreaDto(string Area, Severity Severity, string Descrip
 /// </summary>
 public sealed record ComplianceReportDto(
     Guid Id,
-    int ProjectVersion,
+    Guid ReleaseVersionId,
+    int Checkpoint,
     int Cycle,
     decimal OverallScore,
     decimal Threshold,
@@ -63,7 +64,7 @@ public sealed record ComplianceReportDto(
 /// </summary>
 public sealed record ComplianceTrendPointDto(
     int Cycle,
-    int ProjectVersion,
+    int Checkpoint,
     decimal OverallScore,
     DriftLevel DriftLevel,
     ReviewDecision Decision,
@@ -74,4 +75,4 @@ public sealed record ComplianceTrendPointDto(
 public sealed record ComplianceTrendDto(decimal Threshold, IReadOnlyList<ComplianceTrendPointDto> Series);
 
 /// <summary>The drift level and areas of the latest compliance report (FR-41, §4.7).</summary>
-public sealed record ComplianceDriftDto(DriftLevel DriftLevel, IReadOnlyList<DriftAreaDto> Areas, int ProjectVersion, int Cycle);
+public sealed record ComplianceDriftDto(DriftLevel DriftLevel, IReadOnlyList<DriftAreaDto> Areas, int Checkpoint, int Cycle);

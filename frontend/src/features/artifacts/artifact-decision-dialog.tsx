@@ -22,6 +22,7 @@ const approveEffect: Record<ArtifactType, string> = {
   technical_specification: 'Any existing implementation and optimisation plans and all execution steps are invalidated.',
   implementation_plan: 'Any optimisation plan and the steps of older plan versions are invalidated.',
   optimization_plan: 'Nothing else is invalidated.',
+  codebase_summary: 'Nothing else is invalidated.',
 }
 
 export type ArtifactDecision = 'approve' | 'reject'

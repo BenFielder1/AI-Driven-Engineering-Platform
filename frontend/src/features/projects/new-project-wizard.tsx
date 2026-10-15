@@ -15,6 +15,7 @@ import { cn } from '../../lib/utils'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { TextField } from '../../components/ui/text-field'
 import { errorMessage, isApiError } from '../../lib/errors'
+import { normalizeVersion } from '../versions/semver'
 import { approvalModeDescriptions, approvalModeLabels, approvalModes, gitProviderLabels } from './labels'
 import { useCreateProject } from './projects-api'
 import { limits, toBudget, wizardDefaults, wizardSchema, type WizardValues } from './schemas'
@@ -33,6 +34,7 @@ const fieldIds: Record<Field, string> = {
   repoUrl: 'project-repo-url',
   defaultBranch: 'project-default-branch',
   gitToken: 'project-git-token',
+  initialVersion: 'project-initial-version',
 }
 
 interface Step {
@@ -47,6 +49,7 @@ const steps: readonly Step[] = [
     fields: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget'],
   },
   { title: 'Git repository', fields: ['gitProvider', 'repoUrl', 'defaultBranch', 'gitToken'] },
+  { title: 'Version', fields: ['initialVersion'] },
   { title: 'Review & create', fields: [] },
 ]
 
@@ -66,6 +69,8 @@ const serverFieldMap: Record<string, Field> = {
   'git.defaultbranch': 'defaultBranch',
   'git.token': 'gitToken',
   git: 'gitProvider',
+  initialversion: 'initialVersion',
+  version: 'initialVersion',
 }
 
 function firstStepWithError(errors: Partial<Record<Field, unknown>>): number {
@@ -83,6 +88,7 @@ function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
     maxFilesPerStep: Number(v.maxFilesPerStep),
     maxReviewCycles: Number(v.maxReviewCycles),
     tokenBudget: toBudget(v.tokenBudget),
+    initialVersion: normalizeVersion(v.initialVersion) ?? v.initialVersion.trim(),
     git: {
       provider: v.gitProvider,
       repoUrl: github ? v.repoUrl.trim() : null,
@@ -92,7 +98,7 @@ function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
   }
 }
 
-/** /projects/new (FR-5): four steps with per-step validation; Create navigates to the new project. */
+/** /projects/new (FR-5, FR-66): five steps with per-step validation; Create navigates to the new project. */
 export function NewProjectWizard() {
   const navigate = useNavigate()
   const create = useCreateProject()
@@ -164,6 +170,9 @@ export function NewProjectWizard() {
               goTo(target)
             }
             setServerError(unmatched.length > 0 ? unmatched.join(' ') : errorMessage(error))
+          } else if (isApiError(error, 'VERSION_INVALID')) {
+            setError('initialVersion', { type: 'server', message: errorMessage(error) })
+            goTo(steps.findIndex((s) => s.title === 'Version'))
           } else {
             setServerError(errorMessage(error))
           }
@@ -360,6 +369,19 @@ export function NewProjectWizard() {
             </>
           )}
 
+          {step === 3 && (
+            <TextField
+              id={fieldIds.initialVersion}
+              label="Initial version"
+              hint="The first release version (semantic version, e.g. 0.1.0 or 1.0.0). The first release is tagged with it."
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={72}
+              error={errors.initialVersion?.message}
+              {...register('initialVersion')}
+            />
+          )}
+
           {step === LAST_STEP && <ReviewSummary values={getValues()} onEdit={goTo} />}
         </div>
 
@@ -486,6 +508,9 @@ function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step
         {github && <SummaryRow term="Repository URL">{values.repoUrl.trim()}</SummaryRow>}
         <SummaryRow term="Default branch">{values.defaultBranch.trim()}</SummaryRow>
         {github && <SummaryRow term="Access token">{values.gitToken ? 'Provided' : 'Not provided'}</SummaryRow>}
+      </SummarySection>
+      <SummarySection title="Version" step={3} onEdit={onEdit}>
+        <SummaryRow term="Initial version">{normalizeVersion(values.initialVersion) ?? values.initialVersion.trim()}</SummaryRow>
       </SummarySection>
     </div>
   )

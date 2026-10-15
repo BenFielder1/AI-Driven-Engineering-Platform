@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw'
 import type { Schemas } from '../../api/client'
 import { antiforgeryFailure, nextId } from './auth'
 import { problem } from './problem'
-import { access, record, type Access, type StoredProject } from './projects'
+import { access, currentVersionId, record, type Access, type StoredProject } from './projects'
 
 type Report = Schemas['ComplianceReportDto']
 type CategoryScore = Schemas['CategoryScoreDto']
@@ -35,9 +35,14 @@ export function overallScore(scores: readonly CategoryScore[]): number {
   return Math.round(scores.reduce((sum, c) => sum + c.score * c.weight, 0) * 1000) / 1000
 }
 
-/** Reports the API would show: at or below the current project version (§4.8), oldest first. */
-function visibleReports(p: StoredProject): Report[] {
-  return (p.complianceReports ?? []).filter((r) => r.projectVersion <= p.projectVersion)
+/**
+ * Reports the API would show, oldest first: those of the current release version at or below its checkpoint (§4.8),
+ * or every report of a past one (`releaseVersionId`, FR-62).
+ */
+function visibleReports(p: StoredProject, request?: Request): Report[] {
+  const scope = (request && new URL(request.url).searchParams.get('releaseVersionId')) ?? currentVersionId(p)
+  const current = scope === currentVersionId(p)
+  return (p.complianceReports ?? []).filter((r) => r.releaseVersionId === scope && (!current || r.checkpoint <= p.checkpoint))
 }
 
 /** Puts the project in the review phase (status `reviewing`), as after execution completes (FR-36). */
@@ -55,7 +60,8 @@ export function seedComplianceReport(p: StoredProject, overrides: Partial<Report
   const scores = overrides.categoryScores ?? categoryScores(0.93)
   const report: Report = {
     id: nextId(),
-    projectVersion: p.projectVersion,
+    releaseVersionId: currentVersionId(p),
+    checkpoint: p.checkpoint,
     cycle: reports.length + 1,
     overallScore: overallScore(scores),
     threshold: p.complianceThreshold,
@@ -119,23 +125,23 @@ export const reviewHandlers = [
     )
   }),
   // FR-41: the latest report; 404 before the first review.
-  http.get('*/api/projects/:id/compliance/latest', ({ params }) => {
+  http.get('*/api/projects/:id/compliance/latest', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
-    const latest = visibleReports(a.project).at(-1)
+    const latest = visibleReports(a.project, request).at(-1)
     return latest ? HttpResponse.json<Report>(latest) : noReport()
   }),
   // FR-41: the score per cycle, oldest first, each with its report's threshold, plus the project's current one.
-  http.get('*/api/projects/:id/compliance/trend', ({ params }) => {
+  http.get('*/api/projects/:id/compliance/trend', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
-    const series = visibleReports(a.project).map(({ cycle, projectVersion, overallScore, driftLevel, decision, createdAt, threshold }) => ({
+    const series = visibleReports(a.project, request).map(({ cycle, checkpoint, overallScore, driftLevel, decision, createdAt, threshold }) => ({
       cycle,
-      projectVersion,
+      checkpoint,
       overallScore,
       driftLevel,
       decision,
@@ -145,17 +151,17 @@ export const reviewHandlers = [
     return HttpResponse.json<Schemas['ComplianceTrendDto']>({ threshold: a.project.complianceThreshold, series })
   }),
   // FR-41: the latest report's drift; 404 before the first review.
-  http.get('*/api/projects/:id/compliance/drift', ({ params }) => {
+  http.get('*/api/projects/:id/compliance/drift', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
-    const latest = visibleReports(a.project).at(-1)
+    const latest = visibleReports(a.project, request).at(-1)
     return latest
       ? HttpResponse.json<Schemas['ComplianceDriftDto']>({
           driftLevel: latest.driftLevel,
           areas: latest.driftAreas,
-          projectVersion: latest.projectVersion,
+          checkpoint: latest.checkpoint,
           cycle: latest.cycle,
         })
       : noReport()

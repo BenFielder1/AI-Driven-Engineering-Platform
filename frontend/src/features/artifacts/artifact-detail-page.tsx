@@ -7,11 +7,11 @@ import { Button } from '../../components/ui/button'
 import { SelectField } from '../../components/ui/select-field'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
 import { isApiError } from '../../lib/errors'
-import { canInProject } from '../../lib/permissions'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { artifactStatusLabels, artifactTypeLabels, formatDateTime } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
 import { RelativeTime } from '../projects/relative-time'
+import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
 import { authorName, isAgentAuthored } from './artifact-author'
 import { ArtifactStatusBadge, IntegrityBadge } from './artifact-badges'
 import { ArtifactDecisionDialog, type ArtifactDecision } from './artifact-decision-dialog'
@@ -43,7 +43,7 @@ function Meta({ term, children }: { term: string; children: ReactNode }) {
   )
 }
 
-function VersionDetails({ artifact }: { artifact: Artifact }) {
+function VersionDetails({ artifact, versionName }: { artifact: Artifact; versionName: string | undefined }) {
   return (
     <dl className="grid grid-cols-2 gap-3 rounded-lg border border-border/60 bg-background/40 p-3 sm:grid-cols-4">
       <Meta term="Status">
@@ -57,7 +57,7 @@ function VersionDetails({ artifact }: { artifact: Artifact }) {
         <RelativeTime iso={artifact.createdAt} />
       </Meta>
       <Meta term="Parent version">{artifact.parentVersion === null ? 'None' : `v${String(artifact.parentVersion)}`}</Meta>
-      <Meta term="Project version">{artifact.projectVersionAtCreation}</Meta>
+      <Meta term="Created at">{checkpointLabel(versionName, artifact.checkpointAtCreation)}</Meta>
       {artifact.approvedAt && (
         <Meta term="Approved">
           {artifact.approvedBy ? `${artifact.approvedBy.name}, ` : ''}
@@ -284,13 +284,15 @@ export function ArtifactDetailPage({
   version: number | undefined
   onVersionChange: (version: number | undefined) => void
 }) {
-  const { project, user, role } = useProjectAccess()
+  const { project, can, releaseVersionId } = useProjectAccess()
+  const versionName = useReleaseVersionNames(project.id)
   const label = artifactTypeLabels[type]
   useDocumentTitle(`${label} · ${project.name}`)
-  const canEdit = canInProject(user, role, 'createDraft')
-  const canDecide = canInProject(user, role, 'approveArtifacts')
+  // FR-62: a past release version is read-only (`can` is false for mutations there).
+  const canEdit = can('createDraft')
+  const canDecide = can('approveArtifacts')
 
-  const history = useArtifactHistory(project.id, type)
+  const history = useArtifactHistory(project.id, type, releaseVersionId)
   const versions = history.data ?? []
   const newest = versions[0]?.version ?? null
   const selected = version !== undefined && versions.some((a) => a.version === version) ? version : newest
@@ -471,7 +473,7 @@ export function ArtifactDetailPage({
             {shown.data.integrity === 'corrupted' && (
               <CorruptedAlert artifact={shown.data} current={isCurrentVersion(shown.data.version, versions)} />
             )}
-            <VersionDetails artifact={shown.data} />
+            <VersionDetails artifact={shown.data} versionName={versionName(shown.data.releaseVersionId)} />
             {isPlanType(type) && (
               <Section id="plan-steps" title="Steps">
                 <PlanSteps projectId={project.id} artifact={shown.data} />

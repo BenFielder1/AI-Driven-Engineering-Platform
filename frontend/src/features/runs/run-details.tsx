@@ -13,6 +13,7 @@ import {
   llmProviderLabels,
   phaseLabels,
 } from '../projects/labels'
+import { useReleaseVersionNames } from '../versions/version-label'
 import { RunStatusBadge } from './run-badges'
 import { describeRunError, formatPromptVersion, isUnfinished } from './run-format'
 import { useRun, type AgentRun } from './runs-api'
@@ -38,6 +39,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 /** The fields every run has (shown from the list row at once, then from the detail response). */
 function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
   const unfinished = isUnfinished(run)
+  const versionName = useReleaseVersionNames(projectId)(run.releaseVersionId)
   return (
     <>
       <dl>
@@ -46,6 +48,7 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
         </Row>
         <Row term="Agent">{agentKindLabels[run.agent]}</Row>
         <Row term="Phase">{phaseLabels[run.phase]}</Row>
+        {versionName && <Row term="Release version">{versionName}</Row>}
         {run.stepId && (
           <Row term="Execution step">
             <code className="text-xs">{run.stepId}</code>

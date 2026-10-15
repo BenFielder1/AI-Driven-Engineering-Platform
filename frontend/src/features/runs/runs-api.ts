@@ -14,19 +14,27 @@ export const RUNS_PAGE_SIZE = 20
 /** Query keys, all under `projectKeys.runs(id)` so one live `run` event refreshes every runs view (FR-46). */
 export const runKeys = {
   all: (id: string) => projectKeys.runs(id),
-  list: (id: string, agent: AgentKind | null, page: number) =>
-    [...projectKeys.runs(id), 'list', agent ?? 'all', page] as const,
+  list: (id: string, agent: AgentKind | null, page: number, releaseVersionId?: string) =>
+    [...projectKeys.runs(id), 'list', agent ?? 'all', page, releaseVersionId ?? 'current'] as const,
   detail: (id: string, runId: string) => [...projectKeys.runs(id), 'detail', runId] as const,
 }
 
-/** FR-23: the project's agent runs, newest first, paged, optionally for one agent. */
-export function useRuns(id: string, agent: AgentKind | null, page: number) {
+/** FR-23: the project's agent runs, newest first, paged, optionally for one agent and one release version (FR-62). */
+export function useRuns(id: string, agent: AgentKind | null, page: number, releaseVersionId?: string) {
   return useQuery({
-    queryKey: runKeys.list(id, agent, page),
+    queryKey: runKeys.list(id, agent, page, releaseVersionId),
     queryFn: async ({ signal }) =>
       unwrap(
         await api.GET('/api/projects/{id}/runs', {
-          params: { path: { id }, query: { page, limit: RUNS_PAGE_SIZE, ...(agent ? { agent } : {}) } },
+          params: {
+            path: { id },
+            query: {
+              page,
+              limit: RUNS_PAGE_SIZE,
+              ...(agent ? { agent } : {}),
+              ...(releaseVersionId ? { releaseVersionId } : {}),
+            },
+          },
           signal,
         }),
       ),

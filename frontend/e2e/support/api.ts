@@ -256,7 +256,7 @@ export async function waitForPendingGate(context: BrowserContext, projectId: str
 interface ProjectStateDto {
   phase: string
   status: string
-  projectVersion: number
+  checkpoint: number
   executionStatus: string
   review: { cycle: number; latestDecision: string | null; status: string }
 }

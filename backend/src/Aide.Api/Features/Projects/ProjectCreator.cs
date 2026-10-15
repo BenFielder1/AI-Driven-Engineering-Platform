@@ -3,6 +3,7 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
+using Aide.Domain.Releases;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
@@ -11,10 +12,11 @@ using Microsoft.EntityFrameworkCore;
 namespace Aide.Api.Features.Projects;
 
 /// <summary>
-/// FR-5: creates a project with everything it starts with, in one <c>SaveChanges</c> (one transaction): the project
-/// (refinement / active / version 1), the Owner membership, Git settings (token encrypted), LLM settings (system
+/// FR-5, FR-66: creates a project with everything it starts with, in one <c>SaveChanges</c> (one transaction): the project
+/// (refinement / active / checkpoint 1) and its first release version (<c>in_development</c>, the initial version, default
+/// <c>0.1.0</c>; nothing released yet), the Owner membership, Git settings (token encrypted), LLM settings (system
 /// default provider if usable, else Fake), empty notification settings, the creation state transition (none →
-/// refinement at version 1, the anchor for a rollback to v1) and the <c>PROJECT_CREATED</c> event.
+/// refinement at checkpoint 1, the anchor for a rollback to checkpoint 1) and the <c>PROJECT_CREATED</c> event.
 /// Used by <c>POST /api/projects</c> and the dev seed.
 /// </summary>
 public sealed partial class ProjectCreator(
@@ -36,6 +38,12 @@ public sealed partial class ProjectCreator(
             return Result.Failure<Project>(validation.Error!);
         }
 
+        var initial = ReleaseVersionRules.Parse(request.InitialVersion ?? ReleaseVersionRules.DefaultInitialVersion, "initialVersion");
+        if (initial.IsFailure)
+        {
+            return Result.Failure<Project>(initial.Error!);
+        }
+
         var now = time.GetUtcNow();
         var name = request.Name.Trim();
         var project = new Project
@@ -44,7 +52,7 @@ public sealed partial class ProjectCreator(
             Idea = request.Idea.Trim(),
             CurrentPhase = LifecycleState.Initial.Phase,
             Status = LifecycleState.Initial.Status,
-            ProjectVersion = LifecycleState.Initial.Version,
+            Checkpoint = LifecycleState.Initial.Version,
             ApprovalMode = request.ApprovalMode,
             ComplianceThreshold = request.ComplianceThreshold,
             MaxFilesPerStep = request.MaxFilesPerStep,
@@ -54,6 +62,19 @@ public sealed partial class ProjectCreator(
             UpdatedAt = now,
         };
         project.Slug = await UniqueSlugAsync(name, project.Id, cancellationToken);
+        var version = new ReleaseVersion
+        {
+            ProjectId = project.Id,
+            Version = initial.Value.ToString(),
+            Status = ReleaseVersionStatus.InDevelopment,
+            TagPrefix = project.TagPrefix,
+            Request = project.Idea,
+            StartedBy = ownerId,
+            CreatedAt = now,
+        };
+        project.CurrentReleaseVersionId = version.Id;
+        project.DevelopmentVersion = version.Version;
+        project.ReleasedVersion = null;
 
         var provider = llm.DefaultForNewProject;
         if (provider != llm.ConfiguredDefault)
@@ -62,6 +83,7 @@ public sealed partial class ProjectCreator(
         }
 
         db.Projects.Add(project);
+        db.ReleaseVersions.Add(version);
         db.ProjectMembers.Add(new ProjectMembership { ProjectId = project.Id, UserId = ownerId, Role = ProjectRole.Owner, CreatedAt = now });
         db.ProjectGitSettings.Add(new ProjectGitSettings
         {
@@ -82,11 +104,12 @@ public sealed partial class ProjectCreator(
         db.StateTransitions.Add(new StateTransition
         {
             ProjectId = project.Id,
+            ReleaseVersionId = version.Id,
             FromPhase = null,
             ToPhase = project.CurrentPhase,
             Actor = actor,
             Reason = ProjectRules.CreatedReason,
-            ProjectVersion = project.ProjectVersion,
+            Checkpoint = project.Checkpoint,
             CreatedAt = now,
         });
         db.AddEvent(EventTypes.ProjectCreated, project.Id, new { projectId = project.Id, name = project.Name, actor }, actor, now);

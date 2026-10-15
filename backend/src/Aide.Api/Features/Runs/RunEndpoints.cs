@@ -4,6 +4,7 @@ using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Admin;
 using Aide.Api.Features.Projects;
+using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
@@ -50,7 +51,8 @@ public static class RunEndpoints
         CancellationToken cancellationToken,
         [WireEnum(typeof(AgentKind))] string? agent = null,
         [Range(1, int.MaxValue)] int page = 1,
-        [Range(1, ProjectLimits.MaxPageLimit)] int limit = 20)
+        [Range(1, ProjectLimits.MaxPageLimit)] int limit = 20,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -58,7 +60,15 @@ public static class RunEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        var query = db.AgentRuns.AsNoTracking().Where(r => r.ProjectId == id);
+        // §6 Notes: runs of one release version (default: the version in development, else the latest released).
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
+        var versionId = scope.Value;
+        var query = db.AgentRuns.AsNoTracking().Where(r => r.ProjectId == id && r.ReleaseVersionId == versionId);
         if (agent is not null)
         {
             var wanted = EnumStrings.Parse<AgentKind>(agent);
@@ -82,6 +92,7 @@ public static class RunEndpoints
             {
                 Id = r.Id,
                 ProjectId = r.ProjectId,
+                ReleaseVersionId = r.ReleaseVersionId,
                 Agent = r.Agent,
                 Phase = r.Phase,
                 StepId = r.StepId,
@@ -127,7 +138,7 @@ public static class RunEndpoints
         var truncated = text is { Length: > MaxOutputLength };
         var r = ToDto(run);
         return TypedResults.Ok(new AgentRunDetailDto(
-            r.Id, r.Agent, r.Phase, r.StepId, r.Provider, r.Model, r.PromptVersion, r.InputArtifacts, r.UserFeedback, r.Status,
+            r.Id, r.ReleaseVersionId, r.Agent, r.Phase, r.StepId, r.Provider, r.Model, r.PromptVersion, r.InputArtifacts, r.UserFeedback, r.Status,
             r.Attempts, r.InputTokens, r.OutputTokens, r.CostEstimate, r.DurationMs, r.Error, r.CreatedAt, r.CompletedAt,
             truncated ? text![..MaxOutputLength] : text,
             truncated));
@@ -135,6 +146,7 @@ public static class RunEndpoints
 
     private static AgentRunDto ToDto(AgentRun r) => new(
         r.Id,
+        r.ReleaseVersionId,
         r.Agent,
         r.Phase,
         r.StepId,

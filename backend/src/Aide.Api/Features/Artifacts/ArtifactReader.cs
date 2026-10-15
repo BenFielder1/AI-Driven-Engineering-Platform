@@ -13,41 +13,42 @@ namespace Aide.Api.Features.Artifacts;
 /// </summary>
 public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard integrity)
 {
-    /// <summary>The highest version of each type that exists, in type order.</summary>
-    public async Task<IReadOnlyList<ArtifactSummaryDto>> ListLatestAsync(Guid projectId, CancellationToken cancellationToken)
+    /// <summary>The highest version of each type that exists in release version <paramref name="releaseVersionId"/>, in type order.</summary>
+    public async Task<IReadOnlyList<ArtifactSummaryDto>> ListLatestAsync(Guid projectId, Guid? releaseVersionId, CancellationToken cancellationToken)
     {
         var latest = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId
-                && a.Version == db.Artifacts.Where(b => b.ProjectId == projectId && b.Type == a.Type).Max(b => b.Version))
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId
+                && a.Version == db.Artifacts.Where(b => b.ProjectId == projectId && b.ReleaseVersionId == releaseVersionId && b.Type == a.Type).Max(b => b.Version))
             .ToListAsync(cancellationToken);
         return await SummariesAsync([.. latest.OrderBy(a => a.Type)], cancellationToken);
     }
 
-    /// <summary>Every version of a type, newest first.</summary>
-    public async Task<IReadOnlyList<ArtifactSummaryDto>> HistoryAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
+    /// <summary>Every version of a type in release version <paramref name="releaseVersionId"/>, newest first.</summary>
+    public async Task<IReadOnlyList<ArtifactSummaryDto>> HistoryAsync(Guid projectId, ArtifactType type, Guid? releaseVersionId, CancellationToken cancellationToken)
     {
         var versions = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Type == type)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == type)
             .OrderByDescending(a => a.Version)
             .ToListAsync(cancellationToken);
         return await SummariesAsync(versions, cancellationToken);
     }
 
-    /// <summary>The highest version of a type without its content, or <c>null</c>.</summary>
+    /// <summary>The highest version of a type in the project's current release version, without its content, or <c>null</c>.</summary>
     public async Task<ArtifactSummaryDto?> LatestSummaryAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
     {
+        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
         var artifact = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Type == type)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == type)
             .OrderByDescending(a => a.Version)
             .FirstOrDefaultAsync(cancellationToken);
         return artifact is null ? null : (await SummariesAsync([artifact], cancellationToken))[0];
     }
 
-    /// <summary>The highest version of a type, or <c>null</c>.</summary>
-    public async Task<ArtifactDto?> LatestAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
+    /// <summary>The highest version of a type in release version <paramref name="releaseVersionId"/>, or <c>null</c>.</summary>
+    public async Task<ArtifactDto?> LatestAsync(Guid projectId, ArtifactType type, Guid? releaseVersionId, CancellationToken cancellationToken)
     {
         var artifact = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Type == type)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == type)
             .OrderByDescending(a => a.Version)
             .FirstOrDefaultAsync(cancellationToken);
         return artifact is null ? null : await ToDtoAsync(artifact, cancellationToken);
@@ -103,7 +104,8 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             artifact.Content,
             artifact.ContentHash,
             artifact.Status,
-            artifact.ProjectVersionAtCreation,
+            artifact.ReleaseVersionId,
+            artifact.CheckpointAtCreation,
             Author(artifact, names),
             artifact.ApprovedBy is { } approver ? User(approver, names) : null,
             artifact.ApprovedAt,
@@ -126,6 +128,7 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
                 a.Type,
                 a.Version,
                 a.Status,
+                a.ReleaseVersionId,
                 checkedIntegrity[a.Id],
                 a.CreatedAt,
                 Author(a, names))),

@@ -27,6 +27,7 @@ export type ProjectCapability =
   | 'approveArtifacts'
   | 'requestRelease'
   | 'rollback'
+  | 'startVersion'
   | 'changeSettings'
   | 'manageMembers'
   | 'deleteProject'
@@ -46,6 +47,8 @@ const owner: readonly ProjectCapability[] = [
   'approveArtifacts',
   'requestRelease',
   'rollback',
+  // FR-60 (SPEC §2 v2): only Owners start a new release version.
+  'startVersion',
   'changeSettings',
   'manageMembers',
   'deleteProject',

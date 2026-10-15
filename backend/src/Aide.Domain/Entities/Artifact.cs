@@ -26,7 +26,14 @@ public sealed class Artifact
 
     public ArtifactStatus Status { get; set; } = ArtifactStatus.Draft;
 
-    public int ProjectVersionAtCreation { get; init; }
+    /// <summary>The lifecycle checkpoint the artifact was created at (§4.10).</summary>
+    public int CheckpointAtCreation { get; init; }
+
+    /// <summary>The release version the artifact belongs to (§4.10).</summary>
+    public Guid ReleaseVersionId { get; init; }
+
+    /// <summary>FR-58: the version whose content a restored draft copies; null otherwise.</summary>
+    public int? RestoredFromVersion { get; init; }
 
     public Guid? CreatedByUserId { get; init; }
 

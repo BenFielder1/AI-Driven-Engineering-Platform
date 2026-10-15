@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 
 import type { Schemas } from '../../api/client'
+import { compareSemVer, normalizeVersion, parseSemVer } from '../../features/versions/semver'
 import type { ProjectRole } from '../../lib/permissions'
 import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from './auth'
 import { problem } from './problem'
@@ -13,6 +14,7 @@ type GitSettings = Schemas['GitSettingsDto']
 type LlmSettings = Schemas['LlmSettingsDto']
 type ProviderStatus = Schemas['LlmProviderStatusDto']
 type Channel = Schemas['NotificationChannelDto']
+type ReleaseVersion = Schemas['ReleaseVersionDto']
 
 /**
  * A stored channel. `secret` is the webhook HMAC key, or for Slack/Teams the incoming-webhook URL (the API never
@@ -33,8 +35,15 @@ interface StoredMember {
   createdAt: string
 }
 
-export interface StoredProject extends Omit<Project, 'myRole'> {
+export interface StoredProject extends Omit<Project, 'myRole' | 'releaseVersionId' | 'releasedVersion' | 'developmentVersion'> {
   members: StoredMember[]
+  /**
+   * Release versions in any order (FR-62); the project's released, development and current versions are derived from
+   * them (§4.10). Seeded with one version (0.1.0: in development, or released for a released project).
+   */
+  releaseVersions: ReleaseVersion[]
+  /** Tags that already exist in the repository: starting a version whose tag is here answers TAG_EXISTS (FR-61). */
+  repoTags?: string[]
   git: GitSettings
   llm: Omit<LlmSettings, 'providers'>
   channels: StoredChannel[]
@@ -63,7 +72,7 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
   pullRequestJobQueued?: boolean
   /** Compliance reports, oldest first (FR-38, FR-41); see mocks/handlers/review.ts. */
   complianceReports?: Schemas['ComplianceReportDto'][]
-  /** Phase recorded at each project version (rollback restores it, §4.8). */
+  /** Phase recorded at each checkpoint of the current release version (rollback restores it, §4.8, §4.10). */
   phaseAtVersion: Record<number, Project['currentPhase']>
   /** Release attempts, oldest first (FR-42, FR-43); see mocks/handlers/release.ts. */
   releases?: Schemas['ReleaseDto'][]
@@ -125,8 +134,70 @@ const emptyState = (): StoredProject['state'] => ({
   review: { cycle: 0, maxCycles: 3, latestScore: null, latestDecision: null, driftLevel: null, status: 'idle' },
 })
 
+/** A release version row for seeds (FR-62). */
+export function makeReleaseVersion(overrides: Partial<ReleaseVersion> & Pick<ReleaseVersion, 'version'>): ReleaseVersion {
+  const status = overrides.status ?? 'in_development'
+  const released = status === 'released' || status === 'imported'
+  return {
+    id: nextId(),
+    status,
+    tag: released ? `v${overrides.version}` : null,
+    tagPrefix: 'v',
+    baseTag: null,
+    baseCommitSha: null,
+    mergeCommitSha: released ? 'abc1234def5678' : null,
+    branchName: `aide/project/v${overrides.version}`,
+    pullRequestUrl: null,
+    checkpoints: { current: 1, max: 1 },
+    presetId: null,
+    presetVersion: null,
+    request: 'Track stock levels across warehouses.',
+    startedBy: { id: null, name: 'Ada Owner', isSystem: false },
+    createdAt: '2026-09-01T10:00:00Z',
+    releasedAt: released ? '2026-09-10T10:00:00Z' : null,
+    ...overrides,
+  }
+}
+
+const byVersionDesc = (a: ReleaseVersion, b: ReleaseVersion) => {
+  const pa = parseSemVer(a.version)
+  const pb = parseSemVer(b.version)
+  return pa && pb ? compareSemVer(pb, pa) : b.version.localeCompare(a.version)
+}
+
+/** §4.10: the version in development or awaiting merge, if any. */
+export function developmentVersionOf(p: StoredProject): ReleaseVersion | undefined {
+  return p.releaseVersions.find((v) => v.status === 'in_development' || v.status === 'awaiting_merge')
+}
+
+/** §4.10: the highest released or imported version, if any. */
+export function releasedVersionOf(p: StoredProject): ReleaseVersion | undefined {
+  return [...p.releaseVersions].filter((v) => v.status === 'released' || v.status === 'imported').sort(byVersionDesc)[0]
+}
+
+/** The release version the lifecycle state belongs to: the one in development, else the latest released. */
+export function currentVersionOf(p: StoredProject): ReleaseVersion | undefined {
+  return developmentVersionOf(p) ?? releasedVersionOf(p)
+}
+
+/** Every release version, highest first (GET /versions). */
+export function releaseVersionsOf(p: StoredProject): ReleaseVersion[] {
+  return [...p.releaseVersions].sort(byVersionDesc).map((v) => (v === currentVersionOf(p) ? { ...v, checkpoints: { ...v.checkpoints, current: p.checkpoint } } : v))
+}
+
+/** The current release version's id ('' when the project has none). */
+export const currentVersionId = (p: StoredProject) => currentVersionOf(p)?.id ?? ''
+
+/** FR-60: the next minor of the released version, else 0.1.0. */
+export function suggestedNextVersion(p: StoredProject): string {
+  const released = releasedVersionOf(p)
+  const parsed = released ? parseSemVer(released.version) : null
+  return parsed ? `${String(parsed.major)}.${String(parsed.minor + 1n)}.0` : '0.1.0'
+}
+
 /**
  * Seeds a project. `members` defaults to the signed-in user as Owner; pass `[]` for a project the user can't see.
+ * Without `releaseVersions`, the project gets version 0.1.0: released when `status` is `released`, else in development.
  */
 export function seedProject(
   overrides: Partial<Omit<StoredProject, 'members'>> & { members?: { userId: string; role: ProjectRole }[] } = {},
@@ -141,7 +212,7 @@ export function seedProject(
     idea: 'Track stock levels across warehouses.',
     currentPhase: 'refinement',
     status: 'active',
-    projectVersion: 1,
+    checkpoint: 1,
     approvalMode: 'advisory',
     complianceThreshold: 0.9,
     maxFilesPerStep: 20,
@@ -162,11 +233,22 @@ export function seedProject(
     refinementRounds: [],
     executionSteps: [],
     phaseAtVersion: {},
+    releaseVersions: [],
     ...rest,
     members: (members ?? (owner ? [{ userId: owner, role: 'owner' as const }] : [])).map((m) => ({
       ...m,
       createdAt: now,
     })),
+  }
+  if (!rest.releaseVersions) {
+    project.releaseVersions = [
+      makeReleaseVersion({
+        version: '0.1.0',
+        status: project.status === 'released' ? 'released' : 'in_development',
+        checkpoints: { current: project.checkpoint, max: project.checkpoint },
+        request: project.idea,
+      }),
+    ]
   }
   projectsDb.projects.push(project)
   return project
@@ -192,7 +274,10 @@ function toDto(project: StoredProject, userId: string): Project {
     idea: p.idea,
     currentPhase: p.currentPhase,
     status: p.status,
-    projectVersion: p.projectVersion,
+    checkpoint: p.checkpoint,
+    releaseVersionId: currentVersionOf(p)?.id ?? null,
+    releasedVersion: releasedVersionOf(p)?.version ?? null,
+    developmentVersion: developmentVersionOf(p)?.version ?? null,
     approvalMode: p.approvalMode,
     complianceThreshold: p.complianceThreshold,
     maxFilesPerStep: p.maxFilesPerStep,
@@ -207,8 +292,21 @@ function toDto(project: StoredProject, userId: string): Project {
 }
 
 function toSummary(project: StoredProject, userId: string): Summary {
-  const { id, name, slug, currentPhase, status, projectVersion, approvalMode, createdAt, updatedAt } = project
-  return { id, name, slug, currentPhase, status, projectVersion, approvalMode, createdAt, updatedAt, myRole: roleOf(project, userId) }
+  const { id, name, slug, currentPhase, status, checkpoint, approvalMode, createdAt, updatedAt } = project
+  return {
+    id,
+    name,
+    slug,
+    currentPhase,
+    status,
+    checkpoint,
+    releasedVersion: releasedVersionOf(project)?.version ?? null,
+    developmentVersion: developmentVersionOf(project)?.version ?? null,
+    approvalMode,
+    createdAt,
+    updatedAt,
+    myRole: roleOf(project, userId),
+  }
 }
 
 function toMember(m: StoredMember): Member {
@@ -344,7 +442,11 @@ export function stateDto(p: StoredProject): State {
     projectId: p.id,
     phase: p.currentPhase,
     status: p.status,
-    projectVersion: p.projectVersion,
+    checkpoint: p.checkpoint,
+    releaseVersionId: currentVersionOf(p)?.id ?? null,
+    releasedVersion: releasedVersionOf(p)?.version ?? null,
+    developmentVersion: developmentVersionOf(p)?.version ?? null,
+    suggestedNextVersion: suggestedNextVersion(p),
     executionPaused: p.executionPaused,
     executionStatus: executionRunStatus(p),
     ...p.state,
@@ -364,8 +466,8 @@ function latestReleaseSummary(releases: Schemas['ReleaseDto'][] | undefined): Sc
   if (!latest) {
     return null
   }
-  const { id, projectVersion, status, tag, startedAt } = latest
-  return { id, projectVersion, status, tag, startedAt }
+  const { id, releaseVersionId, checkpoint, status, tag, startedAt } = latest
+  return { id, releaseVersionId, checkpoint, status, tag, startedAt }
 }
 
 export type Access = { project: StoredProject; userId: string; level: 'owner' | 'contributor' | 'viewer' | 'admin' } | Response
@@ -428,6 +530,7 @@ export const projectHandlers = [
     const search = q.get('search')?.toLowerCase()
     const phase = q.get('phase')
     const status = q.get('status')
+    const hasDevelopment = q.get('hasDevelopmentVersion')
     const sortBy = q.get('sortBy') ?? 'updated'
     const dir = q.get('sortOrder') === 'asc' ? 1 : -1
     const items = projectsDb.projects
@@ -435,6 +538,7 @@ export const projectHandlers = [
       .filter((p) => !search || p.name.toLowerCase().includes(search))
       .filter((p) => !phase || p.currentPhase === phase)
       .filter((p) => !status || p.status === status)
+      .filter((p) => hasDevelopment === null || (developmentVersionOf(p) !== undefined) === (hasDevelopment === 'true'))
       .sort((a, b) => {
         const key = sortBy === 'name' ? 'name' : sortBy === 'created' ? 'createdAt' : 'updatedAt'
         return a[key].localeCompare(b[key]) * dir
@@ -467,6 +571,11 @@ export const projectHandlers = [
     if (Object.keys(errors).length > 0) {
       return validation(errors)
     }
+    // FR-66: the initial version (default 0.1.0) is the first release version, in development.
+    const initialVersion = body.initialVersion ? normalizeVersion(body.initialVersion) : '0.1.0'
+    if (!initialVersion) {
+      return problem(400, 'VERSION_INVALID', `'${body.initialVersion ?? ''}' is not a valid version.`)
+    }
     const now = new Date().toISOString()
     const project = seedProject({
       name: body.name,
@@ -487,6 +596,7 @@ export const projectHandlers = [
         hasToken: Boolean(body.git.token),
       },
       members: [{ userId: user.id, role: 'owner' }],
+      releaseVersions: [makeReleaseVersion({ version: initialVersion, request: body.idea })],
     })
     return HttpResponse.json<Project>(toDto(project, user.id), { status: 201 })
   }),

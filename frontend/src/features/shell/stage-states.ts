@@ -29,6 +29,7 @@ const artifactStage: Record<ArtifactType, Phase> = {
   technical_specification: 'specification',
   implementation_plan: 'planning',
   optimization_plan: 'review',
+  codebase_summary: 'refinement',
 }
 
 /** The gate that already stands for a draft of this type (so the draft isn't counted twice). */

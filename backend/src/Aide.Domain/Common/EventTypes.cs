@@ -127,10 +127,10 @@ public static class EventTypes
 
     // Review (FR-38–FR-41)
 
-    /// <summary>A review cycle started: <c>{jobId, cycle, trigger, projectVersion}</c>.</summary>
+    /// <summary>A review cycle started: <c>{jobId, cycle, trigger, checkpoint, releaseVersionId}</c>.</summary>
     public const string ReviewStarted = "REVIEW_STARTED";
 
-    /// <summary>A review cycle recorded its report: <c>{jobId, reportId, cycle, projectVersion, overallScore, threshold, driftLevel, decision, decisionReason, optimizationPlanArtifactId}</c>.</summary>
+    /// <summary>A review cycle recorded its report: <c>{jobId, reportId, cycle, checkpoint, releaseVersionId, overallScore, threshold, driftLevel, decision, decisionReason, optimizationPlanArtifactId}</c>.</summary>
     public const string ReviewCompleted = "REVIEW_COMPLETED";
 
     /// <summary>A review job ended without a report (failed for good or dead-lettered): <c>{jobId, cycle, reason, deadLettered}</c>; the reason is redacted.</summary>
@@ -140,6 +140,12 @@ public static class EventTypes
     public const string ReleaseStarted = "RELEASE_STARTED";
     public const string ReleaseCompleted = "RELEASE_COMPLETED";
     public const string ReleaseFailed = "RELEASE_FAILED";
+
+    /// <summary>
+    /// FR-60: an Owner started a new release version: <c>{releaseVersionId, version, baseTag, baseCommitSha, branchName,
+    /// presetId, request}</c> (the request is truncated). The project is then in refinement at checkpoint 1.
+    /// </summary>
+    public const string VersionStarted = "VERSION_STARTED";
 
     // Rollback (FR-44, FR-45)
     public const string RollbackCompleted = "ROLLBACK_COMPLETED";
@@ -159,7 +165,7 @@ public static class EventTypes
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
-        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed],
+        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, VersionStarted],
         [EventCategory.Rollback] = [RollbackCompleted],
         [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated],
         [EventCategory.Integrity] = [IntegrityAlert],

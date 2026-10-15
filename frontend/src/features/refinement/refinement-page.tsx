@@ -8,10 +8,9 @@ import { Button } from '../../components/ui/button'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { applyFieldErrors, errorMessage } from '../../lib/errors'
-import { canInProject } from '../../lib/permissions'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { ArtifactStatusBadge, IntegrityBadge } from '../artifacts/artifact-badges'
-import { useArtifactVersion } from '../artifacts/artifacts-api'
+import { useArtifactVersion, useLatestArtifact } from '../artifacts/artifacts-api'
 import { MarkdownView } from '../artifacts/markdown-view'
 import { phaseLabels } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
@@ -284,19 +283,42 @@ function RoundForm({
   )
 }
 
+/** FR-62: a past release version's refinement, read-only: its latest project request. */
+function PastRefinement({ projectId, releaseVersionId }: { projectId: string; releaseVersionId: string }) {
+  const request = useLatestArtifact(projectId, 'project_request', true, releaseVersionId)
+  if (request.isPending) {
+    return <LoadingState label="Loading the project request…" />
+  }
+  if (request.isError) {
+    return (
+      <EmptyState title="No project request in this version">
+        <p>This version has no recorded project request.</p>
+      </EmptyState>
+    )
+  }
+  return (
+    <section aria-labelledby="past-request-title" className="flex flex-col gap-3">
+      <h3 id="past-request-title" className="flex flex-wrap items-center gap-2 text-lg">
+        Project request v{request.data.version} <ArtifactStatusBadge status={request.data.status} />
+      </h3>
+      <MarkdownView content={request.data.content} label={`Project request v${String(request.data.version)}`} />
+    </section>
+  )
+}
+
 /**
  * /projects/:id/refinement (FR-27, SPEC §7): the current project request draft, the clarifying questions with answer
  * fields, "Run another round" (writers, refinement phase only) and the latest round's status — pending until its live
  * `run`/`artifact` event (or a refetch) brings the result.
  */
 export function RefinementPage() {
-  const { project, user, role } = useProjectAccess()
+  const { project, can, releaseVersionId } = useProjectAccess()
   useDocumentTitle(`Refinement · ${project.name}`)
   const refinement = useRefinement(project.id)
   const start = useStartRefinement(project.id)
   /** Shown outside the form: REFINEMENT_IN_PROGRESS and CONFLICT refetch the page, which replaces the form. */
   const [startErrors, setStartErrors] = useState<string[]>([])
-  const writer = canInProject(user, role, 'startAgents')
+  const writer = can('startAgents')
   const inPhase = project.currentPhase === 'refinement'
 
   const header = (
@@ -304,6 +326,15 @@ export function RefinementPage() {
       Refinement
     </h2>
   )
+
+  if (releaseVersionId) {
+    return (
+      <>
+        {header}
+        <PastRefinement projectId={project.id} releaseVersionId={releaseVersionId} />
+      </>
+    )
+  }
 
   if (refinement.isPending) {
     return (

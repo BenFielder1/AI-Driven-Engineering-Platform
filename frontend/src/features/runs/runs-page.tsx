@@ -124,11 +124,11 @@ function RunsTable({ runs, onOpen }: { runs: AgentRun[]; onOpen: (run: AgentRun)
  * (nothing streams in v1); live `run` events refresh the list (FR-46).
  */
 export function RunsPage({ search, onSearchChange, onOpenRun, onCloseRun }: RunsPageProps) {
-  const { project } = useProjectAccess()
+  const { project, releaseVersionId } = useProjectAccess()
   useDocumentTitle(`Runs · ${project.name}`)
   const page = search.page ?? 1
   const agent = search.agent ?? null
-  const runs = useRuns(project.id, agent, page)
+  const runs = useRuns(project.id, agent, page, releaseVersionId)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   const openRunId = search.run ?? null

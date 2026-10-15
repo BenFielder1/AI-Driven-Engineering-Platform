@@ -111,7 +111,7 @@ test('§2: a Contributor can edit drafts but gate, approval and settings control
 
   expect((await api(context, 'POST', `/api/projects/${projectId}/gates/${gateId}/approve`, {})).status()).toBe(403)
   expect((await api(context, 'POST', `/api/projects/${projectId}/artifacts/${draftId}/approve`, {})).status()).toBe(403)
-  expect((await api(context, 'POST', `/api/projects/${projectId}/rollback`, { targetVersion: 1, reason: 'no' })).status()).toBe(403)
+  expect((await api(context, 'POST', `/api/projects/${projectId}/rollback`, { targetCheckpoint: 1, reason: 'no' })).status()).toBe(403)
   expect((await api(context, 'PATCH', `/api/projects/${projectId}`, { name: 'Renamed' })).status()).toBe(403)
   expect((await api(context, 'GET', `/api/projects/${projectId}/settings`)).status()).toBe(403)
   const problem = (await (await api(context, 'POST', `/api/projects/${projectId}/gates/${gateId}/approve`, {})).json()) as {

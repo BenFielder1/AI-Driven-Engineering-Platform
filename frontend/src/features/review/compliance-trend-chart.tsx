@@ -19,8 +19,8 @@ const decisionColor: Record<Decision, string> = {
 const noDecisionColor = cssVar('chart-1')
 
 /** A stable key per trend point: cycle numbers restart after a rollback, so the cycle alone can repeat. */
-const pointKey = (p: { projectVersion: number; cycle: number; createdAt: string }) =>
-  `${String(p.projectVersion)}-${String(p.cycle)}-${p.createdAt}`
+const pointKey = (p: { checkpoint: number; cycle: number; createdAt: string }) =>
+  `${String(p.checkpoint)}-${String(p.cycle)}-${p.createdAt}`
 
 interface Point extends ComplianceTrendPoint {
   key: string
@@ -83,7 +83,7 @@ export function ComplianceTrendChart({ trend, headingLevel = 3 }: { trend: Compl
     caption: 'Compliance score by review cycle, oldest first',
     columns: [
       { key: 'cycle', header: 'Cycle' },
-      { key: 'version', header: 'Version' },
+      { key: 'version', header: 'Checkpoint' },
       { key: 'score', header: 'Score' },
       { key: 'threshold', header: 'Threshold' },
       { key: 'drift', header: 'Drift' },
@@ -91,7 +91,7 @@ export function ComplianceTrendChart({ trend, headingLevel = 3 }: { trend: Compl
     ],
     rows: points.map((p) => ({
       cycle: p.cycle,
-      version: `v${String(p.projectVersion)}`,
+      version: String(p.checkpoint),
       score: (
         <>
           {formatPercent(p.overallScore)}{' '}

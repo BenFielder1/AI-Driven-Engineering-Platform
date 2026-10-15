@@ -19,7 +19,23 @@ public sealed class Project
 
     public ProjectStatus Status { get; set; } = ProjectStatus.Active;
 
-    public int ProjectVersion { get; set; } = ProjectDefaults.InitialVersion;
+    /// <summary>The lifecycle checkpoint within the current release version (§4.10; v1's "project version").</summary>
+    public int Checkpoint { get; set; } = ProjectDefaults.InitialVersion;
+
+    /// <summary>The release version the lifecycle state belongs to (the one in development, or the latest released).</summary>
+    public Guid? CurrentReleaseVersionId { get; set; }
+
+    /// <summary>Denormalised: the highest <c>released</c> or <c>imported</c> version (§4.10); null when never released.</summary>
+    public string? ReleasedVersion { get; set; }
+
+    /// <summary>Denormalised: the version <c>in_development</c> or <c>awaiting_merge</c>; null when none.</summary>
+    public string? DevelopmentVersion { get; set; }
+
+    /// <summary>FR-65 release merge strategy.</summary>
+    public MergeStrategy MergeStrategy { get; set; } = MergeStrategy.AideMerges;
+
+    /// <summary>Tag prefix for release tags (§4.10, default <c>v</c>).</summary>
+    public string TagPrefix { get; set; } = ReleaseVersion.DefaultTagPrefix;
 
     public ApprovalMode ApprovalMode { get; set; } = ProjectDefaults.Mode;
 

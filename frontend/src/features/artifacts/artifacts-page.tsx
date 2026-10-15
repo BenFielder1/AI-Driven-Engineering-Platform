@@ -17,6 +17,7 @@ const producedIn: Record<ArtifactType, string> = {
   technical_specification: 'The Specification phase produces the technical specification.',
   implementation_plan: 'The Planning phase produces the implementation plan.',
   optimization_plan: 'A review cycle that needs more work produces an optimisation plan.',
+  codebase_summary: 'The Repository Analyst produces a codebase summary when a new version starts.',
 }
 
 /**
@@ -68,9 +69,9 @@ function ArtifactCard({ projectId, type, latest }: { projectId: string; type: Ar
 
 /** /projects/:id/artifacts (FR-21, SPEC §7): a card per type with its latest version, status and integrity. */
 export function ArtifactsPage() {
-  const { project } = useProjectAccess()
+  const { project, releaseVersionId } = useProjectAccess()
   useDocumentTitle(`Artifacts · ${project.name}`)
-  const artifacts = useArtifacts(project.id)
+  const artifacts = useArtifacts(project.id, releaseVersionId)
 
   let body
   if (artifacts.isPending) {

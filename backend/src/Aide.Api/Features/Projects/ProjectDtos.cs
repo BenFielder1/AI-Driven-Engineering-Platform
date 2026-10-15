@@ -12,7 +12,13 @@ using Aide.Domain.Review;
 
 namespace Aide.Api.Features.Projects;
 
-/// <summary>A project as shown on its overview and settings pages (FR-5, FR-7). <c>myRole</c> is the caller's project role (<c>null</c> for an Admin who isn't a member); a <c>null</c> <c>tokenBudget</c> means unlimited.</summary>
+/// <summary>
+/// A project as shown on its overview and settings pages (FR-5, FR-7). <c>myRole</c> is the caller's project role (<c>null</c>
+/// for an Admin who isn't a member); a <c>null</c> <c>tokenBudget</c> means unlimited. <c>checkpoint</c> is the lifecycle
+/// checkpoint within the current release version <c>releaseVersionId</c> (§4.10, D-V2-11: was <c>projectVersion</c>);
+/// <c>releasedVersion</c> is the highest released version (<c>null</c>: not released) and <c>developmentVersion</c> the
+/// version in development (<c>null</c>: none) (FR-62). <c>idea</c> is the request of the version in development.
+/// </summary>
 public sealed record ProjectDto(
     Guid Id,
     string Name,
@@ -20,7 +26,10 @@ public sealed record ProjectDto(
     string Idea,
     Phase CurrentPhase,
     ProjectStatus Status,
-    int ProjectVersion,
+    int Checkpoint,
+    Guid? ReleaseVersionId,
+    string? ReleasedVersion,
+    string? DevelopmentVersion,
     ApprovalMode ApprovalMode,
     decimal ComplianceThreshold,
     int MaxFilesPerStep,
@@ -32,14 +41,20 @@ public sealed record ProjectDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
-/// <summary>A row of the projects list (FR-6). <c>myRole</c> is <c>null</c> for an Admin who isn't a member.</summary>
+/// <summary>
+/// A row of the projects list (FR-6, FR-62). <c>myRole</c> is <c>null</c> for an Admin who isn't a member;
+/// <c>releasedVersion</c> / <c>developmentVersion</c> are the two version badges (<c>null</c> when not released / nothing in
+/// development); <c>checkpoint</c> was <c>projectVersion</c> (D-V2-11).
+/// </summary>
 public sealed record ProjectSummaryDto(
     Guid Id,
     string Name,
     string Slug,
     Phase CurrentPhase,
     ProjectStatus Status,
-    int ProjectVersion,
+    int Checkpoint,
+    string? ReleasedVersion,
+    string? DevelopmentVersion,
     ApprovalMode ApprovalMode,
     ProjectRole? MyRole,
     DateTimeOffset CreatedAt,
@@ -103,6 +118,10 @@ public sealed record CreateProjectRequest
     public long? TokenBudget { get; init; }
 
     public required CreateProjectGitRequest Git { get; init; }
+
+    /// <summary>FR-66: the first release version (semver, a leading <c>v</c> is stripped; default <c>0.1.0</c>). The first release tags it.</summary>
+    [MaxLength(Versions.VersionLimits.VersionMaxLength)]
+    public string? InitialVersion { get; init; }
 }
 
 /// <summary>Partial update of a project (FR-7). Omitted fields are unchanged.</summary>
@@ -152,12 +171,25 @@ public sealed record ReviewStateDto(
 /// <summary>A pending approval gate.</summary>
 public sealed record GateSummaryDto(Guid Id, GateType Type, DateTimeOffset CreatedAt, bool Overdue);
 
-/// <summary>Deterministic project state for the overview page and the CLI (§6 <c>/api/projects/:id/state</c>). <c>tokensUsed</c> counts every agent run's tokens; a <c>null</c> <c>tokenBudget</c> means unlimited (FR-26). <c>executionStatus</c> is the execution runner's state over the current plan (FR-31, FR-37). <c>pullRequest</c> is the project PR once AIDE has opened it (FR-36), else <c>null</c>. <c>latestRelease</c> is the latest release attempt (FR-42, FR-43), else <c>null</c>.</summary>
+/// <summary>
+/// Deterministic project state for the overview page and the CLI (§6 <c>/api/projects/:id/state</c>). <c>tokensUsed</c>
+/// counts every agent run's tokens; a <c>null</c> <c>tokenBudget</c> means unlimited (FR-26). <c>executionStatus</c> is the
+/// execution runner's state over the current plan (FR-31, FR-37). <c>pullRequest</c> is the project PR once AIDE has opened
+/// it (FR-36), else <c>null</c>. <c>latestRelease</c> is the latest release attempt of the current release version (FR-42,
+/// FR-43), else <c>null</c>. Artifacts, steps, review and gates are those of the current release version
+/// <c>releaseVersionId</c> (the version in development, else the latest released; §4.10). <c>checkpoint</c> was
+/// <c>projectVersion</c> (D-V2-11). <c>suggestedNextVersion</c> prefills "Start new version" (FR-60: the next minor of the
+/// released version).
+/// </summary>
 public sealed record ProjectStateDto(
     Guid ProjectId,
     Phase Phase,
     ProjectStatus Status,
-    int ProjectVersion,
+    int Checkpoint,
+    Guid? ReleaseVersionId,
+    string? ReleasedVersion,
+    string? DevelopmentVersion,
+    string SuggestedNextVersion,
     bool ExecutionPaused,
     IReadOnlyList<ArtifactStateDto> Artifacts,
     ExecutionCountsDto Execution,

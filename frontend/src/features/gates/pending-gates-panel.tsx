@@ -124,11 +124,11 @@ function PendingGateItem({
 export function PendingGatesPanel({
   projectId,
   canDecide,
-  currentVersion,
+  currentCheckpoint,
 }: {
   projectId: string
   canDecide: boolean
-  currentVersion: number
+  currentCheckpoint: number
 }) {
   const gates = useGates(projectId)
   const [dialog, setDialog] = useState<OpenDialog>(null)
@@ -196,7 +196,7 @@ export function PendingGatesPanel({
         <EscalationDialog
           projectId={projectId}
           gate={dialog.gate}
-          currentVersion={currentVersion}
+          currentCheckpoint={currentCheckpoint}
           onClose={close}
           onDecided={onDecided}
           fallbackFocusRef={headingRef}

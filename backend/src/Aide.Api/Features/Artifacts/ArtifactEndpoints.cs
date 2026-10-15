@@ -2,9 +2,11 @@ using System.ComponentModel.DataAnnotations;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Projects;
+using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
+using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Aide.Api.Features.Artifacts;
@@ -26,14 +28,14 @@ public static class ArtifactEndpoints
 
         group.MapGet("/", ListLatestArtifacts)
             .WithName("ListLatestArtifacts")
-            .WithSummary("The latest version of each artifact type that exists, without content (members).")
+            .WithSummary("The latest version of each artifact type that exists in a release version (default: the version in development, else the latest released), without content (members, FR-59).")
             .Produces<IReadOnlyList<ArtifactSummaryDto>>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project."));
 
         group.MapGet("/{type}/latest", GetLatestArtifact)
             .WithName("GetLatestArtifact")
-            .WithSummary("The highest version of an artifact type, with content and integrity (members).")
+            .WithSummary("The highest version of an artifact type in a release version (default: the version in development, else the latest released), with content and integrity (members).")
             .Produces<ArtifactDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -43,7 +45,7 @@ public static class ArtifactEndpoints
 
         group.MapGet("/{type}/history", GetArtifactHistory)
             .WithName("GetArtifactHistory")
-            .WithSummary("Every version of an artifact type, newest first, without content (members).")
+            .WithSummary("Every version of an artifact type in a release version (default: the version in development, else the latest released), newest first, without content (members).")
             .Produces<IReadOnlyList<ArtifactSummaryDto>>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -120,7 +122,9 @@ public static class ArtifactEndpoints
         Guid id,
         IProjectAccess access,
         ArtifactReader reader,
-        CancellationToken cancellationToken)
+        AideDbContext db,
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -128,7 +132,13 @@ public static class ArtifactEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        return TypedResults.Ok(await reader.ListLatestAsync(id, cancellationToken));
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
+        return TypedResults.Ok(await reader.ListLatestAsync(id, scope.Value, cancellationToken));
     }
 
     private static async Task<Results<Ok<ArtifactDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> GetLatestArtifact(
@@ -136,7 +146,9 @@ public static class ArtifactEndpoints
         [WireEnum(typeof(ArtifactType))] string type,
         IProjectAccess access,
         ArtifactReader reader,
-        CancellationToken cancellationToken)
+        AideDbContext db,
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -144,8 +156,14 @@ public static class ArtifactEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
         var artifactType = EnumStrings.Parse<ArtifactType>(type);
-        return await reader.LatestAsync(id, artifactType, cancellationToken) is { } artifact
+        return await reader.LatestAsync(id, artifactType, scope.Value, cancellationToken) is { } artifact
             ? TypedResults.Ok(artifact)
             : ApiProblems.NotFound($"No version of the {type} exists yet.");
     }
@@ -155,7 +173,9 @@ public static class ArtifactEndpoints
         [WireEnum(typeof(ArtifactType))] string type,
         IProjectAccess access,
         ArtifactReader reader,
-        CancellationToken cancellationToken)
+        AideDbContext db,
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -163,7 +183,13 @@ public static class ArtifactEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        return TypedResults.Ok(await reader.HistoryAsync(id, EnumStrings.Parse<ArtifactType>(type), cancellationToken));
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
+        return TypedResults.Ok(await reader.HistoryAsync(id, EnumStrings.Parse<ArtifactType>(type), scope.Value, cancellationToken));
     }
 
     private static async Task<Results<Ok<ArtifactDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> GetArtifactVersion(

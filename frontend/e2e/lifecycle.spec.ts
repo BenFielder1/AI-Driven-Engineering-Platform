@@ -5,8 +5,9 @@ import { addMember, apiJson, registerViaApi } from './support/api.ts'
 /**
  * NFR-TEST, M8: the full lifecycle in a real browser with the Fake LLM provider and the Local Git provider —
  * register → wizard (strict mode: spec, plan and pre-release gates) → refinement rounds → spec → plan → execution
- * (live, FR-46) → branch comparison (FR-36) → review loop (FR-38–FR-41) → pre-release gate → release with tag (FR-42)
- * → rollback with confirmation (FR-44) → activity feed (FR-50) → notifications (FR-47).
+ * (live, FR-46) → branch comparison (FR-36) → review loop (FR-38–FR-41) → pre-release gate → release tagged with the
+ * initial version (FR-42, FR-64, FR-66) → the released version is closed for rollback (FR-63) → Start new version
+ * (FR-60, FR-62) → activity feed (FR-50) → notifications (FR-47).
  * A second user (a Viewer, in their own browser context) watches the overview to check FR-46's 2-second bound.
  */
 
@@ -62,7 +63,7 @@ function currentPhase(page: Page): Locator {
   return page.getByRole('navigation', { name: 'Lifecycle stages' }).locator('[data-stage-state="current"]')
 }
 
-test('NFR-TEST, FR-5–FR-50: an idea becomes a tagged release, is rolled back, and the history and notifications show it', async ({
+test('NFR-TEST, FR-5–FR-66: an idea becomes a tagged release, a new version starts, and the history and notifications show it', async ({
   page,
   browser,
 }) => {
@@ -75,18 +76,21 @@ test('NFR-TEST, FR-5–FR-50: an idea becomes a tagged release, is rolled back, 
   await page.goto('/projects')
   await expect(page.getByRole('heading', { level: 1, name: 'Projects', exact: true })).toBeVisible()
 
-  // FR-5: the four-step wizard, strict approval mode, Local Git.
+  // FR-5, FR-66: the five-step wizard, strict approval mode, Local Git, the default initial version 0.1.0.
   await page.getByRole('link', { name: 'New project' }).first().click()
   await expect(page.getByRole('heading', { level: 1, name: 'New project' })).toBeVisible()
   await page.getByLabel('Project name').fill(projectName)
   await page.getByLabel('Your idea').fill('A ticket tracker API for small support teams: create, assign and close tickets.')
   await page.getByRole('button', { name: 'Next' }).click()
-  await expect(page.getByRole('heading', { name: 'Step 2 of 4: Configuration' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Step 2 of 5: Configuration' })).toBeVisible()
   await page.getByRole('radio', { name: /^Strict/ }).check()
   await page.getByRole('button', { name: 'Next' }).click()
   await page.getByRole('radio', { name: /^Local repository/ }).check()
   await page.getByRole('button', { name: 'Next' }).click()
-  await expect(page.getByRole('heading', { name: 'Step 4 of 4: Review & create' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Step 4 of 5: Version' })).toBeVisible()
+  await expect(page.getByLabel('Initial version')).toHaveValue('0.1.0')
+  await page.getByRole('button', { name: 'Next' }).click()
+  await expect(page.getByRole('heading', { name: 'Step 5 of 5: Review & create' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Configuration' }).getByText('Strict')).toBeVisible()
   await page.getByRole('button', { name: 'Create project' }).click()
 
@@ -121,7 +125,7 @@ test('NFR-TEST, FR-5–FR-50: an idea becomes a tagged release, is rolled back, 
     // FR-12: strict mode has no gate into Specification.
     await openSection(page, 'Overview')
     await page.getByRole('button', { name: 'Advance to Specification' }).click()
-    await expect(page.getByText('The project moved to Specification (version 2).')).toBeVisible()
+    await expect(page.getByText('The project moved to Specification (checkpoint 2).')).toBeVisible()
 
     // FR-28: the Spec Generator's draft arrives live; approve it.
     await approveGeneratedArtifact(page, 'Technical specification')
@@ -200,32 +204,41 @@ test('NFR-TEST, FR-5–FR-50: an idea becomes a tagged release, is rolled back, 
     await approvePendingGate(page, 'Release approval')
     const release = page.getByRole('region', { name: 'Release' })
     await expect(release.getByText('Released', { exact: true })).toBeVisible({ timeout: AGENT_TIMEOUT })
-    await expect(release.getByText(/^v\d+-aide$/)).toBeVisible()
-    const tag = (await release.getByText(/^v\d+-aide$/).textContent()) ?? ''
+    // FR-64, FR-66: the first release tags the initial version.
+    await expect(release.getByText('v0.1.0', { exact: true })).toBeVisible()
+    const tag = 'v0.1.0'
+    await expect(page.getByTestId('version-badges').first()).toContainText('Released 0.1.0')
 
-    // FR-44: roll back to the Planning version with a reason and an explicit confirmation step.
+    // FR-63, D-V2-3: a released version is closed; rollback says so and the way forward is a new version.
     await openSection(page, 'Settings')
     await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Danger zone' }).click()
-    await page.getByRole('button', { name: 'Roll back…' }).click()
-    const dialog = page.getByRole('alertdialog', { name: 'Roll back the project' })
-    const versionSelect = dialog.getByLabel('Version to restore')
-    const planningOption = versionSelect.getByRole('option', { name: /^Version \d+ · Planning$/ })
-    const planningValue = await planningOption.getAttribute('value')
-    expect(planningValue).not.toBeNull()
-    await versionSelect.selectOption(planningValue ?? '')
-    await dialog.getByLabel('Reason').fill('E2E: re-plan the release from the approved spec')
-    await dialog.getByRole('button', { name: 'Continue' }).click()
-    await expect(dialog.getByRole('heading', { name: new RegExp(`to version ${planningValue ?? ''}\\?$`) })).toBeVisible()
-    await dialog.getByRole('button', { name: `Roll back to version ${planningValue ?? ''}` }).click()
-    await expect(page.getByText(new RegExp(`^Rolled back from version \\d+ to version ${planningValue ?? ''}$`))).toBeVisible()
-    await expect(page.getByText('The project is back in Planning.')).toBeVisible()
-    await expect(page.getByRole('list', { name: 'Rollbacks' }).getByRole('listitem')).toHaveCount(1)
+    const rollback = page.getByRole('button', { name: 'Roll back…' })
+    await expect(rollback).toHaveAttribute('aria-disabled', 'true')
+    await expect(rollback).toHaveAccessibleDescription(/Version 0\.1\.0 is released and closed/)
+
+    // FR-60, FR-62: start 0.2.0 from the overview; the project goes back to Refinement with both badges.
+    await openSection(page, 'Overview')
+    await page.getByRole('region', { name: '0.1.0 is released' }).getByRole('button', { name: 'Start new version' }).click()
+    const start = page.getByRole('dialog', { name: 'Start a new version' })
+    await expect(start.getByLabel('New version')).toHaveValue('0.2.0')
+    await start.getByLabel('What should this version add or fix?').fill('E2E: add ticket priorities')
+    await start.getByRole('button', { name: 'Start development' }).click()
+    await expect(start).toBeHidden()
+    await expect(currentPhase(page)).toContainText('Refinement')
+    const badges = page.getByRole('heading', { level: 1, name: projectName }).locator('xpath=ancestor::header[1]').getByTestId('version-badges')
+    await expect(badges).toContainText('Released 0.1.0')
+    await expect(badges).toContainText('In development 0.2.0')
+
+    // FR-62: the released 0.1.0 can be opened read-only from the version switcher.
+    await page.getByRole('button', { name: /^Release version: 0\.2\.0/ }).click()
+    await page.getByRole('menuitem', { name: /^0\.1\.0/ }).click()
+    await expect(page.getByTestId('read-only-banner')).toHaveText(/Viewing 0\.1\.0 \(released\)\. Read-only/)
+    await page.getByRole('button', { name: 'Back to the current version' }).click()
+    await expect(page.getByTestId('read-only-banner')).toBeHidden()
 
     // FR-50: the activity feed tells the story, newest first.
-    await openSection(page, 'Overview')
-    await expect(currentPhase(page)).toContainText('Planning')
     const activity = page.getByRole('list', { name: 'Activity' })
-    await expect(activity.getByText(new RegExp(`^Rolled back from version \\d+ to version ${planningValue ?? ''}$`))).toBeVisible()
+    await expect(activity.getByText('Version 0.2.0 started from v0.1.0')).toBeVisible()
     await page.getByLabel('Show', { exact: true }).selectOption('release')
     await expect(activity.getByText(`Released: merged and tagged ${tag}`)).toBeVisible()
     await page.getByLabel('Show', { exact: true }).selectOption('gate')
@@ -234,13 +247,13 @@ test('NFR-TEST, FR-5–FR-50: an idea becomes a tagged release, is rolled back, 
 
     // FR-47: the bell shows unread notifications; marking one read and then all read updates the count.
     // Notifications are delivered by background jobs, so first wait (through the API) until this journey's expected set is
-    // in: the agents' drafts, both review cycles, the release and the rollback (gate_required isn't awaited: the
+    // in: the agents' drafts, both review cycles and the release (gate_required isn't awaited: the
     // worker drops it when the gate is decided before delivery), and the server's unread count has stopped
     // moving. Only then are the before/after counts comparable.
     interface NotificationPage { items: { id: string; type: string; title: string; readAt: string | null }[]; unreadCount: number }
     const serverUnread = async () =>
       (await apiJson<{ unreadCount: number }>(page.context(), 'GET', '/api/me/notifications/unread-count')).unreadCount
-    const expectedTypes: Record<string, number> = { artifact_ready: 1, review_completed: 2, release_completed: 1, rollback: 1 }
+    const expectedTypes: Record<string, number> = { artifact_ready: 1, review_completed: 2, release_completed: 1 }
     const recentCounts: number[] = []
     await expect
       .poll(
@@ -268,7 +281,7 @@ test('NFR-TEST, FR-5–FR-50: an idea becomes a tagged release, is rolled back, 
     await page.getByRole('link', { name: 'View all notifications' }).click()
     await expect(page.getByRole('heading', { level: 1, name: 'Notifications' })).toBeVisible()
     const notifications = page.getByRole('list', { name: 'Notifications', exact: true })
-    for (const label of ['Artifact ready', 'Review completed', 'Release completed', 'Rollback']) {
+    for (const label of ['Artifact ready', 'Review completed', 'Release completed']) {
       await expect(notifications.getByText(new RegExp(`^${label} · `)).first()).toBeVisible()
     }
 

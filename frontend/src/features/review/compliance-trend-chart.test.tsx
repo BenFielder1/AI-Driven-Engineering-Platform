@@ -13,7 +13,7 @@ describe('ComplianceTrendChart (NFR-A11Y)', () => {
           series: [
             {
               cycle: 1,
-              projectVersion: 1,
+              checkpoint: 1,
               overallScore: 0.9,
               driftLevel: 'none',
               decision: 'release_eligible',

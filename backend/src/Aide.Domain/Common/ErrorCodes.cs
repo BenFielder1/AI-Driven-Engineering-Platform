@@ -47,10 +47,34 @@ public static class ErrorCodes
     public const string RateLimited = "RATE_LIMITED";
 
     /// <summary>
-    /// FR-42 (recorded on a failed release, not returned by an endpoint): the release tag <c>v&lt;version&gt;-aide</c> already
-    /// exists but points at a commit that doesn't contain the project branch; tags are never moved.
+    /// FR-61 (409 on <c>POST /versions</c>) and FR-64 (recorded on a failed release): the tag <c>&lt;tagPrefix&gt;&lt;version&gt;</c>
+    /// already exists in the repository on a commit that doesn't hold the release; tags are never moved (replaces v1's
+    /// <c>TAG_CONFLICT</c> and the <c>v&lt;N&gt;-aide.&lt;k&gt;</c> suffixes).
     /// </summary>
-    public const string TagConflict = "TAG_CONFLICT";
+    public const string TagExists = "TAG_EXISTS";
+
+    // Release versions (§4.10, FR-60–FR-66)
+
+    /// <summary>FR-61: not <c>MAJOR.MINOR.PATCH[-prerelease]</c>.</summary>
+    public const string VersionInvalid = "VERSION_INVALID";
+
+    /// <summary>FR-61: not strictly greater than the released version (or the version already exists).</summary>
+    public const string VersionNotGreater = "VERSION_NOT_GREATER";
+
+    /// <summary>FR-61: a version is already in development.</summary>
+    public const string VersionInProgress = "VERSION_IN_PROGRESS";
+
+    /// <summary>FR-60: the latest release is waiting for its pull request to be merged (FR-65).</summary>
+    public const string ReleaseNotMerged = "RELEASE_NOT_MERGED";
+
+    /// <summary>FR-60: a new version needs the project to be released.</summary>
+    public const string NotReleased = "NOT_RELEASED";
+
+    /// <summary>An external service (the Git host) failed or couldn't be reached while serving the request (§6).</summary>
+    public const string UpstreamError = "UPSTREAM_ERROR";
+
+    /// <summary>FR-74: the preset doesn't exist (until presets land, every preset id).</summary>
+    public const string PresetNotFound = "PRESET_NOT_FOUND";
 
     /// <summary>FR-42, FR-43 (recorded on a failed release): Git or GitHub refused the merge, tag or push for good.</summary>
     public const string GitError = "GIT_ERROR";
@@ -130,6 +154,14 @@ public static class ErrorCodes
         [InvalidTargetVersion] = 400,
         [RollbackBlocked] = 409,
         [RateLimited] = 429,
+        [TagExists] = 409,
+        [VersionInvalid] = 400,
+        [VersionNotGreater] = 409,
+        [VersionInProgress] = 409,
+        [ReleaseNotMerged] = 409,
+        [NotReleased] = 409,
+        [PresetNotFound] = 400,
+        [UpstreamError] = 502,
         [LinkExpired] = 410,
         [LinkUsed] = 409,
     };

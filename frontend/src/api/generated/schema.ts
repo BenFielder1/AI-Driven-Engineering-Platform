@@ -335,10 +335,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The caller's projects (every project for Admins), paged, with search by name, phase and status filters and sorting. */
+        /** The caller's projects (every project for Admins), paged, with search by name, phase, status and has-a-version-in-development filters and sorting. Rows carry the released and in-development version badges (FR-62). */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults; initialVersion (FR-66, default 0.1.0) is the first release version, in development. 400 VERSION_INVALID. */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -546,7 +546,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve a pending gate (Owner). Applies the gated transition; escalation gates need a decision (continue, rollback with targetVersion, or accept). 409 GATE_NOT_PENDING, 400 INVALID_DECISION. */
+        /** Approve a pending gate (Owner). Applies the gated transition; escalation gates need a decision (continue, rollback with targetCheckpoint, or accept). 409 GATE_NOT_PENDING, 400 INVALID_DECISION. */
         post: operations["ApproveGate"];
         delete?: never;
         options?: never;
@@ -578,7 +578,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's activity feed, newest first (members). Filter by category with type; load more with before = the previous page's nextBefore. limit defaults to 50 (max 100). */
+        /** The project's activity feed, newest first (members). Filter by category with type; load more with before = the previous page's nextBefore. limit defaults to 50 (max 100). releaseVersionId limits it to the events while that release version was current (from its start to the start of the next); without it, the whole history. */
         get: operations["ListProjectActivity"];
         put?: never;
         post?: never;
@@ -595,7 +595,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The latest version of each artifact type that exists, without content (members). */
+        /** The latest version of each artifact type that exists in a release version (default: the version in development, else the latest released), without content (members, FR-59). */
         get: operations["ListLatestArtifacts"];
         put?: never;
         post?: never;
@@ -612,7 +612,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The highest version of an artifact type, with content and integrity (members). */
+        /** The highest version of an artifact type in a release version (default: the version in development, else the latest released), with content and integrity (members). */
         get: operations["GetLatestArtifact"];
         put?: never;
         post?: never;
@@ -629,7 +629,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Every version of an artifact type, newest first, without content (members). */
+        /** Every version of an artifact type in a release version (default: the version in development, else the latest released), newest first, without content (members). */
         get: operations["GetArtifactHistory"];
         put?: never;
         post?: never;
@@ -970,7 +970,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Every release attempt of the project, newest first (members, FR-42, FR-43). Empty before the first release. */
+        /** The release attempts of a release version (default: the version in development, else the latest released), newest first (members, FR-42, FR-43, FR-64). Empty before the first release. */
         get: operations["ListReleases"];
         put?: never;
         post?: never;
@@ -1006,7 +1006,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Roll the project back to an earlier version (Owner, FR-44, FR-45, §4.8). In one transaction: restores the phase recorded at that version (status rolled_back), invalidates artifacts created after it, resets their plans' steps, cancels pending gates and queued jobs, clears the review state and records the rollback. The Git branch is not rewritten. Checks run in order: INVALID_TARGET_VERSION, ROLLBACK_BLOCKED, RATE_LIMITED (one rollback per project per minute). */
+        /** Roll the project back to an earlier checkpoint of the release version in development (Owner, FR-44, FR-45, FR-63, §4.8, §4.10). In one transaction: restores the phase recorded at that checkpoint (status rolled_back), invalidates that version's artifacts created after it, resets their plans' steps, cancels pending gates and queued jobs, clears the review state and records the rollback. The Git branch is not rewritten. A released version is closed (ROLLBACK_BLOCKED version_released). Checks run in order: ROLLBACK_BLOCKED (version_released, release_partially_applied while awaiting merge), INVALID_TARGET_VERSION, ROLLBACK_BLOCKED (running work), RATE_LIMITED (one rollback per project per minute). */
         post: operations["RollbackProject"];
         delete?: never;
         options?: never;
@@ -1038,8 +1038,26 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's versions from its state transitions, newest first (members, FR-44): the phase recorded at each version (the latest transition at that version; version 1 without one is refinement), when it was entered, and whether it is a valid rollback target now. */
-        get: operations["ListProjectVersions"];
+        /** The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, preset and dates. */
+        get: operations["ListReleaseVersions"];
+        put?: never;
+        /** Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. */
+        post: operations["StartReleaseVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/checkpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The lifecycle checkpoints of a release version (default: the version in development, else the latest released), newest first (members, FR-44, FR-63): the phase recorded at each, when it was entered, and whether it is a rollback target now. Replaces v1's GET /versions (D-V2-11). */
+        get: operations["ListCheckpoints"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1293,6 +1311,8 @@ export interface components {
         AgentRunDetailDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: null | string;
             agent: components["schemas"]["AgentKind"];
             phase: components["schemas"]["Phase"];
             /** Format: uuid */
@@ -1324,11 +1344,14 @@ export interface components {
         /**
          * @description An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt
          *     template version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in
-         *     USD, duration and error. `userFeedback` is the feedback or answers given to the agent.
+         *     USD, duration and error. `userFeedback` is the feedback or answers given to the agent. `releaseVersionId` is the
+         *     release version it ran for (§4.10).
          */
         AgentRunDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: null | string;
             agent: components["schemas"]["AgentKind"];
             phase: components["schemas"]["Phase"];
             /** Format: uuid */
@@ -1443,6 +1466,8 @@ export interface components {
          * @description One artifact version with its Markdown content (FR-16, §4.3). `contentHash` is the lowercase hex SHA-256 of the
          *     normalised content; `integrity` is `corrupted` when it no longer matches (FR-20). `approvedBy` and
          *     `approvedAt` are set once approved (status `locked`); `rejectionComment` once rejected (FR-17).
+         *     `releaseVersionId` and `checkpointAtCreation` say where it was created (§4.10; D-V2-11: was
+         *     `projectVersionAtCreation`).
          */
         ArtifactDto: {
             /** Format: uuid */
@@ -1455,8 +1480,10 @@ export interface components {
             content: string;
             contentHash: string;
             status: components["schemas"]["ArtifactStatus"];
+            /** Format: uuid */
+            releaseVersionId: string;
             /** Format: int32 */
-            projectVersionAtCreation: number;
+            checkpointAtCreation: number;
             author: components["schemas"]["ArtifactAuthorDto"];
             approvedBy: null | components["schemas"]["ActorDto"];
             /** Format: date-time */
@@ -1484,8 +1511,9 @@ export interface components {
         /** @enum {unknown} */
         ArtifactStatus: "draft" | "locked" | "rejected" | "superseded" | "invalidated" | "corrupted" | null;
         /**
-         * @description One artifact version without its content (FR-16, FR-21): the artifacts page cards and the history list.
-         *     `integrity` is the result of re-checking the content hash on this read (FR-20).
+         * @description One artifact version without its content (FR-16, FR-21, FR-59): the artifacts page cards and the history list.
+         *     `integrity` is the result of re-checking the content hash on this read (FR-20); `releaseVersionId` is the
+         *     release version it belongs to (§4.10).
          */
         ArtifactSummaryDto: {
             /** Format: uuid */
@@ -1494,13 +1522,15 @@ export interface components {
             /** Format: int32 */
             version: number;
             status: components["schemas"]["ArtifactStatus"];
+            /** Format: uuid */
+            releaseVersionId: string;
             integrity: components["schemas"]["ArtifactIntegrity"];
             /** Format: date-time */
             createdAt: string;
             author: components["schemas"]["ArtifactAuthorDto"];
         };
         /** @enum {unknown} */
-        ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+        ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
         /** @description Which sign-in providers are available (the frontend hides GitHub when it isn't configured). */
         AuthProvidersDto: {
             github: boolean;
@@ -1525,12 +1555,30 @@ export interface components {
         ChangeSystemRoleRequest: {
             systemRole: components["schemas"]["SystemRole"];
         };
+        /** @enum {unknown} */
+        CheckpointBlock: "current_checkpoint" | "release_phase" | "version_released" | null;
+        /**
+         * @description A lifecycle checkpoint of a release version (FR-44, FR-63), for the rollback target picker: the phase entered at that
+         *     checkpoint and when. `rollbackAllowed` says whether it is a valid rollback target now; when it isn't,
+         *     `rollbackBlockedReason` says why (`current_checkpoint`, `release_phase`, or `version_released` for
+         *     every checkpoint of a released version). Rate limits and running work (RATE_LIMITED, ROLLBACK_BLOCKED) are checked when
+         *     the rollback is requested.
+         */
+        CheckpointDto: {
+            /** Format: int32 */
+            checkpoint: number;
+            phase: components["schemas"]["Phase"];
+            /** Format: date-time */
+            enteredAt: string;
+            rollbackAllowed: boolean;
+            rollbackBlockedReason: null | components["schemas"]["CheckpointBlock"];
+        };
         /** @description The drift level and areas of the latest compliance report (FR-41, §4.7). */
         ComplianceDriftDto: {
             driftLevel: components["schemas"]["DriftLevel"];
             areas: components["schemas"]["DriftAreaDto"][];
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
             /** Format: int32 */
             cycle: number;
         };
@@ -1545,8 +1593,10 @@ export interface components {
         ComplianceReportDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
             /** Format: int32 */
             cycle: number;
             /** Format: double */
@@ -1579,7 +1629,7 @@ export interface components {
             /** Format: int32 */
             cycle: number;
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
             /** Format: double */
             overallScore: number;
             driftLevel: components["schemas"]["DriftLevel"];
@@ -1638,6 +1688,8 @@ export interface components {
              */
             tokenBudget?: null | number;
             git: components["schemas"]["CreateProjectGitRequest"];
+            /** @description FR-66: the first release version (semver, a leading `v` is stripped; default `0.1.0`). The first release tags it. */
+            initialVersion?: null | string;
         };
         /** @description A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again. */
         CreatedApiTokenDto: {
@@ -1676,13 +1728,13 @@ export interface components {
         /**
          * @description Approve or reject a pending gate (FR-13, FR-14). `comment` is optional (on reject it is the feedback for the
          *     re-run agent). Escalation gates are approved with a `decision`; `rollback` also needs a
-         *     `targetVersion`. Other gates take neither (400 `INVALID_DECISION`), and escalation gates can't be rejected.
+         *     `targetCheckpoint` (a checkpoint of the release version in development). Other gates take neither (400 `INVALID_DECISION`), and escalation gates can't be rejected.
          */
         DecideGateRequest: {
             comment?: null | string;
             decision?: null | components["schemas"]["EscalationDecision"];
             /** Format: int32 */
-            targetVersion?: null | number;
+            targetCheckpoint?: null | number;
         };
         /**
          * @description A file a step declares it creates or modifies (FR-29). `protected` marks a protected path (§4.6: .git/, .aide/, CI
@@ -1836,7 +1888,7 @@ export interface components {
         /**
          * @description An approval gate (§4.2, FR-12–FR-15). `artifactId`, `artifactType` and `artifactVersion` identify
          *     the gated artifact (spec and plan gates). Escalation gates carry `escalationReason` and, once decided,
-         *     `decision` (and `targetVersion` for a rollback). `reason` is a human-readable context line.
+         *     `decision` (and `targetCheckpoint` for a rollback; D-V2-11: was `targetVersion`). `reason` is a human-readable context line.
          *     `decidedBy`, `decidedAt` and `comment` are set once the gate is decided. `overdue` is true
          *     72 hours after creation while pending (FR-15); `remindedAt` is when its 24-hour reminder was sent. An escalation raised by a blocked execution step (FR-33) has
          *     `escalationReason` `step_blocked` and names the step in `executionStepId` and `stepNumber`
@@ -1862,7 +1914,7 @@ export interface components {
             comment: null | string;
             decision: null | components["schemas"]["EscalationDecision"];
             /** Format: int32 */
-            targetVersion: null | number;
+            targetCheckpoint: null | number;
             overdue: boolean;
             /** Format: date-time */
             remindedAt: null | string;
@@ -2168,7 +2220,13 @@ export interface components {
             /** @description Individual reasons, when there are several. */
             details?: string[];
         };
-        /** @description A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null` for an Admin who isn't a member); a `null` `tokenBudget` means unlimited. */
+        /**
+         * @description A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null`
+         *     for an Admin who isn't a member); a `null` `tokenBudget` means unlimited. `checkpoint` is the lifecycle
+         *     checkpoint within the current release version `releaseVersionId` (§4.10, D-V2-11: was `projectVersion`);
+         *     `releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the
+         *     version in development (`null`: none) (FR-62). `idea` is the request of the version in development.
+         */
         ProjectDto: {
             /** Format: uuid */
             id: string;
@@ -2178,7 +2236,11 @@ export interface components {
             currentPhase: components["schemas"]["Phase"];
             status: components["schemas"]["ProjectStatus"];
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
+            /** Format: uuid */
+            releaseVersionId: null | string;
+            releasedVersion: null | string;
+            developmentVersion: null | string;
             approvalMode: components["schemas"]["ApprovalMode"];
             /** Format: double */
             complianceThreshold: number;
@@ -2228,14 +2290,28 @@ export interface components {
             llm: components["schemas"]["LlmSettingsDto"];
             notifications: components["schemas"]["NotificationSettingsDto"];
         };
-        /** @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened it (FR-36), else `null`. `latestRelease` is the latest release attempt (FR-42, FR-43), else `null`. */
+        /**
+         * @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`
+         *     counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the
+         *     execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened
+         *     it (FR-36), else `null`. `latestRelease` is the latest release attempt of the current release version (FR-42,
+         *     FR-43), else `null`. Artifacts, steps, review and gates are those of the current release version
+         *     `releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was
+         *     `projectVersion` (D-V2-11). `suggestedNextVersion` prefills "Start new version" (FR-60: the next minor of the
+         *     released version).
+         */
         ProjectStateDto: {
             /** Format: uuid */
             projectId: string;
             phase: components["schemas"]["Phase"];
             status: components["schemas"]["ProjectStatus"];
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
+            /** Format: uuid */
+            releaseVersionId: null | string;
+            releasedVersion: null | string;
+            developmentVersion: null | string;
+            suggestedNextVersion: string;
             executionPaused: boolean;
             artifacts: components["schemas"]["ArtifactStateDto"][];
             execution: components["schemas"]["ExecutionCountsDto"];
@@ -2254,7 +2330,11 @@ export interface components {
          * @enum {unknown}
          */
         ProjectStatus: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back";
-        /** @description A row of the projects list (FR-6). `myRole` is `null` for an Admin who isn't a member. */
+        /**
+         * @description A row of the projects list (FR-6, FR-62). `myRole` is `null` for an Admin who isn't a member;
+         *     `releasedVersion` / `developmentVersion` are the two version badges (`null` when not released / nothing in
+         *     development); `checkpoint` was `projectVersion` (D-V2-11).
+         */
         ProjectSummaryDto: {
             /** Format: uuid */
             id: string;
@@ -2263,28 +2343,15 @@ export interface components {
             currentPhase: components["schemas"]["Phase"];
             status: components["schemas"]["ProjectStatus"];
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
+            releasedVersion: null | string;
+            developmentVersion: null | string;
             approvalMode: components["schemas"]["ApprovalMode"];
             myRole: null | components["schemas"]["ProjectRole"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
-        };
-        /**
-         * @description A project version from the state transitions (FR-44), for the rollback target picker: the phase entered at that version
-         *     and when. `rollbackAllowed` says whether it is a valid rollback target now; when it isn't,
-         *     `rollbackBlockedReason` says why (`current_version`, `release_phase`). Rate limits and running work
-         *     (RATE_LIMITED, ROLLBACK_BLOCKED) are not reflected here: they are checked when the rollback is requested.
-         */
-        ProjectVersionDto: {
-            /** Format: int32 */
-            version: number;
-            phase: components["schemas"]["Phase"];
-            /** Format: date-time */
-            enteredAt: string;
-            rollbackAllowed: boolean;
-            rollbackBlockedReason: null | components["schemas"]["RollbackTargetBlock"];
         };
         /** @description A commit on the project branch that isn't on the default branch; `url` links it on GitHub (`null` for Local). */
         PullRequestCommitDto: {
@@ -2410,21 +2477,23 @@ export interface components {
             password: string;
         };
         /**
-         * @description A release attempt (FR-42, FR-43). `status` is `in_progress` while the release job is queued or running, then
+         * @description A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint
+         *     `checkpoint`. `status` is `in_progress` while the release job is queued or running, then
          *     `succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`.
          *     A failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict
          *     `conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`
-         *     for Local). `attempt` counts the release attempts for this project version (1 for the first, +1 per retry).
-         *     `completedAt` is `null` while in progress. `tag` is `v&lt;version&gt;-aide` until the release succeeds,
-         *     then the tag it was recorded with: `v&lt;version&gt;-aide.&lt;k&gt;` when the version number was reused after a rollback
-         *     and the base tag holds an earlier release; several attempts of one version may succeed (re-releases after rollbacks).
-         *     `mergeCommitSha` is set as soon as the merge exists, before tagging.
+         *     for Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).
+         *     `completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`
+         *     (e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails
+         *     the release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.
          */
         ReleaseDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
             status: components["schemas"]["ReleaseStatus"];
             tag: string;
             mergeCommitSha: null | string;
@@ -2443,18 +2512,66 @@ export interface components {
          * @description Outcome of a release attempt (FR-42, FR-43).
          * @enum {unknown}
          */
-        ReleaseStatus: "succeeded" | "failed" | "in_progress";
+        ReleaseStatus: "succeeded" | "failed" | "in_progress" | "awaiting_merge";
         /** @description The latest release attempt in the project state (FR-42, FR-43): enough for the overview's release banner. */
         ReleaseSummaryDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
             status: components["schemas"]["ReleaseStatus"];
             tag: string;
             /** Format: date-time */
             startedAt: string;
         };
+        /**
+         * @description The lifecycle checkpoints of a release version (§4.10): `current` is the project's checkpoint for the version in
+         *     development (or the latest checkpoint recorded for any other version); `max` the highest checkpoint recorded in it
+         *     (above `current` after a rollback).
+         */
+        ReleaseVersionCheckpointsDto: {
+            /** Format: int32 */
+            current: number;
+            /** Format: int32 */
+            max: number;
+        };
+        /**
+         * @description A release version of a project (§4.10, FR-60–FR-62). `version` is the normalised semver (no leading `v`);
+         *     `tag` is the release tag once released (or the imported/migrated tag, e.g. v1's `v7-aide`); `baseTag` and
+         *     `baseCommitSha` are the released tag and merge commit the version started from (null for a first version);
+         *     `branchName` and `pullRequestUrl` are the version's working branch and PR once they exist; `request` is
+         *     what the version was started with (the project idea for a first version); `startedBy` is null for versions created
+         *     by migration or import.
+         */
+        ReleaseVersionDto: {
+            /** Format: uuid */
+            id: string;
+            version: string;
+            status: components["schemas"]["ReleaseVersionStatus"];
+            tag: null | string;
+            tagPrefix: string;
+            baseTag: null | string;
+            baseCommitSha: null | string;
+            mergeCommitSha: null | string;
+            branchName: null | string;
+            pullRequestUrl: null | string;
+            checkpoints: components["schemas"]["ReleaseVersionCheckpointsDto"];
+            presetId: null | string;
+            presetVersion: null | string;
+            request: string;
+            startedBy: null | components["schemas"]["ActorDto"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            releasedAt: null | string;
+        };
+        /**
+         * @description Status of a release version (§4.10). Wire values: `in_development`, `awaiting_merge`, `released`, `imported`.
+         * @enum {unknown}
+         */
+        ReleaseVersionStatus: "in_development" | "awaiting_merge" | "released" | "imported";
         /**
          * @description Compliance categories (§4.7).
          * @enum {unknown}
@@ -2487,8 +2604,8 @@ export interface components {
             status: components["schemas"]["ReviewRunStatus"];
         };
         /**
-         * @description A recorded rollback (FR-44, §4.8): from `fromVersion` to `toVersion`, restoring `restoredPhase`.
-         *     `invalidatedArtifactIds` are the artifacts created after the target version; `resetStepIds` the steps of
+         * @description A recorded rollback (FR-44, §4.8): from checkpoint `fromCheckpoint` to `toCheckpoint` of release version
+         *     `releaseVersionId`, restoring `restoredPhase`. `invalidatedArtifactIds` are the artifacts created after the target checkpoint; `resetStepIds` the steps of
          *     invalidated plans (now `invalidated`); `requeuedStepIds` the blocked or rejected steps of surviving plans
          *     (back to `pending`); `cancelledGateIds` and `cancelledJobIds` the pending gates and queued jobs it
          *     cancelled. `createdBy` is the Owner (or the system, for an escalation decision recorded by a worker).
@@ -2496,10 +2613,12 @@ export interface components {
         RollbackDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
             /** Format: int32 */
-            fromVersion: number;
+            fromCheckpoint: number;
             /** Format: int32 */
-            toVersion: number;
+            toCheckpoint: number;
             restoredPhase: components["schemas"]["Phase"];
             reason: string;
             invalidatedArtifactIds: string[];
@@ -2512,16 +2631,15 @@ export interface components {
             createdBy: components["schemas"]["ActorDto"];
         };
         /**
-         * @description Roll the project back to an earlier project version (FR-44, §4.8). `targetVersion` must be below the current
-         *     version, recorded, and not a release-phase version; `reason` is recorded on the rollback and its state transition.
+         * @description Roll the project back to an earlier checkpoint (FR-44, FR-63, §4.8, §4.10). `targetCheckpoint` must be below the
+         *     current checkpoint, recorded in the release version in development, and not a release-phase checkpoint; `reason` is
+         *     recorded on the rollback and its state transition.
          */
         RollbackRequest: {
             /** Format: int32 */
-            targetVersion: number;
+            targetCheckpoint: number;
             reason: string;
         };
-        /** @enum {unknown} */
-        RollbackTargetBlock: "current_version" | "release_phase" | null;
         /** @description An artifact version a run used as input (FR-23). */
         RunInputArtifactDto: {
             type: components["schemas"]["ArtifactType"];
@@ -2536,6 +2654,22 @@ export interface components {
         /** @description Start a refinement round (FR-27), optionally answering some or all clarifying questions of the latest round. */
         StartRefinementRequest: {
             answers?: null | components["schemas"]["RefinementAnswerRequest"][];
+        };
+        /**
+         * @description FR-60: start a new release version. `version` is semver (a leading `v` is stripped, e.g. `v1.2.0` →
+         *     `1.2.0`); `request` describes the new features, improvements or fixes and becomes the project idea for this
+         *     version; `presetId` picks a tech stack preset (presets arrive with FR-74: until then any value is
+         *     `PRESET_NOT_FOUND`).
+         */
+        StartReleaseVersionRequest: {
+            version: string;
+            request: string;
+            presetId?: null | string;
+        };
+        /** @description FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1). */
+        StartReleaseVersionResultDto: {
+            releaseVersion: components["schemas"]["ReleaseVersionDto"];
+            state: components["schemas"]["ProjectStateDto"];
         };
         /** @enum {unknown} */
         StepStatus: "pending" | "in_progress" | "completed" | "rejected" | "blocked" | "invalidated";
@@ -3457,6 +3591,7 @@ export interface operations {
                 search?: string;
                 phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back";
+                hasDevelopmentVersion?: boolean;
                 sortBy?: "created" | "updated" | "name";
                 sortOrder?: "asc" | "desc";
             };
@@ -3523,7 +3658,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Unauthorized */
@@ -4551,6 +4686,7 @@ export interface operations {
                 type?: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project" | "integrity";
                 before?: string;
                 limit?: number;
+                releaseVersionId?: string;
             };
             header?: never;
             path: {
@@ -4600,7 +4736,9 @@ export interface operations {
     };
     ListLatestArtifacts: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -4649,11 +4787,13 @@ export interface operations {
     };
     GetLatestArtifact: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
             };
             cookie?: never;
         };
@@ -4699,11 +4839,13 @@ export interface operations {
     };
     GetArtifactHistory: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
             };
             cookie?: never;
         };
@@ -4753,7 +4895,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
                 version: number;
             };
             cookie?: never;
@@ -4807,7 +4949,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
             };
             cookie?: never;
         };
@@ -4857,7 +4999,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
             };
             cookie?: never;
         };
@@ -5073,6 +5215,7 @@ export interface operations {
                 agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review";
                 page?: number;
                 limit?: number;
+                releaseVersionId?: string;
             };
             header?: never;
             path: {
@@ -5285,7 +5428,8 @@ export interface operations {
         parameters: {
             query?: {
                 planVersion?: number;
-                planType?: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                planType?: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+                releaseVersionId?: string;
             };
             header?: never;
             path: {
@@ -5663,7 +5807,9 @@ export interface operations {
     };
     GetLatestCompliance: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5703,7 +5849,9 @@ export interface operations {
     };
     GetComplianceTrend: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5743,7 +5891,9 @@ export interface operations {
     };
     GetComplianceDrift: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5841,7 +5991,9 @@ export interface operations {
     };
     ListReleases: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5943,7 +6095,7 @@ export interface operations {
                     "application/json": components["schemas"]["RollbackDto"];
                 };
             };
-            /** @description VALIDATION (targetVersion < 1, reason empty or over 500 characters) or INVALID_TARGET_VERSION (not below the current version, not recorded, or a release-phase version). */
+            /** @description VALIDATION (targetCheckpoint < 1, reason empty or over 500 characters) or INVALID_TARGET_VERSION (not below the current checkpoint, not recorded in the version in development, or a release-phase checkpoint). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5979,7 +6131,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description ROLLBACK_BLOCKED with details ["reason: <step_in_progress|agent_run_in_progress|release_running|release_partially_applied>"] (a step, agent run or release job is running, or a queued release retry already merged), or CONFLICT (a concurrent change). */
+            /** @description ROLLBACK_BLOCKED with details ["reason: <version_released|release_partially_applied|step_in_progress|agent_run_in_progress|release_running>"] (the project is released with nothing in development, the release is awaiting merge or partly applied, or a step, agent run or release job is running), or CONFLICT (a concurrent change). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6041,7 +6193,7 @@ export interface operations {
             };
         };
     };
-    ListProjectVersions: {
+    ListReleaseVersions: {
         parameters: {
             query?: never;
             header?: never;
@@ -6058,7 +6210,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectVersionDto"][];
+                    "application/json": components["schemas"]["ReleaseVersionDto"][];
                 };
             };
             /** @description Unauthorized */
@@ -6071,6 +6223,128 @@ export interface operations {
                 };
             };
             /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StartReleaseVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartReleaseVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description The release version (in_development) and the project state. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartReleaseVersionResultDto"];
+                };
+            };
+            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]) or PRESET_NOT_FOUND. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners start versions. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description VERSION_IN_PROGRESS, RELEASE_NOT_MERGED (the latest release is awaiting merge), NOT_RELEASED, VERSION_NOT_GREATER (not above the released version), TAG_EXISTS (the tag is already in the repository) or CONFLICT. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR: the repository's tags could not be checked. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListCheckpoints: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckpointDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or a releaseVersionId of another project. */
             404: {
                 headers: {
                     [name: string]: unknown;

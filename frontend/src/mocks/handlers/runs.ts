@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw'
 import type { Schemas } from '../../api/client'
 import { nextId } from './auth'
 import { problem } from './problem'
-import { access, type StoredProject } from './projects'
+import { access, currentVersionId, type StoredProject } from './projects'
 
 type Run = Schemas['AgentRunDetailDto']
 type AgentKind = Schemas['AgentKind']
@@ -48,6 +48,7 @@ export function seedRun(project: StoredProject, overrides: Partial<Run> = {}): R
   const finished = status === 'succeeded' || status === 'failed' || status === 'cancelled'
   const run: Run = {
     id: nextId(),
+    releaseVersionId: currentVersionId(project),
     agent,
     phase: phaseOf[agent],
     stepId: null,
@@ -112,8 +113,10 @@ export const runHandlers = [
     if (page === null || limit === null || Object.keys(errors).length > 0) {
       return problem(400, 'VALIDATION', 'One or more validation errors occurred.', { errors })
     }
+    const scope = q.get('releaseVersionId') ?? currentVersionId(a.project)
     const items = a.project.runs
       .filter((r) => agent === null || r.agent === agent)
+      .filter((r) => (r.releaseVersionId ?? currentVersionId(a.project)) === scope)
       .sort((x, y) => y.createdAt.localeCompare(x.createdAt) || y.id.localeCompare(x.id))
     return HttpResponse.json<Schemas['PagedResultOfAgentRunDto']>({
       items: items.slice((page - 1) * limit, page * limit).map(toListDto),

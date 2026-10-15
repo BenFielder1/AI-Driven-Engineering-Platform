@@ -14,6 +14,7 @@ import { gateTypeLabels, nextPhase, phaseLabels } from '../projects/labels'
 import type { ProjectState } from '../projects/projects-api'
 import { useAdvancePhase, type AdvanceResult } from './lifecycle-api'
 import type { NextAction } from './next-action'
+import { checkpointLabel } from '../versions/version-label'
 import { NextActionButton } from './next-action-button'
 
 /**
@@ -62,7 +63,7 @@ function AdvanceOutcome({ result }: { result: AdvanceResult }) {
   }
   return (
     <Alert tone="success" className="mt-3">
-      The project moved to {phaseLabels[result.state.phase]} (version {result.state.projectVersion}).
+      The project moved to {phaseLabels[result.state.phase]} (checkpoint {result.state.checkpoint}).
     </Alert>
   )
 }
@@ -140,7 +141,9 @@ export function LifecycleCard({
           </div>
           <div className="flex items-center gap-2">
             <dt className="text-muted-foreground">Version</dt>
-            <dd className="font-mono font-medium tabular-nums">{state.projectVersion}</dd>
+            <dd className="font-mono font-medium tabular-nums">
+              {checkpointLabel(state.developmentVersion ?? state.releasedVersion, state.checkpoint)}
+            </dd>
           </div>
         </dl>
       </div>

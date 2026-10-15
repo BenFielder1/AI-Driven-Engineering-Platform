@@ -10,6 +10,7 @@ import { notificationHandlers } from './notifications'
 import { projectHandlers } from './projects'
 import { reviewHandlers } from './review'
 import { runHandlers } from './runs'
+import { versionHandlers } from './versions'
 
 export const handlers = [
   ...healthHandlers,
@@ -22,6 +23,7 @@ export const handlers = [
   ...executionHandlers,
   ...reviewHandlers,
   ...releaseHandlers,
+  ...versionHandlers,
   ...notificationHandlers,
   ...adminHandlers,
 ]

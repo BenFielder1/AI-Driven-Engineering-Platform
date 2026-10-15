@@ -50,8 +50,10 @@ public sealed class AgentDraftWriter(AideDbContext db, TimeProvider time)
         var plan = ArtifactRules.NewDraft(existing);
         if (plan.SupersededVersions.Count > 0)
         {
+            // §4.10, D-V2-3: only open drafts of the current release version are superseded; a closed version's drafts are
+            // history. Version numbers stay project-wide.
             var drafts = await db.Artifacts
-                .Where(a => a.ProjectId == projectId && a.Type == type && plan.SupersededVersions.Contains(a.Version))
+                .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == project.CurrentReleaseVersionId && a.Type == type && plan.SupersededVersions.Contains(a.Version))
                 .ToListAsync(cancellationToken);
             foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
             {
@@ -74,7 +76,8 @@ public sealed class AgentDraftWriter(AideDbContext db, TimeProvider time)
             Content = content,
             ContentHash = ContentHash.Compute(content),
             Status = ArtifactStatus.Draft,
-            ProjectVersionAtCreation = project.ProjectVersion,
+            CheckpointAtCreation = project.Checkpoint,
+            ReleaseVersionId = project.CurrentReleaseVersionId ?? Guid.Empty,
             AgentRunId = agentRunId,
             CreatedAt = now,
         };

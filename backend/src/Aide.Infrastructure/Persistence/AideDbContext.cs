@@ -53,6 +53,10 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<Release> Releases => Set<Release>();
 
+    public DbSet<ReleaseVersion> ReleaseVersions => Set<ReleaseVersion>();
+
+    public DbSet<ExecutionStepAttempt> ExecutionStepAttempts => Set<ExecutionStepAttempt>();
+
     public DbSet<AuditEvent> Events => Set<AuditEvent>();
 
     public DbSet<Job> Jobs => Set<Job>();
@@ -89,6 +93,9 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<ReviewDecision>(configurationBuilder);
         MapEnum<EscalationReason>(configurationBuilder);
         MapEnum<ReleaseStatus>(configurationBuilder);
+        MapEnum<ReleaseVersionStatus>(configurationBuilder);
+        MapEnum<MergeStrategy>(configurationBuilder);
+        MapEnum<StepAttemptOutcome>(configurationBuilder);
         MapEnum<JobStatus>(configurationBuilder);
         MapEnum<NotificationDeliveryStatus>(configurationBuilder);
         MapEnum<ApprovalLinkDecision>(configurationBuilder);

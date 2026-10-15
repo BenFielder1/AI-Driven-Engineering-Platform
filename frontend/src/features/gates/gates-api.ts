@@ -26,7 +26,7 @@ interface DecideVariables {
 }
 
 /**
- * FR-13/FR-14: approve a pending gate (Owner). Escalation gates send `decision` (and `targetVersion` for a rollback).
+ * FR-13/FR-14: approve a pending gate (Owner). Escalation gates send `decision` (and `targetCheckpoint` for a rollback).
  * Both outcomes refresh the project: success applies the transition, GATE_NOT_PENDING means our list is stale.
  */
 export function useApproveGate(id: string) {

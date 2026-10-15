@@ -24,9 +24,13 @@ internal sealed class ArtifactConfiguration : IEntityTypeConfiguration<Artifact>
         builder.HasOne<AppUser>().WithMany().HasForeignKey(a => a.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
         builder.HasOne<AppUser>().WithMany().HasForeignKey(a => a.ApprovedBy).OnDelete(DeleteBehavior.SetNull);
         builder.HasOne<AgentRun>().WithMany().HasForeignKey(a => a.AgentRunId).OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(a => a.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
 
+        // Artifact versions keep counting across release versions (FR-58, FR-59), so uniqueness stays per project.
         builder.HasIndex(a => new { a.ProjectId, a.Type, a.Version }).IsUnique();
         builder.HasIndex(a => new { a.ProjectId, a.Type, a.Status });
+        builder.HasIndex(a => new { a.ProjectId, a.ReleaseVersionId });
+        builder.HasIndex(a => a.ReleaseVersionId);
     }
 }
 
@@ -42,6 +46,7 @@ internal sealed class ApprovalGateConfiguration : IEntityTypeConfiguration<Appro
         builder.HasOne<Project>().WithMany().HasForeignKey(g => g.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Artifact>().WithMany().HasForeignKey(g => g.ArtifactId).OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<AppUser>().WithMany().HasForeignKey(g => g.ReviewerId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(g => g.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
 
         // At most one pending gate per (project, type) — enforced by the database (§4.2).
         builder.HasIndex(g => new { g.ProjectId, g.Type })
@@ -49,6 +54,8 @@ internal sealed class ApprovalGateConfiguration : IEntityTypeConfiguration<Appro
             .HasFilter("status = 'pending'")
             .HasDatabaseName("ux_approval_gates_project_id_type_pending");
         builder.HasIndex(g => new { g.ProjectId, g.Status });
+        builder.HasIndex(g => new { g.ProjectId, g.ReleaseVersionId });
+        builder.HasIndex(g => g.ReleaseVersionId);
     }
 }
 
@@ -67,13 +74,37 @@ internal sealed class ExecutionStepConfiguration : IEntityTypeConfiguration<Exec
         builder.Property(s => s.FileManifest).HasJsonbConversion();
         builder.Property(s => s.BranchName).HasMaxLength(255);
         builder.Property(s => s.CommitSha).HasMaxLength(64);
+        builder.Property(s => s.AgentKey).HasMaxLength(100);
+        builder.PrimitiveCollection(s => s.Covers).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]").IsRequired();
         builder.Property(s => s.RowVersion).IsXminRowVersion();
 
         builder.HasOne<Project>().WithMany().HasForeignKey(s => s.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Artifact>().WithMany().HasForeignKey(s => s.PlanArtifactId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(s => s.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
 
         builder.HasIndex(s => new { s.PlanArtifactId, s.StepNumber }).IsUnique();
         builder.HasIndex(s => new { s.ProjectId, s.Status });
+        builder.HasIndex(s => new { s.ProjectId, s.ReleaseVersionId });
+        builder.HasIndex(s => s.ReleaseVersionId);
+    }
+}
+
+internal sealed class ExecutionStepAttemptConfiguration : IEntityTypeConfiguration<ExecutionStepAttempt>
+{
+    public void Configure(EntityTypeBuilder<ExecutionStepAttempt> builder)
+    {
+        builder.ToTable("execution_step_attempts");
+        builder.HasKey(a => a.Id);
+        builder.Property(a => a.Id).ValueGeneratedNever();
+        builder.Property(a => a.Violations).HasJsonbConversion().IsRequired();
+        builder.Property(a => a.Warnings).HasJsonbConversion().IsRequired();
+        builder.Property(a => a.ProducedFiles).HasJsonbConversion().IsRequired();
+
+        builder.HasOne<ExecutionStep>().WithMany().HasForeignKey(a => a.StepId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<AgentRun>().WithMany().HasForeignKey(a => a.AgentRunId).OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasIndex(a => new { a.StepId, a.Attempt }).IsUnique();
+        builder.HasIndex(a => a.AgentRunId);
     }
 }
 
@@ -89,12 +120,21 @@ internal sealed class AgentRunConfiguration : IEntityTypeConfiguration<AgentRun>
         builder.Property(r => r.InputArtifacts).HasJsonbConversion().IsRequired();
         builder.Property(r => r.Output).HasColumnType("jsonb");
         builder.Property(r => r.CostEstimate).HasPrecision(10, 4);
+        builder.Property(r => r.AgentKey).HasMaxLength(100);
+        builder.Property(r => r.PresetId).HasMaxLength(100);
+        builder.Property(r => r.PresetVersion).HasMaxLength(50);
+        builder.Property(r => r.ToolCalls).HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb").IsRequired();
 
         builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<ExecutionStep>().WithMany().HasForeignKey(r => r.StepId).OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(r => r.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
+
+        // credential_id is a plain column for now; its FK (set null) arrives with the llm_credentials table.
 
         builder.HasIndex(r => new { r.ProjectId, r.CreatedAt });
         builder.HasIndex(r => new { r.Status, r.CreatedAt });
+        builder.HasIndex(r => new { r.ProjectId, r.ReleaseVersionId });
+        builder.HasIndex(r => r.ReleaseVersionId);
 
         // FR-51 cross-project admin list: ORDER BY created_at DESC, id DESC.
         builder.HasIndex(r => new { r.CreatedAt, r.Id }, "ix_agent_runs_created_at_id").IsDescending(true, true);
@@ -114,12 +154,17 @@ internal sealed class ComplianceReportConfiguration : IEntityTypeConfiguration<C
         builder.Property(r => r.Violations).HasJsonbConversion().IsRequired();
         builder.Property(r => r.MissingFeatures).HasJsonbConversion().IsRequired();
         builder.Property(r => r.DriftAreas).HasJsonbConversion().IsRequired();
+        builder.Property(r => r.Regressions).HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb").IsRequired();
+        builder.Property(r => r.ExternalChecks).HasColumnType("jsonb");
 
         builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<AgentRun>().WithMany().HasForeignKey(r => r.AgentRunId).OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<Artifact>().WithMany().HasForeignKey(r => r.OptimizationPlanArtifactId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(r => r.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
 
         builder.HasIndex(r => new { r.ProjectId, r.ReviewCycle });
+        builder.HasIndex(r => new { r.ProjectId, r.ReleaseVersionId });
+        builder.HasIndex(r => r.ReleaseVersionId);
         builder.HasIndex(r => r.OptimizationPlanArtifactId);
     }
 }

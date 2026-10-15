@@ -198,8 +198,8 @@ describe('Overview → Pending gates (FR-13, FR-15)', () => {
 })
 
 describe('Overview → Escalation decision (FR-14)', () => {
-  async function openEscalation(projectVersion = 3) {
-    const utils = await openOverviewAs('owner', { currentPhase: 'review', status: 'reviewing', projectVersion }, (p) => {
+  async function openEscalation(checkpoint = 3) {
+    const utils = await openOverviewAs('owner', { currentPhase: 'review', status: 'reviewing', checkpoint }, (p) => {
       p.phaseAtVersion[2] = 'planning'
       seedGate(p, { type: 'escalation', escalationReason: 'no_improvement', reason: 'Score 0.83 after 0.84.' })
     })
@@ -211,7 +211,7 @@ describe('Overview → Escalation decision (FR-14)', () => {
     return { ...utils, dialog }
   }
 
-  it('FR-14: rollback requires a target version below the current version, and confirms as a destructive action', async () => {
+  it('FR-14, FR63: rollback requires a target checkpoint below the current one, and confirms as a destructive action', async () => {
     const { user, dialog, project } = await openEscalation(3)
 
     await user.click(within(dialog).getByRole('button', { name: 'Record decision' }))
@@ -221,31 +221,31 @@ describe('Overview → Escalation decision (FR-14)', () => {
     // §7: destructive, so the dialog becomes an alertdialog with a danger submit naming the version.
     expect(dialog).toHaveAttribute('role', 'alertdialog')
     expect(screen.getByRole('alertdialog', { name: 'Decide the escalation' })).toBe(dialog)
-    const target = within(dialog).getByLabelText('Roll back to version')
-    expect(target).toHaveAccessibleDescription('A version from 1 to 2 (the project is at version 3).')
+    const target = within(dialog).getByLabelText('Roll back to checkpoint')
+    expect(target).toHaveAccessibleDescription('A checkpoint from 1 to 2 (the project is at checkpoint 3).')
     await user.click(within(dialog).getByRole('button', { name: 'Roll back' }))
-    expect(target).toHaveAccessibleDescription(expect.stringContaining('Enter the version to roll back to.'))
+    expect(target).toHaveAccessibleDescription(expect.stringContaining('Enter the checkpoint to roll back to.'))
 
     await user.type(target, '3')
-    await user.click(within(dialog).getByRole('button', { name: 'Roll back to v3' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Roll back to checkpoint 3' }))
     expect(target).toHaveAccessibleDescription(
-      expect.stringContaining('Enter a whole version number from 1 to 2.'),
+      expect.stringContaining('Enter a whole checkpoint number from 1 to 2.'),
     )
     expect(target).toHaveAttribute('aria-invalid', 'true')
     expect(requestsTo('POST', '/approve')).toHaveLength(0)
 
     await user.clear(target)
     await user.type(target, '2')
-    const submit = within(dialog).getByRole('button', { name: 'Roll back to v2' })
+    const submit = within(dialog).getByRole('button', { name: 'Roll back to checkpoint 2' })
     expect(submit.className).toMatch(/destructive/)
     await user.click(submit)
 
-    expect(await screen.findByText('Escalation decided: roll back to version 2.')).toBeInTheDocument()
-    expect(requestsTo('POST', '/approve')[0]?.body).toEqual({ decision: 'rollback', comment: null, targetVersion: 2 })
+    expect(await screen.findByText('Escalation decided: roll back to checkpoint 2.')).toBeInTheDocument()
+    expect(requestsTo('POST', '/approve')[0]?.body).toEqual({ decision: 'rollback', comment: null, targetCheckpoint: 2 })
     await waitFor(() => {
       expect(currentTimelineStep()).toHaveTextContent('Planning')
     })
-    expect(project.projectVersion).toBe(2)
+    expect(project.checkpoint).toBe(2)
   })
 
   it('FR33_step_blocked_escalation_names_its_step_offers_continue_or_rollback_and_continue_retries', async () => {
@@ -270,7 +270,7 @@ describe('Overview → Escalation decision (FR-14)', () => {
     await user.click(within(dialog).getByLabelText('Continue'))
     await user.click(within(dialog).getByRole('button', { name: 'Record decision' }))
     expect(await screen.findByText('Escalation decided: step 1 will be retried.')).toBeInTheDocument()
-    expect(requestsTo('POST', '/approve')[0]?.body).toEqual({ decision: 'continue', comment: null, targetVersion: null })
+    expect(requestsTo('POST', '/approve')[0]?.body).toEqual({ decision: 'continue', comment: null, targetCheckpoint: null })
     expect(project.executionSteps[0]).toMatchObject({ status: 'pending', attempt: 0 })
     expect(project.currentPhase).toBe('execution')
   })
@@ -311,11 +311,11 @@ describe('Overview → Escalation decision (FR-14)', () => {
     const { user, dialog } = await openEscalation()
 
     await user.click(within(dialog).getByLabelText('Continue'))
-    expect(within(dialog).queryByLabelText('Roll back to version')).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText('Roll back to checkpoint')).not.toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Record decision' }))
 
     expect(await screen.findByText('Escalation decided: continue.')).toBeInTheDocument()
-    expect(requestsTo('POST', '/approve')[0]?.body).toEqual({ decision: 'continue', comment: null, targetVersion: null })
+    expect(requestsTo('POST', '/approve')[0]?.body).toEqual({ decision: 'continue', comment: null, targetCheckpoint: null })
     await waitFor(() => {
       expect(currentTimelineStep()).toHaveTextContent('Execution')
     })
@@ -332,7 +332,7 @@ describe('Overview → Escalation decision (FR-14)', () => {
     expect(requestsTo('POST', '/approve')[0]?.body).toEqual({
       decision: 'accept',
       comment: 'Known gaps are tracked separately',
-      targetVersion: null,
+      targetCheckpoint: null,
     })
   })
 
@@ -343,7 +343,7 @@ describe('Overview → Escalation decision (FR-14)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Record decision' }))
 
     expect(await screen.findByText('Escalation decided: accept.')).toBeInTheDocument()
-    expect(requestsTo('POST', '/approve')[0]?.body).toEqual({ decision: 'accept', comment: null, targetVersion: null })
+    expect(requestsTo('POST', '/approve')[0]?.body).toEqual({ decision: 'accept', comment: null, targetCheckpoint: null })
   })
 
   it('FR-14: INVALID_DECISION from the server is mapped', async () => {

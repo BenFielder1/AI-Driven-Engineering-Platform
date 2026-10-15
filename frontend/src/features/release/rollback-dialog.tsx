@@ -11,7 +11,9 @@ import { ErrorState, LoadingState } from '../../components/ui/states'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { applyFieldErrors, errorMessage, isApiError, messageFor } from '../../lib/errors'
 import { phaseLabels, rollbackBlockLabels } from '../projects/labels'
-import { useProjectVersions, useRollback, type ProjectVersion, type Rollback } from './release-api'
+import { checkpointLabel } from '../versions/version-label'
+import { useCheckpoints, type Checkpoint } from '../versions/versions-api'
+import { useRollback, type Rollback } from './release-api'
 import { ROLLBACK_REASON_MAX, rollbackSchema, type RollbackFormValues, type RollbackValues } from './rollback-schemas'
 
 interface RetryWindow {
@@ -48,30 +50,34 @@ function useRetryCountdown() {
   }
 }
 
-function versionOptionLabel(v: ProjectVersion): string {
-  const base = `Version ${String(v.version)} · ${phaseLabels[v.phase]}`
-  return !v.rollbackAllowed && v.rollbackBlockedReason ? `${base} (${rollbackBlockLabels[v.rollbackBlockedReason]})` : base
+function checkpointOptionLabel(version: string | null, c: Checkpoint): string {
+  const base = `${checkpointLabel(version, c.checkpoint)} · ${phaseLabels[c.phase]}`
+  return !c.rollbackAllowed && c.rollbackBlockedReason ? `${base} (${rollbackBlockLabels[c.rollbackBlockedReason]})` : base
 }
 
-const ids = { targetVersion: 'rollback-target', reason: 'rollback-reason' } as const
+const ids = { targetCheckpoint: 'rollback-target', reason: 'rollback-reason' } as const
 
 /**
- * Settings → Danger zone → Roll back (FR-44, FR-45, §4.8). Two steps: pick an allowed version and give a reason
+ * Settings → Danger zone → Roll back (FR-44, FR-45, FR-63, §4.8, §4.10). Two steps: pick an allowed checkpoint of the
+ * version in development (listed as "1.2.0 · checkpoint 4 · Review", blocked ones with the reason) and give a reason
  * (Zod: 1–500 characters), then confirm a summary of the effects. ROLLBACK_BLOCKED and RATE_LIMITED (with a countdown
  * from Retry-After) are shown on the confirmation step; INVALID_TARGET_VERSION returns to the picker.
  */
 export function RollbackDialog({
   projectId,
-  currentVersion,
+  version,
+  currentCheckpoint,
   onClose,
   onRolledBack,
 }: {
   projectId: string
-  currentVersion: number
+  /** The release version in development (the checkpoints belong to it). */
+  version: string | null
+  currentCheckpoint: number
   onClose: () => void
   onRolledBack: (rollback: Rollback) => void
 }) {
-  const versions = useProjectVersions(projectId, true)
+  const checkpoints = useCheckpoints(projectId, undefined)
   const rollback = useRollback(projectId)
   const [confirmed, setConfirmed] = useState<RollbackValues | null>(null)
   const [serverError, setServerError] = useState<unknown>(null)
@@ -88,13 +94,13 @@ export function RollbackDialog({
     formState: { errors, isSubmitted },
   } = useForm<RollbackFormValues, unknown, RollbackValues>({
     resolver: zodResolver(rollbackSchema),
-    defaultValues: { targetVersion: '', reason: '' },
+    defaultValues: { targetCheckpoint: '', reason: '' },
   })
 
   // Focus follows the step (NFR-A11Y): the confirmation heading, or the field to fix after going back. The picker gets
   // focus once the versions load (the dialog opens on a loading state with nothing to focus).
-  const focusField = useRef<keyof RollbackFormValues | null>('targetVersion')
-  const loaded = versions.isSuccess
+  const focusField = useRef<keyof RollbackFormValues | null>('targetCheckpoint')
+  const loaded = checkpoints.isSuccess
   useEffect(() => {
     if (confirmed) {
       confirmHeadingRef.current?.focus()
@@ -104,7 +110,7 @@ export function RollbackDialog({
     }
   }, [confirmed, loaded, setFocus])
 
-  const backToForm = (field: keyof RollbackFormValues = 'targetVersion') => {
+  const backToForm = (field: keyof RollbackFormValues = 'targetCheckpoint') => {
     focusField.current = field
     setConfirmed(null)
   }
@@ -121,7 +127,7 @@ export function RollbackDialog({
     setServerError(null)
     countdown.clear()
     rollback.mutate(
-      { targetVersion: confirmed.targetVersion, reason: confirmed.reason },
+      { targetCheckpoint: confirmed.targetCheckpoint, reason: confirmed.reason },
       {
         onSuccess: (record) => {
           onRolledBack(record)
@@ -131,17 +137,17 @@ export function RollbackDialog({
             countdown.start(error.retryAfterSeconds)
           }
           if (isApiError(error, 'INVALID_TARGET_VERSION')) {
-            void versions.refetch()
-            setError('targetVersion', { type: 'server', message: messageFor('INVALID_TARGET_VERSION') })
-            backToForm('targetVersion')
+            void checkpoints.refetch()
+            setError('targetCheckpoint', { type: 'server', message: messageFor('INVALID_TARGET_VERSION') })
+            backToForm('targetCheckpoint')
             return
           }
           if (isApiError(error, 'VALIDATION')) {
-            const unmatched = applyFieldErrors(error, setError, ['targetVersion', 'reason'])
+            const unmatched = applyFieldErrors(error, setError, ['targetCheckpoint', 'reason'])
             if (unmatched.length > 0) {
               setServerError(error)
             }
-            backToForm(Object.hasOwn(error.fieldErrors, 'reason') ? 'reason' : 'targetVersion')
+            backToForm(Object.hasOwn(error.fieldErrors, 'reason') ? 'reason' : 'targetCheckpoint')
             return
           }
           setServerError(error)
@@ -152,31 +158,32 @@ export function RollbackDialog({
 
   const rateLimited = isApiError(serverError, 'RATE_LIMITED')
   const errorCopy = serverError === null ? null : rateLimited ? messageFor('RATE_LIMITED', 'rollback') : errorMessage(serverError, 'rollback')
-  const target = confirmed ? versions.data?.find((v) => v.version === confirmed.targetVersion) : undefined
-  const allowed = versions.data?.filter((v) => v.rollbackAllowed) ?? []
-  const sorted = [...(versions.data ?? [])].sort((a, b) => b.version - a.version)
+  const target = confirmed ? checkpoints.data?.find((c) => c.checkpoint === confirmed.targetCheckpoint) : undefined
+  const allowed = checkpoints.data?.filter((c) => c.rollbackAllowed) ?? []
+  const sorted = [...(checkpoints.data ?? [])].sort((a, b) => b.checkpoint - a.checkpoint)
+  const at = (n: number) => checkpointLabel(version, n)
 
   let content: ReactNode
-  if (versions.isPending) {
-    content = <LoadingState label="Loading project versions…" />
-  } else if (versions.isError) {
+  if (checkpoints.isPending) {
+    content = <LoadingState label="Loading checkpoints…" />
+  } else if (checkpoints.isError) {
     content = (
-      <ErrorState error={versions.error} title="The project versions couldn't load" onRetry={() => void versions.refetch()} />
+      <ErrorState error={checkpoints.error} title="The checkpoints couldn't load" onRetry={() => void checkpoints.refetch()} />
     )
   } else if (confirmed) {
     const phase = target ? phaseLabels[target.phase] : null
     content = (
       <div className="flex flex-col gap-4">
         <h3 ref={confirmHeadingRef} tabIndex={-1} className="font-semibold outline-none">
-          Roll back from version {currentVersion} to version {confirmed.targetVersion}?
+          Roll back from {at(currentCheckpoint)} to {at(confirmed.targetCheckpoint)}?
         </h3>
         <ul aria-label="What the rollback does" className="list-disc pl-5 text-sm">
           <li>
-            {phase ? `Restores the ${phase} phase` : 'Restores the phase'} recorded at version {confirmed.targetVersion}; the
+            {phase ? `Restores the ${phase} phase` : 'Restores the phase'} recorded at checkpoint {confirmed.targetCheckpoint}; the
             project status becomes Rolled back.
           </li>
           <li>
-            Artifacts created after version {confirmed.targetVersion} are invalidated, and the steps of invalidated plans
+            Artifacts created after checkpoint {confirmed.targetCheckpoint} are invalidated, and the steps of invalidated plans
             are reset.
           </li>
           <li>Pending gates and queued jobs are cancelled, and the review state is cleared.</li>
@@ -214,7 +221,7 @@ export function RollbackDialog({
             disabled={remaining > 0}
             onClick={onConfirm}
           >
-            Roll back to version {confirmed.targetVersion}
+            Roll back to checkpoint {confirmed.targetCheckpoint}
           </Button>
         </div>
       </div>
@@ -230,19 +237,19 @@ export function RollbackDialog({
           ]}
         />
         {allowed.length === 0 && (
-          <Alert tone="info">There&apos;s no earlier version to roll back to yet.</Alert>
+          <Alert tone="info">There&apos;s no earlier checkpoint of this version to roll back to.</Alert>
         )}
         <SelectField
-          id={ids.targetVersion}
-          label="Version to restore"
-          hint="Versions that can't be restored are listed with the reason."
-          error={errors.targetVersion?.message}
-          {...register('targetVersion')}
+          id={ids.targetCheckpoint}
+          label="Checkpoint to restore"
+          hint="Checkpoints of the version in development. Those that can't be restored are listed with the reason."
+          error={errors.targetCheckpoint?.message}
+          {...register('targetCheckpoint')}
         >
-          <option value="">Choose a version</option>
-          {sorted.map((v) => (
-            <option key={v.version} value={String(v.version)} disabled={!v.rollbackAllowed}>
-              {versionOptionLabel(v)}
+          <option value="">Choose a checkpoint</option>
+          {sorted.map((c) => (
+            <option key={c.checkpoint} value={String(c.checkpoint)} disabled={!c.rollbackAllowed}>
+              {checkpointOptionLabel(version, c)}
             </option>
           ))}
         </SelectField>
@@ -271,7 +278,7 @@ export function RollbackDialog({
       open
       role="alertdialog"
       title="Roll back the project"
-      description="Restore an earlier project version. You'll confirm what changes before anything happens."
+      description="Restore an earlier checkpoint of the version in development. You'll confirm what changes before anything happens."
       busy={rollback.isPending}
       onClose={onClose}
     >

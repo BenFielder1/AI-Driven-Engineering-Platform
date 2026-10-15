@@ -13,13 +13,7 @@ public sealed class ProjectGitSettings
 
     public string? TokenEncrypted { get; set; }
 
-    /// <summary>The project branch <c>aide/&lt;slug&gt;-&lt;short-id&gt;</c>, set when the working copy is prepared.</summary>
-    public string? BranchName { get; set; }
-
-    /// <summary>The project PR opened when execution completes (FR-36); merged by the release job (FR-42).</summary>
-    public string? PullRequestUrl { get; set; }
-
-    public int? PullRequestNumber { get; set; }
+    // The working branch and pull request belong to the release version (ReleaseVersion.BranchName, PullRequestUrl/Number).
 }
 
 /// <summary>LLM settings of a project (FR-9, FR-22). Model ids per agent are keyed by the agent's wire name.</summary>

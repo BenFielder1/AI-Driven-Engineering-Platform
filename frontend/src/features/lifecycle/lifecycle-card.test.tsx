@@ -15,7 +15,7 @@ import { renderRoute } from '../../test/render'
 
 describe('Overview → next action and stage stepper (FR-11, FR-12, FR-54)', () => {
   it('FR54_stepper: the header stage stepper is an ordered list of the six stages with the current one marked', async () => {
-    await openOverviewAs('owner', { currentPhase: 'planning', projectVersion: 3 })
+    await openOverviewAs('owner', { currentPhase: 'planning', checkpoint: 3 })
 
     const stepper = screen.getByRole('navigation', { name: 'Lifecycle stages' })
     const list = within(stepper).getByRole('list')
@@ -88,7 +88,7 @@ describe('Overview → next action and stage stepper (FR-11, FR-12, FR-54)', () 
     expect(within(alert as HTMLElement).getByRole('listitem')).toHaveTextContent('The project request must be approved.')
     expect(currentTimelineStep()).toHaveTextContent('Refinement')
     expect(project.currentPhase).toBe('refinement')
-    expect(project.projectVersion).toBe(1)
+    expect(project.checkpoint).toBe(1)
   })
 
   it('FR-12: in advisory mode, advancing from specification creates a pending spec gate and the phase is unchanged', async () => {
@@ -110,21 +110,21 @@ describe('Overview → next action and stage stepper (FR-11, FR-12, FR-54)', () 
     expect(requestsTo('POST', '/phase/advance')).toHaveLength(1)
   })
 
-  it('FR-12: with no gate required (autonomous), advancing moves the phase and bumps the version', async () => {
+  it('FR-12, FR63: with no gate required (autonomous), advancing moves the phase and bumps the checkpoint', async () => {
     const { user, project } = await openOverviewAs('owner', { currentPhase: 'specification', approvalMode: 'autonomous' }, (p) => {
       lockArtifact(p, 'technical_specification')
     })
 
     await user.click(screen.getByRole('button', { name: 'Advance to Planning' }))
 
-    expect(await screen.findByText('The project moved to Planning (version 2).')).toBeInTheDocument()
+    expect(await screen.findByText('The project moved to Planning (checkpoint 2).')).toBeInTheDocument()
     await waitFor(() => {
       expect(currentTimelineStep()).toHaveTextContent('Planning')
     })
     expect(screen.getByRole('button', { name: 'Advance to Execution' })).toBeInTheDocument()
     // The layout header (GET /projects/:id) is refreshed too.
-    expect(await screen.findByText('Version 2')).toBeInTheDocument()
-    expect(project.projectVersion).toBe(2)
+    expect((await screen.findAllByText('0.1.0 · checkpoint 2')).length).toBeGreaterThan(0)
+    expect(project.checkpoint).toBe(2)
   })
 
   it('FR-12: GATE_PENDING is mapped when a gate is already waiting', async () => {

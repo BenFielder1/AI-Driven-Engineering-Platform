@@ -5,6 +5,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure;
+using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Identity;
 using Microsoft.AspNetCore.Identity;
@@ -36,7 +37,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
             var admin = await db.Users.SingleAsync(u => u.Email == DevSeeder.AdminEmail, Ct);
             Assert.Equal((SystemRole.Admin, DevSeeder.AdminName), (admin.SystemRole, admin.Name));
             var project = await db.Projects.SingleAsync(Ct);
-            Assert.Equal((DevSeeder.DemoProjectName, LifecycleState.Initial.Phase, ApprovalMode.Advisory), (project.Name, project.CurrentPhase, project.ApprovalMode));
+            Assert.Equal((DevSeeder.DemoProjectName, Phase.Release, ProjectStatus.Released, ApprovalMode.Advisory), (project.Name, project.CurrentPhase, project.Status, project.ApprovalMode));
             var owner = await db.ProjectMembers.SingleAsync(m => m.ProjectId == project.Id, Ct);
             Assert.Equal((admin.Id, ProjectRole.Owner), (owner.UserId, owner.Role));
             Assert.Equal(LlmProvider.Fake, (await db.ProjectLlmSettings.SingleAsync(s => s.ProjectId == project.Id, Ct)).Provider);
@@ -44,6 +45,30 @@ public sealed class DevSeederTests(AideApiFactory factory)
             var marker = await db.Events.SingleAsync(e => e.Type == EventTypes.DemoProjectSeeded, Ct);
             Assert.Null(marker.ProjectId);
             Assert.Contains(project.Id.ToString(), marker.Payload, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact]
+    public async Task DEPV2_Demo_project_is_released_at_0_1_0_with_a_tagged_local_repository()
+    {
+        await using var app = await AppAsync();
+        await SeedAsync(app);
+
+        await WithDbAsync(app, async db =>
+        {
+            var project = await db.Projects.SingleAsync(Ct);
+            Assert.Equal(("0.1.0", (string?)null), (project.ReleasedVersion, project.DevelopmentVersion));
+            var version = await db.ReleaseVersions.SingleAsync(v => v.ProjectId == project.Id, Ct);
+            Assert.Equal((ReleaseVersionStatus.Released, "0.1.0", "v0.1.0"), (version.Status, version.Version, version.Tag));
+            Assert.Equal(version.Id, project.CurrentReleaseVersionId);
+            Assert.NotNull(version.MergeCommitSha);
+            var release = await db.Releases.SingleAsync(r => r.ProjectId == project.Id, Ct);
+            Assert.Equal((ReleaseStatus.Succeeded, "v0.1.0", version.Id), (release.Status, release.Tag, release.ReleaseVersionId));
+
+            // The tag exists in the Local repository, so starting 0.1.0 again would be TAG_EXISTS and 0.2.0 is possible.
+            var git = app.Services.GetRequiredService<IWorkingCopies>();
+            var tag = await git.TagAsync(project.Id, "v0.1.0", Ct);
+            Assert.Equal(version.MergeCommitSha, tag?.Commit);
         });
     }
 

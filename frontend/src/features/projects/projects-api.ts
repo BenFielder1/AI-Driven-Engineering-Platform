@@ -53,8 +53,10 @@ export const projectKeys = {
   releases: (id: string) => [...projectKeys.detail(id), 'releases'] as const,
   /** GET /rollbacks: recorded rollbacks (FR-44). */
   rollbacks: (id: string) => [...projectKeys.detail(id), 'rollbacks'] as const,
-  /** GET /versions: project versions with their rollback eligibility (FR-44). */
-  versions: (id: string) => [...projectKeys.detail(id), 'versions'] as const,
+  /** GET /versions: the project's release versions, highest first (FR-62; see features/versions/versions-api.ts). */
+  releaseVersions: (id: string) => [...projectKeys.detail(id), 'release-versions'] as const,
+  /** GET /checkpoints: a release version's checkpoints with their rollback eligibility (FR-44, FR-63). */
+  checkpoints: (id: string) => [...projectKeys.detail(id), 'checkpoints'] as const,
 }
 
 /** Unwraps an openapi-fetch result: the body on success, an ApiError otherwise. */

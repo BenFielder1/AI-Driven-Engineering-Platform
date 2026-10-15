@@ -40,7 +40,7 @@ public sealed partial class ReviewService(AideDbContext db, JobEnqueuer jobs, Ti
         project.UpdatedAt = now;
         var job = await jobs.EnqueueAsync(
             JobTypes.Review,
-            new LifecycleJobPayload(project.Id, project.ProjectVersion, LifecycleJobPayload.UserRequested),
+            new LifecycleJobPayload(project.Id, project.Checkpoint, LifecycleJobPayload.UserRequested),
             project.Id,
             cancellationToken,
             now);
@@ -70,59 +70,66 @@ public sealed partial class ReviewService(AideDbContext db, JobEnqueuer jobs, Ti
 }
 
 /// <summary>
-/// FR-41: compliance reports of the current review timeline (<see cref="ReviewTimeline"/>) — reports above the current
-/// version or from before the last rollback were undone by it (§4.8) and are left out.
+/// FR-41, FR-62: compliance reports. For the current release version, those of the current review timeline
+/// (<see cref="ReviewTimeline"/>) — reports above the current checkpoint or from before the last rollback were undone by it
+/// (§4.8) and are left out. For another release version (<c>releaseVersionId</c>), all of its reports (read-only history).
 /// </summary>
 public sealed class ReviewReader(AideDbContext db)
 {
-    public async Task<ComplianceReportDto?> LatestAsync(Guid projectId, CancellationToken cancellationToken)
+    public async Task<ComplianceReportDto?> LatestAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
-        var report = await LatestReportAsync(projectId, cancellationToken);
+        var report = await LatestReportAsync(projectId, releaseVersionId, cancellationToken);
         return report is null ? null : ToDto(report);
     }
 
-    public async Task<ComplianceTrendDto?> TrendAsync(Guid projectId, CancellationToken cancellationToken)
+    public async Task<ComplianceTrendDto?> TrendAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
         if (await ProjectAsync(projectId, cancellationToken) is not { } project)
         {
             return null;
         }
 
-        var series = await ReviewTimeline.Current(db, projectId, project.ProjectVersion, project.LastRollbackAt)
+        var series = await Reports(projectId, project, releaseVersionId)
             .OrderBy(r => r.CreatedAt)
             .ThenBy(r => r.Id)
-            .Select(r => new ComplianceTrendPointDto(r.ReviewCycle, r.ProjectVersion, r.Score, r.DriftLevel, r.Decision, r.CreatedAt, r.Threshold))
+            .Select(r => new ComplianceTrendPointDto(r.ReviewCycle, r.Checkpoint, r.Score, r.DriftLevel, r.Decision, r.CreatedAt, r.Threshold))
             .ToListAsync(cancellationToken);
         return new ComplianceTrendDto(project.ComplianceThreshold, series);
     }
 
-    public async Task<ComplianceDriftDto?> DriftAsync(Guid projectId, CancellationToken cancellationToken)
+    public async Task<ComplianceDriftDto?> DriftAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
-        var report = await LatestReportAsync(projectId, cancellationToken);
+        var report = await LatestReportAsync(projectId, releaseVersionId, cancellationToken);
         return report is null
             ? null
-            : new ComplianceDriftDto(report.DriftLevel, [.. report.DriftAreas.Select(d => new DriftAreaDto(d.Area, d.Severity, d.Description))], report.ProjectVersion, report.ReviewCycle);
+            : new ComplianceDriftDto(report.DriftLevel, [.. report.DriftAreas.Select(d => new DriftAreaDto(d.Area, d.Severity, d.Description))], report.Checkpoint, report.ReviewCycle);
     }
 
-    private async Task<ComplianceReport?> LatestReportAsync(Guid projectId, CancellationToken cancellationToken) =>
+    private async Task<ComplianceReport?> LatestReportAsync(Guid projectId, Guid? releaseVersionId, CancellationToken cancellationToken) =>
         await ProjectAsync(projectId, cancellationToken) is { } project
-            ? await ReviewTimeline.Current(db, projectId, project.ProjectVersion, project.LastRollbackAt).NewestFirst().FirstOrDefaultAsync(cancellationToken)
+            ? await Reports(projectId, project, releaseVersionId).NewestFirst().FirstOrDefaultAsync(cancellationToken)
             : null;
+
+    private IQueryable<ComplianceReport> Reports(Guid projectId, TimelineFacts project, Guid? releaseVersionId) =>
+        releaseVersionId is { } requested && requested != project.CurrentReleaseVersionId
+            ? ReviewTimeline.OfVersion(db, projectId, requested)
+            : ReviewTimeline.Current(db, projectId, project.CurrentReleaseVersionId, project.Checkpoint, project.LastRollbackAt);
 
     private Task<TimelineFacts?> ProjectAsync(Guid projectId, CancellationToken cancellationToken) =>
         db.Projects.AsNoTracking()
             .Where(p => p.Id == projectId)
-            .Select(p => new TimelineFacts(p.ProjectVersion, p.LastRollbackAt, p.ComplianceThreshold))
+            .Select(p => new TimelineFacts(p.Checkpoint, p.CurrentReleaseVersionId, p.LastRollbackAt, p.ComplianceThreshold))
             .FirstOrDefaultAsync(cancellationToken);
 
-    private sealed record TimelineFacts(int ProjectVersion, DateTimeOffset? LastRollbackAt, decimal ComplianceThreshold);
+    private sealed record TimelineFacts(int Checkpoint, Guid? CurrentReleaseVersionId, DateTimeOffset? LastRollbackAt, decimal ComplianceThreshold);
 
     public static ComplianceReportDto ToDto(ComplianceReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
         return new ComplianceReportDto(
             report.Id,
-            report.ProjectVersion,
+            report.ReleaseVersionId,
+            report.Checkpoint,
             report.ReviewCycle,
             report.Score,
             report.Threshold,

@@ -11,10 +11,12 @@ public sealed record RunInputArtifactDto(ArtifactType Type, int Version);
 /// <summary>
 /// An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt
 /// template version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in
-/// USD, duration and error. <c>userFeedback</c> is the feedback or answers given to the agent.
+/// USD, duration and error. <c>userFeedback</c> is the feedback or answers given to the agent. <c>releaseVersionId</c> is the
+/// release version it ran for (§4.10).
 /// </summary>
 public sealed record AgentRunDto(
     Guid Id,
+    Guid? ReleaseVersionId,
     AgentKind Agent,
     Phase Phase,
     Guid? StepId,
@@ -39,6 +41,7 @@ public sealed record AgentRunDto(
 /// </summary>
 public sealed record AgentRunDetailDto(
     Guid Id,
+    Guid? ReleaseVersionId,
     AgentKind Agent,
     Phase Phase,
     Guid? StepId,

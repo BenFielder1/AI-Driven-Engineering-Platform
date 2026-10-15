@@ -55,7 +55,7 @@ public sealed partial class LifecycleService(
             prepared = (await workingCopies.PrepareAsync(project.Id, cancellationToken)).IsSuccess;
         }
 
-        var state = new LifecycleState(project.CurrentPhase, project.Status, project.ProjectVersion);
+        var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
         var snapshot = await snapshots.LoadAsync(project, cancellationToken);
         if (prepared is { } ready)
         {
@@ -112,8 +112,9 @@ public sealed partial class LifecycleService(
             return null;
         }
 
+        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
         return await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Type == artifactType && a.Status == ArtifactStatus.Locked)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == artifactType && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .Select(a => (Guid?)a.Id)
             .FirstOrDefaultAsync(cancellationToken);
@@ -125,8 +126,8 @@ public sealed partial class LifecycleService(
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} needs a {GateType} gate before advancing; gate created")]
     private static partial void LogGateCreated(ILogger logger, Guid projectId, GateType gateType);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} moved {FromPhase} → {ToPhase} (version {ProjectVersion})")]
-    private static partial void LogAdvanced(ILogger logger, Guid projectId, Phase fromPhase, Phase toPhase, int projectVersion);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} moved {FromPhase} → {ToPhase} (checkpoint {Checkpoint})")]
+    private static partial void LogAdvanced(ILogger logger, Guid projectId, Phase fromPhase, Phase toPhase, int checkpoint);
 }
 
 /// <summary>Saves a lifecycle unit of work, mapping concurrency clashes to the spec's error codes.</summary>

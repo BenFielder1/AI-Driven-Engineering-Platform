@@ -273,11 +273,11 @@ public class LifecycleStateMachineTests
         }
     }
 
-    // ---- Release completed: only from release/releasing; released + version + 1 (D4) ----
+    // ---- Release completed: only from release/releasing; released, checkpoint unchanged (D4 amended by §4.10) ----
 
     [Theory]
     [MemberData(nameof(AllPhaseStatusPairs))]
-    public void FR42_ReleaseCompleted_only_from_release_releasing(Phase phase, ProjectStatus status)
+    public void FR42_amended_by_S4_10_ReleaseCompleted_only_from_release_releasing_and_keeps_the_checkpoint(Phase phase, ProjectStatus status)
     {
         var result = LifecycleStateMachine.Apply(new LifecycleState(phase, status, 7), TransitionRequest.ReleaseCompleted(), LifecycleSnapshot.Empty);
 
@@ -285,7 +285,7 @@ public class LifecycleStateMachineTests
         {
             Assert.True(result.IsSuccess);
             Assert.Equal(ProjectStatus.Released, result.Value.Status);
-            Assert.Equal(8, result.Value.Version);
+            Assert.Equal(7, result.Value.Version);
         }
         else
         {
@@ -461,10 +461,10 @@ public class LifecycleStateMachineTests
         Assert.Equal(ErrorCodes.WrongPhase, result.Error!.Code);
     }
 
-    // ---- Version rules ----
+    // ---- Checkpoint rules (§4.10) ----
 
     [Fact]
-    public void Version_increments_on_forward_and_release_only()
+    public void S4_10_Checkpoint_increments_on_forward_transitions_only_not_on_release_completion()
     {
         var state = LifecycleState.Initial;
         foreach (var _ in Enumerable.Range(0, 5))
@@ -474,7 +474,86 @@ public class LifecycleStateMachineTests
 
         Assert.Equal(new LifecycleState(Phase.Release, ProjectStatus.Releasing, 6), state);
         Assert.Equal(6, LifecycleStateMachine.Apply(state, TransitionRequest.ReleaseNoop(), AllMet).Value.Version);
-        Assert.Equal(7, LifecycleStateMachine.Apply(state, TransitionRequest.ReleaseCompleted(), AllMet).Value.Version);
+        var released = LifecycleStateMachine.Apply(state, TransitionRequest.ReleaseCompleted(), AllMet).Value;
+        Assert.Equal(6, released.Version);
+
+        // A new version starts again at checkpoint 1; the next forward transition is checkpoint 2.
+        var started = LifecycleStateMachine.Apply(released.NewState, TransitionRequest.NewVersion(), LifecycleSnapshot.Empty).Value;
+        Assert.Equal(new LifecycleState(Phase.Refinement, ProjectStatus.Active, 1), started.NewState);
+        Assert.Equal(2, LifecycleStateMachine.Apply(started.NewState, TransitionRequest.Advance(), AllMet).Value.Version);
+    }
+
+    [Fact]
+    public void S4_10_Checkpoint_does_not_change_on_review_cycle_fallback_or_noop()
+    {
+        var reviewing = At(Phase.Review, 5);
+        var cycleMet = AllMet with { LatestReviewDecision = ReviewDecision.ReviewRequired, LatestReviewProjectVersion = 5 };
+
+        Assert.Equal(5, LifecycleStateMachine.Apply(reviewing, TransitionRequest.ReviewCycle(), cycleMet).Value.Version);
+        Assert.Equal(5, LifecycleStateMachine.Apply(reviewing, TransitionRequest.Fallback(Phase.Planning), LifecycleSnapshot.Empty).Value.Version);
+        Assert.Equal(5, LifecycleStateMachine.Apply(At(Phase.Release, 5), TransitionRequest.ReleaseNoop(), LifecycleSnapshot.Empty).Value.Version);
+        Assert.Equal(6, LifecycleStateMachine.Apply(reviewing, TransitionRequest.Advance(), AllMet).Value.Version);
+    }
+
+    // ---- New version: release → refinement, only from released with nothing in development (§4.10, FR-60) ----
+
+    [Theory]
+    [MemberData(nameof(AllPhaseStatusPairs))]
+    public void S4_10_NewVersion_only_from_release_released(Phase phase, ProjectStatus status)
+    {
+        var result = LifecycleStateMachine.Apply(new LifecycleState(phase, status, 6), TransitionRequest.NewVersion(), LifecycleSnapshot.Empty);
+
+        if (phase == Phase.Release && status == ProjectStatus.Released)
+        {
+            Assert.True(result.IsSuccess, result.Error?.Message);
+            Assert.Equal((Phase.Release, Phase.Refinement, ProjectStatus.Active, 1, TransitionKind.NewVersion),
+                (result.Value.From, result.Value.To, result.Value.Status, result.Value.Version, result.Value.Kind));
+            Assert.True(result.Value.ClearsReviewState);
+            Assert.True(result.Value.ClearsExecutionPause);
+        }
+        else
+        {
+            Assert.Equal(ErrorCodes.NotReleased, result.Error!.Code);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(AllPhaseStatusPairs))]
+    public void S4_10_NewVersion_is_refused_from_every_phase_and_status_while_a_version_is_in_development(Phase phase, ProjectStatus status)
+    {
+        var result = LifecycleStateMachine.Apply(
+            new LifecycleState(phase, status, 6), TransitionRequest.NewVersion(), LifecycleSnapshot.Empty with { DevelopmentVersionExists = true });
+
+        Assert.Equal(
+            phase == Phase.Release && status == ProjectStatus.Released ? ErrorCodes.VersionInProgress : ErrorCodes.NotReleased,
+            result.Error!.Code);
+    }
+
+    [Theory]
+    [MemberData(nameof(AllPhasePairs))]
+    public void S4_10_NewVersion_matrix_allows_only_release_to_refinement(Phase from, Phase to)
+    {
+        var status = from == Phase.Release ? ProjectStatus.Released : PhaseOrder.StatusFor(from);
+        var result = LifecycleStateMachine.Apply(new LifecycleState(from, status, 6), new TransitionRequest(TransitionKind.NewVersion, to), LifecycleSnapshot.Empty);
+
+        if (from == Phase.Release && to == Phase.Refinement)
+        {
+            Assert.True(result.IsSuccess, result.Error?.Message);
+        }
+        else
+        {
+            Assert.Contains(result.Error!.Code, new[] { ErrorCodes.WrongPhase, ErrorCodes.NotReleased });
+        }
+    }
+
+    [Fact]
+    public void S4_10_Advancing_from_release_is_still_wrong_phase_only_new_version_leaves_it()
+    {
+        var released = new LifecycleState(Phase.Release, ProjectStatus.Released, 6);
+
+        Assert.Equal(ErrorCodes.WrongPhase, LifecycleStateMachine.Apply(released, TransitionRequest.Advance(), AllMet).Error!.Code);
+        Assert.Equal(ErrorCodes.WrongPhase, LifecycleStateMachine.Apply(released, TransitionRequest.AdvanceTo(Phase.Refinement), AllMet).Error!.Code);
+        Assert.True(LifecycleStateMachine.Apply(released, TransitionRequest.NewVersion(), LifecycleSnapshot.Empty).IsSuccess);
     }
 
     [Fact]
@@ -496,5 +575,7 @@ public class LifecycleStateMachineTests
         Assert.True(LifecycleStateMachine.Apply(reviewing, TransitionRequest.Fallback(Phase.Planning), LifecycleSnapshot.Empty).Value.ClearsReviewState);
         Assert.False(LifecycleStateMachine.Apply(reviewing, TransitionRequest.ReviewCycle(), cycleMet).Value.ClearsReviewState);
         Assert.False(LifecycleStateMachine.Apply(At(Phase.Planning, 3), TransitionRequest.Advance(), AllMet).Value.ClearsReviewState);
+        Assert.True(LifecycleStateMachine.Apply(new LifecycleState(Phase.Release, ProjectStatus.Released, 7), TransitionRequest.NewVersion(), LifecycleSnapshot.Empty).Value.ClearsReviewState);
+        Assert.False(LifecycleStateMachine.Apply(reviewing, TransitionRequest.Rollback(Phase.Planning, 4), LifecycleSnapshot.Empty).Value.ClearsExecutionPause);
     }
 }

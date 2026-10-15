@@ -90,8 +90,8 @@ public static class NotificationMessages
                 $"{project}: release failed",
                 $"Releasing {project} failed{(facts.ErrorCode is { } code ? $" ({OneLine(code, 60)})" : string.Empty)}. An Owner can retry the release from the project page."),
             NotificationType.Rollback => (
-                $"{project}: rolled back to version {Opt(facts.TargetVersion)}",
-                $"{project} was rolled back from version {Opt(facts.FromVersion)} to version {Opt(facts.TargetVersion)}.{reason}"),
+                $"{project}: rolled back to checkpoint {Opt(facts.TargetVersion)}",
+                $"{project} was rolled back from checkpoint {Opt(facts.FromVersion)} to checkpoint {Opt(facts.TargetVersion)}.{reason}"),
             _ => ($"{project}: update", $"There is an update on {project}."),
         };
 

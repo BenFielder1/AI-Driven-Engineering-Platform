@@ -17,16 +17,19 @@ using ReleaseEntity = Aide.Domain.Entities.Release;
 namespace Aide.Api.Features.Release;
 
 /// <summary>
-/// FR-42, FR-43: the release job, queued with the transition into release (or by <c>POST /release</c>). Idempotent (§4.9).
+/// FR-42 amended by FR-64, FR-43: the release job, queued with the transition into release (or by <c>POST /release</c>).
+/// Idempotent (§4.9).
 /// <list type="number">
-/// <item>Skip unless the project is in release/releasing at the version the job was queued for and that version's latest
-/// attempt is in progress (an attempt is created for a job queued without one).</item>
+/// <item>Skip unless the project is in release/releasing at the checkpoint the job was queued for and that checkpoint's
+/// latest attempt is in progress (an attempt is created for a job queued without one).</item>
 /// <item>Prepare the working copy (GitHub: fetch), re-check (touching the project row) that the project is still releasing,
-/// then release through the project's Git provider: an existing release tag of the version that holds the release is a
-/// no-op; otherwise merge the PR (GitHub) or the branch (Local) — the merge commit is recorded on the attempt at once — and
-/// create the first free annotated tag <c>v&lt;N&gt;-aide[.k]</c>.</item>
-/// <item>Released: the attempt succeeds (merge commit, completed_at), the project becomes <c>released</c> through the
-/// state machine (version + 1) and <c>RELEASE_COMPLETED</c> is written, in one transaction guarded by the project's xmin.</item>
+/// then release through the project's Git provider: the version's tag <c>&lt;tagPrefix&gt;&lt;version&gt;</c> already holding the
+/// release is a no-op, on another commit it fails the release (<c>TAG_EXISTS</c>, nothing merged); otherwise merge the PR
+/// (GitHub) or the branch (Local) — the merge commit is recorded on the attempt at once — and create the annotated tag.</item>
+/// <item>Released: the attempt succeeds (merge commit, completed_at), the release version becomes <c>released</c> (tag,
+/// merge commit, released_at), the project becomes <c>released</c> through the state machine (checkpoint unchanged), its
+/// released version is this version and nothing is in development, and <c>RELEASE_COMPLETED</c> is written, in one
+/// transaction guarded by the project's xmin.</item>
 /// <item>Merge conflict or another permanent failure: the attempt fails with its code (and the conflicting files), the
 /// project stays release/releasing, <c>RELEASE_FAILED</c> is written; the job itself ends (nothing to retry).</item>
 /// </list>
@@ -73,9 +76,9 @@ public sealed partial class ReleaseJobHandler(
         }
 
         var working = preparation.Result.Value;
-        var pullRequestNumber = await db.ProjectGitSettings.AsNoTracking()
-            .Where(s => s.ProjectId == project.Id)
-            .Select(s => s.PullRequestNumber)
+        var version = await db.ReleaseVersions.AsNoTracking()
+            .Where(v => v.Id == release.ReleaseVersionId)
+            .Select(v => new { v.Version, v.PullRequestNumber })
             .FirstOrDefaultAsync(cancellationToken);
 
         // Preparing can take a while: immediately before the merge, confirm (and claim, by touching the project row) that the
@@ -89,9 +92,10 @@ public sealed partial class ReleaseJobHandler(
 
         var request = new ReleaseRequest(
             working.Branch,
-            release.ProjectVersion,
+            release.Tag,
+            version?.Version ?? string.Empty,
             project.Name,
-            pullRequestNumber,
+            version?.PullRequestNumber,
             (sha, ct) => RecordMergeAsync(release.Id, sha, ct));
         var outcome = await working.Provider.ReleaseAsync(working.Connection, request, working.Token, cancellationToken);
         switch (outcome.Kind)
@@ -113,7 +117,7 @@ public sealed partial class ReleaseJobHandler(
     /// <summary>The in-progress attempt at the project's version; a job queued without one (e.g. before this phase) gets one.</summary>
     private async Task<ReleaseEntity?> AttemptAsync(Project project, CancellationToken cancellationToken)
     {
-        var latest = await ReleaseRecords.LatestAtAsync(db, project.Id, project.ProjectVersion, track: false, cancellationToken);
+        var latest = await ReleaseRecords.LatestAtAsync(db, project.Id, project.Checkpoint, track: false, cancellationToken);
         if (latest is not null)
         {
             return latest.Status == ReleaseStatus.InProgress ? latest : null;
@@ -183,15 +187,14 @@ public sealed partial class ReleaseJobHandler(
             return;
         }
 
-        // Version numbers repeat after a released project is rolled back (§4.8): the provider chose the tag — an existing one
-        // holding this release (alreadyTagged), or the first free v<N>-aide[.k] — so several succeeded attempts of one version
-        // may exist, each with its own tag (or the same tag, when re-released without new commits).
+        // FR-64: the tag is the version's own (<prefix><version>); the provider created it, or found it already holding this
+        // release (alreadyTagged).
         release.Status = ReleaseStatus.Succeeded;
         release.Tag = outcome.Tag ?? release.Tag;
         release.MergeCommitSha = outcome.MergeCommitSha;
         release.CompletedAt = now;
         var project = await db.Projects.FirstAsync(p => p.Id == release.ProjectId, cancellationToken);
-        if (ReleaseRules.ShouldRun(State(project), release.ProjectVersion))
+        if (ReleaseRules.ShouldRun(State(project), release.Checkpoint))
         {
             var completed = LifecycleStateMachine.Apply(State(project), TransitionRequest.ReleaseCompleted(CompletedReason), LifecycleSnapshot.Empty);
             if (completed.IsFailure)
@@ -200,10 +203,11 @@ public sealed partial class ReleaseJobHandler(
             }
 
             await writer.ApplyAsync(project, completed.Value, SystemActor.Name, now, cancellationToken);
+            await MarkVersionReleasedAsync(project, release, now, cancellationToken);
         }
         else
         {
-            LogProjectMoved(logger, project.Id, release.ProjectVersion);
+            LogProjectMoved(logger, project.Id, release.Checkpoint);
         }
 
         db.AddEvent(
@@ -212,7 +216,8 @@ public sealed partial class ReleaseJobHandler(
             new
             {
                 releaseId = release.Id,
-                projectVersion = release.ProjectVersion,
+                releaseVersionId = release.ReleaseVersionId,
+                checkpoint = release.Checkpoint,
                 tag = release.Tag,
                 attempt = release.Attempt,
                 mergeCommitSha = release.MergeCommitSha,
@@ -223,6 +228,25 @@ public sealed partial class ReleaseJobHandler(
             now);
         await SaveAsync(cancellationToken);
         LogReleased(logger, release.ProjectId, release.Tag, outcome.AlreadyTagged);
+    }
+
+    /// <summary>
+    /// FR-64, §4.10: the release version becomes <c>released</c> (tag, merge commit, released_at) and the project's
+    /// denormalised versions follow: released = the highest released version, nothing in development. Same unit of work.
+    /// </summary>
+    private async Task MarkVersionReleasedAsync(Project project, ReleaseEntity release, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var versions = await db.ReleaseVersions.Where(v => v.ProjectId == project.Id).ToListAsync(cancellationToken);
+        if (versions.FirstOrDefault(v => v.Id == release.ReleaseVersionId) is { } version
+            && ReleaseVersionRules.CanTransition(version.Status, ReleaseVersionStatus.Released))
+        {
+            version.Status = ReleaseVersionStatus.Released;
+            version.Tag = release.Tag;
+            version.MergeCommitSha = release.MergeCommitSha;
+            version.ReleasedAt = now;
+        }
+
+        Versions.ReleaseVersionScope.Refresh(project, versions);
     }
 
     private async Task FailAsync(Guid releaseId, string errorCode, string message, IReadOnlyList<string> conflictingFiles, CancellationToken cancellationToken)
@@ -249,7 +273,7 @@ public sealed partial class ReleaseJobHandler(
         }
     }
 
-    private static LifecycleState State(Project project) => new(project.CurrentPhase, project.Status, project.ProjectVersion);
+    private static LifecycleState State(Project project) => new(project.CurrentPhase, project.Status, project.Checkpoint);
 
     private static LifecycleJobPayload Payload(JobExecution job)
     {
@@ -272,8 +296,8 @@ public sealed partial class ReleaseJobHandler(
     [LoggerMessage(Level = LogLevel.Warning, Message = "Release {Tag} of project {ProjectId} failed ({ErrorCode}, {ConflictCount} conflicting files)")]
     private static partial void LogFailed(ILogger logger, Guid projectId, string tag, string errorCode, int conflictCount);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId} left release version {ProjectVersion} while it was being released; the release is recorded, the project is unchanged")]
-    private static partial void LogProjectMoved(ILogger logger, Guid projectId, int projectVersion);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId} left release checkpoint {Checkpoint} while it was being released; the release is recorded, the project is unchanged")]
+    private static partial void LogProjectMoved(ILogger logger, Guid projectId, int checkpoint);
 }
 
 /// <summary>A release job that ended without succeeding (retries used up) fails the project's in-progress attempts with its last (token-free) error.</summary>

@@ -21,45 +21,61 @@ public static class ReleaseRecords
     public const string Retried = "retried";
 
     /// <summary>
-    /// FR-42, FR-43: adds the next <c>in_progress</c> release attempt for the project's current version (tag
-    /// <c>v&lt;version&gt;-aide</c> until the provider picks the actual tag, attempt = attempts so far + 1, the project PR URL for GitHub) and <c>RELEASE_STARTED</c>.
+    /// FR-42 amended by FR-64, FR-43: adds the next <c>in_progress</c> release attempt for the project's release version in
+    /// development at its current checkpoint (tag <c>&lt;tagPrefix&gt;&lt;version&gt;</c>, attempt = attempts at that checkpoint so
+    /// far + 1, the version's PR URL for GitHub) and <c>RELEASE_STARTED</c>.
     /// </summary>
     public static async Task<ReleaseEntity> AddAttemptAsync(
         AideDbContext db, Project project, string trigger, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(project);
-        var version = project.ProjectVersion;
+        var checkpoint = project.Checkpoint;
+        var versionId = project.CurrentReleaseVersionId ?? await db.CurrentReleaseVersionIdAsync(project.Id, cancellationToken) ?? Guid.Empty;
         var attempts = await db.Releases.AsNoTracking()
-            .Where(r => r.ProjectId == project.Id && r.ProjectVersion == version)
+            .Where(r => r.ReleaseVersionId == versionId && r.Checkpoint == checkpoint)
             .Select(r => r.Attempt)
             .ToListAsync(cancellationToken);
         attempts.AddRange(db.ChangeTracker.Entries<ReleaseEntity>()
-            .Where(e => e.State == EntityState.Added && e.Entity.ProjectId == project.Id && e.Entity.ProjectVersion == version)
+            .Where(e => e.State == EntityState.Added && e.Entity.ProjectId == project.Id && e.Entity.Checkpoint == checkpoint)
             .Select(e => e.Entity.Attempt));
-        var git = await db.ProjectGitSettings.AsNoTracking()
+        var provider = await db.ProjectGitSettings.AsNoTracking()
             .Where(s => s.ProjectId == project.Id)
-            .Select(s => new { s.Provider, s.PullRequestUrl })
+            .Select(s => (GitProvider?)s.Provider)
+            .FirstOrDefaultAsync(cancellationToken);
+        var version = await db.ReleaseVersions.AsNoTracking()
+            .Where(v => v.Id == versionId)
+            .Select(v => new { v.Version, v.TagPrefix, v.PullRequestUrl })
             .FirstOrDefaultAsync(cancellationToken);
 
         var release = new ReleaseEntity
         {
             ProjectId = project.Id,
-            ProjectVersion = version,
-            Tag = ReleaseRules.Tag(version),
+            ReleaseVersionId = versionId,
+            Checkpoint = checkpoint,
+            Tag = TagFor(version?.TagPrefix, version?.Version),
             Status = ReleaseStatus.InProgress,
             Attempt = ReleaseRules.NextAttempt(attempts),
-            PrUrl = git?.Provider == GitProvider.Github ? git.PullRequestUrl : null,
+            PrUrl = provider == GitProvider.Github ? version?.PullRequestUrl : null,
             CreatedAt = now,
         };
         db.Releases.Add(release);
         db.AddEvent(
             EventTypes.ReleaseStarted,
             project.Id,
-            new { releaseId = release.Id, projectVersion = version, tag = release.Tag, attempt = release.Attempt, trigger },
+            new { releaseId = release.Id, releaseVersionId = versionId, version = version?.Version, checkpoint, tag = release.Tag, attempt = release.Attempt, trigger },
             actor,
             now);
         return release;
+    }
+
+    /// <summary>§4.10: <c>&lt;tagPrefix&gt;&lt;version&gt;</c>; a version text that isn't semver (or a bad prefix) keeps the text as the tag.</summary>
+    public static string TagFor(string? tagPrefix, string? version)
+    {
+        var prefix = tagPrefix ?? ReleaseVersion.DefaultTagPrefix;
+        return SemVer.TryParse(version, out var parsed) && ReleaseVersionRules.IsValidTagPrefix(prefix)
+            ? ReleaseVersionRules.Tag(prefix, parsed)
+            : prefix + (version ?? string.Empty);
     }
 
     /// <summary>FR-43: marks an in-progress attempt failed and adds <c>RELEASE_FAILED</c> (the Owner notification seam, FR-47).</summary>
@@ -79,7 +95,8 @@ public static class ReleaseRecords
             new
             {
                 releaseId = release.Id,
-                projectVersion = release.ProjectVersion,
+                releaseVersionId = release.ReleaseVersionId,
+                checkpoint = release.Checkpoint,
                 tag = release.Tag,
                 attempt = release.Attempt,
                 errorCode,
@@ -91,13 +108,14 @@ public static class ReleaseRecords
             now);
     }
 
-    /// <summary>The latest attempt at <paramref name="projectVersion"/> (tracked when <paramref name="track"/>), or <c>null</c>.</summary>
-    public static Task<ReleaseEntity?> LatestAtAsync(AideDbContext db, Guid projectId, int projectVersion, bool track, CancellationToken cancellationToken)
+    /// <summary>The latest attempt of the project's current release version at <paramref name="checkpoint"/> (tracked when <paramref name="track"/>), or <c>null</c>.</summary>
+    public static async Task<ReleaseEntity?> LatestAtAsync(AideDbContext db, Guid projectId, int checkpoint, bool track, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
+        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
         var releases = track ? db.Releases : db.Releases.AsNoTracking();
-        return releases
-            .Where(r => r.ProjectId == projectId && r.ProjectVersion == projectVersion)
+        return await releases
+            .Where(r => r.ProjectId == projectId && r.ReleaseVersionId == versionId && r.Checkpoint == checkpoint)
             .OrderByDescending(r => r.Attempt)
             .ThenByDescending(r => r.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
@@ -117,7 +135,8 @@ public static class ReleaseRecords
         ArgumentNullException.ThrowIfNull(release);
         return new ReleaseDto(
             release.Id,
-            release.ProjectVersion,
+            release.ReleaseVersionId,
+            release.Checkpoint,
             release.Status,
             release.Tag,
             release.MergeCommitSha,
@@ -147,9 +166,9 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, T
             return Result.Failure<ReleaseEntity>(new DomainError(ErrorCodes.NotFound, "The project was not found."));
         }
 
-        var latest = await ReleaseRecords.LatestAtAsync(db, project.Id, project.ProjectVersion, track: false, cancellationToken);
+        var latest = await ReleaseRecords.LatestAtAsync(db, project.Id, project.Checkpoint, track: false, cancellationToken);
         var verdict = ReleaseRules.CanRetry(
-            new LifecycleState(project.CurrentPhase, project.Status, project.ProjectVersion),
+            new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint),
             latest?.Status,
             await ReleaseRecords.JobActiveAsync(db, project.Id, cancellationToken));
         if (verdict.IsFailure)
@@ -162,7 +181,7 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, T
         var release = await ReleaseRecords.AddAttemptAsync(db, project, ReleaseRecords.Retried, actor, now, cancellationToken);
         await jobs.EnqueueAsync(
             JobTypes.Release,
-            new LifecycleJobPayload(project.Id, project.ProjectVersion, ReleaseRecords.Retried),
+            new LifecycleJobPayload(project.Id, project.Checkpoint, ReleaseRecords.Retried),
             project.Id,
             cancellationToken,
             now);
@@ -172,15 +191,15 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, T
             return Result.Failure<ReleaseEntity>(saved.Error!);
         }
 
-        LogRetried(logger, project.Id, release.ProjectVersion, release.Attempt);
+        LogRetried(logger, project.Id, release.Checkpoint, release.Attempt);
         return Result.Success(release);
     }
 
-    /// <summary>Every release attempt of the project, newest first.</summary>
-    public async Task<IReadOnlyList<ReleaseDto>> ListAsync(Guid projectId, CancellationToken cancellationToken)
+    /// <summary>The release attempts of the project, newest first; only those of <paramref name="releaseVersionId"/> when given.</summary>
+    public async Task<IReadOnlyList<ReleaseDto>> ListAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
         var releases = await db.Releases.AsNoTracking()
-            .Where(r => r.ProjectId == projectId)
+            .Where(r => r.ProjectId == projectId && (releaseVersionId == null || r.ReleaseVersionId == releaseVersionId))
             .OrderByDescending(r => r.CreatedAt)
             .ThenByDescending(r => r.Id)
             .ToListAsync(cancellationToken);
@@ -198,6 +217,6 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, T
         return release is null ? null : ReleaseRecords.ToDto(release);
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: release of version {ProjectVersion} retried (attempt {Attempt})")]
-    private static partial void LogRetried(ILogger logger, Guid projectId, int projectVersion, int attempt);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: release at checkpoint {Checkpoint} retried (attempt {Attempt})")]
+    private static partial void LogRetried(ILogger logger, Guid projectId, int checkpoint, int attempt);
 }

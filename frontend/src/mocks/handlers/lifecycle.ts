@@ -95,7 +95,7 @@ export function seedGate(project: StoredProject, overrides: Partial<Gate> = {}):
     decidedBy: null,
     comment: null,
     decision: null,
-    targetVersion: null,
+    targetCheckpoint: null,
     overdue: false,
     remindedAt: null,
     executionStepId: null,
@@ -194,21 +194,21 @@ function moveTo(p: StoredProject, to: Phase, actor: Actor, kind: 'forward' | 'cy
   const from = p.currentPhase
   p.currentPhase = to
   if (kind === 'forward') {
-    p.projectVersion += 1
+    p.checkpoint += 1
     p.status = statusFor[to]
   } else if (kind === 'rollback') {
-    p.projectVersion = version ?? p.projectVersion
+    p.checkpoint = version ?? p.checkpoint
     p.status = 'rolled_back'
   } else {
     p.status = statusFor[to]
   }
-  p.phaseAtVersion[p.projectVersion] = to
+  p.phaseAtVersion[p.checkpoint] = to
   p.updatedAt = new Date().toISOString()
   addEvent(p, {
     type: 'PHASE_CHANGED',
     category: 'transition',
-    summary: `Phase changed from ${from} to ${to} (version ${String(p.projectVersion)})`,
-    payload: { from, to, status: p.status, projectVersion: p.projectVersion },
+    summary: `Phase changed from ${from} to ${to} (version ${String(p.checkpoint)})`,
+    payload: { from, to, status: p.status, checkpoint: p.checkpoint },
     actor,
   })
 }
@@ -286,7 +286,7 @@ export const lifecycleHandlers = [
         type: 'GATE_CREATED',
         category: 'gate',
         summary: `${gateType} gate created`,
-        payload: { gateId: gate.id, type: gateType, artifactId: gate.artifactId, projectVersion: p.projectVersion },
+        payload: { gateId: gate.id, type: gateType, artifactId: gate.artifactId, checkpoint: p.checkpoint },
         actor,
       })
       return HttpResponse.json<Schemas['AdvanceResultDto']>({ state: stateDto(p), gate })
@@ -327,9 +327,9 @@ export const lifecycleHandlers = [
       if (decision === 'accept' && gate.escalationReason === 'step_blocked') {
         return invalidDecision('A blocked step can be continued (retried) or rolled back, not accepted.')
       }
-      const target = body?.targetVersion ?? null
+      const target = body?.targetCheckpoint ?? null
       if (decision === 'rollback') {
-        if (target === null || target < 1 || target >= p.projectVersion) {
+        if (target === null || target < 1 || target >= p.checkpoint) {
           return invalidDecision('A rollback needs a target version below the current version.')
         }
       } else if (target !== null) {
@@ -337,12 +337,12 @@ export const lifecycleHandlers = [
       }
       decide(gate, 'approved', a.userId, body)
       gate.decision = decision
-      gate.targetVersion = target
+      gate.targetCheckpoint = target
       addEvent(p, {
         type: 'GATE_APPROVED',
         category: 'gate',
         summary: `escalation gate decided: ${decision}`,
-        payload: { gateId: gate.id, type: gate.type, decision, targetVersion: target },
+        payload: { gateId: gate.id, type: gate.type, decision, targetCheckpoint: target },
         actor,
       })
       if (decision === 'continue' && p.currentPhase === 'execution') {
@@ -368,13 +368,13 @@ export const lifecycleHandlers = [
         for (const other of p.gates.filter((g) => g.status === 'pending')) {
           other.status = 'cancelled'
         }
-        const fromVersion = p.projectVersion
+        const fromCheckpoint = p.checkpoint
         moveTo(p, p.phaseAtVersion[target] ?? 'refinement', actor, 'rollback', target)
         addEvent(p, {
           type: 'ROLLBACK_COMPLETED',
           category: 'rollback',
-          summary: `Rolled back from version ${String(fromVersion)} to version ${String(target)}`,
-          payload: { fromVersion, targetVersion: target },
+          summary: `Rolled back from version ${String(fromCheckpoint)} to version ${String(target)}`,
+          payload: { fromCheckpoint, targetCheckpoint: target },
           actor,
         })
       } else {
@@ -383,7 +383,7 @@ export const lifecycleHandlers = [
       return HttpResponse.json<Gate>(gate)
     }
 
-    if (body?.decision != null || body?.targetVersion != null) {
+    if (body?.decision != null || body?.targetCheckpoint != null) {
       return invalidDecision('Only escalation gates take a decision.')
     }
     decide(gate, 'approved', a.userId, body)
@@ -391,7 +391,7 @@ export const lifecycleHandlers = [
       type: 'GATE_APPROVED',
       category: 'gate',
       summary: `${gate.type} gate approved`,
-      payload: { gateId: gate.id, type: gate.type, decision: null, targetVersion: null },
+      payload: { gateId: gate.id, type: gate.type, decision: null, targetCheckpoint: null },
       actor,
     })
     moveTo(p, gateEntering[gate.type], actor, 'forward')
@@ -410,7 +410,7 @@ export const lifecycleHandlers = [
     if (gate instanceof Response) {
       return gate
     }
-    if (gate.type === 'escalation' || body?.decision != null || body?.targetVersion != null) {
+    if (gate.type === 'escalation' || body?.decision != null || body?.targetCheckpoint != null) {
       return invalidDecision('Escalation gates are decided with approve; other gates take only a comment.')
     }
     decide(gate, 'rejected', a.userId, body)

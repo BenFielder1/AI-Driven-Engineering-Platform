@@ -3,6 +3,7 @@ import { ChevronRight, Menu, Search } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { ProjectLive } from '../live/live-indicator'
 import { NotificationBell } from '../notifications/notification-bell'
+import { VersionSwitcher } from '../versions/version-switcher'
 import { HrefLink } from './href-link'
 import { crumbsFor } from './nav-config'
 import type { ShellNav } from './use-shell-nav'
@@ -39,13 +40,6 @@ export function Breadcrumbs({ nav, className }: { nav: ShellNav; className?: str
 }
 
 /**
- * Where the release-version switcher (FR-62) mounts on project pages. Renders nothing until release versions exist.
- */
-function VersionSwitcherSlot() {
-  return null
-}
-
-/**
  * FR-53 header (SPEC §7.1): sticky, frosted, 64 px; hamburger below lg, breadcrumbs, then on project pages the live
  * indicator and the version switcher, search below lg, the bell.
  */
@@ -67,7 +61,7 @@ export function Header({ nav, onOpenDrawer, onOpenPalette }: { nav: ShellNav; on
           {nav.projectId && nav.projectName !== undefined && (
             <div className="mr-1 flex items-center gap-2" data-slot="project-header-tools">
               <ProjectLive projectId={nav.projectId} />
-              <VersionSwitcherSlot />
+              <VersionSwitcher projectId={nav.projectId} />
             </div>
           )}
           <button

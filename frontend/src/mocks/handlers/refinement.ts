@@ -125,6 +125,7 @@ function refinementDto(project: StoredProject): Schemas['RefinementDto'] {
           id: latestDraft.id,
           type: latestDraft.type,
           version: latestDraft.version,
+          releaseVersionId: latestDraft.releaseVersionId,
           status: latestDraft.status,
           integrity: latestDraft.integrity,
           createdAt: latestDraft.createdAt,

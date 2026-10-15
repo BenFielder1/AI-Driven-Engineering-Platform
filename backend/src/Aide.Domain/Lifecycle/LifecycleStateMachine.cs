@@ -5,9 +5,9 @@ using Aide.Domain.Review;
 namespace Aide.Domain.Lifecycle;
 
 /// <summary>
-/// The only way a project's phase, status and version change (§4.1, FR-11, CLAUDE.md rule 9).
-/// Version increments on every forward transition and on release completion; never on a review cycle,
-/// a fallback or a no-op; a rollback sets it to the target.
+/// The only way a project's phase, status and checkpoint change (§4.1, §4.10, FR-11, CLAUDE.md rule 9).
+/// The checkpoint increments on every forward transition; never on release completion (v2, D-V2-2), a review cycle,
+/// a fallback or a no-op; a rollback sets it to the target; starting a new release version resets it to 1.
 /// </summary>
 public static class LifecycleStateMachine
 {
@@ -25,6 +25,7 @@ public static class LifecycleStateMachine
             TransitionKind.InvalidationFallback => Fallback(state, request),
             TransitionKind.ReleaseNoop => ReleaseNoop(state, request),
             TransitionKind.ReleaseCompleted => ReleaseCompleted(state, request),
+            TransitionKind.NewVersion => NewVersion(state, request, snapshot),
             _ => throw new ArgumentOutOfRangeException(nameof(request), request.Kind, null),
         };
     }
@@ -182,7 +183,7 @@ public static class LifecycleStateMachine
         {
             return Result.Failure<PhaseTransition>(new DomainError(
                 ErrorCodes.InvalidTargetVersion,
-                $"The target version must be an existing version below the current version {state.Version}."));
+                $"The target checkpoint must be an existing checkpoint below the current checkpoint {state.Version}."));
         }
 
         if (request.TargetPhase is not { } target || state.Phase.IsBefore(target))
@@ -190,7 +191,7 @@ public static class LifecycleStateMachine
             return WrongPhase("A rollback can't move to a later phase.");
         }
 
-        return Success(state, target, ProjectStatus.RolledBack, version, request, $"Rolled back to version {version}");
+        return Success(state, target, ProjectStatus.RolledBack, version, request, $"Rolled back to checkpoint {version}");
     }
 
     private static Result<PhaseTransition> Fallback(LifecycleState state, TransitionRequest request)
@@ -220,7 +221,33 @@ public static class LifecycleStateMachine
             return Result.Failure<PhaseTransition>(new DomainError(ErrorCodes.NotReleasing, "The project is not releasing."));
         }
 
-        return Success(state, Phase.Release, ProjectStatus.Released, state.Version + 1, request, "Release completed");
+        // §4.10 (amends §4.1): release completion no longer creates a checkpoint.
+        return Success(state, Phase.Release, ProjectStatus.Released, state.Version, request, "Release completed");
+    }
+
+    /// <summary>
+    /// §4.10, FR-60: <c>release → refinement</c> at checkpoint 1, status <c>active</c>; only from <c>release</c>/<c>released</c>
+    /// (<c>NOT_RELEASED</c>) with no version in development (<c>VERSION_IN_PROGRESS</c>).
+    /// </summary>
+    private static Result<PhaseTransition> NewVersion(LifecycleState state, TransitionRequest request, LifecycleSnapshot snapshot)
+    {
+        if (request.TargetPhase is { } target && target != Phase.Refinement)
+        {
+            return WrongPhase("A new version starts in refinement.");
+        }
+
+        if (state.Phase != Phase.Release || state.Status != ProjectStatus.Released)
+        {
+            return Result.Failure<PhaseTransition>(new DomainError(
+                ErrorCodes.NotReleased, $"A new version can only start once the project is released; it is in {state.Phase.ToWire()} with status {state.Status.ToWire()}."));
+        }
+
+        if (snapshot.DevelopmentVersionExists)
+        {
+            return Result.Failure<PhaseTransition>(new DomainError(ErrorCodes.VersionInProgress, "A version is already in development."));
+        }
+
+        return Success(state, Phase.Refinement, ProjectStatus.Active, LifecycleState.Initial.Version, request, "New version started");
     }
 
     private static Result<PhaseTransition> Success(

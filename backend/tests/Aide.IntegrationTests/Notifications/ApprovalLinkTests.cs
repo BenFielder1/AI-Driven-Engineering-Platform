@@ -61,7 +61,7 @@ public sealed class ApprovalLinkTests(AideApiFactory factory)
         await Problems.AssertAsync(await fixture.Owner.Client.PostAsJsonAsync(Path(reject), new { }, Ct), HttpStatusCode.Conflict, ErrorCodes.LinkUsed);
 
         var after = await LifecycleSeed.ProjectAsync(App, id);
-        Assert.Equal((project.CurrentPhase, project.ProjectVersion), (after.CurrentPhase, after.ProjectVersion));
+        Assert.Equal((project.CurrentPhase, project.Checkpoint), (after.CurrentPhase, after.Checkpoint));
         Assert.Equal(GateStatus.Approved, (await NotificationScenario.GateAsync(App, gate.Id)).Status);
         Assert.Equal(events, await ProjectApi.WithDbAsync(App, db => db.Events.CountAsync(e => e.ProjectId == id, Ct)));
     }

@@ -169,7 +169,7 @@ public sealed partial class ReviewJobHandler(
         db.AddEvent(
             EventTypes.ReviewStarted,
             project.Id,
-            new { jobId = job.Id, cycle = project.ReviewCycle, trigger = payload.Trigger, projectVersion = project.ProjectVersion },
+            new { jobId = job.Id, cycle = project.ReviewCycle, trigger = payload.Trigger, checkpoint = project.Checkpoint, releaseVersionId = project.CurrentReleaseVersionId },
             SystemActor.Name,
             now);
         await SaveAsync("starting the review cycle", cancellationToken);
@@ -324,8 +324,9 @@ public sealed partial class ReviewJobHandler(
         var report = new ComplianceReport
         {
             ProjectId = project.Id,
+            ReleaseVersionId = project.CurrentReleaseVersionId ?? Guid.Empty,
             ReviewCycle = cycle,
-            ProjectVersion = project.ProjectVersion,
+            Checkpoint = project.Checkpoint,
             Score = assessment.Overall,
             CategoryScores = assessment.Categories,
             Violations = assessment.Violations,
@@ -371,7 +372,8 @@ public sealed partial class ReviewJobHandler(
                 jobId = job.Id,
                 reportId = report.Id,
                 cycle,
-                projectVersion = project.ProjectVersion,
+                checkpoint = project.Checkpoint,
+                releaseVersionId = project.CurrentReleaseVersionId,
                 overallScore = assessment.Overall,
                 threshold = project.ComplianceThreshold,
                 driftLevel = assessment.Drift,

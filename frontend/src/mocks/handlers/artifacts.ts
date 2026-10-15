@@ -5,7 +5,7 @@ import { antiforgeryFailure, authDb, nextId } from './auth'
 import { createExecutionSteps, invalidPlan, validatePlan } from './execution'
 import { addEvent } from './lifecycle'
 import { problem } from './problem'
-import { access, ownerMutation, record, type Access, type StoredProject } from './projects'
+import { access, currentVersionId, ownerMutation, record, type Access, type StoredProject } from './projects'
 
 type Artifact = Schemas['ArtifactDto']
 type Summary = Schemas['ArtifactSummaryDto']
@@ -13,7 +13,13 @@ type ArtifactType = Schemas['ArtifactType']
 type DiffLine = Schemas['DiffLineDto']
 type Actor = Schemas['ActorDto']
 
-const types: readonly ArtifactType[] = ['project_request', 'technical_specification', 'implementation_plan', 'optimization_plan']
+const types: readonly ArtifactType[] = [
+  'project_request',
+  'technical_specification',
+  'implementation_plan',
+  'optimization_plan',
+  'codebase_summary',
+]
 
 /** SPEC §4.4: what approving a new version of each type invalidates. */
 const cascade: Record<ArtifactType, readonly ArtifactType[]> = {
@@ -21,6 +27,7 @@ const cascade: Record<ArtifactType, readonly ArtifactType[]> = {
   technical_specification: ['implementation_plan', 'optimization_plan'],
   implementation_plan: ['optimization_plan'],
   optimization_plan: [],
+  codebase_summary: [],
 }
 
 /** A deterministic 64-hex-digit stand-in for the SHA-256 content hash (the mock never verifies it). */
@@ -60,6 +67,8 @@ export function seedArtifact(
     authorUserId?: string
     approvedByUserId?: string
     rejectionComment?: string
+    /** Default: the project's current release version. */
+    releaseVersionId?: string
   },
 ): Artifact {
   artifactClock += 3_600_000
@@ -74,7 +83,8 @@ export function seedArtifact(
     content: init.content,
     contentHash: fakeHash(init.content),
     status,
-    projectVersionAtCreation: project.projectVersion,
+    releaseVersionId: init.releaseVersionId ?? currentVersionId(project),
+    checkpointAtCreation: project.checkpoint,
     author: init.authorUserId
       ? { user: userActor(init.authorUserId), agentRunId: null }
       : { user: null, agentRunId: nextId() },
@@ -130,8 +140,18 @@ function syncState(p: StoredProject, type: ArtifactType) {
 }
 
 function toSummary(a: Artifact): Summary {
-  const { id, type, version, status, integrity, createdAt, author } = a
-  return { id, type, version, status, integrity, createdAt, author }
+  const { id, type, version, status, integrity, createdAt, author, releaseVersionId } = a
+  return { id, type, version, status, integrity, createdAt, author, releaseVersionId }
+}
+
+/** FR-59, FR-62: the `releaseVersionId` query (default: the current release version). */
+function versionScope(request: Request, p: StoredProject): string {
+  return new URL(request.url).searchParams.get('releaseVersionId') ?? currentVersionId(p)
+}
+
+/** The versions of `type` in one release version, newest first. */
+function scopedVersionsOf(p: StoredProject, type: ArtifactType, releaseVersionId: string): Artifact[] {
+  return versionsOf(p, type).filter((a) => a.releaseVersionId === releaseVersionId)
 }
 
 function parseType(value: unknown): ArtifactType | Response {
@@ -246,19 +266,20 @@ function findById(p: StoredProject, artifactId: unknown): Artifact | Response {
 
 export const artifactHandlers = [
   // FR-21: latest version of each type that has one.
-  http.get('*/api/projects/:id/artifacts', ({ params }) => {
+  http.get('*/api/projects/:id/artifacts', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
+    const scope = versionScope(request, a.project)
     const latest = types.flatMap((t) => {
-      const v = latestOf(a.project, t)
+      const v = scopedVersionsOf(a.project, t, scope)[0]
       return v ? [toSummary(read(a.project, v))] : []
     })
     return HttpResponse.json<Summary[]>(latest)
   }),
 
-  http.get('*/api/projects/:id/artifacts/:type/latest', ({ params }) => {
+  http.get('*/api/projects/:id/artifacts/:type/latest', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
@@ -267,11 +288,11 @@ export const artifactHandlers = [
     if (type instanceof Response) {
       return type
     }
-    const latest = latestOf(a.project, type)
+    const latest = scopedVersionsOf(a.project, type, versionScope(request, a.project))[0]
     return latest ? HttpResponse.json<Artifact>(read(a.project, latest)) : notFound()
   }),
 
-  http.get('*/api/projects/:id/artifacts/:type/history', ({ params }) => {
+  http.get('*/api/projects/:id/artifacts/:type/history', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
@@ -280,7 +301,9 @@ export const artifactHandlers = [
     if (type instanceof Response) {
       return type
     }
-    return HttpResponse.json<Summary[]>(versionsOf(a.project, type).map((v) => toSummary(read(a.project, v))))
+    return HttpResponse.json<Summary[]>(
+      scopedVersionsOf(a.project, type, versionScope(request, a.project)).map((v) => toSummary(read(a.project, v))),
+    )
   }),
 
   http.get('*/api/projects/:id/artifacts/:type/versions/:version', ({ params }) => {

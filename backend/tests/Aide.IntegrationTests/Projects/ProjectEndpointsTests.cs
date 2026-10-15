@@ -41,7 +41,7 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
         Assert.Equal($"/api/projects/{project.Id}", response.Headers.Location?.OriginalString);
         Assert.Equal(Phase.Refinement, project.CurrentPhase);
         Assert.Equal(ProjectStatus.Active, project.Status);
-        Assert.Equal(1, project.ProjectVersion);
+        Assert.Equal(1, project.Checkpoint);
         Assert.Equal(ProjectRole.Owner, project.MyRole);
         Assert.Equal("A todo API for teams.", project.Idea);
         Assert.Matches("^my-project-[0-9a-f]{6}$", project.Slug);
@@ -55,7 +55,7 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
             var transition = await db.StateTransitions.SingleAsync(t => t.ProjectId == project.Id, Ct);
             Assert.Null(transition.FromPhase);
             Assert.Equal(Phase.Refinement, transition.ToPhase);
-            Assert.Equal(1, transition.ProjectVersion);
+            Assert.Equal(1, transition.Checkpoint);
             Assert.Equal(owner.User.Id.ToString(), transition.Actor);
             Assert.Equal("project created", transition.Reason);
 

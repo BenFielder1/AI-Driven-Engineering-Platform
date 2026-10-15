@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { checkNewVersion, DEFAULT_INITIAL_VERSION } from '../versions/semver'
 import { approvalModes } from './labels'
 
 /**
@@ -102,6 +103,12 @@ export function checkSecret(v: string, label: string): Check {
 /** Parses an optional budget input into the request value (`null` = unlimited). */
 export const toBudget = (v: string): number | null => (v.trim() === '' ? null : Number(v))
 
+/** FR-66: the initial version is semver (a leading `v` is stripped). */
+export function checkInitialVersion(v: string): Check {
+  const check = checkNewVersion(v, null)
+  return check.ok ? null : check.message
+}
+
 const str = z.string()
 
 /** Adds `message` at `path` when the check fails. */
@@ -127,9 +134,11 @@ export const wizardSchema = z
     repoUrl: str,
     defaultBranch: str,
     gitToken: str,
+    initialVersion: str,
   })
   .superRefine((v, ctx) => {
     addCheck(ctx, 'name', checkName(v.name))
+    addCheck(ctx, 'initialVersion', checkInitialVersion(v.initialVersion))
     addCheck(
       ctx,
       'idea',
@@ -164,6 +173,7 @@ export const wizardDefaults: WizardValues = {
   repoUrl: '',
   defaultBranch: projectDefaults.defaultBranch,
   gitToken: '',
+  initialVersion: DEFAULT_INITIAL_VERSION,
 }
 
 // ---- Settings → General (FR-7) ---------------------------------------------------------------------------------

@@ -78,7 +78,7 @@ public static partial class ProjectSettingsEndpoints
         var llm = await LlmAsync(db, id, catalog, cancellationToken);
         var notifications = await NotificationsAsync(db, id, cancellationToken);
         return TypedResults.Ok(new ProjectSettingsDto(
-            ProjectMapping.ToDto(git),
+            ProjectMapping.ToDto(git, await CurrentBranchAsync(db, id, cancellationToken)),
             ProjectMapping.ToDto(llm, catalog),
             ProjectMapping.ToDto(notifications)));
     }
@@ -138,8 +138,12 @@ public static partial class ProjectSettingsEndpoints
         {
             // The recorded PR belongs to the old repository (FR-36): the PR summary, GET /git/pull-request and the pull
             // request job all honour PULL_REQUEST_FORGOTTEN, so a new PR is opened in the new repository.
-            settings.PullRequestNumber = null;
-            settings.PullRequestUrl = null;
+            if (await db.CurrentReleaseVersionAsync(id, cancellationToken) is { } version)
+            {
+                version.PullRequestNumber = null;
+                version.PullRequestUrl = null;
+            }
+
             if (await PullRequestQueries.LatestOpenedAsync(db, id, cancellationToken) is not null)
             {
                 db.AddEvent(EventTypes.PullRequestForgotten, id, new { projectId = id, changes = changes.ToArray() }, currentUser.Actor, now);
@@ -170,7 +174,7 @@ public static partial class ProjectSettingsEndpoints
         }
 
         await SaveChangesAsync(db, id, "git", changes, currentUser, time, loggers, cancellationToken);
-        return TypedResults.Ok(ProjectMapping.ToDto(settings));
+        return TypedResults.Ok(ProjectMapping.ToDto(settings, await CurrentBranchAsync(db, id, cancellationToken)));
     }
 
     private static async Task<Results<Ok<LlmSettingsDto>, ValidationProblem, ProblemHttpResult>> UpdateLlmSettings(
@@ -331,6 +335,12 @@ public static partial class ProjectSettingsEndpoints
         await SaveChangesAsync(db, id, "notifications", unchanged ? [] : ["channels"], currentUser, time, loggers, cancellationToken);
         return TypedResults.Ok(ProjectMapping.ToDto(settings));
     }
+
+    /// <summary>The working branch recorded on the project's current release version (§4.10).</summary>
+    private static async Task<string?> CurrentBranchAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken) =>
+        await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken) is { } versionId
+            ? await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == versionId).Select(v => v.BranchName).FirstOrDefaultAsync(cancellationToken)
+            : null;
 
     private static async Task<Results<Ok<GitTestResultDto>, ProblemHttpResult>> TestGitConnection(
         Guid id,

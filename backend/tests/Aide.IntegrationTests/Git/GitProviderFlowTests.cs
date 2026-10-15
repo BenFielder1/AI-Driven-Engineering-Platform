@@ -45,14 +45,14 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        var branch = ExecutionRules.BranchName(fixture.Project.Slug, id);
+        var branch = Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!));
         await SeedExecutionAsync(factory, id, 2);
         await ControlAsync(fixture.Contributor.Client, id, "start");
 
         var jobs = await AgentJobs.RunQueuedAsync(factory, id);
 
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Review, ProjectStatus.Reviewing, 5), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Review, ProjectStatus.Reviewing, 5), (project.CurrentPhase, project.Status, project.Checkpoint));
         var transition = (await LifecycleSeed.TransitionsAsync(factory, id)).Single(t => t.ToPhase == Phase.Review);
         Assert.Equal((Phase.Execution, SystemActor.Name, PullRequestJobHandler.AdvanceReason), (transition.FromPhase, transition.Actor, transition.Reason));
         Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.PullRequest).Status);
@@ -92,7 +92,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
 
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PullRequestOpened));
         Assert.Single(await LifecycleSeed.TransitionsAsync(factory, id), t => t.ToPhase == Phase.Review);
-        Assert.Equal(5, (await LifecycleSeed.ProjectAsync(factory, id)).ProjectVersion);
+        Assert.Equal(5, (await LifecycleSeed.ProjectAsync(factory, id)).Checkpoint);
         Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.Review);
     }
 
@@ -132,7 +132,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(factory, id);
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PullRequestOpened));
         Assert.Single(await LifecycleSeed.TransitionsAsync(factory, id), t => t.ToPhase == Phase.Review);
-        Assert.Equal((Phase.Review, 5), ((await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase, (await LifecycleSeed.ProjectAsync(factory, id)).ProjectVersion));
+        Assert.Equal((Phase.Review, 5), ((await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase, (await LifecycleSeed.ProjectAsync(factory, id)).Checkpoint));
     }
 
     // ---------- GitHub ----------
@@ -144,7 +144,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         await using var app = remote.App(factory, HappyGitHub(), out var git);
         using var fixture = await GitHubFixtureAsync(app);
         var id = fixture.Project.Id;
-        var branch = ExecutionRules.BranchName(fixture.Project.Slug, id);
+        var branch = Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!));
         await SeedExecutionAsync(factory, id, 1);
 
         await ControlAsync(fixture.Contributor.Client, id, "start");
@@ -168,7 +168,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         await using var app = remote.App(factory, api, out var git);
         using var fixture = await GitHubFixtureAsync(app);
         var id = fixture.Project.Id;
-        var branch = ExecutionRules.BranchName(fixture.Project.Slug, id);
+        var branch = Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!));
         await SeedExecutionAsync(factory, id, 2);
         await ControlAsync(fixture.Contributor.Client, id, "start");
 
@@ -198,8 +198,8 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         Assert.Contains("### Plan: implementation_plan v1 (2 steps)", description, StringComparison.Ordinal);
         Assert.Contains("| 2 | Step 2 | `", description, StringComparison.Ordinal);
 
-        var settings = await ProjectApi.WithDbAsync(factory, db => db.ProjectGitSettings.AsNoTracking().SingleAsync(s => s.ProjectId == id, Ct));
-        Assert.Equal((42, PrUrl), (settings.PullRequestNumber, settings.PullRequestUrl));
+        var version = await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == id, Ct));
+        Assert.Equal((42, PrUrl), (version.PullRequestNumber, version.PullRequestUrl));
         var state = await StateAsync(fixture.Viewer.Client, id);
         Assert.Equal((Phase.Review, GitProvider.Github, 42, PrUrl), (state.Phase, state.PullRequest!.Provider, state.PullRequest.Number, state.PullRequest.Url));
         var pr = await PullRequestAsync(fixture.Viewer.Client, id);
@@ -254,7 +254,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
             await db.Events.Where(e => e.ProjectId == id && e.Type == EventTypes.PullRequestOpened).ExecuteDeleteAsync(Ct);
             await db.StateTransitions.Where(t => t.ProjectId == id && t.ToPhase == Phase.Review).ExecuteDeleteAsync(Ct);
             await db.Jobs.Where(j => j.ProjectId == id && j.Type == JobTypes.Review).ExecuteDeleteAsync(Ct);
-            await db.ProjectGitSettings.Where(s => s.ProjectId == id).ExecuteUpdateAsync(s => s.SetProperty(g => g.PullRequestNumber, (int?)null).SetProperty(g => g.PullRequestUrl, (string?)null), Ct);
+            await db.ReleaseVersions.Where(v => v.ProjectId == id).ExecuteUpdateAsync(s => s.SetProperty(v => v.PullRequestNumber, (int?)null).SetProperty(v => v.PullRequestUrl, (string?)null), Ct);
         });
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Execution, 4, ApprovalMode.Advisory);
         await AgentJobs.RunAsync(app, job);
@@ -262,7 +262,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         Assert.Equal(1, created);
         var opened = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PullRequestOpened)).Payload);
         Assert.Equal((42, true), (opened.GetProperty("number").GetInt32(), opened.GetProperty("reused").GetBoolean()));
-        Assert.Equal((Phase.Review, 5), ((await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase, (await LifecycleSeed.ProjectAsync(factory, id)).ProjectVersion));
+        Assert.Equal((Phase.Review, 5), ((await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase, (await LifecycleSeed.ProjectAsync(factory, id)).Checkpoint));
     }
 
     [Fact]
@@ -303,7 +303,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         await using var app = remote.App(factory, HappyGitHub(), out _);
         using var fixture = await GitHubFixtureAsync(app);
         var id = fixture.Project.Id;
-        var branch = ExecutionRules.BranchName(fixture.Project.Slug, id);
+        var branch = Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!));
         await SeedExecutionAsync(factory, id, 1);
         await ControlAsync(fixture.Contributor.Client, id, "start");
 
@@ -425,7 +425,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
                 ProjectApi.WithDbAsync(factory, async db =>
                 {
                     await db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(
-                        s => s.SetProperty(p => p.CurrentPhase, Phase.Planning).SetProperty(p => p.Status, PhaseOrder.StatusFor(Phase.Planning)).SetProperty(p => p.ProjectVersion, 3), Ct);
+                        s => s.SetProperty(p => p.CurrentPhase, Phase.Planning).SetProperty(p => p.Status, PhaseOrder.StatusFor(Phase.Planning)).SetProperty(p => p.Checkpoint, 3), Ct);
                     await db.ExecutionSteps.Where(st => st.ProjectId == id).ExecuteUpdateAsync(st => st.SetProperty(x => x.Status, StepStatus.Pending), Ct);
                 }).GetAwaiter().GetResult();
                 return (HttpStatusCode.Created, $$"""{"number":42,"html_url":"{{PrUrl}}"}""");
@@ -441,7 +441,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
 
         Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.PullRequest).Status);
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Planning, 3), (project.CurrentPhase, project.ProjectVersion));
+        Assert.Equal((Phase.Planning, 3), (project.CurrentPhase, project.Checkpoint));
         Assert.Empty(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PullRequestOpened));
         Assert.DoesNotContain(await LifecycleSeed.TransitionsAsync(factory, id), t => t.Actor == SystemActor.Name);
         Assert.Empty(await LifecycleSeed.GatesAsync(factory, id));
@@ -492,7 +492,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
 
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PullRequestOpened));
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Review, 5), (project.CurrentPhase, project.ProjectVersion));
+        Assert.Equal((Phase.Review, 5), (project.CurrentPhase, project.Checkpoint));
         Assert.Single(await LifecycleSeed.TransitionsAsync(factory, id), t => t.ToPhase == Phase.Review);
         Assert.NotNull((await StateAsync(fixture.Viewer.Client, id)).PullRequest);
         await Problems.AssertAsync(await RetryPullRequestAsync(fixture.Contributor.Client, id), HttpStatusCode.Conflict, ErrorCodes.PhasePreconditionFailed);
@@ -663,7 +663,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
     }
 
     private Task<int?> PrNumberAsync(Guid id) =>
-        ProjectApi.WithDbAsync(factory, db => db.ProjectGitSettings.Where(s => s.ProjectId == id).Select(s => s.PullRequestNumber).SingleAsync(Ct));
+        ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.Where(v => v.ProjectId == id).Select(v => v.PullRequestNumber).SingleAsync(Ct));
 
     private string WorkingCopy(Guid id) => Path.Combine(factory.WorkspacesRoot, id.ToString("D"));
 

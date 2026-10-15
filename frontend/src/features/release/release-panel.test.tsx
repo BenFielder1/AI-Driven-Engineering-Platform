@@ -14,7 +14,7 @@ const releasePanel = () => screen.findByRole('region', { name: 'Release' })
 
 describe('Overview → Release (FR-42, FR-43)', () => {
   it('FR42_release_panel_shows_tag_and_merge', async () => {
-    await openOverviewAs('owner', { projectVersion: 6 }, (p) => {
+    await openOverviewAs('owner', { checkpoint: 6 }, (p) => {
       seedReleasePhase(p)
       p.status = 'released'
       seedRelease(p)
@@ -22,7 +22,7 @@ describe('Overview → Release (FR-42, FR-43)', () => {
 
     const panel = await releasePanel()
     expect(await within(panel).findByText('Released')).toBeInTheDocument()
-    expect(within(panel).getByText('v6-aide')).toBeInTheDocument()
+    expect(within(panel).getByText('v0.1.0')).toBeInTheDocument()
     expect(within(panel).getByTitle('3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f')).toHaveTextContent('3f2a9c1')
     expect(within(panel).getByRole('link', { name: 'View on GitHub' })).toHaveAttribute(
       'href',
@@ -38,7 +38,7 @@ describe('Overview → Release (FR-42, FR-43)', () => {
   })
 
   it('FR43_conflict_lists_files_and_owner_can_retry', async () => {
-    const { user, project } = await openOverviewAs('owner', { projectVersion: 6 }, (p) => {
+    const { user, project } = await openOverviewAs('owner', { checkpoint: 6 }, (p) => {
       seedReleasePhase(p)
       seedRelease(p, {
         status: 'failed',
@@ -86,12 +86,12 @@ describe('Overview → Release (FR-42, FR-43)', () => {
 
   it('FR43_no_attempt_shows_owner_retry', async () => {
     // Releasing with no attempt at all (its job was lost): not "starting" forever, the Owner can start one.
-    const { user, project } = await openOverviewAs('owner', { projectVersion: 6 }, (p) => {
+    const { user, project } = await openOverviewAs('owner', { checkpoint: 6 }, (p) => {
       seedReleasePhase(p)
     })
 
     const panel = await releasePanel()
-    expect(await within(panel).findByText('No release attempt is running for version 6.')).toBeInTheDocument()
+    expect(await within(panel).findByText('No release attempt is running for 0.1.0 · checkpoint 6.')).toBeInTheDocument()
     expect(within(panel).queryByText('The release is starting…')).not.toBeInTheDocument()
 
     await user.click(within(panel).getByRole('button', { name: 'Retry release' }))
@@ -99,16 +99,16 @@ describe('Overview → Release (FR-42, FR-43)', () => {
     expect(requestsTo('POST', `/projects/${project.id}/release`)).toHaveLength(1)
   })
 
-  it('FR43: an attempt at an older version only is no attempt for the current one', async () => {
-    await openOverviewAs('owner', { projectVersion: 6 }, (p) => {
+  it('FR43, FR63: an attempt at an older checkpoint only is no attempt for the current one', async () => {
+    await openOverviewAs('owner', { checkpoint: 6 }, (p) => {
       seedReleasePhase(p)
-      seedRelease(p, { projectVersion: 4, tag: 'v4-aide' })
+      seedRelease(p, { checkpoint: 4, tag: 'v4-aide' })
     })
 
     const panel = await releasePanel()
-    expect(await within(panel).findByText('No release attempt is running for version 6.')).toBeInTheDocument()
+    expect(await within(panel).findByText('No release attempt is running for 0.1.0 · checkpoint 6.')).toBeInTheDocument()
     expect(within(panel).getByRole('button', { name: 'Retry release' })).toBeInTheDocument()
-    expect(within(panel).getByRole('list', { name: 'Release attempts' })).toHaveTextContent('Version 4, attempt 1')
+    expect(within(panel).getByRole('list', { name: 'Release attempts' })).toHaveTextContent('0.1.0 · checkpoint 4, attempt 1')
   })
 
   it('FR43: with no attempt, a non-owner is told an Owner can start it', async () => {
@@ -125,7 +125,7 @@ describe('Overview → Release (FR-42, FR-43)', () => {
   it.each(['TAG_EXISTS', 'GIT_ERROR', 'RELEASE_CANCELLED'] as const)(
     'FR43_failed_release_copy_%s',
     async (code) => {
-      await openOverviewAs('owner', { projectVersion: 6 }, (p) => {
+      await openOverviewAs('owner', { checkpoint: 6 }, (p) => {
         seedReleasePhase(p)
         seedRelease(p, { status: 'failed', mergeCommitSha: null, errorCode: code, tag: 'v6-aide.2' })
       })
@@ -152,13 +152,14 @@ describe('Overview → Release (FR-42, FR-43)', () => {
 })
 
 describe('Release and rollback events (FR-46, FR-50)', () => {
-  it('FR46: a release event refreshes the releases and state', async () => {
+  it('FR46, FR60: a release event (including VERSION_STARTED) refreshes the whole project and the list', async () => {
     const client = new QueryClient()
     const spy = vi.spyOn(client, 'invalidateQueries')
     await invalidateForEvent(client, 'p1', 'release')
     const keys = spy.mock.calls.map(([filters]) => filters?.queryKey)
-    expect(keys).toContainEqual(projectKeys.releases('p1'))
-    expect(keys).toContainEqual(projectKeys.state('p1'))
+    // The detail key prefixes the releases, release versions and state queries.
+    expect(keys).toContainEqual(projectKeys.detail('p1'))
+    expect(keys).toContainEqual(projectKeys.lists())
   })
 
   it('FR50: release events read as plain sentences', () => {

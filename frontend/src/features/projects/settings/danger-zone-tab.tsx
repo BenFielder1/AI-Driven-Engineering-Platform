@@ -46,7 +46,12 @@ export function DangerZoneTab({ project }: { project: Project }) {
     <div className="flex max-w-2xl flex-col gap-6">
       <h2 className="text-xl">Danger zone</h2>
 
-      <RollbackSection projectId={project.id} currentVersion={project.projectVersion} />
+      <RollbackSection
+        projectId={project.id}
+        developmentVersion={project.developmentVersion}
+        releasedVersion={project.releasedVersion}
+        currentCheckpoint={project.checkpoint}
+      />
 
       <section aria-labelledby="delete-title" className="rounded-lg border border-destructive p-4">
         <h3 id="delete-title" className="font-semibold">

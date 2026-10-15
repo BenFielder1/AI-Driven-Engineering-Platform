@@ -19,7 +19,11 @@ import { StageNavButtons, StageStepper } from '../lifecycle/stage-stepper'
 import { matchesHref } from '../shell/nav-config'
 import { stageStatuses } from '../shell/stage-states'
 import { PhaseBadge, StatusBadge } from './project-badges'
-import { ProjectContext } from './project-context'
+import { currentView, ProjectContext, ReleaseViewContext } from './project-context'
+import { ProjectVersionBadges } from '../../components/shared/version-badge'
+import { ReadOnlyBanner } from '../versions/read-only-banner'
+import { useSelectedReleaseVersion } from '../versions/use-selected-release-version'
+import { checkpointLabel } from '../versions/version-label'
 import { useProject, useProjectState, type Project } from './projects-api'
 
 function ProjectNotFound() {
@@ -41,17 +45,18 @@ function ProjectNotFound() {
 }
 
 /**
- * FR-54 project header: name, phase and status, the version (the version switcher joins here with FR-62), the
- * primary next-action button, and the horizontal stage stepper with Previous / Next stage. The Overview shows the
+ * FR-54 project header: name, phase and status, the version badges and checkpoint (FR-62, FR-63; the version switcher
+ * is in the shell header), the primary next-action button, and the horizontal stage stepper with Previous / Next stage. The Overview shows the
  * next action in its own card, so the header leaves the button out there.
  */
-function ProjectHeader({ project, onOverview }: { project: Project; onOverview: boolean }) {
+function ProjectHeader({ project, onOverview, readOnly }: { project: Project; onOverview: boolean; readOnly: boolean }) {
   const state = useProjectState(project.id)
   const user = useCurrentUser()
   const role = effectiveProjectRole(user, project.myRole)
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const viewing = stageFromPath(pathname)
-  const action = state.data ? nextAction(state.data, (c) => canInProject(user, role, c)) : null
+  // A past release version is read-only (FR-62): no next action is offered.
+  const action = state.data && !readOnly ? nextAction(state.data, (c) => canInProject(user, role, c)) : null
   // The page on screen already holds the control the action links to (e.g. "Start execution" on Execution).
   const actionHere =
     action !== null && action.key !== 'advance' && matchesHref(pathname, actionHref(action, project.id), true)
@@ -64,7 +69,8 @@ function ProjectHeader({ project, onOverview }: { project: Project; onOverview: 
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <PhaseBadge phase={project.currentPhase} />
             <StatusBadge status={project.status} />
-            <span className="font-mono tabular-nums">{`Version ${String(project.projectVersion)}`}</span>
+            <ProjectVersionBadges released={project.releasedVersion} development={project.developmentVersion} />
+            <span className="font-mono tabular-nums">{checkpointLabel(project.developmentVersion ?? project.releasedVersion, project.checkpoint)}</span>
           </div>
         </div>
         {!onOverview && action && !actionHere && <NextActionButton projectId={project.id} action={action} className="shrink-0" />}
@@ -88,6 +94,10 @@ function ProjectHeader({ project, onOverview }: { project: Project; onOverview: 
 export function ProjectLayout({ projectId, children }: { projectId: string; children: ReactNode }) {
   const project = useProject(projectId)
   const onOverview = Boolean(useMatchRoute()({ to: '/projects/$projectId', params: { projectId } }))
+  const view = useSelectedReleaseVersion(projectId, project.data?.releaseVersionId ?? null)
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  // Settings aren't per release version: they stay editable and carry no banner.
+  const onSettings = /\/settings(\/|$)/.test(pathname)
 
   if (project.isPending) {
     return <SkeletonPage />
@@ -104,8 +114,11 @@ export function ProjectLayout({ projectId, children }: { projectId: string; chil
 
   return (
     <ProjectContext value={project.data}>
-      <ProjectHeader project={project.data} onOverview={onOverview} />
-      {children}
+      <ReleaseViewContext value={onSettings ? currentView : view}>
+        <ProjectHeader project={project.data} onOverview={onOverview} readOnly={view.readOnly && !onSettings} />
+        {view.readOnly && view.version && !onSettings && <ReadOnlyBanner version={view.version} />}
+        {view.resolving ? <SkeletonPage /> : children}
+      </ReleaseViewContext>
     </ProjectContext>
   )
 }

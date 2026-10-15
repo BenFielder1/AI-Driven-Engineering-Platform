@@ -35,6 +35,12 @@ public static class JobTypes
     public const string Release = "release";
 
     /// <summary>
+    /// FR-70: the Repository Analyst summarises the codebase at a new version's base commit. Queued when a version starts
+    /// (FR-60); until the analyst exists its handler only logs and completes.
+    /// </summary>
+    public const string RepositoryAnalysis = "repository_analysis";
+
+    /// <summary>
     /// FR-47: fan out one notification-worthy event (or a gate reminder, FR-15): in-app notifications for its recipients,
     /// one delivery row per subscribed project channel, then a first delivery attempt. Queued in the event's transaction.
     /// </summary>
