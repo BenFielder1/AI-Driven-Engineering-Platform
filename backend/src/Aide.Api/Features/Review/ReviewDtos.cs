@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Aide.Domain.Artifacts;
 using Aide.Domain.Review;
 
 namespace Aide.Api.Features.Review;
@@ -76,3 +78,56 @@ public sealed record ComplianceTrendDto(decimal Threshold, IReadOnlyList<Complia
 
 /// <summary>The drift level and areas of the latest compliance report (FR-41, §4.7).</summary>
 public sealed record ComplianceDriftDto(DriftLevel DriftLevel, IReadOnlyList<DriftAreaDto> Areas, int Checkpoint, int Cycle);
+
+/// <summary>
+/// One review cycle in the Review page's cycle list (FR-56): cycle number, overall score against the threshold it was
+/// decided on, drift level, decision, date, the checkpoint it ran at and its release version. <c>id</c> is the report id:
+/// cycle numbers restart after a rollback, so one release version can list two reports of the same cycle.
+/// </summary>
+public sealed record ComplianceReportSummaryDto(
+    int Cycle,
+    decimal Score,
+    decimal Threshold,
+    DriftLevel Drift,
+    ReviewDecision Decision,
+    DateTimeOffset CreatedAt,
+    int Checkpoint,
+    Guid ReleaseVersionId,
+    Guid Id);
+
+/// <summary>
+/// An <c>[unchanged]</c> requirement the review found broken in an iteration (§4.13): the requirement id, the category it
+/// was reported under, what is broken and the evidence. Regressions carry no deterministic penalty.
+/// </summary>
+public sealed record RegressionDto(string RequirementId, ReviewCategory Category, string Description, string? Evidence);
+
+/// <summary>The optimisation plan a review cycle produced (FR-40): its artifact id, version and status.</summary>
+public sealed record ReportPlanDto(Guid ArtifactId, int Version, ArtifactStatus Status);
+
+/// <summary>
+/// The full compliance report of one review cycle (FR-56): the category breakdown, every violation with its evidence,
+/// the deterministic findings alone (<c>deterministicFindings</c>, the violations whose source is <c>deterministic</c>),
+/// missing features, drift areas, the decision and its <c>escalationReason</c>, regressions (§4.13), the external checks
+/// collected (check runs, preview deployment; schemaless, <c>null</c> when none), the optimisation plan it produced and
+/// <c>executionRunId</c>, the review-fix run that plan produced (the plan artifact id, see <c>ListExecutionRuns</c>).
+/// </summary>
+public sealed record ComplianceReportDetailDto(
+    Guid Id,
+    Guid ReleaseVersionId,
+    int Checkpoint,
+    int Cycle,
+    decimal OverallScore,
+    decimal Threshold,
+    IReadOnlyList<CategoryScoreDto> CategoryScores,
+    IReadOnlyList<ViolationDto> Violations,
+    IReadOnlyList<ViolationDto> DeterministicFindings,
+    IReadOnlyList<string> MissingFeatures,
+    DriftLevel DriftLevel,
+    IReadOnlyList<DriftAreaDto> DriftAreas,
+    ReviewDecision Decision,
+    EscalationReason? EscalationReason,
+    IReadOnlyList<RegressionDto> Regressions,
+    JsonElement? ExternalChecks,
+    ReportPlanDto? OptimizationPlan,
+    Guid? ExecutionRunId,
+    DateTimeOffset CreatedAt);

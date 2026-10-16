@@ -76,6 +76,12 @@ public static class EventTypes
     public const string ArtifactCorrupted = "ARTIFACT_CORRUPTED";
 
     /// <summary>
+    /// FR-58: a writer restored an older version as a new draft: <c>{artifactId, type, version, parentVersion,
+    /// restoredFromVersion, restoredFromArtifactId}</c>. Like <see cref="ArtifactCreated"/>, it tells Owners a draft awaits approval.
+    /// </summary>
+    public const string ArtifactRestored = "ARTIFACT_RESTORED";
+
+    /// <summary>
     /// FR-20 "integrity admin alert": raised with <see cref="ArtifactCorrupted"/> when a read finds a hash mismatch.
     /// There is no alerts table (§5), so the alert is this event (category <see cref="EventCategory.Integrity"/>),
     /// visible in the project feed and the admin event list.
@@ -161,7 +167,7 @@ public static class EventTypes
     {
         [EventCategory.Transition] = [PhaseChanged],
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
-        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted],
+        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored],
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],

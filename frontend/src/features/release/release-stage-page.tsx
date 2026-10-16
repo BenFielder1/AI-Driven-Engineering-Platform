@@ -6,6 +6,10 @@ import { useProjectState } from '../projects/projects-api'
 import { StartVersionButton } from '../versions/start-version-button'
 import { useReleaseVersionNames } from '../versions/version-label'
 import { VersionSummary } from '../versions/version-summary'
+import { IntegrationSlot } from '../stages/integration-slot'
+import { StageGates } from '../stages/stage-gates'
+import { StageHeader } from '../stages/stage-header'
+import { stageGates } from '../stages/stage-model'
 import { ReleaseHistory, ReleasePanel } from './release-panel'
 import { useReleases } from './release-api'
 
@@ -26,7 +30,8 @@ function PastReleases({ projectId, releaseVersionId }: { projectId: string; rele
 }
 
 /**
- * /projects/:id/release (FR-54 stage route): the release panel (FR-42, FR-43, FR-64) and, for Owners, Start new version
+ * /projects/:id/release (FR-55 stage page): the pre-release gate (decided in place), the release panel (FR-42, FR-43,
+ * FR-64: attempts, tag, pull request) and, for Owners, Start new version
  * (FR-60; disabled with the reason until the project is released and merged). Before the project reaches Release, an
  * empty state says what has to happen first. A past version (FR-62) shows its summary and release attempts, read-only.
  */
@@ -37,8 +42,8 @@ export function ReleaseStagePage() {
 
   if (readOnly && releaseVersionId && view.version) {
     return (
-      <div className="flex flex-col gap-5">
-        <h2 className="text-xl">Release</h2>
+      <section aria-labelledby="release-title" className="flex flex-col gap-5">
+        <StageHeader stage="release" />
         <VersionSummary version={view.version} />
         <section aria-labelledby="past-release-title" className="flex flex-col gap-2">
           <h3 id="past-release-title" className="font-semibold">
@@ -46,26 +51,39 @@ export function ReleaseStagePage() {
           </h3>
           <PastReleases projectId={project.id} releaseVersionId={releaseVersionId} />
         </section>
-      </div>
+      </section>
     )
   }
 
   if (state.isPending) {
-    return <LoadingState label="Loading release…" />
+    return (
+      <section aria-labelledby="release-title" className="flex flex-col gap-5">
+        <StageHeader stage="release" />
+        <LoadingState label="Loading release…" />
+      </section>
+    )
   }
   if (state.isError) {
-    return <ErrorState error={state.error} onRetry={() => void state.refetch()} title="The release couldn't load" />
+    return (
+      <section aria-labelledby="release-title" className="flex flex-col gap-5">
+        <StageHeader stage="release" />
+        <ErrorState error={state.error} onRetry={() => void state.refetch()} title="The release couldn't load" />
+      </section>
+    )
   }
 
   const s = state.data
   const started = s.phase === 'release' || s.latestRelease !== null
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 className="text-xl">Release</h2>
-        {can('startVersion') && <StartVersionButton projectId={project.id} state={s} />}
-      </div>
+    <section aria-labelledby="release-title" className="flex flex-col gap-5">
+      <StageHeader
+        stage="release"
+        awaitingApproval={s.phase === 'release' && s.pendingGates.some((g) => g.type === 'pre_release')}
+        actions={can('startVersion') ? <StartVersionButton projectId={project.id} state={s} /> : undefined}
+      />
+      <StageGates types={stageGates.release} />
       {started ? (
+        // The release panel holds the attempts, the tag and the pull request.
         <ReleasePanel projectId={project.id} state={s} canRelease={can('requestRelease')} />
       ) : (
         <EmptyState
@@ -75,6 +93,21 @@ export function ReleaseStagePage() {
           description="The release starts once review finds the build release-eligible and the project moves to Release."
         />
       )}
-    </div>
+      <IntegrationSlot
+        id="release-merge-readiness"
+        title="Merge readiness"
+        description="Whether the release pull request can merge (checks, reviews, conflicts) will show here once the GitHub integration reports it."
+      />
+      <IntegrationSlot
+        id="release-github-release"
+        title="GitHub Release"
+        description="The GitHub Release created for this version's tag will be linked here."
+      />
+      <IntegrationSlot
+        id="release-production-deployment"
+        title="Production deployment"
+        description="The production deployment of this version will show here once a deployment target is set."
+      />
+    </section>
   )
 }

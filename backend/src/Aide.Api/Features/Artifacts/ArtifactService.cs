@@ -75,25 +75,7 @@ public sealed partial class ArtifactService(
 
         var numbering = ArtifactRules.NewDraft(existing);
         var now = time.GetUtcNow();
-
-        if (numbering.SupersededVersions.Count > 0)
-        {
-            // §4.10, D-V2-3: only open drafts of the current release version are superseded; a closed version's drafts are
-            // history. Version numbers stay project-wide.
-            var drafts = await db.Artifacts
-                .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == project.CurrentReleaseVersionId && a.Type == type && numbering.SupersededVersions.Contains(a.Version))
-                .ToListAsync(cancellationToken);
-            foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
-            {
-                draft.Status = ArtifactStatus.Superseded;
-                db.AddEvent(
-                    EventTypes.ArtifactSuperseded,
-                    projectId,
-                    new { artifactId = draft.Id, type, version = draft.Version, supersededByVersion = numbering.Version },
-                    actor,
-                    now);
-            }
-        }
+        await SupersedeOpenDraftsAsync(project, type, numbering, actor, now, cancellationToken);
 
         var artifact = new Artifact
         {
@@ -126,6 +108,121 @@ public sealed partial class ArtifactService(
 
         LogDraftCreated(logger, projectId, type, artifact.Version);
         return Result.Success(artifact);
+    }
+
+    /// <summary>
+    /// FR-58, D-V2-15: restore <paramref name="version"/> of <paramref name="type"/> as a new draft with its content and
+    /// hash (version = latest + 1, parent = latest, <c>restored_from_version</c> = the chosen version). The chosen version
+    /// is re-hashed first (FR-20). <see cref="RestoreRules"/> decides; open drafts of the release version in development
+    /// are superseded as for any new draft, <c>ARTIFACT_RESTORED</c> is recorded, and the draft then follows the normal
+    /// approval rules (FR-17).
+    /// </summary>
+    public async Task<Result<Artifact>> RestoreAsync(
+        Guid projectId, ArtifactType type, int version, Guid userId, string actor, CancellationToken cancellationToken)
+    {
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
+        if (project is null)
+        {
+            return ProjectNotFound<Artifact>();
+        }
+
+        var chosen = await db.Artifacts.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ProjectId == projectId && a.Type == type && a.Version == version, cancellationToken);
+        if (chosen is null)
+        {
+            return Result.Failure<Artifact>(new DomainError(ErrorCodes.NotFound, $"Version {version} of the {type.ToWire()} was not found."));
+        }
+
+        var chosenIntegrity = await integrity.CheckAsync(chosen, cancellationToken);
+        var existing = await db.Artifacts.AsNoTracking()
+            .Where(a => a.ProjectId == projectId && a.Type == type)
+            .Select(a => new ArtifactVersion(a.Version, a.Status))
+            .ToListAsync(cancellationToken);
+        var decided = RestoreRules.Check(new RestoreFacts(
+            type,
+            project.CurrentPhase,
+            project.Status,
+            project.DevelopmentVersion is null ? null : project.CurrentReleaseVersionId,
+            chosen.ReleaseVersionId,
+            chosen.Version,
+            chosenIntegrity,
+            existing.Max(a => a.Version)));
+        if (decided.IsFailure)
+        {
+            return Result.Failure<Artifact>(decided.Error!);
+        }
+
+        var numbering = ArtifactRules.NewDraft(existing);
+        var now = time.GetUtcNow();
+        await SupersedeOpenDraftsAsync(project, type, numbering, actor, now, cancellationToken);
+
+        var artifact = new Artifact
+        {
+            ProjectId = projectId,
+            Type = type,
+            Version = decided.Value.Version,
+            ParentVersion = decided.Value.ParentVersion,
+            RestoredFromVersion = decided.Value.RestoredFromVersion,
+            Content = chosen.Content,
+            ContentHash = chosen.ContentHash,
+            Status = ArtifactStatus.Draft,
+            CheckpointAtCreation = project.Checkpoint,
+            ReleaseVersionId = chosen.ReleaseVersionId,
+            CreatedByUserId = userId,
+            CreatedAt = now,
+        };
+        db.Artifacts.Add(artifact);
+        db.AddEvent(
+            EventTypes.ArtifactRestored,
+            projectId,
+            new
+            {
+                artifactId = artifact.Id,
+                type,
+                version = artifact.Version,
+                parentVersion = artifact.ParentVersion,
+                restoredFromVersion = artifact.RestoredFromVersion,
+                restoredFromArtifactId = chosen.Id,
+            },
+            actor,
+            now);
+        project.UpdatedAt = now;
+
+        var saved = await LifecyclePersistence.SaveAsync(db, cancellationToken);
+        if (saved.IsFailure)
+        {
+            return Result.Failure<Artifact>(saved.Error!);
+        }
+
+        LogRestored(logger, projectId, type, chosen.Version, artifact.Version);
+        return Result.Success(artifact);
+    }
+
+    /// <summary>
+    /// §4.10, D-V2-3: a new draft supersedes the open drafts of the current release version only; a closed version's
+    /// drafts are history. Version numbers stay project-wide.
+    /// </summary>
+    private async Task SupersedeOpenDraftsAsync(
+        Project project, ArtifactType type, NewDraftPlan numbering, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (numbering.SupersededVersions.Count == 0)
+        {
+            return;
+        }
+
+        var drafts = await db.Artifacts
+            .Where(a => a.ProjectId == project.Id && a.ReleaseVersionId == project.CurrentReleaseVersionId && a.Type == type && numbering.SupersededVersions.Contains(a.Version))
+            .ToListAsync(cancellationToken);
+        foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
+        {
+            draft.Status = ArtifactStatus.Superseded;
+            db.AddEvent(
+                EventTypes.ArtifactSuperseded,
+                project.Id,
+                new { artifactId = draft.Id, type, version = draft.Version, supersededByVersion = numbering.Version },
+                actor,
+                now);
+        }
     }
 
     /// <summary>
@@ -487,6 +584,9 @@ public sealed partial class ArtifactService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: draft {ArtifactType} v{Version} created")]
     private static partial void LogDraftCreated(ILogger logger, Guid projectId, ArtifactType artifactType, int version);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: {ArtifactType} v{RestoredFromVersion} restored as draft v{Version}")]
+    private static partial void LogRestored(ILogger logger, Guid projectId, ArtifactType artifactType, int restoredFromVersion, int version);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: {ArtifactType} v{Version} approved ({Invalidated} artifacts invalidated, {Reset} steps reset, fallback {Fallback})")]
     private static partial void LogApproved(ILogger logger, Guid projectId, ArtifactType artifactType, int version, int invalidated, int reset, Phase? fallback);

@@ -1,20 +1,13 @@
 import { Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 
-import { Badge, type BadgeTone } from '../../components/ui/badge'
+import { Badge } from '../../components/ui/badge'
+import { stepTones } from './step-tones'
 import { guardianCheckLabels, stepStatusLabels } from '../projects/labels'
 import { RelativeTime } from '../projects/relative-time'
 import type { Gate } from '../gates/gates-api'
-import { MAX_STEP_ATTEMPTS, type ExecutionStep, type StepStatus, type StepViolation } from './execution-api'
+import { MAX_STEP_ATTEMPTS, type ExecutionStep, type StepViolation } from './execution-api'
 
-const stepTones: Record<StepStatus, BadgeTone> = {
-  pending: 'neutral',
-  in_progress: 'info',
-  completed: 'success',
-  rejected: 'danger',
-  blocked: 'warning',
-  invalidated: 'warning',
-}
 
 const plural = (n: number, one: string, many = `${one}s`) => `${String(n)} ${n === 1 ? one : many}`
 
@@ -48,7 +41,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 /** FR-34: the short SHA, linked to the commit when the API gives its URL (GitHub), else plain text with a copy button. */
-function Commit({ sha, url }: { sha: string; url: string | null }) {
+export function Commit({ sha, url }: { sha: string; url: string | null }) {
   const short = sha.slice(0, 7)
   return url ? (
     <a href={url} target="_blank" rel="noreferrer" className="font-mono text-primary underline" title={sha}>
@@ -65,7 +58,7 @@ function Commit({ sha, url }: { sha: string; url: string | null }) {
   )
 }
 
-function ViolationList({ title, violations }: { title: string; violations: StepViolation[] }) {
+export function ViolationList({ title, violations }: { title: string; violations: StepViolation[] }) {
   return (
     <div className="flex flex-col gap-1">
       <h5 className="text-sm font-semibold">{title}</h5>
@@ -144,12 +137,15 @@ export function ExecutionStepItem({
   step,
   current,
   escalationGate,
+  extra,
 }: {
   projectId: string
   step: ExecutionStep
   current: boolean
   /** The pending escalation gate created for this step when it was blocked (FR-33), if listed. */
   escalationGate: Gate | null
+  /** FR-57: the run's view of the step (specialist, produced files, attempt history). */
+  extra?: ReactNode
 }) {
   const titleId = `step-${String(step.number)}-title`
   const violations = step.violations ?? []
@@ -272,6 +268,7 @@ export function ExecutionStepItem({
           </table>
         </details>
       )}
+      {extra}
     </li>
   )
 }

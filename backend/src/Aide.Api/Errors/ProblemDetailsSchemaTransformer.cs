@@ -33,6 +33,11 @@ internal sealed class ProblemDetailsSchemaTransformer : IOpenApiSchemaTransforme
             Items = new OpenApiSchema { Type = JsonSchemaType.String },
             Description = "Individual reasons, when there are several.",
         };
+        schema.Properties[ApiProblems.ReasonKey] = new OpenApiSchema
+        {
+            Type = JsonSchemaType.String,
+            Description = "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing.",
+        };
         return Task.CompletedTask;
     }
 }

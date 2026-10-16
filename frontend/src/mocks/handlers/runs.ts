@@ -68,6 +68,12 @@ export function seedRun(project: StoredProject, overrides: Partial<Run> = {}): R
     completedAt: finished ? new Date(runClock + 48_250).toISOString() : null,
     output: status === 'succeeded' ? '# Inventory tracker: technical specification\n\n## 1. Overview\nTrack stock levels.' : null,
     outputTruncated: false,
+    checkpoint: project.checkpoint,
+    agentKey: null,
+    presetId: null,
+    presetVersion: null,
+    toolCallCount: 0,
+    credentialLabel: null,
     ...overrides,
   }
   project.runs.push(run)

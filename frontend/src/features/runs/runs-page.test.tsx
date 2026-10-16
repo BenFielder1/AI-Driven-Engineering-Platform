@@ -64,7 +64,20 @@ describe('Agent runs page (FR-23)', () => {
 
     expect(screen.getByText('Showing 1–3 of 3 runs')).toBeInTheDocument()
     const headers = within(table()).getAllByRole('columnheader').map((h) => h.textContent)
-    expect(headers).toEqual(['Agent', 'Model', 'Provider', 'Tokens in / out', 'Est. cost', 'Duration', 'Status', 'Started'])
+    expect(headers).toEqual([
+      'Agent',
+      'Specialist',
+      'Model',
+      'Provider',
+      'Credential',
+      'Version',
+      'Tokens in / out',
+      'Tool calls',
+      'Est. cost',
+      'Duration',
+      'Status',
+      'Started',
+    ])
     expect(rows().map((r) => within(r).getByRole('button').textContent)).toEqual([
       expect.stringMatching(/^Plan generator/),
       expect.stringMatching(/^Spec generator/),
@@ -85,7 +98,8 @@ describe('Agent runs page (FR-23)', () => {
     const running = rowFor('Plan generator')
     expect(within(running).getAllByText('Running…')).toHaveLength(2)
     expect(within(running).getByText('Fake (testing)')).toBeInTheDocument()
-    expect(within(running).getAllByText('—')).toHaveLength(2)
+    // Tokens and cost, plus the empty specialist and credential cells of a base-agent run with no recorded key.
+    expect(within(running).getAllByText('—')).toHaveLength(4)
   })
 
   it('FR23_ filter: the agent filter shows only that agent and is kept in the URL', async () => {
@@ -353,5 +367,35 @@ describe('Agent runs page (FR-23)', () => {
     await waitFor(() => {
       expect(within(rowFor('Spec generator')).getByText('Succeeded')).toBeInTheDocument()
     })
+  })
+})
+
+describe('Agent runs page (SPEC §7.2, v2 columns)', () => {
+  it('FR63_FR71_runs_table_shows_specialist_credential_tool_calls_and_version_checkpoint', async () => {
+    const project = seedProjectAs('viewer', (p) => {
+      p.checkpoint = 4
+      seedRun(p, {
+        agent: 'code_generator',
+        agentKey: 'frontend-engineer',
+        toolCallCount: 12,
+        credentialLabel: 'Team Anthropic key',
+        checkpoint: 4,
+      })
+    })
+    const { user } = await openRuns(project)
+
+    const head = within(table()).getAllByRole('columnheader').map((h) => h.textContent)
+    expect(head).toEqual(expect.arrayContaining(['Specialist', 'Credential', 'Version', 'Tool calls']))
+    const row = rowFor('Code generator')
+    expect(row).toHaveTextContent('frontend-engineer')
+    expect(row).toHaveTextContent('Team Anthropic key')
+    expect(within(row).getByTestId('run-version')).toHaveTextContent('0.1.0 · checkpoint 4')
+    expect(row).toHaveTextContent('12')
+
+    await user.click(within(row).getByRole('button', { name: /^Code generator run/ }))
+    const sheet = await screen.findByRole('dialog', { name: 'Code generator run' })
+    expect(within(sheet).getByText('Specialist').nextElementSibling).toHaveTextContent('frontend-engineer')
+    expect(within(sheet).getByText('Credential').nextElementSibling).toHaveTextContent('Team Anthropic key')
+    expect(within(sheet).getByText('Repository tool calls').nextElementSibling).toHaveTextContent('12')
   })
 })

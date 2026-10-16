@@ -49,12 +49,12 @@ const planningWithGate = state({
 })
 
 describe('FR-54: next action', () => {
-  it('FR54_next_action: planning + pending plan_approval + Owner → "Approve plan" on the pending gates', () => {
+  it('FR54_next_action: planning + pending plan_approval + Owner → "Approve plan" on the Planning page (FR-55)', () => {
     expect(nextAction(planningWithGate, as('owner'))).toMatchObject({
       key: 'decide_gate',
       label: 'Approve plan',
-      to: '/projects/$projectId',
-      hash: 'pending-gates',
+      to: '/projects/$projectId/planning',
+      hash: 'stage-gates',
     })
     expect(nextAction(planningWithGate, as('owner'))?.disabledReason).toBeUndefined()
   })
@@ -97,11 +97,11 @@ describe('FR-54: next action', () => {
     expect(nextAction(state(), as('contributor'))).toMatchObject({ key: 'refine', to: '/projects/$projectId/refinement' })
     const locked = state({ artifacts: artifacts({ project_request: { latest: 'locked' } }) })
     expect(nextAction(locked, as('contributor'))).toMatchObject({ key: 'advance', label: 'Advance to Specification' })
-    // FR54_next_action: a request draft is approved on its artifact page (the Refinement page has no approve control).
+    // FR-55: a request draft is approved in place on the Refinement page.
     const draft = state({ artifacts: artifacts({ project_request: { latest: 'draft' } }) })
     const approve = nextAction(draft, as('owner'))
-    expect(approve).toMatchObject({ key: 'approve_artifact', label: 'Approve request', params: { type: 'project_request' } })
-    expect(approve && actionHref(approve, 'p1')).toBe('/projects/p1/artifacts/project_request')
+    expect(approve).toMatchObject({ key: 'approve_artifact', label: 'Approve request', hash: 'stage-artifact' })
+    expect(approve && actionHref(approve, 'p1')).toBe('/projects/p1/refinement')
   })
 
   it('FR54_next_action: a locked plan in planning → "Advance to Execution" (the same label as the Overview button)', () => {
@@ -139,7 +139,7 @@ describe('FR-54: next action', () => {
       state({ phase: 'review', review: { cycle: 1, maxCycles: 3, latestScore: 0.8, latestDecision: 'review_required', driftLevel: 'low', status: 'completed' }, artifacts: artifacts({ optimization_plan: { latest: 'draft' } }) }),
       as('owner'),
     )
-    expect(optimisation && actionHref(optimisation, 'p1')).toBe('/projects/p1/artifacts/optimization_plan')
+    expect(optimisation && actionHref(optimisation, 'p1')).toBe('/projects/p1/review')
     const failed = state({
       phase: 'release',
       status: 'releasing',

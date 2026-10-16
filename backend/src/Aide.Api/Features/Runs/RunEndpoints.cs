@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using Aide.Api.Agents;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
@@ -99,6 +100,10 @@ public static class RunEndpoints
                 Provider = r.Provider,
                 Model = r.Model,
                 PromptVersion = r.PromptVersion,
+                AgentKey = r.AgentKey,
+                PresetId = r.PresetId,
+                PresetVersion = r.PresetVersion,
+                ToolCalls = r.ToolCalls,
                 InputArtifacts = r.InputArtifacts,
                 UserFeedback = r.UserFeedback,
                 Status = r.Status,
@@ -112,7 +117,8 @@ public static class RunEndpoints
                 CompletedAt = r.CompletedAt,
             })
             .ToListAsync(cancellationToken);
-        return TypedResults.Ok(new PagedResult<AgentRunDto>([.. runs.Select(ToDto)], page, limit, total));
+        var checkpoints = await CheckpointsAsync(db, [.. runs.Select(r => r.Id)], cancellationToken);
+        return TypedResults.Ok(new PagedResult<AgentRunDto>([.. runs.Select(r => ToDto(r, checkpoints.GetValueOrDefault(r.Id)))], page, limit, total));
     }
 
     private static async Task<Results<Ok<AgentRunDetailDto>, ProblemHttpResult>> GetRun(
@@ -136,15 +142,54 @@ public static class RunEndpoints
 
         var text = AgentRunner.ReadOutput(run.Output)?.Text ?? run.Output;
         var truncated = text is { Length: > MaxOutputLength };
-        var r = ToDto(run);
+        var r = ToDto(run, (await CheckpointsAsync(db, [run.Id], cancellationToken)).GetValueOrDefault(run.Id));
         return TypedResults.Ok(new AgentRunDetailDto(
             r.Id, r.ReleaseVersionId, r.Agent, r.Phase, r.StepId, r.Provider, r.Model, r.PromptVersion, r.InputArtifacts, r.UserFeedback, r.Status,
             r.Attempts, r.InputTokens, r.OutputTokens, r.CostEstimate, r.DurationMs, r.Error, r.CreatedAt, r.CompletedAt,
             truncated ? text![..MaxOutputLength] : text,
-            truncated));
+            truncated,
+            r.Checkpoint,
+            r.AgentKey,
+            r.PresetId,
+            r.PresetVersion,
+            r.ToolCallCount,
+            r.CredentialLabel));
     }
 
-    private static AgentRunDto ToDto(AgentRun r) => new(
+    /// <summary>
+    /// The checkpoint each run ran at, derived on read (no column): that of the artifact the run produced, else of the
+    /// compliance report it wrote. Runs that produced neither (e.g. Code Generator step runs; steps carry no checkpoint)
+    /// are left out and read as <c>null</c>. Two queries for any number of runs.
+    /// </summary>
+    public static async Task<Dictionary<Guid, int?>> CheckpointsAsync(AideDbContext db, IReadOnlyList<Guid> runIds, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(runIds);
+        if (runIds.Count == 0)
+        {
+            return [];
+        }
+
+        var fromArtifacts = await db.Artifacts.AsNoTracking()
+            .Where(a => a.AgentRunId != null && runIds.Contains(a.AgentRunId.Value))
+            .GroupBy(a => a.AgentRunId!.Value)
+            .Select(g => new { RunId = g.Key, Checkpoint = g.Min(a => a.CheckpointAtCreation) })
+            .ToListAsync(cancellationToken);
+        var fromReports = await db.ComplianceReports.AsNoTracking()
+            .Where(r => runIds.Contains(r.AgentRunId))
+            .GroupBy(r => r.AgentRunId)
+            .Select(g => new { RunId = g.Key, Checkpoint = g.Min(r => r.Checkpoint) })
+            .ToListAsync(cancellationToken);
+        var result = fromReports.ToDictionary(x => x.RunId, x => (int?)x.Checkpoint);
+        foreach (var produced in fromArtifacts)
+        {
+            result[produced.RunId] = produced.Checkpoint;
+        }
+
+        return result;
+    }
+
+    private static AgentRunDto ToDto(AgentRun r, int? checkpoint) => new(
         r.Id,
         r.ReleaseVersionId,
         r.Agent,
@@ -163,5 +208,30 @@ public static class RunEndpoints
         r.DurationMs,
         r.Error,
         r.CreatedAt,
-        r.CompletedAt);
+        r.CompletedAt,
+        checkpoint,
+        r.AgentKey,
+        r.PresetId,
+        r.PresetVersion,
+        ToolCallCount(r.ToolCalls),
+        CredentialLabel: null);
+
+    /// <summary>FR-71: the number of entries in the run's tool-call JSON array (0 when it isn't one).</summary>
+    public static int ToolCallCount(string? toolCalls)
+    {
+        if (string.IsNullOrWhiteSpace(toolCalls))
+        {
+            return 0;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(toolCalls);
+            return doc.RootElement.ValueKind == JsonValueKind.Array ? doc.RootElement.GetArrayLength() : 0;
+        }
+        catch (JsonException)
+        {
+            return 0;
+        }
+    }
 }

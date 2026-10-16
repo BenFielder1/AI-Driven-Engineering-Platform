@@ -6,6 +6,7 @@ import { chartTheme, cssVar } from '../../components/charts/chart-theme'
 import { useChartWidth } from '../../components/charts/use-chart-width'
 import { ChartCard, type ChartTableData } from '../../components/shared/chart-card'
 import { driftLevelLabels, formatPercent, reviewDecisionLabels } from '../projects/labels'
+import { reportKey } from './report-key'
 import type { ComplianceTrend, ComplianceTrendPoint } from './review-api'
 
 type Decision = NonNullable<ComplianceTrendPoint['decision']>
@@ -19,8 +20,7 @@ const decisionColor: Record<Decision, string> = {
 const noDecisionColor = cssVar('chart-1')
 
 /** A stable key per trend point: cycle numbers restart after a rollback, so the cycle alone can repeat. */
-const pointKey = (p: { checkpoint: number; cycle: number; createdAt: string }) =>
-  `${String(p.checkpoint)}-${String(p.cycle)}-${p.createdAt}`
+const pointKey = reportKey
 
 interface Point extends ComplianceTrendPoint {
   key: string
@@ -34,7 +34,14 @@ interface DotProps {
   payload?: Point
 }
 
-function DecisionDot({ cx, cy, payload }: DotProps) {
+/** A point coloured by decision; the selected cycle's point is larger and ringed (FR-56). Clicking selects it. */
+function DecisionDot({
+  cx,
+  cy,
+  payload,
+  selected,
+  onSelect,
+}: DotProps & { selected: boolean; onSelect?: (point: ComplianceTrendPoint) => void }) {
   if (cx === undefined || cy === undefined || !payload) {
     return null
   }
@@ -43,12 +50,21 @@ function DecisionDot({ cx, cy, payload }: DotProps) {
       data-cycle={payload.cycle}
       data-meets={payload.meets}
       data-decision={payload.decision ?? 'none'}
+      data-selected={selected}
       cx={cx}
       cy={cy}
-      r={5}
+      r={selected ? 8 : 5}
       fill={payload.decision ? decisionColor[payload.decision] : noDecisionColor}
-      stroke={cssVar('background')}
-      strokeWidth={2}
+      stroke={selected ? cssVar('foreground') : cssVar('background')}
+      strokeWidth={selected ? 3 : 2}
+      style={onSelect ? { cursor: 'pointer' } : undefined}
+      onClick={
+        onSelect
+          ? () => {
+              onSelect(payload)
+            }
+          : undefined
+      }
     />
   )
 }
@@ -59,7 +75,19 @@ function DecisionDot({ cx, cy, payload }: DotProps) {
  * is a dashed reference line, a changing one a dashed step line. The chart is a described image (its text names every
  * point); "View as table" swaps in the same data, threshold, drift and decision included.
  */
-export function ComplianceTrendChart({ trend, headingLevel = 3 }: { trend: ComplianceTrend; headingLevel?: 2 | 3 }) {
+export function ComplianceTrendChart({
+  trend,
+  headingLevel = 3,
+  selectedKey = null,
+  onSelectPoint,
+}: {
+  trend: ComplianceTrend
+  headingLevel?: 2 | 3
+  /** FR-56: the report on screen (its `reportKey`), highlighted. */
+  selectedKey?: string | null
+  /** FR-56: clicking a point selects its cycle's report (the cycles table is the keyboard path). */
+  onSelectPoint?: (point: ComplianceTrendPoint) => void
+}) {
   const titleId = useId()
   const descId = useId()
   const { setElement, width } = useChartWidth()
@@ -78,6 +106,8 @@ export function ComplianceTrendChart({ trend, headingLevel = 3 }: { trend: Compl
         .map((p) => `Cycle ${String(p.cycle)}: ${formatPercent(p.overallScore)} against a ${formatPercent(p.threshold)} threshold`)
         .join(', ')}.`
     : `${series.map((p) => `Cycle ${String(p.cycle)}: ${formatPercent(p.overallScore)}`).join(', ')}. Threshold ${formatPercent(threshold)}.`
+  const selectedPoint = selectedKey === null ? undefined : points.find((p) => p.key === selectedKey)
+  const selectedText = selectedPoint ? ` Cycle ${String(selectedPoint.cycle)} is selected.` : ''
 
   const table: ChartTableData = {
     caption: 'Compliance score by review cycle, oldest first',
@@ -124,6 +154,7 @@ export function ComplianceTrendChart({ trend, headingLevel = 3 }: { trend: Compl
         </span>
         <span id={descId} className="sr-only">
           {description}
+          {selectedText}
         </span>
         <div ref={setElement} aria-hidden className="w-full overflow-hidden" style={{ height: chartTheme.height }}>
           <LineChart
@@ -182,7 +213,14 @@ export function ComplianceTrendChart({ trend, headingLevel = 3 }: { trend: Compl
                 strokeWidth={2}
                 dot={(props) => {
                 const dot = props as DotProps
-                return <DecisionDot key={dot.payload?.key} {...dot} />
+                return (
+                  <DecisionDot
+                    key={dot.payload?.key}
+                    {...dot}
+                    selected={dot.payload?.key === selectedKey}
+                    onSelect={onSelectPoint}
+                  />
+                )
               }}
                 activeDot={{ r: 6 }}
                 isAnimationActive={false}

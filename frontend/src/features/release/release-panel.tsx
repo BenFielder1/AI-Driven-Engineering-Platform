@@ -217,10 +217,10 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
   return (
     <section
       id="release"
-      aria-labelledby="release-title"
+      aria-labelledby="release-panel-title"
       className="flex scroll-mt-4 flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4"
     >
-      <h2 id="release-title" className="text-lg">
+      <h2 id="release-panel-title" className="text-lg">
         Release
       </h2>
       {body}

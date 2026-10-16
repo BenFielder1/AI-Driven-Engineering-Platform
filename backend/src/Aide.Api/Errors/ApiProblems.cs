@@ -13,6 +13,13 @@ public static class ApiProblems
     public const string ErrorCodeKey = "errorCode";
     public const string TraceIdKey = "traceId";
     public const string DetailsKey = "details";
+    public const string ReasonKey = "reason";
+
+    /// <summary>
+    /// The <c>errorCode</c> of a 501 contract stub: the endpoint is in the contract (so the client can be built against
+    /// it) but not implemented yet. Not in <see cref="ErrorCodes"/>: no implemented endpoint returns it.
+    /// </summary>
+    public const string NotImplementedCode = "NOT_IMPLEMENTED";
 
     /// <summary>A ProblemDetails result for a domain error (status from the domain's HTTP status map).</summary>
     public static ProblemHttpResult FromError(DomainError error)
@@ -24,6 +31,11 @@ public static class ApiProblems
             extensions[DetailsKey] = error.Details;
         }
 
+        if (error.Reason is not null)
+        {
+            extensions[ReasonKey] = error.Reason;
+        }
+
         return TypedResults.Problem(
             title: error.Message,
             statusCode: StatusFor(error.Code),
@@ -31,6 +43,13 @@ public static class ApiProblems
     }
 
     public static ProblemHttpResult Of(string code, string title) => FromError(new DomainError(code, title));
+
+    /// <summary>501 for an endpoint whose contract is committed but whose behaviour isn't built yet.</summary>
+    public static ProblemHttpResult NotImplemented(string title = "This endpoint is not implemented yet.") =>
+        TypedResults.Problem(
+            title: title,
+            statusCode: StatusCodes.Status501NotImplemented,
+            extensions: new Dictionary<string, object?> { [ErrorCodeKey] = NotImplementedCode });
 
     public static ProblemHttpResult NotFound(string title = "The resource was not found.") => Of(ErrorCodes.NotFound, title);
 

@@ -43,7 +43,7 @@ describe('Refinement page (FR-27)', () => {
     const project = seedInRefinement('contributor')
     const { user, live } = await openRefinement(project)
 
-    expect(screen.getByText('No draft yet')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'No project request yet' })).toBeInTheDocument()
     expect(screen.getByText(project.idea)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Start refinement' }))
 
@@ -57,7 +57,7 @@ describe('Refinement page (FR-27)', () => {
 
     const article = await draftArticle(1)
     expect(within(article).getByRole('heading', { name: 'Inventory tracker' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Current draft: v1' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Project request' })).toHaveTextContent('v1')
     expect(screen.getByLabelText('Who uses the tracker?')).toHaveValue('')
     expect(screen.getByText('Shapes the roles.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Run another round' })).toBeInTheDocument()

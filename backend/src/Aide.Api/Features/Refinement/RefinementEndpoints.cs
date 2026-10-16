@@ -1,8 +1,10 @@
 using Aide.Api.Auth;
 using Aide.Api.Errors;
+using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
+using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Aide.Api.Features.Refinement;
@@ -22,10 +24,10 @@ public static class RefinementEndpoints
 
         group.MapGet("/", GetRefinement)
             .WithName("GetRefinement")
-            .WithSummary("The refinement state (members): the latest project request version, the latest round with its status, and the clarifying questions of the latest completed round with any answers already given.")
+            .WithSummary("The refinement state of a release version (default: the version in development, else the latest released), members: its latest project request version, its latest round with its status, and the clarifying questions of its latest completed round with any answers already given.")
             .Produces<RefinementDto>()
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project."));
+            .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or the release version in this project."));
 
         group.MapPost("/run", StartRefinement)
             .WithName("StartRefinement")
@@ -48,7 +50,9 @@ public static class RefinementEndpoints
         Guid id,
         IProjectAccess access,
         RefinementService refinement,
-        CancellationToken cancellationToken)
+        AideDbContext db,
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -56,7 +60,13 @@ public static class RefinementEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        return TypedResults.Ok(await refinement.GetAsync(id, cancellationToken));
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
+        return TypedResults.Ok(await refinement.GetAsync(id, cancellationToken, scope.Value));
     }
 
     private static async Task<Results<Accepted<RefinementRoundDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> StartRefinement(

@@ -13,7 +13,7 @@ import {
   llmProviderLabels,
   phaseLabels,
 } from '../projects/labels'
-import { useReleaseVersionNames } from '../versions/version-label'
+import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
 import { RunStatusBadge } from './run-badges'
 import { describeRunError, formatPromptVersion, isUnfinished } from './run-format'
 import { useRun, type AgentRun } from './runs-api'
@@ -47,8 +47,16 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
           <RunStatusBadge status={run.status} />
         </Row>
         <Row term="Agent">{agentKindLabels[run.agent]}</Row>
+        {run.agentKey && <Row term="Specialist">{run.agentKey}</Row>}
         <Row term="Phase">{phaseLabels[run.phase]}</Row>
-        {versionName && <Row term="Release version">{versionName}</Row>}
+        {run.checkpoint !== null ? (
+          <Row term="Release version">{checkpointLabel(versionName, run.checkpoint)}</Row>
+        ) : (
+          versionName && <Row term="Release version">{versionName}</Row>
+        )}
+        {run.presetId && (
+          <Row term="Preset">{run.presetVersion ? `${run.presetId} ${run.presetVersion}` : run.presetId}</Row>
+        )}
         {run.stepId && (
           <Row term="Execution step">
             <code className="text-xs">{run.stepId}</code>
@@ -59,7 +67,9 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
           <code>{run.model}</code>
         </Row>
         <Row term="Prompt template">{`${agentKindLabels[run.agent]} ${formatPromptVersion(run.promptVersion)}`}</Row>
+        <Row term="Credential">{run.credentialLabel ?? 'Not recorded'}</Row>
         <Row term="Attempts">{run.attempts}</Row>
+        <Row term="Repository tool calls">{formatNumber(run.toolCallCount)}</Row>
         <Row term="Input tokens">{unfinished ? 'Not known yet' : formatNumber(run.inputTokens)}</Row>
         <Row term="Output tokens">{unfinished ? 'Not known yet' : formatNumber(run.outputTokens)}</Row>
         <Row term="Total tokens">{unfinished ? 'Not known yet' : formatNumber(run.inputTokens + run.outputTokens)}</Row>

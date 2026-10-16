@@ -54,12 +54,13 @@ describe('FR-54: project header (stage stepper, next action)', () => {
     expect(within(nav).getByRole('link', { name: /^Release/ })).toHaveAttribute('href', `/projects/${project.id}/release`)
 
     const action = await screen.findByRole('link', { name: 'Approve plan' })
-    expect(action).toHaveAttribute('href', `/projects/${project.id}#pending-gates`)
+    // FR-55: the plan gate is decided in place on the Planning stage page.
+    expect(action).toHaveAttribute('href', `/projects/${project.id}/planning#stage-gates`)
     await userEvent.setup().click(action)
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe(`/projects/${project.id}`)
+      expect(router.state.location.pathname).toBe(`/projects/${project.id}/planning`)
     })
-    expect(router.state.location.hash).toBe('pending-gates')
+    expect(router.state.location.hash).toBe('stage-gates')
   })
 
   it('FR54_header: a Contributor sees the step disabled with the reason; a Viewer sees no action', async () => {

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { ProjectRole } from '../../lib/permissions'
 import { contextualErrorMessages } from '../../lib/errors'
-import { nextId } from '../../mocks/handlers/auth'
+import { seedArtifact } from '../../mocks/handlers/artifacts'
 import type { StoredProject } from '../../mocks/handlers/projects'
 import { categoryScores, seedComplianceReport, seedReviewPhase } from '../../mocks/handlers/review'
 import { seedProjectAs } from '../../test/artifacts'
@@ -46,7 +46,8 @@ describe('Review page (FR-38–FR-41)', () => {
     const trend = region('Compliance trend')
     const chart = within(trend).getByRole('img', { name: /Compliance score by review cycle/ })
     expect(chart).toHaveAccessibleName(
-      'Compliance score by review cycle Cycle 1: 82%, Cycle 2: 86%, Cycle 3: 93%. Threshold 90%.',
+      // FR-56: the latest cycle is selected by default.
+      'Compliance score by review cycle Cycle 1: 82%, Cycle 2: 86%, Cycle 3: 93%. Threshold 90%. Cycle 3 is selected.',
     )
     expect([...chart.querySelectorAll('circle[data-cycle]')].map((c) => c.getAttribute('data-cycle'))).toEqual(['1', '2', '3'])
     // SPEC 7.1: points are coloured by decision.
@@ -85,7 +86,7 @@ describe('Review page (FR-38–FR-41)', () => {
     const trend = region('Compliance trend')
     const chart = within(trend).getByRole('img', { name: /Compliance score by review cycle/ })
     expect(chart).toHaveAccessibleName(
-      'Compliance score by review cycle Cycle 1: 86% against a 85% threshold, Cycle 2: 88% against a 90% threshold.',
+      'Compliance score by review cycle Cycle 1: 86% against a 85% threshold, Cycle 2: 88% against a 90% threshold. Cycle 2 is selected.',
     )
     // A changing threshold is drawn as a dashed step line, and each point is judged against its own report's threshold.
     expect(chart.querySelector('.recharts-line-curve[stroke-dasharray]')).not.toBeNull()
@@ -267,9 +268,8 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
       seedComplianceReport(p, {
         categoryScores: categoryScores(0.82),
         decision: 'review_required',
-        optimizationPlanArtifactId: nextId(),
+        optimizationPlanArtifactId: seedArtifact(p, { type: 'optimization_plan', content: '# Optimisation plan' }).id,
       })
-      p.state.artifacts.push({ type: 'optimization_plan', latestVersion: 1, latestStatus: 'draft', currentLockedVersion: null })
     })
     await openReview(project)
 
@@ -279,7 +279,7 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
     expect(within(latest).getByText(/An Owner must approve it before execution re-enters/)).toBeInTheDocument()
     expect(within(latest).getByRole('link', { name: 'Open the optimisation plan' })).toHaveAttribute(
       'href',
-      `/projects/${project.id}/artifacts/optimization_plan`,
+      `/projects/${project.id}/artifacts/optimization_plan?version=1`,
     )
   })
 
@@ -306,9 +306,8 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
         categoryScores: categoryScores(0.7),
         decision: 'escalation_required',
         decisionReason: 'low_score',
-        optimizationPlanArtifactId: nextId(),
+        optimizationPlanArtifactId: seedArtifact(p, { type: 'optimization_plan', content: '# Optimisation plan' }).id,
       })
-      p.state.artifacts.push({ type: 'optimization_plan', latestVersion: 1, latestStatus: 'draft', currentLockedVersion: null })
     })
     await openReview(project)
 

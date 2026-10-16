@@ -22,6 +22,7 @@ import { RelativeTime } from '../projects/relative-time'
 import { RunStatusBadge } from './run-badges'
 import { RunDetails } from './run-details'
 import { isUnfinished } from './run-format'
+import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
 import { useRun, useRuns, type AgentRun } from './runs-api'
 import type { RunsSearch } from './runs-search'
 
@@ -35,7 +36,15 @@ interface RunsPageProps {
   onCloseRun: () => void
 }
 
-function RunRow({ run, onOpen }: { run: AgentRun; onOpen: () => void }) {
+/** SPEC §7.2: "1.2.0 · checkpoint 4" (every list shows its release version). */
+function runVersion(run: AgentRun, versionName: string | undefined): string {
+  if (run.checkpoint !== null) {
+    return checkpointLabel(versionName, run.checkpoint)
+  }
+  return versionName ?? '—'
+}
+
+function RunRow({ run, onOpen, versionName }: { run: AgentRun; onOpen: () => void; versionName: string | undefined }) {
   const unfinished = isUnfinished(run)
   return (
     <tr className="border-b border-border last:border-b-0">
@@ -49,13 +58,19 @@ function RunRow({ run, onOpen }: { run: AgentRun; onOpen: () => void }) {
           {agentKindLabels[run.agent]}
         </button>
       </th>
+      <td className="px-3 py-2">{run.agentKey ?? '—'}</td>
       <td className="px-3 py-2">
         <code className="text-xs">{run.model}</code>
       </td>
       <td className="px-3 py-2">{llmProviderLabels[run.provider]}</td>
+      <td className="px-3 py-2">{run.credentialLabel ?? '—'}</td>
+      <td className="px-3 py-2 whitespace-nowrap" data-testid="run-version">
+        {runVersion(run, versionName)}
+      </td>
       <td className="px-3 py-2 text-right tabular-nums">
         {unfinished ? '—' : `${formatNumber(run.inputTokens)} / ${formatNumber(run.outputTokens)}`}
       </td>
+      <td className="px-3 py-2 text-right tabular-nums">{formatNumber(run.toolCallCount)}</td>
       <td className="px-3 py-2 text-right tabular-nums">{unfinished ? '—' : formatCost(run.costEstimate)}</td>
       <td className="px-3 py-2 text-right tabular-nums">{unfinished ? 'Running…' : formatDuration(run.durationMs)}</td>
       <td className="px-3 py-2">
@@ -68,11 +83,12 @@ function RunRow({ run, onOpen }: { run: AgentRun; onOpen: () => void }) {
   )
 }
 
-function RunsTable({ runs, onOpen }: { runs: AgentRun[]; onOpen: (run: AgentRun) => void }) {
+function RunsTable({ projectId, runs, onOpen }: { projectId: string; runs: AgentRun[]; onOpen: (run: AgentRun) => void }) {
   const head = 'px-3 py-2 font-medium'
+  const versionName = useReleaseVersionNames(projectId)
   return (
     <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md">
-      <table className="w-full min-w-[44rem] border-collapse text-sm">
+      <table className="w-full min-w-[64rem] border-collapse text-sm">
         <caption className="sr-only">Agent runs, newest first. Open a run to see all its details.</caption>
         <thead>
           <tr className="border-b border-border/60 text-left text-xs text-muted-foreground">
@@ -80,13 +96,25 @@ function RunsTable({ runs, onOpen }: { runs: AgentRun[]; onOpen: (run: AgentRun)
               Agent
             </th>
             <th scope="col" className={head}>
+              Specialist
+            </th>
+            <th scope="col" className={head}>
               Model
             </th>
             <th scope="col" className={head}>
               Provider
             </th>
+            <th scope="col" className={head}>
+              Credential
+            </th>
+            <th scope="col" className={head}>
+              Version
+            </th>
             <th scope="col" className={`${head} text-right`}>
               Tokens in / out
+            </th>
+            <th scope="col" className={`${head} text-right`}>
+              Tool calls
             </th>
             <th scope="col" className={`${head} text-right`}>
               Est. cost
@@ -107,6 +135,7 @@ function RunsTable({ runs, onOpen }: { runs: AgentRun[]; onOpen: (run: AgentRun)
             <RunRow
               key={run.id}
               run={run}
+              versionName={versionName(run.releaseVersionId)}
               onOpen={() => {
                 onOpen(run)
               }}
@@ -171,6 +200,7 @@ export function RunsPage({ search, onSearchChange, onOpenRun, onCloseRun }: Runs
         </p>
         <div aria-busy={runs.isPlaceholderData || undefined}>
           <RunsTable
+            projectId={project.id}
             runs={d.items}
             onOpen={(run) => {
               onOpenRun(run.id)

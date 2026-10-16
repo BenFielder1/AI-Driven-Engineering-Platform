@@ -8,6 +8,7 @@ import {
   currentVersionId,
   executionRunStatus,
   record,
+  releaseVersionName,
   type Access,
   type StoredExecutionStep,
   type StoredProject,
@@ -259,6 +260,8 @@ export function seedExecution(
     contentHash: "sha256:plan",
     status: "locked",
     releaseVersionId: currentVersionId(project),
+    releaseVersion: releaseVersionName(project, currentVersionId(project)),
+    restoredFromVersion: null,
     checkpointAtCreation: project.checkpoint,
     author: { user: null, agentRunId: nextId() },
     approvedBy: null,
@@ -286,6 +289,8 @@ export function seedOptimizationPlan(
   count: number,
   version = 1,
   setup?: (steps: StoredExecutionStep[]) => void,
+  /** FR-57: the review cycle that drafted it (the review-fix run's cycle). */
+  cycle?: number,
 ): StoredExecutionStep[] {
   const steps = planSteps(count).map((s) => ({
     ...s,
@@ -300,6 +305,8 @@ export function seedOptimizationPlan(
     contentHash: "sha256:optimisation-plan",
     status: "locked",
     releaseVersionId: currentVersionId(project),
+    releaseVersion: releaseVersionName(project, currentVersionId(project)),
+    restoredFromVersion: null,
     checkpointAtCreation: project.checkpoint,
     author: { user: null, agentRunId: nextId() },
     approvedBy: null,
@@ -309,6 +316,9 @@ export function seedOptimizationPlan(
     integrity: "ok",
   };
   project.artifacts.push(plan);
+  if (cycle !== undefined) {
+    (project.planCycles ??= {})[plan.id] = cycle;
+  }
   const summary = {
     type: "optimization_plan" as const,
     latestVersion: version,
@@ -438,6 +448,117 @@ export function seedPullRequest(
   return pr;
 }
 
+type Run = Schemas["ExecutionRunDto"];
+type Attempt = Schemas["StepAttemptDto"];
+
+/** FR-57: seeds the attempt history of a step (oldest first); each attempt gets a fake agent run unless `run: null`. */
+export function seedStepAttempts(
+  project: StoredProject,
+  step: Pick<StoredExecutionStep, "id" | "agentKey">,
+  attempts: readonly Partial<Attempt>[],
+): Attempt[] {
+  const seeded = attempts.map((a, i): Attempt => ({
+    attempt: i + 1,
+    outcome: i === attempts.length - 1 ? "accepted" : "rejected",
+    createdAt: new Date(Date.parse("2026-09-01T10:00:00Z") + i * 600_000).toISOString(),
+    violations: [],
+    warnings: [],
+    producedFiles: [],
+    run: {
+      id: nextId(),
+      agent: "code_generator",
+      agentKey: step.agentKey ?? null,
+      model: "claude-opus-5-5",
+      inputTokens: 1_200,
+      outputTokens: 3_400,
+      durationMs: 42_000,
+      status: "succeeded",
+    },
+    toolCalls: [],
+    ...a,
+  }));
+  (project.stepAttempts ??= {})[step.id] = seeded;
+  return seeded;
+}
+
+/** Mirrors the backend's run status (FR-57): superseded, else derived from the steps and the runner. */
+function runStatus(project: StoredProject, planId: string, steps: StoredExecutionStep[], superseded: boolean): Schemas["PlanRunStatus"] {
+  if (superseded) {
+    return "superseded";
+  }
+  if (steps.length > 0 && steps.every((s) => s.status === "completed")) {
+    return "completed";
+  }
+  if (steps.some((s) => s.status === "blocked")) {
+    return "blocked";
+  }
+  if (steps.every((s) => s.status === "pending")) {
+    return "pending";
+  }
+  const current = currentPlanSteps(project)[0]?.planArtifactId === planId;
+  return current && project.executionPaused ? "paused" : "running";
+}
+
+/** FR-57: GET /execution/runs of one release version: the development run first, then review-fix runs by cycle. */
+export function executionRuns(project: StoredProject, releaseVersionId: string): Run[] {
+  const plans = project.artifacts.filter(
+    (x) => planTypes.includes(x.type) && x.releaseVersionId === releaseVersionId && project.executionSteps.some((s) => s.planArtifactId === x.id),
+  );
+  const cycleOf = (planId: string) =>
+    project.planCycles?.[planId] ?? project.complianceReports?.find((r) => r.optimizationPlanArtifactId === planId)?.cycle ?? null;
+  const ordered = [...plans].sort(
+    (x, y) =>
+      (x.type === "implementation_plan" ? 0 : 1) - (y.type === "implementation_plan" ? 0 : 1) ||
+      (cycleOf(x.id) ?? 0) - (cycleOf(y.id) ?? 0) ||
+      x.version - y.version,
+  );
+  return ordered.map((plan): Run => {
+    const steps = project.executionSteps.filter((s) => s.planArtifactId === plan.id).sort((a, b) => a.number - b.number);
+    const superseded = plan.status === "invalidated" || steps.every((s) => s.status === "invalidated");
+    const started = steps.flatMap((s) => (s.startedAt ? [s.startedAt] : [])).sort();
+    const completed = steps.flatMap((s) => (s.completedAt ? [s.completedAt] : [])).sort();
+    const status = runStatus(project, plan.id, steps, superseded);
+    const stepIds = new Set(steps.map((s) => s.id));
+    const tokens = project.runs
+      .filter((r) => r.stepId !== null && stepIds.has(r.stepId))
+      .reduce((sum, r) => sum + r.inputTokens + r.outputTokens, 0);
+    return {
+      id: plan.id,
+      planType: plan.type,
+      planVersion: plan.version,
+      releaseVersionId: plan.releaseVersionId,
+      cycle: plan.type === "optimization_plan" ? cycleOf(plan.id) : null,
+      complianceReportId:
+        plan.type === "optimization_plan"
+          ? (project.complianceReports?.find((r) => r.optimizationPlanArtifactId === plan.id)?.id ?? null)
+          : null,
+      status,
+      superseded,
+      supersededReason: superseded
+        ? (project.supersededReasons?.[plan.id] ?? "A newer approved plan invalidated this plan.")
+        : null,
+      stepCount: steps.length,
+      completedCount: steps.filter((s) => s.status === "completed").length,
+      startedAt: started[0] ?? null,
+      completedAt: status === "completed" ? (completed.at(-1) ?? null) : null,
+      commitCount: steps.filter((s) => s.commitSha !== null).length,
+      tokens,
+      steps: steps.map((s) => ({
+        id: s.id,
+        number: s.number,
+        title: s.title,
+        agentKey: s.agentKey ?? null,
+        status: s.status,
+        attempt: s.attempt,
+        declaredFiles: s.declaredFiles,
+        producedFiles: s.fileManifest ?? [],
+        commitSha: s.commitSha,
+        commitUrl: s.commitUrl,
+      })),
+    };
+  });
+}
+
 export const executionHandlers = [
   // FR-36: the recorded PR and its branch comparison; 404 until one is opened.
   http.get("*/api/projects/:id/git/pull-request", ({ params }) => {
@@ -499,6 +620,29 @@ export const executionHandlers = [
   control("start"),
   control("pause"),
   control("resume"),
+  // FR-57: every execution run of a release version (default: the current one).
+  http.get("*/api/projects/:id/execution/runs", ({ request, params }) => {
+    const a = access(params.id);
+    if (a instanceof Response) {
+      return a;
+    }
+    const scope = new URL(request.url).searchParams.get("releaseVersionId") ?? currentVersionId(a.project);
+    if (!a.project.releaseVersions.some((v) => v.id === scope)) {
+      return problem(404, "NOT_FOUND", "The release version was not found in this project.");
+    }
+    return HttpResponse.json<Run[]>(executionRuns(a.project, scope));
+  }),
+  // FR-57: a step's attempt history, oldest first.
+  http.get("*/api/projects/:id/execution/steps/:stepId/attempts", ({ params }) => {
+    const a = access(params.id);
+    if (a instanceof Response) {
+      return a;
+    }
+    if (!a.project.executionSteps.some((s) => s.id === params.stepId)) {
+      return problem(404, "NOT_FOUND", "The execution step was not found.");
+    }
+    return HttpResponse.json<Attempt[]>(a.project.stepAttempts?.[String(params.stepId)] ?? []);
+  }),
   // FR-30: the steps of a plan version (default: the current locked implementation plan, as in the API).
   http.get("*/api/projects/:id/execution/steps", ({ request, params }) => {
     const a = access(params.id);

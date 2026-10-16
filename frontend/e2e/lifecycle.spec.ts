@@ -110,12 +110,14 @@ test('NFR-TEST, FR-5–FR-66: an idea becomes a tagged release, a new version st
     // FR-27: first refinement round, answer one clarifying question, run another round → draft v2.
     await page.getByRole('link', { name: 'Refine the idea' }).click()
     await page.getByRole('button', { name: 'Start refinement' }).click()
-    await expect(page.getByRole('heading', { name: 'Current draft: v1' })).toBeVisible({ timeout: AGENT_TIMEOUT })
+    const request = page.getByRole('region', { name: 'Project request', exact: true })
+    await expect(request.getByRole('article', { name: 'Project request v1' })).toBeVisible({ timeout: AGENT_TIMEOUT })
     const answer = 'Support agents who sign in with their work email.'
     await page.getByLabel(/Who are the main users of/).fill(answer)
     await page.getByRole('button', { name: 'Run another round' }).click()
-    await expect(page.getByRole('heading', { name: 'Current draft: v2' })).toBeVisible({ timeout: AGENT_TIMEOUT })
-    await expect(page.getByRole('region', { name: 'Current draft: v2' }).getByText(answer)).toBeVisible()
+    const draftV2 = request.getByRole('article', { name: 'Project request v2' })
+    await expect(draftV2).toBeVisible({ timeout: AGENT_TIMEOUT })
+    await expect(draftV2.getByText(answer)).toBeVisible()
 
     // FR-17: approve project request v2 from its artifact page.
     await page.getByRole('link', { name: 'Open in Artifacts' }).click()

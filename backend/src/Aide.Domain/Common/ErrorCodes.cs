@@ -34,6 +34,12 @@ public static class ErrorCodes
     public const string GateNotPending = "GATE_NOT_PENDING";
     public const string InvalidDecision = "INVALID_DECISION";
 
+    /// <summary>
+    /// FR-58: an artifact version can't be restored now; the ProblemDetails <c>reason</c> says why
+    /// (<see cref="RestoreReasons"/>).
+    /// </summary>
+    public const string RestoreNotAllowed = "RESTORE_NOT_ALLOWED";
+
     /// <summary>FR-27: a refinement round is already queued or running for the project.</summary>
     public const string RefinementInProgress = "REFINEMENT_IN_PROGRESS";
 
@@ -145,6 +151,7 @@ public static class ErrorCodes
         [ArtifactLocked] = 409,
         [GateNotPending] = 409,
         [InvalidDecision] = 400,
+        [RestoreNotAllowed] = 409,
         [RefinementInProgress] = 409,
         [InvalidPlan] = 400,
         [ReviewInProgress] = 409,

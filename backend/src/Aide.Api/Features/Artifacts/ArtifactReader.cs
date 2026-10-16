@@ -33,10 +33,20 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
         return await SummariesAsync(versions, cancellationToken);
     }
 
-    /// <summary>The highest version of a type in the project's current release version, without its content, or <c>null</c>.</summary>
-    public async Task<ArtifactSummaryDto?> LatestSummaryAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
+    /// <summary>FR-59: every version of a type across all the project's release versions, newest first.</summary>
+    public async Task<IReadOnlyList<ArtifactSummaryDto>> HistoryAcrossReleaseVersionsAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
     {
-        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
+        var versions = await db.Artifacts.AsNoTracking()
+            .Where(a => a.ProjectId == projectId && a.Type == type)
+            .OrderByDescending(a => a.Version)
+            .ToListAsync(cancellationToken);
+        return await SummariesAsync(versions, cancellationToken);
+    }
+
+    /// <summary>The highest version of a type in release version <paramref name="releaseVersionId"/>, without its content, or <c>null</c>.</summary>
+    public async Task<ArtifactSummaryDto?> LatestSummaryAsync(Guid projectId, ArtifactType type, Guid? releaseVersionId, CancellationToken cancellationToken)
+    {
+        var versionId = releaseVersionId;
         var artifact = await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == type)
             .OrderByDescending(a => a.Version)
@@ -96,6 +106,7 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
         ArgumentNullException.ThrowIfNull(artifact);
         var checkedIntegrity = await integrity.CheckAsync(artifact, cancellationToken);
         var names = await ActorResolver.NamesAsync(db, new[] { artifact.CreatedByUserId, artifact.ApprovedBy }.OfType<Guid>(), cancellationToken);
+        var releaseVersions = await ReleaseVersionNamesAsync([artifact.ReleaseVersionId], cancellationToken);
         return new ArtifactDto(
             artifact.Id,
             artifact.Type,
@@ -111,7 +122,9 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             artifact.ApprovedAt,
             artifact.RejectionComment,
             artifact.CreatedAt,
-            checkedIntegrity);
+            checkedIntegrity,
+            releaseVersions.GetValueOrDefault(artifact.ReleaseVersionId, string.Empty),
+            artifact.RestoredFromVersion);
     }
 
     private Task<Artifact?> FindAsync(Guid projectId, ArtifactType type, int version, CancellationToken cancellationToken) =>
@@ -121,6 +134,7 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     {
         var checkedIntegrity = await integrity.CheckAsync(artifacts, cancellationToken);
         var names = await ActorResolver.NamesAsync(db, artifacts.Select(a => a.CreatedByUserId).OfType<Guid>(), cancellationToken);
+        var releaseVersions = await ReleaseVersionNamesAsync([.. artifacts.Select(a => a.ReleaseVersionId).Distinct()], cancellationToken);
         return
         [
             .. artifacts.Select(a => new ArtifactSummaryDto(
@@ -131,9 +145,19 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
                 a.ReleaseVersionId,
                 checkedIntegrity[a.Id],
                 a.CreatedAt,
-                Author(a, names))),
+                Author(a, names),
+                releaseVersions.GetValueOrDefault(a.ReleaseVersionId, string.Empty),
+                a.RestoredFromVersion)),
         ];
     }
+
+    /// <summary>FR-59: the semver of each release version, by id.</summary>
+    private async Task<Dictionary<Guid, string>> ReleaseVersionNamesAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken) =>
+        ids.Count == 0
+            ? []
+            : await db.ReleaseVersions.AsNoTracking()
+                .Where(v => ids.Contains(v.Id))
+                .ToDictionaryAsync(v => v.Id, v => v.Version, cancellationToken);
 
     private static ArtifactAuthorDto Author(Artifact artifact, Dictionary<Guid, string> names) =>
         new(artifact.CreatedByUserId is { } userId ? User(userId, names) : null, artifact.AgentRunId);

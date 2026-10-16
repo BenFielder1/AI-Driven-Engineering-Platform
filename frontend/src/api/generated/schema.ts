@@ -629,7 +629,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Every version of an artifact type in a release version (default: the version in development, else the latest released), newest first, without content (members). */
+        /** Every version of an artifact type in a release version (default: the version in development, else the latest released), newest first, without content (members). With allReleaseVersions=true, every version of the type across all release versions (each with its releaseVersion), for diffs across release versions (FR-59). */
         get: operations["GetArtifactHistory"];
         put?: never;
         post?: never;
@@ -684,6 +684,23 @@ export interface paths {
         put?: never;
         /** Save edited Markdown as a new draft version (Contributor or Owner): version = latest + 1, parent = latest; an open draft of the type becomes superseded. With baseVersion, 409 CONFLICT unless it is still the latest version. 409 WRONG_PHASE. */
         post: operations["CreateArtifactDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/artifacts/{type}/versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore an older version (Contributor or Owner, FR-58): creates a new draft with that version's content and hash (version = latest + 1, parent = latest, restoredFromVersion = the chosen version), which then follows the normal approval rules. Only in the phase that produces the type, in the release version in development, while not releasing, for a non-corrupted version of that release version. */
+        post: operations["RestoreArtifactVersion"];
         delete?: never;
         options?: never;
         head?: never;
@@ -765,7 +782,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The refinement state (members): the latest project request version, the latest round with its status, and the clarifying questions of the latest completed round with any answers already given. */
+        /** The refinement state of a release version (default: the version in development, else the latest released), members: its latest project request version, its latest round with its status, and the clarifying questions of its latest completed round with any answers already given. */
         get: operations["GetRefinement"];
         put?: never;
         post?: never;
@@ -801,6 +818,40 @@ export interface paths {
         };
         /** The execution steps of a plan version, in step order (members). Without planType and planVersion this is the current plan: the most recently locked plan that owns steps (the implementation plan, or the optimisation plan of a review cycle); `plan` names its type and version. With planType only, that type's highest locked version; with planVersion, that version of planType (default implementation_plan). With no locked plan the result has no plan and no steps. */
         get: operations["ListExecutionSteps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/execution/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every execution run of a release version (default: the version in development, else the latest released), members (FR-57): the development run (the implementation plan's steps) first, then one review-fix run per review cycle (that cycle's optimisation plan's steps) by cycle; runs of invalidated plans are flagged superseded. */
+        get: operations["ListExecutionRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/execution/steps/{stepId}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The attempt history of an execution step, oldest first (members, FR-57): outcome, Guardian violations and warnings, produced files, the agent run (model, tokens, duration) and its repo tool calls. */
+        get: operations["ListStepAttempts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -938,6 +989,40 @@ export interface paths {
         };
         /** The drift level and areas of the latest compliance report (members, FR-41, §4.7). Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version. */
         get: operations["GetComplianceDrift"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/compliance/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every review cycle of a release version (default: the version in development, else the latest released), newest first (members, FR-56): cycle, score, threshold, drift, decision and date. Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version. */
+        get: operations["ListComplianceReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/compliance/reports/{cycle}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The full compliance report of one review cycle of a release version (default: the version in development, else the latest released), members (FR-56): category breakdown, violations with evidence, deterministic findings, missing features, drift areas, decision and escalation reason, regressions, external checks, its optimisation plan and the execution run that plan produced. Cycle numbers restart after a rollback: reportId selects one exact report (it must be of that cycle), otherwise the newest report of the cycle is returned. Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version. */
+        get: operations["GetComplianceReport"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1306,7 +1391,7 @@ export interface components {
         };
         /**
          * @description An agent run with the provider's output text (FR-23). `output` is `null` until the run succeeds and is cut
-         *     to the first 200,000 characters (`outputTruncated`).
+         *     to the first 200,000 characters (`outputTruncated`). The v2 fields are as on AgentRunDto.
          */
         AgentRunDetailDto: {
             /** Format: uuid */
@@ -1340,12 +1425,23 @@ export interface components {
             completedAt: null | string;
             output: null | string;
             outputTruncated: boolean;
+            /** Format: int32 */
+            checkpoint: null | number;
+            agentKey: null | string;
+            presetId: null | string;
+            presetVersion: null | string;
+            /** Format: int32 */
+            toolCallCount: number;
+            credentialLabel: null | string;
         };
         /**
          * @description An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt
          *     template version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in
          *     USD, duration and error. `userFeedback` is the feedback or answers given to the agent. `releaseVersionId` is the
-         *     release version it ran for (§4.10).
+         *     release version it ran for (§4.10). `checkpoint` is the checkpoint it ran at (null until recorded). `agentKey`,
+         *     `presetId` and `presetVersion` name the preset specialist (FR-76; null for base agents). `toolCallCount` is
+         *     the number of repo tool calls (FR-71). `credentialLabel` is the label of the LLM connection that paid for the run
+         *     (FR-77; null when the deployment key paid or the connection is gone).
          */
         AgentRunDto: {
             /** Format: uuid */
@@ -1377,6 +1473,14 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             completedAt: null | string;
+            /** Format: int32 */
+            checkpoint: null | number;
+            agentKey: null | string;
+            presetId: null | string;
+            presetVersion: null | string;
+            /** Format: int32 */
+            toolCallCount: number;
+            credentialLabel: null | string;
         };
         /**
          * @description Status of an agent run (FR-23, FR-25).
@@ -1467,7 +1571,8 @@ export interface components {
          *     normalised content; `integrity` is `corrupted` when it no longer matches (FR-20). `approvedBy` and
          *     `approvedAt` are set once approved (status `locked`); `rejectionComment` once rejected (FR-17).
          *     `releaseVersionId` and `checkpointAtCreation` say where it was created (§4.10; D-V2-11: was
-         *     `projectVersionAtCreation`).
+         *     `projectVersionAtCreation`); `releaseVersion` is that release version's semver (FR-59).
+         *     `restoredFromVersion` is the version whose content a restore copied (FR-58), else `null`.
          */
         ArtifactDto: {
             /** Format: uuid */
@@ -1492,6 +1597,9 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             integrity: components["schemas"]["ArtifactIntegrity"];
+            releaseVersion: string;
+            /** Format: int32 */
+            restoredFromVersion: null | number;
         };
         /**
          * @description Result of re-checking an artifact's content hash on read (FR-20). `corrupted` means the stored content no
@@ -1513,7 +1621,8 @@ export interface components {
         /**
          * @description One artifact version without its content (FR-16, FR-21, FR-59): the artifacts page cards and the history list.
          *     `integrity` is the result of re-checking the content hash on this read (FR-20); `releaseVersionId` is the
-         *     release version it belongs to (§4.10).
+         *     release version it belongs to (§4.10) and `releaseVersion` its semver (FR-59). `restoredFromVersion` is the
+         *     version whose content a restore copied (FR-58), else `null`.
          */
         ArtifactSummaryDto: {
             /** Format: uuid */
@@ -1528,6 +1637,9 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             author: components["schemas"]["ArtifactAuthorDto"];
+            releaseVersion: string;
+            /** Format: int32 */
+            restoredFromVersion: null | number;
         };
         /** @enum {unknown} */
         ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
@@ -1583,6 +1695,42 @@ export interface components {
             cycle: number;
         };
         /**
+         * @description The full compliance report of one review cycle (FR-56): the category breakdown, every violation with its evidence,
+         *     the deterministic findings alone (`deterministicFindings`, the violations whose source is `deterministic`),
+         *     missing features, drift areas, the decision and its `escalationReason`, regressions (§4.13), the external checks
+         *     collected (check runs, preview deployment; schemaless, `null` when none), the optimisation plan it produced and
+         *     `executionRunId`, the review-fix run that plan produced (the plan artifact id, see `ListExecutionRuns`).
+         */
+        ComplianceReportDetailDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
+            /** Format: int32 */
+            checkpoint: number;
+            /** Format: int32 */
+            cycle: number;
+            /** Format: double */
+            overallScore: number;
+            /** Format: double */
+            threshold: number;
+            categoryScores: components["schemas"]["CategoryScoreDto"][];
+            violations: components["schemas"]["ViolationDto"][];
+            deterministicFindings: components["schemas"]["ViolationDto"][];
+            missingFeatures: string[];
+            driftLevel: components["schemas"]["DriftLevel"];
+            driftAreas: components["schemas"]["DriftAreaDto"][];
+            decision: components["schemas"]["ReviewDecision"];
+            escalationReason: null | components["schemas"]["EscalationReason"];
+            regressions: components["schemas"]["RegressionDto"][];
+            externalChecks: null | components["schemas"]["JsonElement"];
+            optimizationPlan: null | components["schemas"]["ReportPlanDto"];
+            /** Format: uuid */
+            executionRunId: null | string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /**
          * @description The compliance report of one review cycle (FR-38, FR-41). `overallScore` is Σ category score × weight (3 dp);
          *     `threshold` is the project's compliance threshold. `decision` follows §4.5; `decisionReason` is set
          *     when the decision is `escalation_required` (`low_score`, `severe_drift`, `max_cycles`,
@@ -1614,6 +1762,29 @@ export interface components {
             optimizationPlanArtifactId: null | string;
             /** Format: date-time */
             createdAt: string;
+        };
+        /**
+         * @description One review cycle in the Review page's cycle list (FR-56): cycle number, overall score against the threshold it was
+         *     decided on, drift level, decision, date, the checkpoint it ran at and its release version. `id` is the report id:
+         *     cycle numbers restart after a rollback, so one release version can list two reports of the same cycle.
+         */
+        ComplianceReportSummaryDto: {
+            /** Format: int32 */
+            cycle: number;
+            /** Format: double */
+            score: number;
+            /** Format: double */
+            threshold: number;
+            drift: components["schemas"]["DriftLevel"];
+            decision: components["schemas"]["ReviewDecision"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: int32 */
+            checkpoint: number;
+            /** Format: uuid */
+            releaseVersionId: string;
+            /** Format: uuid */
+            id: string;
         };
         /** @description The compliance score across review cycles, oldest first (FR-41), with the project's threshold. Empty before the first review. */
         ComplianceTrendDto: {
@@ -1818,6 +1989,42 @@ export interface components {
             status: components["schemas"]["ArtifactStatus"];
         };
         /**
+         * @description One execution run (FR-57): the steps of one plan version. `id` is the plan artifact's id. The development run is
+         *     the implementation plan's; a review-fix run is the optimisation plan of review `cycle`. A run of an invalidated
+         *     plan is `superseded` (status `superseded`, with `supersededReason`). `tokens` is input + output
+         *     tokens of the steps' agent runs; `commitCount` the steps committed. `complianceReportId` is the report whose
+         *     optimisation plan this is (null for the development run): cycle numbers restart after a rollback, report ids don't.
+         */
+        ExecutionRunDto: {
+            /** Format: uuid */
+            id: string;
+            planType: components["schemas"]["ArtifactType"];
+            /** Format: int32 */
+            planVersion: number;
+            /** Format: uuid */
+            releaseVersionId: string;
+            /** Format: int32 */
+            cycle: null | number;
+            status: components["schemas"]["PlanRunStatus"];
+            superseded: boolean;
+            supersededReason: null | string;
+            /** Format: int32 */
+            stepCount: number;
+            /** Format: int32 */
+            completedCount: number;
+            /** Format: date-time */
+            startedAt: null | string;
+            /** Format: date-time */
+            completedAt: null | string;
+            /** Format: int32 */
+            commitCount: number;
+            /** Format: int64 */
+            tokens: number;
+            steps: components["schemas"]["ExecutionStepSummaryDto"][];
+            /** Format: uuid */
+            complianceReportId: null | string;
+        };
+        /**
          * @description The execution runner's overall state for a project (FR-31, FR-33, FR-37): `idle` (not started, or nothing to run),
          *     `running`, `paused` (no new step starts; a running step may still finish), `completed` (every step of the
          *     current plan completed) or `blocked` (a step is blocked awaiting an escalation decision).
@@ -1862,6 +2069,26 @@ export interface components {
             /** Format: date-time */
             completedAt: null | string;
             fileManifest: null | components["schemas"]["FileManifestEntryDto"][];
+            commitUrl: null | string;
+        };
+        /**
+         * @description One step of an execution run (FR-57): number, title, the preset specialist that runs it (`agentKey`, null for the
+         *     base Code Generator), status, attempt count, declared vs produced files, and the commit once accepted
+         *     (`commitUrl` is null for the Local provider).
+         */
+        ExecutionStepSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            number: number;
+            title: string;
+            agentKey: null | string;
+            status: components["schemas"]["StepStatus"];
+            /** Format: int32 */
+            attempt: number;
+            declaredFiles: components["schemas"]["DeclaredFileDto"][];
+            producedFiles: components["schemas"]["FileManifestEntryDto"][];
+            commitSha: null | string;
             commitUrl: null | string;
         };
         /** @description A plan version's execution steps in step order (FR-30); `plan` is `null` (and no steps) before any plan is approved. */
@@ -1989,6 +2216,8 @@ export interface components {
             traceId?: string;
             /** @description Individual reasons, when there are several. */
             details?: string[];
+            /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
+            reason?: string;
         };
         /** @description A background job (§4.9): the job queued by a dead-letter retry (FR-51). */
         JobDto: {
@@ -2007,6 +2236,7 @@ export interface components {
         };
         /** @enum {unknown} */
         JobStatus: "queued" | "running" | "succeeded" | "failed" | "dead" | "cancelled" | "retried";
+        JsonElement: unknown;
         JsonObject: {
             [key: string]: unknown;
         };
@@ -2206,6 +2436,13 @@ export interface components {
          * @enum {unknown}
          */
         Phase: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+        /**
+         * @description The state of one execution run (FR-57): the steps of one plan version. `pending` (no step started),
+         *     `running`, `paused`, `completed` (every step completed), `blocked` (a step awaits an escalation
+         *     decision) or `superseded` (the plan was invalidated; its run stays listed under "Superseded").
+         * @enum {unknown}
+         */
+        PlanRunStatus: "pending" | "running" | "paused" | "completed" | "blocked" | "superseded";
         ProblemDetails: {
             type?: null | string;
             title?: null | string;
@@ -2219,6 +2456,8 @@ export interface components {
             traceId?: string;
             /** @description Individual reasons, when there are several. */
             details?: string[];
+            /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
+            reason?: string;
         };
         /**
          * @description A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null`
@@ -2477,6 +2716,16 @@ export interface components {
             password: string;
         };
         /**
+         * @description An `[unchanged]` requirement the review found broken in an iteration (§4.13): the requirement id, the category it
+         *     was reported under, what is broken and the evidence. Regressions carry no deterministic penalty.
+         */
+        RegressionDto: {
+            requirementId: string;
+            category: components["schemas"]["ReviewCategory"];
+            description: string;
+            evidence: null | string;
+        };
+        /**
          * @description A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint
          *     `checkpoint`. `status` is `in_progress` while the release job is queued or running, then
          *     `succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`.
@@ -2572,6 +2821,14 @@ export interface components {
          * @enum {unknown}
          */
         ReleaseVersionStatus: "in_development" | "awaiting_merge" | "released" | "imported";
+        /** @description The optimisation plan a review cycle produced (FR-40): its artifact id, version and status. */
+        ReportPlanDto: {
+            /** Format: uuid */
+            artifactId: string;
+            /** Format: int32 */
+            version: number;
+            status: components["schemas"]["ArtifactStatus"];
+        };
         /**
          * @description Compliance categories (§4.7).
          * @enum {unknown}
@@ -2671,6 +2928,42 @@ export interface components {
             releaseVersion: components["schemas"]["ReleaseVersionDto"];
             state: components["schemas"]["ProjectStateDto"];
         };
+        /**
+         * @description One attempt of an execution step (FR-57): its outcome, the Guardian errors (`violations`) and `warnings`, the
+         *     files an accepted attempt committed, its agent run (null when the run row is gone) and that run's tool calls.
+         */
+        StepAttemptDto: {
+            /** Format: int32 */
+            attempt: number;
+            outcome: components["schemas"]["StepAttemptOutcome"];
+            /** Format: date-time */
+            createdAt: string;
+            violations: components["schemas"]["StepViolationDto"][];
+            warnings: components["schemas"]["StepViolationDto"][];
+            producedFiles: components["schemas"]["FileManifestEntryDto"][];
+            run: null | components["schemas"]["StepAttemptRunDto"];
+            toolCalls: components["schemas"]["ToolCallDto"][];
+        };
+        /**
+         * @description Outcome of an execution step attempt (FR-57). Wire values: `accepted`, `rejected`, `error`.
+         * @enum {unknown}
+         */
+        StepAttemptOutcome: "accepted" | "rejected" | "error";
+        /** @description The agent run of a step attempt (FR-57): agent, specialist key, model, tokens, duration and status. */
+        StepAttemptRunDto: {
+            /** Format: uuid */
+            id: string;
+            agent: components["schemas"]["AgentKind"];
+            agentKey: null | string;
+            model: string;
+            /** Format: int32 */
+            inputTokens: number;
+            /** Format: int32 */
+            outputTokens: number;
+            /** Format: int64 */
+            durationMs: number;
+            status: components["schemas"]["AgentRunStatus"];
+        };
         /** @enum {unknown} */
         StepStatus: "pending" | "in_progress" | "completed" | "rejected" | "blocked" | "invalidated";
         /** @description A Guardian violation recorded on a step's last rejected attempt (§4.6, FR-32). Never contains secret values. */
@@ -2683,6 +2976,17 @@ export interface components {
         };
         /** @enum {unknown} */
         SystemRole: "user" | "admin";
+        /**
+         * @description A repository tool call made during an agent run (FR-71): the tool name, its arguments as given by the model, the bytes
+         *     returned and whether the result was cut to the tool's limit.
+         */
+        ToolCallDto: {
+            tool: string;
+            arguments: components["schemas"]["JsonElement"];
+            /** Format: int32 */
+            bytes: number;
+            truncated: boolean;
+        };
         /** @description The number of the caller's unread notifications (the bell badge). */
         UnreadNotificationCountDto: {
             /** Format: int32 */
@@ -4841,6 +5145,7 @@ export interface operations {
         parameters: {
             query?: {
                 releaseVersionId?: string;
+                allReleaseVersions?: boolean;
             };
             header?: never;
             path: {
@@ -5055,6 +5360,75 @@ export interface operations {
                 };
             };
             /** @description WRONG_PHASE: the type can't be edited in the current phase; CONFLICT: baseVersion is no longer the latest version (details: latestVersion), or a concurrent save. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RestoreArtifactVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactDto"];
+                };
+            };
+            /** @description VALIDATION: unknown artifact type, version below 1, or the version is already the latest of its type. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't restore versions. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project or version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description RESTORE_NOT_ALLOWED (reason: stage_completed, stage_not_reached, other_release_version, corrupted or releasing) or CONFLICT (a concurrent save). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5306,7 +5680,9 @@ export interface operations {
     };
     GetRefinement: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5342,7 +5718,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description NOT_FOUND: the project. */
+            /** @description NOT_FOUND: the project, or the release version in this project. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5467,6 +5843,89 @@ export interface operations {
                 };
             };
             /** @description NOT_FOUND: the project, or the requested plan version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListExecutionRuns: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionRunDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or the release version in this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListStepAttempts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                stepId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepAttemptDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or the step in this project. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5921,6 +6380,101 @@ export interface operations {
                 };
             };
             /** @description NOT_FOUND: the project, or no review has completed yet. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListComplianceReports: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceReportSummaryDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or the release version in this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetComplianceReport: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+                reportId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                cycle: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceReportDetailDto"];
+                };
+            };
+            /** @description VALIDATION: cycle below 1. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, the release version, or no report for that cycle (or reportId is not a report of that cycle). */
             404: {
                 headers: {
                     [name: string]: unknown;

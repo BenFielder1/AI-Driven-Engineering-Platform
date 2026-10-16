@@ -117,10 +117,11 @@ public sealed partial class RefinementService(
     }
 
     /// <summary>The refinement page state (FR-27): latest draft, latest round and the latest completed round's questions.</summary>
-    public async Task<RefinementDto> GetAsync(Guid projectId, CancellationToken cancellationToken)
+    public async Task<RefinementDto> GetAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
-        var latestDraft = await artifacts.LatestSummaryAsync(projectId, ArtifactType.ProjectRequest, cancellationToken);
-        var rounds = await LoadRoundsAsync(projectId, cancellationToken);
+        var versionId = releaseVersionId ?? await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
+        var latestDraft = await artifacts.LatestSummaryAsync(projectId, ArtifactType.ProjectRequest, versionId, cancellationToken);
+        var rounds = await LoadRoundsAsync(projectId, cancellationToken, versionId);
         var latest = rounds.Count == 0 ? null : rounds[0];
         var completed = LatestCompleted(rounds);
 
@@ -141,16 +142,21 @@ public sealed partial class RefinementService(
         rounds.FirstOrDefault(r => r.Dto.Status == AgentRunStatus.Succeeded && r.Questions is not null);
 
     /// <summary>The project's latest refinement rounds, newest first, with their runs, answers and drafts.</summary>
-    private async Task<IReadOnlyList<Round>> LoadRoundsAsync(Guid projectId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<Round>> LoadRoundsAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
-        // §4.10: the rounds of the current release version only (they started after it did).
-        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
+        // §4.10: the rounds of one release version (default: the current one): they started after it did and before the
+        // project's next release version did.
+        var versionId = releaseVersionId ?? await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
         var since = await db.ReleaseVersions.AsNoTracking()
             .Where(v => v.Id == versionId)
             .Select(v => (DateTimeOffset?)v.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken) ?? DateTimeOffset.MinValue;
+        var until = await db.ReleaseVersions.AsNoTracking()
+            .Where(v => v.ProjectId == projectId && v.CreatedAt > since)
+            .Select(v => (DateTimeOffset?)v.CreatedAt)
+            .MinAsync(cancellationToken) ?? DateTimeOffset.MaxValue;
         var roundJobs = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.IdeaRefinement && j.CreatedAt >= since)
+            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.IdeaRefinement && j.CreatedAt >= since && j.CreatedAt < until)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
             .Take(RoundsRead)

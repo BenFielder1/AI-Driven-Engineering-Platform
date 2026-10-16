@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Versions;
@@ -54,7 +55,71 @@ public static class ReviewEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or no review has completed yet."));
 
+        group.MapGet("/compliance/reports", ListComplianceReports)
+            .WithName("ListComplianceReports")
+            .WithSummary("Every review cycle of a release version (default: the version in development, else the latest released), newest first (members, FR-56): cycle, score, threshold, drift, decision and date. " + VersionNote)
+            .Produces<IReadOnlyList<ComplianceReportSummaryDto>>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or the release version in this project."));
+
+        group.MapGet("/compliance/reports/{cycle:int}", GetComplianceReport)
+            .WithName("GetComplianceReport")
+            .WithSummary("The full compliance report of one review cycle of a release version (default: the version in development, else the latest released), members (FR-56): category breakdown, violations with evidence, deterministic findings, missing features, drift areas, decision and escalation reason, regressions, external checks, its optimisation plan and the execution run that plan produced. Cycle numbers restart after a rollback: reportId selects one exact report (it must be of that cycle), otherwise the newest report of the cycle is returned. " + VersionNote)
+            .Produces<ComplianceReportDetailDto>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .WithResponseDescriptions(
+                (StatusCodes.Status400BadRequest, "VALIDATION: cycle below 1."),
+                (StatusCodes.Status404NotFound, "NOT_FOUND: the project, the release version, or no report for that cycle (or reportId is not a report of that cycle)."));
+
         return app;
+    }
+
+    /// <summary>FR-56: members; the cycles of the release version's review timeline, newest first.</summary>
+    private static async Task<Results<Ok<IReadOnlyList<ComplianceReportSummaryDto>>, ProblemHttpResult>> ListComplianceReports(
+        Guid id,
+        IProjectAccess access,
+        ReviewReader reader,
+        AideDbContext db,
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        return scope.IsFailure ? ApiProblems.FromError(scope.Error!) : TypedResults.Ok(await reader.ListAsync(id, cancellationToken, scope.Value));
+    }
+
+    /// <summary>FR-56: members; one cycle's full report, 404 when the release version has no report for it.</summary>
+    private static async Task<Results<Ok<ComplianceReportDetailDto>, ValidationProblem, ProblemHttpResult>> GetComplianceReport(
+        Guid id,
+        [Range(1, int.MaxValue)] int cycle,
+        IProjectAccess access,
+        ReviewReader reader,
+        AideDbContext db,
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null,
+        Guid? reportId = null)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
+        return await reader.CycleAsync(id, cycle, cancellationToken, scope.Value, reportId) is { } report
+            ? TypedResults.Ok(report)
+            : ApiProblems.NotFound($"There is no report for review cycle {cycle}.");
     }
 
     private static async Task<Results<Accepted<ReviewStartedDto>, ProblemHttpResult>> StartReview(

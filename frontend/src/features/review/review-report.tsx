@@ -9,7 +9,11 @@ import {
   formatPercent,
   reviewCategoryLabels,
 } from '../projects/labels'
-import type { CategoryScore, ComplianceReport, FindingSeverity } from './review-api'
+import { CategoryBarsChart } from './category-bars-chart'
+import type { CategoryScore, ComplianceReportDetail, FindingSeverity } from './review-api'
+
+/** The report fields the sections read (the v2 detail DTO; the v1 latest-report DTO has the same shapes). */
+type Report = Pick<ComplianceReportDetail, 'categoryScores' | 'driftLevel' | 'driftAreas' | 'violations' | 'missingFeatures'>
 
 const severityTones: Record<FindingSeverity, BadgeTone> = {
   critical: 'danger',
@@ -17,7 +21,7 @@ const severityTones: Record<FindingSeverity, BadgeTone> = {
   minor: 'neutral',
 }
 
-const driftTones: Record<NonNullable<ComplianceReport['driftLevel']>, BadgeTone> = {
+const driftTones: Record<NonNullable<Report['driftLevel']>, BadgeTone> = {
   none: 'success',
   low: 'neutral',
   moderate: 'warning',
@@ -90,9 +94,10 @@ function CategoryRow({ score }: { score: CategoryScore }) {
 }
 
 /** FR-41, §4.7: weight, agent score, deterministic penalty and final score per category, with expandable evidence. */
-export function CategoryBreakdown({ report }: { report: ComplianceReport }) {
+export function CategoryBreakdown({ report }: { report: Report }) {
   return (
     <ReportSection id="review-categories" title="Category breakdown">
+      <CategoryBarsChart scores={report.categoryScores} />
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <caption className="sr-only">
@@ -124,7 +129,7 @@ export function CategoryBreakdown({ report }: { report: ComplianceReport }) {
 }
 
 /** FR-41, §4.7: drift level and the areas the review agent reported. */
-export function DriftSection({ report }: { report: ComplianceReport }) {
+export function DriftSection({ report }: { report: Report }) {
   const level = report.driftLevel
   return (
     <ReportSection id="review-drift" title="Drift from the specification">
@@ -152,7 +157,7 @@ export function DriftSection({ report }: { report: ComplianceReport }) {
 }
 
 /** FR-41: violations grouped by severity, each with its category, source, file and evidence. */
-export function ViolationsSection({ report }: { report: ComplianceReport }) {
+export function ViolationsSection({ report }: { report: Report }) {
   const groups = findingSeverities
     .map((severity) => ({ severity, items: report.violations.filter((v) => v.severity === severity) }))
     .filter((g) => g.items.length > 0)
@@ -191,7 +196,7 @@ export function ViolationsSection({ report }: { report: ComplianceReport }) {
 }
 
 /** FR-38: features from the specification the review agent could not find in the code. */
-export function MissingFeaturesSection({ report }: { report: ComplianceReport }) {
+export function MissingFeaturesSection({ report }: { report: Report }) {
   return (
     <ReportSection id="review-missing" title={`Missing features (${String(report.missingFeatures.length)})`}>
       {report.missingFeatures.length === 0 ? (

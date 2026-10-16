@@ -13,6 +13,10 @@ export interface PlanPreviewStep {
   title: string
   files: { path: string; action: string }[]
   dependencies: number[]
+  /** FR-76: the preset specialist that runs the step (absent for the base Code Generator). */
+  agent: string | null
+  /** FR-76: the requirement ids the step covers. */
+  covers: string[]
 }
 
 /** Same shape as the backend's BlockPattern: a line ```aide-plan, the JSON, then a closing ``` line. */
@@ -29,6 +33,11 @@ const asString = (value: unknown): string => (typeof value === 'string' ? value 
  * it can't read rather than reporting rule violations of its own.
  */
 export function readPlanBlock(markdown: string): PlanPreviewStep[] | null {
+  return readPlanDocument(markdown)?.steps ?? null
+}
+
+/** The plan block's steps plus its coverage warnings (FR-76: `coverageWarnings` or `coverage.warnings`, if present). */
+export function readPlanDocument(markdown: string): { steps: PlanPreviewStep[]; coverageWarnings: string[] } | null {
   const blocks = [...markdown.replaceAll('\r\n', '\n').matchAll(blockPattern)]
   const json = blocks.length === 1 ? blocks[0]?.[1] : undefined
   if (json === undefined) {
@@ -40,10 +49,13 @@ export function readPlanBlock(markdown: string): PlanPreviewStep[] | null {
   } catch {
     return null
   }
-  const steps = Array.isArray(parsed) ? parsed : asRecord(parsed)?.steps
+  const root = asRecord(parsed)
+  const steps = Array.isArray(parsed) ? parsed : root?.steps
   if (!Array.isArray(steps)) {
     return null
   }
+  const warnings = root?.coverageWarnings ?? asRecord(root?.coverage)?.warnings
+  const coverageWarnings = Array.isArray(warnings) ? warnings.filter((w): w is string => typeof w === 'string') : []
   const out: PlanPreviewStep[] = []
   for (const item of steps) {
     const step = asRecord(item)
@@ -59,7 +71,9 @@ export function readPlanBlock(markdown: string): PlanPreviewStep[] | null {
         return file ? [{ path: asString(file.path), action: asString(file.action) }] : []
       }),
       dependencies: Array.isArray(step.dependencies) ? step.dependencies.filter((d): d is number => typeof d === 'number') : [],
+      agent: typeof step.agent === 'string' && step.agent ? step.agent : null,
+      covers: Array.isArray(step.covers) ? step.covers.filter((c): c is string => typeof c === 'string') : [],
     })
   }
-  return out
+  return { steps: out, coverageWarnings }
 }

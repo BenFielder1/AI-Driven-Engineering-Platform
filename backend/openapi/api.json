@@ -2945,7 +2945,7 @@
         "tags": [
           "Artifacts"
         ],
-        "summary": "Every version of an artifact type in a release version (default: the version in development, else the latest released), newest first, without content (members).",
+        "summary": "Every version of an artifact type in a release version (default: the version in development, else the latest released), newest first, without content (members). With allReleaseVersions=true, every version of the type across all release versions (each with its releaseVersion), for diffs across release versions (FR-59).",
         "operationId": "GetArtifactHistory",
         "parameters": [
           {
@@ -2978,6 +2978,14 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "allReleaseVersions",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
             }
           }
         ],
@@ -3311,6 +3319,114 @@
           },
           "409": {
             "description": "WRONG_PHASE: the type can't be edited in the current phase; CONFLICT: baseVersion is no longer the latest version (details: latestVersion), or a concurrent save.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/artifacts/{type}/versions/{version}/restore": {
+      "post": {
+        "tags": [
+          "Artifacts"
+        ],
+        "summary": "Restore an older version (Contributor or Owner, FR-58): creates a new draft with that version's content and hash (version = latest + 1, parent = latest, restoredFromVersion = the chosen version), which then follows the normal approval rules. Only in the phase that produces the type, in the release version in development, while not releasing, for a non-corrupted version of that release version.",
+        "operationId": "RestoreArtifactVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "project_request",
+                "technical_specification",
+                "implementation_plan",
+                "optimization_plan",
+                "codebase_summary"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION: unknown artifact type, version below 1, or the version is already the latest of its type.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: Viewers can't restore versions.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project or version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "RESTORE_NOT_ALLOWED (reason: stage_completed, stage_not_reached, other_release_version, corrupted or releasing) or CONFLICT (a concurrent save).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3708,13 +3824,21 @@
         "tags": [
           "Refinement"
         ],
-        "summary": "The refinement state (members): the latest project request version, the latest round with its status, and the clarifying questions of the latest completed round with any answers already given.",
+        "summary": "The refinement state of a release version (default: the version in development, else the latest released), members: its latest project request version, its latest round with its status, and the clarifying questions of its latest completed round with any answers already given.",
         "operationId": "GetRefinement",
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "releaseVersionId",
+            "in": "query",
             "schema": {
               "type": "string",
               "format": "uuid"
@@ -3753,7 +3877,7 @@
             }
           },
           "404": {
-            "description": "NOT_FOUND: the project.",
+            "description": "NOT_FOUND: the project, or the release version in this project.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3946,6 +4070,133 @@
           },
           "404": {
             "description": "NOT_FOUND: the project, or the requested plan version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/execution/runs": {
+      "get": {
+        "tags": [
+          "Execution"
+        ],
+        "summary": "Every execution run of a release version (default: the version in development, else the latest released), members (FR-57): the development run (the implementation plan's steps) first, then one review-fix run per review cycle (that cycle's optimisation plan's steps) by cycle; runs of invalidated plans are flagged superseded.",
+        "operationId": "ListExecutionRuns",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "releaseVersionId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExecutionRunDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or the release version in this project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/execution/steps/{stepId}/attempts": {
+      "get": {
+        "tags": [
+          "Execution"
+        ],
+        "summary": "The attempt history of an execution step, oldest first (members, FR-57): outcome, Guardian violations and warnings, produced files, the agent run (model, tokens, duration) and its repo tool calls.",
+        "operationId": "ListStepAttempts",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "stepId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StepAttemptDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or the step in this project.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4529,6 +4780,158 @@
           },
           "404": {
             "description": "NOT_FOUND: the project, or no review has completed yet.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/compliance/reports": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "summary": "Every review cycle of a release version (default: the version in development, else the latest released), newest first (members, FR-56): cycle, score, threshold, drift, decision and date. Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version.",
+        "operationId": "ListComplianceReports",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "releaseVersionId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComplianceReportSummaryDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or the release version in this project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/compliance/reports/{cycle}": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "summary": "The full compliance report of one review cycle of a release version (default: the version in development, else the latest released), members (FR-56): category breakdown, violations with evidence, deterministic findings, missing features, drift areas, decision and escalation reason, regressions, external checks, its optimisation plan and the execution run that plan produced. Cycle numbers restart after a rollback: reportId selects one exact report (it must be of that cycle), otherwise the newest report of the cycle is returned. Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version.",
+        "operationId": "GetComplianceReport",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cycle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "releaseVersionId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "reportId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComplianceReportDetailDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION: cycle below 1.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, the release version, or no report for that cycle (or reportId is not a report of that cycle).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5983,7 +6386,13 @@
           "createdAt",
           "completedAt",
           "output",
-          "outputTruncated"
+          "outputTruncated",
+          "checkpoint",
+          "agentKey",
+          "presetId",
+          "presetVersion",
+          "toolCallCount",
+          "credentialLabel"
         ],
         "type": "object",
         "properties": {
@@ -6080,9 +6489,44 @@
           },
           "outputTruncated": {
             "type": "boolean"
+          },
+          "checkpoint": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "agentKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "presetId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "presetVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "toolCallCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "credentialLabel": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
-        "description": "An agent run with the provider's output text (FR-23). `output` is `null` until the run succeeds and is cut\nto the first 200,000 characters (`outputTruncated`)."
+        "description": "An agent run with the provider's output text (FR-23). `output` is `null` until the run succeeds and is cut\nto the first 200,000 characters (`outputTruncated`). The v2 fields are as on AgentRunDto."
       },
       "AgentRunDto": {
         "required": [
@@ -6104,7 +6548,13 @@
           "durationMs",
           "error",
           "createdAt",
-          "completedAt"
+          "completedAt",
+          "checkpoint",
+          "agentKey",
+          "presetId",
+          "presetVersion",
+          "toolCallCount",
+          "credentialLabel"
         ],
         "type": "object",
         "properties": {
@@ -6192,9 +6642,44 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "checkpoint": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "agentKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "presetId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "presetVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "toolCallCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "credentialLabel": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
-        "description": "An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt\ntemplate version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in\nUSD, duration and error. `userFeedback` is the feedback or answers given to the agent. `releaseVersionId` is the\nrelease version it ran for (§4.10)."
+        "description": "An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt\ntemplate version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in\nUSD, duration and error. `userFeedback` is the feedback or answers given to the agent. `releaseVersionId` is the\nrelease version it ran for (§4.10). `checkpoint` is the checkpoint it ran at (null until recorded). `agentKey`,\n`presetId` and `presetVersion` name the preset specialist (FR-76; null for base agents). `toolCallCount` is\nthe number of repo tool calls (FR-71). `credentialLabel` is the label of the LLM connection that paid for the run\n(FR-77; null when the deployment key paid or the connection is gone)."
       },
       "AgentRunStatus": {
         "enum": [
@@ -6422,7 +6907,9 @@
           "approvedAt",
           "rejectionComment",
           "createdAt",
-          "integrity"
+          "integrity",
+          "releaseVersion",
+          "restoredFromVersion"
         ],
         "type": "object",
         "properties": {
@@ -6493,9 +6980,19 @@
           },
           "integrity": {
             "$ref": "#/components/schemas/ArtifactIntegrity"
+          },
+          "releaseVersion": {
+            "type": "string"
+          },
+          "restoredFromVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
           }
         },
-        "description": "One artifact version with its Markdown content (FR-16, §4.3). `contentHash` is the lowercase hex SHA-256 of the\nnormalised content; `integrity` is `corrupted` when it no longer matches (FR-20). `approvedBy` and\n`approvedAt` are set once approved (status `locked`); `rejectionComment` once rejected (FR-17).\n`releaseVersionId` and `checkpointAtCreation` say where it was created (§4.10; D-V2-11: was\n`projectVersionAtCreation`)."
+        "description": "One artifact version with its Markdown content (FR-16, §4.3). `contentHash` is the lowercase hex SHA-256 of the\nnormalised content; `integrity` is `corrupted` when it no longer matches (FR-20). `approvedBy` and\n`approvedAt` are set once approved (status `locked`); `rejectionComment` once rejected (FR-17).\n`releaseVersionId` and `checkpointAtCreation` say where it was created (§4.10; D-V2-11: was\n`projectVersionAtCreation`); `releaseVersion` is that release version's semver (FR-59).\n`restoredFromVersion` is the version whose content a restore copied (FR-58), else `null`."
       },
       "ArtifactIntegrity": {
         "enum": [
@@ -6563,7 +7060,9 @@
           "releaseVersionId",
           "integrity",
           "createdAt",
-          "author"
+          "author",
+          "releaseVersion",
+          "restoredFromVersion"
         ],
         "type": "object",
         "properties": {
@@ -6594,9 +7093,19 @@
           },
           "author": {
             "$ref": "#/components/schemas/ArtifactAuthorDto"
+          },
+          "releaseVersion": {
+            "type": "string"
+          },
+          "restoredFromVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
           }
         },
-        "description": "One artifact version without its content (FR-16, FR-21, FR-59): the artifacts page cards and the history list.\n`integrity` is the result of re-checking the content hash on this read (FR-20); `releaseVersionId` is the\nrelease version it belongs to (§4.10)."
+        "description": "One artifact version without its content (FR-16, FR-21, FR-59): the artifacts page cards and the history list.\n`integrity` is the result of re-checking the content hash on this read (FR-20); `releaseVersionId` is the\nrelease version it belongs to (§4.10) and `releaseVersion` its semver (FR-59). `restoredFromVersion` is the\nversion whose content a restore copied (FR-58), else `null`."
       },
       "ArtifactType": {
         "enum": [
@@ -6743,6 +7252,140 @@
         },
         "description": "The drift level and areas of the latest compliance report (FR-41, §4.7)."
       },
+      "ComplianceReportDetailDto": {
+        "required": [
+          "id",
+          "releaseVersionId",
+          "checkpoint",
+          "cycle",
+          "overallScore",
+          "threshold",
+          "categoryScores",
+          "violations",
+          "deterministicFindings",
+          "missingFeatures",
+          "driftLevel",
+          "driftAreas",
+          "decision",
+          "escalationReason",
+          "regressions",
+          "externalChecks",
+          "optimizationPlan",
+          "executionRunId",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "releaseVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "checkpoint": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cycle": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "overallScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "threshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "categoryScores": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryScoreDto"
+            }
+          },
+          "violations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViolationDto"
+            }
+          },
+          "deterministicFindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViolationDto"
+            }
+          },
+          "missingFeatures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "driftLevel": {
+            "$ref": "#/components/schemas/DriftLevel"
+          },
+          "driftAreas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriftAreaDto"
+            }
+          },
+          "decision": {
+            "$ref": "#/components/schemas/ReviewDecision"
+          },
+          "escalationReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EscalationReason"
+              }
+            ]
+          },
+          "regressions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RegressionDto"
+            }
+          },
+          "externalChecks": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "optimizationPlan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReportPlanDto"
+              }
+            ]
+          },
+          "executionRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "The full compliance report of one review cycle (FR-56): the category breakdown, every violation with its evidence,\nthe deterministic findings alone (`deterministicFindings`, the violations whose source is `deterministic`),\nmissing features, drift areas, the decision and its `escalationReason`, regressions (§4.13), the external checks\ncollected (check runs, preview deployment; schemaless, `null` when none), the optimisation plan it produced and\n`executionRunId`, the review-fix run that plan produced (the plan artifact id, see `ListExecutionRuns`)."
+      },
       "ComplianceReportDto": {
         "required": [
           "id",
@@ -6840,6 +7483,57 @@
           }
         },
         "description": "The compliance report of one review cycle (FR-38, FR-41). `overallScore` is Σ category score × weight (3 dp);\n`threshold` is the project's compliance threshold. `decision` follows §4.5; `decisionReason` is set\nwhen the decision is `escalation_required` (`low_score`, `severe_drift`, `max_cycles`,\n`no_improvement` or `no_optimization_plan` — another cycle was required but the review proposed no\noptimisation steps), else `null`. `optimizationPlanArtifactId` is the optimisation plan draft the review\nproduced (FR-40), if any."
+      },
+      "ComplianceReportSummaryDto": {
+        "required": [
+          "cycle",
+          "score",
+          "threshold",
+          "drift",
+          "decision",
+          "createdAt",
+          "checkpoint",
+          "releaseVersionId",
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "cycle": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "score": {
+            "type": "number",
+            "format": "double"
+          },
+          "threshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "drift": {
+            "$ref": "#/components/schemas/DriftLevel"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/ReviewDecision"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "checkpoint": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "releaseVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "description": "One review cycle in the Review page's cycle list (FR-56): cycle number, overall score against the threshold it was\ndecided on, drift level, decision, date, the checkpoint it ran at and its release version. `id` is the report id:\ncycle numbers restart after a rollback, so one release version can list two reports of the same cycle."
       },
       "ComplianceTrendDto": {
         "required": [
@@ -7416,6 +8110,107 @@
         },
         "description": "The plan version the steps belong to."
       },
+      "ExecutionRunDto": {
+        "required": [
+          "id",
+          "planType",
+          "planVersion",
+          "releaseVersionId",
+          "cycle",
+          "status",
+          "superseded",
+          "supersededReason",
+          "stepCount",
+          "completedCount",
+          "startedAt",
+          "completedAt",
+          "commitCount",
+          "tokens",
+          "steps",
+          "complianceReportId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "planType": {
+            "$ref": "#/components/schemas/ArtifactType"
+          },
+          "planVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "releaseVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cycle": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PlanRunStatus"
+          },
+          "superseded": {
+            "type": "boolean"
+          },
+          "supersededReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stepCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "commitCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExecutionStepSummaryDto"
+            }
+          },
+          "complianceReportId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "One execution run (FR-57): the steps of one plan version. `id` is the plan artifact's id. The development run is\nthe implementation plan's; a review-fix run is the optimisation plan of review `cycle`. A run of an invalidated\nplan is `superseded` (status `superseded`, with `supersededReason`). `tokens` is input + output\ntokens of the steps' agent runs; `commitCount` the steps committed. `complianceReportId` is the report whose\noptimisation plan this is (null for the development run): cycle numbers restart after a rollback, report ids don't."
+      },
       "ExecutionRunStatus": {
         "enum": [
           "idle",
@@ -7567,6 +8362,72 @@
           }
         },
         "description": "One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on\nearlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the\nbranch and commit once accepted. `commitUrl` links the commit on GitHub; it is `null` for the Local provider\n(no remote) and before the step is committed."
+      },
+      "ExecutionStepSummaryDto": {
+        "required": [
+          "id",
+          "number",
+          "title",
+          "agentKey",
+          "status",
+          "attempt",
+          "declaredFiles",
+          "producedFiles",
+          "commitSha",
+          "commitUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "agentKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/StepStatus"
+          },
+          "attempt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "declaredFiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclaredFileDto"
+            }
+          },
+          "producedFiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileManifestEntryDto"
+            }
+          },
+          "commitSha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "commitUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "One step of an execution run (FR-57): number, title, the preset specialist that runs it (`agentKey`, null for the\nbase Code Generator), status, attempt count, declared vs produced files, and the commit once accepted\n(`commitUrl` is null for the Local provider)."
       },
       "ExecutionStepsDto": {
         "required": [
@@ -8001,6 +8862,10 @@
               "type": "string"
             },
             "description": "Individual reasons, when there are several."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing."
           }
         }
       },
@@ -8059,6 +8924,7 @@
           "retried"
         ]
       },
+      "JsonElement": { },
       "JsonObject": {
         "type": "object",
         "additionalProperties": { }
@@ -8601,6 +9467,17 @@
         ],
         "description": "The six lifecycle phases, in order (§4.1). Stored as snake_case strings."
       },
+      "PlanRunStatus": {
+        "enum": [
+          "pending",
+          "running",
+          "paused",
+          "completed",
+          "blocked",
+          "superseded"
+        ],
+        "description": "The state of one execution run (FR-57): the steps of one plan version. `pending` (no step started),\n`running`, `paused`, `completed` (every step completed), `blocked` (a step awaits an escalation\ndecision) or `superseded` (the plan was invalidated; its run stays listed under \"Superseded\")."
+      },
       "ProblemDetails": {
         "type": "object",
         "properties": {
@@ -8649,6 +9526,10 @@
               "type": "string"
             },
             "description": "Individual reasons, when there are several."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing."
           }
         }
       },
@@ -9446,6 +10327,33 @@
         },
         "description": "FR-1 registration."
       },
+      "RegressionDto": {
+        "required": [
+          "requirementId",
+          "category",
+          "description",
+          "evidence"
+        ],
+        "type": "object",
+        "properties": {
+          "requirementId": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ReviewCategory"
+          },
+          "description": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "An `[unchanged]` requirement the review found broken in an iteration (§4.13): the requirement id, the category it\nwas reported under, what is broken and the evidence. Regressions carry no deterministic penalty."
+      },
       "ReleaseDto": {
         "required": [
           "id",
@@ -9714,6 +10622,28 @@
           "imported"
         ],
         "description": "Status of a release version (§4.10). Wire values: `in_development`, `awaiting_merge`, `released`, `imported`."
+      },
+      "ReportPlanDto": {
+        "required": [
+          "artifactId",
+          "version",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ArtifactStatus"
+          }
+        },
+        "description": "The optimisation plan a review cycle produced (FR-40): its artifact id, version and status."
       },
       "ReviewCategory": {
         "enum": [
@@ -10003,6 +10933,122 @@
         },
         "description": "FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1)."
       },
+      "StepAttemptDto": {
+        "required": [
+          "attempt",
+          "outcome",
+          "createdAt",
+          "violations",
+          "warnings",
+          "producedFiles",
+          "run",
+          "toolCalls"
+        ],
+        "type": "object",
+        "properties": {
+          "attempt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/StepAttemptOutcome"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "violations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StepViolationDto"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StepViolationDto"
+            }
+          },
+          "producedFiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileManifestEntryDto"
+            }
+          },
+          "run": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StepAttemptRunDto"
+              }
+            ]
+          },
+          "toolCalls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallDto"
+            }
+          }
+        },
+        "description": "One attempt of an execution step (FR-57): its outcome, the Guardian errors (`violations`) and `warnings`, the\nfiles an accepted attempt committed, its agent run (null when the run row is gone) and that run's tool calls."
+      },
+      "StepAttemptOutcome": {
+        "enum": [
+          "accepted",
+          "rejected",
+          "error"
+        ],
+        "description": "Outcome of an execution step attempt (FR-57). Wire values: `accepted`, `rejected`, `error`."
+      },
+      "StepAttemptRunDto": {
+        "required": [
+          "id",
+          "agent",
+          "agentKey",
+          "model",
+          "inputTokens",
+          "outputTokens",
+          "durationMs",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agent": {
+            "$ref": "#/components/schemas/AgentKind"
+          },
+          "agentKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "inputTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "outputTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentRunStatus"
+          }
+        },
+        "description": "The agent run of a step attempt (FR-57): agent, specialist key, model, tokens, duration and status."
+      },
       "StepStatus": {
         "enum": [
           "pending",
@@ -10049,6 +11095,31 @@
           "user",
           "admin"
         ]
+      },
+      "ToolCallDto": {
+        "required": [
+          "tool",
+          "arguments",
+          "bytes",
+          "truncated"
+        ],
+        "type": "object",
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "arguments": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "description": "A repository tool call made during an agent run (FR-71): the tool name, its arguments as given by the model, the bytes\nreturned and whether the result was cut to the tool's limit."
       },
       "UnreadNotificationCountDto": {
         "required": [

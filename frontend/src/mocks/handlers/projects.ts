@@ -61,6 +61,12 @@ export interface StoredProject extends Omit<Project, 'myRole' | 'releaseVersionI
   refinementRounds: StoredRefinementRound[]
   /** Execution steps of approved plan versions (FR-30); see mocks/handlers/execution.ts. */
   executionSteps: StoredExecutionStep[]
+  /** FR-57: attempt history per execution step id, oldest first; see mocks/handlers/execution.ts. */
+  stepAttempts?: Record<string, Schemas['StepAttemptDto'][]>
+  /** FR-57: the review cycle whose optimisation plan an artifact id is (review-fix runs). */
+  planCycles?: Record<string, number>
+  /** FR-57: why a plan's run is superseded, by plan artifact id (default copy when unset). */
+  supersededReasons?: Record<string, string>
   /**
    * Set once execution was started or resumed (the mock's stand-in for the runner's queued work; FR-31). Left unset,
    * an in_progress or rejected step implies queued work; `false` means no job is queued (an interrupted runner).
@@ -71,7 +77,7 @@ export interface StoredProject extends Omit<Project, 'myRole' | 'releaseVersionI
   /** A pull request job is queued or running (FR-36): POST /git/pull-request sets it and refuses with 409 CONFLICT while set. */
   pullRequestJobQueued?: boolean
   /** Compliance reports, oldest first (FR-38, FR-41); see mocks/handlers/review.ts. */
-  complianceReports?: Schemas['ComplianceReportDto'][]
+  complianceReports?: StoredComplianceReport[]
   /** Phase recorded at each checkpoint of the current release version (rollback restores it, §4.8, §4.10). */
   phaseAtVersion: Record<number, Project['currentPhase']>
   /** Release attempts, oldest first (FR-42, FR-43); see mocks/handlers/release.ts. */
@@ -89,9 +95,16 @@ export type StoredRefinementRound = Schemas['RefinementRoundDto'] & {
   questions: Omit<Schemas['RefinementQuestionDto'], 'answer'>[] | null
 }
 
-/** An execution step and the plan version it belongs to. */
+/** An execution step and the plan version it belongs to (and its preset specialist, FR-57/FR-76). */
 export type StoredExecutionStep = Schemas['ExecutionStepDto'] & {
   planArtifactId: string
+  agentKey?: string | null
+}
+
+/** A compliance report plus the v2 detail fields (FR-56) that the v1 DTO lacks. */
+export type StoredComplianceReport = Schemas['ComplianceReportDto'] & {
+  regressions?: Schemas['RegressionDto'][]
+  externalChecks?: unknown
 }
 
 /** A request the mock API received (for assertions such as "the token was sent but never shown"). */
@@ -187,6 +200,10 @@ export function releaseVersionsOf(p: StoredProject): ReleaseVersion[] {
 
 /** The current release version's id ('' when the project has none). */
 export const currentVersionId = (p: StoredProject) => currentVersionOf(p)?.id ?? ''
+
+/** The semver of one of the project's release versions ('' when unknown), e.g. ArtifactDto.releaseVersion (FR-59). */
+export const releaseVersionName = (p: StoredProject, releaseVersionId: string | null) =>
+  p.releaseVersions.find((v) => v.id === releaseVersionId)?.version ?? ''
 
 /** FR-60: the next minor of the released version, else 0.1.0. */
 export function suggestedNextVersion(p: StoredProject): string {

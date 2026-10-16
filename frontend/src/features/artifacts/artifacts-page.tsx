@@ -3,9 +3,11 @@ import { Link } from '@tanstack/react-router'
 import { Alert } from '../../components/ui/alert'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
 import { useDocumentTitle } from '../../lib/use-document-title'
-import { artifactTypeLabels, artifactTypes } from '../projects/labels'
+import { SelectField } from '../../components/ui/select-field'
+import { artifactTypeLabels, artifactTypes, releaseVersionStatusLabels } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
 import { RelativeTime } from '../projects/relative-time'
+import { useShowReleaseVersion } from '../versions/use-selected-release-version'
 import { authorName } from './artifact-author'
 import { ArtifactStatusBadge, IntegrityBadge } from './artifact-badges'
 import { corruptedCopy } from './artifact-integrity'
@@ -42,6 +44,9 @@ function ArtifactCard({ projectId, type, latest }: { projectId: string; type: Ar
           <>
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono font-medium tabular-nums">Version {latest.version}</span>
+              {latest.restoredFromVersion !== null && (
+                <span className="text-xs text-muted-foreground">restored from v{latest.restoredFromVersion}</span>
+              )}
               <ArtifactStatusBadge status={latest.status} />
               <IntegrityBadge integrity={latest.integrity} />
             </div>
@@ -67,7 +72,42 @@ function ArtifactCard({ projectId, type, latest }: { projectId: string; type: Ar
   )
 }
 
-/** /projects/:id/artifacts (FR-21, SPEC §7): a card per type with its latest version, status and integrity. */
+/** FR-59: the release version filter; picking a past version shows its artifacts read-only (FR-62, `?release=`). */
+function ReleaseVersionFilter() {
+  const { project, view } = useProjectAccess()
+  const show = useShowReleaseVersion()
+  if (view.versions.length === 0 || !view.version) {
+    return null
+  }
+  return (
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <p className="text-sm text-muted-foreground">
+        The latest version of each artifact in release version{' '}
+        <span className="font-mono text-foreground">{view.version.version}</span>.
+      </p>
+      <SelectField
+        label="Release version"
+        value={view.version.id}
+        onChange={(e) => {
+          const picked = view.versions.find((v) => v.id === e.target.value)
+          show(picked && picked.id !== project.releaseVersionId ? picked.version : undefined)
+        }}
+      >
+        {view.versions.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.version} · {releaseVersionStatusLabels[v.status]}
+            {v.id === project.releaseVersionId ? ' (current)' : ''}
+          </option>
+        ))}
+      </SelectField>
+    </div>
+  )
+}
+
+/**
+ * /projects/:id/artifacts (FR-21, FR-59): a card per type with its latest version, status and integrity, for the
+ * release version picked in the filter.
+ */
 export function ArtifactsPage() {
   const { project, releaseVersionId } = useProjectAccess()
   useDocumentTitle(`Artifacts · ${project.name}`)
@@ -91,5 +131,10 @@ export function ArtifactsPage() {
     )
   }
 
-  return body
+  return (
+    <>
+      <ReleaseVersionFilter />
+      {body}
+    </>
+  )
 }

@@ -14,7 +14,7 @@ const stepTones: Record<StepStatus, BadgeTone> = {
   invalidated: 'warning',
 }
 
-interface Row extends Omit<PlanPreviewStep, 'files'> {
+interface Row extends Omit<PlanPreviewStep, 'files' | 'agent' | 'covers'> {
   /** `protected` comes from the server (FR-30, §4.6); a draft preview can't tell, so it leaves it unset. */
   files: { path: string; action: string; protected?: boolean }[]
   status?: StepStatus

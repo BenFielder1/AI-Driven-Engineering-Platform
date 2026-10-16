@@ -27,7 +27,7 @@ public static class NotificationRules
     {
         EventTypes.GateCreated => NotificationType.GateRequired,
         EventTypes.GateOverdue => NotificationType.GateOverdue,
-        EventTypes.ArtifactCreated => NotificationType.ArtifactReady,
+        EventTypes.ArtifactCreated or EventTypes.ArtifactRestored => NotificationType.ArtifactReady,
         EventTypes.StepBlocked => NotificationType.StepBlocked,
         EventTypes.RunFailed => NotificationType.RunFailed,
         EventTypes.BudgetExceeded => NotificationType.BudgetExceeded,

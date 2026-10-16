@@ -72,6 +72,8 @@ export const errorMessages = {
   PROVIDER_NOT_CONFIGURED:
     "The run's LLM provider has no API key on this project or the server. An Owner can add one in Settings → LLM.",
   PROVIDER_ERROR: "The model provider returned an error.",
+  // Restore (FR-58); the specific copy per `reason` is restoreNotAllowedMessage().
+  RESTORE_NOT_ALLOWED: "This version can't be restored right now.",
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;
@@ -97,6 +99,13 @@ export const contextualErrorMessages = {
     /** FR-18, FR-29: an edited plan's `aide-plan` block breaks the plan rules; the reasons are in `details`. */
     INVALID_PLAN:
       "The plan in the aide-plan block is invalid, so it wasn't saved. Fix these problems and save again.",
+  },
+  /** POST /api/projects/:id/artifacts/:type/versions/:v/restore (FR-58); RESTORE_NOT_ALLOWED uses its `reason`. */
+  restoreArtifact: {
+    VALIDATION: "This is already the latest version, so there is nothing to restore.",
+    CONFLICT:
+      "Someone saved a newer version at the same time. The page now shows the latest versions; try again if you still need this one.",
+    FORBIDDEN: "Only Contributors and Owners can restore a version.",
   },
   /** POST /api/projects/:id/refinement/run (FR-27). */
   startRefinement: {
@@ -282,6 +291,7 @@ const statusFallback: Partial<Record<number, ErrorCode>> = {
 interface ProblemBody {
   title?: string | null;
   errorCode?: string;
+  reason?: string;
   errors?: Record<string, string[]>;
   details?: string[];
   traceId?: string;
@@ -296,6 +306,8 @@ export class ApiError extends Error {
   readonly details: readonly string[];
   readonly retryAfterSeconds: number | null;
   readonly traceId: string | undefined;
+  /** ProblemDetails `reason`: the machine-readable sub-reason of some codes (RESTORE_NOT_ALLOWED, FR-58). */
+  readonly reason: string | null;
 
   constructor(init: {
     status: number;
@@ -305,6 +317,7 @@ export class ApiError extends Error {
     details?: readonly string[];
     retryAfterSeconds?: number | null;
     traceId?: string;
+    reason?: string | null;
   }) {
     super(init.title ?? `Request failed with HTTP ${String(init.status)}`);
     this.name = "ApiError";
@@ -314,6 +327,7 @@ export class ApiError extends Error {
     this.details = init.details ?? [];
     this.retryAfterSeconds = init.retryAfterSeconds ?? null;
     this.traceId = init.traceId;
+    this.reason = init.reason ?? null;
   }
 }
 
@@ -339,6 +353,7 @@ export function toApiError(error: unknown, response: Response): ApiError {
     retryAfterSeconds:
       Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null,
     traceId: body.traceId,
+    reason: typeof body.reason === "string" ? body.reason : null,
   });
 }
 
@@ -374,6 +389,40 @@ function rollbackBlockedMessage(error: ApiError): string | null {
     return rollbackBlockedMessages.releaseRunning;
   }
   return null;
+}
+
+/** FR-58: the `reason` values of RESTORE_NOT_ALLOWED (backend RestoreReasons). */
+export const restoreReasons = [
+  "stage_completed",
+  "stage_not_reached",
+  "other_release_version",
+  "corrupted",
+  "releasing",
+] as const;
+
+export type RestoreReason = (typeof restoreReasons)[number];
+
+/**
+ * FR-58: why a version can't be restored, per reason. `stage` is the stage that produces the type ("Specification").
+ * Used both for the hidden action's explanation and for a 409 RESTORE_NOT_ALLOWED from the server.
+ */
+export function restoreNotAllowedMessage(reason: RestoreReason, stage: string): string {
+  switch (reason) {
+    case "stage_completed":
+      return `${stage} is complete. Roll back the project to change it.`;
+    case "stage_not_reached":
+      return `${stage} hasn't been reached yet in this version.`;
+    case "other_release_version":
+      return "Only versions of the release version in development can be restored. Older release versions are read-only.";
+    case "corrupted":
+      return "This version failed its integrity check, so it can't be restored.";
+    case "releasing":
+      return "The project is being released, so nothing can be restored until the release finishes.";
+  }
+}
+
+export function isRestoreReason(value: unknown): value is RestoreReason {
+  return typeof value === "string" && (restoreReasons as readonly string[]).includes(value);
 }
 
 /** User-facing copy for any thrown error; `context` selects overrides from `contextualErrorMessages`. */

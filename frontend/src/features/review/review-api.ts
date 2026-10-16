@@ -14,6 +14,9 @@ export type ReviewState = Schemas['ReviewStateDto']
 export type ReviewRunStatus = Schemas['ReviewRunStatus']
 export type ReviewDecision = NonNullable<Schemas['ReviewDecision']>
 export type FindingSeverity = Schemas['Severity']
+export type ComplianceReportSummary = Schemas['ComplianceReportSummaryDto']
+export type ComplianceReportDetail = Schemas['ComplianceReportDetailDto']
+export type Regression = Schemas['RegressionDto']
 
 /** Fallback refresh while a review runs, for when the live connection is down (FR-46 normally refreshes first). */
 export const REVIEW_RUNNING_REFETCH_MS = 15_000
@@ -23,6 +26,9 @@ export const reviewKeys = {
   all: (id: string) => projectKeys.review(id),
   latest: (id: string, releaseVersionId?: string) => [...projectKeys.review(id), 'latest', releaseVersionId ?? 'current'] as const,
   trend: (id: string, releaseVersionId?: string) => [...projectKeys.review(id), 'trend', releaseVersionId ?? 'current'] as const,
+  reports: (id: string, releaseVersionId?: string) => [...projectKeys.review(id), 'reports', releaseVersionId ?? 'current'] as const,
+  report: (id: string, cycle: number, reportId: string | null, releaseVersionId?: string) =>
+    [...projectKeys.review(id), 'report', cycle, reportId ?? 'newest', releaseVersionId ?? 'current'] as const,
 }
 
 const isNotFound = (error: unknown) => error instanceof ApiError && error.status === 404
@@ -64,6 +70,45 @@ export function useComplianceTrend(id: string, releaseVersionId?: string) {
           signal,
         }),
       ),
+  })
+}
+
+/** FR-56: every review cycle of a release version, newest first (an empty list before the first review). */
+export function useComplianceReports(id: string, refetchWhileRunning: boolean, releaseVersionId?: string) {
+  return useQuery({
+    queryKey: reviewKeys.reports(id, releaseVersionId),
+    queryFn: async ({ signal }) => {
+      const reports = unwrap(
+        await api.GET('/api/projects/{id}/compliance/reports', {
+          params: { path: { id }, query: releaseVersionId ? { releaseVersionId } : {} },
+          signal,
+        }),
+      )
+      // Newest first by time: cycle numbers restart after a rollback, so the cycle can't order them.
+      return [...reports].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    },
+    refetchInterval: refetchWhileRunning ? REVIEW_RUNNING_REFETCH_MS : false,
+  })
+}
+
+/**
+ * FR-56: the full report of one review cycle (`null` = nothing selected yet). `reportId` picks the exact report when
+ * the cycle number repeats (after a rollback); without it the server returns the cycle's newest report.
+ */
+export function useComplianceReport(id: string, cycle: number | null, reportId: string | null, releaseVersionId?: string) {
+  return useQuery({
+    queryKey: reviewKeys.report(id, cycle ?? 0, reportId, releaseVersionId),
+    queryFn: async ({ signal }) =>
+      unwrap(
+        await api.GET('/api/projects/{id}/compliance/reports/{cycle}', {
+          params: {
+            path: { id, cycle: cycle ?? 0 },
+            query: { ...(releaseVersionId ? { releaseVersionId } : {}), ...(reportId ? { reportId } : {}) },
+          },
+          signal,
+        }),
+      ),
+    enabled: cycle !== null,
   })
 }
 

@@ -326,13 +326,13 @@ describe('FR-54: project mode', () => {
     expect(await within(sidebar()).findByRole('navigation', { name: 'Main' })).toBeInTheDocument()
   })
 
-  it('FR54_stage_routes: the new stage and activity routes render the v1 content instead of 404', async () => {
+  it('FR54_stage_routes: the stage and activity routes render their pages instead of 404', async () => {
     signInAs()
     const project = seedProject({ name: 'Inventory tracker', currentPhase: 'refinement' })
 
     for (const [path, heading] of [
-      ['specification', 'Technical specification'],
-      ['planning', 'Implementation plan'],
+      ['specification', 'Specification'],
+      ['planning', 'Planning'],
       ['release', 'Release'],
       ['activity', 'Activity'],
     ] as const) {

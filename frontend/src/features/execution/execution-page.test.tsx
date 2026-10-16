@@ -241,7 +241,8 @@ describe('Execution page (FR-31–FR-34, FR-37)', () => {
     })
     await openExecution(project)
 
-    expect(screen.getByRole('heading', { level: 3, name: 'Steps of optimisation plan v2' })).toBeInTheDocument()
+    // FR-57: the optimisation plan's review-fix run is the active (expanded) run.
+    expect(screen.getByRole('heading', { level: 3, name: /^Optimisation plan v2 · Review-fix run/ })).toBeInTheDocument()
     const list = screen.getByRole('list', { name: 'Execution steps' })
     expect(within(list).getAllByRole('heading', { level: 4 }).map((h) => h.textContent)).toEqual([
       'Step 1: Optimisation 1 title',

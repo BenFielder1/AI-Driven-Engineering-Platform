@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Jobs;
 using Aide.Domain.Common;
@@ -6,6 +8,7 @@ using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
+using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aide.Api.Features.Review;
@@ -74,8 +77,119 @@ public sealed partial class ReviewService(AideDbContext db, JobEnqueuer jobs, Ti
 /// (<see cref="ReviewTimeline"/>) — reports above the current checkpoint or from before the last rollback were undone by it
 /// (§4.8) and are left out. For another release version (<c>releaseVersionId</c>), all of its reports (read-only history).
 /// </summary>
-public sealed class ReviewReader(AideDbContext db)
+public sealed class ReviewReader(AideDbContext db, ExecutionRunReader runs)
 {
+    /// <summary>FR-56: every review cycle of the release version, newest first.</summary>
+    public async Task<IReadOnlyList<ComplianceReportSummaryDto>> ListAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
+    {
+        if (await ProjectAsync(projectId, cancellationToken) is not { } project)
+        {
+            return [];
+        }
+
+        return await Reports(projectId, project, releaseVersionId)
+            .NewestFirst()
+            .Select(r => new ComplianceReportSummaryDto(r.ReviewCycle, r.Score, r.Threshold, r.DriftLevel, r.Decision, r.CreatedAt, r.Checkpoint, r.ReleaseVersionId, r.Id))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// FR-56: the full report of review cycle <paramref name="cycle"/>: report <paramref name="reportId"/> when given (it
+    /// must be of that cycle), else the newest report of that cycle in the timeline (cycles restart after a rollback),
+    /// with its optimisation plan — the version that ran when it produced a review-fix run, else the draft the review
+    /// wrote — and that run's id; <c>null</c> when there is no report for the cycle.
+    /// </summary>
+    public async Task<ComplianceReportDetailDto?> CycleAsync(
+        Guid projectId, int cycle, CancellationToken cancellationToken, Guid? releaseVersionId = null, Guid? reportId = null)
+    {
+        if (await ProjectAsync(projectId, cancellationToken) is not { } project)
+        {
+            return null;
+        }
+
+        var reports = Reports(projectId, project, releaseVersionId).Where(r => r.ReviewCycle == cycle);
+        if (reportId is { } wanted)
+        {
+            reports = reports.Where(r => r.Id == wanted);
+        }
+
+        var report = await reports
+            .NewestFirst()
+            .FirstOrDefaultAsync(cancellationToken);
+        if (report is null)
+        {
+            return null;
+        }
+
+        var run = await runs.RunOfReportAsync(projectId, report.ReleaseVersionId, report.Id, cancellationToken);
+        var plan = run is not null
+            ? new ReportPlanDto(run.Id, run.Version, run.Status)
+            : report.OptimizationPlanArtifactId is { } draftId
+                ? await db.Artifacts.AsNoTracking()
+                    .Where(a => a.Id == draftId)
+                    .Select(a => new ReportPlanDto(a.Id, a.Version, a.Status))
+                    .FirstOrDefaultAsync(cancellationToken)
+                : null;
+        var summary = ToDto(report);
+        return new ComplianceReportDetailDto(
+            summary.Id,
+            summary.ReleaseVersionId,
+            summary.Checkpoint,
+            summary.Cycle,
+            summary.OverallScore,
+            summary.Threshold,
+            summary.CategoryScores,
+            summary.Violations,
+            [.. summary.Violations.Where(v => v.Source == FindingSource.Deterministic)],
+            summary.MissingFeatures,
+            summary.DriftLevel,
+            summary.DriftAreas,
+            summary.Decision,
+            summary.DecisionReason,
+            ReadRegressions(report.Regressions),
+            ReadExternalChecks(report.ExternalChecks),
+            plan,
+            run?.Id,
+            summary.CreatedAt);
+    }
+
+    /// <summary>§4.13 regressions from the report's JSON array; unreadable JSON or entries read as none.</summary>
+    public static IReadOnlyList<RegressionDto> ReadRegressions(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return [.. (AideJson.Deserialize<List<RegressionDto?>>(json)).OfType<RegressionDto>().Where(r => !string.IsNullOrEmpty(r.RequirementId))];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>The report's external checks (schemaless JSON), or <c>null</c> when none were collected or they can't be read.</summary>
+    public static JsonElement? ReadExternalChecks(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind == JsonValueKind.Null ? null : doc.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     public async Task<ComplianceReportDto?> LatestAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
         var report = await LatestReportAsync(projectId, releaseVersionId, cancellationToken);

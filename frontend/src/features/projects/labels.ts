@@ -498,3 +498,20 @@ export const reviewRunStatusLabels: Record<Schemas['ReviewRunStatus'], string> =
 const percentFormat = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 })
 /** A 0–1 score as a percentage ("82.5%"). */
 export const formatPercent = (score: number) => percentFormat.format(score)
+
+/** FR-57: the state of one execution run (a plan version's steps). */
+export const planRunStatusLabels: Record<Schemas['PlanRunStatus'], string> = {
+  pending: 'Pending',
+  running: 'Running',
+  paused: 'Paused',
+  completed: 'Completed',
+  blocked: 'Blocked',
+  superseded: 'Superseded',
+}
+
+/** FR-57: the outcome of one step attempt. */
+export const stepAttemptOutcomeLabels: Record<Schemas['StepAttemptOutcome'], string> = {
+  accepted: 'Accepted',
+  rejected: 'Rejected by the Guardian',
+  error: 'Failed with an error',
+}

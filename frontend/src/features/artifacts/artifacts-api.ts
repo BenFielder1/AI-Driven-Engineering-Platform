@@ -21,6 +21,7 @@ export const artifactKeys = {
     [...artifactKeys.type(id, type), 'latest', releaseVersionId ?? 'current'] as const,
   history: (id: string, type: ArtifactType, releaseVersionId?: string) =>
     [...artifactKeys.type(id, type), 'history', releaseVersionId ?? 'current'] as const,
+  allHistory: (id: string, type: ArtifactType) => [...artifactKeys.type(id, type), 'all-history'] as const,
   version: (id: string, type: ArtifactType, version: number) =>
     [...artifactKeys.type(id, type), 'version', version] as const,
   diff: (id: string, type: ArtifactType, from: number, to: number) =>
@@ -54,6 +55,25 @@ export function useArtifactHistory(id: string, type: ArtifactType, releaseVersio
       const versions = unwrap(
         await api.GET('/api/projects/{id}/artifacts/{type}/history', {
           params: { path: { id, type }, query: versionQuery(releaseVersionId) },
+          signal,
+        }),
+      )
+      return [...versions].sort((a, b) => b.version - a.version)
+    },
+  })
+}
+
+/**
+ * FR-59: every version of a type across all release versions, newest first, each with its `releaseVersion` (for the
+ * cross-version diff picker).
+ */
+export function useAllArtifactHistory(id: string, type: ArtifactType) {
+  return useQuery({
+    queryKey: artifactKeys.allHistory(id, type),
+    queryFn: async ({ signal }) => {
+      const versions = unwrap(
+        await api.GET('/api/projects/{id}/artifacts/{type}/history', {
+          params: { path: { id, type }, query: { allReleaseVersions: true } },
           signal,
         }),
       )
@@ -121,6 +141,23 @@ export function useCreateArtifactDraft(id: string, type: ArtifactType) {
         await api.POST('/api/projects/{id}/artifacts/{type}', {
           params: { path: { id, type } },
           body: { content, baseVersion },
+        }),
+      ),
+    onSettled: () => invalidateProject(queryClient, id),
+  })
+}
+
+/**
+ * FR-58: restore an older version as a new draft (writers): same content and hash, parent = the latest version,
+ * `restoredFromVersion` = the chosen one. Refreshes the whole project either way (a 409 means our view is stale).
+ */
+export function useRestoreArtifact(id: string, type: ArtifactType) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (version: number) =>
+      unwrap(
+        await api.POST('/api/projects/{id}/artifacts/{type}/versions/{version}/restore', {
+          params: { path: { id, type, version } },
         }),
       ),
     onSettled: () => invalidateProject(queryClient, id),

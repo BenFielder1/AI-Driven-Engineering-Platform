@@ -8,16 +8,18 @@ import { SelectField } from '../../components/ui/select-field'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
 import { isApiError } from '../../lib/errors'
 import { useDocumentTitle } from '../../lib/use-document-title'
-import { artifactStatusLabels, artifactTypeLabels, formatDateTime } from '../projects/labels'
+import { artifactStatusLabels, artifactTypeLabels } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
 import { RelativeTime } from '../projects/relative-time'
-import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
+import { useReleaseVersionNames } from '../versions/version-label'
 import { authorName, isAgentAuthored } from './artifact-author'
 import { ArtifactStatusBadge, IntegrityBadge } from './artifact-badges'
 import { ArtifactDecisionDialog, type ArtifactDecision } from './artifact-decision-dialog'
 import { ArtifactEditor } from './artifact-editor'
+import { ArtifactVersionDetails } from './artifact-version-details'
 import { corruptedCopy, isCurrentVersion } from './artifact-integrity'
 import {
+  useAllArtifactHistory,
   useArtifactDiff,
   useArtifactHistory,
   useArtifactVersion,
@@ -30,54 +32,13 @@ import { DiffView } from './diff-view'
 import { MarkdownView } from './markdown-view'
 import { isPlanType } from './plan-block'
 import { PlanSteps } from './plan-steps'
+import { RestoreVersionAction } from './restore-version'
 
 const versionOption = (a: ArtifactSummary) =>
   `v${String(a.version)} · ${a.status ? artifactStatusLabels[a.status] : 'Unknown'}${a.integrity === 'corrupted' ? ' · integrity check failed' : ''}`
 
-function Meta({ term, children }: { term: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <dt className="text-xs text-muted-foreground">{term}</dt>
-      <dd className="text-sm font-medium break-words">{children}</dd>
-    </div>
-  )
-}
-
-function VersionDetails({ artifact, versionName }: { artifact: Artifact; versionName: string | undefined }) {
-  return (
-    <dl className="grid grid-cols-2 gap-3 rounded-lg border border-border/60 bg-background/40 p-3 sm:grid-cols-4">
-      <Meta term="Status">
-        <ArtifactStatusBadge status={artifact.status} />
-      </Meta>
-      <Meta term="Integrity">
-        <IntegrityBadge integrity={artifact.integrity} />
-      </Meta>
-      <Meta term="Author">{authorName(artifact.author)}</Meta>
-      <Meta term="Created">
-        <RelativeTime iso={artifact.createdAt} />
-      </Meta>
-      <Meta term="Parent version">{artifact.parentVersion === null ? 'None' : `v${String(artifact.parentVersion)}`}</Meta>
-      <Meta term="Created at">{checkpointLabel(versionName, artifact.checkpointAtCreation)}</Meta>
-      {artifact.approvedAt && (
-        <Meta term="Approved">
-          {artifact.approvedBy ? `${artifact.approvedBy.name}, ` : ''}
-          <time dateTime={artifact.approvedAt}>{formatDateTime(artifact.approvedAt)}</time>
-        </Meta>
-      )}
-      <Meta term="Content hash (SHA-256)">
-        <code className="text-xs" title={artifact.contentHash}>
-          {artifact.contentHash.slice(0, 12)}…
-        </code>
-      </Meta>
-      {artifact.rejectionComment && (
-        <div className="col-span-full flex flex-col gap-0.5">
-          <dt className="text-xs text-muted-foreground">Rejection comment</dt>
-          <dd className="text-sm whitespace-pre-wrap">{artifact.rejectionComment}</dd>
-        </div>
-      )}
-    </dl>
-  )
-}
+/** FR-59: the compare options name each version's release version, since they span release versions. */
+const compareOption = (a: ArtifactSummary) => `${versionOption(a)}${a.releaseVersion ? ` · ${a.releaseVersion}` : ''}`
 
 function HistoryTable({
   projectId,
@@ -103,6 +64,9 @@ function HistoryTable({
               Status
             </th>
             <th scope="col" className="px-3 py-2">
+              Release version
+            </th>
+            <th scope="col" className="px-3 py-2">
               Author
             </th>
             <th scope="col" className="py-2">
@@ -124,6 +88,9 @@ function HistoryTable({
                   v{a.version}
                 </Link>
                 {a.version === selected && <span className="ml-1 text-xs font-normal text-muted-foreground">(shown)</span>}
+                {a.restoredFromVersion !== null && (
+                  <span className="block text-xs font-normal text-muted-foreground">restored from v{a.restoredFromVersion}</span>
+                )}
               </th>
               <td className="px-3 py-2">
                 <span className="flex flex-wrap gap-1">
@@ -131,6 +98,7 @@ function HistoryTable({
                   {a.integrity === 'corrupted' && <IntegrityBadge integrity={a.integrity} />}
                 </span>
               </td>
+              <td className="px-3 py-2 font-mono tabular-nums">{a.releaseVersion || '—'}</td>
               <td className="px-3 py-2">{authorName(a.author)}</td>
               <td className="py-2">
                 <RelativeTime iso={a.createdAt} />
@@ -143,8 +111,11 @@ function HistoryTable({
   )
 }
 
-/** FR-21: pick any two versions and see the side-by-side diff. */
-function ComparePanel({ projectId, type, history }: { projectId: string; type: ArtifactType; history: ArtifactSummary[] }) {
+/** FR-21, FR-59: pick any two versions, across release versions, and see the side-by-side diff. */
+function ComparePanel({ projectId, type, scoped }: { projectId: string; type: ArtifactType; scoped: ArtifactSummary[] }) {
+  const all = useAllArtifactHistory(projectId, type)
+  // Until (or unless) the cross-version history loads, the release version's own history is offered.
+  const history = all.data && all.data.length >= scoped.length ? all.data : scoped
   const newest = history[0]?.version ?? 1
   const [from, setFrom] = useState(String(history[1]?.version ?? newest))
   const [to, setTo] = useState(String(newest))
@@ -168,7 +139,7 @@ function ComparePanel({ projectId, type, history }: { projectId: string; type: A
 
   const options = history.map((a) => (
     <option key={a.id} value={a.version}>
-      {versionOption(a)}
+      {compareOption(a)}
     </option>
   ))
 
@@ -238,7 +209,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
 }
 
 /** Opens the editor once the latest version (FR-18: the edit starts from it) has loaded. */
-function EditLatest({
+export function EditLatest({
   projectId,
   type,
   openDraftVersion,
@@ -284,8 +255,9 @@ export function ArtifactDetailPage({
   version: number | undefined
   onVersionChange: (version: number | undefined) => void
 }) {
-  const { project, can, releaseVersionId } = useProjectAccess()
+  const { project, can, releaseVersionId, view } = useProjectAccess()
   const versionName = useReleaseVersionNames(project.id)
+  const releaseName = view.version?.version ?? versionName(project.releaseVersionId)
   const label = artifactTypeLabels[type]
   useDocumentTitle(`${label} · ${project.name}`)
   // FR-62: a past release version is read-only (`can` is false for mutations there).
@@ -312,6 +284,7 @@ export function ArtifactDetailPage({
       <h2 ref={headingRef} tabIndex={-1} className="text-xl">
         {label}
       </h2>
+      {releaseName && <p className="text-sm text-muted-foreground">Release version {releaseName}</p>}
     </div>
   )
 
@@ -473,7 +446,19 @@ export function ArtifactDetailPage({
             {shown.data.integrity === 'corrupted' && (
               <CorruptedAlert artifact={shown.data} current={isCurrentVersion(shown.data.version, versions)} />
             )}
-            <VersionDetails artifact={shown.data} versionName={versionName(shown.data.releaseVersionId)} />
+            {newest !== null && (
+              <RestoreVersionAction
+                key={shown.data.version}
+                type={type}
+                shown={shown.data}
+                latest={newest}
+                onRestored={(created) => {
+                  onVersionChange(created)
+                  headingRef.current?.focus()
+                }}
+              />
+            )}
+            <ArtifactVersionDetails projectId={project.id} artifact={shown.data} />
             {isPlanType(type) && (
               <Section id="plan-steps" title="Steps">
                 <PlanSteps projectId={project.id} artifact={shown.data} />
@@ -488,7 +473,7 @@ export function ArtifactDetailPage({
         </Section>
 
         <Section id="artifact-compare" title="Compare versions">
-          <ComparePanel projectId={project.id} type={type} history={versions} />
+          <ComparePanel projectId={project.id} type={type} scoped={versions} />
         </Section>
       </div>
 

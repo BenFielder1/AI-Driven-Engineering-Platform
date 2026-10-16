@@ -5,7 +5,7 @@ import { writerMutation, seedArtifact } from './artifacts'
 import { nextId } from './auth'
 import { addEvent } from './lifecycle'
 import { problem } from './problem'
-import { access, record, type StoredProject, type StoredRefinementRound } from './projects'
+import { access, currentVersionId, record, type StoredProject, type StoredRefinementRound } from './projects'
 
 type Round = Schemas['RefinementRoundDto']
 type Question = NonNullable<StoredRefinementRound['questions']>[number]
@@ -111,10 +111,14 @@ export function failRefinementRound(project: StoredProject, error: string) {
 const toDto = ({ questions, ...dto }: StoredRefinementRound): Round => dto
 
 /** Mirrors RefinementService.GetAsync. */
-function refinementDto(project: StoredProject): Schemas['RefinementDto'] {
-  const drafts = project.artifacts.filter((a) => a.type === 'project_request').sort((a, b) => b.version - a.version)
+function refinementDto(project: StoredProject, releaseVersionId: string): Schemas['RefinementDto'] {
+  const drafts = project.artifacts
+    .filter((a) => a.type === 'project_request' && a.releaseVersionId === releaseVersionId)
+    .sort((a, b) => b.version - a.version)
+  // Rounds are only kept for the current release version in this mock.
+  const roundsOf = releaseVersionId === currentVersionId(project) ? project.refinementRounds : []
   const latestDraft = drafts[0]
-  const rounds = [...project.refinementRounds].reverse()
+  const rounds = [...roundsOf].reverse()
   const latest = rounds[0]
   const completed = rounds.find((r) => r.status === 'succeeded' && r.questions !== null)
   const later = latest && completed && latest.jobId !== completed.jobId ? latest : undefined
@@ -126,6 +130,8 @@ function refinementDto(project: StoredProject): Schemas['RefinementDto'] {
           type: latestDraft.type,
           version: latestDraft.version,
           releaseVersionId: latestDraft.releaseVersionId,
+          releaseVersion: latestDraft.releaseVersion,
+          restoredFromVersion: latestDraft.restoredFromVersion,
           status: latestDraft.status,
           integrity: latestDraft.integrity,
           createdAt: latestDraft.createdAt,
@@ -142,12 +148,13 @@ const validation = (errors: Record<string, string[]>) =>
   problem(400, 'VALIDATION', 'One or more validation errors occurred.', { errors })
 
 export const refinementHandlers = [
-  http.get('*/api/projects/:id/refinement', ({ params }) => {
+  http.get('*/api/projects/:id/refinement', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
-    return HttpResponse.json<Schemas['RefinementDto']>(refinementDto(a.project))
+    const scope = new URL(request.url).searchParams.get('releaseVersionId') ?? currentVersionId(a.project)
+    return HttpResponse.json<Schemas['RefinementDto']>(refinementDto(a.project, scope))
   }),
 
   // FR-27: queue a round (writers): WRONG_PHASE, BUDGET_EXCEEDED, REFINEMENT_IN_PROGRESS, VALIDATION.

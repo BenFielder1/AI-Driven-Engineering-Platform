@@ -22,12 +22,20 @@ export const isRoundPending = (round: Pick<RefinementRound, 'status'> | null | u
  */
 const PENDING_REFETCH_MS = 15_000
 
-/** FR-27: the refinement page state (members): latest draft summary, latest round, its questions and given answers. */
-export function useRefinement(id: string) {
+/**
+ * FR-27, FR-55: the refinement page state (members) of a release version (default: the current one): latest draft
+ * summary, latest round, its questions and given answers.
+ */
+export function useRefinement(id: string, releaseVersionId?: string) {
   return useQuery({
-    queryKey: refinementKeys.detail(id),
+    queryKey: releaseVersionId ? [...refinementKeys.detail(id), releaseVersionId] : refinementKeys.detail(id),
     queryFn: async ({ signal }) =>
-      unwrap(await api.GET('/api/projects/{id}/refinement', { params: { path: { id } }, signal })),
+      unwrap(
+        await api.GET('/api/projects/{id}/refinement', {
+          params: { path: { id }, query: releaseVersionId ? { releaseVersionId } : {} },
+          signal,
+        }),
+      ),
     refetchInterval: (query) => (isRoundPending(query.state.data?.latestRound) ? PENDING_REFETCH_MS : false),
   })
 }

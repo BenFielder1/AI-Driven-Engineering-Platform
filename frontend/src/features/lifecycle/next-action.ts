@@ -49,17 +49,13 @@ const gateAction: Record<GateType, { label: string; noun: string }> = {
 }
 
 /** The artifact each phase produces (and the approve label for its draft). */
-/*
- * Each target page must hold the approve control: the request and the optimisation plan are approved on their
- * artifact pages until the M11 stage pages add approval (the Refinement and Review pages only link to the artifact).
- */
-const phaseArtifact: Partial<Record<Phase, { type: ArtifactType; label: string; noun: string; to: AppPath; byType?: boolean }>> = {
+/* FR-55: each stage page holds the approve control for its artifact, so the action points there. */
+const phaseArtifact: Partial<Record<Phase, { type: ArtifactType; label: string; noun: string; to: AppPath }>> = {
   refinement: {
     type: 'project_request',
     label: 'Approve request',
     noun: 'approve the project request',
-    to: '/projects/$projectId/artifacts/$type',
-    byType: true,
+    to: '/projects/$projectId/refinement',
   },
   specification: {
     type: 'technical_specification',
@@ -77,9 +73,22 @@ const phaseArtifact: Partial<Record<Phase, { type: ArtifactType; label: string; 
     type: 'optimization_plan',
     label: 'Approve optimisation plan',
     noun: 'approve the optimisation plan',
-    to: '/projects/$projectId/artifacts/$type',
-    byType: true,
+    to: '/projects/$projectId/review',
   },
+}
+
+/** FR-55: the stage page that decides each gate (escalations: the stage that raised them). */
+function gatePage(type: GateType, phase: Phase): AppPath {
+  switch (type) {
+    case 'spec_approval':
+      return '/projects/$projectId/specification'
+    case 'plan_approval':
+      return '/projects/$projectId/planning'
+    case 'pre_release':
+      return '/projects/$projectId/release'
+    case 'escalation':
+      return phase === 'execution' ? '/projects/$projectId/execution' : phase === 'review' ? '/projects/$projectId/review' : '/projects/$projectId'
+  }
 }
 
 /** The gate a draft is already waiting on (so its approval reads as the gate, not the draft). */
@@ -123,8 +132,8 @@ export function nextAction(
         key: 'decide_gate',
         label: copy.label,
         description: `A gate is waiting: an Owner needs to ${copy.noun} before the project moves on.`,
-        to: '/projects/$projectId',
-        hash: 'pending-gates',
+        to: gatePage(gate.type, state.phase),
+        hash: gatePage(gate.type, state.phase) === '/projects/$projectId' ? 'pending-gates' : 'stage-gates',
         capability: 'decideGates',
       },
       can,
@@ -145,7 +154,7 @@ export function nextAction(
             ? 'A draft is waiting for approval.'
             : `Version ${String(draft.latestVersion)} is a draft waiting for approval.`,
         to: produced.to,
-        ...(produced.byType ? { params: { type: produced.type } } : {}),
+        hash: 'stage-artifact',
         capability: 'approveArtifacts',
       },
       can,

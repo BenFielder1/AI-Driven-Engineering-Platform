@@ -45,7 +45,7 @@ public static class ArtifactEndpoints
 
         group.MapGet("/{type}/history", GetArtifactHistory)
             .WithName("GetArtifactHistory")
-            .WithSummary("Every version of an artifact type in a release version (default: the version in development, else the latest released), newest first, without content (members).")
+            .WithSummary("Every version of an artifact type in a release version (default: the version in development, else the latest released), newest first, without content (members). With allReleaseVersions=true, every version of the type across all release versions (each with its releaseVersion), for diffs across release versions (FR-59).")
             .Produces<IReadOnlyList<ArtifactSummaryDto>>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -86,6 +86,20 @@ public static class ArtifactEndpoints
                 (StatusCodes.Status403Forbidden, "FORBIDDEN: Viewers can't create drafts."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project."),
                 (StatusCodes.Status409Conflict, "WRONG_PHASE: the type can't be edited in the current phase; CONFLICT: baseVersion is no longer the latest version (details: latestVersion), or a concurrent save."));
+
+        group.MapPost("/{type}/versions/{version:int}/restore", RestoreArtifactVersion)
+            .WithName("RestoreArtifactVersion")
+            .WithSummary("Restore an older version (Contributor or Owner, FR-58): creates a new draft with that version's content and hash (version = latest + 1, parent = latest, restoredFromVersion = the chosen version), which then follows the normal approval rules. Only in the phase that produces the type, in the release version in development, while not releasing, for a non-corrupted version of that release version.")
+            .Produces<ArtifactDto>(StatusCodes.Status201Created)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .WithResponseDescriptions(
+                (StatusCodes.Status400BadRequest, "VALIDATION: unknown artifact type, version below 1, or the version is already the latest of its type."),
+                (StatusCodes.Status403Forbidden, "FORBIDDEN: Viewers can't restore versions."),
+                (StatusCodes.Status404NotFound, "NOT_FOUND: the project or version."),
+                (StatusCodes.Status409Conflict, "RESTORE_NOT_ALLOWED (reason: stage_completed, stage_not_reached, other_release_version, corrupted or releasing) or CONFLICT (a concurrent save)."));
 
         group.MapPost("/{artifactId:guid}/approve", ApproveArtifact)
             .WithName("ApproveArtifact")
@@ -175,7 +189,8 @@ public static class ArtifactEndpoints
         ArtifactReader reader,
         AideDbContext db,
         CancellationToken cancellationToken,
-        Guid? releaseVersionId = null)
+        Guid? releaseVersionId = null,
+        bool allReleaseVersions = false)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -189,7 +204,10 @@ public static class ArtifactEndpoints
             return ApiProblems.FromError(scope.Error!);
         }
 
-        return TypedResults.Ok(await reader.HistoryAsync(id, EnumStrings.Parse<ArtifactType>(type), scope.Value, cancellationToken));
+        var artifactType = EnumStrings.Parse<ArtifactType>(type);
+        return TypedResults.Ok(allReleaseVersions
+            ? await reader.HistoryAcrossReleaseVersionsAsync(id, artifactType, cancellationToken)
+            : await reader.HistoryAsync(id, artifactType, scope.Value, cancellationToken));
     }
 
     private static async Task<Results<Ok<ArtifactDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> GetArtifactVersion(
@@ -264,6 +282,33 @@ public static class ArtifactEndpoints
         }
 
         var dto = await reader.ToDtoAsync(created.Value, cancellationToken);
+        return TypedResults.Created($"/api/projects/{id}/artifacts/{type}/versions/{dto.Version}", dto);
+    }
+
+    /// <summary>FR-58: writers only; <see cref="ArtifactService.RestoreAsync"/> decides and writes.</summary>
+    private static async Task<Results<Created<ArtifactDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> RestoreArtifactVersion(
+        Guid id,
+        [WireEnum(typeof(ArtifactType))] string type,
+        [Range(1, int.MaxValue)] int version,
+        IProjectAccess access,
+        ICurrentUser currentUser,
+        ArtifactService service,
+        ArtifactReader reader,
+        CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.CreateDraft, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        var restored = await service.RestoreAsync(id, EnumStrings.Parse<ArtifactType>(type), version, currentUser.RequiredUserId, currentUser.Actor, cancellationToken);
+        if (restored.IsFailure)
+        {
+            return restored.Error!.Code == ErrorCodes.Validation ? ApiProblems.Validation(restored.Error) : ApiProblems.FromError(restored.Error);
+        }
+
+        var dto = await reader.ToDtoAsync(restored.Value, cancellationToken);
         return TypedResults.Created($"/api/projects/{id}/artifacts/{type}/versions/{dto.Version}", dto);
     }
 
