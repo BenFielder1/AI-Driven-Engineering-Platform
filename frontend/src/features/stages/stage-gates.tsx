@@ -11,7 +11,6 @@ import { GateArtifactRef, GateStepRef } from '../gates/pending-gates-panel'
 import { escalationReasonLabels, gateStatusLabels, gateTypeLabels } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
 import { RelativeTime } from '../projects/relative-time'
-import { releaseVersionAt } from './stage-model'
 import { StageSection } from './stage-section'
 
 type GateType = Schemas['GateType']
@@ -30,7 +29,7 @@ const RECENT_DECIDED = 5
 /**
  * FR-55: the stage's gates of the release version on screen, decided in place: pending ones first with Approve/Reject
  * (escalations: Decide) for Owners, then the most recent decided ones, each with its release version. A gate belongs to
- * the release version it was created in (`releaseVersionAt`); a past version (FR-62) lists its gates read-only.
+ * the release version it was created in (`GateDto.releaseVersionId`); a past version (FR-62) lists its gates read-only.
  */
 export function StageGates({ types, filter }: { types: readonly GateType[]; filter?: (gate: Gate) => boolean }) {
   const { project, can, readOnly, view } = useProjectAccess()
@@ -41,9 +40,9 @@ export function StageGates({ types, filter }: { types: readonly GateType[]; filt
     return null
   }
   const canDecide = can('decideGates')
-  const versionOf = (gate: Gate) => releaseVersionAt(view.versions, gate.createdAt)
+  const versionOf = (gate: Gate) => view.versions.find((v) => v.id === gate.releaseVersionId)
   const shownVersionId = view.version?.id ?? null
-  const inShownVersion = (gate: Gate) => shownVersionId === null || versionOf(gate)?.id === shownVersionId
+  const inShownVersion = (gate: Gate) => shownVersionId === null || gate.releaseVersionId === shownVersionId
   const mine = (gates.data ?? []).filter((g) => types.includes(g.type) && inShownVersion(g) && (filter?.(g) ?? true))
   const pending = mine.filter((g) => g.status === 'pending')
   const decided = mine.filter((g) => g.status !== 'pending').slice(0, RECENT_DECIDED)

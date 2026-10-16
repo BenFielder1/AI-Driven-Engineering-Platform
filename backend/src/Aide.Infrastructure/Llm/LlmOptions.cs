@@ -12,9 +12,12 @@ namespace Aide.Infrastructure.Llm;
 /// <item><c>Llm:DefaultProvider</c> (anthropic|openai|ollama|fake, default anthropic);</item>
 /// <item><c>Llm:Providers:{Anthropic|OpenAI|Ollama|Fake}:DefaultModel</c> and <c>…:Models:{AgentKind}</c> (e.g. <c>Models:IdeaRefinement</c>);</item>
 /// <item><c>Llm:Providers:Anthropic:ApiKey</c>, <c>Llm:Providers:OpenAI:ApiKey</c> (secrets: user-secrets / secrets.env only);</item>
+/// <item><c>Llm:AllowSystemKeys</c> (default <c>false</c>, D-V2-5): whether those system keys may be used at all, and then only
+/// for projects with no bound connection (FR-79);</item>
 /// <item><c>Llm:Providers:{Provider}:BaseUrl</c> (defaults: https://api.anthropic.com, https://api.openai.com/v1, and for
 /// Ollama http://localhost:11434 in the dev loop or http://host.docker.internal:11434 in a container);</item>
 /// <item><c>Llm:Pricing:{model-id}:InputPerMTok</c> / <c>OutputPerMTok</c> (USD per million tokens; unpriced models cost 0);</item>
+/// <item><c>Llm:KeyCheckTimeout</c> (per key check, FR-78, default 00:00:15);</item>
 /// <item><c>Llm:RequestTimeout</c> (per provider call, default 00:05:00) and <c>Llm:MaxOutputTokens</c> (default 16000).</item>
 /// </list>
 /// Environment variables use <c>__</c>, e.g. <c>Llm__Providers__Anthropic__ApiKey</c>.
@@ -25,6 +28,10 @@ public sealed class LlmOptions
 
     public string DefaultProvider { get; set; } = "anthropic";
 
+    /// <summary>D-V2-5, FR-79: system keys are used only when this is <c>true</c> and the project has no bound connection.
+    /// Off by default: runs use the key an Owner bound to the project.</summary>
+    public bool AllowSystemKeys { get; set; }
+
     public LlmProvidersOptions Providers { get; set; } = new();
 
     /// <summary>Price per model id (case-insensitive), for run cost estimates (FR-23, D15).</summary>
@@ -32,6 +39,9 @@ public sealed class LlmOptions
 
     /// <summary>How long one provider call may take before it counts as a (transient) timeout.</summary>
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>FR-78: how long a key check (list models) may take before it counts as <c>UPSTREAM_ERROR</c>.</summary>
+    public TimeSpan KeyCheckTimeout { get; set; } = TimeSpan.FromSeconds(15);
 
     /// <summary>Default output token cap per call.</summary>
     public int MaxOutputTokens { get; set; } = 16_000;
@@ -138,6 +148,11 @@ internal sealed class LlmOptionsValidator : IValidateOptions<LlmOptions>
             failures.Add("Llm:RequestTimeout must be positive.");
         }
 
+        if (options.KeyCheckTimeout <= TimeSpan.Zero)
+        {
+            failures.Add("Llm:KeyCheckTimeout must be positive.");
+        }
+
         if (options.MaxOutputTokens < 1)
         {
             failures.Add("Llm:MaxOutputTokens must be at least 1.");
@@ -154,8 +169,15 @@ public interface ILlmProviderCatalog
     /// <summary><c>Llm:DefaultProvider</c>.</summary>
     LlmProvider ConfiguredDefault { get; }
 
-    /// <summary>Whether a non-blank system API key is configured for the provider.</summary>
+    /// <summary><c>Llm:AllowSystemKeys</c> (D-V2-5): whether system keys may be used.</summary>
+    bool AllowSystemKeys { get; }
+
+    /// <summary>Whether a usable system API key exists for the provider: one is configured and
+    /// <see cref="AllowSystemKeys"/> is on.</summary>
     bool HasSystemKey(LlmProvider provider);
+
+    /// <summary>Whether a non-blank system API key is configured for the provider, allowed or not (admin display).</summary>
+    bool IsSystemKeySet(LlmProvider provider);
 
     string DefaultModel(LlmProvider provider);
 
@@ -169,7 +191,8 @@ public interface ILlmProviderCatalog
     /// or localhost for the dev loop.</summary>
     Uri OllamaBaseUrl { get; }
 
-    /// <summary>The system API key of a provider (Anthropic, OpenAI), or <c>null</c>. Never log it.</summary>
+    /// <summary>The system API key of a provider (Anthropic, OpenAI), or <c>null</c> (none, or system keys not allowed).
+    /// Never log it.</summary>
     string? SystemApiKey(LlmProvider provider);
 
     /// <summary>The configured price of a model (<c>Llm:Pricing</c>), or <c>null</c> when unpriced.</summary>
@@ -204,7 +227,11 @@ internal sealed class LlmProviderCatalog(IOptions<LlmOptions> options) : ILlmPro
         return price is null ? null : new ModelPrice(price.InputPerMTok, price.OutputPerMTok);
     }
 
-    public bool HasSystemKey(LlmProvider provider) =>
+    public bool AllowSystemKeys => _options.AllowSystemKeys;
+
+    public bool HasSystemKey(LlmProvider provider) => AllowSystemKeys && IsSystemKeySet(provider);
+
+    public bool IsSystemKeySet(LlmProvider provider) =>
         ProjectSettingsRules.RequiresApiKey(provider) && !string.IsNullOrWhiteSpace(_options.Providers.For(provider).ApiKey);
 
     public string DefaultModel(LlmProvider provider) => _options.Providers.For(provider).DefaultModel;

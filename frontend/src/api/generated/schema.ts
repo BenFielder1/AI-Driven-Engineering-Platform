@@ -226,6 +226,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/connections/llm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's LLM connections (no keys: provider, label, last 4, status, bound projects) and the providers that need no key. */
+        get: operations["ListLlmConnections"];
+        put?: never;
+        /** Add an Anthropic or OpenAI key. It is checked with the provider first: 400 CREDENTIAL_INVALID if rejected (nothing saved), 502 UPSTREAM_ERROR if the provider can't be reached. Browser session only. */
+        post: operations["CreateLlmConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/llm/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete one of the caller's LLM connections. Projects it was bound to lose their binding (LLM_BINDING_CLEARED); their runs then fail with PROVIDER_NOT_CONFIGURED. Browser session only. */
+        delete: operations["DeleteLlmConnection"];
+        options?: never;
+        head?: never;
+        /** Rename one of the caller's LLM connections. Browser session only. */
+        patch: operations["RenameLlmConnection"];
+        trace?: never;
+    };
+    "/api/me/connections/llm/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check the key with the provider again and record the result (status valid or invalid, lastValidatedAt). 502 UPSTREAM_ERROR if the provider can't be reached (status unchanged). Browser session only. */
+        post: operations["TestLlmConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/users": {
         parameters: {
             query?: never;
@@ -322,6 +375,23 @@ export interface paths {
         put?: never;
         /** Re-enqueue a dead letter's job (browser session only): the dead letter is marked retried and a new queued job with the same type and payload is returned. 404 NOT_FOUND if the job isn't a dead letter; 409 CONFLICT if the project already has a queued or running execution job. */
         post: operations["RetryDeadLetter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/llm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether system LLM keys may be used (Llm:AllowSystemKeys, read-only configuration) and which providers have one configured. Admins only. */
+        get: operations["GetAdminLlmPolicy"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -459,13 +529,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** The LLM settings and binding ("connected by <name>", no secret) for any member, with canBind for the caller (FR-79). */
+        get: operations["GetLlmSettings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the LLM provider, models and optional project API key (Owner). */
+        /** Update the LLM provider and models, and bind one of the caller's own connections (credentialId; null unbinds) (Owner). 403 CREDENTIAL_NOT_OWNER for another user's connection, 404 NOT_FOUND for an unknown one. */
         patch: operations["UpdateLlmSettings"];
         trace?: never;
     };
@@ -1349,6 +1420,16 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /**
+         * @description §2 Admin: the system LLM key policy (D-V2-5). `allowSystemKeys` is `Llm:AllowSystemKeys` (configuration,
+         *     read-only here: set `Llm__AllowSystemKeys` in `secrets.env` / user-secrets and restart). When it is on,
+         *     projects with no bound connection use the system key of their provider; `systemKeyProviders` lists the
+         *     providers that have one configured (allowed or not). Keys are never returned.
+         */
+        AdminLlmPolicyDto: {
+            allowSystemKeys: boolean;
+            systemKeyProviders: components["schemas"]["LlmProvider"][];
+        };
         /** @description A user as shown on the admin users page. */
         AdminUserDto: {
             /** Format: uuid */
@@ -1440,8 +1521,8 @@ export interface components {
          *     USD, duration and error. `userFeedback` is the feedback or answers given to the agent. `releaseVersionId` is the
          *     release version it ran for (§4.10). `checkpoint` is the checkpoint it ran at (null until recorded). `agentKey`,
          *     `presetId` and `presetVersion` name the preset specialist (FR-76; null for base agents). `toolCallCount` is
-         *     the number of repo tool calls (FR-71). `credentialLabel` is the label of the LLM connection that paid for the run
-         *     (FR-77; null when the deployment key paid or the connection is gone).
+         *     the number of repo tool calls (FR-71). `credentialLabel` names the LLM connection that paid for the run,
+         *     `Label (••••a1b2)` (FR-79, D-V2-5; null for a system key, a provider without a key, or a deleted connection).
          */
         AgentRunDto: {
             /** Format: uuid */
@@ -1833,6 +1914,15 @@ export interface components {
              */
             baseVersion?: null | number;
         };
+        /**
+         * @description Add an LLM connection (FR-78): `anthropic` or `openai`, a label and the key. The key is checked with
+         *         the provider before anything is saved.
+         */
+        CreateLlmCredentialRequest: {
+            provider: components["schemas"]["LlmProvider"];
+            label: string;
+            apiKey: string;
+        };
         /** @description Git step of the new-project wizard (FR-5, FR-35). */
         CreateProjectGitRequest: {
             provider: components["schemas"]["GitProvider"];
@@ -2119,7 +2209,7 @@ export interface components {
          *     `decidedBy`, `decidedAt` and `comment` are set once the gate is decided. `overdue` is true
          *     72 hours after creation while pending (FR-15); `remindedAt` is when its 24-hour reminder was sent. An escalation raised by a blocked execution step (FR-33) has
          *     `escalationReason` `step_blocked` and names the step in `executionStepId` and `stepNumber`
-         *     (both `null` otherwise).
+         *     (both `null` otherwise). `releaseVersionId` is the release version the gate belongs to (§4.10).
          */
         GateDto: {
             /** Format: uuid */
@@ -2149,6 +2239,8 @@ export interface components {
             executionStepId: null | string;
             /** Format: int32 */
             stepNumber: null | number;
+            /** Format: uuid */
+            releaseVersionId: string;
         };
         /** @enum {unknown} */
         GateStatus: "pending" | "approved" | "rejected" | "cancelled";
@@ -2241,23 +2333,87 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * @description The connection bound to a project (FR-79), shown to every member as e.g. "Anthropic · connected by Ana (••••a1b2)".
+         *     Never contains the key. `credentialId` only lets the binding Owner recognise their own connection; nobody else can
+         *     bind it (`CREDENTIAL_NOT_OWNER`).
+         */
+        LlmBindingDto: {
+            /** Format: uuid */
+            credentialId: string;
+            provider: components["schemas"]["LlmProvider"];
+            label: string;
+            last4: string;
+            status: components["schemas"]["LlmCredentialStatus"];
+            boundBy: components["schemas"]["LlmBindingUserDto"];
+        };
+        /** @description The Owner who bound a project's LLM connection (FR-79). */
+        LlmBindingUserDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /** @description A project that has an LLM connection bound (FR-79). */
+        LlmBoundProjectDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /**
+         * @description The caller's LLM connections, newest first (FR-78), and `keylessProviders`: the providers that need no key and
+         *     are always available (Ollama at the system base URL, and Fake).
+         */
+        LlmConnectionsDto: {
+            credentials: components["schemas"]["LlmCredentialDto"][];
+            keylessProviders: components["schemas"]["LlmProvider"][];
+        };
+        /**
+         * @description One of the caller's LLM connections (FR-78). The key is never returned: only the provider, label, its last 4
+         *     characters, the validation status (`valid`, `invalid`, `unchecked`) and when it was last checked, plus
+         *     the projects it is bound to. `last4` is `????` for a key migrated from v1 until the start-up backfill reads it.
+         */
+        LlmCredentialDto: {
+            /** Format: uuid */
+            id: string;
+            provider: components["schemas"]["LlmProvider"];
+            label: string;
+            last4: string;
+            status: components["schemas"]["LlmCredentialStatus"];
+            /** Format: date-time */
+            lastValidatedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            boundProjects: components["schemas"]["LlmBoundProjectDto"][];
+        };
+        /**
+         * @description Validation state of an LLM credential (FR-78). Wire values: `valid`, `invalid`, `unchecked`.
+         * @enum {unknown}
+         */
+        LlmCredentialStatus: "valid" | "invalid" | "unchecked";
+        /**
          * @description LLM provider (FR-22). Wire values: `anthropic`, `openai`, `ollama`, `fake`.
          * @enum {unknown}
          */
         LlmProvider: "anthropic" | "openai" | "ollama" | "fake";
-        /** @description Whether a provider can be used: a system key is configured or the project has its own key (Ollama and Fake are always configured). */
+        /** @description Whether a provider can be used: an allowed system key is configured or the project has a bound connection for it (Ollama and Fake are always configured). */
         LlmProviderStatusDto: {
             provider: components["schemas"]["LlmProvider"];
             configured: boolean;
             defaultModel: string;
         };
-        /** @description LLM settings (FR-9, FR-22). The API key is never returned, only `hasApiKey`. `providers` lists every provider with whether it's usable and its system default model. */
+        /**
+         * @description LLM settings (FR-9, FR-22, FR-79). Keys are never returned. `hasApiKey` is true while a connection is bound
+         *     (kept from v1); `binding` describes it (`null` when nothing is bound). `canBind` is true when the caller
+         *     is a project Owner and so may bind one of their own connections or unbind. `providers` lists every provider with
+         *     whether it's usable and its system default model.
+         */
         LlmSettingsDto: {
             provider: components["schemas"]["LlmProvider"];
             defaultModel: string;
             modelsByAgent: components["schemas"]["AgentModelsDto"];
             hasApiKey: boolean;
             providers: components["schemas"]["LlmProviderStatusDto"][];
+            binding: null | components["schemas"]["LlmBindingDto"];
+            canBind: boolean;
         };
         /** @description FR-1 sign-in. */
         LoginRequest: {
@@ -3002,14 +3158,25 @@ export interface components {
             token?: null | string;
             clearToken?: boolean;
         };
-        /** @description Partial update of the LLM settings. Omitted fields are unchanged; `modelsByAgent`, when sent, replaces the map. */
+        /** @description Rename an LLM connection (FR-78). */
+        UpdateLlmCredentialRequest: {
+            label: string;
+        };
+        /**
+         * @description Partial update of the LLM settings (Owner). Omitted fields are unchanged; `modelsByAgent`, when sent, replaces the
+         *     map. FR-79: `credentialId` binds one of the caller's own connections for the (new) provider; `null` unbinds.
+         *     Changing the provider without sending `credentialId` drops a binding of the old provider. v1's per-project
+         *     `apiKey`/`clearApiKey` are gone: keys are added under Account → Connections (FR-78).
+         */
         UpdateLlmSettingsRequest: {
             provider?: null | components["schemas"]["LlmProvider"];
             defaultModel?: null | string;
             modelsByAgent?: null | components["schemas"]["AgentModelsDto"];
-            /** @description Sets the project's own API key. To remove it, send `clearApiKey: true`. */
-            apiKey?: null | string;
-            clearApiKey?: boolean;
+            /**
+             * Format: uuid
+             * @description The caller's connection to bind, or `null` to unbind. Omit it to keep the binding.
+             */
+            credentialId?: null | string;
         };
         UpdateMemberRoleRequest: {
             role: components["schemas"]["ProjectRole"];
@@ -3543,6 +3710,262 @@ export interface operations {
             };
         };
     };
+    ListLlmConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateLlmConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLlmCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmCredentialDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteLlmConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RenameLlmConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLlmCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmCredentialDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestLlmConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmCredentialDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListUsers: {
         parameters: {
             query?: {
@@ -3878,6 +4301,44 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAdminLlmPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminLlmPolicyDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4503,6 +4964,55 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetLlmSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmSettingsDto"];
                 };
             };
             /** @description Unauthorized */

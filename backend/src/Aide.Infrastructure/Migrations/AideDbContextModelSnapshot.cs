@@ -152,6 +152,9 @@ namespace Aide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_agent_runs");
 
+                    b.HasIndex("CredentialId")
+                        .HasDatabaseName("ix_agent_runs_credential_id");
+
                     b.HasIndex("ReleaseVersionId")
                         .HasDatabaseName("ix_agent_runs_release_version_id");
 
@@ -887,6 +890,63 @@ namespace Aide.Infrastructure.Migrations
                     b.ToTable("jobs", (string)null);
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.LlmCredential", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("label");
+
+                    b.Property<string>("Last4")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("last4");
+
+                    b.Property<DateTimeOffset?>("LastValidatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_validated_at");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("SecretEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("secret_encrypted");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_llm_credentials");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_llm_credentials_user_id");
+
+                    b.ToTable("llm_credentials", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_llm_credentials_provider", "provider IN ('anthropic', 'openai')");
+                        });
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1200,9 +1260,13 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
 
-                    b.Property<string>("ApiKeyEncrypted")
-                        .HasColumnType("text")
-                        .HasColumnName("api_key_encrypted");
+                    b.Property<Guid?>("BoundByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bound_by_user_id");
+
+                    b.Property<Guid?>("CredentialId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("credential_id");
 
                     b.Property<string>("DefaultModel")
                         .IsRequired()
@@ -1223,6 +1287,12 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasKey("ProjectId")
                         .HasName("pk_project_llm_settings");
+
+                    b.HasIndex("BoundByUserId")
+                        .HasDatabaseName("ix_project_llm_settings_bound_by_user_id");
+
+                    b.HasIndex("CredentialId")
+                        .HasDatabaseName("ix_project_llm_settings_credential_id");
 
                     b.ToTable("project_llm_settings", (string)null);
                 });
@@ -1934,6 +2004,12 @@ namespace Aide.Infrastructure.Migrations
 
             modelBuilder.Entity("Aide.Domain.Entities.AgentRun", b =>
                 {
+                    b.HasOne("Aide.Domain.Entities.LlmCredential", null)
+                        .WithMany()
+                        .HasForeignKey("CredentialId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_agent_runs_llm_credentials_credential_id");
+
                     b.HasOne("Aide.Domain.Entities.Project", null)
                         .WithMany()
                         .HasForeignKey("ProjectId")
@@ -2126,6 +2202,16 @@ namespace Aide.Infrastructure.Migrations
                         .HasConstraintName("fk_jobs_projects_project_id");
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.LlmCredential", b =>
+                {
+                    b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_llm_credentials_users_user_id");
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.Notification", b =>
                 {
                     b.HasOne("Aide.Domain.Entities.Project", null)
@@ -2163,6 +2249,18 @@ namespace Aide.Infrastructure.Migrations
 
             modelBuilder.Entity("Aide.Domain.Entities.ProjectLlmSettings", b =>
                 {
+                    b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("BoundByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_project_llm_settings_users_bound_by_user_id");
+
+                    b.HasOne("Aide.Domain.Entities.LlmCredential", null)
+                        .WithMany()
+                        .HasForeignKey("CredentialId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_project_llm_settings_llm_credentials_credential_id");
+
                     b.HasOne("Aide.Domain.Entities.Project", null)
                         .WithOne()
                         .HasForeignKey("Aide.Domain.Entities.ProjectLlmSettings", "ProjectId")

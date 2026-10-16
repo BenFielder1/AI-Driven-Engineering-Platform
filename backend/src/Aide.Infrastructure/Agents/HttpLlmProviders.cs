@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Aide.Domain.Agents;
 using Aide.Domain.Entities;
 using Aide.Infrastructure.Llm;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace Aide.Infrastructure.Agents;
@@ -80,6 +81,45 @@ internal static class LlmHttp
         catch (JsonException ex)
         {
             throw new LlmProviderException($"{providerName} returned a response that isn't JSON.", transient: false, status, innerException: ex);
+        }
+    }
+
+    /// <summary>
+    /// FR-78: a minimal authenticated <c>GET</c> (list models): 2xx is valid, 401/403 rejected, anything else (network,
+    /// timeout, 429, 5xx, other statuses) unavailable. The response body is never read or relayed.
+    /// </summary>
+    public static async Task<LlmKeyCheck> CheckKeyAsync(
+        HttpClient http,
+        string providerName,
+        Uri url,
+        Action<HttpRequestMessage> configure,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        configure(request);
+
+        // A short per-check timeout (Llm:KeyCheckTimeout), not the client's completion timeout: a user is waiting.
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(timeout);
+        try
+        {
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutSource.Token);
+            var status = (int)response.StatusCode;
+            return status switch
+            {
+                >= 200 and < 300 => new LlmKeyCheck(LlmKeyCheckOutcome.Valid, status, $"{providerName} accepted the key."),
+                401 or 403 => new LlmKeyCheck(LlmKeyCheckOutcome.Rejected, status, $"{providerName} rejected the API key (HTTP {status})."),
+                _ => new LlmKeyCheck(LlmKeyCheckOutcome.Unavailable, status, $"{providerName} returned HTTP {status} while checking the key."),
+            };
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new LlmKeyCheck(LlmKeyCheckOutcome.Unavailable, null, $"{providerName} did not answer in time.");
+        }
+        catch (HttpRequestException ex)
+        {
+            return new LlmKeyCheck(LlmKeyCheckOutcome.Unavailable, null, $"{providerName} could not be reached ({ex.HttpRequestError}).");
         }
     }
 
@@ -204,6 +244,24 @@ public sealed class AnthropicLlmProvider(HttpClient http, IOptions<LlmOptions> o
             LlmHttp.String(root, "stop_reason") ?? "unknown");
     }
 
+    /// <summary>FR-78: <c>GET {BaseUrl}/v1/models?limit=1</c> with the key.</summary>
+    public Task<LlmKeyCheck> CheckKeyAsync(string apiKey, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(apiKey);
+        var baseUrl = options.Value.Providers.Anthropic.BaseUrl is { Length: > 0 } configured ? configured : DefaultBaseUrl;
+        return LlmHttp.CheckKeyAsync(
+            http,
+            Name,
+            LlmHttp.Combine(baseUrl, "v1/models?limit=1"),
+            r =>
+            {
+                r.Headers.Add("x-api-key", apiKey.Trim());
+                r.Headers.Add("anthropic-version", ApiVersion);
+            },
+            options.Value.KeyCheckTimeout,
+            cancellationToken);
+    }
+
     internal static string RequireKey(LlmRequest request, string providerName) =>
         string.IsNullOrWhiteSpace(request.ApiKey)
             ? throw new LlmProviderException($"{providerName} is not configured: no API key.", transient: false, errorCode: Aide.Domain.Common.ErrorCodes.ProviderNotConfigured)
@@ -262,6 +320,31 @@ public sealed class OpenAiLlmProvider(HttpClient http, IOptions<LlmOptions> opti
             LlmHttp.Int(root, "usage", "completion_tokens"),
             LlmHttp.String(choice, "finish_reason") ?? "unknown");
     }
+
+    /// <summary>FR-78: <c>GET {BaseUrl}/models</c> with the Bearer key.</summary>
+    public Task<LlmKeyCheck> CheckKeyAsync(string apiKey, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(apiKey);
+        var baseUrl = options.Value.Providers.OpenAI.BaseUrl is { Length: > 0 } configured ? configured : DefaultBaseUrl;
+        return LlmHttp.CheckKeyAsync(
+            http,
+            Name,
+            LlmHttp.Combine(baseUrl, "models"),
+            r => r.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey.Trim()),
+            options.Value.KeyCheckTimeout,
+            cancellationToken);
+    }
+}
+
+/// <summary>FR-78: <see cref="ILlmKeyValidator"/> over the Anthropic and OpenAI providers' typed HttpClients.</summary>
+internal sealed class LlmKeyValidator(IServiceProvider services) : ILlmKeyValidator
+{
+    public Task<LlmKeyCheck> CheckAsync(LlmProvider provider, string apiKey, CancellationToken cancellationToken) => provider switch
+    {
+        LlmProvider.Anthropic => services.GetRequiredService<AnthropicLlmProvider>().CheckKeyAsync(apiKey, cancellationToken),
+        LlmProvider.Openai => services.GetRequiredService<OpenAiLlmProvider>().CheckKeyAsync(apiKey, cancellationToken),
+        _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, "Only Anthropic and OpenAI keys are checked."),
+    };
 }
 
 /// <summary>

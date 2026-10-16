@@ -11,6 +11,7 @@ import {
   formatNumber,
   gateTypeLabels,
   gateTypes,
+  llmProviderLabels,
   phaseLabels,
   phases,
   reviewDecisions,
@@ -377,6 +378,34 @@ function describeArtifact(type: string, payload: Payload): string | null {
     : null;
 }
 
+const llmProviders = Object.keys(llmProviderLabels) as (keyof typeof llmProviderLabels)[];
+
+/** Why a project's LLM binding was cleared (FR-79; backend LlmBindingClearedReason). */
+export const llmBindingClearedReasonLabels = {
+  owner_role_lost: "the Owner who bound it is no longer an Owner",
+  member_removed: "the Owner who bound it left the project",
+  connection_deleted: "the connection was deleted",
+} as const;
+
+const bindingClearedReasons = Object.keys(llmBindingClearedReasonLabels) as (keyof typeof llmBindingClearedReasonLabels)[];
+
+/** LLM connection events (FR-78, FR-79). */
+function describeConnection(type: string, payload: Payload): string | null {
+  const provider = oneOf(payload, "provider", llmProviders);
+  const name = provider ? llmProviderLabels[provider] : "LLM";
+  switch (type) {
+    case "CONNECTION_INVALID":
+      return `${name} connection marked invalid: the provider rejected its key during a run`;
+    case "LLM_BINDING_CLEARED": {
+      const reason = oneOf(payload, "reason", bindingClearedReasons);
+      const text = `${name} connection unbound`;
+      return reason ? `${text}: ${llmBindingClearedReasonLabels[reason]}` : text;
+    }
+    default:
+      return null;
+  }
+}
+
 /**
  * FR-50: the one-line description shown in the activity feed, built from the event's type and payload with the same
  * labels the rest of the UI uses. Unknown types and payloads that don't match the expected shape fall back to the
@@ -433,6 +462,10 @@ export function describeActivity(
     case "REVIEW_FAILED":
     case "COMPLIANCE_REPORT_CREATED":
       text = describeReview(type, payload);
+      break;
+    case "CONNECTION_INVALID":
+    case "LLM_BINDING_CLEARED":
+      text = describeConnection(type, payload);
       break;
     case "PULL_REQUEST_OPENED":
     case "PULL_REQUEST_FAILED":

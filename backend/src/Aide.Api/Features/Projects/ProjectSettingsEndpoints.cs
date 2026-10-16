@@ -11,13 +11,15 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Aide.Api.Features.Projects;
 
 /// <summary>
-/// FR-9, FR-10: persisted project settings (§6 <c>/api/projects/:id/settings</c>), Owner only. Secrets (Git token,
-/// LLM API key, webhook signing keys and Slack/Teams webhook URLs) are encrypted at rest with <see cref="ISecretProtector"/>, only reported as
-/// set / not set, and never written to logs or event payloads.
+/// FR-9, FR-10: persisted project settings (§6 <c>/api/projects/:id/settings</c>), Owner only (the LLM section alone is
+/// readable by members, FR-79). Secrets (Git token, webhook signing keys and Slack/Teams webhook URLs) are encrypted at
+/// rest with <see cref="ISecretProtector"/>, only reported as set / not set, and never written to logs or event payloads.
+/// LLM keys live in the binding Owner's connections (FR-78, FR-79); a project only references one.
 /// </summary>
 public static partial class ProjectSettingsEndpoints
 {
@@ -41,9 +43,14 @@ public static partial class ProjectSettingsEndpoints
             .Produces<GitSettingsDto>()
             .ProducesValidationProblem();
 
+        group.MapGet("/llm", GetLlmSettings)
+            .WithName("GetLlmSettings")
+            .WithSummary("The LLM settings and binding (\"connected by <name>\", no secret) for any member, with canBind for the caller (FR-79).")
+            .Produces<LlmSettingsDto>();
+
         group.MapPatch("/llm", UpdateLlmSettings)
             .WithName("UpdateLlmSettings")
-            .WithSummary("Update the LLM provider, models and optional project API key (Owner).")
+            .WithSummary("Update the LLM provider and models, and bind one of the caller's own connections (credentialId; null unbinds) (Owner). 403 CREDENTIAL_NOT_OWNER for another user's connection, 404 NOT_FOUND for an unknown one.")
             .Produces<LlmSettingsDto>()
             .ProducesValidationProblem();
 
@@ -79,8 +86,27 @@ public static partial class ProjectSettingsEndpoints
         var notifications = await NotificationsAsync(db, id, cancellationToken);
         return TypedResults.Ok(new ProjectSettingsDto(
             ProjectMapping.ToDto(git, await CurrentBranchAsync(db, id, cancellationToken)),
-            ProjectMapping.ToDto(llm, catalog),
+            ProjectMapping.ToDto(llm, catalog, await LlmBindings.LoadAsync(db, llm, cancellationToken), LlmBindings.CanBind(grant.Value.ProjectRole)),
             ProjectMapping.ToDto(notifications)));
+    }
+
+    private static async Task<Results<Ok<LlmSettingsDto>, ProblemHttpResult>> GetLlmSettings(
+        Guid id,
+        IProjectAccess access,
+        AideDbContext db,
+        ILlmProviderCatalog catalog,
+        CancellationToken cancellationToken)
+    {
+        // FR-79: every member sees which connection the project uses ("connected by <name>"), never the key.
+        var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        var llm = await db.ProjectLlmSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ProjectId == id, cancellationToken)
+            ?? DefaultLlm(id, catalog);
+        return TypedResults.Ok(ProjectMapping.ToDto(llm, catalog, await LlmBindings.LoadAsync(db, llm, cancellationToken), LlmBindings.CanBind(grant.Value.ProjectRole)));
     }
 
     private static async Task<Results<Ok<GitSettingsDto>, ValidationProblem, ProblemHttpResult>> UpdateGitSettings(
@@ -183,7 +209,6 @@ public static partial class ProjectSettingsEndpoints
         IProjectAccess access,
         ICurrentUser currentUser,
         AideDbContext db,
-        ISecretProtector secrets,
         ILlmProviderCatalog catalog,
         TimeProvider time,
         ILoggerFactory loggers,
@@ -195,27 +220,71 @@ public static partial class ProjectSettingsEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
+        // FR-79: the same project row lock as member role changes and removals, so a concurrent demotion either commits
+        // first (and is seen below) or waits for this bind (and then clears it). Everything below is read under the lock.
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await ProjectLocks.LockProjectAsync(db, id, cancellationToken);
+        var callerId = grant.Value.UserId;
+        var callerRole = await db.ProjectMembers.AsNoTracking()
+            .Where(m => m.ProjectId == id && m.UserId == callerId)
+            .Select(m => (ProjectRole?)m.Role)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (grant.Value.SystemRole != SystemRole.Admin && callerRole != ProjectRole.Owner)
+        {
+            // Demoted or removed while this request waited for the lock.
+            return callerRole is null
+                ? ApiProblems.NotFound("The project was not found.")
+                : ApiProblems.Forbidden("Your project role doesn't allow this action.");
+        }
+
         var settings = await LlmAsync(db, id, catalog, cancellationToken);
         var provider = request.Provider ?? settings.Provider;
         var providerChanged = provider != settings.Provider;
+        var current = settings.CredentialId is { } currentId
+            ? await db.LlmCredentials.AsNoTracking().Where(c => c.Id == currentId).Select(c => new LlmConnectionRef(c.Id, c.UserId, c.Provider)).FirstOrDefaultAsync(cancellationToken)
+            : null;
 
-        // A new provider starts from its configured defaults unless the request sets models explicitly, and a project
-        // key belongs to the provider it was saved for, so it is dropped unless a new one is sent.
+        // FR-79: the binding after the update. Sending a credentialId binds it (only the caller's own, for the provider);
+        // null unbinds; omitting it keeps the binding unless the provider changes (a binding is for one provider).
+        LlmConnectionRef? binding;
+        if (request.CredentialIdSent && request.CredentialId is { } credentialId)
+        {
+            // Re-sending the current binding (e.g. the whole form) needs no ownership check: it changes nothing.
+            var connection = credentialId == current?.Id
+                ? current
+                : await db.LlmCredentials.AsNoTracking()
+                    .Where(c => c.Id == credentialId)
+                    .Select(c => new LlmConnectionRef(c.Id, c.UserId, c.Provider))
+                    .FirstOrDefaultAsync(cancellationToken);
+            var allowed = connection == current && connection is not null
+                ? LlmConnectionRules.CanBind(connection.UserId, ProjectRole.Owner, connection, provider)
+                : LlmConnectionRules.CanBind(callerId, callerRole, connection, provider);
+            if (allowed.IsFailure)
+            {
+                return allowed.Error!.Code == ErrorCodes.Validation ? ApiProblems.Validation(allowed.Error) : ApiProblems.FromError(allowed.Error);
+            }
+
+            binding = connection;
+        }
+        else if (request.CredentialIdSent)
+        {
+            binding = null;
+        }
+        else
+        {
+            binding = LlmConnectionRules.KeepsBinding(current?.Provider, provider) ? current : null;
+        }
+
+        // A new provider starts from its configured defaults unless the request sets models explicitly.
         var defaultModel = request.DefaultModel?.Trim() ?? (providerChanged ? catalog.DefaultModel(provider) : settings.DefaultModel);
         var sentModels = request.ModelsByAgent is { } dto ? ProjectMapping.FromAgentModels(dto) : null;
-        var apiKeySent = request.ApiKey is not null;
-        var apiKeyValid = apiKeySent && !string.IsNullOrWhiteSpace(request.ApiKey) && !request.ClearApiKey;
-        var keepsKey = !request.ClearApiKey && !providerChanged && settings.ApiKeyEncrypted is not null;
         var validation = ProjectSettingsRules.ValidateLlm(
             provider,
             defaultModel,
             sentModels?.ToDictionary(m => m.FieldName, m => m.Model),
-            apiKeySent,
-            apiKeySent && string.IsNullOrWhiteSpace(request.ApiKey),
-            request.ClearApiKey,
             catalog.HasSystemKey(provider),
-            hasProjectKeyAfter: apiKeyValid || keepsKey,
-            apiKey: request.ApiKey);
+            hasBindingAfter: binding is not null,
+            providerChanged);
         if (validation.IsFailure)
         {
             return ApiProblems.Validation(validation.Error!);
@@ -246,19 +315,26 @@ public static partial class ProjectSettingsEndpoints
             changes.Add("modelsByAgent");
         }
 
-        if (apiKeyValid)
+        if (binding?.Id != settings.CredentialId)
         {
-            settings.ApiKeyEncrypted = secrets.Protect(request.ApiKey!);
-            changes.Add("apiKey");
-        }
-        else if (!keepsKey && settings.ApiKeyEncrypted is not null)
-        {
-            settings.ApiKeyEncrypted = null;
-            changes.Add("apiKey");
+            // The binding Owner is the connection's owner (D-V2-5: runs use it on their behalf).
+            settings.CredentialId = binding?.Id;
+            settings.BoundByUserId = binding?.UserId;
+            changes.Add("credentialId");
         }
 
-        await SaveChangesAsync(db, id, "llm", changes, currentUser, time, loggers, cancellationToken);
-        return TypedResults.Ok(ProjectMapping.ToDto(settings, catalog));
+        try
+        {
+            await SaveChangesAsync(db, id, "llm", changes, currentUser, time, loggers, cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation })
+        {
+            // The connection was deleted between the check and the save (its deletion doesn't take the project lock).
+            return ApiProblems.NotFound("The connection was not found.");
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return TypedResults.Ok(ProjectMapping.ToDto(settings, catalog, await LlmBindings.LoadAsync(db, settings, cancellationToken), LlmBindings.CanBind(callerRole)));
     }
 
     private static async Task<Results<Ok<NotificationSettingsDto>, ValidationProblem, ProblemHttpResult>> UpdateNotificationSettings(
@@ -413,18 +489,23 @@ public static partial class ProjectSettingsEndpoints
         var settings = await db.ProjectLlmSettings.FirstOrDefaultAsync(s => s.ProjectId == id, cancellationToken);
         if (settings is null)
         {
-            var provider = catalog.DefaultForNewProject;
-            settings = new ProjectLlmSettings
-            {
-                ProjectId = id,
-                Provider = provider,
-                DefaultModel = catalog.DefaultModel(provider),
-                ModelsByAgent = new Dictionary<string, string>(catalog.DefaultAgentModels(provider)),
-            };
+            settings = DefaultLlm(id, catalog);
             db.ProjectLlmSettings.Add(settings);
         }
 
         return settings;
+    }
+
+    private static ProjectLlmSettings DefaultLlm(Guid id, ILlmProviderCatalog catalog)
+    {
+        var provider = catalog.DefaultForNewProject;
+        return new ProjectLlmSettings
+        {
+            ProjectId = id,
+            Provider = provider,
+            DefaultModel = catalog.DefaultModel(provider),
+            ModelsByAgent = new Dictionary<string, string>(catalog.DefaultAgentModels(provider)),
+        };
     }
 
     private static async Task<ProjectNotificationSettings> NotificationsAsync(AideDbContext db, Guid id, CancellationToken cancellationToken)

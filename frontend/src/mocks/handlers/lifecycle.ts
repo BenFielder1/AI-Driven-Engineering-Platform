@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw'
 import type { Schemas } from '../../api/client'
 import { antiforgeryFailure, authDb, nextId } from './auth'
 import { problem } from './problem'
-import { access, ownerMutation, record, stateDto, type Access, type StoredProject } from './projects'
+import { access, currentVersionId, ownerMutation, record, stateDto, type Access, type StoredProject } from './projects'
 
 type Phase = Schemas['Phase']
 type ProjectStatus = Schemas['ProjectStatus']
@@ -100,6 +100,7 @@ export function seedGate(project: StoredProject, overrides: Partial<Gate> = {}):
     remindedAt: null,
     executionStepId: null,
     stepNumber: null,
+    releaseVersionId: currentVersionId(project),
     ...overrides,
   }
   if (gate.type === 'spec_approval' && overrides.artifactType === undefined) {

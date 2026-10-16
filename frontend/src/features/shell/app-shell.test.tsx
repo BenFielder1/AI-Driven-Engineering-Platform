@@ -71,12 +71,14 @@ describe('FR-53: app shell', () => {
     expect(await screen.findByRole('heading', { level: 1, name: "You don't have access to this page" })).toBeInTheDocument()
   })
 
-  it('FR53_shell: /connections shows the not-connected placeholder', async () => {
+  it('FR53_shell: /connections shows GitHub and Vercel as not connected (FR-78 lists LLM keys above them)', async () => {
     signInAs()
     renderRoute('/connections')
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Connections' })).toBeInTheDocument()
-    expect(screen.getByTestId('empty-state')).toHaveAttribute('data-variant', 'not_connected')
+    for (const name of ['GitHub', 'Vercel']) {
+      expect(within(screen.getByRole('region', { name })).getByTestId('empty-state')).toHaveAttribute('data-variant', 'not_connected')
+    }
   })
 
   it('FR53_palette: ⌘K opens the command palette, which lists nav-config pages and navigates', async () => {

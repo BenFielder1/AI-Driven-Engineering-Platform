@@ -6,6 +6,7 @@ using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Aide.Domain.Projects;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
@@ -170,11 +171,14 @@ public sealed partial class AgentRunner(
             throw new JobFailedException(rendered.Error.Message, transient: false, rendered.Error.Code);
         }
 
-        var apiKey = await llm.ApiKeyAsync(run.ProjectId, run.Provider, cancellationToken);
-        var resolved = new ResolvedLlm(run.Provider, run.Model, apiKey);
+        // D-V2-5: the project's bound connection pays for every run, whoever triggered it; the run records which one.
+        var key = await llm.KeyAsync(run.ProjectId, run.Provider, cancellationToken);
+        var apiKey = key.ApiKey;
+        run.CredentialId = key.CredentialId;
+        var resolved = new ResolvedLlm(run.Provider, run.Model, apiKey, key.CredentialId);
         if (!resolved.IsConfigured)
         {
-            var message = $"{run.Provider.ToWire()} is not configured: add a project API key or set the system key.";
+            var message = $"{run.Provider.ToWire()} is not configured: a project Owner binds one of their {run.Provider.ToWire()} connections in the project's LLM settings.";
             await FailAsync(run, ErrorCodes.ProviderNotConfigured, message, deadLetter: false);
             throw new JobFailedException(message, transient: false, ErrorCodes.ProviderNotConfigured);
         }
@@ -204,6 +208,15 @@ public sealed partial class AgentRunner(
             run.DurationMs += Elapsed(started);
             var message = SecretRedaction.SanitizeProviderError(ex.Message, apiKey);
             LogAttemptFailed(logger, run.Attempts, ex.Transient, ex.StatusCode, message);
+            if (LlmConnectionRules.RunFailureInvalidatesKey(ex.StatusCode) && key.CredentialId is { } credentialId)
+            {
+                // FR-78: the bound key was rejected: the connection is marked invalid and the run fails for good.
+                var rejected = $"The bound {run.Provider.ToWire()} connection's key was rejected (HTTP {ex.StatusCode}); its owner must replace it.";
+                await InvalidateCredentialAsync(run, credentialId);
+                await FailAsync(run, ErrorCodes.CredentialInvalid, rejected, deadLetter: false);
+                throw new JobFailedException(rejected, transient: false, ErrorCodes.CredentialInvalid);
+            }
+
             await OnProviderFailureAsync(run, request.Job.Attempt, ex.Transient, ex.ErrorCode, message);
             throw new JobFailedException(message, ex.Transient, ex.ErrorCode);
         }
@@ -221,6 +234,31 @@ public sealed partial class AgentRunner(
 
         await CompleteAsync(run, completion, Elapsed(started), request.Check);
         return Outcome(run);
+    }
+
+    /// <summary>
+    /// FR-78: marks the run's bound connection <c>invalid</c> and records <c>CONNECTION_INVALID</c> (no secret). The run's
+    /// <c>RUN_FAILED</c> notifies the project's Owners; the dedicated notification to the connection's owner is FR-92.
+    /// Saved with the run's failure.
+    /// </summary>
+    private async Task InvalidateCredentialAsync(AgentRun run, Guid credentialId)
+    {
+        var credential = await db.LlmCredentials.FirstOrDefaultAsync(c => c.Id == credentialId, CancellationToken.None);
+        if (credential is null)
+        {
+            return;
+        }
+
+        var now = time.GetUtcNow();
+        credential.Status = LlmCredentialStatus.Invalid;
+        credential.LastValidatedAt = now;
+        db.AddEvent(
+            EventTypes.ConnectionInvalid,
+            run.ProjectId,
+            new { credentialId, userId = credential.UserId, provider = credential.Provider.ToWire(), runId = run.Id },
+            SystemActor.Name,
+            now);
+        LogCredentialInvalid(logger, credentialId, credential.Provider);
     }
 
     /// <summary>FR-25: a transient failure with attempts left keeps the run <c>running</c> (the job retries); otherwise
@@ -273,6 +311,7 @@ public sealed partial class AgentRunner(
             StepId = request.StepId,
             Provider = resolved.Provider,
             Model = resolved.Model,
+            CredentialId = resolved.CredentialId,
             PromptVersion = template.Version,
             InputArtifacts = request.InputArtifacts,
             UserFeedback = request.UserFeedback,
@@ -411,6 +450,9 @@ public sealed partial class AgentRunner(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Agent run failed with {ErrorCode} after {Attempts} provider attempts (dead letter: {DeadLetter})")]
     private static partial void LogFailed(ILogger logger, string errorCode, int attempts, bool deadLetter);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The provider rejected the key of LLM connection {CredentialId} ({Provider}); it is marked invalid")]
+    private static partial void LogCredentialInvalid(ILogger logger, Guid credentialId, LlmProvider provider);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Agent run refused: token budget used up ({TokensUsed} of {TokenBudget})")]
     private static partial void LogBudgetExceeded(ILogger logger, long tokensUsed, long? tokenBudget);

@@ -1,10 +1,62 @@
 import { EmptyState } from '../../components/shared/empty-state'
+import { panelClass } from '../../components/shared/panel-class'
+import { StatusBadge } from '../../components/shared/status-badge'
+import { ErrorState, LoadingState } from '../../components/ui/states'
 import { useDocumentTitle } from '../../lib/use-document-title'
+import { cn } from '../../lib/utils'
+import { useAdminLlmPolicy } from '../connections/connections-api'
+import { llmProviderLabels } from '../projects/labels'
 
 /**
- * /admin/integrations (SPEC §7.2): GitHub App registration and status, presets, system-key policy. A placeholder until
- * that work lands; the admin layout already guards the route (FR-3).
+ * Admin → Integrations → LLM system keys (FR-79): read-only. The policy comes from configuration
+ * (`Llm__AllowSystemKeys`), so there is nothing to change here.
  */
+function LlmSystemKeysPanel() {
+  const policy = useAdminLlmPolicy()
+  let body
+  if (policy.isPending) {
+    body = <LoadingState label="Loading the system-key policy…" />
+  } else if (policy.isError) {
+    body = <ErrorState error={policy.error} title="The system-key policy couldn't load" onRetry={() => void policy.refetch()} />
+  } else {
+    const { allowSystemKeys, systemKeyProviders } = policy.data
+    body = (
+      <div className="flex flex-col gap-3 text-sm">
+        <p className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">System keys</span>
+          <StatusBadge tone={allowSystemKeys ? 'warning' : 'neutral'}>
+            <span data-testid="system-keys-allowed">{allowSystemKeys ? 'Allowed' : 'Not allowed'}</span>
+          </StatusBadge>
+        </p>
+        <p className="text-muted-foreground">
+          {allowSystemKeys
+            ? 'Projects with no bound connection use the server’s key for their provider.'
+            : 'Projects must bind an Owner’s connection; without one, their runs fail with PROVIDER_NOT_CONFIGURED.'}
+        </p>
+        <p>
+          <span className="font-medium">Keys configured: </span>
+          {systemKeyProviders.length === 0
+            ? 'none'
+            : systemKeyProviders.map((p) => llmProviderLabels[p]).join(', ')}
+        </p>
+        <p className="text-muted-foreground">
+          Set by <code>Llm__AllowSystemKeys</code> in configuration (<code>secrets.env</code> on Kubernetes, user-secrets in
+          the dev loop) and applied on restart. Keys are never shown.
+        </p>
+      </div>
+    )
+  }
+  return (
+    <section aria-labelledby="admin-llm-keys-title" className={cn(panelClass, 'flex flex-col gap-3 p-5')}>
+      <h3 id="admin-llm-keys-title" className="text-lg">
+        LLM system keys
+      </h3>
+      {body}
+    </section>
+  )
+}
+
+/** /admin/integrations (SPEC §7.2): system-key policy now; GitHub App registration and presets come later. */
 export function AdminIntegrationsPage() {
   useDocumentTitle('Integrations · Admin')
   return (
@@ -12,11 +64,12 @@ export function AdminIntegrationsPage() {
       <h2 id="admin-integrations-title" className="text-xl">
         Integrations
       </h2>
+      <LlmSystemKeysPanel />
       <EmptyState
         variant="not_connected"
         headingLevel={3}
-        title="No integrations set up yet"
-        description="Registering the GitHub App, the presets list and the system-key policy are coming soon."
+        title="GitHub App not registered"
+        description="Registering the AIDE GitHub App and the presets list are available in a later update."
       />
     </section>
   )

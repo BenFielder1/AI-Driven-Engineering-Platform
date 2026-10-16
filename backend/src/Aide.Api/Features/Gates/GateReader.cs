@@ -88,7 +88,8 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
                 g.Status == GateStatus.Pending && (g.Overdue || now - g.CreatedAt >= GateTimers.OverdueAfter),
                 g.RemindedAt,
                 blocked?.StepId,
-                blocked?.StepNumber);
+                blocked?.StepNumber,
+                g.ReleaseVersionId);
         })];
     }
 

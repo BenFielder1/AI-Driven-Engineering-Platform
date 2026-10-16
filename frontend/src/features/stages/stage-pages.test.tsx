@@ -226,8 +226,8 @@ describe('Stage pages (FR-55)', () => {
       past.createdAt = '2026-01-01T00:00:00Z'
       current.createdAt = '2026-06-01T00:00:00Z'
       seedArtifact(p, { type: 'implementation_plan', content: '# Plan of 1.1.0', status: 'locked', releaseVersionId: past.id })
-      seedGate(p, { type: 'plan_approval', status: 'approved', createdAt: '2026-03-01T00:00:00Z', decidedAt: '2026-03-02T00:00:00Z' })
-      seedGate(p, { type: 'plan_approval', createdAt: '2026-07-01T00:00:00Z' })
+      seedGate(p, { type: 'plan_approval', status: 'approved', createdAt: '2026-03-01T00:00:00Z', decidedAt: '2026-03-02T00:00:00Z', releaseVersionId: past.id })
+      seedGate(p, { type: 'plan_approval', createdAt: '2026-07-01T00:00:00Z', releaseVersionId: current.id })
     })
     renderRoute(`/projects/${project.id}/planning?release=1.1.0`)
     expect(await screen.findByTestId('read-only-banner')).toHaveTextContent('Viewing 1.1.0 (released). Read-only')
@@ -253,7 +253,8 @@ describe('Stage pages (FR-55)', () => {
       for (const v of rows) {
         v.createdAt = v.version === '1.1.0' ? '2026-01-01T00:00:00Z' : '2026-06-01T00:00:00Z'
       }
-      seedGate(p, { type: 'plan_approval', status: 'approved', createdAt: '2026-03-01T00:00:00Z', decidedAt: '2026-03-02T00:00:00Z' })
+      const past = rows.find((v) => v.version === '1.1.0')
+      seedGate(p, { type: 'plan_approval', status: 'approved', createdAt: '2026-03-01T00:00:00Z', decidedAt: '2026-03-02T00:00:00Z', releaseVersionId: past?.id ?? '' })
       seedGate(p, { type: 'plan_approval', createdAt: '2026-07-01T00:00:00Z' })
     })
     await openStage(project, 'planning', 'Planning')
@@ -261,5 +262,23 @@ describe('Stage pages (FR-55)', () => {
     expect(await within(gates).findByRole('listitem', { name: 'Plan approval' })).toBeInTheDocument()
     expect(within(gates).getByRole('button', { name: 'Approve' })).toBeInTheDocument()
     expect(within(gates).queryByRole('list', { name: 'Decided stage gates' })).not.toBeInTheDocument()
+  })
+  it('FR55_gates_scoped_by_releaseVersionId_not_by_creation_time', async () => {
+    const project = seedProjectAs('owner', (p) => {
+      p.currentPhase = 'planning'
+      const rows = seedReleaseVersions(p, { released: '1.1.0', development: '1.2.0' })
+      const past = rows.find((v) => v.version === '1.1.0')
+      const current = rows.find((v) => v.version === '1.2.0')
+      if (!past || !current) {
+        throw new Error('seed')
+      }
+      past.createdAt = '2026-01-01T00:00:00Z'
+      current.createdAt = '2026-06-01T00:00:00Z'
+      // Created after 1.2.0 started, but recorded against 1.1.0: the id wins over the timestamp.
+      seedGate(p, { type: 'plan_approval', status: 'approved', createdAt: '2026-08-01T00:00:00Z', decidedAt: '2026-08-02T00:00:00Z', releaseVersionId: past.id })
+    })
+    await openStage(project, 'planning', 'Planning')
+    const gates = screen.getByRole('region', { name: 'Gates' })
+    expect(await within(gates).findByText('No gates for this stage yet.')).toBeInTheDocument()
   })
 })

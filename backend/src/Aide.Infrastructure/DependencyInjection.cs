@@ -59,6 +59,9 @@ public static class DependencyInjection
         services.TryAddSingleton<NotificationOutboxInterceptor>();
         services.TryAddSingleton<ReleaseVersionStampingInterceptor>();
 
+        // FR-79: fills last4 of LLM keys migrated from v1 projects (needs ISecretProtector from AddAideDataProtection).
+        services.AddHostedService<LlmCredentialLast4Backfill>();
+
         // LLM provider configuration (FR-22): defaults and which providers have a system key.
         services.AddOptions<LlmOptions>()
             .BindConfiguration(LlmOptions.SectionName)
@@ -85,6 +88,7 @@ public static class DependencyInjection
         services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<FakeLlmProvider>());
         services.AddSingleton<IPromptLibrary, EmbeddedPromptLibrary>();
         services.AddScoped<ILlmResolver, LlmResolver>();
+        services.AddScoped<ILlmKeyValidator, LlmKeyValidator>();
 
         // Git providers (FR-10, FR-35) and working copies.
         services.AddSingleton<IWorkspaceStore, WorkspaceStore>();

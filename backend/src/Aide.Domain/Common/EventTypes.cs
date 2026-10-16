@@ -53,6 +53,13 @@ public static class EventTypes
     /// <summary>Git, LLM or notification settings changed (FR-9). The payload never contains secret values.</summary>
     public const string SettingsUpdated = "SETTINGS_UPDATED";
 
+    /// <summary>
+    /// FR-79: the project's LLM binding was cleared because the binding Owner lost the Owner role, left or was removed, or
+    /// deleted the connection: <c>{projectId, credentialId, boundByUserId, provider, reason}</c>
+    /// (<see cref="Projects.LlmBindingClearedReason"/>). Runs then fail with <c>PROVIDER_NOT_CONFIGURED</c>.
+    /// </summary>
+    public const string LlmBindingCleared = "LLM_BINDING_CLEARED";
+
     /// <summary>DEP-2 seed marker: the dev seed created its demo project. Written with <c>project_id</c> null (so it
     /// survives deleting the project) and the project id in the payload; the seed never creates the demo again.</summary>
     public const string DemoProjectSeeded = "DEMO_PROJECT_SEEDED";
@@ -92,6 +99,13 @@ public static class EventTypes
     public const string RunStarted = "RUN_STARTED";
     public const string RunCompleted = "RUN_COMPLETED";
     public const string RunFailed = "RUN_FAILED";
+
+    /// <summary>
+    /// FR-78: the provider rejected a bound connection's key during a run (HTTP 401), so the connection was marked
+    /// <c>invalid</c>: <c>{credentialId, userId, provider, runId}</c> (no secret). Its owner is notified through the run's
+    /// <see cref="RunFailed"/> notification until FR-92 adds the "connection invalid" notification type.
+    /// </summary>
+    public const string ConnectionInvalid = "CONNECTION_INVALID";
 
     /// <summary>FR-26: a run was refused because the project's token budget is used up (Owners are notified, phase 12).</summary>
     public const string BudgetExceeded = "BUDGET_EXCEEDED";
@@ -168,12 +182,12 @@ public static class EventTypes
         [EventCategory.Transition] = [PhaseChanged],
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
         [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored],
-        [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded],
+        [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, VersionStarted],
         [EventCategory.Rollback] = [RollbackCompleted],
-        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated],
+        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared],
         [EventCategory.Integrity] = [IntegrityAlert],
     };
 
@@ -181,6 +195,8 @@ public static class EventTypes
     {
         RunFailed,
         BudgetExceeded,
+        ConnectionInvalid,
+        LlmBindingCleared,
         StepRejected,
         StepBlocked,
         GitPushFailed,

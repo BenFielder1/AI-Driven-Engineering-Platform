@@ -27,7 +27,12 @@ public sealed class ProjectLlmSettings
 
     public IReadOnlyDictionary<string, string> ModelsByAgent { get; set; } = new Dictionary<string, string>();
 
-    public string? ApiKeyEncrypted { get; set; }
+    /// <summary>FR-79: the bound user connection (<see cref="LlmCredential"/>) every run of the project uses; cleared
+    /// (ON DELETE SET NULL) when the connection is deleted. Replaces v1's per-project key.</summary>
+    public Guid? CredentialId { get; set; }
+
+    /// <summary>The Owner who bound <see cref="CredentialId"/> (the connection's owner).</summary>
+    public Guid? BoundByUserId { get; set; }
 }
 
 /// <summary>Notification channels of a project (FR-9, FR-47).</summary>

@@ -79,6 +79,15 @@ public static class ErrorCodes
     /// <summary>An external service (the Git host) failed or couldn't be reached while serving the request (§6).</summary>
     public const string UpstreamError = "UPSTREAM_ERROR";
 
+    /// <summary>
+    /// FR-78: the LLM provider rejected the key (HTTP 401/403): returned (400) when a connection is saved, and recorded on a
+    /// run that failed because the bound key was rejected (the connection is then marked <c>invalid</c>).
+    /// </summary>
+    public const string CredentialInvalid = "CREDENTIAL_INVALID";
+
+    /// <summary>FR-79: an Owner tried to bind a connection that belongs to another user.</summary>
+    public const string CredentialNotOwner = "CREDENTIAL_NOT_OWNER";
+
     /// <summary>FR-74: the preset doesn't exist (until presets land, every preset id).</summary>
     public const string PresetNotFound = "PRESET_NOT_FOUND";
 
@@ -168,6 +177,8 @@ public static class ErrorCodes
         [ReleaseNotMerged] = 409,
         [NotReleased] = 409,
         [PresetNotFound] = 400,
+        [CredentialInvalid] = 400,
+        [CredentialNotOwner] = 403,
         [UpstreamError] = 502,
         [LinkExpired] = 410,
         [LinkUsed] = 409,

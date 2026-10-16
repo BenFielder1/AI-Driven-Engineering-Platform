@@ -129,7 +129,9 @@ internal sealed class AgentRunConfiguration : IEntityTypeConfiguration<AgentRun>
         builder.HasOne<ExecutionStep>().WithMany().HasForeignKey(r => r.StepId).OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(r => r.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
 
-        // credential_id is a plain column for now; its FK (set null) arrives with the llm_credentials table.
+        // The connection that paid for the run (FR-78/79); deleting the connection keeps the run.
+        builder.HasOne<LlmCredential>().WithMany().HasForeignKey(r => r.CredentialId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(r => r.CredentialId);
 
         builder.HasIndex(r => new { r.ProjectId, r.CreatedAt });
         builder.HasIndex(r => new { r.Status, r.CreatedAt });

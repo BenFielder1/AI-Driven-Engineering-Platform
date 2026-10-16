@@ -57,6 +57,10 @@ export const errorMessages = {
   NOT_RELEASED: "Release the current version before starting a new one.",
   // External services and presets
   UPSTREAM_ERROR: "An external service (such as GitHub) failed or couldn't be reached. Try again in a moment.",
+  // LLM connections (FR-78, FR-79)
+  CREDENTIAL_INVALID:
+    "The provider rejected this key. Check that you copied the whole key and that it is active, then try again.",
+  CREDENTIAL_NOT_OWNER: "You can only bind one of your own connections. Add your own key under Connections.",
   PRESET_NOT_FOUND: "That tech stack preset doesn't exist.",
   GIT_ERROR: "Git or GitHub refused the operation.",
   RELEASE_CANCELLED: "A rollback cancelled this release before it ran.",
@@ -70,7 +74,7 @@ export const errorMessages = {
     "The agent's specification was still missing required sections after a retry.",
   INVALID_OUTPUT: "The agent's reply couldn't be read, even after a retry.",
   PROVIDER_NOT_CONFIGURED:
-    "The run's LLM provider has no API key on this project or the server. An Owner can add one in Settings → LLM.",
+    "The project has no LLM connection bound for this provider, and system keys aren't allowed. An Owner can bind one of their connections in Settings → LLM.",
   PROVIDER_ERROR: "The model provider returned an error.",
   // Restore (FR-58); the specific copy per `reason` is restoreNotAllowedMessage().
   RESTORE_NOT_ALLOWED: "This version can't be restored right now.",
@@ -227,6 +231,18 @@ export const contextualErrorMessages = {
     CONFLICT:
       "The project already has an execution job queued or running. Retry this dead letter after it finishes.",
     FORBIDDEN: "Only administrators can retry dead letters, and only from a browser session.",
+  },
+  /** POST /api/me/connections/llm · /:id/test — the provider couldn't be reached (FR-78). */
+  llmConnection: {
+    UPSTREAM_ERROR: "We couldn't reach the provider to check the key. Nothing changed; try again in a moment.",
+    FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
+    CREDENTIAL_INVALID:
+      "The provider rejected this key, so it wasn't saved. Check that you copied the whole key and that it is active.",
+  },
+  /** PATCH /api/projects/:id/settings/llm (FR-79). */
+  llmBinding: {
+    FORBIDDEN: "Only project Owners can change the LLM settings or the bound connection.",
+    VALIDATION: "The connection must be for the chosen provider.",
   },
   /** PATCH /api/admin/users/:id/role (FR-3). */
   changeSystemRole: {

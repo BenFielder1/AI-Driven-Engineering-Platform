@@ -173,9 +173,11 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Jobs:LeaseDuration` | Lease before a stalled job is re-queued | `00:05:00` | no |
 | `Llm:DefaultProvider` | `anthropic`, `openai`, `ollama` or `fake` | `anthropic` | no |
 | `Llm:RequestTimeout` | Per provider call | `00:05:00` | no |
+| `Llm:KeyCheckTimeout` | Per key check when a connection is added or re-tested (FR-78); a timeout is `UPSTREAM_ERROR` | `00:00:15` | no |
 | `Llm:MaxOutputTokens` | Output token cap per call | `16000` | no |
-| `Llm:Providers:Anthropic:ApiKey` | Anthropic key | none | yes |
-| `Llm:Providers:OpenAI:ApiKey` | OpenAI key | none | yes |
+| `Llm:AllowSystemKeys` | Whether the system keys below may be used, and then only for projects with no bound connection (D-V2-5, FR-79). Otherwise runs use the key an Owner bound from Account → Connections | `false` | no |
+| `Llm:Providers:Anthropic:ApiKey` | Anthropic system key (used only with `Llm:AllowSystemKeys=true`) | none | yes |
+| `Llm:Providers:OpenAI:ApiKey` | OpenAI system key (used only with `Llm:AllowSystemKeys=true`) | none | yes |
 | `Llm:Providers:<Name>:BaseUrl` | Endpoint override (`Anthropic`, `OpenAI`, `Ollama`, `Fake`). Ollama: `Llm__Providers__Ollama__BaseUrl` | Ollama: `http://localhost:11434` (Development, no container) or `http://host.docker.internal:11434` (container) | no |
 | `Llm:Providers:<Name>:DefaultModel` | Model when an agent has no own entry | see section below | no |
 | `Llm:Providers:<Name>:Models:<Agent>` | Model per agent | see section below | no |

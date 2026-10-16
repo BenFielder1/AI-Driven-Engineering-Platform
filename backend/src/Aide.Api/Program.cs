@@ -7,6 +7,7 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Approvals;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
+using Aide.Api.Features.Connections;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Git;
@@ -188,8 +189,10 @@ if (app.Environment.IsDevelopment())
 app.MapHealthEndpoints();
 app.MapAuthEndpoints();
 app.MapApiTokenEndpoints();
+app.MapLlmConnectionEndpoints();
 app.MapAdminUserEndpoints();
 app.MapAdminOperationsEndpoints();
+app.MapAdminIntegrationEndpoints();
 app.MapProjectEndpoints();
 app.MapProjectMemberEndpoints();
 app.MapProjectSettingsEndpoints();

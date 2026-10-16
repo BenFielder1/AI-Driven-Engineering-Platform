@@ -18,6 +18,7 @@ import { Route as AppConnectionsRouteImport } from './routes/_app/connections'
 import { Route as AppNotificationsRouteImport } from './routes/_app/notifications'
 import { Route as PublicLoginRouteImport } from './routes/_public/login'
 import { Route as PublicRegisterRouteImport } from './routes/_public/register'
+import { Route as AppAccountConnectionsRouteImport } from './routes/_app/account_.connections'
 import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
 import { Route as AppAdminDeadLettersRouteImport } from './routes/_app/admin/dead-letters'
 import { Route as AppAdminEventsRouteImport } from './routes/_app/admin/events'
@@ -85,6 +86,11 @@ const PublicRegisterRoute = PublicRegisterRouteImport.update({
   id: '/register',
   path: '/register',
   getParentRoute: () => PublicRoute,
+} as any)
+const AppAccountConnectionsRoute = AppAccountConnectionsRouteImport.update({
+  id: '/account_/connections',
+  path: '/account/connections',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
   id: '/',
@@ -229,6 +235,7 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof AppNotificationsRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/account/connections': typeof AppAccountConnectionsRoute
   '/admin/dead-letters': typeof AppAdminDeadLettersRoute
   '/admin/events': typeof AppAdminEventsRoute
   '/admin/integrations': typeof AppAdminIntegrationsRoute
@@ -261,6 +268,7 @@ export interface FileRoutesByTo {
   '/notifications': typeof AppNotificationsRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/account/connections': typeof AppAccountConnectionsRoute
   '/admin/dead-letters': typeof AppAdminDeadLettersRoute
   '/admin/events': typeof AppAdminEventsRoute
   '/admin/integrations': typeof AppAdminIntegrationsRoute
@@ -295,6 +303,7 @@ export interface FileRoutesById {
   '/_app/notifications': typeof AppNotificationsRoute
   '/_public/login': typeof PublicLoginRoute
   '/_public/register': typeof PublicRegisterRoute
+  '/_app/account_/connections': typeof AppAccountConnectionsRoute
   '/_app/admin/dead-letters': typeof AppAdminDeadLettersRoute
   '/_app/admin/events': typeof AppAdminEventsRoute
   '/_app/admin/integrations': typeof AppAdminIntegrationsRoute
@@ -330,6 +339,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/login'
     | '/register'
+    | '/account/connections'
     | '/admin/dead-letters'
     | '/admin/events'
     | '/admin/integrations'
@@ -362,6 +372,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/login'
     | '/register'
+    | '/account/connections'
     | '/admin/dead-letters'
     | '/admin/events'
     | '/admin/integrations'
@@ -395,6 +406,7 @@ export interface FileRouteTypes {
     | '/_app/notifications'
     | '/_public/login'
     | '/_public/register'
+    | '/_app/account_/connections'
     | '/_app/admin/dead-letters'
     | '/_app/admin/events'
     | '/_app/admin/integrations'
@@ -491,6 +503,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/register'
       preLoaderRoute: typeof PublicRegisterRouteImport
       parentRoute: typeof PublicRoute
+    }
+    '/_app/account_/connections': {
+      id: '/_app/account_/connections'
+      path: '/account/connections'
+      fullPath: '/account/connections'
+      preLoaderRoute: typeof AppAccountConnectionsRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/admin/': {
       id: '/_app/admin/'
@@ -745,6 +764,7 @@ interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRouteWithChildren
   AppConnectionsRoute: typeof AppConnectionsRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
+  AppAccountConnectionsRoute: typeof AppAccountConnectionsRoute
   AppApprovalsTokenRoute: typeof AppApprovalsTokenRoute
   AppProjectsProjectIdRoute: typeof AppProjectsProjectIdRouteWithChildren
   AppProjectsNewRoute: typeof AppProjectsNewRoute
@@ -756,6 +776,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAdminRoute: AppAdminRouteWithChildren,
   AppConnectionsRoute: AppConnectionsRoute,
   AppNotificationsRoute: AppNotificationsRoute,
+  AppAccountConnectionsRoute: AppAccountConnectionsRoute,
   AppApprovalsTokenRoute: AppApprovalsTokenRoute,
   AppProjectsProjectIdRoute: AppProjectsProjectIdRouteWithChildren,
   AppProjectsNewRoute: AppProjectsNewRoute,

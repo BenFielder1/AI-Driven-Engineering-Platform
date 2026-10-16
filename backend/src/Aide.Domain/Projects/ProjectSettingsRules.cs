@@ -162,7 +162,7 @@ public static partial class ProjectSettingsRules
 
     /// <summary>
     /// "Missing credentials never block": Fake and Ollama are always usable; Anthropic and OpenAI are usable when a
-    /// system key is configured or the project has its own key for that provider.
+    /// (allowed) system key is configured or the project has a bound connection for that provider (FR-79).
     /// </summary>
     public static bool IsConfigured(LlmProvider provider, bool hasSystemKey, bool hasProjectKey) =>
         !RequiresApiKey(provider) || hasSystemKey || hasProjectKey;
@@ -182,18 +182,19 @@ public static partial class ProjectSettingsRules
         return !Agents.SecretRedaction.HasWhitespaceOrControl(apiKey);
     }
 
-    /// <summary>Validates LLM settings as they will be stored (after a partial update). <paramref name="apiKey"/> is
-    /// the key sent, when one was.</summary>
+    /// <summary>
+    /// Validates LLM settings as they will be stored (after a partial update). FR-79: keys come from a bound connection
+    /// (or an allowed system key), so a provider that needs a key can only be <em>chosen</em> (<paramref name="providerChanged"/>)
+    /// when one is usable after the update. Unbinding on the same provider is allowed: runs then fail with
+    /// <c>PROVIDER_NOT_CONFIGURED</c>, as after a cleared binding.
+    /// </summary>
     public static Result ValidateLlm(
         LlmProvider provider,
         string? defaultModel,
         IReadOnlyDictionary<string, string?>? modelsByAgent,
-        bool apiKeySent,
-        bool apiKeySentBlank,
-        bool clearApiKey,
         bool hasSystemKey,
-        bool hasProjectKeyAfter,
-        string? apiKey = null)
+        bool hasBindingAfter,
+        bool providerChanged)
     {
         var problems = new List<string>();
         if (string.IsNullOrWhiteSpace(defaultModel))
@@ -209,26 +210,9 @@ public static partial class ProjectSettingsRules
             }
         }
 
-        if (apiKeySent && clearApiKey)
+        if (problems.Count == 0 && providerChanged && !IsConfigured(provider, hasSystemKey, hasBindingAfter))
         {
-            problems.Add("apiKey: Send either apiKey or clearApiKey, not both.");
-        }
-        else if (apiKeySentBlank)
-        {
-            problems.Add("apiKey: The API key can't be blank. Send clearApiKey to remove it.");
-        }
-        else if (apiKeySent && !RequiresApiKey(provider))
-        {
-            problems.Add($"apiKey: {provider.ToWire()} doesn't use an API key.");
-        }
-        else if (apiKey is not null && !IsWellFormedApiKey(apiKey))
-        {
-            problems.Add("apiKey: The API key can't contain spaces, line breaks or other control characters.");
-        }
-
-        if (problems.Count == 0 && !IsConfigured(provider, hasSystemKey, hasProjectKeyAfter))
-        {
-            problems.Add($"provider: {provider.ToWire()} is not configured. Add a project API key, or ask an admin to set the system key.");
+            problems.Add($"provider: {provider.ToWire()} is not configured. Bind one of your {provider.ToWire()} connections (credentialId).");
         }
 
         return ProjectRules.ToResult(problems, "The LLM settings are invalid.");

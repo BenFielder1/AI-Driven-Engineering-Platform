@@ -14,8 +14,8 @@ public sealed record RunInputArtifactDto(ArtifactType Type, int Version);
 /// USD, duration and error. <c>userFeedback</c> is the feedback or answers given to the agent. <c>releaseVersionId</c> is the
 /// release version it ran for (§4.10). <c>checkpoint</c> is the checkpoint it ran at (null until recorded). <c>agentKey</c>,
 /// <c>presetId</c> and <c>presetVersion</c> name the preset specialist (FR-76; null for base agents). <c>toolCallCount</c> is
-/// the number of repo tool calls (FR-71). <c>credentialLabel</c> is the label of the LLM connection that paid for the run
-/// (FR-77; null when the deployment key paid or the connection is gone).
+/// the number of repo tool calls (FR-71). <c>credentialLabel</c> names the LLM connection that paid for the run,
+/// <c>Label (••••a1b2)</c> (FR-79, D-V2-5; null for a system key, a provider without a key, or a deleted connection).
 /// </summary>
 public sealed record AgentRunDto(
     Guid Id,

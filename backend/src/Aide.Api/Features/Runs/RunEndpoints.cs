@@ -10,6 +10,7 @@ using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Aide.Domain.Projects;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -115,10 +116,16 @@ public static class RunEndpoints
                 Error = r.Error,
                 CreatedAt = r.CreatedAt,
                 CompletedAt = r.CompletedAt,
+                CredentialId = r.CredentialId,
             })
             .ToListAsync(cancellationToken);
         var checkpoints = await CheckpointsAsync(db, [.. runs.Select(r => r.Id)], cancellationToken);
-        return TypedResults.Ok(new PagedResult<AgentRunDto>([.. runs.Select(r => ToDto(r, checkpoints.GetValueOrDefault(r.Id)))], page, limit, total));
+        var labels = await CredentialLabelsAsync(db, [.. runs.Select(r => r.CredentialId).OfType<Guid>()], cancellationToken);
+        return TypedResults.Ok(new PagedResult<AgentRunDto>(
+            [.. runs.Select(r => ToDto(r, checkpoints.GetValueOrDefault(r.Id), r.CredentialId is { } c ? labels.GetValueOrDefault(c) : null))],
+            page,
+            limit,
+            total));
     }
 
     private static async Task<Results<Ok<AgentRunDetailDto>, ProblemHttpResult>> GetRun(
@@ -142,7 +149,10 @@ public static class RunEndpoints
 
         var text = AgentRunner.ReadOutput(run.Output)?.Text ?? run.Output;
         var truncated = text is { Length: > MaxOutputLength };
-        var r = ToDto(run, (await CheckpointsAsync(db, [run.Id], cancellationToken)).GetValueOrDefault(run.Id));
+        var label = run.CredentialId is { } credentialId
+            ? (await CredentialLabelsAsync(db, [credentialId], cancellationToken)).GetValueOrDefault(credentialId)
+            : null;
+        var r = ToDto(run, (await CheckpointsAsync(db, [run.Id], cancellationToken)).GetValueOrDefault(run.Id), label);
         return TypedResults.Ok(new AgentRunDetailDto(
             r.Id, r.ReleaseVersionId, r.Agent, r.Phase, r.StepId, r.Provider, r.Model, r.PromptVersion, r.InputArtifacts, r.UserFeedback, r.Status,
             r.Attempts, r.InputTokens, r.OutputTokens, r.CostEstimate, r.DurationMs, r.Error, r.CreatedAt, r.CompletedAt,
@@ -189,7 +199,28 @@ public static class RunEndpoints
         return result;
     }
 
-    private static AgentRunDto ToDto(AgentRun r, int? checkpoint) => new(
+    /// <summary>
+    /// FR-79: the display name (<c>Label (••••a1b2)</c>) of the connections that paid for runs. A deleted connection has
+    /// none (its runs' <c>credential_id</c> is set null). Never the key.
+    /// </summary>
+    public static async Task<Dictionary<Guid, string>> CredentialLabelsAsync(AideDbContext db, IReadOnlyList<Guid> credentialIds, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(credentialIds);
+        if (credentialIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = credentialIds.Distinct().ToList();
+        var rows = await db.LlmCredentials.AsNoTracking()
+            .Where(c => ids.Contains(c.Id))
+            .Select(c => new { c.Id, c.Label, c.Last4 })
+            .ToListAsync(cancellationToken);
+        return rows.ToDictionary(c => c.Id, c => LlmConnectionRules.DisplayName(c.Label, c.Last4));
+    }
+
+    private static AgentRunDto ToDto(AgentRun r, int? checkpoint, string? credentialLabel) => new(
         r.Id,
         r.ReleaseVersionId,
         r.Agent,
@@ -214,7 +245,7 @@ public static class RunEndpoints
         r.PresetId,
         r.PresetVersion,
         ToolCallCount(r.ToolCalls),
-        CredentialLabel: null);
+        credentialLabel);
 
     /// <summary>FR-71: the number of entries in the run's tool-call JSON array (0 when it isn't one).</summary>
     public static int ToolCallCount(string? toolCalls)

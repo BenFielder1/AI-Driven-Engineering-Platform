@@ -36,6 +36,8 @@ public sealed class GateDecisionTests(AideApiFactory factory)
 
         var project = await LifecycleSeed.ProjectAsync(factory, id);
         Assert.Equal((Phase.Planning, ProjectStatus.Active, 3), (project.CurrentPhase, project.Status, project.Checkpoint));
+        // §4.10: a gate names the release version it belongs to.
+        Assert.Equal(project.CurrentReleaseVersionId, decided.ReleaseVersionId);
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.GateApproved));
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PhaseChanged));
         Assert.Equal([JobTypes.PlanGeneration], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));

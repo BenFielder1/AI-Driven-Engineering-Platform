@@ -37,6 +37,8 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<ProjectNotificationSettings> ProjectNotificationSettings => Set<ProjectNotificationSettings>();
 
+    public DbSet<LlmCredential> LlmCredentials => Set<LlmCredential>();
+
     public DbSet<Artifact> Artifacts => Set<Artifact>();
 
     public DbSet<ApprovalGate> ApprovalGates => Set<ApprovalGate>();
@@ -88,6 +90,7 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<AgentKind>(configurationBuilder);
         MapEnum<AgentRunStatus>(configurationBuilder);
         MapEnum<LlmProvider>(configurationBuilder);
+        MapEnum<LlmCredentialStatus>(configurationBuilder);
         MapEnum<GitProvider>(configurationBuilder);
         MapEnum<DriftLevel>(configurationBuilder);
         MapEnum<ReviewDecision>(configurationBuilder);

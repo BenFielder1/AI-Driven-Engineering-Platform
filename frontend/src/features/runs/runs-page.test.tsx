@@ -378,7 +378,7 @@ describe('Agent runs page (SPEC §7.2, v2 columns)', () => {
         agent: 'code_generator',
         agentKey: 'frontend-engineer',
         toolCallCount: 12,
-        credentialLabel: 'Team Anthropic key',
+        credentialLabel: 'Team key (••••a1b2)',
         checkpoint: 4,
       })
     })
@@ -388,14 +388,14 @@ describe('Agent runs page (SPEC §7.2, v2 columns)', () => {
     expect(head).toEqual(expect.arrayContaining(['Specialist', 'Credential', 'Version', 'Tool calls']))
     const row = rowFor('Code generator')
     expect(row).toHaveTextContent('frontend-engineer')
-    expect(row).toHaveTextContent('Team Anthropic key')
+    expect(row).toHaveTextContent('Team key (••••a1b2)')
     expect(within(row).getByTestId('run-version')).toHaveTextContent('0.1.0 · checkpoint 4')
     expect(row).toHaveTextContent('12')
 
     await user.click(within(row).getByRole('button', { name: /^Code generator run/ }))
     const sheet = await screen.findByRole('dialog', { name: 'Code generator run' })
     expect(within(sheet).getByText('Specialist').nextElementSibling).toHaveTextContent('frontend-engineer')
-    expect(within(sheet).getByText('Credential').nextElementSibling).toHaveTextContent('Team Anthropic key')
+    expect(within(sheet).getByText('Credential').nextElementSibling).toHaveTextContent('Team key (••••a1b2)')
     expect(within(sheet).getByText('Repository tool calls').nextElementSibling).toHaveTextContent('12')
   })
 })

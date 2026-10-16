@@ -60,13 +60,15 @@ public partial class EventTypesTests
     [InlineData(EventTypes.ReleaseFailed)]
     [InlineData(EventTypes.ArtifactCorrupted)]
     [InlineData(EventTypes.IntegrityAlert)]
+    [InlineData(EventTypes.ConnectionInvalid)]
+    [InlineData(EventTypes.LlmBindingCleared)]
     public void FR51_Failure_and_alert_events_have_outcome_failure(string type) =>
         Assert.Equal(EventOutcome.Failure, EventTypes.OutcomeOf(type));
 
     [Fact]
     public void FR51_Every_other_event_type_has_outcome_ok()
     {
-        Assert.Equal(10, EventTypes.Failures.Count);
+        Assert.Equal(12, EventTypes.Failures.Count);
         Assert.All(AllTypes.Except(EventTypes.Failures), t => Assert.Equal(EventOutcome.Ok, EventTypes.OutcomeOf(t)));
         Assert.Equal(EventOutcome.Ok, EventTypes.OutcomeOf("NOT_AN_EVENT"));
     }

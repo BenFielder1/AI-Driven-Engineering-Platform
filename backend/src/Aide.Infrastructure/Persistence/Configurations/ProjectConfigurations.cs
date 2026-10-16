@@ -109,6 +109,30 @@ internal sealed class ProjectLlmSettingsConfiguration : IEntityTypeConfiguration
         builder.Property(s => s.DefaultModel).HasMaxLength(100).IsRequired();
         builder.Property(s => s.ModelsByAgent).HasJsonbConversion().IsRequired();
         builder.HasOne<Project>().WithOne().HasForeignKey<ProjectLlmSettings>(s => s.ProjectId).OnDelete(DeleteBehavior.Cascade);
+
+        // FR-79: the bound connection and the Owner who bound it; deleting either clears the binding.
+        builder.HasOne<LlmCredential>().WithMany().HasForeignKey(s => s.CredentialId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(s => s.BoundByUserId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(s => s.CredentialId);
+        builder.HasIndex(s => s.BoundByUserId);
+    }
+}
+
+internal sealed class LlmCredentialConfiguration : IEntityTypeConfiguration<LlmCredential>
+{
+    public void Configure(EntityTypeBuilder<LlmCredential> builder)
+    {
+        builder.ToTable("llm_credentials", t => t.HasCheckConstraint(
+            "ck_llm_credentials_provider", "provider IN ('anthropic', 'openai')"));
+        builder.HasKey(c => c.Id);
+        builder.Property(c => c.Id).ValueGeneratedNever();
+        builder.Property(c => c.Provider).IsRequired();
+        builder.Property(c => c.Label).HasColumnType("text").IsRequired();
+        builder.Property(c => c.SecretEncrypted).HasColumnType("text").IsRequired();
+        builder.Property(c => c.Last4).HasColumnType("text").IsRequired();
+        builder.Property(c => c.Status).IsRequired();
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(c => c.UserId);
     }
 }
 

@@ -132,6 +132,8 @@ public class ErrorCodesTests
             ["MERGE_CONFLICT"] = 409,
             ["REFINEMENT_IN_PROGRESS"] = 409,
             ["INVALID_PLAN"] = 400,
+            ["CREDENTIAL_INVALID"] = 400,
+            ["CREDENTIAL_NOT_OWNER"] = 403,
         };
 
         foreach (var (code, status) in expected)

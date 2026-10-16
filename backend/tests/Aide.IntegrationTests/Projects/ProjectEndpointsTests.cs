@@ -180,7 +180,10 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
     [Fact]
     public async Task FR5_A_system_key_makes_the_configured_default_provider_the_new_project_default()
     {
-        await using var app = factory.WithWebHostBuilder(b => b.UseSetting("Llm:Providers:Anthropic:ApiKey", "sk-ant-system-test-key"));
+        // D-V2-5: a system key counts only when Llm:AllowSystemKeys is on (FR79_System_keys_are_used_only_when_allowed_and_nothing_is_bound).
+        await using var app = factory.WithWebHostBuilder(b => b
+            .UseSetting("Llm:Providers:Anthropic:ApiKey", "sk-ant-system-test-key")
+            .UseSetting("Llm:AllowSystemKeys", "true"));
         using var owner = await ApiSession.RegisterAsync(app);
 
         var project = await ProjectApi.CreateAsync(owner.Client);

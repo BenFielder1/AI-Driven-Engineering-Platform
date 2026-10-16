@@ -125,17 +125,3 @@ export function stageBadge(progress: StageProgress, readOnly: boolean, awaitingA
   }
   return progress
 }
-
-type ReleaseVersionWindow = Pick<Schemas['ReleaseVersionDto'], 'id' | 'version' | 'createdAt'>
-
-/**
- * FR-55, SPEC §7.2: the release version a gate belongs to. GateDto has no release version id, so a gate belongs to the
- * newest release version created at or before it (versions are developed one at a time, FR-60); ties keep the
- * given order (GET /versions: highest first).
- */
-export function releaseVersionAt<V extends ReleaseVersionWindow>(versions: readonly V[], iso: string): V | undefined {
-  const at = Date.parse(iso)
-  const newestFirst = [...versions].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-  // Before any version (the first is created with the project, so only clock skew): the oldest one.
-  return newestFirst.find((v) => Date.parse(v.createdAt) <= at) ?? newestFirst.at(-1)
-}

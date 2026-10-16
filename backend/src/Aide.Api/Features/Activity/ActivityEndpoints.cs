@@ -189,6 +189,8 @@ internal static class ActivitySummary
             EventTypes.RunCompleted => $"{Get("agent") ?? "Agent"} run completed ({Get("inputTokens") ?? "?"} in / {Get("outputTokens") ?? "?"} out tokens)",
             EventTypes.RunFailed => $"{Get("agent") ?? "Agent"} run failed: {Get("errorCode") ?? "error"}",
             EventTypes.BudgetExceeded => $"{Get("agent") ?? "Agent"} run refused: token budget used up",
+            EventTypes.ConnectionInvalid => $"{Get("provider") ?? "LLM"} rejected the bound connection's key; it is marked invalid",
+            EventTypes.LlmBindingCleared => $"LLM binding cleared ({Get("reason") ?? "?"})",
             EventTypes.StepStarted => $"Step {Get("stepNumber") ?? "?"} started (attempt {Get("attempt") ?? "?"})",
             EventTypes.StepCompleted => $"Step {Get("stepNumber") ?? "?"} completed",
             EventTypes.StepRejected => $"Step {Get("stepNumber") ?? "?"} rejected by the Execution Guardian (attempt {Get("attempt") ?? "?"})",

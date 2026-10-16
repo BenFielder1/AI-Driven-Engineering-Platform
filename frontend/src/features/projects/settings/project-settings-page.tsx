@@ -66,7 +66,7 @@ function SettingsNav({
 
 /**
  * /projects/:id/settings/{section} (FR-7–FR-10). Owners (and Admins) see every section; other members see General
- * read-only and Members, and any other section sends them to General. The settings GET is Owner-only, so it isn't
+ * read-only, Members and LLM read-only (FR-79), and any other section sends them to General. The settings GET is Owner-only, so it isn't
  * requested for anyone else.
  */
 export function ProjectSettingsPage({ section }: { section: SettingsTab | undefined }) {
@@ -75,7 +75,8 @@ export function ProjectSettingsPage({ section }: { section: SettingsTab | undefi
   const isOwner = canInProject(user, role, 'changeSettings')
   const settings = useProjectSettings(project.id, isOwner)
 
-  const visible: readonly SettingsTab[] = isOwner ? settingsTabs : ['general', 'members']
+  // FR-79: every member reads Settings → LLM ("connected by <name>"); its GET isn't Owner-only.
+  const visible: readonly SettingsTab[] = isOwner ? settingsTabs : ['general', 'members', 'llm']
   if (!section || !visible.includes(section)) {
     return (
       <Navigate to="/projects/$projectId/settings/$section" params={{ projectId: project.id, section: 'general' }} replace />
@@ -104,7 +105,7 @@ export function ProjectSettingsPage({ section }: { section: SettingsTab | undefi
       panel = withSettings((s) => <GitTab projectId={project.id} git={s.git} />)
       break
     case 'llm':
-      panel = withSettings((s) => <LlmTab projectId={project.id} llm={s.llm} />)
+      panel = <LlmTab projectId={project.id} canEdit={isOwner} />
       break
     case 'notifications':
       panel = withSettings((s) => <NotificationsTab projectId={project.id} notifications={s.notifications} />)

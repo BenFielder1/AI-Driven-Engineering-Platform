@@ -36,8 +36,8 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | FR-75 | Preset spec sections; mandatory FR IDs + GWT | 3.5, 4.13 | backend | 6, 8 | todo | — |
 | FR-76 | Plan steps carry agent + covers; preset plan validation | 3.5, 4.11 | both | 8 | todo | — |
 | FR-77 | Preset review checklist + deterministic checks | 3.5 | backend | 8 | todo | — |
-| FR-78 | User LLM connections | 3.6 | both | 4 | todo | — |
-| FR-79 | Bind Owner's LLM connection to project | 3.6 | both | 4 | todo | — |
+| FR-78 | User LLM connections | 3.6 | both | 4 | done | me/connections/llm CRUD + test, list-models validation; FR78_* tests |
+| FR-79 | Bind Owner's LLM connection to project | 3.6 | both | 4 | done | binding + clearing rules under project lock, runs use bound key, Llm:AllowSystemKeys; FR79_* tests |
 | FR-80 | GitHub App manifest registration + App sign-in | 3.7 | both | 5 | todo | — |
 | FR-81 | User GitHub connection, repo picker, create repo | 3.7 | both | 5 | todo | — |
 | FR-82 | `github_app` provider, installation tokens, per-version branch | 3.7 | backend | 5 | todo | — |
@@ -80,7 +80,11 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
   - [x] aspnet-engineer (restore rules, attempt recording, runs/reports readers with fixed query count + <300 ms test, history `allReleaseVersions` — 2503 backend tests)
   - [x] vite-react-engineer (stage pages, runs/attempts, review cycles, restore, artifacts across versions — first agent interrupted by session end, finished by a fresh agent; 511 frontend tests)
   - [x] gate (backend 2507, frontend 511, manifests, contract fresh + additive) · review (0 Critical, 1 Major, 4 Minor — all fixed) · redeploy (smoke ✓) · commit
-- [ ] 4 M12a LLM connections — IDs: FR-78, FR-79
+- [x] 4 M12a LLM connections (base: 816ff13) — IDs: FR-78, FR-79
+  - [x] ef-data-engineer (migration LlmCredentials: llm_credentials, binding columns, agent_runs FK, v1 keys → earliest Owner's connection; last4 startup backfill; FR79_* migration tests)
+  - [x] aspnet-engineer (connections API, list-models validation, binding + clearing rules, run credential, Llm:AllowSystemKeys, admin LLM policy, GateDto.releaseVersionId — 2579 backend tests; oasdiff: only apiKey/clearApiKey removed from PATCH /settings/llm, accepted by FR-79)
+  - [x] vite-react-engineer (Connections page LLM section, Settings → LLM binding, admin system-key panel — 527 frontend tests)
+  - [x] gate (backend 2584, frontend 527, manifests, contract fresh) · review (0 Critical, 0 Major, 4 Minor — all fixed/logged: binding lock, 15 s key-check timeout `Llm:KeyCheckTimeout`, key cleared from MutationCache) · redeploy (migration LlmCredentials applied; k8s DB had no v1 keys; smoke ✓) · commit
 - [ ] 5 M12b GitHub App — IDs: FR-80–FR-83, FR-86
 - [ ] 6 M13a Iteration + import — IDs: FR-70–FR-73, §4.13, FR-75 (FR IDs part)
 - [ ] 7 M13b Merge strategies + GitHub release — IDs: FR-64 (GitHub), FR-65, FR-84, FR-85
@@ -114,11 +118,17 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 - 2026-10-15 — Artifact history gains optional `allReleaseVersions=true` (additive) for FR-59 cross-version diff — SPEC updated: no
 - 2026-10-16 — Restore reason `stage_not_reached` added (project before the producing phase, e.g. after a rollback); spec listed only stage_completed — FR-58 — SPEC updated: no
 - 2026-10-16 — Compliance reports carry `id`; GetComplianceReport accepts `reportId` and runs carry `complianceReportId`, because cycle numbers restart after a rollback within one release version. For the version in development, pre-rollback reports stay hidden (v1 §4.8 rule kept); duplicates show only in past-version history — FR-56 — SPEC updated: no
+- 2026-10-16 — Migrated v1 project LLM keys keep the shared v1 Data Protection purpose `Aide.Secrets.v1` (now `SecretPurposes.LlmApiKey`) so ciphertext is reused without re-encryption; new secret kinds (GitHub tokens, App key, Vercel tokens, env values) get their own purposes per §8 — SPEC updated: no
+- 2026-10-16 — Migrated credentials get last4 `????` in SQL, filled by an idempotent startup backfill (LlmCredentialLast4Backfill) that decrypts in-process — SPEC updated: no
+- 2026-10-16 — `GET /api/projects/:id/settings/llm` added so all members can see the binding ("connected by …") while `GET /settings` stays Owner-only — FR-79 — SPEC updated: no
+- 2026-10-16 — An Owner may unbind the project's LLM connection; only choosing a keyed provider with no usable key is VALIDATION. An undecryptable bound key → PROVIDER_NOT_CONFIGURED (no silent system-key fallback) — FR-79 — SPEC updated: no
+- 2026-10-16 — New event `LLM_BINDING_CLEARED {reason: owner_role_lost|member_removed|connection_deleted}` (not in FR-92's list); "LLM binding cleared" / "connection invalid" notification types deferred to phase 10 (FR-92) — until then a rejected key reaches Owners via RUN_FAILED — SPEC updated: no
+- 2026-10-16 — Admins see the system-key policy read-only (`GET /api/admin/integrations/llm`); it is set by config `Llm:AllowSystemKeys`, not from the UI — §2 Admin — SPEC updated: no
+- 2026-10-16 — LlmCredentials migration drops `project_llm_settings.api_key_encrypted` (not rolling-update safe): old pods error on LLM settings reads and agent jobs until the Recreate rollout finishes — acceptable locally, same as ReleaseVersions — SPEC updated: no
 
 ## Known issues
 - E2E lifecycle spec lost its rollback-after-release scenario (FR-63 blocks it); add a rollback-before-release scenario — e2e-qa-engineer (phase 10)
 - Refinement page shows only the latest round (RefinementDto has no past-rounds list) — orchestrator
-- GateDto lacks releaseVersionId; frontend assigns gates to versions by time — add in phase 4 contract — aspnet-engineer
 - ReleaseVersionStampingInterceptor still needed by integration-test seeds (LifecycleSeed, direct inserts); remove once they set release_version_id — ef-data-engineer
 - M9a screenshot check left a test user and project "Shell check" in the k8s DB — delete if unwanted — Ben
 - Carried from v1 (see `docs/v1/PROGRESS.md`): rollback_events.restored_phase nullable (folded into the M10 versions migration per SPEC §5); TAG_CONFLICT cleanup; gates list unpaged — orchestrator

@@ -37,16 +37,20 @@ internal static class ProjectMapping
     public static GitSettingsDto ToDto(ProjectGitSettings s, string? branchName) =>
         new(s.Provider, s.RepoUrl, s.DefaultBranch, branchName, s.TokenEncrypted is not null);
 
-    public static LlmSettingsDto ToDto(ProjectLlmSettings s, ILlmProviderCatalog catalog)
+    /// <param name="s">The project's LLM settings.</param>
+    /// <param name="catalog">The system LLM configuration.</param>
+    /// <param name="binding">The bound connection (FR-79), if any.</param>
+    /// <param name="canBind">Whether the caller is a project Owner.</param>
+    public static LlmSettingsDto ToDto(ProjectLlmSettings s, ILlmProviderCatalog catalog, LlmBindingDto? binding, bool canBind)
     {
-        var hasKey = s.ApiKeyEncrypted is not null;
+        var bound = binding is not null && binding.Provider == s.Provider ? binding : null;
         var providers = Enum.GetValues<LlmProvider>()
             .Select(p => new LlmProviderStatusDto(
                 p,
-                ProjectSettingsRules.IsConfigured(p, catalog.HasSystemKey(p), hasKey && s.Provider == p),
+                ProjectSettingsRules.IsConfigured(p, catalog.HasSystemKey(p), bound is not null && s.Provider == p),
                 catalog.DefaultModel(p)))
             .ToList();
-        return new LlmSettingsDto(s.Provider, s.DefaultModel, ToAgentModels(s.ModelsByAgent), hasKey, providers);
+        return new LlmSettingsDto(s.Provider, s.DefaultModel, ToAgentModels(s.ModelsByAgent), bound is not null, providers, bound, canBind);
     }
 
     public static NotificationSettingsDto ToDto(ProjectNotificationSettings s) =>

@@ -45,7 +45,8 @@ export interface StoredProject extends Omit<Project, 'myRole' | 'releaseVersionI
   /** Tags that already exist in the repository: starting a version whose tag is here answers TAG_EXISTS (FR-61). */
   repoTags?: string[]
   git: GitSettings
-  llm: Omit<LlmSettings, 'providers'>
+  /** `canBind` is per caller (derived from the role); `binding` is set by mocks/handlers/connections.ts. */
+  llm: Omit<LlmSettings, 'providers' | 'canBind'>
   channels: StoredChannel[]
   /** `pendingGates` on /state is derived from `gates`. */
   state: Pick<State, 'artifacts' | 'execution' | 'review'>
@@ -114,8 +115,9 @@ export interface RecordedRequest {
   body: unknown
 }
 
+/** v2 default (FR-79): system keys aren't allowed, so keyed providers are configured only by a bound connection. */
 const defaultProviders = (): ProviderStatus[] => [
-  { provider: 'anthropic', configured: true, defaultModel: 'claude-opus-5-5' },
+  { provider: 'anthropic', configured: false, defaultModel: 'claude-opus-5-5' },
   { provider: 'openai', configured: false, defaultModel: 'gpt-6-astra' },
   { provider: 'ollama', configured: true, defaultModel: 'qwen2.5-coder' },
   { provider: 'fake', configured: true, defaultModel: 'fake-1' },
@@ -240,7 +242,7 @@ export function seedProject(
     createdAt: now,
     updatedAt: now,
     git: { provider: 'github', repoUrl: 'https://github.com/acme/inventory', defaultBranch: 'main', branchName: null, hasToken: false },
-    llm: { provider: 'anthropic', defaultModel: 'claude-opus-5-5', modelsByAgent: {}, hasApiKey: false },
+    llm: { provider: 'anthropic', defaultModel: 'claude-opus-5-5', modelsByAgent: {}, hasApiKey: false, binding: null },
     channels: [],
     state: emptyState(),
     gates: [],
@@ -338,10 +340,14 @@ function toMember(m: StoredMember): Member {
   }
 }
 
-function llmDto(project: StoredProject): LlmSettings {
+/** FR-79: a provider is configured for a project by an allowed system key or a bound connection of that provider. */
+export function llmDto(project: StoredProject, canBind: boolean): LlmSettings {
+  const binding = project.llm.binding
   return {
     ...project.llm,
-    providers: projectsDb.providers.map((p) => ({ ...p, configured: p.configured || project.llm.hasApiKey })),
+    hasApiKey: binding !== null,
+    canBind,
+    providers: projectsDb.providers.map((p) => ({ ...p, configured: p.configured || binding?.provider === p.provider })),
   }
 }
 
@@ -739,7 +745,7 @@ export const projectHandlers = [
     }
     return HttpResponse.json<Schemas['ProjectSettingsDto']>({
       git: a.project.git,
-      llm: llmDto(a.project),
+      llm: llmDto(a.project, a.level === 'owner'),
       notifications: { channels: a.project.channels.map(channelDto) },
     })
   }),
@@ -760,24 +766,6 @@ export const projectHandlers = [
       git.hasToken = true
     }
     return HttpResponse.json<GitSettings>(git)
-  }),
-
-  http.patch('*/api/projects/:id/settings/llm', async ({ request, params }) => {
-    const a = ownerMutation(request, params.id)
-    if (a instanceof Response) {
-      return a
-    }
-    const body = (await record(request)) as Schemas['UpdateLlmSettingsRequest']
-    const llm = a.project.llm
-    llm.provider = body.provider ?? llm.provider
-    llm.defaultModel = body.defaultModel ?? llm.defaultModel
-    llm.modelsByAgent = body.modelsByAgent ?? llm.modelsByAgent
-    if (body.clearApiKey) {
-      llm.hasApiKey = false
-    } else if (body.apiKey) {
-      llm.hasApiKey = true
-    }
-    return HttpResponse.json<LlmSettings>(llmDto(a.project))
   }),
 
   http.patch('*/api/projects/:id/settings/notifications', async ({ request, params }) => {

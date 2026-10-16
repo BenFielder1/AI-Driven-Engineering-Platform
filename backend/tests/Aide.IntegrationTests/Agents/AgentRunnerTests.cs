@@ -326,7 +326,8 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
         Assert.Equal(AgentRunStatus.Failed, run.Status);
         if (status == HttpStatusCode.Unauthorized)
         {
-            Assert.Equal("PROVIDER_ERROR: Anthropic rejected the API key (HTTP 401).", run.Error);
+            // FR-78: a bound key the provider rejects fails the run as CREDENTIAL_INVALID (LlmBindingTests covers the rest).
+            Assert.Equal("CREDENTIAL_INVALID: The bound anthropic connection's key was rejected (HTTP 401); its owner must replace it.", run.Error);
         }
 
         await AssertKeyNowhereAsync(fixture.Project.Id, job.Id, key, "project-secret-key");
@@ -473,7 +474,33 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
             settings.Provider = provider;
             settings.DefaultModel = model;
             settings.ModelsByAgent = new Dictionary<string, string>();
-            settings.ApiKeyEncrypted = apiKey is null ? null : secrets.Protect(apiKey);
+            // FR-79: the project's key is a connection of its earliest Owner, bound to the project.
+            if (apiKey is null)
+            {
+                settings.CredentialId = null;
+                settings.BoundByUserId = null;
+            }
+            else
+            {
+                var ownerId = await db.ProjectMembers
+                    .Where(m => m.ProjectId == projectId && m.Role == Aide.Domain.Access.ProjectRole.Owner)
+                    .OrderBy(m => m.CreatedAt)
+                    .Select(m => m.UserId)
+                    .FirstAsync(Ct);
+                var credential = new LlmCredential
+                {
+                    UserId = ownerId,
+                    Provider = provider,
+                    Label = "test",
+                    SecretEncrypted = secrets.Protect(apiKey),
+                    Last4 = LlmCredential.Last4Of(apiKey),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                };
+                db.LlmCredentials.Add(credential);
+                settings.CredentialId = credential.Id;
+                settings.BoundByUserId = ownerId;
+            }
+
             await db.SaveChangesAsync(Ct);
         });
 

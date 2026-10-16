@@ -148,7 +148,7 @@ describe('Settings → Members (FR-8)', () => {
     expect(within(list).queryByRole('combobox')).not.toBeInTheDocument()
     expect(within(list).queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Leave project' })).toBeInTheDocument()
-    // Only General and Members are visible to non-owners.
-    expect(settingsSectionLinks().map((t) => t.textContent)).toEqual(['General', 'Members'])
+    // Only General, Members and LLM (read-only, FR-79) are visible to non-owners.
+    expect(settingsSectionLinks().map((t) => t.textContent)).toEqual(['General', 'Members', 'LLM'])
   })
 })

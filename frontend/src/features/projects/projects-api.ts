@@ -33,6 +33,8 @@ export const projectKeys = {
   state: (id: string) => [...projectKeys.detail(id), 'state'] as const,
   members: (id: string) => [...projectKeys.detail(id), 'members'] as const,
   settings: (id: string) => [...projectKeys.detail(id), 'settings'] as const,
+  /** GET /settings/llm: the LLM settings and binding, for any member (FR-79). */
+  llmSettings: (id: string) => [...projectKeys.detail(id), 'llm-settings'] as const,
   /** GET /gates (all statuses; the overview splits pending from decided). */
   gates: (id: string) => [...projectKeys.detail(id), 'gates'] as const,
   /** GET /activity, per category filter (`all` when unfiltered). */
@@ -125,6 +127,15 @@ export function useProjectSettings(id: string, enabled: boolean) {
     queryFn: async ({ signal }) =>
       unwrap(await api.GET('/api/projects/{id}/settings', { params: { path: { id } }, signal })),
     enabled,
+  })
+}
+
+/** FR-79: the LLM settings and binding ("connected by <name>"), readable by any member; `canBind` for the caller. */
+export function useLlmSettings(id: string) {
+  return useQuery({
+    queryKey: projectKeys.llmSettings(id),
+    queryFn: async ({ signal }) =>
+      unwrap(await api.GET('/api/projects/{id}/settings/llm', { params: { path: { id } }, signal })),
   })
 }
 
@@ -239,12 +250,18 @@ export function useUpdateGitSettings(id: string) {
   })
 }
 
+/** FR-9, FR-79: provider, models and the bound connection. The caller's connections list its bound projects, so it refreshes. */
 export function useUpdateLlmSettings(id: string) {
+  const queryClient = useQueryClient()
   const setSection = useSetSettingsSection(id, 'llm')
   return useMutation({
     mutationFn: async (body: Schemas['UpdateLlmSettingsRequest']) =>
       unwrap(await api.PATCH('/api/projects/{id}/settings/llm', { params: { path: { id } }, body })),
-    onSuccess: setSection,
+    onSuccess: async (llm) => {
+      setSection(llm)
+      queryClient.setQueryData<LlmSettings>(projectKeys.llmSettings(id), llm)
+      await queryClient.invalidateQueries({ queryKey: ['me', 'connections'] })
+    },
   })
 }
 

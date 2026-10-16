@@ -1,6 +1,7 @@
 import { adminHandlers } from './admin'
 import { artifactHandlers } from './artifacts'
 import { authHandlers } from './auth'
+import { connectionHandlers } from './connections'
 import { executionHandlers } from './execution'
 import { refinementHandlers } from './refinement'
 import { releaseHandlers } from './release'
@@ -16,6 +17,7 @@ export const handlers = [
   ...healthHandlers,
   ...authHandlers,
   ...projectHandlers,
+  ...connectionHandlers,
   ...lifecycleHandlers,
   ...artifactHandlers,
   ...runHandlers,
