@@ -79,7 +79,7 @@ public static class ExecutionQueries
     /// </summary>
     public static string? CommitUrl(GitProvider provider, string? repoUrl, string? sha)
     {
-        if (provider != GitProvider.Github || string.IsNullOrEmpty(sha) || !ProjectSettingsRules.TryParseGitHubRepo(repoUrl, out var repo))
+        if (!ProjectSettingsRules.IsGitHub(provider) || string.IsNullOrEmpty(sha) || !ProjectSettingsRules.TryParseGitHubRepo(repoUrl, out var repo))
         {
             return null;
         }

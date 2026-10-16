@@ -30,7 +30,7 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
 
         var patch = await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new
         {
-            provider = "github",
+            provider = "github_pat",
             repoUrl = "https://github.com/acme/widgets",
             defaultBranch = "trunk",
             token = GitToken,
@@ -41,7 +41,7 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
         var settings = await ProjectApi.ReadAsync<ProjectSettingsDto>(get);
 
         Assert.Equal(HttpStatusCode.OK, patch.StatusCode);
-        Assert.Equal(new GitSettingsDto(GitProvider.Github, "https://github.com/acme/widgets", "trunk", null, true), settings.Git);
+        Assert.Equal(new GitSettingsDto(GitProvider.GithubPat, "https://github.com/acme/widgets", "trunk", null, true, GitProvider.GithubPat, null, null, null, null, false), settings.Git);
         Assert.DoesNotContain(GitToken, patchText, StringComparison.Ordinal);
         Assert.DoesNotContain(GitToken, getText, StringComparison.Ordinal);
         await AssertStoredEncryptedAsync(fixture.Project.Id, GitToken, db => db.ProjectGitSettings.Where(s => s.ProjectId == fixture.Project.Id).Select(s => s.TokenEncrypted));
@@ -52,7 +52,7 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
     public async Task FR9_Git_partial_update_keeps_the_token_and_clearToken_removes_it()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { provider = "github", repoUrl = "https://github.com/acme/widgets.git", token = GitToken });
+        await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { provider = "github_pat", repoUrl = "https://github.com/acme/widgets.git", token = GitToken });
 
         var renamed = await ProjectApi.ReadAsync<GitSettingsDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { defaultBranch = "release" }));
         var cleared = await ProjectApi.ReadAsync<GitSettingsDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { clearToken = true }));
@@ -70,7 +70,7 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
     public async Task FR9_Switching_the_git_provider_to_local_drops_the_token_unless_a_new_one_is_sent()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { provider = "github", repoUrl = "https://github.com/acme/widgets", token = GitToken });
+        await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { provider = "github_pat", repoUrl = "https://github.com/acme/widgets", token = GitToken });
 
         var local = await ProjectApi.ReadAsync<GitSettingsDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { provider = "local" }));
         var settings = await ProjectApi.ReadAsync<ProjectSettingsDto>(await fixture.Owner.Client.GetAsync(new Uri($"{fixture.Path}/settings", UriKind.Relative), Ct));
@@ -82,10 +82,10 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
     }
 
     [Theory]
-    [InlineData("""{"provider":"github"}""", "repoUrl")]
-    [InlineData("""{"provider":"github","repoUrl":"http://github.com/a/b"}""", "repoUrl")]
-    [InlineData("""{"provider":"github","repoUrl":"https://github.com/a/b/tree/main"}""", "repoUrl")]
-    [InlineData("""{"provider":"github","repoUrl":"https://user:pw@github.com/a/b"}""", "repoUrl")]
+    [InlineData("""{"provider":"github_pat"}""", "repoUrl")]
+    [InlineData("""{"provider":"github_pat","repoUrl":"http://github.com/a/b"}""", "repoUrl")]
+    [InlineData("""{"provider":"github_pat","repoUrl":"https://github.com/a/b/tree/main"}""", "repoUrl")]
+    [InlineData("""{"provider":"github_pat","repoUrl":"https://user:pw@github.com/a/b"}""", "repoUrl")]
     [InlineData("""{"defaultBranch":"-rf"}""", "defaultBranch")]
     [InlineData("""{"defaultBranch":"a b"}""", "defaultBranch")]
     [InlineData("""{"token":"x","clearToken":true}""", "token")]

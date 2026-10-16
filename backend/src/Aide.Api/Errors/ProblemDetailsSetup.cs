@@ -57,7 +57,8 @@ public static class ProblemDetailsSetup
 }
 
 /// <summary>Maps exceptions to ProblemDetails: optimistic-concurrency failures → 409 <c>CONFLICT</c>, malformed
-/// requests → 400 <c>VALIDATION</c>, everything else → 500 without exception details.</summary>
+/// requests → 400 <c>VALIDATION</c>, GitHub rate limits → 429 <c>GITHUB_RATE_LIMITED</c> with <c>Retry-After</c> (§4.14),
+/// everything else → 500 without exception details.</summary>
 public sealed partial class GlobalExceptionHandler(IProblemDetailsService problemDetails, ILogger<GlobalExceptionHandler> logger)
     : IExceptionHandler
 {
@@ -66,8 +67,17 @@ public sealed partial class GlobalExceptionHandler(IProblemDetailsService proble
         ArgumentNullException.ThrowIfNull(httpContext);
         ArgumentNullException.ThrowIfNull(exception);
 
+        if (exception is Infrastructure.GitHub.GitHubRateLimitedException limited)
+        {
+            // §4.14: GitHub's rate limit for the token in use; Retry-After is the seconds until its reset.
+            var now = httpContext.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
+            ResponseDocs.SetRetryAfter(httpContext, TimeSpan.FromSeconds(Domain.GitHub.GitHubRules.RetryAfterSeconds(limited.ResetAt, now)));
+        }
+
         var (status, code, title) = exception switch
         {
+            Infrastructure.GitHub.GitHubRateLimitedException => (StatusCodes.Status429TooManyRequests, ErrorCodes.GitHubRateLimited,
+                "GitHub's API rate limit is exhausted. Try again after the time in Retry-After."),
             DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, ErrorCodes.Conflict,
                 "The resource was changed by someone else. Reload and try again."),
             BadHttpRequestException bad => (bad.StatusCode, ApiProblems.DefaultCodeFor(bad.StatusCode), "The request is invalid."),

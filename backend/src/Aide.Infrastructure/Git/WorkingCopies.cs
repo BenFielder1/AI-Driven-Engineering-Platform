@@ -5,6 +5,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Aide.Infrastructure.Git;
 
+/// <summary>
+/// Who commits and tags in a working copy (author and committer). The default is AIDE (<see cref="GitCli.AuthorName"/>);
+/// FR-82: GitHub App projects commit as the App bot (<c>&lt;slug&gt;[bot]</c> with its noreply email).
+/// </summary>
+public sealed record GitCommitIdentity(string Name, string Email);
+
 /// <summary>A file as committed: its repository path and content.</summary>
 public sealed record CommittedFile(string Path, string Content);
 
@@ -201,6 +207,13 @@ public interface IWorkingCopies
 
     /// <summary>FR-42 (GitHub): pushes the release tag to <paramref name="remote"/>. The result is returned (redacted), not thrown.</summary>
     Task<GitCommandResult> PushTagAsync(Guid projectId, string tag, GitRemote remote, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-82: commits, merges and tags in the project's working copy are made as <paramref name="identity"/> from now on
+    /// (<c>null</c>: AIDE). Set by the provider each time it prepares the working copy (in memory; prepared again after a
+    /// restart before any commit).
+    /// </summary>
+    void UseCommitIdentity(Guid projectId, GitCommitIdentity? identity);
 }
 
 internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli git, ILogger<WorkingCopies> logger) : IWorkingCopies
@@ -209,6 +222,22 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
     public const string InitialCommitMessage = "Initial commit";
 
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> Locks = new();
+
+    /// <summary>FR-82: the commit identity per working-copy root (absent: AIDE).</summary>
+    private readonly ConcurrentDictionary<string, GitCommitIdentity> _identities = new(StringComparer.Ordinal);
+
+    public void UseCommitIdentity(Guid projectId, GitCommitIdentity? identity)
+    {
+        var root = PathFor(projectId);
+        if (identity is null)
+        {
+            _identities.TryRemove(root, out _);
+        }
+        else
+        {
+            _identities[root] = identity;
+        }
+    }
 
     public string PathFor(Guid projectId) => workspaces.PathFor(projectId);
 
@@ -986,7 +1015,9 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
     private async Task<GitCommandResult> RunAsync(string root, IReadOnlyList<string> arguments, CancellationToken cancellationToken, bool allowFailure = false)
     {
-        var result = await git.RunAsync(root, arguments, cancellationToken);
+        var result = _identities.TryGetValue(root, out var identity)
+            ? await git.RunAsync(root, arguments, IdentityEnvironment(identity), cancellationToken)
+            : await git.RunAsync(root, arguments, cancellationToken);
         if (!result.Succeeded && !allowFailure)
         {
             var error = result.StandardError.Trim();
@@ -995,6 +1026,15 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
         return result;
     }
+
+    /// <summary>The author and committer of commits, merges and tags (git's identity variables win over <c>user.name</c>).</summary>
+    private static Dictionary<string, string> IdentityEnvironment(GitCommitIdentity identity) => new(StringComparer.Ordinal)
+    {
+        ["GIT_AUTHOR_NAME"] = identity.Name,
+        ["GIT_AUTHOR_EMAIL"] = identity.Email,
+        ["GIT_COMMITTER_NAME"] = identity.Name,
+        ["GIT_COMMITTER_EMAIL"] = identity.Email,
+    };
 
     private static async Task<T> WithLockAsync<T>(Guid projectId, Func<Task<T>> action)
     {

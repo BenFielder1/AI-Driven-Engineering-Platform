@@ -11,7 +11,17 @@ public sealed class ProjectGitSettings
 
     public string DefaultBranch { get; set; } = "main";
 
+    /// <summary>The per-project PAT; only for <see cref="GitProvider.GithubPat"/> (FR-83).</summary>
     public string? TokenEncrypted { get; set; }
+
+    /// <summary>FR-82, <see cref="GitProvider.GithubApp"/>: the App installation that grants access to the repo.</summary>
+    public long? InstallationId { get; set; }
+
+    /// <summary>FR-82, <see cref="GitProvider.GithubApp"/>: GitHub's numeric repository id (stable across renames).</summary>
+    public long? RepoId { get; set; }
+
+    /// <summary>FR-82, <see cref="GitProvider.GithubApp"/>: <c>owner/name</c>.</summary>
+    public string? RepoFullName { get; set; }
 
     // The working branch and pull request belong to the release version (ReleaseVersion.BranchName, PullRequestUrl/Number).
 }

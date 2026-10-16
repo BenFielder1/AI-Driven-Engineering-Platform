@@ -174,7 +174,7 @@ describe('New project wizard (FR-5)', () => {
       maxReviewCycles: 3,
       tokenBudget: 50000,
       initialVersion: '0.1.0',
-      git: { provider: 'github', repoUrl: 'https://github.com/acme/inventory', defaultBranch: 'main', token: TOKEN },
+      git: { mode: 'github_pat', repoUrl: 'https://github.com/acme/inventory', defaultBranch: 'main', token: TOKEN },
     })
   })
 

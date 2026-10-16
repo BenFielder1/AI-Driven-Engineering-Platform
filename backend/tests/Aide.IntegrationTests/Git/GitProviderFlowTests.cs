@@ -201,7 +201,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         var version = await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == id, Ct));
         Assert.Equal((42, PrUrl), (version.PullRequestNumber, version.PullRequestUrl));
         var state = await StateAsync(fixture.Viewer.Client, id);
-        Assert.Equal((Phase.Review, GitProvider.Github, 42, PrUrl), (state.Phase, state.PullRequest!.Provider, state.PullRequest.Number, state.PullRequest.Url));
+        Assert.Equal((Phase.Review, GitProvider.GithubPat, 42, PrUrl), (state.Phase, state.PullRequest!.Provider, state.PullRequest.Number, state.PullRequest.Url));
         var pr = await PullRequestAsync(fixture.Viewer.Client, id);
         Assert.Equal(2, pr.Commits.Count);
         Assert.All(pr.Commits, c => Assert.Equal($"https://github.com/acme/widgets/commit/{c.Sha}", c.Url));
@@ -355,7 +355,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
     {
         using var remote = await BareRemote.CreateAsync(Ct);
         await using var app = remote.App(factory, HappyGitHub(), out var git);
-        using var fixture = await ProjectApi.FixtureAsync(app, git: new { provider = "github", repoUrl = BareRemote.RepoUrl, defaultBranch = "main" });
+        using var fixture = await ProjectApi.FixtureAsync(app, git: new { provider = "github_pat", repoUrl = BareRemote.RepoUrl, defaultBranch = "main" });
         var id = fixture.Project.Id;
         await SeedExecutionAsync(factory, id, 1);
 
@@ -612,7 +612,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         .On(HttpMethod.Post, Pulls, HttpStatusCode.Created, $$"""{"number":42,"html_url":"{{PrUrl}}"}""");
 
     private static Task<ProjectFixture> GitHubFixtureAsync(WebApplicationFactory<Program> app) =>
-        ProjectApi.FixtureAsync(app, git: new { provider = "github", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
+        ProjectApi.FixtureAsync(app, git: new { provider = "github_pat", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
 
     /// <summary>The project in execution (advisory, version 4) with request, spec and a locked plan of <paramref name="count"/> chained steps.</summary>
     private static async Task SeedExecutionAsync(WebApplicationFactory<Program> app, Guid id, int count)

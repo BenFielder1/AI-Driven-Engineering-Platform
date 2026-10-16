@@ -34,8 +34,21 @@ internal static class ProjectMapping
 
     /// <param name="s">The project's Git settings.</param>
     /// <param name="branchName">The working branch of the project's current release version (§4.10), if recorded.</param>
-    public static GitSettingsDto ToDto(ProjectGitSettings s, string? branchName) =>
-        new(s.Provider, s.RepoUrl, s.DefaultBranch, branchName, s.TokenEncrypted is not null);
+    /// <param name="appInstalledOnRepo">FR-83: whether the App can access a PAT project's repo (<c>null</c>: unknown).</param>
+    /// <param name="canSwitchToApp">FR-83: the App can access the repo and the caller is an Owner.</param>
+    public static GitSettingsDto ToDto(ProjectGitSettings s, string? branchName, bool? appInstalledOnRepo = null, bool canSwitchToApp = false) =>
+        new(
+            s.Provider,
+            s.RepoUrl,
+            s.DefaultBranch,
+            branchName,
+            s.TokenEncrypted is not null,
+            s.Provider,
+            s.InstallationId,
+            s.RepoId,
+            s.RepoFullName,
+            appInstalledOnRepo,
+            canSwitchToApp);
 
     /// <param name="s">The project's LLM settings.</param>
     /// <param name="catalog">The system LLM configuration.</param>

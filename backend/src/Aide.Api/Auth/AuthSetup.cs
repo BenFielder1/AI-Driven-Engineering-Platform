@@ -69,10 +69,8 @@ public static partial class AuthSetup
             })
             .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ApiTokenAuthenticationHandler>(
                 AuthConstants.ApiTokenScheme, null);
-        if (githubEnabled)
-        {
-            authentication.AddAideGitHub(builder.Configuration);
-        }
+        // D-V2-7: always registered; the handler uses the AIDE GitHub App once one exists, else the v1 OAuth App (if any).
+        authentication.AddAideGitHub(builder.Configuration);
 
         services.AddOptions<CookieAuthenticationOptions>(IdentityConstants.ApplicationScheme)
             .Configure<IOptions<AideAuthOptions>>((o, auth) => o.Cookie.SecurePolicy = auth.Value.Cookie.SecurePolicy);

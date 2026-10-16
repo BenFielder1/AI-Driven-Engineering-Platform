@@ -11,6 +11,7 @@ using Aide.Api.Features.Connections;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Git;
+using Aide.Api.Features.GitHub;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Live;
 using Aide.Api.Features.Notifications;
@@ -126,6 +127,12 @@ builder.Services.AddAideInfrastructure();
 builder.Services.AddAideDataProtection(builder.Configuration);
 builder.AddAideAuth();
 builder.Services.AddScoped<ProjectCreator>();
+
+// The AIDE GitHub App (FR-80–FR-83, FR-86): connections, the repo picker, project repositories and the manifest flow.
+builder.Services.AddScoped<GitHubConnections>();
+builder.Services.AddScoped<GitHubRepoService>();
+builder.Services.AddSingleton<GitHubManifestStates>();
+builder.Services.AddScoped<GitHubAppAdmin>();
 builder.Services.AddScoped<DeadLetterService>();
 
 // Lifecycle, gates and background work (FR-11–FR-14, §4.9).
@@ -190,6 +197,7 @@ app.MapHealthEndpoints();
 app.MapAuthEndpoints();
 app.MapApiTokenEndpoints();
 app.MapLlmConnectionEndpoints();
+app.MapGitHubEndpoints();
 app.MapAdminUserEndpoints();
 app.MapAdminOperationsEndpoints();
 app.MapAdminIntegrationEndpoints();

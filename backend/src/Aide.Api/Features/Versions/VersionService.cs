@@ -240,7 +240,7 @@ public sealed partial class VersionService(
         }
 
         var lookup = await providers.Resolve(settings.Provider)
-            .FindTagAsync(new GitConnectionSettings(projectId, settings.RepoUrl, settings.DefaultBranch), tag, token, cancellationToken);
+            .FindTagAsync(GitConnectionSettings.From(settings), tag, token, cancellationToken);
         if (!lookup.Ok)
         {
             LogTagLookupFailed(logger, projectId, settings.Provider);

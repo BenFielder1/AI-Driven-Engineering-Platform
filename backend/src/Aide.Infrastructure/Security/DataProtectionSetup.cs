@@ -22,7 +22,8 @@ public static class DataProtectionSetup
             .SetApplicationName(configuration[ApplicationNameKey] is { Length: > 0 } name ? name : DefaultApplicationName)
             .PersistKeysToFileSystem(new DirectoryInfo(ResolveKeysPath(configuration)));
 
-        services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>();
+        services.AddSingleton<ISecretProtector>(sp => new DataProtectionSecretProtector(sp.GetRequiredService<IDataProtectionProvider>()));
+        services.AddSingleton<ISecretProtectors, DataProtectionSecretProtectors>();
         return services;
     }
 

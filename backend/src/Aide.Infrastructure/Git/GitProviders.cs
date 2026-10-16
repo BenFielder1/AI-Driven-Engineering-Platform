@@ -31,7 +31,7 @@ internal sealed partial class GitHubGitProvider(
 
     private const int MaxReasonLength = 300;
 
-    public GitProvider Kind => GitProvider.Github;
+    public GitProvider Kind => GitProvider.GithubPat;
 
     public async Task<GitTestResult> TestConnectionAsync(GitConnectionSettings settings, string? token, CancellationToken cancellationToken)
     {
@@ -712,9 +712,10 @@ internal sealed partial class GitHubGitProvider(
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
 
+        HttpResponseMessage response;
         try
         {
-            return new Sent(await client.SendAsync(request, cancellationToken), null);
+            response = await client.SendAsync(request, cancellationToken);
         }
         catch (HttpRequestException ex)
         {
@@ -724,6 +725,15 @@ internal sealed partial class GitHubGitProvider(
         {
             return new Sent(null, "Could not reach GitHub: the request timed out.");
         }
+
+        // §4.14, NFR-REL: a rate limit isn't a failure: request paths answer 429 GITHUB_RATE_LIMITED, jobs wait for the reset.
+        if (GitHub.GitHubApi.RateLimitResetAt(response, TimeProvider.System.GetUtcNow()) is { } resetAt)
+        {
+            response.Dispose();
+            throw new GitHub.GitHubRateLimitedException(resetAt);
+        }
+
+        return new Sent(response, null);
     }
 
     private static async Task<bool> CanPushAsync(HttpResponseMessage response, CancellationToken cancellationToken)

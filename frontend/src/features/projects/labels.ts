@@ -221,8 +221,17 @@ export const guardianCheckLabels: Record<Schemas['GuardianCheck'], string> = {
   secret_scan: 'Secret scan',
 }
 
+/** FR-82: a project's Git mode, as Settings → Git and the wizard summary name it. */
 export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {
-  github: 'GitHub',
+  github_app: 'GitHub App',
+  github_pat: 'Personal access token',
+  local: 'Local repository',
+}
+
+/** Where a project's repository (and its pull requests) lives, whatever the GitHub credential (FR-36, FR-82). */
+export const gitHostLabels: Record<Schemas['GitProvider'], string> = {
+  github_app: 'GitHub',
+  github_pat: 'GitHub',
   local: 'Local repository',
 }
 

@@ -429,7 +429,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
             })))
             .On(HttpMethod.Put, Pull + "/merge", _ => (HttpStatusCode.OK, JsonSerializer.Serialize(new { sha = MergeInBare(remote, branch[0]), merged = true })));
         await using var app = remote.App(ReleaseEligible(), api, out var git);
-        using var fixture = await ProjectApi.FixtureAsync(app, git: new { provider = "github", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
+        using var fixture = await ProjectApi.FixtureAsync(app, git: new { provider = "github_pat", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
         var id = fixture.Project.Id;
         branch[0] = Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!));
         await StartExecutionAsync(app, fixture);
@@ -479,7 +479,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
             .On(HttpMethod.Post, Pulls, HttpStatusCode.Created, $$"""{"number":42,"html_url":"{{PrUrl}}"}""")
             .On(HttpMethod.Get, Pull, HttpStatusCode.OK, $$"""{"number":42,"state":"open","merged":false,"mergeable":false,"html_url":"{{PrUrl}}"}""");
         await using var app = remote.App(ReleaseEligible(), api, out _);
-        using var fixture = await ProjectApi.FixtureAsync(app, git: new { provider = "github", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
+        using var fixture = await ProjectApi.FixtureAsync(app, git: new { provider = "github_pat", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
         var id = fixture.Project.Id;
         await StartExecutionAsync(app, fixture);
         await AgentJobs.RunQueuedAsync(app, id);
@@ -505,7 +505,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
             .On(HttpMethod.Post, Pulls, HttpStatusCode.Created, $$"""{"number":42,"html_url":"{{PrUrl}}"}""")
             .On(HttpMethod.Get, Pull, HttpStatusCode.OK, JsonSerializer.Serialize(new { number = 42, state = "open", merged = false, mergeable = true, html_url = PrUrl, head = new { sha = new string('a', 40) } }));
         await using var app = remote.App(ReleaseEligible(), api, out _);
-        using var fixture = await ProjectApi.FixtureAsync(app, git: new { provider = "github", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
+        using var fixture = await ProjectApi.FixtureAsync(app, git: new { provider = "github_pat", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
         var id = fixture.Project.Id;
         await StartExecutionAsync(app, fixture);
         await AgentJobs.RunQueuedAsync(app, id);

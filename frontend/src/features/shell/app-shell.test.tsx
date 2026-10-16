@@ -77,7 +77,7 @@ describe('FR-53: app shell', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Connections' })).toBeInTheDocument()
     for (const name of ['GitHub', 'Vercel']) {
-      expect(within(screen.getByRole('region', { name })).getByTestId('empty-state')).toHaveAttribute('data-variant', 'not_connected')
+      expect(await within(screen.getByRole('region', { name })).findByTestId('empty-state')).toHaveAttribute('data-variant', 'not_connected')
     }
   })
 

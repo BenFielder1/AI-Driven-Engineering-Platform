@@ -14,7 +14,8 @@ interface StoredUser extends User {
 export const authDb = {
   users: [] as StoredUser[],
   currentUserId: null as string | null,
-  github: false,
+  /** FR-2, FR-80: how "Continue with GitHub" signs in (`none` hides it). */
+  githubMode: 'none' as Schemas['GitHubSignInMode'],
   tokens: [] as Token[],
   xsrfCounter: 0,
   /** XSRF values the "server" accepts (the latest issued one). */
@@ -30,7 +31,7 @@ export const nextId = () => {
 export function resetAuthDb() {
   authDb.users = []
   authDb.currentUserId = null
-  authDb.github = false
+  authDb.githubMode = 'none'
   authDb.tokens = []
   authDb.xsrfCounter = 0
   authDb.validXsrf = null
@@ -105,7 +106,10 @@ export const authHandlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
-  http.get('*/api/auth/providers', () => HttpResponse.json<Schemas['AuthProvidersDto']>({ github: authDb.github })),
+  http.get('*/api/auth/providers', () => HttpResponse.json<Schemas['AuthProvidersDto']>({
+      github: authDb.githubMode !== 'none',
+      githubMode: authDb.githubMode,
+    })),
 
   http.get('*/api/auth/me', () => {
     const user = currentUser()

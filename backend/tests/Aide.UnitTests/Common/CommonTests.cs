@@ -134,6 +134,10 @@ public class ErrorCodesTests
             ["INVALID_PLAN"] = 400,
             ["CREDENTIAL_INVALID"] = 400,
             ["CREDENTIAL_NOT_OWNER"] = 403,
+            ["GITHUB_NOT_CONNECTED"] = 409,
+            ["GITHUB_APP_NOT_INSTALLED"] = 409,
+            ["REPO_NAME_TAKEN"] = 409,
+            ["GITHUB_RATE_LIMITED"] = 429,
         };
 
         foreach (var (code, status) in expected)

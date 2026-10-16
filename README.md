@@ -161,7 +161,7 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Workspaces:Root` | Git working copies and local repos | `/data/workspaces` in a container, else `%LOCALAPPDATA%/aide/workspaces` | no |
 | `Telemetry:ConsoleExporter` | OpenTelemetry console exporter | `false` (`true` in Development) | no |
 | `Seed:Enabled` | Create the seed admin and demo project | `false` (`true` in Development and the local k8s overlay) | no |
-| `App:PublicBaseUrl` | Base URL for links in notifications | `http://localhost:8080` (`http://localhost:5173` in Development) | no |
+| `App:PublicBaseUrl` | Browser-facing base URL (absolute http(s), validated at start-up): notification links, the GitHub App manifest's callback and setup URLs, PR links back to AIDE | `http://localhost:8080` (`http://localhost:5173` in Development) | no |
 | `Approvals:SigningKey` | HMAC key for one-click approval links, at least 32 chars | none: no links are created | yes |
 | `Auth:Cookie:SecurePolicy` | Auth cookie `Always`, `SameAsRequest` or `None` | `SameAsRequest` | no |
 | `Auth:RateLimits:LoginPerMinute` | Login attempts per IP per minute | `5` | no |
@@ -182,7 +182,12 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Llm:Providers:<Name>:DefaultModel` | Model when an agent has no own entry | see section below | no |
 | `Llm:Providers:<Name>:Models:<Agent>` | Model per agent | see section below | no |
 | `Llm:Pricing:<model>:InputPerMTok`, `OutputPerMTok` | USD per million tokens, for cost estimates | see appsettings; unpriced = 0 | no |
-| `GitHub:OAuth:ClientId` | GitHub sign-in OAuth App client id | none: sign-in disabled | no (treat as config) |
+| `GitHub:App:AppId` | AIDE GitHub App id (FR-80). All five `GitHub:App:*` values together override the App registered from Admin → Integrations → GitHub; set none or all | none: the registered App, if any | no |
+| `GitHub:App:ClientId` | The App's client id (sign-in and connections) | none | no |
+| `GitHub:App:ClientSecret` | The App's client secret | none | yes |
+| `GitHub:App:PrivateKey` | The App's PEM private key; `\n` escapes allowed (one line in `secrets.env`) | none | yes |
+| `GitHub:App:Slug` | The App's slug (install link `https://github.com/apps/<slug>/installations/new`) | none | no |
+| `GitHub:OAuth:ClientId` | GitHub sign-in OAuth App client id (v1; used only while no GitHub App exists, D-V2-7) | none: sign-in disabled | no (treat as config) |
 | `GitHub:OAuth:ClientSecret` | GitHub sign-in OAuth App secret | none | yes |
 | `GitHub:GitBaseUrl` | Where repos are cloned from and pushed to | `https://github.com/` | no |
 | `GitHub:ApiBaseUrl` | GitHub REST API | `https://api.github.com/` | no |
@@ -218,7 +223,15 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 
 If either value is unset, the "Continue with GitHub" button is hidden and `/api/auth/github*` returns 404. Email and password sign-in still works. A failed sign-in redirects to `/login?error=GITHUB_AUTH_FAILED&reason=<oauth_failed|link_required|already_linked>`. A GitHub email that matches an existing unlinked account is not auto-linked: sign in, then link GitHub on the Account page.
 
-### b. GitHub as a project Git provider
+### a2. The AIDE GitHub App (recommended, FR-80)
+
+1. Admin → Integrations → GitHub → Register: AIDE posts a manifest to GitHub (your account or an organisation). The App is named `AIDE (<host of App:PublicBaseUrl>)`, has its webhook off, and asks for Contents, Pull requests, Workflows and Administration (write), Metadata, Checks and Commit statuses (read), and email addresses (read). Untick Administration to disable "Create repository".
+2. GitHub redirects back to `/api/admin/integrations/github/callback`; AIDE stores the App id, slug, client id and the client secret and private key encrypted (Data Protection, one purpose per secret). Neither is ever returned.
+3. Install the App on the repositories (or organisations) AIDE should use; the install link is on the Integrations page and in the repo picker.
+
+Once an App exists, "Continue with GitHub" uses its user authorization (PKCE) and also connects GitHub (Account → Connections); v1 links keep working because accounts are matched by GitHub user id. Projects default to the `github_app` mode: background Git work uses installation tokens minted per job (scoped to the repository, cached at most 55 minutes, never on disk, in remote URLs or logs), commits are made by `<slug>[bot]`, and the PR links back to the project. Instead of the manifest flow, set all of `GitHub__App__AppId`, `__ClientId`, `__ClientSecret`, `__PrivateKey` and `__Slug` in `secrets.env` (they take precedence). GitHub rate limits answer `429 GITHUB_RATE_LIMITED` with `Retry-After`; background jobs wait for the reset without counting a failed attempt.
+
+### b. GitHub as a project Git provider (personal access token)
 
 - In the project wizard or Settings, Git tab, choose GitHub, enter `https://github.com/OWNER/REPO` and the default branch, then paste a personal access token. The token is stored encrypted and never returned. Use "Test connection" to check it.
 - Fine-grained token, on that repository: Contents read and write (clone, push, tag), Pull requests read and write (open, update, merge). Classic token: `repo`.

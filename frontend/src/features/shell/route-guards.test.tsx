@@ -41,7 +41,7 @@ describe('Route guards (FR-1)', () => {
     const { router } = renderRoute('/login?error=GITHUB_AUTH_FAILED&reason=already_linked')
 
     expect(
-      await screen.findByText('That GitHub account is already linked to a different AIDE account.'),
+      await screen.findByText('This GitHub account is already linked to another AIDE user.'),
     ).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/account')
   })

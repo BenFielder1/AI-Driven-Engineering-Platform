@@ -113,7 +113,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Which sign-in providers are configured. */
+        /** Which sign-in providers are configured, and how GitHub sign-in works (githubMode: app, oauth or none; D-V2-7). */
         get: operations["GetAuthProviders"];
         put?: never;
         post?: never;
@@ -147,7 +147,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Redirects to GitHub to sign in (FR-2). 404 when GitHub sign-in isn't configured. */
+        /** Redirects to GitHub to sign in (FR-2). Once an AIDE GitHub App exists this uses its user authorization flow with PKCE, which also connects GitHub (FR-80, FR-81, D-V2-7). 404 when GitHub sign-in isn't configured. */
         get: operations["StartGitHubSignIn"];
         put?: never;
         post?: never;
@@ -279,6 +279,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/connections/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-81: the caller's GitHub connection (login, GitHub user id, status, token expiry; never a token), the App installations they can access and the App's install URL. */
+        get: operations["GetGitHubConnection"];
+        put?: never;
+        post?: never;
+        /** FR-81: remove the caller's GitHub connection (the stored tokens). Sign-in with GitHub keeps working and reconnects. Browser session only. */
+        delete: operations["DisconnectGitHub"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/github/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-81: redirects to the AIDE GitHub App's user authorization (PKCE) to connect GitHub to the signed-in account without signing in again, then back to returnUrl (a same-origin path). 404 when no App is registered. Browser session only. */
+        get: operations["ConnectGitHub"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/github/repos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-81: the repositories the AIDE GitHub App is installed on that the caller can access, searchable by name, 30 per page. */
+        get: operations["ListGitHubRepos"];
+        put?: never;
+        /** FR-81: create a repository for the caller or an organisation where the App is installed, initialised with a README (auto_init) so the default branch exists, and check the App can access it. Needs the App's Administration permission (403 FORBIDDEN otherwise). */
+        post: operations["CreateGitHubRepo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/github/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-81: where the caller can create a repository: themselves and their organisations, with whether the App is installed there and whether creating is possible. */
+        get: operations["ListGitHubOwners"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/github/repos/{owner}/{repo}/refs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-73, FR-86: a picked repository's default branch, whether it is empty, its releases and its tags (with their semantic versions). */
+        get: operations["GetGitHubRepoRefs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/users": {
         parameters: {
             query?: never;
@@ -398,6 +485,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/integrations/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-80: the AIDE GitHub App's status (not_configured or configured, from the database or GitHub__App__* configuration), slug, owner, install URL, granted permissions and whether repositories can be created. Admins only; secrets are never returned. */
+        get: operations["GetAdminGitHubApp"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/github/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-80: start the manifest flow: returns the App manifest (§4.14) and the GitHub URL to post it to, with a single-use state. 409 CONFLICT when an App is already configured. Admins with a browser session only. */
+        post: operations["CreateGitHubAppManifest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/github/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-80: GitHub's redirect after the Admin creates the App: checks state, exchanges the code (POST /app-manifests/{code}/conversions) and stores the App with its secrets encrypted, then redirects to /admin/integrations?github=configured, or to /admin/integrations?error=GITHUB_AUTH_FAILED on failure. Admins with a browser session only. */
+        get: operations["CompleteGitHubAppManifest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects": {
         parameters: {
             query?: never;
@@ -408,7 +546,7 @@ export interface paths {
         /** The caller's projects (every project for Admins), paged, with search by name, phase, status and has-a-version-in-development filters and sorting. Rows carry the released and in-development version badges (FR-62). */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults; initialVersion (FR-66, default 0.1.0) is the first release version, in development. 400 VERSION_INVALID. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults; initialVersion (FR-66, default 0.1.0) is the first release version, in development. git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID; 409 GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -520,6 +658,23 @@ export interface paths {
         head?: never;
         /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. */
         patch: operations["UpdateGitSettings"];
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/git/switch-to-app": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-83: move a github_pat project onto the AIDE GitHub App (Owner): stores the installation and repository ids and drops the PAT. The caller's own GitHub connection must be able to push to the repo (403 FORBIDDEN otherwise; 409 GITHUB_NOT_CONNECTED without a connection). 409 GITHUB_APP_NOT_INSTALLED (extension installUrl) when the App can't access the repo. */
+        post: operations["SwitchGitToApp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/projects/{id}/settings/llm": {
@@ -1421,6 +1576,29 @@ export interface components {
             createdAt: string;
         };
         /**
+         * @description The AIDE GitHub App's status for Admin → Integrations → GitHub (FR-80). Secrets (client secret, private key) are never
+         *     returned. `source` is `configuration` when `GitHub__App__*` is set (it takes precedence), `database`
+         *     for an App registered through the manifest flow, and `null` when `status` is `not_configured` (then every
+         *     App field is `null` and `permissions` is empty). `installUrl` is
+         *     `https://github.com/apps/{slug}/installations/new`; `permissions` are the App's granted permissions
+         *     (e.g. `contents: write`); `canCreateRepositories` is true when `administration: write` is granted (§4.14).
+         */
+        AdminGitHubAppDto: {
+            status: components["schemas"]["GitHubAppStatus"];
+            source: null | components["schemas"]["GitHubAppSource"];
+            /** Format: int64 */
+            appId: null | number;
+            slug: null | string;
+            ownerLogin: null | string;
+            ownerType: null | components["schemas"]["GitHubOwnerType"];
+            installUrl: null | string;
+            htmlUrl: null | string;
+            permissions: {
+                [key: string]: string;
+            };
+            canCreateRepositories: boolean;
+        };
+        /**
          * @description §2 Admin: the system LLM key policy (D-V2-5). `allowSystemKeys` is `Llm:AllowSystemKeys` (configuration,
          *     read-only here: set `Llm__AllowSystemKeys` in `secrets.env` / user-secrets and restart). When it is on,
          *     projects with no bound connection use the system key of their provider; `systemKeyProviders` lists the
@@ -1724,9 +1902,15 @@ export interface components {
         };
         /** @enum {unknown} */
         ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
-        /** @description Which sign-in providers are available (the frontend hides GitHub when it isn't configured). */
+        /**
+         * @description Which sign-in providers are available (the frontend hides "Continue with GitHub" when `github` is false).
+         *     `githubMode` (D-V2-7) says how GitHub sign-in works: `app` (the AIDE GitHub App's user authorization flow
+         *     with PKCE), `oauth` (the v1 OAuth App, only while no App is registered) or `none`; `github` is
+         *     `githubMode != none`.
+         */
         AuthProvidersDto: {
             github: boolean;
+            githubMode: components["schemas"]["GitHubSignInMode"];
         };
         /**
          * @description One compliance category (§4.7): its weight, the agent's score (0–1), the deterministic penalty (sum of the fixed
@@ -1915,6 +2099,25 @@ export interface components {
             baseVersion?: null | number;
         };
         /**
+         * @description Start the GitHub App manifest flow (FR-80): the App is owned by the Admin's personal account (`user`) or by the
+         *     organisation `org` (required for `organization`, ignored for `user`).
+         */
+        CreateGitHubAppManifestRequest: {
+            ownerType: components["schemas"]["GitHubOwnerType"];
+            /** @description The organisation login, for `ownerType: organization`. */
+            org?: null | string;
+        };
+        /**
+         * @description Create a repository (FR-81, §4.14) for `owner` (the caller's login or an organisation where the App is installed),
+         *     initialised with a README so the default branch exists.
+         */
+        CreateGitHubRepoRequest: {
+            owner: string;
+            name: string;
+            description?: null | string;
+            private: boolean;
+        };
+        /**
          * @description Add an LLM connection (FR-78): `anthropic` or `openai`, a label and the key. The key is checked with
          *         the provider before anything is saved.
          */
@@ -1923,13 +2126,30 @@ export interface components {
             label: string;
             apiKey: string;
         };
-        /** @description Git step of the new-project wizard (FR-5, FR-35). */
+        /**
+         * @description Repository step of the new-project wizard (FR-5, FR-35, FR-82, FR-86). `mode` picks the Git provider.
+         *     `github_app`: a repo picked or created through the AIDE GitHub App; send `installationId` and
+         *     `repoFullName` (`owner/name`), no `repoUrl` or `token` (409 `GITHUB_APP_NOT_INSTALLED` when the
+         *     App can't access the repo). `github_pat`: `repoUrl` plus an optional `token` (FR-83, the v1 behaviour).
+         *     `local`: no remote. `provider` is the v1 name of `mode`, kept so v1 clients work: send one of the two;
+         *     when both are sent they must be equal (else 400 `VALIDATION` on `git.mode`).
+         */
         CreateProjectGitRequest: {
-            provider: components["schemas"]["GitProvider"];
-            /** @description Required for `github`: `https://github.com/OWNER/REPO`, optionally ending in `.git`. */
+            /** @description The Git provider (FR-82): `github_app`, `github_pat` or `local`. */
+            mode?: components["schemas"]["GitProvider"];
+            /** @description v1 alias of `mode` (deprecated; send `mode`). */
+            provider?: components["schemas"]["GitProvider"];
+            /**
+             * Format: int64
+             * @description `github_app`: the App installation that grants access to the repo (from the repo picker).
+             */
+            installationId?: null | number;
+            /** @description `github_app`: the repository as `owner/name`. */
+            repoFullName?: null | string;
+            /** @description Required for `github_pat`: `https://github.com/OWNER/REPO`, optionally ending in `.git`. */
             repoUrl?: null | string;
             defaultBranch?: string;
-            /** @description GitHub access token (`github` only). Stored encrypted and never returned. */
+            /** @description GitHub access token (`github_pat` only). Stored encrypted and never returned. */
             token?: null | string;
         };
         /** @description The new-project wizard (FR-5). Omitted settings take the FR-5 defaults. */
@@ -2255,18 +2475,198 @@ export interface components {
         };
         /** @enum {unknown} */
         GateType: "spec_approval" | "plan_approval" | "pre_release" | "escalation";
+        /** @description A GitHub user or organisation (FR-81). */
+        GitHubAccountDto: {
+            login: string;
+            type: components["schemas"]["GitHubOwnerType"];
+        };
         /**
-         * @description Git provider of a project (FR-35). Wire values: `github`, `local`.
+         * @description A GitHub App manifest (FR-80, §4.14), in GitHub's own field names so the page can post it unchanged (as the
+         *     `manifest` form field, JSON-encoded): name `AIDE ({host})` (the host of `App:PublicBaseUrl`); `url` and `setup_url` under
+         *     `App:PublicBaseUrl`; `redirect_url` the manifest callback (`/api/admin/integrations/github/callback`);
+         *     `callback_urls` the sign-in callback (`/api/auth/github/callback`); webhook inactive; private; and
+         *     `default_permissions` contents, pull_requests, workflows and administration `write`, metadata, checks and
+         *     statuses `read` (the Admin may drop `administration`, which disables "Create repository"); no events.
+         */
+        GitHubAppManifestDto: {
+            name: string;
+            url: string;
+            hook_attributes: components["schemas"]["GitHubAppManifestHookDto"];
+            redirect_url: string;
+            callback_urls: string[];
+            setup_url: string;
+            public: boolean;
+            default_permissions: {
+                [key: string]: string;
+            };
+            default_events: string[];
+            request_oauth_on_install: boolean;
+        };
+        /** @description The manifest's webhook settings: AIDE runs on localhost, so the webhook is inactive (§4.14). */
+        GitHubAppManifestHookDto: {
+            active: boolean;
+        };
+        /**
+         * @description What the page posts to GitHub (FR-80): an HTML form `POST` to `postUrl`
+         *     (`https://github.com/settings/apps/new?state=…`, or
+         *     `https://github.com/organizations/{org}/settings/apps/new?state=…`) with the field `manifest` set to the
+         *     JSON of `manifest`. `state` (also in `postUrl`) is single-use, bound to the Admin's session and checked
+         *     by the callback.
+         */
+        GitHubAppManifestResponseDto: {
+            postUrl: string;
+            manifest: components["schemas"]["GitHubAppManifestDto"];
+            state: string;
+        };
+        /** @enum {unknown} */
+        GitHubAppSource: "database" | "configuration" | null;
+        /**
+         * @description Whether the AIDE GitHub App is registered (FR-80). Wire values: `not_configured`, `configured`.
          * @enum {unknown}
          */
-        GitProvider: "github" | "local";
-        /** @description Git settings (FR-9, FR-35). The token is never returned, only `hasToken`. `branchName` is the project branch, once the working copy has been prepared. */
+        GitHubAppStatus: "not_configured" | "configured";
+        /**
+         * @description The caller's GitHub connection (FR-81). Tokens are never returned. When `connected` is false, `login`,
+         *     `githubUserId`, `status` and `accessExpiresAt` are `null` and `installations` is empty.
+         *     `status` is `invalid` after a failed token refresh (§4.14); `accessExpiresAt` is `null` when the
+         *     App's tokens don't expire. `installUrl` is the App's "Install AIDE on more repositories" link (`null` when no
+         *     App is registered).
+         */
+        GitHubConnectionDto: {
+            connected: boolean;
+            login: null | string;
+            /** Format: int64 */
+            githubUserId: null | number;
+            status: null | components["schemas"]["GitHubConnectionStatus"];
+            /** Format: date-time */
+            accessExpiresAt: null | string;
+            installations: components["schemas"]["GitHubInstallationDto"][];
+            installUrl: null | string;
+        };
+        /** @enum {unknown} */
+        GitHubConnectionStatus: "valid" | "invalid" | null;
+        /**
+         * @description An installation of the AIDE GitHub App that the caller can access (FR-81, `GET /user/installations`):
+         *     `repositorySelection` is `all` or `selected`; `manageUrl` is where the user adds repositories to it.
+         */
+        GitHubInstallationDto: {
+            /** Format: int64 */
+            id: number;
+            account: components["schemas"]["GitHubAccountDto"];
+            repositorySelection: components["schemas"]["GitHubRepositorySelection"];
+            manageUrl: string;
+        };
+        /**
+         * @description A possible owner for "Create repository" (FR-81): the caller (`user`) or an organisation they belong to.
+         *     `appInstalled` / `installationId`: whether (and where) the AIDE GitHub App is installed on it;
+         *     `canCreate`: the App is installed, has Administration write, and (for an organisation) the caller may create
+         *     repositories there.
+         */
+        GitHubOwnerDto: {
+            login: string;
+            type: components["schemas"]["GitHubOwnerType"];
+            /** Format: int64 */
+            installationId: null | number;
+            appInstalled: boolean;
+            canCreate: boolean;
+        };
+        /**
+         * @description Owner kind of a GitHub App (FR-80). Wire values: `user`, `organization`.
+         * @enum {unknown}
+         */
+        GitHubOwnerType: "user" | "organization";
+        /** @description A GitHub release (FR-73 import, FR-86): `isLatest` marks GitHub's latest release. */
+        GitHubReleaseDto: {
+            tagName: string;
+            name: null | string;
+            /** Format: date-time */
+            publishedAt: null | string;
+            isLatest: boolean;
+        };
+        /**
+         * @description A repository the AIDE GitHub App can access for the caller (FR-81, FR-86). `installationId` is the installation
+         *     that grants it (send it with `repoFullName` in `POST /api/projects`). `empty` is whether the repo has
+         *     no commits (`null`: not checked in the list; `GET …/refs` always says). `canPush`: the caller may push to it
+         *     (push, maintain or admin); only such repositories can back a project (FR-82, FR-83).
+         */
+        GitHubRepoDto: {
+            /** Format: int64 */
+            id: number;
+            fullName: string;
+            owner: string;
+            name: string;
+            private: boolean;
+            defaultBranch: string;
+            /** Format: int64 */
+            installationId: number;
+            empty: null | boolean;
+            htmlUrl: string;
+            canPush: boolean;
+        };
+        /** @description A page of the repo picker (FR-81): `hasMore` is true when `page + 1` has more repositories. */
+        GitHubRepoPageDto: {
+            items: components["schemas"]["GitHubRepoDto"][];
+            /** Format: int32 */
+            page: number;
+            hasMore: boolean;
+        };
+        /**
+         * @description What the wizard needs to know about a picked repository (FR-73, FR-86): its default branch, whether it is
+         *     `empty` (no commits: "start from scratch"; otherwise it is treated as an import), its releases and tags.
+         */
+        GitHubRepoRefsDto: {
+            defaultBranch: string;
+            empty: boolean;
+            releases: components["schemas"]["GitHubReleaseDto"][];
+            tags: components["schemas"]["GitHubTagDto"][];
+        };
+        /**
+         * @description Which repositories an App installation covers (FR-81). Wire values: `all`, `selected`.
+         * @enum {unknown}
+         */
+        GitHubRepositorySelection: "all" | "selected";
+        /**
+         * @description How "Continue with GitHub" signs in (D-V2-7). Wire values: `app` (the App's user authorization flow with
+         *                 PKCE), `oauth` (the v1 OAuth App, only while no App is registered), `none` (GitHub sign-in unavailable).
+         * @enum {unknown}
+         */
+        GitHubSignInMode: "none" | "oauth" | "app";
+        /**
+         * @description A tag; `semver` is its version (a leading `v` or the tag prefix stripped), or `null` when the
+         *         tag isn't a semantic version.
+         */
+        GitHubTagDto: {
+            name: string;
+            sha: string;
+            semver: null | string;
+        };
+        /**
+         * @description Git provider of a project (FR-35, FR-82). Wire values: `github_pat` (v1 `github`), `local`, `github_app`.
+         * @enum {unknown}
+         */
+        GitProvider: "github_pat" | "local" | "github_app";
+        /**
+         * @description Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the
+         *     project branch, once the working copy has been prepared. `mode` is the v2 name of `provider` (always equal).
+         *     For `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else
+         *     `null`). `appInstalledOnRepo` says whether the AIDE GitHub App can access a `github_pat` project's repo
+         *     (`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an
+         *     Owner ("Switch to GitHub App").
+         */
         GitSettingsDto: {
             provider: components["schemas"]["GitProvider"];
             repoUrl: null | string;
             defaultBranch: string;
             branchName: null | string;
             hasToken: boolean;
+            mode: components["schemas"]["GitProvider"];
+            /** Format: int64 */
+            installationId: null | number;
+            /** Format: int64 */
+            repoId: null | number;
+            repoFullName: null | string;
+            appInstalledOnRepo: null | boolean;
+            canSwitchToApp: boolean;
         };
         /** @description Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false. */
         GitTestResultDto: {
@@ -2310,6 +2710,8 @@ export interface components {
             details?: string[];
             /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
             reason?: string;
+            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). */
+            installUrl?: string;
         };
         /** @description A background job (§4.9): the job queued by a dead-letter retry (FR-51). */
         JobDto: {
@@ -2614,6 +3016,8 @@ export interface components {
             details?: string[];
             /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
             reason?: string;
+            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). */
+            installUrl?: string;
         };
         /**
          * @description A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null`
@@ -3151,7 +3555,7 @@ export interface components {
         /** @description Partial update of the Git settings. Omitted fields are unchanged. */
         UpdateGitSettingsRequest: {
             provider?: null | components["schemas"]["GitProvider"];
-            /** @description Required when the provider is (or becomes) `github`. */
+            /** @description Required when the provider is (or becomes) `github_pat`. */
             repoUrl?: null | string;
             defaultBranch?: null | string;
             /** @description Sets the access token. To remove it, send `clearToken: true`. */
@@ -3966,6 +4370,405 @@ export interface operations {
             };
         };
     };
+    GetGitHubConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubConnectionDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DisconnectGitHub: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ConnectGitHub: {
+        parameters: {
+            query?: {
+                returnUrl?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListGitHubRepos: {
+        parameters: {
+            query?: {
+                search?: string;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubRepoPageDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_NOT_CONNECTED or GITHUB_APP_NOT_INSTALLED (extension installUrl) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateGitHubRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGitHubRepoRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubRepoDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (GitHub refused: no Administration permission, or the caller can't create repositories for that owner) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description REPO_NAME_TAKEN, GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListGitHubOwners: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubOwnerDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_NOT_CONNECTED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetGitHubRepoRefs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner: string;
+                repo: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubRepoRefsDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (no such repository, or the caller can't access it) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_NOT_CONNECTED or GITHUB_APP_NOT_INSTALLED (extension installUrl) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListUsers: {
         parameters: {
             query?: {
@@ -4348,6 +5151,152 @@ export interface operations {
             };
         };
     };
+    GetAdminGitHubApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitHubAppDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateGitHubAppManifest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGitHubAppManifestRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubAppManifestResponseDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (an App is already configured) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CompleteGitHubAppManifest: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListProjects: {
         parameters: {
             query?: {
@@ -4435,8 +5384,37 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Forbidden */
+            /** @description FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4986,6 +5964,84 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    SwitchGitToApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitSettingsDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (not an Owner, or the caller's GitHub account can't push to the repository) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl), GITHUB_NOT_CONNECTED, or CONFLICT when the project isn't on a GitHub PAT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

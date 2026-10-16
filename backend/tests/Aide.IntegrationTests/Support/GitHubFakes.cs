@@ -20,6 +20,7 @@ public sealed class FakeGitHubApi : HttpMessageHandler
 {
     private readonly ConcurrentDictionary<string, Func<GitHubRequest, (HttpStatusCode Status, string Body)>> _routes = new(StringComparer.Ordinal);
     private readonly ConcurrentQueue<GitHubRequest> _requests = new();
+    private readonly ConcurrentDictionary<string, IReadOnlyDictionary<string, string>> _headers = new(StringComparer.Ordinal);
 
     public IReadOnlyList<GitHubRequest> Requests => [.. _requests];
 
@@ -31,6 +32,14 @@ public sealed class FakeGitHubApi : HttpMessageHandler
     }
 
     public FakeGitHubApi On(HttpMethod method, string path, HttpStatusCode status, string body) => On(method, path, _ => (status, body));
+
+    /// <summary>As <see cref="On(HttpMethod, string, HttpStatusCode, string)"/>, with response headers (e.g. rate limits).</summary>
+    public FakeGitHubApi On(HttpMethod method, string path, HttpStatusCode status, string body, IReadOnlyDictionary<string, string> headers)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        _headers[$"{method.Method} {path}"] = headers;
+        return On(method, path, _ => (status, body));
+    }
 
     public int Count(HttpMethod method, string path) => _requests.Count(r => r.Method == method.Method && r.Path == path);
 
@@ -47,11 +56,20 @@ public sealed class FakeGitHubApi : HttpMessageHandler
         var (status, text) = _routes.TryGetValue($"{received.Method} {received.Path}", out var route)
             ? route(received)
             : (HttpStatusCode.NotFound, """{"message":"Not Found"}""");
-        return new HttpResponseMessage(status)
+        var response = new HttpResponseMessage(status)
         {
             RequestMessage = request,
             Content = new StringContent(text, Encoding.UTF8, "application/json"),
         };
+        if (_headers.TryGetValue($"{received.Method} {received.Path}", out var headers))
+        {
+            foreach (var (name, value) in headers)
+            {
+                response.Headers.TryAddWithoutValidation(name, value);
+            }
+        }
+
+        return response;
     }
 }
 

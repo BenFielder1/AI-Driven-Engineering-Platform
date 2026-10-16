@@ -30,10 +30,14 @@ export function AuthCard({ title, description, children }: { title: string; desc
   )
 }
 
-/** "Continue with GitHub" (FR-2): a full-page link to the API's OAuth start; hidden unless GitHub is configured. */
+/**
+ * "Continue with GitHub" (FR-2, FR-80): a full-page link to the API's GitHub sign-in, which uses the AIDE GitHub App's
+ * user authorization (`githubMode: app`) or the v1 OAuth App (`oauth`); hidden when `githubMode` is `none`.
+ */
 export function GitHubButton({ href }: { href: string }) {
   const providers = useAuthProviders()
-  if (!providers.data?.github) {
+  const mode = providers.data?.githubMode ?? 'none'
+  if (mode === 'none') {
     return null
   }
   return (

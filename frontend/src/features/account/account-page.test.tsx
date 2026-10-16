@@ -19,7 +19,7 @@ describe('AccountPage', () => {
   })
 
   it('FR-2: offers "Link GitHub" only when GitHub is enabled and not yet linked', async () => {
-    authDb.github = true
+    authDb.githubMode = 'oauth'
     signInAs({ githubLinked: false })
     renderRoute('/account')
 
@@ -28,7 +28,7 @@ describe('AccountPage', () => {
   })
 
   it('FR-2: shows the linked state instead of the link button', async () => {
-    authDb.github = true
+    authDb.githubMode = 'oauth'
     signInAs({ githubLinked: true })
     renderRoute('/account')
 
@@ -37,7 +37,7 @@ describe('AccountPage', () => {
   })
 
   it('FR-2: hides "Link GitHub" when GitHub is not configured', async () => {
-    authDb.github = false
+    authDb.githubMode = 'none'
     signInAs()
     renderRoute('/account')
 

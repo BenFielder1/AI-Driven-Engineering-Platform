@@ -70,7 +70,8 @@ public sealed partial class WorkingCopyPreparer(
         var branch = recordedBranch ?? (SemVer.TryParse(project.DevelopmentVersion, out var version)
             ? ReleaseVersionRules.BranchName(project.Slug, project.Id, version)
             : ExecutionRules.BranchName(project.Slug, project.Id));
-        var connection = new GitConnectionSettings(project.Id, settings.RepoUrl, settings.DefaultBranch);
+        // FR-82: a github_app connection carries the installation and repository; its provider mints installation tokens.
+        var connection = GitConnectionSettings.From(settings);
         var provider = providers.Resolve(settings.Provider);
         var outcome = await provider.PrepareWorkingCopyAsync(connection, branch, token, cancellationToken);
         if (!outcome.Ok)

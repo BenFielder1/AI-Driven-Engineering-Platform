@@ -123,6 +123,36 @@ const defaultProviders = (): ProviderStatus[] => [
   { provider: 'fake', configured: true, defaultModel: 'fake-1' },
 ]
 
+/**
+ * Git settings as stored (FR-82, FR-83): defaults to a PAT project on acme/inventory without a token. `mode` follows
+ * `provider`; `canSwitchToApp` is derived per caller by `gitDto`.
+ */
+export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
+  const provider = overrides.mode ?? overrides.provider ?? 'github_pat'
+  const app = provider === 'github_app'
+  const repoFullName = overrides.repoFullName ?? (app ? 'acme/inventory' : null)
+  return {
+    repoUrl: provider === 'local' ? null : `https://github.com/${repoFullName ?? 'acme/inventory'}`,
+    defaultBranch: 'main',
+    branchName: null,
+    hasToken: false,
+    installationId: app ? 9001 : null,
+    repoId: app ? 4242 : null,
+    appInstalledOnRepo: null,
+    canSwitchToApp: false,
+    ...overrides,
+    repoFullName,
+    provider,
+    mode: provider,
+  }
+}
+
+/** GET/PATCH /settings/git body: "Switch to GitHub App" is offered to Owners of a PAT project the App can access. */
+export function gitDto(project: StoredProject, isOwner: boolean): GitSettings {
+  const g = project.git
+  return { ...g, canSwitchToApp: isOwner && g.mode === 'github_pat' && g.appInstalledOnRepo === true }
+}
+
 /** In-memory projects backend for tests (reset after each test by src/test/setup.ts). */
 export const projectsDb = {
   projects: [] as StoredProject[],
@@ -241,7 +271,7 @@ export function seedProject(
     executionPaused: false,
     createdAt: now,
     updatedAt: now,
-    git: { provider: 'github', repoUrl: 'https://github.com/acme/inventory', defaultBranch: 'main', branchName: null, hasToken: false },
+    git: gitSettings(),
     llm: { provider: 'anthropic', defaultModel: 'claude-opus-5-5', modelsByAgent: {}, hasApiKey: false, binding: null },
     channels: [],
     state: emptyState(),
@@ -588,8 +618,15 @@ export const projectHandlers = [
     if (!body.name.trim()) {
       errors.name = ['The name is required.']
     }
-    if (body.git.provider === 'github' && !body.git.repoUrl) {
+    const mode = body.git.mode ?? body.git.provider
+    if (!mode) {
+      errors['git.mode'] = ['Choose github_app, github_pat or local.']
+    }
+    if (mode === 'github_pat' && !body.git.repoUrl) {
       errors['git.repoUrl'] = ['A repository URL is required for GitHub.']
+    }
+    if (mode === 'github_app' && (!body.git.installationId || !body.git.repoFullName)) {
+      errors['git.repoFullName'] = ['Pick a repository the AIDE GitHub App is installed on.']
     }
     if (Object.keys(errors).length > 0) {
       return validation(errors)
@@ -611,13 +648,15 @@ export const projectHandlers = [
       tokenBudget: body.tokenBudget ?? null,
       createdAt: now,
       updatedAt: now,
-      git: {
-        provider: body.git.provider,
-        repoUrl: body.git.repoUrl ?? null,
+      git: gitSettings({
+        provider: mode ?? 'local',
+        ...(mode === 'github_pat' ? { repoUrl: body.git.repoUrl ?? null } : {}),
+        ...(mode === 'github_app'
+          ? { repoFullName: body.git.repoFullName ?? null, installationId: body.git.installationId ?? null }
+          : {}),
         defaultBranch: body.git.defaultBranch ?? 'main',
-        branchName: null,
-        hasToken: Boolean(body.git.token),
-      },
+        hasToken: mode === 'github_pat' && Boolean(body.git.token),
+      }),
       members: [{ userId: user.id, role: 'owner' }],
       releaseVersions: [makeReleaseVersion({ version: initialVersion, request: body.idea })],
     })
@@ -744,7 +783,7 @@ export const projectHandlers = [
       return forbidden()
     }
     return HttpResponse.json<Schemas['ProjectSettingsDto']>({
-      git: a.project.git,
+      git: gitDto(a.project, isOwnerLevel(a)),
       llm: llmDto(a.project, a.level === 'owner'),
       notifications: { channels: a.project.channels.map(channelDto) },
     })
@@ -757,15 +796,30 @@ export const projectHandlers = [
     }
     const body = (await record(request)) as Schemas['UpdateGitSettingsRequest']
     const git = a.project.git
-    git.provider = body.provider ?? git.provider
-    git.repoUrl = body.repoUrl !== undefined ? body.repoUrl : git.repoUrl
+    const provider = body.provider ?? git.provider
+    // FR-82/FR-83: only "Switch to GitHub App" moves a project onto the App.
+    if (provider === 'github_app' && git.provider !== 'github_app') {
+      return validation({ provider: ['Use Switch to GitHub App to move this project onto the AIDE GitHub App.'] })
+    }
+    git.provider = provider
+    git.mode = provider
+    if (provider === 'local') {
+      git.repoUrl = null
+    } else if (body.repoUrl) {
+      git.repoUrl = body.repoUrl
+    }
+    if (provider !== 'github_app') {
+      git.installationId = null
+      git.repoId = null
+      git.repoFullName = null
+    }
     git.defaultBranch = body.defaultBranch ?? git.defaultBranch
     if (body.clearToken) {
       git.hasToken = false
     } else if (body.token) {
       git.hasToken = true
     }
-    return HttpResponse.json<GitSettings>(git)
+    return HttpResponse.json<GitSettings>(gitDto(a.project, isOwnerLevel(a)))
   }),
 
   http.patch('*/api/projects/:id/settings/notifications', async ({ request, params }) => {

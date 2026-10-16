@@ -39,6 +39,10 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<LlmCredential> LlmCredentials => Set<LlmCredential>();
 
+    public DbSet<GitHubApp> GitHubApps => Set<GitHubApp>();
+
+    public DbSet<GitHubConnection> GitHubConnections => Set<GitHubConnection>();
+
     public DbSet<Artifact> Artifacts => Set<Artifact>();
 
     public DbSet<ApprovalGate> ApprovalGates => Set<ApprovalGate>();
@@ -92,6 +96,8 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<LlmProvider>(configurationBuilder);
         MapEnum<LlmCredentialStatus>(configurationBuilder);
         MapEnum<GitProvider>(configurationBuilder);
+        MapEnum<GitHubOwnerType>(configurationBuilder);
+        MapEnum<GitHubConnectionStatus>(configurationBuilder);
         MapEnum<DriftLevel>(configurationBuilder);
         MapEnum<ReviewDecision>(configurationBuilder);
         MapEnum<EscalationReason>(configurationBuilder);

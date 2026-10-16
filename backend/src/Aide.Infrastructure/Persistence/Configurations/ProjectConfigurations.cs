@@ -92,11 +92,65 @@ internal sealed class ProjectGitSettingsConfiguration : IEntityTypeConfiguration
 {
     public void Configure(EntityTypeBuilder<ProjectGitSettings> builder)
     {
-        builder.ToTable("project_git_settings");
+        // FR-82: a github_app project always names its installation and repo.
+        builder.ToTable("project_git_settings", t => t.HasCheckConstraint(
+            "ck_project_git_settings_github_app_repo",
+            "provider <> 'github_app' OR (installation_id IS NOT NULL AND repo_id IS NOT NULL AND repo_full_name IS NOT NULL)"));
         builder.HasKey(s => s.ProjectId);
         builder.Property(s => s.RepoUrl).HasMaxLength(500);
         builder.Property(s => s.DefaultBranch).HasMaxLength(255).IsRequired();
+        builder.Property(s => s.RepoFullName).HasColumnType("text");
         builder.HasOne<Project>().WithOne().HasForeignKey<ProjectGitSettings>(s => s.ProjectId).OnDelete(DeleteBehavior.Cascade);
+
+        // Lookups by installation (installation removed / repositories changed).
+        builder.HasIndex(s => s.InstallationId);
+    }
+}
+
+internal sealed class GitHubAppConfiguration : IEntityTypeConfiguration<GitHubApp>
+{
+    /// <summary>Shadow column that is always <c>true</c>; its unique index allows at most one App row (FR-80).</summary>
+    public const string SingletonColumn = "Singleton";
+
+    public void Configure(EntityTypeBuilder<GitHubApp> builder)
+    {
+        builder.ToTable("github_apps");
+        builder.HasKey(a => a.Id);
+        builder.Property(a => a.Id).ValueGeneratedNever();
+        builder.Property(a => a.Slug).HasColumnType("text").IsRequired();
+        builder.Property(a => a.OwnerLogin).HasColumnType("text").IsRequired();
+        builder.Property(a => a.OwnerType).IsRequired();
+        builder.Property(a => a.ClientId).HasColumnType("text").IsRequired();
+        builder.Property(a => a.ClientSecretEncrypted).HasColumnType("text").IsRequired();
+        builder.Property(a => a.PrivateKeyEncrypted).HasColumnType("text").IsRequired();
+        builder.Property(a => a.Permissions).HasJsonbConversion().IsRequired();
+        builder.Property(a => a.HtmlUrl).HasColumnType("text");
+        builder.Property(a => a.CreatedAt).IsRequired();
+
+        // Single row: a stored generated constant with a unique index. A second INSERT fails with 23505 on
+        // ux_github_apps_singleton; replacing the App is an UPDATE (or DELETE + INSERT).
+        builder.Property<bool>(SingletonColumn).HasComputedColumnSql("true", stored: true);
+        builder.HasIndex(SingletonColumn).IsUnique().HasDatabaseName("ux_github_apps_singleton");
+    }
+}
+
+internal sealed class GitHubConnectionConfiguration : IEntityTypeConfiguration<GitHubConnection>
+{
+    public void Configure(EntityTypeBuilder<GitHubConnection> builder)
+    {
+        builder.ToTable("github_connections");
+        builder.HasKey(c => c.UserId);
+        builder.Property(c => c.UserId).ValueGeneratedNever();
+        builder.Property(c => c.Login).HasColumnType("text").IsRequired();
+        builder.Property(c => c.AccessTokenEncrypted).HasColumnType("text").IsRequired();
+        builder.Property(c => c.RefreshTokenEncrypted).HasColumnType("text");
+        builder.Property(c => c.Status).IsRequired();
+        builder.Property(c => c.UpdatedAt).IsRequired();
+        builder.Property(c => c.RowVersion).IsXminRowVersion();
+        builder.HasOne<AppUser>().WithOne().HasForeignKey<GitHubConnection>(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        // One AIDE user per GitHub account.
+        builder.HasIndex(c => c.GithubUserId).IsUnique();
     }
 }
 

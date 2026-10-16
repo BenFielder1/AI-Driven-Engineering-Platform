@@ -54,7 +54,7 @@ internal enum ApprovalMode
 
 internal enum GitProvider
 {
-    Github,
+    GithubPat,
     Local,
 }
 

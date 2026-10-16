@@ -55,7 +55,7 @@ public sealed class ExecutionRunReader(AideDbContext db)
             .FirstAsync(cancellationToken);
         var git = await db.ProjectGitSettings.AsNoTracking()
             .Where(g => g.ProjectId == projectId)
-            .Select(g => new { g.Provider, g.RepoUrl })
+            .Select(g => new { g.Provider, RepoUrl = g.Provider == Aide.Domain.Entities.GitProvider.GithubApp ? "https://github.com/" + g.RepoFullName : g.RepoUrl })
             .FirstOrDefaultAsync(cancellationToken);
         var jobActive = await ExecutionQueries.JobActiveAsync(db, projectId, cancellationToken);
         var invalidations = plans.Any(p => p.Status == ArtifactStatus.Invalidated)

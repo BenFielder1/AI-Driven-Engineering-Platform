@@ -78,9 +78,9 @@ public class ProjectSettingsRulesTests
     public void FR9_ValidateGit_github_needs_a_GitHub_URL_and_local_needs_none()
     {
         Assert.True(ProjectSettingsRules.ValidateGit(GitProvider.Local, null, "main").IsSuccess);
-        Assert.True(ProjectSettingsRules.ValidateGit(GitProvider.Github, "https://github.com/a/b", "main").IsSuccess);
-        AssertProblem(ProjectSettingsRules.ValidateGit(GitProvider.Github, null, "main"), "repoUrl");
-        AssertProblem(ProjectSettingsRules.ValidateGit(GitProvider.Github, "https://example.com/a/b", "main", prefix: "git."), "git.repoUrl");
+        Assert.True(ProjectSettingsRules.ValidateGit(GitProvider.GithubPat, "https://github.com/a/b", "main").IsSuccess);
+        AssertProblem(ProjectSettingsRules.ValidateGit(GitProvider.GithubPat, null, "main"), "repoUrl");
+        AssertProblem(ProjectSettingsRules.ValidateGit(GitProvider.GithubPat, "https://example.com/a/b", "main", prefix: "git."), "git.repoUrl");
     }
 
     [Fact]
@@ -95,17 +95,17 @@ public class ProjectSettingsRulesTests
     [Fact]
     public void FR9_NormalizeRepoUrl_trims_for_github_and_drops_it_for_local()
     {
-        Assert.Equal("https://github.com/a/b", ProjectSettingsRules.NormalizeRepoUrl(GitProvider.Github, "  https://github.com/a/b "));
+        Assert.Equal("https://github.com/a/b", ProjectSettingsRules.NormalizeRepoUrl(GitProvider.GithubPat, "  https://github.com/a/b "));
         Assert.Null(ProjectSettingsRules.NormalizeRepoUrl(GitProvider.Local, "https://github.com/a/b"));
-        Assert.Null(ProjectSettingsRules.NormalizeRepoUrl(GitProvider.Github, " "));
+        Assert.Null(ProjectSettingsRules.NormalizeRepoUrl(GitProvider.GithubPat, " "));
     }
 
     [Theory]
-    [InlineData(GitProvider.Github, GitProvider.Github, false, true)]
-    [InlineData(GitProvider.Local, GitProvider.Github, false, true)]
+    [InlineData(GitProvider.GithubPat, GitProvider.GithubPat, false, true)]
+    [InlineData(GitProvider.Local, GitProvider.GithubPat, false, true)]
     [InlineData(GitProvider.Local, GitProvider.Local, false, true)]
-    [InlineData(GitProvider.Github, GitProvider.Local, false, false)]
-    [InlineData(GitProvider.Github, GitProvider.Github, true, false)]
+    [InlineData(GitProvider.GithubPat, GitProvider.Local, false, false)]
+    [InlineData(GitProvider.GithubPat, GitProvider.GithubPat, true, false)]
     public void FR9_Saved_token_is_dropped_when_cleared_or_switching_to_local(GitProvider previous, GitProvider next, bool clear, bool keeps) =>
         Assert.Equal(keeps, ProjectSettingsRules.KeepsSavedToken(previous, next, clear));
 

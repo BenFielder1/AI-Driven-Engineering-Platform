@@ -3,6 +3,7 @@ import { artifactHandlers } from './artifacts'
 import { authHandlers } from './auth'
 import { connectionHandlers } from './connections'
 import { executionHandlers } from './execution'
+import { githubHandlers } from './github'
 import { refinementHandlers } from './refinement'
 import { releaseHandlers } from './release'
 import { healthHandlers } from './health'
@@ -18,6 +19,7 @@ export const handlers = [
   ...authHandlers,
   ...projectHandlers,
   ...connectionHandlers,
+  ...githubHandlers,
   ...lifecycleHandlers,
   ...artifactHandlers,
   ...runHandlers,

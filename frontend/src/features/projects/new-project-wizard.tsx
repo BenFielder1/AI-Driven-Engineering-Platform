@@ -16,7 +16,13 @@ import { TextAreaField } from '../../components/ui/textarea-field'
 import { TextField } from '../../components/ui/text-field'
 import { errorMessage, isApiError } from '../../lib/errors'
 import { normalizeVersion } from '../versions/semver'
-import { approvalModeDescriptions, approvalModeLabels, approvalModes, gitProviderLabels } from './labels'
+import { buttonClasses } from '../../components/ui/button-classes'
+import { LoadingState } from '../../components/ui/states'
+import { useAuthProviders } from '../auth/auth-api'
+import { connectGitHubHref, useGitHubConnection, useGitHubRepoRefs, type GitHubRepo } from '../github/github-api'
+import { GitHubErrorAlert } from '../github/github-error-alert'
+import { RepoPicker } from '../github/repo-picker'
+import { approvalModeDescriptions, approvalModeLabels, approvalModes } from './labels'
 import { useCreateProject } from './projects-api'
 import { limits, toBudget, wizardDefaults, wizardSchema, type WizardValues } from './schemas'
 
@@ -30,10 +36,13 @@ const fieldIds: Record<Field, string> = {
   maxFilesPerStep: 'project-max-files',
   maxReviewCycles: 'project-max-cycles',
   tokenBudget: 'project-token-budget',
-  gitProvider: 'project-git-provider',
+  gitMode: 'project-git-provider',
   repoUrl: 'project-repo-url',
   defaultBranch: 'project-default-branch',
   gitToken: 'project-git-token',
+  repoFullName: 'project-repo-search',
+  installationId: 'project-repo-search',
+  repoHasCode: 'project-repo-search',
   initialVersion: 'project-initial-version',
 }
 
@@ -48,7 +57,7 @@ const steps: readonly Step[] = [
     title: 'Configuration',
     fields: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget'],
   },
-  { title: 'Git repository', fields: ['gitProvider', 'repoUrl', 'defaultBranch', 'gitToken'] },
+  { title: 'Git repository', fields: ['gitMode', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken'] },
   { title: 'Version', fields: ['initialVersion'] },
   { title: 'Review & create', fields: [] },
 ]
@@ -64,11 +73,14 @@ const serverFieldMap: Record<string, Field> = {
   maxfilesperstep: 'maxFilesPerStep',
   maxreviewcycles: 'maxReviewCycles',
   tokenbudget: 'tokenBudget',
-  'git.provider': 'gitProvider',
+  'git.mode': 'gitMode',
+  'git.provider': 'gitMode',
   'git.repourl': 'repoUrl',
   'git.defaultbranch': 'defaultBranch',
   'git.token': 'gitToken',
-  git: 'gitProvider',
+  'git.installationid': 'repoFullName',
+  'git.repofullname': 'repoFullName',
+  git: 'gitMode',
   initialversion: 'initialVersion',
   version: 'initialVersion',
 }
@@ -78,8 +90,20 @@ function firstStepWithError(errors: Partial<Record<Field, unknown>>): number {
   return index === -1 ? LAST_STEP : index
 }
 
+/** FR-86: `git` per mode; `mode` only (the v1 `provider` alias is deprecated). */
+function toGitRequest(v: WizardValues): Schemas['CreateProjectGitRequest'] {
+  const defaultBranch = v.defaultBranch.trim()
+  switch (v.gitMode) {
+    case 'github_app':
+      return { mode: 'github_app', installationId: Number(v.installationId), repoFullName: v.repoFullName, defaultBranch }
+    case 'github_pat':
+      return { mode: 'github_pat', repoUrl: v.repoUrl.trim(), defaultBranch, token: v.gitToken ? v.gitToken : null }
+    case 'local':
+      return { mode: 'local', defaultBranch }
+  }
+}
+
 function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
-  const github = v.gitProvider === 'github'
   return {
     name: v.name.trim(),
     idea: v.idea.trim(),
@@ -89,13 +113,90 @@ function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
     maxReviewCycles: Number(v.maxReviewCycles),
     tokenBudget: toBudget(v.tokenBudget),
     initialVersion: normalizeVersion(v.initialVersion) ?? v.initialVersion.trim(),
-    git: {
-      provider: v.gitProvider,
-      repoUrl: github ? v.repoUrl.trim() : null,
-      defaultBranch: v.defaultBranch.trim(),
-      token: github && v.gitToken ? v.gitToken : null,
-    },
+    git: toGitRequest(v),
   }
+}
+
+/** `acme` of `acme/todo-app`, or undefined when nothing is picked. */
+function repoOwner(fullName: string): string | undefined {
+  const [owner = ''] = fullName.split('/')
+  return owner === '' ? undefined : owner
+}
+
+/** The wizard's Git options (FR-86). */
+const gitModeOptionLabels: Record<WizardValues['gitMode'], string> = {
+  github_app: 'GitHub (AIDE GitHub App)',
+  github_pat: 'Repository URL and access token',
+  local: 'Local repository',
+}
+
+/**
+ * FR-86 GitHub App option: the repo picker (with Create repository) once the user has connected GitHub, else Connect
+ * GitHub. A repo with code gets the "AIDE will build on it" warning (it's treated as an import, never released).
+ */
+function AppRepository({
+  connectionPending,
+  connectionError,
+  connected,
+  installUrl,
+  selected,
+  hasCode,
+  error,
+  onSelect,
+}: {
+  connectionPending: boolean
+  connectionError: unknown
+  connected: boolean
+  installUrl: string | null
+  selected: string
+  hasCode: boolean
+  error?: string | undefined
+  onSelect: (repo: GitHubRepo) => void
+}) {
+  if (connectionPending) {
+    return <LoadingState label="Checking your GitHub connection…" />
+  }
+  if (connectionError) {
+    return <GitHubErrorAlert error={connectionError} title="We couldn't check your GitHub connection" returnUrl="/projects/new" />
+  }
+  if (!connected) {
+    return (
+      <Alert tone="info" title="Connect GitHub to pick a repository">
+        <p>
+          Connecting opens GitHub and brings you back to a new wizard (what you entered here isn&apos;t kept), so connect
+          first, or choose another option.
+        </p>
+        <p className="mt-2">
+          <a href={connectGitHubHref('/projects/new')} className={buttonClasses('primary')}>
+            Connect GitHub
+          </a>
+        </p>
+        {error && <p className="mt-2 text-destructive">{error}</p>}
+      </Alert>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      <RepoPicker searchId={fieldIds.repoFullName} selected={selected} installUrl={installUrl} error={error} onSelect={onSelect} />
+      <p role="status" aria-live="polite" className="text-sm">
+        {selected ? (
+          <>
+            Selected: <span className="font-medium">{selected}</span>
+          </>
+        ) : (
+          <span className="text-muted-foreground">No repository selected yet.</span>
+        )}
+      </p>
+      {selected && hasCode && (
+        <Alert tone="warning" title="This repository has code. AIDE will build on it">
+          <p>
+            The project is treated as an import of a repository that was never released: the Repository Analyst reads the
+            code first, and the first specification covers what is already there.
+          </p>
+        </Alert>
+      )}
+    </div>
+  )
 }
 
 /** /projects/new (FR-5, FR-66): five steps with per-step validation; Create navigates to the new project. */
@@ -103,7 +204,8 @@ export function NewProjectWizard() {
   const navigate = useNavigate()
   const create = useCreateProject()
   const [step, setStep] = useState(0)
-  const [serverError, setServerError] = useState<string | null>(null)
+  /** The create failure, with the error itself so GitHub codes can offer their way out (install link, connect). */
+  const [serverError, setServerError] = useState<{ message: string; error?: unknown } | null>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   /** False until the first step change, so the page heading (not the step heading) has focus on arrival. */
   const [moveFocus, setMoveFocus] = useState(false)
@@ -113,6 +215,8 @@ export function NewProjectWizard() {
     handleSubmit,
     trigger,
     getValues,
+    setValue,
+    getFieldState,
     control,
     setError,
     formState: { errors },
@@ -136,7 +240,37 @@ export function NewProjectWizard() {
   }
 
   const current = steps[step] ?? steps[0]
-  const provider = useWatch({ control, name: 'gitProvider' })
+  const gitMode = useWatch({ control, name: 'gitMode' })
+  const repoFullName = useWatch({ control, name: 'repoFullName' })
+  const repoHasCode = useWatch({ control, name: 'repoHasCode' })
+
+  // FR-86: the GitHub App option exists once an App is registered; it is the default when the user is connected.
+  const providers = useAuthProviders()
+  const appAvailable = providers.data?.githubMode === 'app'
+  const connection = useGitHubConnection(appAvailable)
+  const connected = connection.data?.connected === true && connection.data.status === 'valid'
+  const defaultApplied = useRef(false)
+  useEffect(() => {
+    if (!defaultApplied.current && appAvailable && connected && !getFieldState('gitMode').isDirty) {
+      defaultApplied.current = true
+      setValue('gitMode', 'github_app')
+    }
+  }, [appAvailable, connected, getFieldState, setValue])
+
+  // The list may not know whether a repo is empty; its refs always do (FR-86).
+  const refs = useGitHubRepoRefs(gitMode === 'github_app' && repoFullName ? repoFullName : null)
+  useEffect(() => {
+    if (refs.data) {
+      setValue('repoHasCode', !refs.data.empty)
+    }
+  }, [refs.data, setValue])
+
+  const pickRepo = (repo: GitHubRepo) => {
+    setValue('repoFullName', repo.fullName, { shouldValidate: getFieldState('repoFullName').invalid })
+    setValue('installationId', String(repo.installationId))
+    setValue('repoHasCode', repo.empty === false)
+    setValue('defaultBranch', repo.defaultBranch, { shouldValidate: true })
+  }
 
   async function next() {
     const valid = await trigger(current?.fields ?? [], { shouldFocus: true })
@@ -169,12 +303,12 @@ export function NewProjectWizard() {
             if (target !== LAST_STEP) {
               goTo(target)
             }
-            setServerError(unmatched.length > 0 ? unmatched.join(' ') : errorMessage(error))
+            setServerError({ message: unmatched.length > 0 ? unmatched.join(' ') : errorMessage(error) })
           } else if (isApiError(error, 'VERSION_INVALID')) {
             setError('initialVersion', { type: 'server', message: errorMessage(error) })
             goTo(steps.findIndex((s) => s.title === 'Version'))
           } else {
-            setServerError(errorMessage(error))
+            setServerError({ message: errorMessage(error, 'createProject'), error })
           }
         },
       })
@@ -218,9 +352,21 @@ export function NewProjectWizard() {
 
         <ErrorSummary title="Check this step" errors={stepErrors} />
         {serverError && (
-          <Alert tone="error" role="alert" title="We couldn't create the project" className="mb-4">
-            <p>{serverError}</p>
-          </Alert>
+          <div className="mb-4">
+            {isApiError(serverError.error, 'GITHUB_APP_NOT_INSTALLED') ||
+            isApiError(serverError.error, 'GITHUB_NOT_CONNECTED') ? (
+              <GitHubErrorAlert
+                error={serverError.error}
+                title="We couldn't create the project"
+                installTarget={repoOwner(getValues('repoFullName'))}
+                returnUrl="/projects/new"
+              />
+            ) : (
+              <Alert tone="error" role="alert" title="We couldn't create the project">
+                <p>{serverError.message}</p>
+              </Alert>
+            )}
+          </div>
         )}
 
         <div className="mt-2 flex flex-col gap-5">
@@ -314,20 +460,45 @@ export function NewProjectWizard() {
           {step === 2 && (
             <>
               <RadioGroup
-                id={fieldIds.gitProvider}
-                legend="Git provider"
-                inputProps={register('gitProvider')}
-                error={errors.gitProvider?.message}
+                id={fieldIds.gitMode}
+                legend="Where should the code live?"
+                inputProps={register('gitMode')}
+                error={errors.gitMode?.message}
                 options={[
-                  { value: 'github', label: gitProviderLabels.github, description: 'Use a repository on GitHub.' },
+                  ...(appAvailable
+                    ? [
+                        {
+                          value: 'github_app',
+                          label: gitModeOptionLabels.github_app,
+                          description: 'Pick or create a repository the AIDE GitHub App can access. Recommended.',
+                        },
+                      ]
+                    : []),
+                  {
+                    value: 'github_pat',
+                    label: gitModeOptionLabels.github_pat,
+                    description: "For a GitHub repository the AIDE GitHub App can't be installed on.",
+                  },
                   {
                     value: 'local',
-                    label: gitProviderLabels.local,
+                    label: gitModeOptionLabels.local,
                     description: 'AIDE keeps a Git repository for this project on its own data volume.',
                   },
                 ]}
               />
-              {provider === 'github' ? (
+              {gitMode === 'github_app' && (
+                <AppRepository
+                  connectionPending={connection.isPending}
+                  connectionError={connection.isError ? connection.error : null}
+                  connected={connected}
+                  installUrl={connection.data?.installUrl ?? null}
+                  selected={repoFullName}
+                  hasCode={repoHasCode}
+                  error={errors.repoFullName?.message}
+                  onSelect={pickRepo}
+                />
+              )}
+              {gitMode === 'github_pat' && (
                 <>
                   <TextField
                     id={fieldIds.repoUrl}
@@ -342,7 +513,7 @@ export function NewProjectWizard() {
                   <TextField
                     id={fieldIds.gitToken}
                     label="Access token (optional)"
-                    hint="Needs read and write access to the repository. It is stored encrypted and never shown again."
+                    hint="A personal access token with Contents and Pull requests read and write. It is stored encrypted and never shown again."
                     type="password"
                     autoComplete="new-password"
                     maxLength={limits.secretMax}
@@ -350,7 +521,8 @@ export function NewProjectWizard() {
                     {...register('gitToken')}
                   />
                 </>
-              ) : (
+              )}
+              {gitMode === 'local' && (
                 <Alert tone="info">
                   <p>
                     No repository to set up: AIDE creates and keeps a local Git repository for this project on its data
@@ -361,6 +533,7 @@ export function NewProjectWizard() {
               <TextField
                 id={fieldIds.defaultBranch}
                 label="Default branch"
+                hint={gitMode === 'github_app' && repoFullName ? 'Prefilled from the repository.' : undefined}
                 maxLength={limits.branchMax}
                 autoComplete="off"
                 error={errors.defaultBranch?.message}
@@ -487,7 +660,8 @@ function SummarySection({ title, step, onEdit, children }: {
 }
 
 function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step: number) => void }) {
-  const github = values.gitProvider === 'github'
+  const pat = values.gitMode === 'github_pat'
+  const app = values.gitMode === 'github_app'
   return (
     <div className="flex flex-col gap-4">
       <SummarySection title="Project idea" step={0} onEdit={onEdit}>
@@ -504,10 +678,14 @@ function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step
         </SummaryRow>
       </SummarySection>
       <SummarySection title="Git repository" step={2} onEdit={onEdit}>
-        <SummaryRow term="Provider">{gitProviderLabels[values.gitProvider]}</SummaryRow>
-        {github && <SummaryRow term="Repository URL">{values.repoUrl.trim()}</SummaryRow>}
+        <SummaryRow term="Mode">{gitModeOptionLabels[values.gitMode]}</SummaryRow>
+        {app && <SummaryRow term="Repository">{values.repoFullName}</SummaryRow>}
+        {app && values.repoHasCode && (
+          <SummaryRow term="Existing code">AIDE builds on it (treated as an import that was never released)</SummaryRow>
+        )}
+        {pat && <SummaryRow term="Repository URL">{values.repoUrl.trim()}</SummaryRow>}
         <SummaryRow term="Default branch">{values.defaultBranch.trim()}</SummaryRow>
-        {github && <SummaryRow term="Access token">{values.gitToken ? 'Provided' : 'Not provided'}</SummaryRow>}
+        {pat && <SummaryRow term="Access token">{values.gitToken ? 'Provided' : 'Not provided'}</SummaryRow>}
       </SummarySection>
       <SummarySection title="Version" step={3} onEdit={onEdit}>
         <SummaryRow term="Initial version">{normalizeVersion(values.initialVersion) ?? values.initialVersion.trim()}</SummaryRow>

@@ -93,7 +93,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
             db.Users.Add(user);
             db.Projects.Add(project);
             db.ProjectMembers.Add(new ProjectMembership { ProjectId = project.Id, UserId = user.Id, Role = ProjectRole.Owner, CreatedAt = Now });
-            db.ProjectGitSettings.Add(new ProjectGitSettings { ProjectId = project.Id, Provider = GitProvider.Github, RepoUrl = "https://github.com/x/y" });
+            db.ProjectGitSettings.Add(new ProjectGitSettings { ProjectId = project.Id, Provider = GitProvider.GithubPat, RepoUrl = "https://github.com/x/y" });
             db.ProjectLlmSettings.Add(new ProjectLlmSettings
             {
                 ProjectId = project.Id,

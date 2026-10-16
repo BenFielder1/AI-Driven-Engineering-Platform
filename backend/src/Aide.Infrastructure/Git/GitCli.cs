@@ -41,7 +41,7 @@ public interface IGitCli
 
     /// <summary>
     /// As <see cref="RunAsync(string, IReadOnlyList{string}, CancellationToken)"/>, with per-command configuration passed
-    /// through the environment (<c>GIT_CONFIG_COUNT</c>, <c>GIT_CONFIG_KEY_n</c>, <c>GIT_CONFIG_VALUE_n</c>; nothing else is
+    /// through the environment (<c>GIT_CONFIG_COUNT</c>, <c>GIT_CONFIG_KEY_n</c>, <c>GIT_CONFIG_VALUE_n</c>, and the commit identity <c>GIT_AUTHOR_*</c>/<c>GIT_COMMITTER_*</c>; nothing else is
     /// accepted). Used for remote access (FR-35): the auth header lives only in the child process's environment, never in
     /// <c>.git/config</c>, the remote URL or the command line.
     /// </summary>
@@ -100,14 +100,18 @@ internal sealed class GitCli : IGitCli
         ArgumentNullException.ThrowIfNull(arguments);
         if (configEnvironment?.Keys.FirstOrDefault(k => !IsConfigVariable(k)) is { } refused)
         {
-            throw new ArgumentException($"Only GIT_CONFIG_COUNT/KEY_n/VALUE_n may be passed to git, not {refused}.", nameof(configEnvironment));
+            throw new ArgumentException($"Only GIT_CONFIG_COUNT/KEY_n/VALUE_n and the commit identity may be passed to git, not {refused}.", nameof(configEnvironment));
         }
 
         return RunCoreAsync(workingDirectory, arguments, CommandTimeout, cancellationToken, configEnvironment);
     }
 
+    /// <summary>FR-82: the commit identity variables a caller may set (the App bot for GitHub App projects).</summary>
+    private static readonly HashSet<string> IdentityVariables = new(["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"], StringComparer.Ordinal);
+
     private static bool IsConfigVariable(string name) =>
         name == "GIT_CONFIG_COUNT"
+        || IdentityVariables.Contains(name)
         || (name.StartsWith("GIT_CONFIG_KEY_", StringComparison.Ordinal) && name.Length > 15 && name[15..].All(char.IsAsciiDigit))
         || (name.StartsWith("GIT_CONFIG_VALUE_", StringComparison.Ordinal) && name.Length > 17 && name[17..].All(char.IsAsciiDigit));
 

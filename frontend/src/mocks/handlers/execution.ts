@@ -430,7 +430,7 @@ export function seedPullRequest(
   overrides: Partial<Schemas["PullRequestDto"]> = {},
 ): Schemas["PullRequestDto"] {
   const pr: Schemas["PullRequestDto"] = {
-    provider: "github",
+    provider: "github_pat",
     baseBranch: "main",
     headBranch: "aide/inventory-tracker-1a2b3c4d",
     number: 12,

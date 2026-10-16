@@ -2,8 +2,31 @@ using Aide.Domain.Entities;
 
 namespace Aide.Infrastructure.Git;
 
-/// <summary>The saved Git settings of a project, as a provider needs them (never includes the token).</summary>
-public sealed record GitConnectionSettings(Guid ProjectId, string? RepoUrl, string DefaultBranch);
+/// <summary>
+/// The saved Git settings of a project, as a provider needs them (never includes the token). For <c>github_app</c>
+/// (FR-82), <see cref="InstallationId"/> and <see cref="RepoId"/> identify the repository and <see cref="RepoUrl"/> is its
+/// <c>https://github.com/{owner}/{name}</c> URL (derived from the stored full name).
+/// </summary>
+public sealed record GitConnectionSettings(Guid ProjectId, string? RepoUrl, string DefaultBranch)
+{
+    public long? InstallationId { get; init; }
+
+    public long? RepoId { get; init; }
+
+    /// <summary>The connection for a project's stored Git settings (<paramref name="defaultBranch"/> overrides the stored one).</summary>
+    public static GitConnectionSettings From(ProjectGitSettings settings, string? defaultBranch = null)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return new GitConnectionSettings(
+            settings.ProjectId,
+            Domain.Projects.ProjectSettingsRules.RepoWebUrl(settings.Provider, settings.RepoUrl, settings.RepoFullName),
+            defaultBranch ?? settings.DefaultBranch)
+        {
+            InstallationId = settings.Provider == GitProvider.GithubApp ? settings.InstallationId : null,
+            RepoId = settings.Provider == GitProvider.GithubApp ? settings.RepoId : null,
+        };
+    }
+}
 
 /// <summary>Outcome of a connection test (FR-10). <see cref="Reason"/> explains a failure in the provider's words.</summary>
 public sealed record GitTestResult(bool Ok, bool Reachable, bool Writable, bool DefaultBranchExists, string? Reason)

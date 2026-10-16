@@ -7,7 +7,7 @@ import { ErrorState, LoadingState } from "../../components/ui/states";
 import { errorMessage } from "../../lib/errors";
 import { useActivity } from "../activity/activity-api";
 import {
-  gitProviderLabels,
+  gitHostLabels,
   pullRequestFileStatusLabels,
 } from "../projects/labels";
 import type { Phase, ProjectState } from "../projects/projects-api";
@@ -267,7 +267,7 @@ function PullRequestDetails({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        <span>{gitProviderLabels[summary.provider]}</span>
+        <span>{gitHostLabels[summary.provider]}</span>
         <BranchPair pr={summary} />
         <span className="text-muted-foreground">
           Recorded <RelativeTime iso={summary.openedAt} />

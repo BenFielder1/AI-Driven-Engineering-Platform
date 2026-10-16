@@ -38,13 +38,13 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | FR-77 | Preset review checklist + deterministic checks | 3.5 | backend | 8 | todo | — |
 | FR-78 | User LLM connections | 3.6 | both | 4 | done | me/connections/llm CRUD + test, list-models validation; FR78_* tests |
 | FR-79 | Bind Owner's LLM connection to project | 3.6 | both | 4 | done | binding + clearing rules under project lock, runs use bound key, Llm:AllowSystemKeys; FR79_* tests |
-| FR-80 | GitHub App manifest registration + App sign-in | 3.7 | both | 5 | todo | — |
-| FR-81 | User GitHub connection, repo picker, create repo | 3.7 | both | 5 | todo | — |
-| FR-82 | `github_app` provider, installation tokens, per-version branch | 3.7 | backend | 5 | todo | — |
-| FR-83 | PAT fallback | 3.7 | both | 5 | todo | — |
+| FR-80 | GitHub App manifest registration + App sign-in | 3.7 | both | 5 | done (stub-verified) | manifest flow + App sign-in PKCE (stub HTTP); FR80_* tests |
+| FR-81 | User GitHub connection, repo picker, create repo | 3.7 | both | 5 | done (stub-verified) | connection + refresh, picker, create repo; FR81_* tests |
+| FR-82 | `github_app` provider, installation tokens, per-version branch | 3.7 | backend | 5 | done (stub-verified) | github_app provider, scoped installation tokens ≤55 min; FR82_*/S4_14_* tests |
+| FR-83 | PAT fallback | 3.7 | both | 5 | done (stub-verified) | PAT mode + switch-to-app with push check; FR83_* tests |
 | FR-84 | Merge readiness | 3.7 | both | 7 | todo | — |
 | FR-85 | Check runs as review input | 3.7 | backend | 7 | todo | — |
-| FR-86 | Wizard Repository step | 3.7 | frontend | 5 | todo | — |
+| FR-86 | Wizard Repository step | 3.7 | frontend | 5 | done (stub-verified) | wizard Repository step, has-code warning; FR86_* tests |
 | FR-87 | Vercel connection | 3.8 | both | 9 | todo | — |
 | FR-88 | Deployment settings + env vars | 3.8 | both | 9 | todo | — |
 | FR-89 | vercel.json disables aide/** auto deploys | 3.8 | backend | 9 | todo | — |
@@ -85,7 +85,11 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
   - [x] aspnet-engineer (connections API, list-models validation, binding + clearing rules, run credential, Llm:AllowSystemKeys, admin LLM policy, GateDto.releaseVersionId — 2579 backend tests; oasdiff: only apiKey/clearApiKey removed from PATCH /settings/llm, accepted by FR-79)
   - [x] vite-react-engineer (Connections page LLM section, Settings → LLM binding, admin system-key panel — 527 frontend tests)
   - [x] gate (backend 2584, frontend 527, manifests, contract fresh) · review (0 Critical, 0 Major, 4 Minor — all fixed/logged: binding lock, 15 s key-check timeout `Llm:KeyCheckTimeout`, key cleared from MutationCache) · redeploy (migration LlmCredentials applied; k8s DB had no v1 keys; smoke ✓) · commit
-- [ ] 5 M12b GitHub App — IDs: FR-80–FR-83, FR-86
+- [x] 5 M12b GitHub App (base: de44304) — IDs: FR-80–FR-83, FR-86, §4.14 (tokens)
+  - [x] ef-data-engineer (migration GitHubApp: github_apps singleton, github_connections, git settings installation/repo ids, provider github → github_pat; new secret purposes)
+  - [x] aspnet-engineer (contract stubs; oasdiff: only the accepted GitProvider rename)
+  - [x] aspnet-engineer (manifest flow, App sign-in PKCE, user connection + refresh, repo picker/create, installation tokens, github_app provider, rate-limit deferral — 2724 backend tests) ‖ vite-react-engineer (admin GitHub, connections GitHub, wizard Repository step, settings Git — 555 frontend tests)
+  - [x] gate (backend 2729, frontend 561, manifests, contract fresh) · review (1 Critical, 2 Major, 3 Minor — all fixed, Critical/Major re-verified: switch-to-app/create now require the caller's own push access; refresh serialised) · redeploy (migration GitHubApp applied; smoke ✓) · commit
 - [ ] 6 M13a Iteration + import — IDs: FR-70–FR-73, §4.13, FR-75 (FR IDs part)
 - [ ] 7 M13b Merge strategies + GitHub release — IDs: FR-64 (GitHub), FR-65, FR-84, FR-85
 - [ ] 8 M14 Presets — IDs: FR-74–FR-77, §4.11–4.12
@@ -125,8 +129,18 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 - 2026-10-16 — New event `LLM_BINDING_CLEARED {reason: owner_role_lost|member_removed|connection_deleted}` (not in FR-92's list); "LLM binding cleared" / "connection invalid" notification types deferred to phase 10 (FR-92) — until then a rejected key reaches Owners via RUN_FAILED — SPEC updated: no
 - 2026-10-16 — Admins see the system-key policy read-only (`GET /api/admin/integrations/llm`); it is set by config `Llm:AllowSystemKeys`, not from the UI — §2 Admin — SPEC updated: no
 - 2026-10-16 — LlmCredentials migration drops `project_llm_settings.api_key_encrypted` (not rolling-update safe): old pods error on LLM settings reads and agent jobs until the Recreate rollout finishes — acceptable locally, same as ReleaseVersions — SPEC updated: no
+- 2026-10-16 — Git provider wire value `github` renamed to `github_pat` (spec FR-82 name), migrated in SQL; breaking enum change accepted in the D-V2-11 spirit (web + CLI ship together); CLI flag `--git-provider github` still maps to `github_pat`. Migration GitHubApp is not rolling-update safe (old pods can't parse `github_pat`) — SPEC updated: no
+- 2026-10-16 — github_connections refresh fields are nullable (no refresh token when the App has token expiration off); check constraint: a `github_app` project must have installation_id, repo_id and repo_full_name — SPEC updated: no
+- 2026-10-16 — v1 GitHub links live in `users.github_id`; App sign-in matches on the same column (FR-80) — SPEC updated: no
+- 2026-10-16 — Manifest `state` = Data Protection time-limited (10 min) + single-use nonce bound to the Admin, held in memory (a restart means the Admin restarts the flow) — FR-80, §8 — SPEC updated: no
+- 2026-10-16 — FR-86 "repo has code" is stored as the in-development release version's `base_commit_sha` (head) with no base tag (= "Never released"), plus `repoHasCode` in PROJECT_CREATED; a repo with only GitHub starter files (README/LICENSE/.gitignore) counts as empty so `auto_init` repos aren't flagged — SPEC updated: no
+- 2026-10-16 — GitHub rate limits: request paths → 429 GITHUB_RATE_LIMITED + Retry-After; jobs are re-queued at the reset without counting an attempt (capped at 1 h), also for PAT projects — NFR-REL2 — SPEC updated: no
+- 2026-10-16 — Repo creation uses the user token for both user and org owners (installation tokens can't create repos on personal accounts; §11 check, from GitHub docs, not fetched live) — SPEC updated: no
+- 2026-10-16 — Repo push access (push/maintain/admin with the caller's own token) is checked when a project is bound to a repo (create, switch-to-app); it isn't re-checked later, so members keep working via the App on the binding Owner's behalf (§2) even if that Owner later loses GitHub access — SPEC updated: no
 
 ## Known issues
+- §11 to confirm on first real App registration: manifest `hook_attributes {active:false}` accepted without a `url`; GitHub App flows are verified only against stub HTTP handlers (no real App registered) — Ben
+- New-project wizard loses entered values when the user leaves to Connect GitHub (the page warns); persist the draft in sessionStorage if wanted — vite-react-engineer
 - E2E lifecycle spec lost its rollback-after-release scenario (FR-63 blocks it); add a rollback-before-release scenario — e2e-qa-engineer (phase 10)
 - Refinement page shows only the latest round (RefinementDto has no past-rounds list) — orchestrator
 - ReleaseVersionStampingInterceptor still needed by integration-test seeds (LifecycleSeed, direct inserts); remove once they set release_version_id — ef-data-engineer

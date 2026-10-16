@@ -219,7 +219,7 @@ public static class ExecutionEndpoints
             .ToListAsync(cancellationToken);
         var git = await db.ProjectGitSettings.AsNoTracking()
             .Where(g => g.ProjectId == id)
-            .Select(g => new { g.Provider, g.RepoUrl })
+            .Select(g => new { g.Provider, RepoUrl = g.Provider == GitProvider.GithubApp ? "https://github.com/" + g.RepoFullName : g.RepoUrl })
             .FirstOrDefaultAsync(cancellationToken);
         return new ExecutionStepsDto(
             new ExecutionPlanDto(plan.Id, plan.Type, plan.Version, plan.Status),

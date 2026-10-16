@@ -6,6 +6,7 @@ import { useDocumentTitle } from '../../lib/use-document-title'
 import { cn } from '../../lib/utils'
 import { useAdminLlmPolicy } from '../connections/connections-api'
 import { llmProviderLabels } from '../projects/labels'
+import { GitHubAppPanel } from './admin-github-app-panel'
 
 /**
  * Admin → Integrations → LLM system keys (FR-79): read-only. The policy comes from configuration
@@ -56,20 +57,24 @@ function LlmSystemKeysPanel() {
   )
 }
 
-/** /admin/integrations (SPEC §7.2): system-key policy now; GitHub App registration and presets come later. */
-export function AdminIntegrationsPage() {
+/**
+ * /admin/integrations (SPEC §7.2): the GitHub App (FR-80) and the system-key policy; presets come later. `callback` is
+ * the manifest flow's outcome from `?github=configured` / `?error=GITHUB_AUTH_FAILED`.
+ */
+export function AdminIntegrationsPage({ callback }: { callback?: 'configured' | 'failed' }) {
   useDocumentTitle('Integrations · Admin')
   return (
     <section aria-labelledby="admin-integrations-title" className="flex flex-col gap-4">
       <h2 id="admin-integrations-title" className="text-xl">
         Integrations
       </h2>
+      <GitHubAppPanel callback={callback} />
       <LlmSystemKeysPanel />
       <EmptyState
-        variant="not_connected"
+        variant="not_started"
         headingLevel={3}
-        title="GitHub App not registered"
-        description="Registering the AIDE GitHub App and the presets list are available in a later update."
+        title="Presets"
+        description="The tech stack presets list is available in a later update."
       />
     </section>
   )

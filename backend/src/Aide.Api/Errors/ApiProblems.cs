@@ -15,6 +15,9 @@ public static class ApiProblems
     public const string DetailsKey = "details";
     public const string ReasonKey = "reason";
 
+    /// <summary>FR-81, FR-83: the AIDE GitHub App's install link on a <c>GITHUB_APP_NOT_INSTALLED</c> problem.</summary>
+    public const string InstallUrlKey = "installUrl";
+
     /// <summary>
     /// The <c>errorCode</c> of a 501 contract stub: the endpoint is in the contract (so the client can be built against
     /// it) but not implemented yet. Not in <see cref="ErrorCodes"/>: no implemented endpoint returns it.
@@ -50,6 +53,18 @@ public static class ApiProblems
             title: title,
             statusCode: StatusCodes.Status501NotImplemented,
             extensions: new Dictionary<string, object?> { [ErrorCodeKey] = NotImplementedCode });
+
+    /// <summary>409 <c>GITHUB_APP_NOT_INSTALLED</c> with the App's install link (when an App is registered).</summary>
+    public static ProblemHttpResult GitHubAppNotInstalled(string? installUrl, string title = "The AIDE GitHub App isn't installed on this account or repository.")
+    {
+        var extensions = new Dictionary<string, object?> { [ErrorCodeKey] = ErrorCodes.GitHubAppNotInstalled };
+        if (installUrl is not null)
+        {
+            extensions[InstallUrlKey] = installUrl;
+        }
+
+        return TypedResults.Problem(title: title, statusCode: StatusFor(ErrorCodes.GitHubAppNotInstalled), extensions: extensions);
+    }
 
     public static ProblemHttpResult NotFound(string title = "The resource was not found.") => Of(ErrorCodes.NotFound, title);
 

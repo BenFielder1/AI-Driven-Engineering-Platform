@@ -130,10 +130,16 @@ export const wizardSchema = z
     maxFilesPerStep: str,
     maxReviewCycles: str,
     tokenBudget: str,
-    gitProvider: z.enum(['github', 'local']),
+    /** FR-82, FR-86: `github_app` (picker / create), `github_pat` (URL + token) or `local`. */
+    gitMode: z.enum(['github_app', 'github_pat', 'local']),
     repoUrl: str,
     defaultBranch: str,
     gitToken: str,
+    /** `github_app`: the picked repository (`owner/name`) and the installation that grants it (a number, as text). */
+    repoFullName: str,
+    installationId: str,
+    /** `github_app`: the picked repository already has commits (FR-86 warning). */
+    repoHasCode: z.boolean(),
     initialVersion: str,
   })
   .superRefine((v, ctx) => {
@@ -153,9 +159,12 @@ export const wizardSchema = z
     addCheck(ctx, 'maxReviewCycles', checkMaxCycles(v.maxReviewCycles))
     addCheck(ctx, 'tokenBudget', checkTokenBudget(v.tokenBudget))
     addCheck(ctx, 'defaultBranch', checkBranch(v.defaultBranch))
-    if (v.gitProvider === 'github') {
+    if (v.gitMode === 'github_pat') {
       addCheck(ctx, 'repoUrl', checkRepoUrl(v.repoUrl))
       addCheck(ctx, 'gitToken', checkSecret(v.gitToken, 'access token'))
+    }
+    if (v.gitMode === 'github_app' && (!v.repoFullName || !v.installationId)) {
+      addCheck(ctx, 'repoFullName', 'Pick a repository, or create one.')
     }
   })
 
@@ -169,10 +178,13 @@ export const wizardDefaults: WizardValues = {
   maxFilesPerStep: projectDefaults.maxFilesPerStep,
   maxReviewCycles: projectDefaults.maxReviewCycles,
   tokenBudget: '',
-  gitProvider: 'github',
+  gitMode: 'github_pat',
   repoUrl: '',
   defaultBranch: projectDefaults.defaultBranch,
   gitToken: '',
+  repoFullName: '',
+  installationId: '',
+  repoHasCode: false,
   initialVersion: DEFAULT_INITIAL_VERSION,
 }
 

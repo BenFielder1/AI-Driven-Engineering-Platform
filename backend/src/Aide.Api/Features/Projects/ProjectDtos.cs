@@ -75,19 +75,65 @@ public enum SortOrder
     Desc = 1,
 }
 
-/// <summary>Git step of the new-project wizard (FR-5, FR-35).</summary>
+/// <summary>
+/// Repository step of the new-project wizard (FR-5, FR-35, FR-82, FR-86). <c>mode</c> picks the Git provider.
+/// <c>github_app</c>: a repo picked or created through the AIDE GitHub App; send <c>installationId</c> and
+/// <c>repoFullName</c> (<c>owner/name</c>), no <c>repoUrl</c> or <c>token</c> (409 <c>GITHUB_APP_NOT_INSTALLED</c> when the
+/// App can't access the repo). <c>github_pat</c>: <c>repoUrl</c> plus an optional <c>token</c> (FR-83, the v1 behaviour).
+/// <c>local</c>: no remote. <c>provider</c> is the v1 name of <c>mode</c>, kept so v1 clients work: send one of the two;
+/// when both are sent they must be equal (else 400 <c>VALIDATION</c> on <c>git.mode</c>).
+/// </summary>
 public sealed record CreateProjectGitRequest
 {
-    public required GitProvider Provider { get; init; }
+    private readonly GitProvider _mode;
+    private readonly GitProvider _provider;
 
-    /// <summary>Required for <c>github</c>: <c>https://github.com/OWNER/REPO</c>, optionally ending in <c>.git</c>.</summary>
+    /// <summary>The Git provider (FR-82): <c>github_app</c>, <c>github_pat</c> or <c>local</c>.</summary>
+    public GitProvider Mode
+    {
+        get => _mode;
+        init
+        {
+            _mode = value;
+            ModeSent = true;
+        }
+    }
+
+    /// <summary>v1 alias of <c>mode</c> (deprecated; send <c>mode</c>).</summary>
+    public GitProvider Provider
+    {
+        get => _provider;
+        init
+        {
+            _provider = value;
+            ProviderSent = true;
+        }
+    }
+
+    /// <summary>Whether <c>mode</c> was in the request (JSON setters run only for sent properties).</summary>
+    [JsonIgnore]
+    public bool ModeSent { get; private init; }
+
+    /// <summary>Whether <c>provider</c> was in the request.</summary>
+    [JsonIgnore]
+    public bool ProviderSent { get; private init; }
+
+    /// <summary><c>github_app</c>: the App installation that grants access to the repo (from the repo picker).</summary>
+    [Range(1, ProjectLimits.MaxTokenBudget)]
+    public long? InstallationId { get; init; }
+
+    /// <summary><c>github_app</c>: the repository as <c>owner/name</c>.</summary>
+    [MaxLength(ProjectLimits.RepoFullNameMaxLength)]
+    public string? RepoFullName { get; init; }
+
+    /// <summary>Required for <c>github_pat</c>: <c>https://github.com/OWNER/REPO</c>, optionally ending in <c>.git</c>.</summary>
     [MaxLength(ProjectLimits.UrlMaxLength)]
     public string? RepoUrl { get; init; }
 
     [StringLength(ProjectLimits.BranchMaxLength, MinimumLength = 1)]
     public string DefaultBranch { get; init; } = "main";
 
-    /// <summary>GitHub access token (<c>github</c> only). Stored encrypted and never returned.</summary>
+    /// <summary>GitHub access token (<c>github_pat</c> only). Stored encrypted and never returned.</summary>
     [MaxLength(ProjectLimits.SecretMaxLength)]
     public string? Token { get; init; }
 }
@@ -221,8 +267,26 @@ public sealed record UpdateMemberRoleRequest
     public required ProjectRole Role { get; init; }
 }
 
-/// <summary>Git settings (FR-9, FR-35). The token is never returned, only <c>hasToken</c>. <c>branchName</c> is the project branch, once the working copy has been prepared.</summary>
-public sealed record GitSettingsDto(GitProvider Provider, string? RepoUrl, string DefaultBranch, string? BranchName, bool HasToken);
+/// <summary>
+/// Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only <c>hasToken</c>. <c>branchName</c> is the
+/// project branch, once the working copy has been prepared. <c>mode</c> is the v2 name of <c>provider</c> (always equal).
+/// For <c>github_app</c>, <c>installationId</c>, <c>repoId</c> and <c>repoFullName</c> identify the repo (else
+/// <c>null</c>). <c>appInstalledOnRepo</c> says whether the AIDE GitHub App can access a <c>github_pat</c> project's repo
+/// (<c>null</c>: not checked, no App, or not a PAT project); <c>canSwitchToApp</c> is true when it can and the caller is an
+/// Owner ("Switch to GitHub App").
+/// </summary>
+public sealed record GitSettingsDto(
+    GitProvider Provider,
+    string? RepoUrl,
+    string DefaultBranch,
+    string? BranchName,
+    bool HasToken,
+    GitProvider Mode,
+    long? InstallationId,
+    long? RepoId,
+    string? RepoFullName,
+    bool? AppInstalledOnRepo,
+    bool CanSwitchToApp);
 
 /// <summary>Model id per agent; an omitted or <c>null</c> agent uses the default model.</summary>
 public sealed record AgentModelsDto
@@ -299,9 +363,11 @@ public sealed record ProjectSettingsDto(GitSettingsDto Git, LlmSettingsDto Llm, 
 /// <summary>Partial update of the Git settings. Omitted fields are unchanged.</summary>
 public sealed record UpdateGitSettingsRequest
 {
+    /// <summary><c>github_pat</c> or <c>local</c>. Moving onto <c>github_app</c> goes through
+    /// <c>POST /settings/git/switch-to-app</c> (400 <c>VALIDATION</c> here).</summary>
     public GitProvider? Provider { get; init; }
 
-    /// <summary>Required when the provider is (or becomes) <c>github</c>.</summary>
+    /// <summary>Required when the provider is (or becomes) <c>github_pat</c>.</summary>
     [MaxLength(ProjectLimits.UrlMaxLength)]
     public string? RepoUrl { get; init; }
 
@@ -406,6 +472,9 @@ public static class ProjectLimits
     public const long MaxTokenBudget = 9_007_199_254_740_991;
     public const int UrlMaxLength = 2048;
     public const int BranchMaxLength = 255;
+
+    /// <summary><c>owner/name</c>: a 39-character login, a slash and a 100-character name.</summary>
+    public const int RepoFullNameMaxLength = 140;
     public const int SecretMaxLength = 1024;
     public const int ModelMaxLength = 200;
     public const int EmailMaxLength = 256;

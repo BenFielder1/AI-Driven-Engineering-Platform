@@ -188,7 +188,7 @@ public sealed class GitConnectionTestTests(AideApiFactory factory)
         });
 
     private static Task<ProjectFixture> GitHubProjectAsync(WebApplicationFactory<Program> app) =>
-        ProjectApi.FixtureAsync(app, git: new { provider = "github", repoUrl = "https://github.com/acme/widgets", defaultBranch = "main", token = Token });
+        ProjectApi.FixtureAsync(app, git: new { provider = "github_pat", repoUrl = "https://github.com/acme/widgets", defaultBranch = "main", token = Token });
 
     private static async Task<GitTestResultDto> TestAsync(ProjectFixture fixture) =>
         await ProjectApi.ReadAsync<GitTestResultDto>(

@@ -4,7 +4,7 @@ using Microsoft.OpenApi;
 
 namespace Aide.Api.Errors;
 
-/// <summary>Documents the <c>errorCode</c>, <c>traceId</c> and <c>details</c> extensions on the ProblemDetails
+/// <summary>Documents the <c>errorCode</c>, <c>traceId</c>, <c>details</c>, <c>reason</c> and <c>installUrl</c> extensions on the ProblemDetails
 /// schemas, so the generated client types them.</summary>
 internal sealed class ProblemDetailsSchemaTransformer : IOpenApiSchemaTransformer
 {
@@ -37,6 +37,11 @@ internal sealed class ProblemDetailsSchemaTransformer : IOpenApiSchemaTransforme
         {
             Type = JsonSchemaType.String,
             Description = "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing.",
+        };
+        schema.Properties[ApiProblems.InstallUrlKey] = new OpenApiSchema
+        {
+            Type = JsonSchemaType.String,
+            Description = "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83).",
         };
         return Task.CompletedTask;
     }

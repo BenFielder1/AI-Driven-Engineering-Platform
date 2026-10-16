@@ -817,6 +817,134 @@ namespace Aide.Infrastructure.Migrations
                     b.ToTable("execution_step_attempts", (string)null);
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.GitHubApp", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("AppId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("app_id");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("client_id");
+
+                    b.Property<string>("ClientSecretEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("client_secret_encrypted");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("HtmlUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("html_url");
+
+                    b.Property<string>("OwnerLogin")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("owner_login");
+
+                    b.Property<string>("OwnerType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("owner_type");
+
+                    b.Property<string>("Permissions")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("permissions");
+
+                    b.Property<string>("PrivateKeyEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("private_key_encrypted");
+
+                    b.Property<bool>("Singleton")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("boolean")
+                        .HasColumnName("singleton")
+                        .HasComputedColumnSql("true", true);
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("slug");
+
+                    b.HasKey("Id")
+                        .HasName("pk_github_apps");
+
+                    b.HasIndex("Singleton")
+                        .IsUnique()
+                        .HasDatabaseName("ux_github_apps_singleton");
+
+                    b.ToTable("github_apps", (string)null);
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.GitHubConnection", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTimeOffset?>("AccessExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("access_expires_at");
+
+                    b.Property<string>("AccessTokenEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("access_token_encrypted");
+
+                    b.Property<long>("GithubUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("github_user_id");
+
+                    b.Property<string>("Login")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("login");
+
+                    b.Property<DateTimeOffset?>("RefreshExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("refresh_expires_at");
+
+                    b.Property<string>("RefreshTokenEncrypted")
+                        .HasColumnType("text")
+                        .HasColumnName("refresh_token_encrypted");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_github_connections");
+
+                    b.HasIndex("GithubUserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_github_connections_github_user_id");
+
+                    b.ToTable("github_connections", (string)null);
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.Job", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1233,11 +1361,23 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("default_branch");
 
+                    b.Property<long?>("InstallationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("installation_id");
+
                     b.Property<string>("Provider")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("provider");
+
+                    b.Property<string>("RepoFullName")
+                        .HasColumnType("text")
+                        .HasColumnName("repo_full_name");
+
+                    b.Property<long?>("RepoId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("repo_id");
 
                     b.Property<string>("RepoUrl")
                         .HasMaxLength(500)
@@ -1251,7 +1391,13 @@ namespace Aide.Infrastructure.Migrations
                     b.HasKey("ProjectId")
                         .HasName("pk_project_git_settings");
 
-                    b.ToTable("project_git_settings", (string)null);
+                    b.HasIndex("InstallationId")
+                        .HasDatabaseName("ix_project_git_settings_installation_id");
+
+                    b.ToTable("project_git_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_project_git_settings_github_app_repo", "provider <> 'github_app' OR (installation_id IS NOT NULL AND repo_id IS NOT NULL AND repo_full_name IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.ProjectLlmSettings", b =>
@@ -2191,6 +2337,16 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_execution_step_attempts_execution_steps_step_id");
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.GitHubConnection", b =>
+                {
+                    b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
+                        .WithOne()
+                        .HasForeignKey("Aide.Domain.Entities.GitHubConnection", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_github_connections_users_user_id");
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.Job", b =>

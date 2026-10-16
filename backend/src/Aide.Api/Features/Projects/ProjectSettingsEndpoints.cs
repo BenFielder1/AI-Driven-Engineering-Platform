@@ -1,11 +1,13 @@
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Git;
+using Aide.Api.Features.GitHub;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Git;
+using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
@@ -43,6 +45,20 @@ public static partial class ProjectSettingsEndpoints
             .Produces<GitSettingsDto>()
             .ProducesValidationProblem();
 
+        group.MapPost("/git/switch-to-app", SwitchGitToApp)
+            .WithName("SwitchGitToApp")
+            .WithSummary("FR-83: move a github_pat project onto the AIDE GitHub App (Owner): stores the installation and repository ids and drops the PAT. The caller's own GitHub connection must be able to push to the repo (403 FORBIDDEN otherwise; 409 GITHUB_NOT_CONNECTED without a connection). 409 GITHUB_APP_NOT_INSTALLED (extension installUrl) when the App can't access the repo.")
+            .Produces<GitSettingsDto>()
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ProducesProblem(StatusCodes.Status502BadGateway)
+            .WithRetryAfterOn429()
+            .WithResponseDescriptions(
+                (StatusCodes.Status403Forbidden, "FORBIDDEN (not an Owner, or the caller's GitHub account can't push to the repository)"),
+                (StatusCodes.Status409Conflict, "GITHUB_APP_NOT_INSTALLED (extension installUrl), GITHUB_NOT_CONNECTED, or CONFLICT when the project isn't on a GitHub PAT"),
+                (StatusCodes.Status429TooManyRequests, "GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset)"),
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (GitHub failed or couldn't be reached)"));
+
         group.MapGet("/llm", GetLlmSettings)
             .WithName("GetLlmSettings")
             .WithSummary("The LLM settings and binding (\"connected by <name>\", no secret) for any member, with canBind for the caller (FR-79).")
@@ -73,6 +89,8 @@ public static partial class ProjectSettingsEndpoints
         IProjectAccess access,
         AideDbContext db,
         ILlmProviderCatalog catalog,
+        IGitHubAppStore apps,
+        GitHubRepoService gitHubRepos,
         CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(id, ProjectAction.ChangeSettings, cancellationToken);
@@ -84,8 +102,16 @@ public static partial class ProjectSettingsEndpoints
         var git = await GitAsync(db, id, cancellationToken);
         var llm = await LlmAsync(db, id, catalog, cancellationToken);
         var notifications = await NotificationsAsync(db, id, cancellationToken);
+        // FR-83: a PAT project whose repository the App is installed on can switch to the App (Owners; this page is Owner-only).
+        bool? appInstalled = null;
+        if (git.Provider == GitProvider.GithubPat && ProjectSettingsRules.TryParseGitHubRepo(git.RepoUrl, out var patRepo)
+            && await apps.GetAsync(cancellationToken) is { } app)
+        {
+            appInstalled = await gitHubRepos.IsAppInstalledAsync(app, patRepo.Owner, patRepo.Name, cancellationToken);
+        }
+
         return TypedResults.Ok(new ProjectSettingsDto(
-            ProjectMapping.ToDto(git, await CurrentBranchAsync(db, id, cancellationToken)),
+            ProjectMapping.ToDto(git, await CurrentBranchAsync(db, id, cancellationToken), appInstalled, appInstalled == true),
             ProjectMapping.ToDto(llm, catalog, await LlmBindings.LoadAsync(db, llm, cancellationToken), LlmBindings.CanBind(grant.Value.ProjectRole)),
             ProjectMapping.ToDto(notifications)));
     }
@@ -131,7 +157,9 @@ public static partial class ProjectSettingsEndpoints
         var provider = request.Provider ?? settings.Provider;
         var repoUrl = request.RepoUrl ?? settings.RepoUrl;
         var branch = request.DefaultBranch?.Trim() ?? settings.DefaultBranch;
-        var validation = ProjectSettingsRules.ValidateGit(provider, repoUrl, branch, request.Token, request.ClearToken);
+        var validation = Validation.Combine(
+            ProjectSettingsRules.ValidateProviderChange(settings.Provider, provider),
+            ProjectSettingsRules.ValidateGit(provider, repoUrl, branch, request.Token, request.ClearToken));
         if (validation.IsFailure)
         {
             return ApiProblems.Validation(validation.Error!);
@@ -142,6 +170,14 @@ public static partial class ProjectSettingsEndpoints
         var normalizedUrl = ProjectSettingsRules.NormalizeRepoUrl(provider, repoUrl);
         if (provider != settings.Provider)
         {
+            if (settings.Provider == GitProvider.GithubApp)
+            {
+                // FR-82: the App's installation and repository belong to the github_app mode only.
+                settings.InstallationId = null;
+                settings.RepoId = null;
+                settings.RepoFullName = null;
+            }
+
             settings.Provider = provider;
             changes.Add("provider");
         }
@@ -418,6 +454,53 @@ public static partial class ProjectSettingsEndpoints
             ? await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == versionId).Select(v => v.BranchName).FirstOrDefaultAsync(cancellationToken)
             : null;
 
+    private static async Task<Results<Ok<GitSettingsDto>, ProblemHttpResult>> SwitchGitToApp(
+        Guid id,
+        IProjectAccess access,
+        ICurrentUser currentUser,
+        AideDbContext db,
+        IGitHubAppStore apps,
+        GitHubRepoService gitHubRepos,
+        TimeProvider time,
+        ILoggerFactory loggers,
+        CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.ChangeSettings, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        var settings = await GitAsync(db, id, cancellationToken);
+        if (settings.Provider != GitProvider.GithubPat || !ProjectSettingsRules.TryParseGitHubRepo(settings.RepoUrl, out var repo))
+        {
+            return ApiProblems.Of(ErrorCodes.Conflict, "Only a project on a GitHub personal access token can switch to the AIDE GitHub App.");
+        }
+
+        if (await apps.GetAsync(cancellationToken) is null)
+        {
+            return ApiProblems.GitHubAppNotInstalled(null, "No AIDE GitHub App is registered. An Admin registers it under Admin → Integrations → GitHub.");
+        }
+
+        // FR-83: the caller must be able to write to the repository with their own GitHub account.
+        var verified = await gitHubRepos.VerifySwitchAsync(currentUser.RequiredUserId, repo.Owner, repo.Name, cancellationToken);
+        if (verified.IsFailure)
+        {
+            return await GitHubResults.ProblemAsync(verified.Error!, apps, cancellationToken);
+        }
+
+        var found = verified.Value;
+        // FR-83: the project now uses installation tokens; the PAT ciphertext is deleted.
+        settings.Provider = GitProvider.GithubApp;
+        settings.InstallationId = found.InstallationId;
+        settings.RepoId = found.RepoId;
+        settings.RepoFullName = found.FullName;
+        settings.RepoUrl = null;
+        settings.TokenEncrypted = null;
+        await SaveChangesAsync(db, id, "git", ["provider", "installationId", "repoId", "repoFullName", "token"], currentUser, time, loggers, cancellationToken);
+        return TypedResults.Ok(ProjectMapping.ToDto(settings, await CurrentBranchAsync(db, id, cancellationToken)));
+    }
+
     private static async Task<Results<Ok<GitTestResultDto>, ProblemHttpResult>> TestGitConnection(
         Guid id,
         IProjectAccess access,
@@ -442,7 +525,7 @@ public static partial class ProjectSettingsEndpoints
         }
 
         var result = await providers.Resolve(settings.Provider)
-            .TestConnectionAsync(new GitConnectionSettings(id, settings.RepoUrl, settings.DefaultBranch), token, cancellationToken);
+            .TestConnectionAsync(GitConnectionSettings.From(settings), token, cancellationToken);
         return TypedResults.Ok(new GitTestResultDto(result.Ok, result.Reachable, result.Writable, result.DefaultBranchExists, result.Reason));
     }
 

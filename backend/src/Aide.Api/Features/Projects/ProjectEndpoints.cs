@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Admin;
+using Aide.Api.Features.GitHub;
 using Aide.Api.Features.Release;
 using Aide.Api.Features.Review;
 using Aide.Domain.Access;
@@ -42,11 +43,20 @@ public static partial class ProjectEndpoints
 
         group.MapPost("/", CreateProject)
             .WithName("CreateProject")
-            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults; initialVersion (FR-66, default 0.1.0) is the first release version, in development. 400 VERSION_INVALID.")
+            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults; initialVersion (FR-66, default 0.1.0) is the first release version, in development. git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID; 409 GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo.")
             .Produces<ProjectDto>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status403Forbidden);
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ProducesProblem(StatusCodes.Status502BadGateway)
+            .WithRetryAfterOn429()
+            .WithResponseDescriptions(
+                (StatusCodes.Status403Forbidden, "FORBIDDEN (github_app: the caller's GitHub account can't push to the repository)"),
+                (StatusCodes.Status409Conflict, "GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app)"),
+                (StatusCodes.Status429TooManyRequests, "GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset)"),
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (GitHub failed or couldn't be reached)"));
 
         group.MapGet("/{id:guid}", GetProject)
             .WithName("GetProject")
@@ -166,12 +176,15 @@ public static partial class ProjectEndpoints
         CreateProjectRequest request,
         ICurrentUser currentUser,
         ProjectCreator creator,
+        Infrastructure.GitHub.IGitHubAppStore apps,
         CancellationToken cancellationToken)
     {
         var created = await creator.CreateAsync(request, currentUser.RequiredUserId, currentUser.Actor, cancellationToken);
         if (created.IsFailure)
         {
-            return created.Error!.Code == ErrorCodes.Validation ? ApiProblems.Validation(created.Error!) : ApiProblems.FromError(created.Error!);
+            return created.Error!.Code == ErrorCodes.Validation
+                ? ApiProblems.Validation(created.Error!)
+                : await GitHubResults.ProblemAsync(created.Error!, apps, cancellationToken);
         }
 
         var project = created.Value;

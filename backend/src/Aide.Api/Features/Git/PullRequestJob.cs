@@ -115,6 +115,7 @@ public sealed partial class PullRequestJobHandler(
     IWorkingCopies workingCopies,
     AgentJobInputs inputs,
     LifecycleService lifecycle,
+    Microsoft.Extensions.Options.IOptions<Notifications.AppOptions> appOptions,
     TimeProvider time,
     ILogger<PullRequestJobHandler> logger) : IJobHandler
 {
@@ -158,7 +159,14 @@ public sealed partial class PullRequestJobHandler(
         }
 
         var input = await DescriptionInputAsync(project, payload.PlanArtifactId, steps, cancellationToken);
-        var request = new PullRequestRequest(working.Branch, PullRequestDescription.Title(project.Name, steps.Count), PullRequestDescription.Body(input));
+        var body = PullRequestDescription.Body(input);
+        if (working.Provider.Kind == GitProvider.GithubApp)
+        {
+            // FR-82: the App's PR links back to the AIDE project.
+            body += $"\n\n---\nOpened by [AIDE]({appOptions.Value.Absolute($"/projects/{project.Id}")}) for {project.Name}.";
+        }
+
+        var request = new PullRequestRequest(working.Branch, PullRequestDescription.Title(project.Name, steps.Count), body);
         var opened = await working.Provider.OpenPullRequestAsync(working.Connection, request, working.Token, cancellationToken);
         if (!opened.Ok)
         {
@@ -190,7 +198,7 @@ public sealed partial class PullRequestJobHandler(
         project.UpdatedAt = now;
         var settings = await db.ProjectGitSettings.FirstAsync(s => s.ProjectId == project.Id, cancellationToken);
         if (settings.Provider != working.Provider.Kind
-            || settings.RepoUrl != working.Connection.RepoUrl
+            || GitConnectionSettings.From(settings).RepoUrl != working.Connection.RepoUrl
             || settings.DefaultBranch != working.Connection.DefaultBranch)
         {
             throw new JobFailedException(

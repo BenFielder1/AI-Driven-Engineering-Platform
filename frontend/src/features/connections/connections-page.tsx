@@ -17,6 +17,7 @@ import { RelativeTime } from '../projects/relative-time'
 import { credentialStatusLabels, maskedKey } from './connection-format'
 import { useDeleteLlmConnection, useLlmConnections, useTestLlmConnection, type LlmCredential } from './connections-api'
 import { CredentialStatusBadge } from './credential-status-badge'
+import { GitHubConnectionSection } from './github-connection-section'
 import { AddLlmKeyDialog, RenameLlmKeyDialog } from './llm-connection-dialogs'
 
 const keylessDescriptions: Partial<Record<LlmCredential['provider'], string>> = {
@@ -284,25 +285,23 @@ function LlmProvidersSection() {
 }
 
 /**
- * /connections (alias /account/connections; SPEC §7.2): the user's LLM providers (FR-78). GitHub and Vercel come in
- * later updates, so they're shown as not connected without inventing APIs.
+ * /connections (alias /account/connections; SPEC §7.2): the user's LLM providers (FR-78) and GitHub (FR-81). Vercel
+ * comes in a later update, so it's shown as not connected without inventing APIs. `githubError` is a failed Connect
+ * GitHub coming back as `?error=GITHUB_AUTH_FAILED&reason=…`.
  */
-export function ConnectionsPage() {
+export function ConnectionsPage({
+  githubError,
+  githubInstalled = false,
+}: {
+  githubError?: { reason?: string }
+  /** `?github=installed`: back from installing the GitHub App (its setup URL). */
+  githubInstalled?: boolean
+}) {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Connections" description="LLM providers, GitHub and Vercel, connected to your account." />
       <LlmProvidersSection />
-      <section aria-labelledby="github-connection-title" className="flex flex-col gap-2">
-        <h2 id="github-connection-title" className="text-lg">
-          GitHub
-        </h2>
-        <EmptyState
-          variant="not_connected"
-          headingLevel={3}
-          title="Not connected"
-          description="Connecting GitHub here is available in a later update. Projects keep using the Git settings they have."
-        />
-      </section>
+      <GitHubConnectionSection callbackError={githubError} installed={githubInstalled} />
       <section aria-labelledby="vercel-connection-title" className="flex flex-col gap-2">
         <h2 id="vercel-connection-title" className="text-lg">
           Vercel

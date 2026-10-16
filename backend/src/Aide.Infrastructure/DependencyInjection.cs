@@ -1,5 +1,6 @@
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Git;
+using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -108,8 +109,29 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
             client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", GitHubGitProvider.ApiVersion);
         });
-        services.AddScoped<IGitProvider, GitHubGitProvider>();
+        services.AddScoped<GitHubGitProvider>();
+        services.AddScoped<IGitProvider>(sp => sp.GetRequiredService<GitHubGitProvider>());
         services.AddScoped<IGitProvider, LocalGitProvider>();
+
+        // The AIDE GitHub App (FR-80–FR-83, §4.14): configuration (GitHub:App:*) or the manifest-registered row, the REST
+        // API on the fixed GitHub hosts, installation tokens (in-memory cache ≤ 55 min) and the github_app provider.
+        services.AddOptions<GitHubAppOptions>()
+            .BindConfiguration(GitHubAppOptions.SectionName)
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<GitHubAppOptions>, GitHubAppOptionsValidator>();
+        services.AddHttpClient(GitHubApi.WebHttpClientName, client =>
+        {
+            client.BaseAddress = new Uri(GitHubApi.WebBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+        });
+        services.AddTransient<GitHubApi>();
+        services.AddScoped<IGitHubAppStore, GitHubAppStore>();
+        services.AddSingleton<GitHubInstallationTokenCache>();
+        services.AddScoped<IGitHubInstallationTokens, GitHubInstallationTokens>();
+        services.AddSingleton<GitHubBotIdentities>();
+        services.AddSingleton<GitHubAppInfoCache>();
+        services.AddScoped<IGitProvider, GitHubAppGitProvider>();
         services.AddScoped<IGitProviderResolver, GitProviderResolver>();
 
         return services;

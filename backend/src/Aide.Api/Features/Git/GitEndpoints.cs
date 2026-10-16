@@ -6,6 +6,7 @@ using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Access;
 using Aide.Domain.Entities;
+using Aide.Domain.Projects;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -111,7 +112,7 @@ public sealed partial class PullRequestReader(
         }
 
         var git = await db.ProjectGitSettings.AsNoTracking().FirstAsync(g => g.ProjectId == projectId, cancellationToken);
-        var connection = new GitConnectionSettings(projectId, git.RepoUrl, summary.BaseBranch);
+        var connection = GitConnectionSettings.From(git, summary.BaseBranch);
         BranchComparison? comparison = null;
         try
         {
@@ -133,7 +134,7 @@ public sealed partial class PullRequestReader(
             comparison is not null,
             comparison?.BaseSha,
             comparison?.HeadSha,
-            [.. (comparison?.Commits ?? []).Select(c => new PullRequestCommitDto(c.Sha, c.Subject, ExecutionQueries.CommitUrl(git.Provider, git.RepoUrl, c.Sha)))],
+            [.. (comparison?.Commits ?? []).Select(c => new PullRequestCommitDto(c.Sha, c.Subject, ExecutionQueries.CommitUrl(git.Provider, ProjectSettingsRules.RepoWebUrl(git.Provider, git.RepoUrl, git.RepoFullName), c.Sha)))],
             [.. (comparison?.Files ?? []).Select(f => new PullRequestFileDto(f.Path, Status(f.Status)))],
             comparison?.Truncated ?? false);
     }

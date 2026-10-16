@@ -82,8 +82,32 @@ describe('LoginPage', () => {
     expect(screen.getByRole('link', { name: 'Enter your password.' })).toHaveAttribute('href', '#login-password')
   })
 
-  it('FR-2: hides "Continue with GitHub" when GitHub is not configured', async () => {
-    authDb.github = false
+  it('FR80_login_button_shown_for_the_github_app: githubMode app shows "Continue with GitHub"', async () => {
+    authDb.githubMode = 'app'
+    renderRoute('/login')
+
+    expect(await screen.findByRole('link', { name: 'Continue with GitHub' })).toHaveAttribute(
+      'href',
+      '/api/auth/github?returnUrl=%2Fprojects',
+    )
+  })
+
+  it('FR80_register_button_follows_githubMode: register shows it for app and hides it for none', async () => {
+    authDb.githubMode = 'app'
+    const first = renderRoute('/register')
+    expect(await screen.findByRole('link', { name: 'Continue with GitHub' })).toBeInTheDocument()
+    first.unmount()
+
+    authDb.githubMode = 'none'
+    renderRoute('/register')
+    await screen.findByRole('button', { name: /Create account/ })
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: 'Continue with GitHub' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('FR80_login_button_hidden_when_githubMode_none: hides "Continue with GitHub" when GitHub is not configured', async () => {
+    authDb.githubMode = 'none'
     renderRoute('/login')
 
     await screen.findByRole('button', { name: 'Sign in' })
@@ -94,7 +118,7 @@ describe('LoginPage', () => {
   })
 
   it('FR-2: shows "Continue with GitHub" as a full-page link carrying the returnUrl', async () => {
-    authDb.github = true
+    authDb.githubMode = 'oauth'
     renderRoute('/login?returnUrl=%2Faccount')
 
     const link = await screen.findByRole('link', { name: 'Continue with GitHub' })

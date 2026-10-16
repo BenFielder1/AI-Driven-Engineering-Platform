@@ -43,8 +43,7 @@ describe('/connections → LLM providers (FR-78)', () => {
     expect(within(keyless).getByText('Ollama')).toBeInTheDocument()
     expect(within(keyless).getByText('Fake (testing)')).toBeInTheDocument()
 
-    // GitHub and Vercel aren't available yet: not connected.
-    expect(screen.getByRole('region', { name: 'GitHub' })).toHaveTextContent('available in a later update')
+    // Vercel isn't available yet; GitHub is covered by github-connection.test.tsx (FR-81).
     expect(screen.getByRole('region', { name: 'Vercel' })).toHaveTextContent('available in a later update')
   })
 

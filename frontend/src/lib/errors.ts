@@ -62,6 +62,13 @@ export const errorMessages = {
     "The provider rejected this key. Check that you copied the whole key and that it is active, then try again.",
   CREDENTIAL_NOT_OWNER: "You can only bind one of your own connections. Add your own key under Connections.",
   PRESET_NOT_FOUND: "That tech stack preset doesn't exist.",
+  // GitHub App and connections (FR-80–FR-86, §4.14)
+  GITHUB_NOT_CONNECTED:
+    "Connect your GitHub account first, under Connections → GitHub.",
+  GITHUB_APP_NOT_INSTALLED:
+    "The AIDE GitHub App isn't installed there. Install it on the account or repository, then try again.",
+  REPO_NAME_TAKEN: "A repository with this name already exists for that owner. Choose another name.",
+  GITHUB_RATE_LIMITED: "GitHub's rate limit was reached. Wait a moment and try again.",
   GIT_ERROR: "Git or GitHub refused the operation.",
   RELEASE_CANCELLED: "A rollback cancelled this release before it ran.",
   // Approval links
@@ -244,6 +251,42 @@ export const contextualErrorMessages = {
     FORBIDDEN: "Only project Owners can change the LLM settings or the bound connection.",
     VALIDATION: "The connection must be for the chosen provider.",
   },
+  /** POST /api/admin/integrations/github/manifest (FR-80). */
+  githubAppRegistration: {
+    CONFLICT: "An AIDE GitHub App is already registered. The page now shows it.",
+    GITHUB_AUTH_FAILED:
+      "GitHub didn't finish registering the App (the registration may have expired or been cancelled). Nothing was saved; start again.",
+    FORBIDDEN: "Only administrators can register the GitHub App, and only from a browser session.",
+  },
+  /** GET/DELETE /api/me/connections/github (FR-81). */
+  githubConnection: {
+    FORBIDDEN: "Your GitHub connection can only be changed from a signed-in browser session, not with an API token.",
+  },
+  /** GET /api/me/github/repos · /owners · /refs (FR-81, FR-86). */
+  githubRepos: {
+    UPSTREAM_ERROR: "We couldn't load your repositories from GitHub. Try again in a moment.",
+  },
+  /** POST /api/me/github/repos (FR-81). */
+  createGitHubRepo: {
+    FORBIDDEN:
+      "The AIDE GitHub App can't create repositories: it needs the Administration permission, or you may not create repositories for that owner.",
+    GITHUB_APP_NOT_INSTALLED:
+      "The AIDE GitHub App isn't installed on that owner, so it can't create the repository there. Install it first.",
+    UPSTREAM_ERROR: "GitHub couldn't create the repository right now. Nothing was created; try again in a moment.",
+  },
+  /** POST /api/projects/:id/settings/git/switch-to-app (FR-83). */
+  switchGitToApp: {
+    FORBIDDEN:
+      "Only project Owners with write access to the repository on GitHub can switch it to the GitHub App.",
+    GITHUB_NOT_CONNECTED:
+      "Connect your GitHub account first (under Connections), so AIDE can check your access to the repository.",
+    GITHUB_APP_NOT_INSTALLED:
+      "The AIDE GitHub App can't access this repository. Install it on the repository, then try again.",
+  },
+  /** POST /api/projects (FR-86): a github_app repo needs push access for the caller. */
+  createProject: {
+    FORBIDDEN: "You need write access to this repository on GitHub to create a project on it. Pick another repository.",
+  },
   /** PATCH /api/admin/users/:id/role (FR-3). */
   changeSystemRole: {
     CONFLICT:
@@ -271,10 +314,11 @@ export const githubFailureMessages: Readonly<Record<string, string>> = {
   email_required:
     "GitHub didn't share a verified email address. Add one to your GitHub account and try again.",
   already_linked:
-    "That GitHub account is already linked to a different AIDE account.",
+    "This GitHub account is already linked to another AIDE user.",
   link_session:
     "Your session ended while linking GitHub. Sign in and try linking again.",
   link_failed: "We couldn't link your GitHub account. Try again.",
+  access_denied: "GitHub authorization was cancelled.",
   account_create_failed:
     "We couldn't create an account from your GitHub profile. Try again, or register with email.",
 };
@@ -308,6 +352,7 @@ interface ProblemBody {
   title?: string | null;
   errorCode?: string;
   reason?: string;
+  installUrl?: string;
   errors?: Record<string, string[]>;
   details?: string[];
   traceId?: string;
@@ -324,6 +369,8 @@ export class ApiError extends Error {
   readonly traceId: string | undefined;
   /** ProblemDetails `reason`: the machine-readable sub-reason of some codes (RESTORE_NOT_ALLOWED, FR-58). */
   readonly reason: string | null;
+  /** ProblemDetails `installUrl` (GITHUB_APP_NOT_INSTALLED, FR-81/FR-83): the AIDE GitHub App's install link. */
+  readonly installUrl: string | null;
 
   constructor(init: {
     status: number;
@@ -334,6 +381,7 @@ export class ApiError extends Error {
     retryAfterSeconds?: number | null;
     traceId?: string;
     reason?: string | null;
+    installUrl?: string | null;
   }) {
     super(init.title ?? `Request failed with HTTP ${String(init.status)}`);
     this.name = "ApiError";
@@ -344,6 +392,7 @@ export class ApiError extends Error {
     this.retryAfterSeconds = init.retryAfterSeconds ?? null;
     this.traceId = init.traceId;
     this.reason = init.reason ?? null;
+    this.installUrl = init.installUrl ?? null;
   }
 }
 
@@ -370,6 +419,7 @@ export function toApiError(error: unknown, response: Response): ApiError {
       Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null,
     traceId: body.traceId,
     reason: typeof body.reason === "string" ? body.reason : null,
+    installUrl: typeof body.installUrl === "string" && body.installUrl.startsWith("https://") ? body.installUrl : null,
   });
 }
 
@@ -441,12 +491,23 @@ export function isRestoreReason(value: unknown): value is RestoreReason {
   return typeof value === "string" && (restoreReasons as readonly string[]).includes(value);
 }
 
+/** "42 seconds" / "3 minutes" for a Retry-After wait. */
+function waitCopy(seconds: number): string {
+  if (seconds < 120) {
+    return `${String(seconds)} second${seconds === 1 ? "" : "s"}`;
+  }
+  return `${String(Math.ceil(seconds / 60))} minutes`;
+}
+
 /** User-facing copy for any thrown error; `context` selects overrides from `contextualErrorMessages`. */
 export function errorMessage(error: unknown, context?: ErrorContext): string {
   if (error instanceof ApiError) {
     if (error.errorCode === "RATE_LIMITED" && error.retryAfterSeconds) {
       const s = error.retryAfterSeconds;
       return `Too many attempts. Try again in ${String(s)} second${s === 1 ? "" : "s"}.`;
+    }
+    if (error.errorCode === "GITHUB_RATE_LIMITED" && error.retryAfterSeconds) {
+      return `GitHub's rate limit was reached. Try again in ${waitCopy(error.retryAfterSeconds)}.`;
     }
     if (context === "createArtifactDraft" && error.errorCode === "CONFLICT") {
       const latest = detailValue(error, "latestVersion");

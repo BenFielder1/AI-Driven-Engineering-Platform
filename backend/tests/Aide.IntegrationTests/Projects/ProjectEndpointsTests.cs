@@ -105,7 +105,7 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
                 maxFilesPerStep = 5,
                 maxReviewCycles = 4,
                 tokenBudget = 50000,
-                git = new { provider = "github", repoUrl = "https://github.com/acme/todo.git", defaultBranch = "develop", token = "ghp_wizardtoken123" },
+                git = new { provider = "github_pat", repoUrl = "https://github.com/acme/todo.git", defaultBranch = "develop", token = "ghp_wizardtoken123" },
             },
             Ct);
         var project = await ProjectApi.ReadAsync<ProjectDto>(response, HttpStatusCode.Created);
@@ -115,7 +115,7 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
         await ProjectApi.WithDbAsync(factory, async db =>
         {
             var git = await db.ProjectGitSettings.SingleAsync(s => s.ProjectId == project.Id, Ct);
-            Assert.Equal((GitProvider.Github, "https://github.com/acme/todo.git", "develop"), (git.Provider, git.RepoUrl, git.DefaultBranch));
+            Assert.Equal((GitProvider.GithubPat, "https://github.com/acme/todo.git", "develop"), (git.Provider, git.RepoUrl, git.DefaultBranch));
             Assert.NotNull(git.TokenEncrypted);
             Assert.DoesNotContain("ghp_wizardtoken123", git.TokenEncrypted, StringComparison.Ordinal);
             await using var scope = factory.Services.CreateAsyncScope();
@@ -126,8 +126,8 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
     [Theory]
     [InlineData("""{"name":"   ","idea":"Idea","git":{"provider":"local"}}""", "name")]
     [InlineData("""{"name":"N","idea":"","git":{"provider":"local"}}""", "idea")]
-    [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"github"}}""", "git.repoUrl")]
-    [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"github","repoUrl":"https://gitlab.com/a/b"}}""", "git.repoUrl")]
+    [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"github_pat"}}""", "git.repoUrl")]
+    [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"github_pat","repoUrl":"https://gitlab.com/a/b"}}""", "git.repoUrl")]
     [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"local","defaultBranch":"bad..branch"}}""", "git.defaultBranch")]
     [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"local","token":"  "}}""", "git.token")]
     [InlineData("""{"name":"N","idea":"Idea","complianceThreshold":0.905,"git":{"provider":"local"}}""", "complianceThreshold")]

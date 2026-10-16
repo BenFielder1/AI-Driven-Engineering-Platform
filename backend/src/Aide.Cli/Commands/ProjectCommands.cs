@@ -181,7 +181,7 @@ internal static class ProjectCommands
                 context.Get(maxFiles),
                 context.Get(maxCycles),
                 context.Get(tokenBudget),
-                new CreateProjectGitRequest(provider == "github" ? GitProvider.Github : GitProvider.Local, repo, context.Get(defaultBranch), gitToken));
+                new CreateProjectGitRequest(provider == "github" ? GitProvider.GithubPat : GitProvider.Local, repo, context.Get(defaultBranch), gitToken));
 
             var created = await context.Api().PostAsync<ProjectDto>("api/projects", request, cancellationToken).ConfigureAwait(false);
             if (context.Json)

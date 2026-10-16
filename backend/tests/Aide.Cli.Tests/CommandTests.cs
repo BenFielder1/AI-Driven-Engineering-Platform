@@ -74,7 +74,7 @@ public sealed class CommandTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, run.ExitCode);
         AssertJson(
-            """{"name":"N","idea":"I","git":{"provider":"github","repoUrl":"https://github.com/o/r","token":"ghp_secret"}}""",
+            """{"name":"N","idea":"I","git":{"provider":"github_pat","repoUrl":"https://github.com/o/r","token":"ghp_secret"}}""",
             Assert.Single(_cli.Requests).Body);
     }
 

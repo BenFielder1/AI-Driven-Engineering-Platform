@@ -88,6 +88,26 @@ public static class ErrorCodes
     /// <summary>FR-79: an Owner tried to bind a connection that belongs to another user.</summary>
     public const string CredentialNotOwner = "CREDENTIAL_NOT_OWNER";
 
+    // GitHub App and connections (FR-80–FR-86, §4.14)
+
+    /// <summary>FR-81: the caller has no (valid) GitHub connection; connect under Account → Connections → GitHub.</summary>
+    public const string GitHubNotConnected = "GITHUB_NOT_CONNECTED";
+
+    /// <summary>
+    /// FR-81, FR-82, FR-83: the AIDE GitHub App isn't installed on the target owner or repository. The ProblemDetails
+    /// carries an <c>installUrl</c> extension (the App's install link) when an App is registered.
+    /// </summary>
+    public const string GitHubAppNotInstalled = "GITHUB_APP_NOT_INSTALLED";
+
+    /// <summary>FR-81: a repository with that name already exists for the owner.</summary>
+    public const string RepoNameTaken = "REPO_NAME_TAKEN";
+
+    /// <summary>
+    /// §4.14: GitHub's rate limit for the token in use is exhausted. Returned as 429 with <c>Retry-After</c> (seconds until
+    /// GitHub's reset); also recorded on a background job that gave up waiting.
+    /// </summary>
+    public const string GitHubRateLimited = "GITHUB_RATE_LIMITED";
+
     /// <summary>FR-74: the preset doesn't exist (until presets land, every preset id).</summary>
     public const string PresetNotFound = "PRESET_NOT_FOUND";
 
@@ -180,6 +200,10 @@ public static class ErrorCodes
         [CredentialInvalid] = 400,
         [CredentialNotOwner] = 403,
         [UpstreamError] = 502,
+        [GitHubNotConnected] = 409,
+        [GitHubAppNotInstalled] = 409,
+        [RepoNameTaken] = 409,
+        [GitHubRateLimited] = 429,
         [LinkExpired] = 410,
         [LinkUsed] = 409,
     };

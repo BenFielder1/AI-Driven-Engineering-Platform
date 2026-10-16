@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll } from 'vitest'
 import { resetAdminDb } from '../mocks/handlers/admin'
 import { resetAuthDb } from '../mocks/handlers/auth'
 import { resetConnectionsDb } from '../mocks/handlers/connections'
+import { resetGitHubDb } from '../mocks/handlers/github'
 import { resetNotificationsDb } from '../mocks/handlers/notifications'
 import { resetProjectsDb } from '../mocks/handlers/projects'
 import { server } from '../mocks/server'
@@ -64,6 +65,7 @@ afterEach(() => {
   resetNotificationsDb()
   resetAdminDb()
   resetConnectionsDb()
+  resetGitHubDb()
   localStorage.clear()
 })
 afterAll(() => {
