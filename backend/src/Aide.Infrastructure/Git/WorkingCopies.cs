@@ -80,6 +80,12 @@ public sealed record MergeResult(bool Merged, string? Sha, IReadOnlyList<string>
 /// <summary>A release tag (FR-42) and the commit it points at (peeled).</summary>
 public sealed record ReleaseTagRef(string Tag, string Commit);
 
+/// <summary>
+/// FR-73 (Local import): the repository copied into a project's working copy: its checked-out default branch, that branch's
+/// head commit and every tag with its (peeled) commit.
+/// </summary>
+public sealed record ImportedRepository(string DefaultBranch, string HeadSha, IReadOnlyList<ReleaseTagRef> Tags);
+
 /// <summary>A release tag looked up on a remote (FR-64), or the failed command.</summary>
 public sealed record RemoteReleaseTags(bool Ok, IReadOnlyList<ReleaseTagRef> Tags, GitCommandResult? Failure);
 
@@ -126,6 +132,15 @@ public interface IWorkingCopies
     /// <c>origin</c> at the remote's (clean) URL and fetches. The remote's credentials are used for this command only.
     /// </summary>
     Task SyncFromRemoteAsync(Guid projectId, GitRemote remote, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-73, §8 Testing (Local import): copies the Git repository at <paramref name="sourcePath"/> (a directory on the
+    /// server, already checked to be under the import root) into the project's working copy with its history and tags
+    /// (<c>git clone --no-hardlinks</c>), then removes the clone's remote so the working copy stands alone like any Local
+    /// repository. The working copy must not exist yet. Throws <see cref="WorkingCopyException"/> when the source isn't a
+    /// repository with a commit, <see cref="GitCommandException"/> when git fails.
+    /// </summary>
+    Task<ImportedRepository> ImportLocalAsync(Guid projectId, string sourcePath, CancellationToken cancellationToken);
 
     /// <summary>
     /// FR-35 (GitHub): checks out <paramref name="branch"/>; if it doesn't exist locally it is created from the remote project
@@ -335,6 +350,55 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
             await RunRemoteAsync(path, ["fetch", "-q", "--no-tags", "--prune", GitRemote.Name], remote, cancellationToken);
             return 0;
+        });
+    }
+
+    public async Task<ImportedRepository> ImportLocalAsync(Guid projectId, string sourcePath, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(sourcePath);
+        return await WithLockAsync(projectId, async () =>
+        {
+            var source = Path.GetFullPath(sourcePath);
+            var isWorkTree = Directory.Exists(Path.Combine(source, ".git"));
+            var isBare = !isWorkTree && File.Exists(Path.Combine(source, "HEAD")) && Directory.Exists(Path.Combine(source, "objects"));
+            if (!isWorkTree && !isBare)
+            {
+                throw new WorkingCopyException("The directory to import is not a Git repository.");
+            }
+
+            var path = PathFor(projectId);
+            if (Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
+            {
+                throw new WorkingCopyException("The project's working copy already exists.");
+            }
+
+            Directory.CreateDirectory(workspaces.Root);
+            var safeSource = source.Replace('\\', '/');
+            await RunAsync(
+                workspaces.Root,
+                ["-c", "safe.directory=" + safeSource, "clone", "-q", "--no-hardlinks", "--origin", GitRemote.Name, "--", source, projectId.ToString("D")],
+                cancellationToken);
+            await RunAsync(path, ["remote", "remove", GitRemote.Name], cancellationToken);
+            var branch = (await RunAsync(path, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken, allowFailure: true)).StandardOutput.Trim();
+            var head = (await RunAsync(path, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], cancellationToken, allowFailure: true)).StandardOutput.Trim();
+            if (branch.Length == 0 || head.Length == 0)
+            {
+                throw new WorkingCopyException("The repository to import has no commit on its default branch.");
+            }
+
+            var listed = await RunAsync(path, ["for-each-ref", "refs/tags", "--format=%(refname:strip=2)%09%(*objectname)%09%(objectname)"], cancellationToken);
+            var tags = new List<ReleaseTagRef>();
+            foreach (var line in listed.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = line.TrimEnd('\r').Split('\t');
+                if (parts.Length == 3 && parts[0].Length > 0)
+                {
+                    tags.Add(new ReleaseTagRef(parts[0], parts[1].Length > 0 ? parts[1] : parts[2]));
+                }
+            }
+
+            LogImported(logger, projectId, tags.Count);
+            return new ImportedRepository(branch, head, tags);
         });
     }
 
@@ -1052,6 +1116,9 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Initialised the local repository of project {ProjectId} on {DefaultBranch}")]
     private static partial void LogInitialised(ILogger logger, Guid projectId, string defaultBranch);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Imported a local repository with {TagCount} tags into the working copy of project {ProjectId}")]
+    private static partial void LogImported(ILogger logger, Guid projectId, int tagCount);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cloned the repository of project {ProjectId} into its working copy")]
     private static partial void LogCloned(ILogger logger, Guid projectId);

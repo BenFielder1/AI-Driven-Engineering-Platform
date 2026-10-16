@@ -24,12 +24,13 @@ async function openGitStep({ app = true, connect = true } = {}) {
   }
   renderRoute('/projects/new')
   const user = userEvent.setup()
-  await screen.findByRole('heading', { level: 2, name: /Step 1 of 5/ })
+  await screen.findByRole('heading', { level: 2, name: /Step 1 of 6: Source/ })
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+  await screen.findByRole('heading', { level: 2, name: /Step 2 of 6: Project idea/ })
   await user.type(screen.getByLabelText('Project name'), 'Todo app')
   await user.type(screen.getByLabelText('Your idea'), 'A shared todo list.')
   await user.click(screen.getByRole('button', { name: 'Next' }))
-  await user.click(await screen.findByRole('button', { name: 'Next' }))
-  await screen.findByRole('heading', { level: 2, name: /Step 3 of 5: Git repository/ })
+  await screen.findByRole('heading', { level: 2, name: /Step 3 of 6: Repository/ })
   return { user }
 }
 
@@ -37,9 +38,11 @@ const repoList = () => screen.findByRole('list', { name: 'Repositories' })
 
 async function finish(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Next' }))
-  await screen.findByRole('heading', { level: 2, name: /Step 4 of 5/ })
+  await screen.findByRole('heading', { level: 2, name: /Step 4 of 6/ })
   await user.click(screen.getByRole('button', { name: 'Next' }))
-  await screen.findByRole('heading', { level: 2, name: /Step 5 of 5/ })
+  await screen.findByRole('heading', { level: 2, name: /Step 5 of 6/ })
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+  await screen.findByRole('heading', { level: 2, name: /Step 6 of 6/ })
 }
 
 const createBody = () =>
@@ -90,7 +93,7 @@ describe('Wizard → Git repository with the GitHub App (FR-81, FR-86)', () => {
     expect(screen.queryByText('This repository has code. AIDE will build on it')).not.toBeInTheDocument()
 
     await finish(user)
-    const git = screen.getByRole('region', { name: 'Git repository' })
+    const git = screen.getByRole('region', { name: 'Repository' })
     expect(within(git).getByText('acme/billing')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Create project' }))
 
@@ -113,7 +116,7 @@ describe('Wizard → Git repository with the GitHub App (FR-81, FR-86)', () => {
 
     expect(await screen.findByText('This repository has code. AIDE will build on it')).toBeInTheDocument()
     await finish(user)
-    expect(within(screen.getByRole('region', { name: 'Git repository' })).getByText(/AIDE builds on it/)).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Repository' })).getByText(/AIDE builds on it/)).toBeInTheDocument()
   })
 
   it('FR81_create_repo_selects_it: Create repository makes a private repo and the wizard selects it', async () => {
@@ -139,7 +142,7 @@ describe('Wizard → Git repository with the GitHub App (FR-81, FR-86)', () => {
     const post = projectsDb.requests.find((r) => r.method === 'POST' && r.path === '/api/me/github/repos')
     expect(post?.body).toEqual({ owner: 'acme', name: 'todo-app', private: true, description: 'Shared todos' })
     // Still on the Git step: the dialog's submit didn't advance the wizard.
-    expect(screen.getByRole('heading', { level: 2, name: /Step 3 of 5/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: /Step 3 of 6/ })).toBeInTheDocument()
     expect(await within(await repoList()).findByRole('radio', { name: 'acme/todo-app' })).toBeChecked()
   })
 

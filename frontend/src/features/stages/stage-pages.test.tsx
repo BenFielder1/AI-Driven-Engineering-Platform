@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
+import { errorMessages } from '../../lib/errors'
 import { authDb } from '../../mocks/handlers/auth'
 import { seedArtifact } from '../../mocks/handlers/artifacts'
 import { seedGate } from '../../mocks/handlers/lifecycle'
@@ -126,6 +127,48 @@ describe('Stage pages (FR-55)', () => {
     expect(within(list()).getByRole('link', { name: 'FR-7 Wish lists' })).toHaveAttribute('href', '#md-fr-7-new-wish-lists')
   })
 
+  it('FR55_changes_filter_reads_list_item_and_paragraph_tags_with_counts (§4.13)', async () => {
+    const content = [
+      '# Spec',
+      '',
+      '## Functional Requirements',
+      '',
+      '- **FR-1** [unchanged] Browse products',
+      '  - Given a shopper, when they browse, then products show.',
+      '- **FR-3** [changed]: Export orders',
+      '',
+      '**FR-5** [new]: CSV import',
+      '',
+      '```',
+      '- FR-9 [new] In a code block',
+      '```',
+      '',
+      '### FR-6 [new] Wish lists',
+    ].join('\n')
+    const project = seedProjectAs('owner', (p) => {
+      seedArtifact(p, { type: 'technical_specification', content })
+    })
+    const { user } = await openStage(project, 'specification', 'Specification')
+
+    const changes = screen.getByRole('region', { name: 'Changes in this version' })
+    const buttons = within(changes).getAllByRole('button').map((b) => b.textContent)
+    expect(buttons).toEqual(['All changes (3)', 'New (2)', 'Changed (1)', 'Removed (0)', 'Unchanged (1)'])
+    const links = () =>
+      within(within(changes).getByRole('list', { name: 'Requirements in this filter' }))
+        .getAllByRole('link')
+        .map((l) => l.textContent)
+    expect(links()).toEqual(['FR-3: Export orders', 'FR-5: CSV import', 'FR-6 Wish lists'])
+    expect(within(changes).getByRole('link', { name: 'FR-3: Export orders' })).toHaveAttribute('href', '#md-req-fr-3')
+    // The rendered list item and paragraph carry the link targets.
+    expect(document.getElementById('md-req-fr-3')?.tagName).toBe('LI')
+    expect(document.getElementById('md-req-fr-3')).toHaveTextContent('Export orders')
+    expect(document.getElementById('md-req-fr-5')?.tagName).toBe('P')
+    expect(document.getElementById('md-req-fr-9')).toBeNull()
+
+    await user.click(within(changes).getByRole('button', { name: 'Unchanged (1)' }))
+    expect(links()).toEqual(['FR-1 Browse products'])
+  })
+
   it('FR55_spec_without_tags_has_no_changes_filter', async () => {
     const project = seedProjectAs('owner', (p) => {
       seedArtifact(p, { type: 'technical_specification', content: '# Spec\n\n## Scope\nThings.' })
@@ -172,6 +215,25 @@ describe('Stage pages (FR-55)', () => {
     expect(within(gates).getByRole('button', { name: 'Approve' })).toBeInTheDocument()
     const runs = await screen.findByRole('region', { name: 'Agent runs' })
     expect(await within(runs).findByRole('link', { name: /^Plan generator run/ })).toBeInTheDocument()
+  })
+
+  it('FR76_planning_shows_the_uncovered_requirements_warning_with_its_ids (§4.13)', async () => {
+    const block = { format: 1, steps: [{ number: 1, title: 'API', covers: ['FR-1'], files: [{ path: 'src/api.cs', action: 'create' }], dependencies: [] }] }
+    const content = `# Plan\n\n\`\`\`aide-plan\n${JSON.stringify(block)}\n\`\`\`\n`
+    const project = seedProjectAs('owner', (p) => {
+      p.currentPhase = 'planning'
+      seedArtifact(p, {
+        type: 'implementation_plan',
+        content,
+        warnings: [{ code: 'UNCOVERED_REQUIREMENTS', message: 'FR-3, FR-5 are not covered.', ids: ['FR-3', 'FR-5'] }],
+      })
+    })
+    await openStage(project, 'planning', 'Planning')
+
+    expect(await screen.findByText('Uncovered requirements')).toBeInTheDocument()
+    expect(screen.getByText(errorMessages.UNCOVERED_REQUIREMENTS)).toBeInTheDocument()
+    const ids = screen.getByRole('list', { name: 'Requirements not covered by any step' })
+    expect(within(ids).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['FR-3', 'FR-5'])
   })
 
   it('FR55_dependency_waves_follow_the_latest_dependency', () => {

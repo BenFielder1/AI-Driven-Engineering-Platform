@@ -546,7 +546,7 @@ export interface paths {
         /** The caller's projects (every project for Admins), paged, with search by name, phase, status and has-a-version-in-development filters and sorting. Rows carry the released and in-development version badges (FR-62). */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults; initialVersion (FR-66, default 0.1.0) is the first release version, in development. git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID; 409 GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -1636,10 +1636,10 @@ export interface components {
         /** @enum {unknown} */
         AgentJobTrigger: "user_requested" | "phase_entered" | "gate_rejected" | "artifact_rejected" | "artifact_corrupted" | null;
         /**
-         * @description The five cognitive agents (§1, FR-23).
+         * @description The cognitive agents (§1, FR-23), plus the Repository Analyst (FR-70).
          * @enum {unknown}
          */
-        AgentKind: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review";
+        AgentKind: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
         /** @description Model id per agent; an omitted or `null` agent uses the default model. */
         AgentModelsDto: {
             ideaRefinement?: null | string;
@@ -1651,6 +1651,9 @@ export interface components {
         /**
          * @description An agent run with the provider's output text (FR-23). `output` is `null` until the run succeeds and is cut
          *     to the first 200,000 characters (`outputTruncated`). The v2 fields are as on AgentRunDto.
+         *     `toolCalls` is the run's repo tool log (FR-71: tool, arguments, bytes, truncated, error code) and `warnings`
+         *     what was recorded on it (FR-70, FR-71): `tools_unsupported`, `snapshot_unavailable`,
+         *     `summary_wait_timeout`, `summary_unavailable`.
          */
         AgentRunDetailDto: {
             /** Format: uuid */
@@ -1692,6 +1695,8 @@ export interface components {
             /** Format: int32 */
             toolCallCount: number;
             credentialLabel: null | string;
+            toolCalls: components["schemas"]["ToolCallDto"][];
+            warnings: string[];
         };
         /**
          * @description An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt
@@ -1832,6 +1837,9 @@ export interface components {
          *     `releaseVersionId` and `checkpointAtCreation` say where it was created (§4.10; D-V2-11: was
          *     `projectVersionAtCreation`); `releaseVersion` is that release version's semver (FR-59).
          *     `restoredFromVersion` is the version whose content a restore copied (FR-58), else `null`.
+         *     `warnings` are non-blocking findings about the version (FR-76, §4.13): for an `implementation_plan`,
+         *     `UNCOVERED_REQUIREMENTS` when its steps' `covers` miss a `[new]`/`[changed]` requirement of the
+         *     release version's locked specification (`ids` lists them); empty otherwise.
          */
         ArtifactDto: {
             /** Format: uuid */
@@ -1859,6 +1867,7 @@ export interface components {
             releaseVersion: string;
             /** Format: int32 */
             restoredFromVersion: null | number;
+            warnings: components["schemas"]["ArtifactWarningDto"][];
         };
         /**
          * @description Result of re-checking an artifact's content hash on read (FR-20). `corrupted` means the stored content no
@@ -1902,6 +1911,12 @@ export interface components {
         };
         /** @enum {unknown} */
         ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+        /** @description A non-blocking finding about an artifact version (FR-76, §4.13): its code, a message and the ids it is about. */
+        ArtifactWarningDto: {
+            code: string;
+            message: string;
+            ids: string[];
+        };
         /**
          * @description Which sign-in providers are available (the frontend hides "Continue with GitHub" when `github` is false).
          *     `githubMode` (D-V2-7) says how GitHub sign-in works: `app` (the AIDE GitHub App's user authorization flow
@@ -1949,6 +1964,30 @@ export interface components {
             enteredAt: string;
             rollbackAllowed: boolean;
             rollbackBlockedReason: null | components["schemas"]["CheckpointBlock"];
+        };
+        /**
+         * @description The Repository Analyst's progress for a release version as shown on the Refinement page (FR-70): `not_needed` (no
+         *     existing code), `queued`, `running`, `completed` (the summary exists), `failed` (the analyst ended
+         *     without a summary) or `timed_out` (still unfinished 10 minutes after the version started; refinement no longer
+         *     waits for it).
+         * @enum {unknown}
+         */
+        CodebaseSummaryState: "not_needed" | "queued" | "running" | "completed" | "failed" | "timed_out";
+        /**
+         * @description FR-70: the Repository Analyst for the release version. `status`: `not_needed` (no existing code),
+         *     `queued`, `running`, `completed` (the locked summary exists: `artifactId`/`artifactVersion`),
+         *     `failed` (the analyst ended without one) or `timed_out` (unfinished 10 minutes after the version started;
+         *     refinement no longer waits). `runId` is the analyst's agent run once it has started (the run that wrote the
+         *     summary when completed), else `null`.
+         */
+        CodebaseSummaryStatusDto: {
+            status: components["schemas"]["CodebaseSummaryState"];
+            /** Format: uuid */
+            runId: null | string;
+            /** Format: uuid */
+            artifactId: null | string;
+            /** Format: int32 */
+            artifactVersion: null | number;
         };
         /** @description The drift level and areas of the latest compliance report (FR-41, §4.7). */
         ComplianceDriftDto: {
@@ -2151,6 +2190,23 @@ export interface components {
             defaultBranch?: string;
             /** @description GitHub access token (`github_pat` only). Stored encrypted and never returned. */
             token?: null | string;
+            /**
+             * @description FR-73, §8 Testing: `local` + `source: import` only, and only where the server sets `Git:Local:ImportRoot`
+             *     (Development and E2E): the existing Git repository directory to import, absolute or relative to that root, which it
+             *     must resolve under (else 400 `VALIDATION` on `git.localSourcePath`). Omit it otherwise.
+             */
+            localSourcePath?: null | string;
+        };
+        /**
+         * @description FR-73: the versions of an imported repository. `releasedTag` is the tag of the currently released version, picked
+         *     from the repository's GitHub Releases and semver tags (`null` or omitted: "Never released"); it must exist in the
+         *     repository (400 `TAG_NOT_FOUND`) and name a semver version (400 `VERSION_INVALID`). `developmentVersion`
+         *     is the version to develop (semver, a leading `v` is stripped; 400 `VERSION_INVALID`), greater than the
+         *     released one (409 `VERSION_NOT_GREATER`).
+         */
+        CreateProjectImportRequest: {
+            releasedTag?: null | string;
+            developmentVersion: string;
         };
         /** @description The new-project wizard (FR-5). Omitted settings take the FR-5 defaults. */
         CreateProjectRequest: {
@@ -2169,8 +2225,17 @@ export interface components {
              */
             tokenBudget?: null | number;
             git: components["schemas"]["CreateProjectGitRequest"];
-            /** @description FR-66: the first release version (semver, a leading `v` is stripped; default `0.1.0`). The first release tags it. */
+            /**
+             * @description FR-66 (`source: scratch` only): the first release version (semver, a leading `v` is stripped; default
+             *     `0.1.0`). The first release tags it.
+             */
             initialVersion?: null | string;
+            /**
+             * @description FR-73: `scratch` (default) starts from scratch with `initialVersion`; `import` imports the existing
+             *     repository named by `git` with `import` (required) and `idea` as the request for the version to develop.
+             */
+            source?: components["schemas"]["ProjectSource"];
+            import?: null | components["schemas"]["CreateProjectImportRequest"];
         };
         /** @description A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again. */
         CreatedApiTokenDto: {
@@ -3090,6 +3155,11 @@ export interface components {
             notifications: components["schemas"]["NotificationSettingsDto"];
         };
         /**
+         * @description FR-73: where a new project's code comes from (wizard step "Source").
+         * @enum {unknown}
+         */
+        ProjectSource: "scratch" | "import";
+        /**
          * @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`
          *     counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the
          *     execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened
@@ -3222,7 +3292,8 @@ export interface components {
         /**
          * @description The refinement page (FR-27): the latest project request version (`latestDraft`, without content — read it from
          *     the artifacts API), the latest round and its status, and the clarifying questions of the latest completed round
-         *     (`questionsRunId`) with any answers already given.
+         *     (`questionsRunId`) with any answers already given. `codebaseSummary` is the Repository Analyst's state for
+         *     the version (FR-70).
          */
         RefinementDto: {
             latestDraft: null | components["schemas"]["ArtifactSummaryDto"];
@@ -3230,6 +3301,7 @@ export interface components {
             /** Format: uuid */
             questionsRunId: null | string;
             questions: components["schemas"]["RefinementQuestionDto"][];
+            codebaseSummary: components["schemas"]["CodebaseSummaryStatusDto"];
         };
         /**
          * @description A clarifying question of the latest completed round (FR-27). `answer` is the answer already given for the next
@@ -3538,7 +3610,8 @@ export interface components {
         SystemRole: "user" | "admin";
         /**
          * @description A repository tool call made during an agent run (FR-71): the tool name, its arguments as given by the model, the bytes
-         *     returned and whether the result was cut to the tool's limit.
+         *     returned and whether the result was cut to the tool's limit. `error` is the code of a refused call
+         *     (`UNSAFE_PATH`, `TOOL_LIMIT`, `NOT_FOUND`, …), else `null`.
          */
         ToolCallDto: {
             tool: string;
@@ -3546,6 +3619,7 @@ export interface components {
             /** Format: int32 */
             bytes: number;
             truncated: boolean;
+            error: null | string;
         };
         /** @description The number of the caller's unread notifications (the bell badge). */
         UnreadNotificationCountDto: {
@@ -4951,7 +5025,7 @@ export interface operations {
         parameters: {
             query?: {
                 projectId?: string;
-                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review";
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
                 status?: "queued" | "running" | "succeeded" | "failed" | "cancelled";
                 provider?: "anthropic" | "openai" | "ollama" | "fake";
                 model?: string;
@@ -5366,7 +5440,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectDto"];
                 };
             };
-            /** @description Bad Request */
+            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag) or TAG_NOT_FOUND (import: the released tag isn't in the repository) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5393,7 +5467,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app) */
+            /** @description NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7152,7 +7235,7 @@ export interface operations {
     ListRuns: {
         parameters: {
             query?: {
-                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review";
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
                 page?: number;
                 limit?: number;
                 releaseVersionId?: string;

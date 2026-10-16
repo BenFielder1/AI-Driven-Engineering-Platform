@@ -281,6 +281,13 @@ public sealed partial class JobWorker : BackgroundService
             spanError = ErrorCodes.GitHubRateLimited;
             LogRateLimited(_logger, deferredUntil.Value);
         }
+        catch (JobDeferredException ex)
+        {
+            // FR-70: the handler waits for something (e.g. the codebase summary): run again later, attempt not counted.
+            deferredUntil = JobPolicy.DeferUntil(_time.GetUtcNow(), ex.RunAfter);
+            error = ex.Message;
+            LogDeferred(_logger, deferredUntil.Value);
+        }
         catch (JobFailedException ex)
         {
             transient = ex.Transient;
@@ -605,6 +612,9 @@ public sealed partial class JobWorker : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Job stopped by GitHub's rate limit; deferred until {RunAfter} without counting the attempt")]
     private static partial void LogRateLimited(ILogger logger, DateTimeOffset runAfter);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Job is waiting; deferred until {RunAfter} without counting the attempt")]
+    private static partial void LogDeferred(ILogger logger, DateTimeOffset runAfter);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Job handler failed (transient: {Transient})")]
     private static partial void LogHandlerFailed(ILogger logger, Exception exception, bool transient);

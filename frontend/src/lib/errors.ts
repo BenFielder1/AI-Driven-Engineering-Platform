@@ -70,6 +70,8 @@ export const errorMessages = {
   REPO_NAME_TAKEN: "A repository with this name already exists for that owner. Choose another name.",
   GITHUB_RATE_LIMITED: "GitHub's rate limit was reached. Wait a moment and try again.",
   GIT_ERROR: "Git or GitHub refused the operation.",
+  // Import an existing repository (FR-73)
+  TAG_NOT_FOUND: "That tag isn't in the repository. Pick another released version, or choose Never released.",
   RELEASE_CANCELLED: "A rollback cancelled this release before it ran.",
   // Approval links
   LINK_EXPIRED: "This approval link has expired.",
@@ -80,6 +82,15 @@ export const errorMessages = {
   MISSING_SECTIONS:
     "The agent's specification was still missing required sections after a retry.",
   INVALID_OUTPUT: "The agent's reply couldn't be read, even after a retry.",
+  // Spec and plan validation, repo tools (FR-71, FR-75, FR-76, §4.13)
+  MISSING_REQUIREMENT_IDS:
+    "The agent's specification still had functional requirements without an FR-n ID or a Given/When/Then acceptance criterion after a retry.",
+  INVALID_REQUIREMENT_TAGS:
+    "The agent's specification still had invalid requirement tags after a retry: every FR-n needs exactly one of [new], [changed], [unchanged] or [removed], at least one must be [new] or [changed], and [changed] or [removed] IDs must exist in the previous version's spec.",
+  UNCOVERED_REQUIREMENTS:
+    "Some new or changed requirements aren't covered by any plan step. This is a warning: the plan can still be approved.",
+  TOOL_LIMIT:
+    "The agent reached its repository tool limit (25 calls or 400 KB read per run) and answered with what it had read.",
   PROVIDER_NOT_CONFIGURED:
     "The project has no LLM connection bound for this provider, and system keys aren't allowed. An Owner can bind one of their connections in Settings → LLM.",
   PROVIDER_ERROR: "The model provider returned an error.",
@@ -283,9 +294,17 @@ export const contextualErrorMessages = {
     GITHUB_APP_NOT_INSTALLED:
       "The AIDE GitHub App can't access this repository. Install it on the repository, then try again.",
   },
-  /** POST /api/projects (FR-86): a github_app repo needs push access for the caller. */
+  /** POST /api/projects (FR-86): a github_app repo needs push access for the caller; FR-73 import versions. */
   createProject: {
     FORBIDDEN: "You need write access to this repository on GitHub to create a project on it. Pick another repository.",
+    VERSION_INVALID:
+      "Enter a version as MAJOR.MINOR.PATCH with an optional -prerelease, for example 1.2.0 or 2.0.0-beta.1.",
+    VERSION_NOT_GREATER: "The version to develop must be greater than the currently released version.",
+    TAG_EXISTS: "The repository already has a tag for this version. Choose a higher version to develop.",
+    TAG_NOT_FOUND:
+      "That tag isn't in the repository (it may have been deleted). Pick another released version, or choose Never released.",
+    NOT_FOUND:
+      "We couldn't find that repository, or the access token can't see it. Check the URL and the token's repository access.",
   },
   /** PATCH /api/admin/users/:id/role (FR-3). */
   changeSystemRole: {
@@ -322,6 +341,25 @@ export const githubFailureMessages: Readonly<Record<string, string>> = {
   account_create_failed:
     "We couldn't create an account from your GitHub profile. Try again, or register with email.",
 };
+
+/**
+ * FR-71: the codes a refused repo tool call records (`ToolCallDto.error`, backend RepoTools), as the result shown in a
+ * run's tool log. They are tool results, not endpoint errors, so they live beside `errorMessages` rather than in it.
+ */
+export const toolCallErrorMessages = {
+  UNSAFE_PATH: "Refused: the path is outside the repository or hidden",
+  TOOL_LIMIT: "Refused: the run reached its tool limit (25 calls or 400 KB read)",
+  NOT_FOUND: "Refused: no such file or directory",
+  INVALID_ARGUMENT: "Refused: the arguments were invalid",
+  SEARCH_TIMEOUT: "Refused: the search took too long",
+  FILE_TOO_LARGE: "Refused: the file is too large to read",
+} as const satisfies Record<string, string>;
+
+/** A refused tool call's result in words, with its code, e.g. "Refused: … (UNSAFE_PATH)". */
+export function toolCallErrorMessage(code: string): string {
+  const copy: string | undefined = (toolCallErrorMessages as Readonly<Record<string, string>>)[code];
+  return copy ? `${copy} (${code})` : `Refused (${code})`;
+}
 
 export function githubFailureMessage(reason: string | undefined): string {
   return (

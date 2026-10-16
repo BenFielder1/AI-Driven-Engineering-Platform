@@ -46,8 +46,10 @@ const targets: Target[] = [
     name: 'wizard (idea step, with errors)',
     path: () => '/projects/new',
     signedIn: true,
-    ready: (p) => p.getByRole('heading', { name: 'Step 1 of 5: Project idea' }),
+    ready: (p) => p.getByRole('heading', { name: 'Step 1 of 6: Source' }),
     prepare: async (p) => {
+      await p.getByRole('button', { name: 'Next' }).click()
+      await expect(p.getByRole('heading', { name: 'Step 2 of 6: Project idea' })).toBeVisible()
       await p.getByRole('button', { name: 'Next' }).click()
       await expect(p.getByText('Check this step')).toBeVisible()
     },
@@ -56,12 +58,18 @@ const targets: Target[] = [
     name: 'wizard (configuration step)',
     path: () => '/projects/new',
     signedIn: true,
-    ready: (p) => p.getByRole('heading', { name: 'Step 1 of 5: Project idea' }),
+    ready: (p) => p.getByRole('heading', { name: 'Step 1 of 6: Source' }),
     prepare: async (p) => {
+      await p.getByRole('button', { name: 'Next' }).click()
       await p.getByLabel('Project name').fill('A11y wizard')
       await p.getByLabel('Your idea').fill('Checking the configuration step for accessibility.')
       await p.getByRole('button', { name: 'Next' }).click()
-      await expect(p.getByRole('heading', { name: 'Step 2 of 5: Configuration' })).toBeVisible()
+      await expect(p.getByRole('heading', { name: 'Step 3 of 6: Repository' })).toBeVisible()
+      await p.getByRole('radio', { name: /^Local repository/ }).check()
+      await p.getByRole('button', { name: 'Next' }).click()
+      await expect(p.getByRole('heading', { name: 'Step 4 of 6: Version' })).toBeVisible()
+      await p.getByRole('button', { name: 'Next' }).click()
+      await expect(p.getByRole('heading', { name: 'Step 5 of 6: Configuration' })).toBeVisible()
     },
   },
   {

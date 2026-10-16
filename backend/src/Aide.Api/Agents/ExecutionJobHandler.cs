@@ -219,6 +219,7 @@ public sealed partial class ExecutionJobHandler(
     {
         var projectRequest = await inputs.CurrentAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
         var spec = await inputs.CurrentAsync(project.Id, ArtifactType.TechnicalSpecification, cancellationToken);
+        var summary = await inputs.CurrentAsync(project.Id, ArtifactType.CodebaseSummary, cancellationToken);
         var plan = await db.Artifacts.AsNoTracking().FirstAsync(a => a.Id == planId, cancellationToken);
         var files = await Git(() => workingCopies.ReadAsync(project.Id, step.DeclaredFiles.Select(f => f.Path), cancellationToken));
         var rules = await Git(() => workingCopies.ReadRulesAsync(project.Id, cancellationToken));
@@ -235,6 +236,7 @@ public sealed partial class ExecutionJobHandler(
                 ["PROJECT_REQUEST"] = projectRequest?.Content,
                 ["TECHNICAL_SPECIFICATION"] = spec?.Content,
                 ["IMPLEMENTATION_PLAN"] = planView,
+                ["CODEBASE_SUMMARY"] = summary?.Content,
                 ["PROJECT_RULES"] = CodeGeneration.ProjectRules(project.MaxFilesPerStep, rules),
                 ["MAX_FILES_PER_STEP"] = project.MaxFilesPerStep.ToString(CultureInfo.InvariantCulture),
                 ["STEP_NUMBER"] = step.StepNumber.ToString(CultureInfo.InvariantCulture),
@@ -244,8 +246,11 @@ public sealed partial class ExecutionJobHandler(
                 ["STEP_USER_INSTRUCTIONS"] = step.UserInstructions,
                 ["EXISTING_CODE"] = CodeGeneration.ExistingCode(files!),
             },
-            InputArtifacts = [.. new[] { projectRequest, spec, plan }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
+            InputArtifacts = [.. new[] { projectRequest, spec, plan, summary }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = CodeGeneration.RetryFeedback(step.Violations),
+
+            // FR-71: the code generator reads the project branch's working tree through the repo tools.
+            Repo = RepoScope.WorkingTree,
         };
     }
 

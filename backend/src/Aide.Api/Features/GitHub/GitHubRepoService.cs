@@ -170,12 +170,55 @@ public sealed partial class GitHubRepoService(
 
             var root = await api.ReadBranchRootAsync(user.Token, repository.Owner, repository.Name, repository.DefaultBranch, cancellationToken);
             var (releases, latest) = root is null ? ([], null) : await api.ListReleasesAsync(user.Token, repository.Owner, repository.Name, cancellationToken);
-            var tags = root is null ? [] : await api.ListTagsAsync(user.Token, repository.Owner, repository.Name, cancellationToken);
+            var tags = root is null ? [] : (await api.ListTagsAsync(user.Token, repository.Owner, repository.Name, cancellationToken)).ToList();
+
+            // FR-73: every release's tag is offered even beyond the tag list's paging cap (exact lookups, bounded).
+            var listed = tags.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+            foreach (var missing in releases.Where(r => !r.Draft && !listed.Contains(r.TagName)).Select(r => r.TagName).Distinct(StringComparer.Ordinal).Take(MaxReleaseTagLookups))
+            {
+                if (await api.FindTagCommitAsync(user.Token, repository.Owner, repository.Name, missing, cancellationToken) is { } sha)
+                {
+                    tags.Add((missing, sha));
+                }
+            }
+
             return Result.Success(new GitHubRepoRefsDto(
                 repository.DefaultBranch,
                 GitHubRules.IsEmptyRepository(root?.RootEntries),
                 [.. releases.Where(r => !r.Draft).Select(r => new GitHubReleaseDto(r.TagName, r.Name, r.PublishedAt, r.TagName == latest))],
                 [.. tags.Select(t => new GitHubTagDto(t.Name, t.Sha, GitHubRules.TagSemver(t.Name)))]));
+        }, cancellationToken);
+    }
+
+    /// <summary>Release tags missing from the tag list that are looked up one by one (FR-73).</summary>
+    public const int MaxReleaseTagLookups = 20;
+
+    /// <summary>
+    /// FR-73: exact lookups of <paramref name="tags"/> in a repository with the caller's connection: the ones that exist,
+    /// with their commits (not limited by any list's paging).
+    /// </summary>
+    public async Task<Result<IReadOnlyList<(string Tag, string Commit)>>> FindTagsAsync(Guid userId, string owner, string repo, IEnumerable<string> tags, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(tags);
+        var session = await connections.SessionAsync(userId, cancellationToken);
+        if (session.IsFailure)
+        {
+            return Result.Failure<IReadOnlyList<(string Tag, string Commit)>>(session.Error!);
+        }
+
+        var user = session.Value;
+        return await CallAsync(user, async () =>
+        {
+            var found = new List<(string Tag, string Commit)>();
+            foreach (var tag in tags.Distinct(StringComparer.Ordinal))
+            {
+                if (await api.FindTagCommitAsync(user.Token, owner, repo, tag, cancellationToken) is { } sha)
+                {
+                    found.Add((tag, sha));
+                }
+            }
+
+            return Result.Success<IReadOnlyList<(string Tag, string Commit)>>(found);
         }, cancellationToken);
     }
 

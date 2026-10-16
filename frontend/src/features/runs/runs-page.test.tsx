@@ -398,4 +398,30 @@ describe('Agent runs page (SPEC §7.2, v2 columns)', () => {
     expect(within(sheet).getByText('Credential').nextElementSibling).toHaveTextContent('Team key (••••a1b2)')
     expect(within(sheet).getByText('Repository tool calls').nextElementSibling).toHaveTextContent('12')
   })
+
+  it('FR70_FR71_run_details_list_tool_calls_with_refusals_and_warnings', async () => {
+    const project = seedProjectAs('viewer', (p) => {
+      seedRun(p, {
+        agent: 'repository_analyst',
+        toolCallCount: 2,
+        toolCalls: [
+          { tool: 'read_file', arguments: { path: 'src/index.ts' }, bytes: 2048, truncated: false, error: null },
+          { tool: 'read_file', arguments: { path: '../../etc/passwd' }, bytes: 0, truncated: false, error: 'UNSAFE_PATH' },
+        ],
+        warnings: ['tools_unsupported'],
+      })
+    })
+    const { user } = await openRuns(project)
+
+    const row = rowFor('Repository Analyst')
+    await user.click(within(row).getByRole('button', { name: /^Repository Analyst run/ }))
+    const sheet = await screen.findByRole('dialog', { name: 'Repository Analyst run' })
+    const tools = await within(sheet).findByRole('table', { name: 'Repository tool calls of this run' })
+    const rows = within(tools).getAllByRole('row').slice(1)
+    expect(rows[0]).toHaveTextContent('{"path":"src/index.ts"}')
+    expect(rows[0]).toHaveTextContent('Complete')
+    expect(rows[1]).toHaveTextContent('Refused: the path is outside the repository or hidden (UNSAFE_PATH)')
+    expect(within(sheet).getByRole('heading', { name: 'Repository tool calls (2)' })).toBeInTheDocument()
+    expect(within(sheet).getByText(/doesn't support tool use/)).toBeInTheDocument()
+  })
 })

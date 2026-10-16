@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import {
   markdownOutline,
-  requirementChangeEntries,
+  requirementChangesIn,
   requirementChanges,
   type RequirementChange,
 } from '../artifacts/markdown-outline'
@@ -18,7 +18,7 @@ type Filter = RequirementChange | 'all'
 
 /** FR-55, §4.13: the requirements this version tags new / changed / removed (/ unchanged), filterable. */
 function ChangesInVersion({ content }: { content: string }) {
-  const entries = requirementChangeEntries(markdownOutline(content))
+  const entries = requirementChangesIn(content)
   const [filter, setFilter] = useState<Filter>('all')
   if (entries.length === 0) {
     return null

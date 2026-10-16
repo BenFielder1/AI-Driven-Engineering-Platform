@@ -23,7 +23,15 @@ public sealed record CodeReviewResult(
     IReadOnlyList<DriftAreaEntry> DriftAreas,
     IReadOnlyList<PlanStep> OptimizationPlan,
     string? OptimizationPlanMarkdown,
-    string? Summary);
+    string? Summary)
+{
+    /// <summary>
+    /// §4.13: requirements the agent reports as broken by this version (optional <c>"regressions"</c> array of
+    /// <c>{requirementId, category, description, evidence?}</c>). <see cref="IterationReviewScope"/> keeps those tagged
+    /// <c>[unchanged]</c> as regressions.
+    /// </summary>
+    public IReadOnlyList<RegressionEntry> Regressions { get; init; } = [];
+}
 
 /// <summary>
 /// FR-38: reads the Code Review agent's JSON reply. Every one of the six categories needs a score from 0 to 1; violations
@@ -72,6 +80,7 @@ public static class CodeReviewOutput
             var violations = ReadViolations(root, reasons);
             var missing = ReadMissingFeatures(root, reasons);
             var drift = ReadDriftAreas(root, reasons);
+            var regressions = ReadRegressions(root, reasons);
             var summary = StringOf(root, "summary") is { Length: > 0 } s ? Clip(s.Trim()) : null;
             if (reasons.Count > 0)
             {
@@ -84,7 +93,10 @@ public static class CodeReviewOutput
                 return Result.Failure<CodeReviewResult>(plan.Error!);
             }
 
-            return Result.Success(new CodeReviewResult(categories, violations, missing, drift, plan.Value.Steps, plan.Value.Markdown, summary));
+            return Result.Success(new CodeReviewResult(categories, violations, missing, drift, plan.Value.Steps, plan.Value.Markdown, summary)
+            {
+                Regressions = regressions,
+            });
         }
     }
 
@@ -284,6 +296,49 @@ public static class CodeReviewOutput
             }
 
             result.Add(new DriftAreaEntry(Clip(area, 200), severity, Clip(StringOf(item, "description")?.Trim() ?? string.Empty)));
+        }
+
+        return result;
+    }
+
+    /// <summary>§4.13: the optional regressions; the category defaults to <c>feature_coverage</c> when omitted.</summary>
+    private static List<RegressionEntry> ReadRegressions(JsonElement root, List<string> reasons)
+    {
+        var result = new List<RegressionEntry>();
+        if (!root.TryGetProperty("regressions", out var list) || list.ValueKind == JsonValueKind.Null)
+        {
+            return result;
+        }
+
+        if (list.ValueKind != JsonValueKind.Array)
+        {
+            reasons.Add("\"regressions\" must be an array.");
+            return result;
+        }
+
+        foreach (var item in list.EnumerateArray().Take(MaxItems))
+        {
+            var id = item.ValueKind == JsonValueKind.Object ? Specs.RequirementParser.NormaliseId(StringOf(item, "requirementId")) : null;
+            var description = item.ValueKind == JsonValueKind.Object ? StringOf(item, "description")?.Trim() : null;
+            if (id is null || string.IsNullOrEmpty(description))
+            {
+                reasons.Add("Every regression needs a \"requirementId\" (FR-n) and a \"description\".");
+                continue;
+            }
+
+            var categoryText = StringOf(item, "category")?.Trim();
+            var category = ReviewCategory.FeatureCoverage;
+            if (!string.IsNullOrEmpty(categoryText) && !EnumStrings.TryParse(categoryText, out category))
+            {
+                reasons.Add($"The regression of {id} has the unknown category '{categoryText}'; use {string.Join(", ", EnumStrings.Values<ReviewCategory>())}.");
+                continue;
+            }
+
+            result.Add(new RegressionEntry(
+                id,
+                category,
+                Clip(description),
+                StringOf(item, "evidence") is { Length: > 0 } evidence ? Clip(evidence.Trim()) : null));
         }
 
         return result;

@@ -269,6 +269,7 @@ export function seedExecution(
     rejectionComment: null,
     createdAt: "2026-09-01T10:00:00Z",
     integrity: "ok",
+    warnings: [],
   };
   project.artifacts.push(plan);
   project.currentPhase = "execution";
@@ -314,6 +315,7 @@ export function seedOptimizationPlan(
     rejectionComment: null,
     createdAt: "2026-09-02T10:00:00Z",
     integrity: "ok",
+    warnings: [],
   };
   project.artifacts.push(plan);
   if (cycle !== undefined) {

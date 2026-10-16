@@ -67,9 +67,7 @@ public sealed partial class WorkingCopyPreparer(
         // FR-82, §4.10: the branch is the one stored on the release version (migrated v1 versions keep their
         // aide/<slug>-<short-id> name); a version without one gets aide/<slug>/v<version>, stored below. The stored name
         // is also the "working copy prepared" fact (LifecycleSnapshotLoader), so it is only written here.
-        var branch = recordedBranch ?? (SemVer.TryParse(project.DevelopmentVersion, out var version)
-            ? ReleaseVersionRules.BranchName(project.Slug, project.Id, version)
-            : ExecutionRules.BranchName(project.Slug, project.Id));
+        var branch = BranchFor(recordedBranch, project.Slug, project.Id, project.DevelopmentVersion);
         // FR-82: a github_app connection carries the installation and repository; its provider mints installation tokens.
         var connection = GitConnectionSettings.From(settings);
         var provider = providers.Resolve(settings.Provider);
@@ -91,6 +89,12 @@ public sealed partial class WorkingCopyPreparer(
 
         return new WorkingCopyPreparation(Result.Success(new PreparedWorkingCopy(provider, connection, branch, token)), Transient: false);
     }
+
+    /// <summary>The version's branch: the recorded one, else <c>aide/&lt;slug&gt;/v&lt;version&gt;</c> (v1 name without a version).</summary>
+    public static string BranchFor(string? recordedBranch, string slug, Guid projectId, string? developmentVersion) =>
+        recordedBranch ?? (SemVer.TryParse(developmentVersion, out var version)
+            ? ReleaseVersionRules.BranchName(slug, projectId, version)
+            : ExecutionRules.BranchName(slug, projectId));
 
     private static WorkingCopyPreparation Failure(string message, bool transient, string code = ErrorCodes.PhasePreconditionFailed) =>
         new(Result.Failure<PreparedWorkingCopy>(new DomainError(code, message) { Details = [message] }), transient);

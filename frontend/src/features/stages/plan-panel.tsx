@@ -1,4 +1,6 @@
+import type { Schemas } from '../../api/client'
 import { Alert } from '../../components/ui/alert'
+import { copyForCode } from '../../lib/errors'
 import { PLAN_BLOCK_LANGUAGE, readPlanDocument } from '../artifacts/plan-block'
 import { dependencyWaves } from './plan-waves'
 
@@ -6,7 +8,36 @@ import { dependencyWaves } from './plan-waves'
  * FR-55 Planning panel, FR-76: the plan's steps (number, title, specialist, declared files, dependencies, covered
  * requirement ids), a dependency view in waves, and the plan's coverage warnings when it records any.
  */
-export function PlanPanel({ content }: { content: string }) {
+/** FR-76, §4.13: the API's non-blocking findings about this plan version (e.g. UNCOVERED_REQUIREMENTS), with their ids. */
+function PlanWarnings({ warnings }: { warnings: readonly Schemas['ArtifactWarningDto'][] }) {
+  if (warnings.length === 0) {
+    return null
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {warnings.map((w) => (
+        <Alert
+          key={`${w.code}:${w.ids.join(',')}`}
+          tone="warning"
+          title={w.code === 'UNCOVERED_REQUIREMENTS' ? 'Uncovered requirements' : 'Plan warning'}
+        >
+          <p>{copyForCode(w.code) ?? w.message}</p>
+          {w.ids.length > 0 && (
+            <ul aria-label="Requirements not covered by any step" className="mt-1 flex flex-wrap gap-1">
+              {w.ids.map((id) => (
+                <li key={id}>
+                  <code className="rounded border border-border px-1 text-xs">{id}</code>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Alert>
+      ))}
+    </div>
+  )
+}
+
+export function PlanPanel({ content, warnings = [] }: { content: string; warnings?: readonly Schemas['ArtifactWarningDto'][] }) {
   const doc = readPlanDocument(content)
   if (!doc) {
     return (
@@ -20,6 +51,7 @@ export function PlanPanel({ content }: { content: string }) {
   const th = 'px-3 py-2 font-medium'
   return (
     <div className="flex flex-col gap-3">
+      <PlanWarnings warnings={warnings} />
       {coverageWarnings.length > 0 && (
         <Alert tone="warning" title="Coverage warnings">
           <ul className="list-disc pl-5">

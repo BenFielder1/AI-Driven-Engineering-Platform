@@ -35,8 +35,9 @@ public static class JobTypes
     public const string Release = "release";
 
     /// <summary>
-    /// FR-70: the Repository Analyst summarises the codebase at a new version's base commit. Queued when a version starts
-    /// (FR-60); until the analyst exists its handler only logs and completes.
+    /// FR-70: the Repository Analyst summarises the codebase at a version's base commit into a locked
+    /// <c>codebase_summary</c>. Queued when a version with existing code starts: a new version (FR-60), an import's first
+    /// version (FR-73) and a scratch project on a repository that already has code (FR-86).
     /// </summary>
     public const string RepositoryAnalysis = "repository_analysis";
 
@@ -54,6 +55,7 @@ public static class JobTypes
         AgentKind.PlanGenerator => PlanGeneration,
         AgentKind.CodeGenerator => Execution,
         AgentKind.CodeReview => Review,
+        AgentKind.RepositoryAnalyst => RepositoryAnalysis,
         _ => throw new ArgumentOutOfRangeException(nameof(agent), agent, null),
     };
 

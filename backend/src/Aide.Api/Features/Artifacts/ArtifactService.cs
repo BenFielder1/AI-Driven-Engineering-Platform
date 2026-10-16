@@ -570,6 +570,10 @@ public sealed partial class ArtifactService(
         DeclaredFiles = step.Files,
         Dependencies = step.Dependencies,
         UserInstructions = step.UserInstructions,
+
+        // FR-76: the agent that runs the step (generalist without a preset) and the requirements it covers.
+        AgentKey = step.Agent,
+        Covers = step.Covers,
         Status = StepStatus.Pending,
         Attempt = 0,
     };

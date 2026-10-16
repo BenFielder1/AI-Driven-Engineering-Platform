@@ -136,6 +136,31 @@ public sealed record CreateProjectGitRequest
     /// <summary>GitHub access token (<c>github_pat</c> only). Stored encrypted and never returned.</summary>
     [MaxLength(ProjectLimits.SecretMaxLength)]
     public string? Token { get; init; }
+
+    /// <summary>
+    /// FR-73, §8 Testing: <c>local</c> + <c>source: import</c> only, and only where the server sets <c>Git:Local:ImportRoot</c>
+    /// (Development and E2E): the existing Git repository directory to import, absolute or relative to that root, which it
+    /// must resolve under (else 400 <c>VALIDATION</c> on <c>git.localSourcePath</c>). Omit it otherwise.
+    /// </summary>
+    [MaxLength(ProjectLimits.UrlMaxLength)]
+    public string? LocalSourcePath { get; init; }
+}
+
+/// <summary>
+/// FR-73: the versions of an imported repository. <c>releasedTag</c> is the tag of the currently released version, picked
+/// from the repository's GitHub Releases and semver tags (<c>null</c> or omitted: "Never released"); it must exist in the
+/// repository (400 <c>TAG_NOT_FOUND</c>) and name a semver version (400 <c>VERSION_INVALID</c>). <c>developmentVersion</c>
+/// is the version to develop (semver, a leading <c>v</c> is stripped; 400 <c>VERSION_INVALID</c>), greater than the
+/// released one (409 <c>VERSION_NOT_GREATER</c>).
+/// </summary>
+public sealed record CreateProjectImportRequest
+{
+    [MaxLength(ImportRules.TagMaxLength)]
+    public string? ReleasedTag { get; init; }
+
+    [Required]
+    [MaxLength(Versions.VersionLimits.VersionMaxLength)]
+    public required string DevelopmentVersion { get; init; }
 }
 
 /// <summary>The new-project wizard (FR-5). Omitted settings take the FR-5 defaults.</summary>
@@ -166,9 +191,21 @@ public sealed record CreateProjectRequest
 
     public required CreateProjectGitRequest Git { get; init; }
 
-    /// <summary>FR-66: the first release version (semver, a leading <c>v</c> is stripped; default <c>0.1.0</c>). The first release tags it.</summary>
+    /// <summary>
+    /// FR-66 (<c>source: scratch</c> only): the first release version (semver, a leading <c>v</c> is stripped; default
+    /// <c>0.1.0</c>). The first release tags it.
+    /// </summary>
     [MaxLength(Versions.VersionLimits.VersionMaxLength)]
     public string? InitialVersion { get; init; }
+
+    /// <summary>
+    /// FR-73: <c>scratch</c> (default) starts from scratch with <c>initialVersion</c>; <c>import</c> imports the existing
+    /// repository named by <c>git</c> with <c>import</c> (required) and <c>idea</c> as the request for the version to develop.
+    /// </summary>
+    public ProjectSource Source { get; init; } = ProjectSource.Scratch;
+
+    /// <summary>FR-73: required with <c>source: import</c>, not allowed otherwise.</summary>
+    public CreateProjectImportRequest? Import { get; init; }
 }
 
 /// <summary>Partial update of a project (FR-7). Omitted fields are unchanged.</summary>

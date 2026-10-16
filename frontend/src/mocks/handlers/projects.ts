@@ -4,6 +4,7 @@ import type { Schemas } from '../../api/client'
 import { compareSemVer, normalizeVersion, parseSemVer } from '../../features/versions/semver'
 import type { ProjectRole } from '../../lib/permissions'
 import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from './auth'
+import { githubDb } from './github'
 import { problem } from './problem'
 
 type Project = Schemas['ProjectDto']
@@ -42,6 +43,11 @@ export interface StoredProject extends Omit<Project, 'myRole' | 'releaseVersionI
    * them (§4.10). Seeded with one version (0.1.0: in development, or released for a released project).
    */
   releaseVersions: ReleaseVersion[]
+  /**
+   * FR-70: the Repository Analyst's state per release version id (GET /refinement `codebaseSummary`); a version with a
+   * `codebase_summary` artifact reads `completed`, one without an entry `not_needed`.
+   */
+  analyst?: Record<string, Schemas['CodebaseSummaryStatusDto']>
   /** Tags that already exist in the repository: starting a version whose tag is here answers TAG_EXISTS (FR-61). */
   repoTags?: string[]
   git: GitSettings
@@ -570,6 +576,52 @@ function validation(errors: Record<string, string[]>) {
   return problem(400, 'VALIDATION', 'One or more validation errors occurred.', { errors })
 }
 
+/** FR-66: the initial version (default 0.1.0) is the first release version, in development. */
+function scratchVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[] | Response {
+  const initialVersion = body.initialVersion ? normalizeVersion(body.initialVersion) : '0.1.0'
+  if (!initialVersion) {
+    return problem(400, 'VERSION_INVALID', `'${body.initialVersion ?? ''}' is not a valid version.`)
+  }
+  return [makeReleaseVersion({ version: initialVersion, request: body.idea })]
+}
+
+/**
+ * FR-73 import (the API answers 501 until it is built; this follows the contract): the released tag must be in the
+ * GitHub App repo's refs (TAG_NOT_FOUND) and a version (VERSION_INVALID); the version to develop must be valid and
+ * greater (VERSION_NOT_GREATER). Creates an `imported` row for the released tag plus the version `in_development`.
+ */
+function importVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[] | Response {
+  const releasedTag = body.import?.releasedTag ?? null
+  let released: string | null = null
+  if (releasedTag !== null) {
+    const refs = body.git.repoFullName ? githubDb.refs[body.git.repoFullName] : undefined
+    const tag = refs?.tags.find((t) => t.name === releasedTag)
+    if (refs && !tag && !refs.releases.some((r) => r.tagName === releasedTag)) {
+      return problem(400, 'TAG_NOT_FOUND', `The tag '${releasedTag}' was not found in the repository.`)
+    }
+    released = normalizeVersion(tag ? tag.semver : releasedTag)
+    if (!released) {
+      return problem(400, 'VERSION_INVALID', `The tag '${releasedTag}' is not a semantic version.`)
+    }
+  }
+  const text = body.import?.developmentVersion ?? ''
+  const development = normalizeVersion(text)
+  if (!development) {
+    return problem(400, 'VERSION_INVALID', `'${text}' is not a valid version.`)
+  }
+  const [dev, base] = [parseSemVer(development), released ? parseSemVer(released) : null]
+  if (dev && base && compareSemVer(dev, base) <= 0) {
+    return problem(409, 'VERSION_NOT_GREATER', `${development} is not greater than the released version ${released ?? ''}.`)
+  }
+  const baseCommitSha = 'c0ffee1234567890c0ffee1234567890c0ffee12'
+  return [
+    ...(released
+      ? [makeReleaseVersion({ version: released, status: 'imported', tag: releasedTag, mergeCommitSha: baseCommitSha, request: '' })]
+      : []),
+    makeReleaseVersion({ version: development, request: body.idea, baseTag: releasedTag, baseCommitSha }),
+  ]
+}
+
 export const projectHandlers = [
   // ---- Projects ----
   http.get('*/api/projects', ({ request }) => {
@@ -628,13 +680,19 @@ export const projectHandlers = [
     if (mode === 'github_app' && (!body.git.installationId || !body.git.repoFullName)) {
       errors['git.repoFullName'] = ['Pick a repository the AIDE GitHub App is installed on.']
     }
+    const importing = body.source === 'import'
+    if (importing && !body.import) {
+      errors.import = ['Say which version is released and which to develop.']
+    }
+    if (importing && mode === 'local' && !body.git.localSourcePath?.trim()) {
+      errors['git.localSourcePath'] = ['Enter the path of the repository to import.']
+    }
     if (Object.keys(errors).length > 0) {
       return validation(errors)
     }
-    // FR-66: the initial version (default 0.1.0) is the first release version, in development.
-    const initialVersion = body.initialVersion ? normalizeVersion(body.initialVersion) : '0.1.0'
-    if (!initialVersion) {
-      return problem(400, 'VERSION_INVALID', `'${body.initialVersion ?? ''}' is not a valid version.`)
+    const versions = importing ? importVersions(body) : scratchVersions(body)
+    if (versions instanceof Response) {
+      return versions
     }
     const now = new Date().toISOString()
     const project = seedProject({
@@ -658,8 +716,13 @@ export const projectHandlers = [
         hasToken: mode === 'github_pat' && Boolean(body.git.token),
       }),
       members: [{ userId: user.id, role: 'owner' }],
-      releaseVersions: [makeReleaseVersion({ version: initialVersion, request: body.idea })],
+      releaseVersions: versions,
     })
+    // FR-70: an import queues the Repository Analyst for the version to develop.
+    const development = developmentVersionOf(project)
+    if (importing && development) {
+      project.analyst = { [development.id]: { status: 'queued', runId: null, artifactId: null, artifactVersion: null } }
+    }
     return HttpResponse.json<Project>(toDto(project, user.id), { status: 201 })
   }),
 

@@ -6,6 +6,7 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Jobs;
+using Aide.Domain.Specs;
 
 namespace Aide.Api.Agents;
 
@@ -16,8 +17,18 @@ namespace Aide.Api.Agents;
 /// <c>project_request</c> draft; the questions stay in the run's output and the answers in its <c>user_feedback</c>
 /// (and the job payload), where <c>GET /refinement</c> reads them. An unreadable reply is re-run once, then fails the run
 /// with <c>INVALID_OUTPUT</c>.
+/// <para>
+/// FR-70, FR-72: in a version with existing code the agent also gets the codebase summary, the previous released
+/// version's locked project request and spec (all listed as input artifacts) and the repo tools at the base commit. If
+/// the summary doesn't exist yet the job waits for it (<see cref="SummaryWaiter"/>), then continues without it.
+/// </para>
 /// </summary>
-public sealed class IdeaRefinementJobHandler(ArtifactAgentJob agentJob, AgentJobInputs inputs, ILogger<IdeaRefinementJobHandler> logger) : IJobHandler
+public sealed class IdeaRefinementJobHandler(
+    ArtifactAgentJob agentJob,
+    AgentJobInputs inputs,
+    IterationContextReader iterations,
+    TimeProvider time,
+    ILogger<IdeaRefinementJobHandler> logger) : IJobHandler
 {
     public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
     {
@@ -30,6 +41,8 @@ public sealed class IdeaRefinementJobHandler(ArtifactAgentJob agentJob, AgentJob
             return;
         }
 
+        var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
+        var waitWarning = await SummaryWaiter.WaitAsync(iterations, iteration, project.Id, time, cancellationToken);
         var draft = await inputs.PreviousAsync(payload, ArtifactType.ProjectRequest, cancellationToken)
             ?? await inputs.LatestIntactAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
         var answers = RefinementRules.FormatAnswers(payload.Answers);
@@ -44,10 +57,15 @@ public sealed class IdeaRefinementJobHandler(ArtifactAgentJob agentJob, AgentJob
                 ["IDEA"] = project.Idea,
                 ["CURRENT_DRAFT"] = draft?.Content,
                 ["ANSWERS"] = answers,
+                ["CODEBASE_SUMMARY"] = iteration.CodebaseSummary?.Content,
+                ["PREVIOUS_PROJECT_REQUEST"] = iteration.BaselineProjectRequest?.Content,
+                ["PREVIOUS_SPECIFICATION"] = iteration.BaselineSpecification?.Content,
                 [AgentRunner.FeedbackInput] = feedback,
             },
-            InputArtifacts = draft is null ? [] : [AgentJobInputs.Ref(draft)],
+            InputArtifacts = [.. new[] { draft }.OfType<Artifact>().Concat(iteration.Artifacts).Select(AgentJobInputs.Ref)],
             UserFeedback = RefinementRules.RunFeedback(payload.Answers, feedback),
+            Repo = RepoScope.BaseCommit,
+            Warnings = waitWarning is null ? [] : [waitWarning],
         };
 
         await agentJob.RunAsync(
@@ -69,10 +87,13 @@ public sealed class IdeaRefinementJobHandler(ArtifactAgentJob agentJob, AgentJob
 /// <summary>
 /// FR-28 (with the FR-13/FR-17/FR-20 re-runs): generates the technical specification from the current approved project
 /// request (none → the run fails with <c>MISSING_INPUT</c>). On a rejection re-run the rejected version and the comment are
-/// given to revise. A reply missing any of the eleven sections is re-run once with the missing section names as feedback;
-/// still missing → the run fails with <c>MISSING_SECTIONS</c> and no draft is created.
+/// given to revise. The reply is validated by <see cref="SpecValidator"/> (FR-75, §4.13) in the version's context
+/// (<see cref="IterationContext.SpecContext"/>: first version, new version against the baseline spec's ids, or an import's
+/// first version); a failure (<c>MISSING_SECTIONS</c>, <c>MISSING_REQUIREMENT_IDS</c>, <c>INVALID_REQUIREMENT_TAGS</c>) is
+/// re-run once with every problem as feedback; still failing → the run fails with that code and no draft is created.
+/// Iterations also get the codebase summary, the baseline spec and the repo tools at the base commit.
 /// </summary>
-public sealed class SpecGenerationJobHandler(ArtifactAgentJob agentJob, AgentJobInputs inputs, ILogger<SpecGenerationJobHandler> logger) : IJobHandler
+public sealed class SpecGenerationJobHandler(ArtifactAgentJob agentJob, AgentJobInputs inputs, IterationContextReader iterations, ILogger<SpecGenerationJobHandler> logger) : IJobHandler
 {
     public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
     {
@@ -87,6 +108,8 @@ public sealed class SpecGenerationJobHandler(ArtifactAgentJob agentJob, AgentJob
 
         var projectRequest = await inputs.CurrentAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
         var previous = await inputs.PreviousAsync(payload, ArtifactType.TechnicalSpecification, cancellationToken);
+        var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
+        var context = iteration.SpecContext;
         AgentRunRequest Request(string? previousSpec, string? feedback) => new()
         {
             ProjectId = project.Id,
@@ -95,25 +118,24 @@ public sealed class SpecGenerationJobHandler(ArtifactAgentJob agentJob, AgentJob
             Inputs = new Dictionary<string, string?>
             {
                 ["PROJECT_REQUEST"] = projectRequest?.Content,
+                ["SPEC_MODE"] = context.Mode,
+                ["BASELINE_SPECIFICATION"] = iteration.BaselineSpecification?.Content,
+                ["CODEBASE_SUMMARY"] = iteration.CodebaseSummary?.Content,
                 ["PREVIOUS_SPECIFICATION"] = previousSpec,
             },
-            InputArtifacts = [.. new[] { projectRequest, previous }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
+            InputArtifacts = [.. new[] { projectRequest, previous, iteration.CodebaseSummary, iteration.BaselineSpecification }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = feedback,
+            Repo = RepoScope.BaseCommit,
         };
 
         await agentJob.RunAsync(
             Request(previous?.Content, payload.Feedback),
             new ArtifactAgentSpec(
                 ArtifactType.TechnicalSpecification,
-                text =>
-                {
-                    var spec = AgentOutput.UnwrapFence(text);
-                    var check = SpecSections.Check(spec);
-                    return check.IsSuccess ? Result.Success(spec) : Result.Failure<string>(check.Error!);
-                },
+                text => SpecValidator.Check(AgentOutput.UnwrapFence(text), context),
                 (rejected, error) => Request(
                     AgentOutput.UnwrapFence(rejected),
-                    ArtifactAgentJob.JoinFeedback(payload.Feedback, SpecSections.CorrectiveFeedback(error.Details)))),
+                    ArtifactAgentJob.JoinFeedback(payload.Feedback, SpecValidator.CorrectiveFeedback(error, context)))),
             cancellationToken);
     }
 }
@@ -124,9 +146,11 @@ public sealed class SpecGenerationJobHandler(ArtifactAgentJob agentJob, AgentJob
 /// the project's max files per step, and no protected paths: a generated plan may not declare them, §4.6); the draft is the
 /// plan rendered by <see cref="PlanDocument.RenderChecked"/> (Markdown plus the canonical <c>```aide-plan</c> block, proven
 /// to read back to the same steps). An invalid plan is re-run once with every reason as feedback; still invalid → the run
-/// fails with <c>INVALID_PLAN</c> and no draft is created.
+/// fails with <c>INVALID_PLAN</c> and no draft is created. Steps carry <c>agent</c> and <c>covers</c> (FR-76); an
+/// iteration plan that leaves a <c>[new]</c>/<c>[changed]</c> requirement uncovered is a warning, shown with the plan
+/// (<see cref="PlanScope"/>, §4.13). Iterations also get the codebase summary and the repo tools at the base commit.
 /// </summary>
-public sealed class PlanGenerationJobHandler(ArtifactAgentJob agentJob, AgentJobInputs inputs, ILogger<PlanGenerationJobHandler> logger) : IJobHandler
+public sealed class PlanGenerationJobHandler(ArtifactAgentJob agentJob, AgentJobInputs inputs, IterationContextReader iterations, ILogger<PlanGenerationJobHandler> logger) : IJobHandler
 {
     public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
     {
@@ -142,6 +166,7 @@ public sealed class PlanGenerationJobHandler(ArtifactAgentJob agentJob, AgentJob
         var projectRequest = await inputs.CurrentAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
         var spec = await inputs.CurrentAsync(project.Id, ArtifactType.TechnicalSpecification, cancellationToken);
         var previous = await inputs.PreviousAsync(payload, ArtifactType.ImplementationPlan, cancellationToken);
+        var summary = (await iterations.ReadAsync(project.Id, cancellationToken)).CodebaseSummary;
         var maxFiles = project.MaxFilesPerStep;
         AgentRunRequest Request(string? previousPlan, string? feedback) => new()
         {
@@ -152,11 +177,13 @@ public sealed class PlanGenerationJobHandler(ArtifactAgentJob agentJob, AgentJob
             {
                 ["PROJECT_REQUEST"] = projectRequest?.Content,
                 ["TECHNICAL_SPECIFICATION"] = spec?.Content,
+                ["CODEBASE_SUMMARY"] = summary?.Content,
                 ["PREVIOUS_PLAN"] = previousPlan,
                 ["MAX_FILES_PER_STEP"] = maxFiles.ToString(CultureInfo.InvariantCulture),
             },
-            InputArtifacts = [.. new[] { projectRequest, spec, previous }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
+            InputArtifacts = [.. new[] { projectRequest, spec, previous, summary }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = feedback,
+            Repo = RepoScope.BaseCommit,
         };
 
         await agentJob.RunAsync(
@@ -184,12 +211,37 @@ public sealed class PlanGenerationJobHandler(ArtifactAgentJob agentJob, AgentJob
     }
 }
 
+/// <summary>
+/// FR-70: a refinement run in a version with existing code waits for the Repository Analyst's summary: the job is
+/// deferred (<see cref="JobDeferredException"/>, re-queued without counting an attempt) while the analyst is queued or
+/// running, up to 10 minutes after the version started (<see cref="CodebaseSummaryWait"/>); then the run goes on
+/// without it and records the warning.
+/// </summary>
+internal static class SummaryWaiter
+{
+    public const string WaitingMessage = "Waiting for the Repository Analyst's codebase summary (FR-70).";
+
+    /// <summary>The warning to record (<c>null</c>: none), or throws <see cref="JobDeferredException"/> to wait.</summary>
+    public static async Task<string?> WaitAsync(IterationContextReader reader, IterationContext iteration, Guid projectId, TimeProvider time, CancellationToken cancellationToken)
+    {
+        if (iteration.Version is not { } version || !iteration.HasExistingCode || iteration.CodebaseSummary is not null)
+        {
+            return null;
+        }
+
+        var state = await reader.AnalysisStateAsync(projectId, version.Id, cancellationToken);
+        var decision = CodebaseSummaryWait.Decide(hasExistingCode: true, summaryExists: false, state, version.CreatedAt, time.GetUtcNow());
+        return decision.Wait ? throw new JobDeferredException(WaitingMessage, decision.RetryAt!.Value) : decision.Warning;
+    }
+}
+
 public static class AgentJobServiceCollectionExtensions
 {
     /// <summary>The refinement, spec and plan job handlers (FR-27–FR-29) and what they share.</summary>
     public static IServiceCollection AddAgentJobs(this IServiceCollection services)
     {
         services.AddScoped<AgentJobInputs>();
+        services.AddScoped<IterationContextReader>();
         services.AddScoped<ArtifactAgentJob>();
         services.AddJobHandler<IdeaRefinementJobHandler>(JobTypes.IdeaRefinement);
         services.AddJobHandler<SpecGenerationJobHandler>(JobTypes.SpecGeneration);

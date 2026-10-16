@@ -298,30 +298,13 @@ public sealed partial class VersionService(
     private static partial void LogTagLookupFailed(ILogger logger, Guid projectId, GitProvider provider);
 }
 
-/// <summary>
-/// FR-70 placeholder: the Repository Analyst job queued when a version starts (FR-60). The analyst arrives with M13; until
-/// then the handler logs that it isn't implemented and completes, so the job doesn't stay queued.
-/// </summary>
-public sealed partial class RepositoryAnalysisJobHandler(ILogger<RepositoryAnalysisJobHandler> logger) : IJobHandler
-{
-    public Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(job);
-        LogNotImplemented(logger, job.ProjectId);
-        return Task.CompletedTask;
-    }
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Repository analysis for project {ProjectId} is not implemented yet (FR-70); the job completes without a codebase summary")]
-    private static partial void LogNotImplemented(ILogger logger, Guid? projectId);
-}
-
 public static class VersionServiceCollectionExtensions
 {
-    /// <summary>§4.10: the versions service and the (placeholder) repository analysis job.</summary>
+    /// <summary>§4.10: the versions service and the Repository Analyst job (FR-70).</summary>
     public static IServiceCollection AddReleaseVersions(this IServiceCollection services)
     {
         services.AddScoped<VersionService>();
-        services.AddJobHandler<RepositoryAnalysisJobHandler>(JobTypes.RepositoryAnalysis);
+        services.AddJobHandler<Agents.RepositoryAnalysisJobHandler>(JobTypes.RepositoryAnalysis);
         return services;
     }
 }

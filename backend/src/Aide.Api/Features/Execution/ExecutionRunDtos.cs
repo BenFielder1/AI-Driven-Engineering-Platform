@@ -61,9 +61,10 @@ public sealed record StepAttemptRunDto(
 
 /// <summary>
 /// A repository tool call made during an agent run (FR-71): the tool name, its arguments as given by the model, the bytes
-/// returned and whether the result was cut to the tool's limit.
+/// returned and whether the result was cut to the tool's limit. <c>error</c> is the code of a refused call
+/// (<c>UNSAFE_PATH</c>, <c>TOOL_LIMIT</c>, <c>NOT_FOUND</c>, …), else <c>null</c>.
 /// </summary>
-public sealed record ToolCallDto(string Tool, JsonElement Arguments, int Bytes, bool Truncated);
+public sealed record ToolCallDto(string Tool, JsonElement Arguments, int Bytes, bool Truncated, string? Error);
 
 /// <summary>
 /// One attempt of an execution step (FR-57): its outcome, the Guardian errors (<c>violations</c>) and <c>warnings</c>, the

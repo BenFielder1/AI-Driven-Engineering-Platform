@@ -2,6 +2,8 @@ using Aide.Api.Features.Activity;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Aide.Domain.Execution;
+using Aide.Domain.Specs;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -124,7 +126,36 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             artifact.CreatedAt,
             checkedIntegrity,
             releaseVersions.GetValueOrDefault(artifact.ReleaseVersionId, string.Empty),
-            artifact.RestoredFromVersion);
+            artifact.RestoredFromVersion,
+            await WarningsAsync(artifact, cancellationToken));
+    }
+
+    /// <summary>
+    /// FR-76, §4.13: an implementation plan's coverage warning (<see cref="PlanScope"/>) against the latest locked
+    /// specification of its release version. Computed on read, so it follows the spec it is checked against.
+    /// </summary>
+    private async Task<IReadOnlyList<ArtifactWarningDto>> WarningsAsync(Artifact artifact, CancellationToken cancellationToken)
+    {
+        if (artifact.Type != ArtifactType.ImplementationPlan)
+        {
+            return [];
+        }
+
+        var plan = PlanDocument.ParseMarkdown(artifact.Content, maxFilesPerStep: null);
+        if (plan.IsFailure)
+        {
+            return [];
+        }
+
+        var spec = await db.Artifacts.AsNoTracking()
+            .Where(a => a.ProjectId == artifact.ProjectId && a.ReleaseVersionId == artifact.ReleaseVersionId
+                && a.Type == ArtifactType.TechnicalSpecification && a.Status == ArtifactStatus.Locked)
+            .OrderByDescending(a => a.Version)
+            .Select(a => a.Content)
+            .FirstOrDefaultAsync(cancellationToken);
+        return spec is null || PlanScope.Check(plan.Value, RequirementParser.Parse(spec).Requirements) is not { } warning
+            ? []
+            : [new ArtifactWarningDto(warning.Code, warning.Message, warning.Details)];
     }
 
     private Task<Artifact?> FindAsync(Guid projectId, ArtifactType type, int version, CancellationToken cancellationToken) =>

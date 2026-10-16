@@ -49,7 +49,7 @@ function seedThreeRuns() {
       {
         outcome: 'accepted',
         producedFiles: [{ path: 'src/part-1.ts', action: 'create', contentHash: 'sha256:aaa' }],
-        toolCalls: [{ tool: 'read_file', arguments: { path: 'src/index.ts' }, bytes: 2048, truncated: false }],
+        toolCalls: [{ tool: 'read_file', arguments: { path: 'src/index.ts' }, bytes: 2048, truncated: false, error: null }],
       },
     ])
     seedStepAttempts(p, fix11, [{ outcome: 'accepted' }])

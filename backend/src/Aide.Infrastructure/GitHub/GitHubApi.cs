@@ -292,25 +292,38 @@ public sealed class GitHubApi(IHttpClientFactory clients, TimeProvider time)
         return (head, entries);
     }
 
-    /// <summary>FR-73: the repository's releases (first 100) and the tag of GitHub's latest release (<c>null</c>: none).</summary>
+    /// <summary>Pages (100 items each) read from list endpoints before stopping: 1,000 releases or 2,000 tags at most.</summary>
+    public const int MaxReleasePages = 10;
+
+    public const int MaxTagPages = 20;
+
+    /// <summary>FR-73: the repository's releases (every page, up to <see cref="MaxReleasePages"/>) and the tag of GitHub's latest release (<c>null</c>: none).</summary>
     public async Task<(IReadOnlyList<(string TagName, string? Name, DateTimeOffset? PublishedAt, bool Draft)> Releases, string? LatestTag)> ListReleasesAsync(
         string token, string owner, string repo, CancellationToken cancellationToken)
     {
         var path = $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repo)}/releases";
         List<(string, string?, DateTimeOffset?, bool)> releases = [];
-        using (var json = await SendAsync(HttpMethod.Get, $"{path}?per_page=100", token, null, cancellationToken))
+        for (var page = 1; page <= MaxReleasePages; page++)
         {
-            if (json.RootElement.ValueKind == JsonValueKind.Array)
+            using var json = await SendAsync(HttpMethod.Get, $"{path}?per_page=100&page={page}", token, null, cancellationToken);
+            if (json.RootElement.ValueKind != JsonValueKind.Array)
             {
-                foreach (var release in json.RootElement.EnumerateArray())
+                break;
+            }
+
+            foreach (var release in json.RootElement.EnumerateArray())
+            {
+                if (Text(release, "tag_name") is { } tag)
                 {
-                    if (Text(release, "tag_name") is { } tag)
-                    {
-                        DateTimeOffset? published = Text(release, "published_at") is { } text
-                            && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at) ? at : null;
-                        releases.Add((tag, Text(release, "name"), published, release.TryGetProperty("draft", out var draft) && draft.ValueKind == JsonValueKind.True));
-                    }
+                    DateTimeOffset? published = Text(release, "published_at") is { } text
+                        && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at) ? at : null;
+                    releases.Add((tag, Text(release, "name"), published, release.TryGetProperty("draft", out var draft) && draft.ValueKind == JsonValueKind.True));
                 }
+            }
+
+            if (json.RootElement.GetArrayLength() < 100)
+            {
+                break;
             }
         }
 
@@ -324,17 +337,70 @@ public sealed class GitHubApi(IHttpClientFactory clients, TimeProvider time)
         return (releases, latest);
     }
 
-    /// <summary>FR-73: the repository's tags (first 100) with their commits.</summary>
+    /// <summary>FR-73: the repository's tags with their commits (every page, up to <see cref="MaxTagPages"/>).</summary>
     public async Task<IReadOnlyList<(string Name, string Sha)>> ListTagsAsync(string token, string owner, string repo, CancellationToken cancellationToken)
     {
-        using var json = await GetOrNullAsync(
-            $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repo)}/tags?per_page=100", token, cancellationToken, emptyIsMissing: true);
-        return json?.RootElement.ValueKind == JsonValueKind.Array
-            ? [.. json.RootElement.EnumerateArray()
+        var tags = new List<(string, string)>();
+        for (var page = 1; page <= MaxTagPages; page++)
+        {
+            using var json = await GetOrNullAsync(
+                $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repo)}/tags?per_page=100&page={page}", token, cancellationToken, emptyIsMissing: true);
+            if (json?.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                break;
+            }
+
+            tags.AddRange(json.RootElement.EnumerateArray()
                 .Select(t => (Name: Text(t, "name"), Sha: t.TryGetProperty("commit", out var c) ? Text(c, "sha") : null))
                 .Where(t => t.Name is not null && t.Sha is not null)
-                .Select(t => (t.Name!, t.Sha!))]
-            : [];
+                .Select(t => (t.Name!, t.Sha!)));
+            if (json.RootElement.GetArrayLength() < 100)
+            {
+                break;
+            }
+        }
+
+        return tags;
+    }
+
+    /// <summary>
+    /// FR-73: the commit the tag <paramref name="tag"/> points at (<c>GET /repos/{o}/{r}/git/ref/tags/{tag}</c>, peeled through
+    /// an annotated tag object), or <c>null</c> when the repository has no such tag. An exact lookup: not limited by paging.
+    /// </summary>
+    public async Task<string?> FindTagCommitAsync(string token, string owner, string repo, string tag, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(tag);
+        var path = $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repo)}/git";
+        var refPath = string.Join('/', tag.Split('/').Select(Uri.EscapeDataString));
+        string? type;
+        string? sha;
+        using (var json = await GetOrNullAsync($"{path}/ref/tags/{refPath}", token, cancellationToken, emptyIsMissing: true))
+        {
+            // Only an object naming exactly this ref is the tag (older API versions answered prefix matches with an array).
+            if (json is null || json.RootElement.ValueKind != JsonValueKind.Object || Text(json.RootElement, "ref") != $"refs/tags/{tag}"
+                || !json.RootElement.TryGetProperty("object", out var target))
+            {
+                return null;
+            }
+
+            type = Text(target, "type");
+            sha = Text(target, "sha");
+        }
+
+        // An annotated tag points at a tag object; follow it (a tag of a tag is followed a few times at most).
+        for (var hop = 0; hop < 4 && type == "tag" && sha is not null; hop++)
+        {
+            using var tagObject = await GetOrNullAsync($"{path}/tags/{Uri.EscapeDataString(sha)}", token, cancellationToken);
+            if (tagObject is null || !tagObject.RootElement.TryGetProperty("object", out var next))
+            {
+                return null;
+            }
+
+            type = Text(next, "type");
+            sha = Text(next, "sha");
+        }
+
+        return type == "commit" ? sha : null;
     }
 
     /// <summary>

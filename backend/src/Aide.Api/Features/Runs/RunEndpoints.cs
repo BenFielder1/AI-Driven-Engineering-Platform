@@ -147,7 +147,8 @@ public static class RunEndpoints
             return ApiProblems.NotFound("The agent run was not found.");
         }
 
-        var text = AgentRunner.ReadOutput(run.Output)?.Text ?? run.Output;
+        var stored = AgentRunner.ReadOutput(run.Output);
+        var text = stored?.Text ?? run.Output;
         var truncated = text is { Length: > MaxOutputLength };
         var label = run.CredentialId is { } credentialId
             ? (await CredentialLabelsAsync(db, [credentialId], cancellationToken)).GetValueOrDefault(credentialId)
@@ -163,7 +164,9 @@ public static class RunEndpoints
             r.PresetId,
             r.PresetVersion,
             r.ToolCallCount,
-            r.CredentialLabel));
+            r.CredentialLabel,
+            Execution.ExecutionRunReader.ToolCalls(run.ToolCalls),
+            stored?.Warnings ?? []));
     }
 
     /// <summary>

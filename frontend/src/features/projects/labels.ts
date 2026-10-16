@@ -382,6 +382,7 @@ export const agentKinds = [
   'plan_generator',
   'code_generator',
   'code_review',
+  'repository_analyst',
 ] as const satisfies readonly Schemas['AgentKind'][]
 
 export const agentKindLabels: Record<Schemas['AgentKind'], string> = {
@@ -390,6 +391,7 @@ export const agentKindLabels: Record<Schemas['AgentKind'], string> = {
   plan_generator: 'Plan generator',
   code_generator: 'Code generator',
   code_review: 'Code review',
+  repository_analyst: 'Repository Analyst',
 }
 
 /** FR-23, FR-25: agent run statuses. Running runs stream nothing in v1 (SPEC §8, §11 Q3). */

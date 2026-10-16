@@ -206,7 +206,8 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
         return new InputArtifactRef(artifact.Id, artifact.Type, artifact.Version);
     }
 
-    private async Task<Artifact?> IntactAsync(Artifact? artifact, CancellationToken cancellationToken)
+    /// <summary><paramref name="artifact"/> when its content still matches its hash (FR-20), else <c>null</c>.</summary>
+    public async Task<Artifact?> IntactAsync(Artifact? artifact, CancellationToken cancellationToken)
     {
         if (artifact is null)
         {

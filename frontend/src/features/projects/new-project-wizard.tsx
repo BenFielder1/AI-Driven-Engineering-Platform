@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useForm, useWatch, type Path } from 'react-hook-form'
 import { Check } from 'lucide-react'
 
@@ -15,7 +15,7 @@ import { cn } from '../../lib/utils'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { TextField } from '../../components/ui/text-field'
 import { errorMessage, isApiError } from '../../lib/errors'
-import { normalizeVersion } from '../versions/semver'
+import { normalizeVersion, suggestNextVersion } from '../versions/semver'
 import { buttonClasses } from '../../components/ui/button-classes'
 import { LoadingState } from '../../components/ui/states'
 import { useAuthProviders } from '../auth/auth-api'
@@ -24,11 +24,24 @@ import { GitHubErrorAlert } from '../github/github-error-alert'
 import { RepoPicker } from '../github/repo-picker'
 import { approvalModeDescriptions, approvalModeLabels, approvalModes } from './labels'
 import { useCreateProject } from './projects-api'
-import { limits, toBudget, wizardDefaults, wizardSchema, type WizardValues } from './schemas'
+import { ReleasedVersionField } from './released-version-field'
+import { defaultReleasedTag, releasedOptions, semverOfTag } from './released-versions'
+import {
+  limits,
+  localSourcePathMax,
+  NEVER_RELEASED,
+  releasedTagOf,
+  toBudget,
+  wizardDefaults,
+  wizardSchema,
+  type WizardValues,
+} from './schemas'
 
 type Field = Path<WizardValues>
+type Source = WizardValues['source']
 
 const fieldIds: Record<Field, string> = {
+  source: 'project-source',
   name: 'project-name',
   idea: 'project-idea',
   approvalMode: 'project-approval-mode',
@@ -44,28 +57,51 @@ const fieldIds: Record<Field, string> = {
   installationId: 'project-repo-search',
   repoHasCode: 'project-repo-search',
   initialVersion: 'project-initial-version',
+  releasedTag: 'project-released-tag',
+  releasedVersion: 'project-released-tag',
+  developmentVersion: 'project-development-version',
+  localSourcePath: 'project-local-source-path',
 }
 
-interface Step {
-  title: string
-  fields: readonly Field[]
+/**
+ * SPEC §7.2 order: Source → Idea (or Request) → Repository → Version → Configuration → Review & create. Stack and
+ * Deployment arrive with their phases.
+ */
+const stepKeys = ['source', 'idea', 'repository', 'version', 'configuration', 'review'] as const
+type StepKey = (typeof stepKeys)[number]
+
+const stepFields: Record<StepKey, readonly Field[]> = {
+  source: ['source'],
+  idea: ['name', 'idea'],
+  repository: ['gitMode', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken', 'releasedTag', 'localSourcePath'],
+  version: ['initialVersion', 'developmentVersion'],
+  configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget'],
+  review: [],
 }
 
-const steps: readonly Step[] = [
-  { title: 'Project idea', fields: ['name', 'idea'] },
-  {
-    title: 'Configuration',
-    fields: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget'],
-  },
-  { title: 'Git repository', fields: ['gitMode', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken'] },
-  { title: 'Version', fields: ['initialVersion'] },
-  { title: 'Review & create', fields: [] },
-]
+function stepTitle(key: StepKey, source: Source): string {
+  switch (key) {
+    case 'source':
+      return 'Source'
+    case 'idea':
+      return source === 'import' ? 'Request' : 'Project idea'
+    case 'repository':
+      return 'Repository'
+    case 'version':
+      return 'Version'
+    case 'configuration':
+      return 'Configuration'
+    case 'review':
+      return 'Review & create'
+  }
+}
 
-const LAST_STEP = steps.length - 1
+const stepIndex = (key: StepKey) => stepKeys.indexOf(key)
+const LAST_STEP = stepKeys.length - 1
 
-/** Server VALIDATION keys (camelCase, possibly `git.`-prefixed) → wizard fields. */
+/** Server VALIDATION keys (camelCase, possibly `git.`/`import.`-prefixed) → wizard fields. */
 const serverFieldMap: Record<string, Field> = {
+  source: 'source',
   name: 'name',
   idea: 'idea',
   approvalmode: 'approvalMode',
@@ -80,13 +116,17 @@ const serverFieldMap: Record<string, Field> = {
   'git.token': 'gitToken',
   'git.installationid': 'repoFullName',
   'git.repofullname': 'repoFullName',
+  'git.localsourcepath': 'localSourcePath',
   git: 'gitMode',
   initialversion: 'initialVersion',
   version: 'initialVersion',
+  import: 'developmentVersion',
+  'import.developmentversion': 'developmentVersion',
+  'import.releasedtag': 'releasedTag',
 }
 
 function firstStepWithError(errors: Partial<Record<Field, unknown>>): number {
-  const index = steps.findIndex((s) => s.fields.some((f) => errors[f]))
+  const index = stepKeys.findIndex((k) => stepFields[k].some((f) => errors[f]))
   return index === -1 ? LAST_STEP : index
 }
 
@@ -99,12 +139,18 @@ function toGitRequest(v: WizardValues): Schemas['CreateProjectGitRequest'] {
     case 'github_pat':
       return { mode: 'github_pat', repoUrl: v.repoUrl.trim(), defaultBranch, token: v.gitToken ? v.gitToken : null }
     case 'local':
-      return { mode: 'local', defaultBranch }
+      // FR-73: a Local import names the existing repository on the server (development and E2E only).
+      return v.source === 'import'
+        ? { mode: 'local', defaultBranch, localSourcePath: v.localSourcePath.trim() }
+        : { mode: 'local', defaultBranch }
   }
 }
 
+const versionText = (text: string) => normalizeVersion(text) ?? text.trim()
+
+/** FR-5, FR-66, FR-73: scratch sends `initialVersion`; import sends `import`, and `idea` is the version's request. */
 function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
-  return {
+  const base = {
     name: v.name.trim(),
     idea: v.idea.trim(),
     approvalMode: v.approvalMode,
@@ -112,15 +158,35 @@ function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
     maxFilesPerStep: Number(v.maxFilesPerStep),
     maxReviewCycles: Number(v.maxReviewCycles),
     tokenBudget: toBudget(v.tokenBudget),
-    initialVersion: normalizeVersion(v.initialVersion) ?? v.initialVersion.trim(),
     git: toGitRequest(v),
   }
+  return v.source === 'import'
+    ? {
+        ...base,
+        source: 'import',
+        import: { releasedTag: releasedTagOf(v), developmentVersion: versionText(v.developmentVersion) },
+      }
+    : { ...base, source: 'scratch', initialVersion: versionText(v.initialVersion) }
+}
+
+/** The released version as the summary says it: "v2.3.0", "release-2.3.0 (2.3.0)" or "Never released". */
+function releasedLabel(v: Pick<WizardValues, 'releasedTag' | 'releasedVersion'>): string {
+  const tag = releasedTagOf(v)
+  if (tag === null) {
+    return 'Never released'
+  }
+  return v.releasedVersion && normalizeVersion(tag) !== v.releasedVersion ? `${tag} (${v.releasedVersion})` : tag
 }
 
 /** `acme` of `acme/todo-app`, or undefined when nothing is picked. */
 function repoOwner(fullName: string): string | undefined {
   const [owner = ''] = fullName.split('/')
   return owner === '' ? undefined : owner
+}
+
+const sourceLabels: Record<Source, string> = {
+  scratch: 'Start from scratch',
+  import: 'Import an existing repository',
 }
 
 /** The wizard's Git options (FR-86). */
@@ -132,7 +198,8 @@ const gitModeOptionLabels: Record<WizardValues['gitMode'], string> = {
 
 /**
  * FR-86 GitHub App option: the repo picker (with Create repository) once the user has connected GitHub, else Connect
- * GitHub. A repo with code gets the "AIDE will build on it" warning (it's treated as an import, never released).
+ * GitHub. In "start from scratch", a repo with code gets the "AIDE will build on it" warning (it's treated as an
+ * import, never released) and offers "Import instead".
  */
 function AppRepository({
   connectionPending,
@@ -141,8 +208,10 @@ function AppRepository({
   installUrl,
   selected,
   hasCode,
+  source,
   error,
   onSelect,
+  onImportInstead,
 }: {
   connectionPending: boolean
   connectionError: unknown
@@ -150,8 +219,10 @@ function AppRepository({
   installUrl: string | null
   selected: string
   hasCode: boolean
+  source: Source
   error?: string | undefined
   onSelect: (repo: GitHubRepo) => void
+  onImportInstead: () => void
 }) {
   if (connectionPending) {
     return <LoadingState label="Checking your GitHub connection…" />
@@ -187,11 +258,17 @@ function AppRepository({
           <span className="text-muted-foreground">No repository selected yet.</span>
         )}
       </p>
-      {selected && hasCode && (
+      {selected && hasCode && source === 'scratch' && (
         <Alert tone="warning" title="This repository has code. AIDE will build on it">
           <p>
             The project is treated as an import of a repository that was never released: the Repository Analyst reads the
-            code first, and the first specification covers what is already there.
+            code first, and the first specification covers what is already there. Import it instead to say which version
+            is released.
+          </p>
+          <p className="mt-2">
+            <Button variant="secondary" onClick={onImportInstead}>
+              Import instead
+            </Button>
           </p>
         </Alert>
       )}
@@ -199,7 +276,11 @@ function AppRepository({
   )
 }
 
-/** /projects/new (FR-5, FR-66): five steps with per-step validation; Create navigates to the new project. */
+/**
+ * /projects/new (FR-5, FR-66, FR-73, FR-86): six steps with per-step validation; "Import an existing repository" asks
+ * for the request, the repository with its released version, and the version to develop. Create navigates to the
+ * new project.
+ */
 export function NewProjectWizard() {
   const navigate = useNavigate()
   const create = useCreateProject()
@@ -217,6 +298,7 @@ export function NewProjectWizard() {
     getValues,
     setValue,
     getFieldState,
+    resetField,
     control,
     setError,
     formState: { errors },
@@ -239,10 +321,14 @@ export function NewProjectWizard() {
     setStep(next)
   }
 
-  const current = steps[step] ?? steps[0]
+  const key = stepKeys[step] ?? 'source'
+  const source = useWatch({ control, name: 'source' })
+  const importing = source === 'import'
   const gitMode = useWatch({ control, name: 'gitMode' })
   const repoFullName = useWatch({ control, name: 'repoFullName' })
   const repoHasCode = useWatch({ control, name: 'repoHasCode' })
+  const releasedTag = useWatch({ control, name: 'releasedTag' })
+  const releasedVersion = useWatch({ control, name: 'releasedVersion' })
 
   // FR-86: the GitHub App option exists once an App is registered; it is the default when the user is connected.
   const providers = useAuthProviders()
@@ -257,26 +343,79 @@ export function NewProjectWizard() {
     }
   }, [appAvailable, connected, getFieldState, setValue])
 
-  // The list may not know whether a repo is empty; its refs always do (FR-86).
+  // The list may not know whether a repo is empty; its refs always do (FR-86). They also list releases and tags (FR-73).
   const refs = useGitHubRepoRefs(gitMode === 'github_app' && repoFullName ? repoFullName : null)
+  const refsData = gitMode === 'github_app' ? refs.data : undefined
   useEffect(() => {
     if (refs.data) {
       setValue('repoHasCode', !refs.data.empty)
     }
   }, [refs.data, setValue])
 
+  /**
+   * Whether the user chose the released version / edited the version to develop. Kept here rather than read from
+   * RHF's dirty state, which also turns true for programmatic prefills once any other field changes.
+   */
+  const [releasedChosen, setReleasedChosen] = useState(false)
+  const [versionEdited, setVersionEdited] = useState(false)
+  const resetReleased = useCallback(() => {
+    setReleasedChosen(false)
+    resetField('releasedTag')
+  }, [resetField])
+
+  // FR-73: preselect the latest release once a repo's refs are known, unless the user already chose.
+  useEffect(() => {
+    if (refsData && importing && !releasedChosen) {
+      setValue('releasedTag', defaultReleasedTag(releasedOptions(refsData)))
+    }
+  }, [refsData, importing, releasedChosen, setValue])
+
+  // A typed tag (URL + token, Local) doesn't carry over to the picker, and a picked one doesn't carry over to the field.
+  const previousMode = useRef(gitMode)
+  useEffect(() => {
+    if (previousMode.current !== gitMode) {
+      previousMode.current = gitMode
+      resetReleased()
+    }
+  }, [gitMode, resetReleased])
+
+  // Keep the released tag's semver in sync, and prefill the version to develop with its next minor (FR-73).
+  useEffect(() => {
+    setValue('releasedVersion', semverOfTag(releasedTag, refsData) ?? '')
+  }, [releasedTag, refsData, setValue])
+  useEffect(() => {
+    if (!versionEdited) {
+      setValue('developmentVersion', suggestNextVersion(releasedVersion || null))
+    }
+  }, [releasedVersion, versionEdited, setValue])
+
   const pickRepo = (repo: GitHubRepo) => {
+    if (repo.fullName !== getValues('repoFullName')) {
+      resetReleased()
+    }
     setValue('repoFullName', repo.fullName, { shouldValidate: getFieldState('repoFullName').invalid })
     setValue('installationId', String(repo.installationId))
     setValue('repoHasCode', repo.empty === false)
     setValue('defaultBranch', repo.defaultBranch, { shouldValidate: true })
   }
 
+  /** FR-86: a repo with code in "start from scratch" becomes an import that was never released. */
+  const importInstead = () => {
+    setValue('source', 'import', { shouldDirty: true })
+    setReleasedChosen(true)
+    setValue('releasedTag', NEVER_RELEASED, { shouldDirty: true })
+  }
+
   async function next() {
-    const valid = await trigger(current?.fields ?? [], { shouldFocus: true })
+    const valid = await trigger(stepFields[key], { shouldFocus: true })
     if (valid) {
       goTo(step + 1)
     }
+  }
+
+  const failVersion = (field: 'developmentVersion' | 'releasedTag' | 'initialVersion', error: unknown) => {
+    setError(field, { type: 'server', message: errorMessage(error, 'createProject') })
+    goTo(stepIndex(field === 'releasedTag' ? 'repository' : 'version'))
   }
 
   const submit = handleSubmit(
@@ -287,14 +426,15 @@ export function NewProjectWizard() {
           void navigate({ to: '/projects/$projectId', params: { projectId: project.id } })
         },
         onError: (error) => {
+          const importValues = values.source === 'import'
           if (isApiError(error, 'VALIDATION')) {
             const unmatched: string[] = []
             const matched: Partial<Record<Field, string>> = {}
-            for (const [key, messages] of Object.entries(error.fieldErrors)) {
-              const field = serverFieldMap[key.toLowerCase()]
-              if (field) {
-                matched[field] = messages.join(' ')
-                setError(field, { type: 'server', message: messages.join(' ') })
+            for (const [field, messages] of Object.entries(error.fieldErrors)) {
+              const target = serverFieldMap[field.toLowerCase()]
+              if (target) {
+                matched[target] = messages.join(' ')
+                setError(target, { type: 'server', message: messages.join(' ') })
               } else {
                 unmatched.push(messages.join(' '))
               }
@@ -305,8 +445,24 @@ export function NewProjectWizard() {
             }
             setServerError({ message: unmatched.length > 0 ? unmatched.join(' ') : errorMessage(error) })
           } else if (isApiError(error, 'VERSION_INVALID')) {
-            setError('initialVersion', { type: 'server', message: errorMessage(error) })
-            goTo(steps.findIndex((s) => s.title === 'Version'))
+            // Import: the version to develop, unless it is valid, in which case the released tag isn't a version.
+            failVersion(
+              !importValues
+                ? 'initialVersion'
+                : normalizeVersion(values.developmentVersion) && releasedTagOf(values) !== null
+                  ? 'releasedTag'
+                  : 'developmentVersion',
+              error,
+            )
+          } else if (importValues && (isApiError(error, 'VERSION_NOT_GREATER') || isApiError(error, 'TAG_EXISTS'))) {
+            failVersion('developmentVersion', error)
+          } else if (importValues && values.gitMode === 'github_pat' && isApiError(error, 'NOT_FOUND')) {
+            // FR-73: the repository to import doesn't exist, or the token can't see it.
+            setError('repoUrl', { type: 'server', message: errorMessage(error, 'createProject') })
+            goTo(stepIndex('repository'))
+          } else if (importValues && isApiError(error, 'TAG_NOT_FOUND')) {
+            void refs.refetch()
+            failVersion('releasedTag', error)
           } else {
             setServerError({ message: errorMessage(error, 'createProject'), error })
           }
@@ -320,13 +476,14 @@ export function NewProjectWizard() {
 
   const stepErrors = fieldErrorSummary(
     errors,
-    Object.fromEntries((current?.fields ?? []).map((f) => [f, fieldIds[f]])) as Partial<Record<Field, string>>,
+    Object.fromEntries(stepFields[key].map((f) => [f, fieldIds[f]])) as Partial<Record<Field, string>>,
   )
+  const titles = stepKeys.map((k) => stepTitle(k, source))
 
   return (
     <>
       <PageHeader title="New project" />
-      <StepIndicator current={step} />
+      <StepIndicator current={step} titles={titles} />
 
       <form
         noValidate
@@ -347,7 +504,7 @@ export function NewProjectWizard() {
           tabIndex={-1}
           className="mb-4 text-xl focus:outline-none"
         >
-          Step {step + 1} of {steps.length}: {current?.title}
+          Step {step + 1} of {stepKeys.length}: {titles[step]}
         </h2>
 
         <ErrorSummary title="Check this step" errors={stepErrors} />
@@ -370,7 +527,29 @@ export function NewProjectWizard() {
         )}
 
         <div className="mt-2 flex flex-col gap-5">
-          {step === 0 && (
+          {key === 'source' && (
+            <RadioGroup
+              id={fieldIds.source}
+              legend="Where does the code come from?"
+              inputProps={register('source')}
+              error={errors.source?.message}
+              options={[
+                {
+                  value: 'scratch',
+                  label: sourceLabels.scratch,
+                  description: 'A new project: the agents build the first version from your idea.',
+                },
+                {
+                  value: 'import',
+                  label: sourceLabels.import,
+                  description:
+                    'A repository that already has code: the Repository Analyst summarises it, then the agents develop the next version from your request.',
+                },
+              ]}
+            />
+          )}
+
+          {key === 'idea' && (
             <>
               <TextField
                 id={fieldIds.name}
@@ -380,19 +559,182 @@ export function NewProjectWizard() {
                 error={errors.name?.message}
                 {...register('name')}
               />
-              <TextAreaField
-                id={fieldIds.idea}
-                label="Your idea"
-                hint="What should the software do, and for whom? The refinement agent will ask follow-up questions."
-                rows={8}
-                maxLength={limits.ideaMax}
-                error={errors.idea?.message}
-                {...register('idea')}
-              />
+              {importing ? (
+                <TextAreaField
+                  id={fieldIds.idea}
+                  label="What should this version deliver?"
+                  hint="New features, improvements or fixes. The refinement agent reads the existing code's summary and asks how the change fits it."
+                  rows={8}
+                  maxLength={limits.ideaMax}
+                  error={errors.idea?.message}
+                  {...register('idea')}
+                />
+              ) : (
+                <TextAreaField
+                  id={fieldIds.idea}
+                  label="Your idea"
+                  hint="What should the software do, and for whom? The refinement agent will ask follow-up questions."
+                  rows={8}
+                  maxLength={limits.ideaMax}
+                  error={errors.idea?.message}
+                  {...register('idea')}
+                />
+              )}
             </>
           )}
 
-          {step === 1 && (
+          {key === 'repository' && (
+            <>
+              <RadioGroup
+                id={fieldIds.gitMode}
+                legend={importing ? 'Where is the repository?' : 'Where should the code live?'}
+                inputProps={register('gitMode')}
+                error={errors.gitMode?.message}
+                options={[
+                  ...(appAvailable
+                    ? [
+                        {
+                          value: 'github_app',
+                          label: gitModeOptionLabels.github_app,
+                          description: importing
+                            ? 'Pick a repository the AIDE GitHub App can access. Recommended.'
+                            : 'Pick or create a repository the AIDE GitHub App can access. Recommended.',
+                        },
+                      ]
+                    : []),
+                  {
+                    value: 'github_pat',
+                    label: gitModeOptionLabels.github_pat,
+                    description: "For a GitHub repository the AIDE GitHub App can't be installed on.",
+                  },
+                  {
+                    value: 'local',
+                    label: gitModeOptionLabels.local,
+                    description: importing
+                      ? 'An existing Git repository on the AIDE server (development and testing only).'
+                      : 'AIDE keeps a Git repository for this project on its own data volume.',
+                  },
+                ]}
+              />
+              {gitMode === 'github_app' && (
+                <AppRepository
+                  connectionPending={connection.isPending}
+                  connectionError={connection.isError ? connection.error : null}
+                  connected={connected}
+                  installUrl={connection.data?.installUrl ?? null}
+                  selected={repoFullName}
+                  hasCode={repoHasCode}
+                  source={source}
+                  error={errors.repoFullName?.message}
+                  onSelect={pickRepo}
+                  onImportInstead={importInstead}
+                />
+              )}
+              {gitMode === 'github_pat' && (
+                <>
+                  <TextField
+                    id={fieldIds.repoUrl}
+                    label="Repository URL"
+                    hint="For example https://github.com/owner/repo"
+                    type="url"
+                    autoComplete="off"
+                    maxLength={limits.urlMax}
+                    error={errors.repoUrl?.message}
+                    {...register('repoUrl')}
+                  />
+                  <TextField
+                    id={fieldIds.gitToken}
+                    label="Access token (optional)"
+                    hint="A personal access token with Contents and Pull requests read and write. It is stored encrypted and never shown again."
+                    type="password"
+                    autoComplete="new-password"
+                    maxLength={limits.secretMax}
+                    error={errors.gitToken?.message}
+                    {...register('gitToken')}
+                  />
+                </>
+              )}
+              {gitMode === 'local' &&
+                (importing ? (
+                  <TextField
+                    id={fieldIds.localSourcePath}
+                    label="Path of an existing repository on the server (development only)"
+                    hint="A Git repository directory under the server's import root. Only available where the server allows local imports."
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={localSourcePathMax}
+                    error={errors.localSourcePath?.message}
+                    {...register('localSourcePath')}
+                  />
+                ) : (
+                  <Alert tone="info">
+                    <p>
+                      No repository to set up: AIDE creates and keeps a local Git repository for this project on its data
+                      volume. Releases are tagged there instead of on GitHub.
+                    </p>
+                  </Alert>
+                ))}
+              <TextField
+                id={fieldIds.defaultBranch}
+                label="Default branch"
+                hint={gitMode === 'github_app' && repoFullName ? 'Prefilled from the repository.' : undefined}
+                maxLength={limits.branchMax}
+                autoComplete="off"
+                error={errors.defaultBranch?.message}
+                {...register('defaultBranch')}
+              />
+              {importing && (
+                <ReleasedVersionField
+                  id={fieldIds.releasedTag}
+                  listed={gitMode === 'github_app'}
+                  repoSelected={Boolean(repoFullName)}
+                  refs={refs}
+                  inputProps={register('releasedTag', {
+                    onChange: () => {
+                      setReleasedChosen(true)
+                    },
+                  })}
+                  error={errors.releasedTag?.message}
+                />
+              )}
+            </>
+          )}
+
+          {key === 'version' &&
+            (importing ? (
+              <TextField
+                id={fieldIds.developmentVersion}
+                label="Version to develop"
+                hint={
+                  releasedVersion
+                    ? `Greater than the released version ${releasedVersion}. Prefilled with its next minor; its release is tagged with it.`
+                    : 'The repository was never released, so this becomes its first release (semantic version, e.g. 0.1.0 or 1.0.0).'
+                }
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={72}
+                error={errors.developmentVersion?.message}
+                {...register('developmentVersion', {
+                  onChange: () => {
+                    setVersionEdited(true)
+                    void trigger('developmentVersion')
+                  },
+                })}
+              />
+            ) : (
+              <TextField
+                id={fieldIds.initialVersion}
+                label="Initial version"
+                hint="The first release version (semantic version, e.g. 0.1.0 or 1.0.0). The first release is tagged with it."
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={72}
+                error={errors.initialVersion?.message}
+                {...register('initialVersion')}
+              />
+            ))}
+
+          {key === 'configuration' && (
             <>
               <RadioGroup
                 id={fieldIds.approvalMode}
@@ -457,105 +799,7 @@ export function NewProjectWizard() {
             </>
           )}
 
-          {step === 2 && (
-            <>
-              <RadioGroup
-                id={fieldIds.gitMode}
-                legend="Where should the code live?"
-                inputProps={register('gitMode')}
-                error={errors.gitMode?.message}
-                options={[
-                  ...(appAvailable
-                    ? [
-                        {
-                          value: 'github_app',
-                          label: gitModeOptionLabels.github_app,
-                          description: 'Pick or create a repository the AIDE GitHub App can access. Recommended.',
-                        },
-                      ]
-                    : []),
-                  {
-                    value: 'github_pat',
-                    label: gitModeOptionLabels.github_pat,
-                    description: "For a GitHub repository the AIDE GitHub App can't be installed on.",
-                  },
-                  {
-                    value: 'local',
-                    label: gitModeOptionLabels.local,
-                    description: 'AIDE keeps a Git repository for this project on its own data volume.',
-                  },
-                ]}
-              />
-              {gitMode === 'github_app' && (
-                <AppRepository
-                  connectionPending={connection.isPending}
-                  connectionError={connection.isError ? connection.error : null}
-                  connected={connected}
-                  installUrl={connection.data?.installUrl ?? null}
-                  selected={repoFullName}
-                  hasCode={repoHasCode}
-                  error={errors.repoFullName?.message}
-                  onSelect={pickRepo}
-                />
-              )}
-              {gitMode === 'github_pat' && (
-                <>
-                  <TextField
-                    id={fieldIds.repoUrl}
-                    label="Repository URL"
-                    hint="For example https://github.com/owner/repo"
-                    type="url"
-                    autoComplete="off"
-                    maxLength={limits.urlMax}
-                    error={errors.repoUrl?.message}
-                    {...register('repoUrl')}
-                  />
-                  <TextField
-                    id={fieldIds.gitToken}
-                    label="Access token (optional)"
-                    hint="A personal access token with Contents and Pull requests read and write. It is stored encrypted and never shown again."
-                    type="password"
-                    autoComplete="new-password"
-                    maxLength={limits.secretMax}
-                    error={errors.gitToken?.message}
-                    {...register('gitToken')}
-                  />
-                </>
-              )}
-              {gitMode === 'local' && (
-                <Alert tone="info">
-                  <p>
-                    No repository to set up: AIDE creates and keeps a local Git repository for this project on its data
-                    volume. Releases are tagged there instead of on GitHub.
-                  </p>
-                </Alert>
-              )}
-              <TextField
-                id={fieldIds.defaultBranch}
-                label="Default branch"
-                hint={gitMode === 'github_app' && repoFullName ? 'Prefilled from the repository.' : undefined}
-                maxLength={limits.branchMax}
-                autoComplete="off"
-                error={errors.defaultBranch?.message}
-                {...register('defaultBranch')}
-              />
-            </>
-          )}
-
-          {step === 3 && (
-            <TextField
-              id={fieldIds.initialVersion}
-              label="Initial version"
-              hint="The first release version (semantic version, e.g. 0.1.0 or 1.0.0). The first release is tagged with it."
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={72}
-              error={errors.initialVersion?.message}
-              {...register('initialVersion')}
-            />
-          )}
-
-          {step === LAST_STEP && <ReviewSummary values={getValues()} onEdit={goTo} />}
+          {key === 'review' && <ReviewSummary values={getValues()} onEdit={goTo} />}
         </div>
 
         <div className="mt-6 flex flex-wrap justify-between gap-2">
@@ -584,12 +828,12 @@ export function NewProjectWizard() {
   )
 }
 
-function StepIndicator({ current }: { current: number }) {
+function StepIndicator({ current, titles }: { current: number; titles: readonly string[] }) {
   return (
     <ol aria-label="Wizard steps" className="mb-6 flex flex-wrap items-center gap-2 text-sm">
-      {steps.map((s, index) => (
+      {titles.map((title, index) => (
         <li
-          key={s.title}
+          key={stepKeys[index]}
           aria-current={index === current ? 'step' : undefined}
           className={cn(
             'flex min-h-9 items-center gap-2 rounded-full border px-3',
@@ -618,7 +862,7 @@ function StepIndicator({ current }: { current: number }) {
             ) : null}
           </span>
           <span className="sr-only">{index < current ? 'Completed: ' : ''}</span>
-          {index + 1}. {s.title}
+          {index + 1}. {title}
         </li>
       ))}
     </ol>
@@ -636,7 +880,7 @@ function SummaryRow({ term, children }: { term: string; children: ReactNode }) {
 
 function SummarySection({ title, step, onEdit, children }: {
   title: string
-  step: number
+  step: StepKey
   onEdit: (step: number) => void
   children: ReactNode
 }) {
@@ -648,7 +892,7 @@ function SummarySection({ title, step, onEdit, children }: {
           variant="ghost"
           aria-label={`Edit ${title.toLowerCase()}`}
           onClick={() => {
-            onEdit(step)
+            onEdit(stepIndex(step))
           }}
         >
           Edit
@@ -662,13 +906,38 @@ function SummarySection({ title, step, onEdit, children }: {
 function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step: number) => void }) {
   const pat = values.gitMode === 'github_pat'
   const app = values.gitMode === 'github_app'
+  const importing = values.source === 'import'
   return (
     <div className="flex flex-col gap-4">
-      <SummarySection title="Project idea" step={0} onEdit={onEdit}>
-        <SummaryRow term="Name">{values.name.trim()}</SummaryRow>
-        <SummaryRow term="Idea">{values.idea.trim()}</SummaryRow>
+      <SummarySection title="Source" step="source" onEdit={onEdit}>
+        <SummaryRow term="Source">{sourceLabels[values.source]}</SummaryRow>
       </SummarySection>
-      <SummarySection title="Configuration" step={1} onEdit={onEdit}>
+      <SummarySection title={importing ? 'Request' : 'Project idea'} step="idea" onEdit={onEdit}>
+        <SummaryRow term="Name">{values.name.trim()}</SummaryRow>
+        <SummaryRow term={importing ? 'Request' : 'Idea'}>{values.idea.trim()}</SummaryRow>
+      </SummarySection>
+      <SummarySection title="Repository" step="repository" onEdit={onEdit}>
+        <SummaryRow term="Mode">{gitModeOptionLabels[values.gitMode]}</SummaryRow>
+        {app && <SummaryRow term="Repository">{values.repoFullName}</SummaryRow>}
+        {app && values.repoHasCode && !importing && (
+          <SummaryRow term="Existing code">AIDE builds on it (treated as an import that was never released)</SummaryRow>
+        )}
+        {pat && <SummaryRow term="Repository URL">{values.repoUrl.trim()}</SummaryRow>}
+        {importing && values.gitMode === 'local' && (
+          <SummaryRow term="Repository path">{values.localSourcePath.trim()}</SummaryRow>
+        )}
+        <SummaryRow term="Default branch">{values.defaultBranch.trim()}</SummaryRow>
+        {pat && <SummaryRow term="Access token">{values.gitToken ? 'Provided' : 'Not provided'}</SummaryRow>}
+        {importing && <SummaryRow term="Currently released version">{releasedLabel(values)}</SummaryRow>}
+      </SummarySection>
+      <SummarySection title="Version" step="version" onEdit={onEdit}>
+        {importing ? (
+          <SummaryRow term="Version to develop">{versionText(values.developmentVersion)}</SummaryRow>
+        ) : (
+          <SummaryRow term="Initial version">{versionText(values.initialVersion)}</SummaryRow>
+        )}
+      </SummarySection>
+      <SummarySection title="Configuration" step="configuration" onEdit={onEdit}>
         <SummaryRow term="Approval mode">{approvalModeLabels[values.approvalMode]}</SummaryRow>
         <SummaryRow term="Compliance threshold">{Number(values.complianceThreshold).toFixed(2)}</SummaryRow>
         <SummaryRow term="Max files per step">{values.maxFilesPerStep}</SummaryRow>
@@ -676,19 +945,6 @@ function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step
         <SummaryRow term="Token budget">
           {values.tokenBudget.trim() ? `${Number(values.tokenBudget).toLocaleString()} tokens` : 'No limit'}
         </SummaryRow>
-      </SummarySection>
-      <SummarySection title="Git repository" step={2} onEdit={onEdit}>
-        <SummaryRow term="Mode">{gitModeOptionLabels[values.gitMode]}</SummaryRow>
-        {app && <SummaryRow term="Repository">{values.repoFullName}</SummaryRow>}
-        {app && values.repoHasCode && (
-          <SummaryRow term="Existing code">AIDE builds on it (treated as an import that was never released)</SummaryRow>
-        )}
-        {pat && <SummaryRow term="Repository URL">{values.repoUrl.trim()}</SummaryRow>}
-        <SummaryRow term="Default branch">{values.defaultBranch.trim()}</SummaryRow>
-        {pat && <SummaryRow term="Access token">{values.gitToken ? 'Provided' : 'Not provided'}</SummaryRow>}
-      </SummarySection>
-      <SummarySection title="Version" step={3} onEdit={onEdit}>
-        <SummaryRow term="Initial version">{normalizeVersion(values.initialVersion) ?? values.initialVersion.trim()}</SummaryRow>
       </SummarySection>
     </div>
   )

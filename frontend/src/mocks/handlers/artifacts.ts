@@ -80,6 +80,8 @@ export function seedArtifact(
     releaseVersionId?: string
     /** FR-58: the version a restore copied. */
     restoredFromVersion?: number
+    /** FR-76, §4.13: the plan's computed warnings (e.g. UNCOVERED_REQUIREMENTS). */
+    warnings?: Artifact['warnings']
   },
 ): Artifact {
   artifactClock += 3_600_000
@@ -106,6 +108,7 @@ export function seedArtifact(
     rejectionComment: init.rejectionComment ?? null,
     createdAt,
     integrity: init.integrity ?? 'ok',
+    warnings: init.warnings ?? [],
   }
   project.artifacts.push(artifact)
   syncState(project, init.type)

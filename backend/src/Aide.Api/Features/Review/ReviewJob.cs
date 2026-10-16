@@ -14,8 +14,10 @@ using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
+using Aide.Domain.Specs;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
+using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aide.Api.Features.Review;
@@ -27,7 +29,14 @@ internal sealed record ReviewMaterial(
     Artifact? CurrentOptimizationPlan,
     string Code,
     IReadOnlyList<ReviewFinding> Findings,
-    string FindingsText);
+    string FindingsText)
+{
+    /// <summary>§4.13: the specification's requirements (tagged in iterations), which scope the review.</summary>
+    public IReadOnlyList<SpecRequirement> Requirements { get; init; } = [];
+
+    /// <summary>FR-70: the version's codebase summary, an input of the review.</summary>
+    public Artifact? CodebaseSummary { get; init; }
+}
 
 /// <summary>The succeeded run whose reply was accepted, and the reply as read.</summary>
 internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult Result);
@@ -52,6 +61,9 @@ internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult 
 /// </list>
 /// An Owner rejecting the optimisation plan draft (FR-17) or its corruption (FR-20) queues this job to revise the plan for
 /// the same cycle: the agent runs again with the feedback and only its plan is used (a new draft linked to the report).
+/// §4.13: in iterations (a spec with tagged requirements) the reply is scoped by <see cref="IterationReviewScope"/> before
+/// scoring: feature coverage is over <c>[new]</c>/<c>[changed]</c> requirements, and broken <c>[unchanged]</c> ones become
+/// regressions (stored in <c>compliance_report.regressions</c>). The agent has the repo tools on the project branch (FR-71).
 /// Redelivery is idempotent: run ids derive from the job, a succeeded run is reused, the cycle is read back from the job's
 /// <c>REVIEW_STARTED</c>, and one report is recorded per job. A rollback (cycle reset) or another review in between makes
 /// the job record nothing.
@@ -60,6 +72,7 @@ public sealed partial class ReviewJobHandler(
     AideDbContext db,
     AgentRunner runner,
     AgentJobInputs inputs,
+    IterationContextReader iterations,
     AgentDraftWriter drafts,
     WorkingCopyPreparer preparer,
     IWorkingCopies workingCopies,
@@ -118,7 +131,7 @@ public sealed partial class ReviewJobHandler(
         // with that reason, and a reply still without steps escalates (RecordAsync).
         DomainError? MissingPlan(CodeReviewResult result)
         {
-            var decision = Assess(result, material, project, cycle, previous?.Score).Decision.Decision;
+            var decision = Assess(result, material, project, cycle, previous?.Score).Assessment.Decision.Decision;
             return ReviewAssessment.LacksOptimizationPlan(decision, result.OptimizationPlan.Count) ? ReviewAssessment.MissingOptimizationPlanError() : null;
         }
 
@@ -126,15 +139,17 @@ public sealed partial class ReviewJobHandler(
         await RecordAsync(job, cycle, material, outcome, previous?.Score, cancellationToken);
     }
 
-    private static ReviewAssessmentResult Assess(CodeReviewResult result, ReviewMaterial material, Project project, int cycle, decimal? previousScore) =>
-        ReviewAssessment.Assess(new ReviewAssessmentInput(
-            result,
-            material.Findings,
-            project.ComplianceThreshold,
-            cycle,
-            project.MaxReviewCycles,
-            project.ExtraReviewCycles,
-            previousScore));
+    private static IterationReviewResult Assess(CodeReviewResult result, ReviewMaterial material, Project project, int cycle, decimal? previousScore) =>
+        IterationReviewScope.Assess(
+            new ReviewAssessmentInput(
+                result,
+                material.Findings,
+                project.ComplianceThreshold,
+                cycle,
+                project.MaxReviewCycles,
+                project.ExtraReviewCycles,
+                previousScore),
+            material.Requirements);
 
     /// <summary>The cycle this job reviews: read back from its <c>REVIEW_STARTED</c>, or started now; <c>null</c> if the project left review.</summary>
     private async Task<int?> BeginCycleAsync(JobExecution job, LifecycleJobPayload payload, CancellationToken cancellationToken)
@@ -220,6 +235,7 @@ public sealed partial class ReviewJobHandler(
             .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents))
             .ToList();
         LogGathered(logger, tree.Count, contents.Count, findings.Count);
+        var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
         return new ReviewMaterial(
             spec,
             implementation,
@@ -227,7 +243,11 @@ public sealed partial class ReviewJobHandler(
             // NFR-SEC: secrets the scan flagged never reach the provider; the markers keep the line numbers.
             ReviewCode.RenderForPrompt(tree, changed, ReviewCode.RedactSecrets(contents), limits),
             findings,
-            ReviewCode.RenderFindings(findings, allowlist is not null, endpoints.Count));
+            ReviewCode.RenderFindings(findings, allowlist is not null, endpoints.Count))
+        {
+            Requirements = RequirementParser.Parse(specText).Requirements,
+            CodebaseSummary = iteration.CodebaseSummary,
+        };
     }
 
     /// <summary>
@@ -258,13 +278,15 @@ public sealed partial class ReviewJobHandler(
                 ["REVIEW_CYCLE"] = cycle.ToString(CultureInfo.InvariantCulture),
                 ["TECHNICAL_SPECIFICATION"] = material.Specification?.Content,
                 ["IMPLEMENTATION_PLAN"] = plans,
+                ["CODEBASE_SUMMARY"] = material.CodebaseSummary?.Content,
                 ["DETERMINISTIC_FINDINGS"] = material.FindingsText,
                 ["PREVIOUS_REVIEW"] = previousReview,
                 ["CODE"] = material.Code,
                 ["MAX_FILES_PER_STEP"] = maxFiles.ToString(CultureInfo.InvariantCulture),
             },
-            InputArtifacts = [.. new[] { material.Specification, material.ImplementationPlan, material.CurrentOptimizationPlan }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
+            InputArtifacts = [.. new[] { material.Specification, material.ImplementationPlan, material.CurrentOptimizationPlan, material.CodebaseSummary }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = runFeedback,
+            Repo = RepoScope.WorkingTree,
         };
 
         var first = await runner.RunAsync(Request(feedback) with { RunKey = null, Check = null }, cancellationToken);
@@ -311,8 +333,9 @@ public sealed partial class ReviewJobHandler(
 
         project.UpdatedAt = now;
         // Still no optimisation steps after the corrective re-run: a human decides (escalation no_optimization_plan).
-        var assessment = ReviewAssessment.RequireOptimizationPlan(
-            Assess(outcome.Result, material, project, cycle, previousScore), outcome.Result.OptimizationPlan.Count);
+        // §4.13: scored on the reply as scoped to the iteration; its regressions are stored with the report.
+        var scoped = Assess(outcome.Result, material, project, cycle, previousScore);
+        var assessment = ReviewAssessment.RequireOptimizationPlan(scoped.Assessment, outcome.Result.OptimizationPlan.Count);
         var decision = assessment.Decision;
 
         Artifact? draft = null;
@@ -330,9 +353,10 @@ public sealed partial class ReviewJobHandler(
             Score = assessment.Overall,
             CategoryScores = assessment.Categories,
             Violations = assessment.Violations,
-            MissingFeatures = outcome.Result.MissingFeatures,
+            MissingFeatures = scoped.ScopedAgent.MissingFeatures,
             DriftLevel = assessment.Drift,
-            DriftAreas = outcome.Result.DriftAreas,
+            DriftAreas = scoped.ScopedAgent.DriftAreas,
+            Regressions = AideJson.Serialize(scoped.Regressions),
             Decision = decision.Decision,
             EscalationReason = decision.Reason,
             AgentRunId = outcome.Run.RunId,
@@ -381,6 +405,7 @@ public sealed partial class ReviewJobHandler(
                 decisionReason = decision.Reason,
                 optimizationPlanArtifactId = draft?.Id,
                 runId = outcome.Run.RunId,
+                regressionCount = scoped.Regressions.Count,
             },
             SystemActor.Name,
             now);

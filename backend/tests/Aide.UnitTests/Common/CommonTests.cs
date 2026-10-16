@@ -52,7 +52,7 @@ public class EnumStringsTests
         Assert.Equal(["feature_coverage", "api_contracts", "data_model", "architecture", "security", "testing"], EnumStrings.Values<ReviewCategory>());
         Assert.Equal(["viewer", "contributor", "owner"], EnumStrings.Values<ProjectRole>());
         Assert.Equal(["user", "admin"], EnumStrings.Values<SystemRole>());
-        Assert.Equal(["idea_refinement", "spec_generator", "plan_generator", "code_generator", "code_review"], EnumStrings.Values<AgentKind>());
+        Assert.Equal(["idea_refinement", "spec_generator", "plan_generator", "code_generator", "code_review", "repository_analyst"], EnumStrings.Values<AgentKind>());
         Assert.Equal(["create", "modify"], EnumStrings.Values<FileAction>());
     }
 

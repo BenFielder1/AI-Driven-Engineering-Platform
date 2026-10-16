@@ -1,6 +1,8 @@
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
+import type { Schemas } from '../../api/client'
+
 import { Alert } from '../../components/ui/alert'
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import {
@@ -15,8 +17,11 @@ import {
 } from '../projects/labels'
 import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
 import { RunStatusBadge } from './run-badges'
-import { describeRunError, formatPromptVersion, isUnfinished } from './run-format'
+import { describeRunError, formatPromptVersion, isUnfinished, runWarningText } from './run-format'
 import { useRun, type AgentRun } from './runs-api'
+import { ToolCallsTable } from './tool-calls'
+
+type AgentRunDetail = Schemas['AgentRunDetailDto']
 
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
@@ -148,6 +153,28 @@ function RunError({ error, attempts, retrying }: { error: string; attempts: numb
   )
 }
 
+/** FR-70, FR-71: the run's recorded warnings and its repository tool log (from the detail response). */
+function RunToolLog({ run }: { run: AgentRunDetail }) {
+  return (
+    <>
+      {run.warnings.length > 0 && (
+        <Section title="Warnings">
+          <Alert tone="warning">
+            <ul className="list-disc pl-5">
+              {run.warnings.map((w) => (
+                <li key={w}>{runWarningText(w)}</li>
+              ))}
+            </ul>
+          </Alert>
+        </Section>
+      )}
+      <Section title={`Repository tool calls (${String(run.toolCalls.length)})`}>
+        <ToolCallsTable calls={run.toolCalls} caption="Repository tool calls of this run" />
+      </Section>
+    </>
+  )
+}
+
 function RunOutput({ projectId, runId, run }: { projectId: string; runId: string; run: AgentRun }) {
   const detail = useRun(projectId, runId)
   if (detail.isPending) {
@@ -201,6 +228,7 @@ export function RunDetails({ projectId, runId, summary }: { projectId: string; r
   return (
     <>
       <RunFields projectId={projectId} run={run} />
+      {detail.data && <RunToolLog run={detail.data} />}
       <Section title="Output">
         <RunOutput projectId={projectId} runId={runId} run={run} />
       </Section>

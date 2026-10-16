@@ -75,7 +75,7 @@ export function PlanningPage({ version, onVersionChange }: ArtifactStageProps) {
         onVersionChange={onVersionChange}
         notStarted="The Plan Generator writes the implementation plan from the approved specification. The specification has to be approved and the project advanced to Planning first."
       >
-        {(artifact) => <PlanPanel content={artifact.content} />}
+        {(artifact) => <PlanPanel content={artifact.content} warnings={artifact.warnings} />}
       </StageArtifact>
       <StageGates types={stageGates.planning} />
       <StageRuns agent="plan_generator" />

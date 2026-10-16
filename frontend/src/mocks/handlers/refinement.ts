@@ -141,7 +141,20 @@ function refinementDto(project: StoredProject, releaseVersionId: string): Schema
     latestRound: latest ? toDto(latest) : null,
     questionsRunId: completed?.runId ?? null,
     questions: (completed?.questions ?? []).map((q) => ({ ...q, answer: given.get(q.id) ?? null })),
+    codebaseSummary: codebaseSummaryOf(project, releaseVersionId),
   }
+}
+
+/** FR-70: `completed` once the version has a summary, else the seeded analyst state, else `not_needed`. */
+function codebaseSummaryOf(project: StoredProject, releaseVersionId: string): Schemas['CodebaseSummaryStatusDto'] {
+  const summary = project.artifacts
+    .filter((a) => a.type === 'codebase_summary' && a.releaseVersionId === releaseVersionId)
+    .sort((a, b) => b.version - a.version)[0]
+  const seeded = project.analyst?.[releaseVersionId]
+  if (summary) {
+    return { status: 'completed', runId: seeded?.runId ?? null, artifactId: summary.id, artifactVersion: summary.version }
+  }
+  return seeded ?? { status: 'not_needed', runId: null, artifactId: null, artifactVersion: null }
 }
 
 const validation = (errors: Record<string, string[]>) =>

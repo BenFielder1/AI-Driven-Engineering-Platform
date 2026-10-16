@@ -35,6 +35,9 @@ public sealed record ArtifactSummaryDto(
 /// <c>releaseVersionId</c> and <c>checkpointAtCreation</c> say where it was created (§4.10; D-V2-11: was
 /// <c>projectVersionAtCreation</c>); <c>releaseVersion</c> is that release version's semver (FR-59).
 /// <c>restoredFromVersion</c> is the version whose content a restore copied (FR-58), else <c>null</c>.
+/// <c>warnings</c> are non-blocking findings about the version (FR-76, §4.13): for an <c>implementation_plan</c>,
+/// <c>UNCOVERED_REQUIREMENTS</c> when its steps' <c>covers</c> miss a <c>[new]</c>/<c>[changed]</c> requirement of the
+/// release version's locked specification (<c>ids</c> lists them); empty otherwise.
 /// </summary>
 public sealed record ArtifactDto(
     Guid Id,
@@ -53,7 +56,11 @@ public sealed record ArtifactDto(
     DateTimeOffset CreatedAt,
     ArtifactIntegrity Integrity,
     string ReleaseVersion,
-    int? RestoredFromVersion);
+    int? RestoredFromVersion,
+    IReadOnlyList<ArtifactWarningDto> Warnings);
+
+/// <summary>A non-blocking finding about an artifact version (FR-76, §4.13): its code, a message and the ids it is about.</summary>
+public sealed record ArtifactWarningDto(string Code, string Message, IReadOnlyList<string> Ids);
 
 /// <summary>
 /// One line of a diff between two versions (FR-21). <c>oldLine</c> is the 1-based line number in the <c>from</c> version

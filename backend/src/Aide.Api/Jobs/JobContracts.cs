@@ -130,3 +130,32 @@ public static class JobScopeKeys
     public const string JobType = "JobType";
     public const string Attempt = "Attempt";
 }
+
+/// <summary>
+/// A handler isn't ready to run yet (e.g. FR-70: refinement waiting for the codebase summary): the worker re-queues the
+/// job to run at <see cref="RunAfter"/> without counting the attempt — a wait, never a blocking sleep and never a failure.
+/// </summary>
+public sealed class JobDeferredException : Exception
+{
+    public JobDeferredException()
+    {
+    }
+
+    public JobDeferredException(string message)
+        : base(message)
+    {
+    }
+
+    public JobDeferredException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    public JobDeferredException(string message, DateTimeOffset runAfter)
+        : base(message)
+    {
+        RunAfter = runAfter;
+    }
+
+    public DateTimeOffset RunAfter { get; }
+}

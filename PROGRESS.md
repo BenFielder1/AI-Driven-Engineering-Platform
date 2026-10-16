@@ -28,12 +28,12 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | FR-65 | Merge strategy, awaiting_merge, merge poll | 3.2, 4.14 | both | 7 | todo | — |
 | FR-66 | Initial version for new projects | 3.2 | both | 2 | done | initialVersion + wizard Version step; FR66_* tests |
 | FR-67 | v1 project migration to release versions | 3.2, 4.10 | backend | 2 | done | migration ReleaseVersions backfill; FR67_* migration tests; applied on k8s |
-| FR-70 | Repository Analyst → codebase_summary (auto-locked) | 3.3 | backend | 6 | todo | — |
-| FR-71 | Read-only repo tools (tool use, limits, path safety, redaction) | 3.3 | backend | 6 | todo | — |
-| FR-72 | Iteration refinement inputs | 3.3 | backend | 6 | todo | — |
-| FR-73 | Import existing repo wizard | 3.4 | both | 6 | todo | — |
+| FR-70 | Repository Analyst → codebase_summary (auto-locked) | 3.3 | backend | 6 | done | Repository Analyst job → locked codebase_summary; FR70_* tests |
+| FR-71 | Read-only repo tools (tool use, limits, path safety, redaction) | 3.3 | backend | 6 | done | RepoToolSession + LlmToolLoop + snapshots; FR71_* tests |
+| FR-72 | Iteration refinement inputs | 3.3 | backend | 6 | done | iteration refinement inputs; FR72_* tests |
+| FR-73 | Import existing repo wizard | 3.4 | both | 6 | done | import (App, PAT, Local) + wizard; FR73_* tests |
 | FR-74 | Presets: data bundles, wizard Stack step, pinned per version | 3.5, 4.11 | both | 8 | todo | — |
-| FR-75 | Preset spec sections; mandatory FR IDs + GWT | 3.5, 4.13 | backend | 6, 8 | todo | — |
+| FR-75 | Preset spec sections; mandatory FR IDs + GWT | 3.5, 4.13 | backend | 6, 8 | partial (FR IDs + GWT done; preset sections phase 8) | SpecValidator; FR75_* tests |
 | FR-76 | Plan steps carry agent + covers; preset plan validation | 3.5, 4.11 | both | 8 | todo | — |
 | FR-77 | Preset review checklist + deterministic checks | 3.5 | backend | 8 | todo | — |
 | FR-78 | User LLM connections | 3.6 | both | 4 | done | me/connections/llm CRUD + test, list-models validation; FR78_* tests |
@@ -54,7 +54,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | FR-93 | CLI additions | 3.9 | backend | 10 | todo | — |
 | §4.10 | Release versions, semver, checkpoints, rollback scope, migration | 4.10 | backend | 2 | done | SemVer, ReleaseVersionRules, NewVersion transition matrix; S4_10_* tests |
 | §4.11–4.12 | Preset format and the two presets | 4.11 | backend | 8 | todo | — |
-| §4.13 | Iteration specs, review scope, plan scope | 4.13 | backend | 6 | todo | — |
+| §4.13 | Iteration specs, review scope, plan scope | 4.13 | backend | 6 | done | SpecValidator tags, IterationReviewScope, PlanScope; S4_13_* tests |
 | §4.14 | GitHub permissions, tokens, polling, merge detection | 4.14 | backend | 5, 7 | todo | — |
 | §4.15 | Deployments (Vercel) states, polling, Fake provider | 4.15 | backend | 9 | todo | — |
 | NFR-SEC2 | Secret encryption, scoped tokens, fixed hosts, signed state | 8 | backend | 4–9 | todo | — |
@@ -90,7 +90,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
   - [x] aspnet-engineer (contract stubs; oasdiff: only the accepted GitProvider rename)
   - [x] aspnet-engineer (manifest flow, App sign-in PKCE, user connection + refresh, repo picker/create, installation tokens, github_app provider, rate-limit deferral — 2724 backend tests) ‖ vite-react-engineer (admin GitHub, connections GitHub, wizard Repository step, settings Git — 555 frontend tests)
   - [x] gate (backend 2729, frontend 561, manifests, contract fresh) · review (1 Critical, 2 Major, 3 Minor — all fixed, Critical/Major re-verified: switch-to-app/create now require the caller's own push access; refresh serialised) · redeploy (migration GitHubApp applied; smoke ✓) · commit
-- [ ] 6 M13a Iteration + import — IDs: FR-70–FR-73, §4.13, FR-75 (FR IDs part)
+- [x] 6 M13a Iteration + import (base: 784fc18) — IDs: FR-70–FR-73, §4.13, FR-75 (FR IDs part)
+  - [x] aspnet-engineer A (§4.13 + FR-75 domain rules, import contract; oasdiff additive) ‖ aspnet-engineer B (repo tools, snapshots, LlmToolLoop for Anthropic/OpenAI/Ollama fallback, Fake scripts — ~98 FR71_* tests)
+  - [x] aspnet-engineer C (Repository Analyst job, refinement wait + iteration inputs, spec/review/plan integration, import implementation — 2938 backend tests) ‖ vite-react-engineer (import wizard, codebase summary, tool calls, e2e wizard selectors — 573 frontend tests)
+  - [x] gate (backend 2945, frontend 579, manifests, contract fresh, no vulnerable packages) · review (0 Critical, 3 Major, 4 Minor — all fixed: linear-time regex + per-line budget, tool-loop tokens counted + mid-loop budget stop, exact tag lookups + paginated picker, link-safe Local import, snapshot cleanup, /tmp sizeLimit 6Gi, tool error copy in errors.ts) · redeploy (smoke ✓) · commit
 - [ ] 7 M13b Merge strategies + GitHub release — IDs: FR-64 (GitHub), FR-65, FR-84, FR-85
 - [ ] 8 M14 Presets — IDs: FR-74–FR-77, §4.11–4.12
 - [ ] 9 M15 Vercel — IDs: FR-87–FR-91, §4.15
@@ -137,8 +140,19 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 - 2026-10-16 — GitHub rate limits: request paths → 429 GITHUB_RATE_LIMITED + Retry-After; jobs are re-queued at the reset without counting an attempt (capped at 1 h), also for PAT projects — NFR-REL2 — SPEC updated: no
 - 2026-10-16 — Repo creation uses the user token for both user and org owners (installation tokens can't create repos on personal accounts; §11 check, from GitHub docs, not fetched live) — SPEC updated: no
 - 2026-10-16 — Repo push access (push/maintain/admin with the caller's own token) is checked when a project is bound to a repo (create, switch-to-app); it isn't re-checked later, so members keep working via the App on the binding Owner's behalf (§2) even if that Owner later loses GitHub access — SPEC updated: no
+- 2026-10-16 — Security: NU1903 advisory on Microsoft.AspNetCore.SignalR.Common 10.0.12 (published mid-build) → ASP.NET Core packages bumped to 10.0.13 (OpenApi, Identity.EFCore, Mvc.Testing, SignalR.Client); Docker images use the floating `10.0` tags so the runtime is patched on rebuild — SPEC updated: no
+- 2026-10-16 — §4.13 rule details: `[removed]` requirements need no Given/When/Then; regressions reported on [new]/[changed] IDs count as missing features, on removed/unknown IDs are dropped; import also rejects a development tag that already exists (TAG_EXISTS); for import the project `idea` field carries the version request (no separate `request` field) — SPEC updated: no
+- 2026-10-16 — Local import (E2E/dev only): `git.mode=local` + `git.localSourcePath` resolved under `Git:Local:ImportRoot` — §8 Testing — SPEC updated: no
+- 2026-10-16 — Repo tools details: every tool's output counts toward the 400 KB run cap; after TOOL_LIMIT (or 28 turns) the next turn is forced to answer (`tool_choice: none`; tools omitted for Ollama); `.aide/` reads as NOT_FOUND and `.git` as UNSAFE_PATH (v1 path rules); search runs on redacted text; `search_code` has an optional `regex` flag (plain text case-insensitive); the no-tools fallback appends a depth-2 file listing; snapshots under `{temp}/aide-snapshots` (≤8 per project/commit) — FR-71 — SPEC updated: no
+- 2026-10-16 — Run warnings (tools_unsupported, snapshot_unavailable, summary_wait_timeout, summary_unavailable) are stored in the run output + RUN_COMPLETED payload and exposed on AgentRunDetailDto (no column, no migration) — FR-70/71 — SPEC updated: no
+- 2026-10-16 — Refinement waits for the codebase summary by re-queuing its job (JobDeferredException, attempt not counted) up to 10 min from version start — FR-70 — SPEC updated: no
+- 2026-10-16 — Plan warnings (UNCOVERED_REQUIREMENTS) are computed on read against the version's latest locked spec and returned as ArtifactDto.warnings for implementation_plan — §4.13 — SPEC updated: no
+- 2026-10-16 — PAT import lists tags via the REST API with the token (not git ls-remote); Local import clones `--no-hardlinks` from under `Git:Local:ImportRoot` (empty = disabled) — FR-73 — SPEC updated: no
+- 2026-10-16 — AgentKind enum gains `repository_analyst` (response enum value added; oasdiff flags it — accepted, same precedent as D-V2-11) — SPEC updated: no
 
 ## Known issues
+- `GitHub` paths (App, PAT import, repo tools over GitHub snapshots) verified only against stub HTTP handlers — orchestrator
+- E2E against k8s needs `Git__Local__ImportRoot` set (and a seeded "existing" repo under it) for the import E2E — local-k8s-engineer (phase 10)
 - §11 to confirm on first real App registration: manifest `hook_attributes {active:false}` accepted without a `url`; GitHub App flows are verified only against stub HTTP handlers (no real App registered) — Ben
 - New-project wizard loses entered values when the user leaves to Connect GitHub (the page warns); persist the draft in sessionStorage if wanted — vite-react-engineer
 - E2E lifecycle spec lost its rollback-after-release scenario (FR-63 blocks it); add a rollback-before-release scenario — e2e-qa-engineer (phase 10)

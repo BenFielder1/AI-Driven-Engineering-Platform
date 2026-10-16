@@ -152,6 +152,7 @@ builder.Services.AddScoped<AgentDraftWriter>();
 
 // Agents (FR-22–FR-26): the runner used by agent job handlers; providers and prompts come from Aide.Infrastructure.
 builder.Services.AddScoped<AgentRunner>();
+builder.Services.AddScoped<AgentRepoContext>();
 builder.Services.AddScoped<IJobEndedHook, AgentRunJobEndedHook>();
 
 // Refinement, specification and planning agents (FR-27–FR-30): job handlers, refinement rounds and execution steps.

@@ -123,6 +123,33 @@ internal static class LlmHttp
         }
     }
 
+    /// <summary>
+    /// FR-71: the tool arguments as a JSON object for providers that take an object (Anthropic <c>input</c>, Ollama
+    /// <c>arguments</c>); anything that isn't a JSON object becomes <c>{}</c>.
+    /// </summary>
+    public static JsonElement ObjectOrEmpty(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                return doc.RootElement.Clone();
+            }
+        }
+        catch (JsonException)
+        {
+            // Not JSON: sent as an empty object (the tool already reported the bad arguments).
+        }
+
+        using var empty = JsonDocument.Parse("{}");
+        return empty.RootElement.Clone();
+    }
+
+    /// <summary>A generated call id for providers that don't give one (Ollama): <c>call_{turn}_{index}</c>.</summary>
+    public static string CallId(int turn, int index) =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"call_{turn}_{index}");
+
     public static LlmProviderException Unreadable(string providerName, string what) =>
         new($"{providerName} returned an unexpected response: {what}.", transient: false);
 
@@ -189,7 +216,7 @@ internal static class LlmHttp
 /// Anthropic Messages API (FR-22): <c>POST {BaseUrl}/v1/messages</c> with <c>x-api-key</c> and
 /// <c>anthropic-version: 2023-06-01</c>. Text blocks of the reply are concatenated.
 /// </summary>
-public sealed class AnthropicLlmProvider(HttpClient http, IOptions<LlmOptions> options) : ILlmProvider
+public sealed class AnthropicLlmProvider(HttpClient http, IOptions<LlmOptions> options) : ILlmProvider, IToolCallingLlmProvider
 {
     public const string DefaultBaseUrl = "https://api.anthropic.com";
     public const string ApiVersion = "2023-06-01";
@@ -244,6 +271,94 @@ public sealed class AnthropicLlmProvider(HttpClient http, IOptions<LlmOptions> o
             LlmHttp.String(root, "stop_reason") ?? "unknown");
     }
 
+    /// <summary>Every Anthropic Messages model takes tools.</summary>
+    public Task<bool> SupportsToolsAsync(LlmRequest request, CancellationToken cancellationToken) => Task.FromResult(true);
+
+    /// <summary>
+    /// FR-71: one Messages turn with <c>tools</c> (<c>name</c>, <c>description</c>, <c>input_schema</c>). Each earlier exchange
+    /// is an <c>assistant</c> message (its text and <c>tool_use</c> blocks) followed by a <c>user</c> message of
+    /// <c>tool_result</c> blocks (<c>tool_use_id</c>, <c>content</c>, <c>is_error</c>). A forced final answer sends
+    /// <c>tool_choice: {"type":"none"}</c>. The reply's <c>tool_use</c> blocks are the calls; its text blocks the text.
+    /// </summary>
+    public async Task<LlmToolTurn> CompleteTurnAsync(LlmToolRequest toolRequest, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(toolRequest);
+        var request = toolRequest.Request;
+        var apiKey = RequireKey(request, Name);
+        var baseUrl = options.Value.Providers.Anthropic.BaseUrl is { Length: > 0 } configured ? configured : DefaultBaseUrl;
+        var messages = request.Messages.Select(m => (object)new { role = Role(m.Role), content = m.Content }).ToList();
+        foreach (var exchange in toolRequest.Exchanges)
+        {
+            var blocks = new List<object>();
+            if (!string.IsNullOrEmpty(exchange.AssistantText))
+            {
+                blocks.Add(new { type = "text", text = exchange.AssistantText });
+            }
+
+            blocks.AddRange(exchange.Calls.Select(c => (object)new { type = "tool_use", id = c.Id, name = c.Name, input = LlmHttp.ObjectOrEmpty(c.ArgumentsJson) }));
+            messages.Add(new { role = "assistant", content = blocks });
+            messages.Add(new
+            {
+                role = "user",
+                content = exchange.Results.Select(r => new { type = "tool_result", toolUseId = r.CallId, content = r.Content, isError = r.IsError }).ToArray(),
+            });
+        }
+
+        var body = new
+        {
+            model = request.Model,
+            maxTokens = request.MaxTokens,
+            system = request.System,
+            messages,
+            tools = toolRequest.Tools.Select(t => new { name = t.Name, description = t.Description, inputSchema = t.InputSchema }).ToArray(),
+            toolChoice = toolRequest.ForceFinalAnswer ? new { type = "none" } : null,
+        };
+
+        using var doc = await LlmHttp.PostAsync(
+            http,
+            Name,
+            LlmHttp.Combine(baseUrl, "v1/messages"),
+            body,
+            r =>
+            {
+                r.Headers.Add("x-api-key", apiKey);
+                r.Headers.Add("anthropic-version", ApiVersion);
+            },
+            cancellationToken);
+
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
+        {
+            throw LlmHttp.Unreadable(Name, "no content");
+        }
+
+        var text = new StringBuilder();
+        var calls = new List<LlmToolCall>();
+        foreach (var block in content.EnumerateArray())
+        {
+            switch (LlmHttp.String(block, "type"))
+            {
+                case "text" when LlmHttp.String(block, "text") is { } part:
+                    text.Append(part);
+                    break;
+                case "tool_use":
+                    var arguments = block.TryGetProperty("input", out var input) ? input.GetRawText() : "{}";
+                    calls.Add(new LlmToolCall(
+                        LlmHttp.String(block, "id") ?? LlmHttp.CallId(toolRequest.Exchanges.Count + 1, calls.Count + 1),
+                        LlmHttp.String(block, "name") ?? string.Empty,
+                        arguments));
+                    break;
+            }
+        }
+
+        return new LlmToolTurn(
+            text.ToString(),
+            calls,
+            LlmHttp.Int(root, "usage", "input_tokens"),
+            LlmHttp.Int(root, "usage", "output_tokens"),
+            LlmHttp.String(root, "stop_reason") ?? "unknown");
+    }
+
     /// <summary>FR-78: <c>GET {BaseUrl}/v1/models?limit=1</c> with the key.</summary>
     public Task<LlmKeyCheck> CheckKeyAsync(string apiKey, CancellationToken cancellationToken)
     {
@@ -274,7 +389,7 @@ public sealed class AnthropicLlmProvider(HttpClient http, IOptions<LlmOptions> o
 /// OpenAI Chat Completions (FR-22): <c>POST {BaseUrl}/chat/completions</c> (default base https://api.openai.com/v1)
 /// with a Bearer key; the system prompt is the first message.
 /// </summary>
-public sealed class OpenAiLlmProvider(HttpClient http, IOptions<LlmOptions> options) : ILlmProvider
+public sealed class OpenAiLlmProvider(HttpClient http, IOptions<LlmOptions> options) : ILlmProvider, IToolCallingLlmProvider
 {
     public const string DefaultBaseUrl = "https://api.openai.com/v1";
     private const string Name = "OpenAI";
@@ -321,6 +436,91 @@ public sealed class OpenAiLlmProvider(HttpClient http, IOptions<LlmOptions> opti
             LlmHttp.String(choice, "finish_reason") ?? "unknown");
     }
 
+    /// <summary>Chat Completions models take function tools.</summary>
+    public Task<bool> SupportsToolsAsync(LlmRequest request, CancellationToken cancellationToken) => Task.FromResult(true);
+
+    /// <summary>
+    /// FR-71: one Chat Completions turn with <c>tools</c> (<c>{"type":"function","function":{name, description, parameters}}</c>).
+    /// Each earlier exchange is an <c>assistant</c> message with <c>tool_calls</c> (<c>id</c>, <c>type: function</c>,
+    /// <c>function.name</c>, <c>function.arguments</c> as a JSON string) followed by one <c>tool</c> message per result
+    /// (<c>tool_call_id</c>, <c>content</c>). A forced final answer sends <c>tool_choice: "none"</c>.
+    /// </summary>
+    public async Task<LlmToolTurn> CompleteTurnAsync(LlmToolRequest toolRequest, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(toolRequest);
+        var request = toolRequest.Request;
+        var apiKey = AnthropicLlmProvider.RequireKey(request, Name);
+        var baseUrl = options.Value.Providers.OpenAI.BaseUrl is { Length: > 0 } configured ? configured : DefaultBaseUrl;
+        var messages = new List<object> { new { role = "system", content = request.System } };
+        messages.AddRange(request.Messages.Select(m => new { role = m.Role == LlmRole.Assistant ? "assistant" : "user", content = m.Content }));
+        foreach (var exchange in toolRequest.Exchanges)
+        {
+            messages.Add(new
+            {
+                role = "assistant",
+                content = string.IsNullOrEmpty(exchange.AssistantText) ? null : exchange.AssistantText,
+                toolCalls = exchange.Calls.Select(c => new { id = c.Id, type = "function", function = new { name = c.Name, arguments = c.ArgumentsJson } }).ToArray(),
+            });
+            messages.AddRange(exchange.Results.Select(r => new { role = "tool", toolCallId = r.CallId, content = r.Content }));
+        }
+
+        var body = new
+        {
+            model = request.Model,
+            maxCompletionTokens = request.MaxTokens,
+            messages,
+            tools = toolRequest.Tools.Select(t => new { type = "function", function = new { name = t.Name, description = t.Description, parameters = t.InputSchema } }).ToArray(),
+            toolChoice = toolRequest.ForceFinalAnswer ? "none" : null,
+        };
+
+        using var doc = await LlmHttp.PostAsync(
+            http,
+            Name,
+            LlmHttp.Combine(baseUrl, "chat/completions"),
+            body,
+            r => r.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey),
+            cancellationToken);
+
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("choices", out var choices)
+            || choices.ValueKind != JsonValueKind.Array
+            || choices.GetArrayLength() == 0)
+        {
+            throw LlmHttp.Unreadable(Name, "no choices");
+        }
+
+        var choice = choices[0];
+        var message = choice.TryGetProperty("message", out var m) ? m : default;
+        var calls = new List<LlmToolCall>();
+        if (message.ValueKind == JsonValueKind.Object && message.TryGetProperty("tool_calls", out var toolCalls) && toolCalls.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var call in toolCalls.EnumerateArray())
+            {
+                var function = call.TryGetProperty("function", out var f) ? f : default;
+                calls.Add(new LlmToolCall(
+                    LlmHttp.String(call, "id") ?? LlmHttp.CallId(toolRequest.Exchanges.Count + 1, calls.Count + 1),
+                    LlmHttp.String(function, "name") ?? string.Empty,
+                    LlmHttp.String(function, "arguments") ?? "{}"));
+            }
+        }
+
+        var text = LlmHttp.String(message, "content");
+        if (text is null && calls.Count == 0)
+        {
+            throw new LlmProviderException(
+                LlmHttp.String(message, "refusal") is { } refusal ? $"{Name} refused the request: {refusal}" : $"{Name} returned no text.",
+                transient: false);
+        }
+
+        return new LlmToolTurn(
+            text ?? string.Empty,
+            calls,
+            LlmHttp.Int(root, "usage", "prompt_tokens"),
+            LlmHttp.Int(root, "usage", "completion_tokens"),
+            LlmHttp.String(choice, "finish_reason") ?? "unknown");
+    }
+
     /// <summary>FR-78: <c>GET {BaseUrl}/models</c> with the Bearer key.</summary>
     public Task<LlmKeyCheck> CheckKeyAsync(string apiKey, CancellationToken cancellationToken)
     {
@@ -351,7 +551,7 @@ internal sealed class LlmKeyValidator(IServiceProvider services) : ILlmKeyValida
 /// Ollama chat API (FR-22): <c>POST {BaseUrl}/api/chat</c> with <c>stream: false</c>; no key. The output cap is
 /// <c>options.num_predict</c>; token counts come from <c>prompt_eval_count</c> / <c>eval_count</c>.
 /// </summary>
-public sealed class OllamaLlmProvider(HttpClient http, IOptions<LlmOptions> options) : ILlmProvider
+public sealed class OllamaLlmProvider(HttpClient http, IOptions<LlmOptions> options) : ILlmProvider, IToolCallingLlmProvider
 {
     private const string Name = "Ollama";
 
@@ -387,6 +587,111 @@ public sealed class OllamaLlmProvider(HttpClient http, IOptions<LlmOptions> opti
         var text = LlmHttp.String(message, "content") ?? throw LlmHttp.Unreadable(Name, "no message content");
         return new LlmCompletion(
             text,
+            LlmHttp.Int(root, "prompt_eval_count"),
+            LlmHttp.Int(root, "eval_count"),
+            LlmHttp.String(root, "done_reason") ?? "stop");
+    }
+
+    /// <summary>
+    /// FR-71: <c>POST {BaseUrl}/api/show</c> for the model; it takes tools when its <c>capabilities</c> list
+    /// <c>tools</c>. An older Ollama without <c>capabilities</c>, or any failure, counts as no tool support (the run then
+    /// falls back to a context-only prompt and records <c>tools_unsupported</c>).
+    /// </summary>
+    public async Task<bool> SupportsToolsAsync(LlmRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        try
+        {
+            using var doc = await LlmHttp.PostAsync(
+                http,
+                Name,
+                LlmHttp.Combine(options.Value.ResolveOllamaBaseUrl().ToString(), "api/show"),
+                new { model = request.Model },
+                null,
+                cancellationToken);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("capabilities", out var capabilities)
+                && capabilities.ValueKind == JsonValueKind.Array
+                && capabilities.EnumerateArray().Any(c => c.ValueKind == JsonValueKind.String && c.GetString() == "tools");
+        }
+        catch (LlmProviderException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// FR-71: one <c>/api/chat</c> turn with <c>tools</c> (function definitions, as OpenAI). Each earlier exchange is an
+    /// <c>assistant</c> message with <c>tool_calls</c> (<c>function.name</c>, <c>function.arguments</c> as an object) followed by
+    /// one <c>tool</c> message per result (<c>tool_name</c>, <c>content</c>). A forced final answer omits the tools. Ollama
+    /// may give no call ids, so missing ones are generated.
+    /// </summary>
+    public async Task<LlmToolTurn> CompleteTurnAsync(LlmToolRequest toolRequest, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(toolRequest);
+        var request = toolRequest.Request;
+        var messages = new List<object> { new { role = "system", content = request.System } };
+        messages.AddRange(request.Messages.Select(m => new { role = m.Role == LlmRole.Assistant ? "assistant" : "user", content = m.Content }));
+        foreach (var exchange in toolRequest.Exchanges)
+        {
+            messages.Add(new
+            {
+                role = "assistant",
+                content = exchange.AssistantText,
+                toolCalls = exchange.Calls.Select(c => new { function = new { name = c.Name, arguments = LlmHttp.ObjectOrEmpty(c.ArgumentsJson) } }).ToArray(),
+            });
+            messages.AddRange(exchange.Results.Select(r => new
+            {
+                role = "tool",
+                content = r.Content,
+                toolName = exchange.Calls.FirstOrDefault(c => c.Id == r.CallId)?.Name ?? string.Empty,
+            }));
+        }
+
+        var body = new
+        {
+            model = request.Model,
+            messages,
+            stream = false,
+            tools = toolRequest.ForceFinalAnswer
+                ? null
+                : toolRequest.Tools.Select(t => new { type = "function", function = new { name = t.Name, description = t.Description, parameters = t.InputSchema } }).ToArray(),
+            options = new { numPredict = request.MaxTokens },
+        };
+
+        using var doc = await LlmHttp.PostAsync(
+            http,
+            Name,
+            LlmHttp.Combine(options.Value.ResolveOllamaBaseUrl().ToString(), "api/chat"),
+            body,
+            null,
+            cancellationToken);
+
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object)
+        {
+            throw LlmHttp.Unreadable(Name, "no message");
+        }
+
+        var calls = new List<LlmToolCall>();
+        if (message.TryGetProperty("tool_calls", out var toolCalls) && toolCalls.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var call in toolCalls.EnumerateArray())
+            {
+                var function = call.TryGetProperty("function", out var f) ? f : default;
+                var arguments = function.ValueKind == JsonValueKind.Object && function.TryGetProperty("arguments", out var a)
+                    ? (a.ValueKind == JsonValueKind.String ? a.GetString() ?? "{}" : a.GetRawText())
+                    : "{}";
+                calls.Add(new LlmToolCall(
+                    LlmHttp.String(call, "id") ?? LlmHttp.CallId(toolRequest.Exchanges.Count + 1, calls.Count + 1),
+                    LlmHttp.String(function, "name") ?? string.Empty,
+                    arguments));
+            }
+        }
+
+        return new LlmToolTurn(
+            LlmHttp.String(message, "content") ?? string.Empty,
+            calls,
             LlmHttp.Int(root, "prompt_eval_count"),
             LlmHttp.Int(root, "eval_count"),
             LlmHttp.String(root, "done_reason") ?? "stop");

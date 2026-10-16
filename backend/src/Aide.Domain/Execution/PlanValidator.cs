@@ -1,18 +1,48 @@
 using Aide.Domain.Common;
+using Aide.Domain.Specs;
 
 namespace Aide.Domain.Execution;
 
 /// <summary>A file a plan step declares it will create or modify.</summary>
 public sealed record DeclaredFile(string Path, FileAction Action);
 
-/// <summary>One step of a structured plan (FR-29, D6).</summary>
+/// <summary>
+/// One step of a structured plan (FR-29, D6). <see cref="Agent"/> (FR-76) is the agent that runs the step: a preset
+/// catalogue key, or <see cref="PlanAgents.Generalist"/> without a preset (validation fills it in when omitted).
+/// <see cref="Covers"/> (FR-76, §4.13) lists the requirement IDs (<c>FR-n</c>) the step implements.
+/// </summary>
 public sealed record PlanStep(
     int Number,
     string Title,
     string Task,
     IReadOnlyList<DeclaredFile> Files,
     IReadOnlyList<int> Dependencies,
-    string? UserInstructions = null);
+    string? UserInstructions = null,
+    string? Agent = null,
+    IReadOnlyList<string>? Covers = null)
+{
+    public IReadOnlyList<string> Covers { get; init; } = Covers ?? [];
+}
+
+/// <summary>
+/// FR-76: the agents a plan step may name. Without a preset only <see cref="Generalist"/> (the default when a step names
+/// none, so v1 plans stay valid). With a preset (phase 8) the catalogue keys and the preset id; pass them to
+/// <see cref="PlanValidator.Validate"/> — the extension point for preset plan validation.
+/// </summary>
+public sealed record PlanAgents(IReadOnlyCollection<string> Keys, string? PresetId = null)
+{
+    /// <summary>The agent of every step without a preset.</summary>
+    public const string Generalist = "generalist";
+
+    /// <summary>No preset: every step is <see cref="Generalist"/>.</summary>
+    public static PlanAgents None { get; } = new([Generalist]);
+
+    /// <summary>Whether <paramref name="key"/> is allowed (ordinal; keys are lowercase kebab-case).</summary>
+    public bool Allows(string key) => Keys.Contains(key, StringComparer.Ordinal);
+
+    /// <summary>The agent of a step that names none: <see cref="Generalist"/> without a preset; with one, none (an error).</summary>
+    public string? DefaultAgent => PresetId is null ? Generalist : null;
+}
 
 /// <summary>
 /// FR-29: structural validation of a plan (generated, or edited by a human, FR-18). Failures are <c>INVALID_PLAN</c>
@@ -27,6 +57,12 @@ public sealed record PlanStep(
 /// prompt-injected agent can't plan its way into CI workflows, lockfiles or env files. No plan may declare a path under
 /// <c>.aide/</c> (<see cref="PathRules.IsAgentForbidden"/>): the Guardian rejects agent output there even when declared.
 /// </para>
+/// <para>
+/// FR-76, §4.11: a step's <c>agent</c> must be allowed by <see cref="PlanAgents"/> (without a preset: omitted, which
+/// becomes <c>generalist</c>, or <c>generalist</c>); its <c>covers</c> must be requirement IDs (<c>FR-n</c>, normalised
+/// and de-duplicated). §4.13: steps may modify files that already exist in the repository, and "a file is created by one
+/// step only" applies within the plan.
+/// </para>
 /// </summary>
 public static class PlanValidator
 {
@@ -37,9 +73,11 @@ public static class PlanValidator
     public const int MaxTitleLength = 200;
 
     /// <summary>Validates and returns the plan with declared paths normalised.</summary>
-    public static Result<IReadOnlyList<PlanStep>> Validate(IReadOnlyList<PlanStep> steps, int? maxFilesPerStep = null, bool allowProtectedPaths = true)
+    public static Result<IReadOnlyList<PlanStep>> Validate(
+        IReadOnlyList<PlanStep> steps, int? maxFilesPerStep = null, bool allowProtectedPaths = true, PlanAgents? agents = null)
     {
         ArgumentNullException.ThrowIfNull(steps);
+        agents ??= PlanAgents.None;
         var reasons = new List<string>();
 
         if (steps.Count == 0)
@@ -150,7 +188,32 @@ public static class PlanValidator
                 files.Add(file with { Path = path });
             }
 
-            normalised.Add(step with { Title = step.Title.Trim(), Task = step.Task.Trim(), Files = files });
+            var agent = string.IsNullOrWhiteSpace(step.Agent) ? agents.DefaultAgent : step.Agent.Trim();
+            if (agent is null)
+            {
+                reasons.Add($"Step {step.Number} has no \"agent\"; use one of {string.Join(", ", agents.Keys)}.");
+            }
+            else if (!agents.Allows(agent))
+            {
+                reasons.Add(agents.PresetId is null
+                    ? $"Step {step.Number} names the agent '{agent}'; without a preset every step is \"{PlanAgents.Generalist}\"."
+                    : $"Step {step.Number} names the unknown agent '{agent}'; the {agents.PresetId} preset has {string.Join(", ", agents.Keys)}.");
+            }
+
+            var covers = new List<string>(step.Covers.Count);
+            foreach (var id in step.Covers)
+            {
+                if (RequirementParser.NormaliseId(id) is not { } normalisedId)
+                {
+                    reasons.Add($"Step {step.Number} covers '{id}', which is not a requirement ID (FR-n).");
+                }
+                else if (!covers.Contains(normalisedId, StringComparer.Ordinal))
+                {
+                    covers.Add(normalisedId);
+                }
+            }
+
+            normalised.Add(step with { Title = step.Title.Trim(), Task = step.Task.Trim(), Files = files, Agent = agent, Covers = covers });
         }
 
         reasons.AddRange(ModifyOrderReasons(normalised, created));

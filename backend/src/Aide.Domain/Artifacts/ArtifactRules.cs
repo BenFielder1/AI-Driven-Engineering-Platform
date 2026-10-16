@@ -16,10 +16,15 @@ public sealed record ArtifactStatusChange(ArtifactStatus NewStatus, bool Changed
 /// <summary>Artifact lifecycle rules (§4.3, FR-16–FR-18, FR-20).</summary>
 public static class ArtifactRules
 {
+    /// <summary>The types that go through drafts and approval (v1 §4.3); <c>codebase_summary</c> (auto-locked, FR-70) is not one.</summary>
     public static IReadOnlyList<ArtifactType> All { get; } =
         [ArtifactType.ProjectRequest, ArtifactType.TechnicalSpecification, ArtifactType.ImplementationPlan, ArtifactType.OptimizationPlan];
 
-    /// <summary>The agent that produces a type (re-run on rejection or corruption).</summary>
+    /// <summary>
+    /// The agent that produces a type (re-run on rejection or corruption). <c>codebase_summary</c> is written by the
+    /// Repository Analyst (FR-70), which runs as the <c>repository_analysis</c> job rather than an <see cref="AgentKind"/>
+    /// re-run, so it throws here (see <see cref="RerunAgent"/>).
+    /// </summary>
     public static AgentKind ProducingAgent(ArtifactType type) => type switch
     {
         ArtifactType.ProjectRequest => AgentKind.IdeaRefinement,
@@ -36,8 +41,25 @@ public static class ArtifactRules
         ArtifactType.TechnicalSpecification => Phase.Specification,
         ArtifactType.ImplementationPlan => Phase.Planning,
         ArtifactType.OptimizationPlan => Phase.Review,
+
+        // §4.12: produced automatically at the start of refinement.
+        ArtifactType.CodebaseSummary => Phase.Refinement,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
+
+    /// <summary>
+    /// The agent re-run when a version of <paramref name="type"/> is rejected or found corrupted, or <c>null</c> when none
+    /// is: <c>codebase_summary</c> has no <see cref="AgentKind"/> (its analyst is re-queued as a job, FR-70).
+    /// </summary>
+    public static AgentKind? RerunAgent(ArtifactType type) =>
+        CodebaseSummaryRules.IsAutoLocked(type) ? null : ProducingAgent(type);
+
+    /// <summary>
+    /// The status a new agent-authored version is stored with: <c>locked</c> for an auto-locked type (FR-70
+    /// <c>codebase_summary</c>, no approval gate), <c>draft</c> otherwise.
+    /// </summary>
+    public static ArtifactStatus InitialStatus(ArtifactType type) =>
+        CodebaseSummaryRules.IsAutoLocked(type) ? ArtifactStatus.Locked : ArtifactStatus.Draft;
 
     /// <summary>Allowed stored-status moves: draft → locked/rejected/superseded/invalidated, locked → invalidated, any → corrupted.</summary>
     public static bool CanTransition(ArtifactStatus from, ArtifactStatus to) => (from, to) switch
@@ -94,7 +116,7 @@ public static class ArtifactRules
         ArtifactStatus.Draft => Result.Success(new ArtifactStatusChange(
             ArtifactStatus.Rejected,
             Changed: true,
-            authoredByAgent ? ProducingAgent(type) : null)),
+            authoredByAgent ? RerunAgent(type) : null)),
         ArtifactStatus.Locked => Result.Failure<ArtifactStatusChange>(Locked()),
         _ => NotDraft(status),
     };
@@ -120,7 +142,7 @@ public static class ArtifactRules
         ArtifactType type, ArtifactStatus status, string content, string storedHash, bool authoredByAgent = true, bool isCurrentVersion = true) =>
         ContentHash.Matches(content, storedHash) || status == ArtifactStatus.Corrupted
             ? new ArtifactStatusChange(status, Changed: false)
-            : new ArtifactStatusChange(ArtifactStatus.Corrupted, Changed: true, authoredByAgent && isCurrentVersion ? ProducingAgent(type) : null);
+            : new ArtifactStatusChange(ArtifactStatus.Corrupted, Changed: true, authoredByAgent && isCurrentVersion ? RerunAgent(type) : null);
 
     /// <summary>
     /// FR-20: is <paramref name="candidate"/> (with its status before any corruption mark) the current version of its
@@ -180,10 +202,19 @@ public static class ArtifactRules
     /// FR-18: can a new draft of <paramref name="type"/> be saved now? A type can be edited from the phase that
     /// produces it onwards (a later edit is approved like any version and cascades per §4.4); the optimisation plan
     /// only during review (it belongs to a review cycle); and nothing while a release is in progress
-    /// (<see cref="ProjectStatus.Releasing"/>). Otherwise <c>WRONG_PHASE</c>.
+    /// (<see cref="ProjectStatus.Releasing"/>). Otherwise <c>WRONG_PHASE</c>. The auto-locked <c>codebase_summary</c> is
+    /// never drafted: <c>ARTIFACT_LOCKED</c> (FR-70).
     /// </summary>
     public static Result CanCreateDraft(ArtifactType type, Phase phase, ProjectStatus status)
     {
+        if (CodebaseSummaryRules.IsAutoLocked(type))
+        {
+            // FR-70: never a draft; only the Repository Analyst writes new (locked) versions.
+            return Result.Failure(new DomainError(
+                ErrorCodes.ArtifactLocked,
+                "The codebase summary is written and locked by the Repository Analyst; it can't be edited."));
+        }
+
         var producing = ProducingPhase(type);
         if (status == ProjectStatus.Releasing)
         {

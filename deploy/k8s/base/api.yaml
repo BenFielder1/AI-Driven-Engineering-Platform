@@ -83,4 +83,5 @@ spec:
           persistentVolumeClaim:
             claimName: aide-data
         - name: tmp
-          emptyDir: {}
+          # Repo snapshots for agent tools (FR-71) live here; cap it so they can't fill the node disk.
+          emptyDir: { sizeLimit: 6Gi }

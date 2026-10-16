@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Aide.Api.Features.Artifacts;
 using Aide.Domain.Agents;
+using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 
@@ -61,12 +62,23 @@ public sealed record RefinementRoundDto(
     DateTimeOffset? CompletedAt);
 
 /// <summary>
+/// FR-70: the Repository Analyst for the release version. <c>status</c>: <c>not_needed</c> (no existing code),
+/// <c>queued</c>, <c>running</c>, <c>completed</c> (the locked summary exists: <c>artifactId</c>/<c>artifactVersion</c>),
+/// <c>failed</c> (the analyst ended without one) or <c>timed_out</c> (unfinished 10 minutes after the version started;
+/// refinement no longer waits). <c>runId</c> is the analyst's agent run once it has started (the run that wrote the
+/// summary when completed), else <c>null</c>.
+/// </summary>
+public sealed record CodebaseSummaryStatusDto(CodebaseSummaryState Status, Guid? RunId, Guid? ArtifactId, int? ArtifactVersion);
+
+/// <summary>
 /// The refinement page (FR-27): the latest project request version (<c>latestDraft</c>, without content — read it from
 /// the artifacts API), the latest round and its status, and the clarifying questions of the latest completed round
-/// (<c>questionsRunId</c>) with any answers already given.
+/// (<c>questionsRunId</c>) with any answers already given. <c>codebaseSummary</c> is the Repository Analyst's state for
+/// the version (FR-70).
 /// </summary>
 public sealed record RefinementDto(
     ArtifactSummaryDto? LatestDraft,
     RefinementRoundDto? LatestRound,
     Guid? QuestionsRunId,
-    IReadOnlyList<RefinementQuestionDto> Questions);
+    IReadOnlyList<RefinementQuestionDto> Questions,
+    CodebaseSummaryStatusDto CodebaseSummary);

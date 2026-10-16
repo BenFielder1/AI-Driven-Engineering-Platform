@@ -76,21 +76,27 @@ test('NFR-TEST, FR-5–FR-66: an idea becomes a tagged release, a new version st
   await page.goto('/projects')
   await expect(page.getByRole('heading', { level: 1, name: 'Projects', exact: true })).toBeVisible()
 
-  // FR-5, FR-66: the five-step wizard, strict approval mode, Local Git, the default initial version 0.1.0.
+  // FR-5, FR-66, FR-73: the six-step wizard (start from scratch), Local Git, the default initial version 0.1.0, strict
+  // approval mode.
   await page.getByRole('link', { name: 'New project' }).first().click()
   await expect(page.getByRole('heading', { level: 1, name: 'New project' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Step 1 of 6: Source' })).toBeVisible()
+  await expect(page.getByRole('radio', { name: /^Start from scratch/ })).toBeChecked()
+  await page.getByRole('button', { name: 'Next' }).click()
+  await expect(page.getByRole('heading', { name: 'Step 2 of 6: Project idea' })).toBeVisible()
   await page.getByLabel('Project name').fill(projectName)
   await page.getByLabel('Your idea').fill('A ticket tracker API for small support teams: create, assign and close tickets.')
   await page.getByRole('button', { name: 'Next' }).click()
-  await expect(page.getByRole('heading', { name: 'Step 2 of 5: Configuration' })).toBeVisible()
-  await page.getByRole('radio', { name: /^Strict/ }).check()
-  await page.getByRole('button', { name: 'Next' }).click()
+  await expect(page.getByRole('heading', { name: 'Step 3 of 6: Repository' })).toBeVisible()
   await page.getByRole('radio', { name: /^Local repository/ }).check()
   await page.getByRole('button', { name: 'Next' }).click()
-  await expect(page.getByRole('heading', { name: 'Step 4 of 5: Version' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Step 4 of 6: Version' })).toBeVisible()
   await expect(page.getByLabel('Initial version')).toHaveValue('0.1.0')
   await page.getByRole('button', { name: 'Next' }).click()
-  await expect(page.getByRole('heading', { name: 'Step 5 of 5: Review & create' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Step 5 of 6: Configuration' })).toBeVisible()
+  await page.getByRole('radio', { name: /^Strict/ }).check()
+  await page.getByRole('button', { name: 'Next' }).click()
+  await expect(page.getByRole('heading', { name: 'Step 6 of 6: Review & create' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Configuration' }).getByText('Strict')).toBeVisible()
   await page.getByRole('button', { name: 'Create project' }).click()
 

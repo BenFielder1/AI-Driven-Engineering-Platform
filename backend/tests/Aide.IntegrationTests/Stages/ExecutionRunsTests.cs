@@ -11,6 +11,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
+using Aide.Domain.RepoTools;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
 using Aide.IntegrationTests.Support;
@@ -161,7 +162,8 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         Assert.Equal(["src/part1.js"], attempts[1].ProducedFiles.Select(f => f.Path));
         Assert.All(attempts, a => Assert.Equal((AgentKind.CodeGenerator, AgentRunStatus.Succeeded), (a.Run!.Agent, a.Run.Status)));
         Assert.NotEqual(attempts[0].Run!.Id, attempts[1].Run!.Id);
-        Assert.All(attempts, a => Assert.Empty(a.ToolCalls));
+        // FR-71: each attempt's run used the repo tools on the project branch (the Fake's default script).
+        Assert.All(attempts, a => Assert.Equal([RepoToolNames.ListFiles, RepoToolNames.ReadFile], a.ToolCalls.Select(c => c.Tool)));
         var runs = (await AgentJobs.RunsAsync(factory, id)).Where(r => r.Agent == AgentKind.CodeGenerator).ToList();
         Assert.Equal(runs.Select(r => r.Id).Order(), attempts.Select(a => a.Run!.Id).Order());
 

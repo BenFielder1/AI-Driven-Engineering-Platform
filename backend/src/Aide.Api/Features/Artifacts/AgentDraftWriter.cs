@@ -90,4 +90,63 @@ public sealed class AgentDraftWriter(AideDbContext db, TimeProvider time)
             now);
         return artifact;
     }
+
+    /// <summary>
+    /// FR-70: adds an auto-locked version (<see cref="ArtifactRules.InitialStatus"/>; only <c>codebase_summary</c>) written
+    /// by an agent in release version <paramref name="releaseVersionId"/>: version = latest + 1 (project-wide, like every
+    /// type), parent = latest, stored <c>locked</c> with no gate, and <c>CODEBASE_SUMMARY_CREATED</c>. Idempotent per run;
+    /// <c>null</c> when the project is gone or <paramref name="releaseVersionId"/> is no longer its current version. Not saved.
+    /// </summary>
+    public async Task<Artifact?> AddLockedAsync(Guid projectId, Guid releaseVersionId, ArtifactType type, string content, Guid agentRunId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        if (ArtifactRules.InitialStatus(type) != ArtifactStatus.Locked)
+        {
+            throw new ArgumentOutOfRangeException(nameof(type), type, "Only auto-locked types are stored locked by an agent.");
+        }
+
+        var existingForRun = await db.Artifacts.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ProjectId == projectId && a.AgentRunId == agentRunId && a.Type == type, cancellationToken);
+        if (existingForRun is not null)
+        {
+            return existingForRun;
+        }
+
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
+        if (project is null || project.CurrentReleaseVersionId != releaseVersionId)
+        {
+            return null;
+        }
+
+        project.UpdatedAt = time.GetUtcNow(); // xmin: the version checked above must still be current when this commits
+
+        var existing = await db.Artifacts.AsNoTracking()
+            .Where(a => a.ProjectId == projectId && a.Type == type)
+            .Select(a => new ArtifactVersion(a.Version, a.Status))
+            .ToListAsync(cancellationToken);
+        var plan = ArtifactRules.NewDraft(existing);
+        var artifact = new Artifact
+        {
+            ProjectId = projectId,
+            Type = type,
+            Version = plan.Version,
+            ParentVersion = plan.ParentVersion,
+            Content = content,
+            ContentHash = ContentHash.Compute(content),
+            Status = ArtifactStatus.Locked,
+            CheckpointAtCreation = project.Checkpoint,
+            ReleaseVersionId = releaseVersionId,
+            AgentRunId = agentRunId,
+            ApprovedAt = now,
+            CreatedAt = now,
+        };
+        db.Artifacts.Add(artifact);
+        db.AddEvent(
+            EventTypes.CodebaseSummaryCreated,
+            projectId,
+            new { artifactId = artifact.Id, type, version = artifact.Version, releaseVersionId, agentRunId },
+            SystemActor.Name,
+            now);
+        return artifact;
+    }
 }

@@ -22,8 +22,8 @@ import {
   type ExecutionStepSummary,
   type PlanRunStatus,
   type StepAttempt,
-  type ToolCall,
 } from './execution-api'
+import { ToolCallsTable } from '../runs/tool-calls'
 import { stepTones } from './step-tones'
 
 const runTones: Record<PlanRunStatus, StatusTone> = {
@@ -50,58 +50,6 @@ const runKind = (run: Pick<ExecutionRun, 'cycle' | 'planType'>) =>
     : run.cycle === null
       ? 'Review-fix run'
       : `Review-fix run, cycle ${String(run.cycle)}`
-
-/** A tool call's arguments as compact JSON, cut for display (the full value is in the title). */
-function argumentsText(value: unknown): string {
-  if (value === undefined) {
-    return ''
-  }
-  let text: string
-  try {
-    text = JSON.stringify(value)
-  } catch {
-    text = '(arguments could not be shown)'
-  }
-  return text.length > 160 ? `${text.slice(0, 159)}…` : text
-}
-
-function ToolCalls({ calls, attempt }: { calls: ToolCall[]; attempt: number }) {
-  if (calls.length === 0) {
-    return <p className="text-xs text-muted-foreground">No repository tool calls.</p>
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[28rem] border-collapse text-xs">
-        <caption className="sr-only">Repository tool calls of attempt {attempt}</caption>
-        <thead>
-          <tr className="border-b border-border/60 text-left text-muted-foreground">
-            <th scope="col" className="py-1 pr-2 font-medium">Tool</th>
-            <th scope="col" className="py-1 pr-2 font-medium">Arguments</th>
-            <th scope="col" className="py-1 pr-2 text-right font-medium">Bytes</th>
-            <th scope="col" className="py-1 font-medium">Result</th>
-          </tr>
-        </thead>
-        <tbody>
-          {calls.map((c, i) => {
-            const args = argumentsText(c.arguments)
-            return (
-              <tr key={`${c.tool}-${String(i)}`} className="border-b border-border/40 align-top last:border-b-0">
-                <th scope="row" className="py-1 pr-2 text-left font-normal">
-                  <code>{c.tool}</code>
-                </th>
-                <td className="py-1 pr-2 break-all">
-                  <code title={args}>{args}</code>
-                </td>
-                <td className="py-1 pr-2 text-right tabular-nums">{formatNumber(c.bytes)}</td>
-                <td className="py-1">{c.truncated ? 'Cut to the tool limit' : 'Complete'}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
 
 function AttemptItem({ projectId, attempt }: { projectId: string; attempt: StepAttempt }) {
   const { run } = attempt
@@ -157,7 +105,7 @@ function AttemptItem({ projectId, attempt }: { projectId: string; attempt: StepA
       )}
       <div className="flex flex-col gap-1">
         <span className="text-xs font-semibold">Tool calls ({attempt.toolCalls.length})</span>
-        <ToolCalls calls={attempt.toolCalls} attempt={attempt.attempt} />
+        <ToolCallsTable calls={attempt.toolCalls} caption={`Repository tool calls of attempt ${String(attempt.attempt)}`} />
       </div>
     </li>
   )

@@ -52,10 +52,23 @@ public sealed record AgentRunRequest
     /// when a redelivered job finds the run already succeeded (the reply passed it then).
     /// </summary>
     public Func<string, Result>? Check { get; init; }
+
+    /// <summary>
+    /// FR-71: the repository the run's read-only repo tools see (<see cref="RepoScope.None"/>: no tools). Used by the
+    /// Repository Analyst, refinement, spec and plan (base commit) and the code generator and review (working tree).
+    /// </summary>
+    public RepoScope Repo { get; init; }
+
+    /// <summary>Warnings known before the run (e.g. <c>summary_wait_timeout</c>), recorded with the run's own (FR-70, FR-71).</summary>
+    public IReadOnlyList<string> Warnings { get; init; } = [];
 }
 
 /// <summary>A succeeded run: its id, the provider's text, what it cost and when it completed.</summary>
-public sealed record AgentRunOutcome(Guid RunId, string Text, string StopReason, LlmProvider Provider, string Model, string PromptVersion, int InputTokens, int OutputTokens, DateTimeOffset CompletedAt);
+public sealed record AgentRunOutcome(Guid RunId, string Text, string StopReason, LlmProvider Provider, string Model, string PromptVersion, int InputTokens, int OutputTokens, DateTimeOffset CompletedAt)
+{
+    /// <summary>The warnings recorded on the run (FR-70, FR-71).</summary>
+    public IReadOnlyList<string> Warnings { get; init; } = [];
+}
 
 /// <summary>
 /// Runs agents for background jobs (FR-22–FR-26). Never called from endpoints (CLAUDE.md rule 11). One run row per job
@@ -75,6 +88,10 @@ public sealed record AgentRunOutcome(Guid RunId, string Text, string StopReason,
 /// Any other exception from the call is a <c>PROVIDER_ERROR</c> (transient only for I/O, HTTP and timeout errors).
 /// Provider error text is redacted (<see cref="SecretRedaction"/>) before it is stored, logged or published.</item>
 /// </list>
+/// <item>FR-71: with <see cref="AgentRunRequest.Repo"/>, the call is a tool loop (<see cref="LlmToolLoop"/>) over a
+/// credential-free snapshot (<see cref="AgentRepoContext"/>); every tool call is stored in <c>tool_calls</c>. Warnings
+/// (<c>tools_unsupported</c>, <c>snapshot_unavailable</c>, the request's own) are stored with the output and in
+/// <c>RUN_COMPLETED</c>.</item>
 /// <c>RUN_STARTED</c> records the job id, so <see cref="AgentRunJobEndedHook"/> can fail the runs a dead-lettered job
 /// left <c>running</c> (e.g. after its lease expired on the last attempt).
 /// Failures surface as <see cref="JobFailedException"/> carrying the error code. Every log entry carries <c>RunId</c>.
@@ -84,6 +101,7 @@ public sealed partial class AgentRunner(
     ILlmResolver llm,
     IPromptLibrary prompts,
     ILlmProviderCatalog catalog,
+    AgentRepoContext repoContext,
     IOptions<LlmOptions> options,
     TimeProvider time,
     ILogger<AgentRunner> logger)
@@ -187,11 +205,32 @@ public sealed partial class AgentRunner(
         await db.SaveChangesAsync(cancellationToken);
         LogCalling(logger, run.Provider, run.Model, run.Attempts);
 
+        // FR-71: the repo tools over a snapshot (none: a plain call). A missing snapshot is a warning, never a failure.
+        using var context = request.Repo == RepoScope.None
+            ? RepoToolContext.Empty
+            : await repoContext.OpenAsync(run.ProjectId, request.Repo, cancellationToken);
         var started = time.GetTimestamp();
         LlmCompletion completion;
+        IReadOnlyList<string> loopWarnings;
+
+        // FR-26, FR-71: a tool loop's turns are paid for one by one. Their tokens are kept so a failure later in the loop
+        // still counts them, and the budget is checked between turns (as of the run's start plus this run's turns).
+        var budget = await db.Projects.AsNoTracking()
+            .Where(p => p.Id == run.ProjectId)
+            .Select(p => new { p.TokenBudget, p.TokensUsed })
+            .FirstAsync(cancellationToken);
+        var paid = default(LlmTurnTokens);
+        Task<bool> OnToolTurn(LlmTurnTokens soFar, CancellationToken _)
+        {
+            paid = soFar;
+            var runTokens = (long)run.InputTokens + run.OutputTokens + soFar.InputTokens + soFar.OutputTokens;
+            return Task.FromResult(TokenBudget.CheckCanContinue(budget.TokenBudget, budget.TokensUsed, runTokens).IsSuccess);
+        }
+
         try
         {
-            completion = await llm.ProviderFor(run.Provider).CompleteAsync(
+            var loop = await LlmToolLoop.RunAsync(
+                llm.ProviderFor(run.Provider),
                 new LlmRequest
                 {
                     Model = run.Model,
@@ -201,11 +240,35 @@ public sealed partial class AgentRunner(
                     Agent = request.Agent,
                     ApiKey = apiKey,
                 },
-                cancellationToken);
+                context.Tools,
+                cancellationToken,
+                context.Tools is null ? null : OnToolTurn);
+            completion = loop.Completion;
+            loopWarnings = loop.Warnings;
+        }
+        catch (LlmToolLoopStoppedException ex)
+        {
+            // FR-26: the budget ran out between turns: the turns made are counted, the run stops with BUDGET_EXCEEDED.
+            RecordToolCalls(run, context);
+            run.DurationMs += Elapsed(started);
+            await RecordPaidTurnsAsync(run, ex.Tokens);
+            var used = budget.TokensUsed + run.InputTokens + run.OutputTokens;
+            var message = TokenBudget.CheckCanStart(budget.TokenBudget, used).Error?.Message ?? "The project's token budget is used up.";
+            db.AddEvent(
+                EventTypes.BudgetExceeded,
+                run.ProjectId,
+                new { agent = run.Agent.ToWire(), tokenBudget = budget.TokenBudget, tokensUsed = used, jobId = request.Job.Id, runId = run.Id },
+                SystemActor.Name,
+                time.GetUtcNow());
+            LogBudgetExceeded(logger, used, budget.TokenBudget);
+            await FailAsync(run, ErrorCodes.BudgetExceeded, message, deadLetter: false);
+            throw new JobFailedException(message, transient: false, ErrorCodes.BudgetExceeded);
         }
         catch (LlmProviderException ex)
         {
+            RecordToolCalls(run, context);
             run.DurationMs += Elapsed(started);
+            await RecordPaidTurnsAsync(run, paid);
             var message = SecretRedaction.SanitizeProviderError(ex.Message, apiKey);
             LogAttemptFailed(logger, run.Attempts, ex.Transient, ex.StatusCode, message);
             if (LlmConnectionRules.RunFailureInvalidatesKey(ex.StatusCode) && key.CredentialId is { } credentialId)
@@ -224,7 +287,9 @@ public sealed partial class AgentRunner(
         {
             // Anything else from the provider layer (e.g. a FormatException from an HTTP header) must still finish the run,
             // or it would stay running. Its text may quote the request (and the key), so only the exception type is kept.
+            RecordToolCalls(run, context);
             run.DurationMs += Elapsed(started);
+            await RecordPaidTurnsAsync(run, paid);
             var transient = ex is HttpRequestException or TimeoutException or IOException;
             var message = $"{run.Provider.ToWire()} call failed unexpectedly ({ex.GetType().Name}).";
             LogUnexpectedFailure(logger, run.Attempts, transient, ex.GetType().Name, SecretRedaction.SanitizeProviderError(ex.Message, apiKey));
@@ -232,8 +297,49 @@ public sealed partial class AgentRunner(
             throw new JobFailedException(message, transient, ErrorCodes.ProviderError);
         }
 
-        await CompleteAsync(run, completion, Elapsed(started), request.Check);
+        RecordToolCalls(run, context);
+        IReadOnlyList<string> warnings =
+        [
+            .. request.Warnings
+                .Concat(context.Warning is { } warning ? [warning] : [])
+                .Concat(loopWarnings)
+                .Where(w => !string.IsNullOrWhiteSpace(w))
+                .Distinct(StringComparer.Ordinal),
+        ];
+        await CompleteAsync(run, completion, Elapsed(started), request.Check, warnings);
         return Outcome(run);
+    }
+
+    /// <summary>
+    /// FR-26, FR-71: adds the tokens (and cost) of tool-loop turns that completed before the attempt failed or stopped to the
+    /// run and to the project's <c>tokens_used</c>, in one transaction, so retries add up and the budget sees them.
+    /// </summary>
+    private async Task RecordPaidTurnsAsync(AgentRun run, LlmTurnTokens paid)
+    {
+        if (paid.InputTokens == 0 && paid.OutputTokens == 0)
+        {
+            return;
+        }
+
+        run.InputTokens += paid.InputTokens;
+        run.OutputTokens += paid.OutputTokens;
+        run.CostEstimate = AgentRunRules.EstimateCost(run.InputTokens, run.OutputTokens, catalog.PriceOf(run.Model));
+        long tokens = paid.InputTokens + paid.OutputTokens;
+        await using var transaction = await db.Database.BeginTransactionAsync(CancellationToken.None);
+        await db.Projects
+            .Where(p => p.Id == run.ProjectId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.TokensUsed, p => p.TokensUsed + tokens), CancellationToken.None);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await transaction.CommitAsync(CancellationToken.None);
+    }
+
+    /// <summary>FR-71: the tool calls the run made (refused ones included) as its <c>tool_calls</c> log.</summary>
+    private static void RecordToolCalls(AgentRun run, RepoToolContext context)
+    {
+        if (context.Tools is { } tools)
+        {
+            run.ToolCalls = tools.ToJson();
+        }
     }
 
     /// <summary>
@@ -330,18 +436,20 @@ public sealed partial class AgentRunner(
         return run;
     }
 
-    private async Task CompleteAsync(AgentRun run, LlmCompletion completion, long elapsedMs, Func<string, Result>? check)
+    private async Task CompleteAsync(AgentRun run, LlmCompletion completion, long elapsedMs, Func<string, Result>? check, IReadOnlyList<string> warnings)
     {
         // timestamptz keeps microseconds: truncate so the outcome (and the draft dated by it) matches what a redelivered
         // job reads back from the stored run.
         var utcNow = time.GetUtcNow();
         var now = utcNow.AddTicks(-(utcNow.Ticks % TimeSpan.TicksPerMicrosecond));
         run.Status = AgentRunStatus.Succeeded;
-        run.InputTokens = completion.InputTokens;
-        run.OutputTokens = completion.OutputTokens;
-        run.CostEstimate = AgentRunRules.EstimateCost(completion.InputTokens, completion.OutputTokens, catalog.PriceOf(run.Model));
+
+        // Added: earlier attempts' paid tool-loop turns (RecordPaidTurnsAsync) are already on the run.
+        run.InputTokens += completion.InputTokens;
+        run.OutputTokens += completion.OutputTokens;
+        run.CostEstimate = AgentRunRules.EstimateCost(run.InputTokens, run.OutputTokens, catalog.PriceOf(run.Model));
         run.DurationMs += elapsedMs;
-        run.Output = AideJson.Serialize(new RunOutput(completion.Text, completion.StopReason));
+        run.Output = AideJson.Serialize(new RunOutput(completion.Text, completion.StopReason) { Warnings = warnings.Count == 0 ? null : warnings });
         run.Error = null;
         run.CompletedAt = now;
         long tokens = completion.InputTokens + completion.OutputTokens;
@@ -358,7 +466,7 @@ public sealed partial class AgentRunner(
             db.AddEvent(
                 EventTypes.RunCompleted,
                 run.ProjectId,
-                new { runId = run.Id, agent = run.Agent.ToWire(), inputTokens = run.InputTokens, outputTokens = run.OutputTokens, costEstimate = run.CostEstimate, durationMs = run.DurationMs },
+                new { runId = run.Id, agent = run.Agent.ToWire(), inputTokens = run.InputTokens, outputTokens = run.OutputTokens, costEstimate = run.CostEstimate, durationMs = run.DurationMs, warnings },
                 SystemActor.Name,
                 now);
         }
@@ -402,7 +510,10 @@ public sealed partial class AgentRunner(
     private static AgentRunOutcome Outcome(AgentRun run)
     {
         var output = ReadOutput(run.Output);
-        return new AgentRunOutcome(run.Id, output?.Text ?? string.Empty, output?.StopReason ?? string.Empty, run.Provider, run.Model, run.PromptVersion, run.InputTokens, run.OutputTokens, run.CompletedAt ?? run.CreatedAt);
+        return new AgentRunOutcome(run.Id, output?.Text ?? string.Empty, output?.StopReason ?? string.Empty, run.Provider, run.Model, run.PromptVersion, run.InputTokens, run.OutputTokens, run.CompletedAt ?? run.CreatedAt)
+        {
+            Warnings = output?.Warnings ?? [],
+        };
     }
 
     /// <summary>The stored output of a run (<c>{"text": …, "stopReason": …}</c>), or <c>null</c>.</summary>
@@ -458,5 +569,11 @@ public sealed partial class AgentRunner(
     private static partial void LogBudgetExceeded(ILogger logger, long tokensUsed, long? tokenBudget);
 }
 
-/// <summary>What a run stores in <c>agent_runs.output</c>: the provider's text and why it stopped.</summary>
-public sealed record RunOutput(string Text, string StopReason);
+/// <summary>
+/// What a run stores in <c>agent_runs.output</c>: the provider's text, why it stopped, and the run's warnings (FR-70,
+/// FR-71; omitted when none).
+/// </summary>
+public sealed record RunOutput(string Text, string StopReason)
+{
+    public IReadOnlyList<string>? Warnings { get; init; }
+}

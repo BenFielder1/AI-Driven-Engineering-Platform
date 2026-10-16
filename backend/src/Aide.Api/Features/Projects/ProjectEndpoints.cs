@@ -43,18 +43,21 @@ public static partial class ProjectEndpoints
 
         group.MapPost("/", CreateProject)
             .WithName("CreateProject")
-            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults; initialVersion (FR-66, default 0.1.0) is the first release version, in development. git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID; 409 GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo.")
+            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70).")
             .Produces<ProjectDto>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status429TooManyRequests)
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithRetryAfterOn429()
             .WithResponseDescriptions(
+                (StatusCodes.Status400BadRequest, "VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag) or TAG_NOT_FOUND (import: the released tag isn't in the repository)"),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN (github_app: the caller's GitHub account can't push to the repository)"),
-                (StatusCodes.Status409Conflict, "GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app)"),
+                (StatusCodes.Status404NotFound, "NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it)"),
+                (StatusCodes.Status409Conflict, "GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists)"),
                 (StatusCodes.Status429TooManyRequests, "GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset)"),
                 (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (GitHub failed or couldn't be reached)"));
 

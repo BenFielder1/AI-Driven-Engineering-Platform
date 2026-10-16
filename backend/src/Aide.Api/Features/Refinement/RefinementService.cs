@@ -24,6 +24,7 @@ public sealed partial class RefinementService(
     AideDbContext db,
     JobEnqueuer jobs,
     ArtifactReader artifacts,
+    IterationContextReader iterations,
     TimeProvider time,
     ILogger<RefinementService> logger)
 {
@@ -135,7 +136,39 @@ public sealed partial class RefinementService(
             .Select(q => new RefinementQuestionDto(q.Id, q.Question, q.Reason, given.GetValueOrDefault(q.Id)))
             .ToList();
 
-        return new RefinementDto(latestDraft, latest?.Dto, completed?.Dto.RunId, questions);
+        return new RefinementDto(latestDraft, latest?.Dto, completed?.Dto.RunId, questions, await CodebaseSummaryAsync(projectId, versionId, cancellationToken));
+    }
+
+    /// <summary>FR-70: the Repository Analyst's state for release version <paramref name="versionId"/>.</summary>
+    private async Task<CodebaseSummaryStatusDto> CodebaseSummaryAsync(Guid projectId, Guid? versionId, CancellationToken cancellationToken)
+    {
+        var version = versionId is { } id
+            ? await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == id).Select(v => new { v.Id, v.BaseCommitSha, v.CreatedAt }).FirstOrDefaultAsync(cancellationToken)
+            : null;
+        if (version is null)
+        {
+            return new CodebaseSummaryStatusDto(CodebaseSummaryState.NotNeeded, null, null, null);
+        }
+
+        var summary = await db.Artifacts.AsNoTracking()
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == ArtifactType.CodebaseSummary)
+            .OrderByDescending(a => a.Version)
+            .Select(a => new { a.Id, a.Version, a.AgentRunId })
+            .FirstOrDefaultAsync(cancellationToken);
+        var (jobId, analysis) = await iterations.AnalysisJobAsync(projectId, version.Id, cancellationToken);
+        var state = CodebaseSummaryWait.State(!string.IsNullOrWhiteSpace(version.BaseCommitSha), summary is not null, analysis, version.CreatedAt, time.GetUtcNow());
+        var runId = summary?.AgentRunId;
+        if (runId is null && jobId is { } job)
+        {
+            var candidates = new[] { AgentRunRules.RunId(job, AgentOutput.CorrectiveRunKey), AgentRunRules.RunId(job) };
+            var started = await db.AgentRuns.AsNoTracking()
+                .Where(r => r.ProjectId == projectId && candidates.Contains(r.Id))
+                .Select(r => r.Id)
+                .ToListAsync(cancellationToken);
+            runId = candidates.FirstOrDefault(started.Contains) is var found && found != Guid.Empty ? found : null;
+        }
+
+        return new CodebaseSummaryStatusDto(state, runId, summary?.Id, summary?.Version);
     }
 
     private static Round? LatestCompleted(IReadOnlyList<Round> rounds) =>

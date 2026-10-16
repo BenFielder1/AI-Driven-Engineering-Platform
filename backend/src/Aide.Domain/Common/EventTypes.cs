@@ -167,6 +167,12 @@ public static class EventTypes
     /// </summary>
     public const string VersionStarted = "VERSION_STARTED";
 
+    /// <summary>
+    /// FR-70: the Repository Analyst stored a locked <c>codebase_summary</c>: <c>{artifactId, type, version,
+    /// releaseVersionId, agentRunId}</c>. No gate: the summary is auto-locked.
+    /// </summary>
+    public const string CodebaseSummaryCreated = "CODEBASE_SUMMARY_CREATED";
+
     // Rollback (FR-44, FR-45)
     public const string RollbackCompleted = "ROLLBACK_COMPLETED";
 
@@ -181,7 +187,7 @@ public static class EventTypes
     {
         [EventCategory.Transition] = [PhaseChanged],
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
-        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored],
+        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored, CodebaseSummaryCreated],
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],

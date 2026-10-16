@@ -108,6 +108,12 @@ public static class ErrorCodes
     /// </summary>
     public const string GitHubRateLimited = "GITHUB_RATE_LIMITED";
 
+    /// <summary>
+    /// FR-73 (400 on <c>POST /api/projects</c> with <c>source: import</c>): the "currently released version" tag the wizard
+    /// sent doesn't exist in the repository (checked against its tags, case-sensitively).
+    /// </summary>
+    public const string TagNotFound = "TAG_NOT_FOUND";
+
     /// <summary>FR-74: the preset doesn't exist (until presets land, every preset id).</summary>
     public const string PresetNotFound = "PRESET_NOT_FOUND";
 
@@ -132,6 +138,32 @@ public static class ErrorCodes
 
     /// <summary>FR-28: the spec generator's output still misses required sections after its corrective re-run.</summary>
     public const string MissingSections = "MISSING_SECTIONS";
+
+    /// <summary>
+    /// FR-75, D-V2-13: the spec generator's output has a functional requirement without an <c>FR-n</c> ID or without a
+    /// Given/When/Then acceptance criterion (every offender in the details), still after its corrective re-run. Recorded
+    /// on the run, like <see cref="MissingSections"/>.
+    /// </summary>
+    public const string MissingRequirementIds = "MISSING_REQUIREMENT_IDS";
+
+    /// <summary>
+    /// §4.13: an iteration spec's requirement tags are invalid (an <c>FR-n</c> without exactly one of <c>[new]</c>,
+    /// <c>[changed]</c>, <c>[unchanged]</c>, <c>[removed]</c>; no <c>[new]</c>/<c>[changed]</c> at all; or a
+    /// <c>[changed]</c>/<c>[removed]</c> ID that isn't in the baseline spec), still after the corrective re-run. Recorded on the run.
+    /// </summary>
+    public const string InvalidRequirementTags = "INVALID_REQUIREMENT_TAGS";
+
+    /// <summary>
+    /// FR-76, §4.13 (a <b>warning</b>, never blocking): an iteration plan's steps don't cover (<c>covers</c>) every
+    /// <c>[new]</c>/<c>[changed]</c> requirement; the missing IDs are in the details.
+    /// </summary>
+    public const string UncoveredRequirements = "UNCOVERED_REQUIREMENTS";
+
+    /// <summary>
+    /// FR-71: a repo tool call beyond the run's limits (25 calls, 400 KB read); returned to the agent as the tool result,
+    /// which must then answer with what it has. Unsafe tool paths reuse <see cref="Guardian.UnsafePath"/> (<c>UNSAFE_PATH</c>).
+    /// </summary>
+    public const string ToolLimit = "TOOL_LIMIT";
 
     /// <summary>FR-27: an agent's structured (JSON) output could not be read, even after its corrective re-run.</summary>
     public const string InvalidOutput = "INVALID_OUTPUT";
@@ -196,6 +228,7 @@ public static class ErrorCodes
         [VersionInProgress] = 409,
         [ReleaseNotMerged] = 409,
         [NotReleased] = 409,
+        [TagNotFound] = 400,
         [PresetNotFound] = 400,
         [CredentialInvalid] = 400,
         [CredentialNotOwner] = 403,

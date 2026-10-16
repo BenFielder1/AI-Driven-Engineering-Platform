@@ -195,7 +195,8 @@ public sealed class ExecutionRunReader(AideDbContext db)
                 var arguments = entry.TryGetProperty("arguments", out var args) ? args.Clone() : EmptyObject();
                 var bytes = entry.TryGetProperty("bytes", out var b) && b.ValueKind == JsonValueKind.Number && b.TryGetInt32(out var n) ? n : 0;
                 var truncated = entry.TryGetProperty("truncated", out var t) && t.ValueKind == JsonValueKind.True;
-                calls.Add(new ToolCallDto(tool.GetString()!, arguments, bytes, truncated));
+                var error = entry.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+                calls.Add(new ToolCallDto(tool.GetString()!, arguments, bytes, truncated, error));
             }
 
             return calls;

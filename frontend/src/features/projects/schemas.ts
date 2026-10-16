@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { checkNewVersion, DEFAULT_INITIAL_VERSION } from '../versions/semver'
+import { checkNewVersion, DEFAULT_INITIAL_VERSION, normalizeVersion } from '../versions/semver'
 import { approvalModes } from './labels'
 
 /**
@@ -120,9 +120,22 @@ function addCheck(ctx: z.RefinementCtx, path: string, message: Check) {
 
 // ---- New-project wizard (FR-5) ---------------------------------------------------------------------------------
 
+/** FR-73: the released-version radio value for "Never released" (sent as `releasedTag: null`). */
+export const NEVER_RELEASED = '__never_released__'
+
+/** FR-73: the released tag the wizard sends, or `null` for "Never released" (the radio option or an empty field). */
+export function releasedTagOf(v: Pick<WizardValues, 'releasedTag'>): string | null {
+  const tag = v.releasedTag.trim()
+  return tag === '' || tag === NEVER_RELEASED ? null : tag
+}
+
+export const localSourcePathMax = 1024
+
 /** One loose object plus one refinement, so every field is checked together (per-step checks use RHF `trigger`). */
 export const wizardSchema = z
   .object({
+    /** FR-73: start from scratch, or import an existing repository. */
+    source: z.enum(['scratch', 'import']),
     name: str,
     idea: str,
     approvalMode: z.enum(approvalModes),
@@ -141,17 +154,54 @@ export const wizardSchema = z
     /** `github_app`: the picked repository already has commits (FR-86 warning). */
     repoHasCode: z.boolean(),
     initialVersion: str,
+    /** FR-73 import: the released tag (a tag name, NEVER_RELEASED, or '' typed as "never released"). */
+    releasedTag: str,
+    /** FR-73 import: the released tag's semver ('' when never released or not a version), kept in sync by the wizard. */
+    releasedVersion: str,
+    /** FR-73 import: the version to develop. */
+    developmentVersion: str,
+    /** FR-73 import with `local` (development only): the server path of the repository to import. */
+    localSourcePath: str,
   })
   .superRefine((v, ctx) => {
+    const importing = v.source === 'import'
     addCheck(ctx, 'name', checkName(v.name))
-    addCheck(ctx, 'initialVersion', checkInitialVersion(v.initialVersion))
+    if (importing) {
+      const releasedTag = releasedTagOf(v)
+      const released = releasedTag === null ? null : v.releasedVersion || normalizeVersion(releasedTag)
+      if (releasedTag !== null && !released) {
+        addCheck(
+          ctx,
+          'releasedTag',
+          "This tag isn't a semantic version (for example v2.3.0). Enter the released version's tag, or leave it empty.",
+        )
+      }
+      const check = checkNewVersion(v.developmentVersion, released)
+      addCheck(ctx, 'developmentVersion', check.ok ? null : check.message)
+      if (v.gitMode === 'local') {
+        const path = v.localSourcePath.trim()
+        addCheck(
+          ctx,
+          'localSourcePath',
+          !path
+            ? 'Enter the path of the repository to import.'
+            : path.length > localSourcePathMax
+              ? `The path is at most ${String(localSourcePathMax)} characters.`
+              : null,
+        )
+      }
+    } else {
+      addCheck(ctx, 'initialVersion', checkInitialVersion(v.initialVersion))
+    }
     addCheck(
       ctx,
       'idea',
       !v.idea.trim()
-        ? 'Describe your idea: what should the software do, and for whom?'
+        ? importing
+          ? 'Describe what this version should deliver.'
+          : 'Describe your idea: what should the software do, and for whom?'
         : v.idea.length > limits.ideaMax
-          ? `The idea is at most ${limits.ideaMax.toLocaleString()} characters.`
+          ? `The ${importing ? 'request' : 'idea'} is at most ${limits.ideaMax.toLocaleString()} characters.`
           : null,
     )
     addCheck(ctx, 'complianceThreshold', checkThreshold(v.complianceThreshold))
@@ -171,6 +221,7 @@ export const wizardSchema = z
 export type WizardValues = z.infer<typeof wizardSchema>
 
 export const wizardDefaults: WizardValues = {
+  source: 'scratch',
   name: '',
   idea: '',
   approvalMode: projectDefaults.approvalMode,
@@ -186,6 +237,10 @@ export const wizardDefaults: WizardValues = {
   installationId: '',
   repoHasCode: false,
   initialVersion: DEFAULT_INITIAL_VERSION,
+  releasedTag: '',
+  releasedVersion: '',
+  developmentVersion: DEFAULT_INITIAL_VERSION,
+  localSourcePath: '',
 }
 
 // ---- Settings → General (FR-7) ---------------------------------------------------------------------------------

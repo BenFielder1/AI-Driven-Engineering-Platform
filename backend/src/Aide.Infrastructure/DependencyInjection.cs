@@ -3,6 +3,7 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
+using Aide.Infrastructure.RepoTools;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -84,7 +85,14 @@ public static class DependencyInjection
         services.AddSingleton<IFakeAgentResponder, FakeSpecGeneratorResponder>();
         services.AddSingleton<IFakeAgentResponder, FakePlanGeneratorResponder>();
         services.AddSingleton<IFakeAgentResponder, FakeCodeGeneratorResponder>();
+        services.AddSingleton<IFakeAgentResponder, FakeRepositoryAnalystResponder>();
         services.AddSingleton<IFakeAgentResponder>(_ => new FakeCodeReviewResponder(FakeCodeReviewScript.Default));
+        // FR-71: the Fake provider's scripted repo tool calls (last registered per agent wins; tests override them).
+        foreach (var script in FakeToolScripts.Defaults())
+        {
+            services.AddSingleton<IFakeToolScript>(script);
+        }
+
         services.AddSingleton<FakeLlmProvider>();
         services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<FakeLlmProvider>());
         services.AddSingleton<IPromptLibrary, EmbeddedPromptLibrary>();
@@ -95,6 +103,10 @@ public static class DependencyInjection
         services.AddSingleton<IWorkspaceStore, WorkspaceStore>();
         services.AddSingleton<IGitCli, GitCli>();
         services.AddSingleton<IWorkingCopies, WorkingCopies>();
+
+        // FR-71, D-V2-9: credential-free, read-only snapshots of the working copy for the agents' repo tools.
+        services.AddSingleton<IRepoSnapshotProvider, RepoSnapshotProvider>();
+        services.AddOptions<LocalGitOptions>().BindConfiguration(LocalGitOptions.SectionName);
         services.AddOptions<GitHubGitOptions>()
             .BindConfiguration(GitHubGitOptions.SectionName)
             .ValidateOnStart();
