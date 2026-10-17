@@ -1,8 +1,10 @@
 using Aide.Api.Features.Activity;
+using Aide.Api.Features.Presets;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
+using Aide.Domain.Presets;
 using Aide.Domain.Specs;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +15,7 @@ namespace Aide.Api.Features.Artifacts;
 /// FR-16, FR-20, FR-21: artifact reads. Every read goes through <see cref="ArtifactIntegrityGuard"/>, so each returned
 /// version carries the integrity found by re-hashing it now.
 /// </summary>
-public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard integrity)
+public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard integrity, VersionPresetReader presets)
 {
     /// <summary>The highest version of each type that exists in release version <paramref name="releaseVersionId"/>, in type order.</summary>
     public async Task<IReadOnlyList<ArtifactSummaryDto>> ListLatestAsync(Guid projectId, Guid? releaseVersionId, CancellationToken cancellationToken)
@@ -131,8 +133,9 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     }
 
     /// <summary>
-    /// FR-76, §4.13: an implementation plan's coverage warning (<see cref="PlanScope"/>) against the latest locked
-    /// specification of its release version. Computed on read, so it follows the spec it is checked against.
+    /// FR-76, §4.13: an implementation plan's warnings, computed on read (<see cref="PresetPlanValidator.AllWarnings"/>):
+    /// coverage (<c>UNCOVERED_REQUIREMENTS</c>, against the latest locked specification of its release version, so it follows
+    /// the spec it is checked against) and, with the version's preset, <c>AGENT_SCOPE</c> and <c>PLAN_ORDER</c>.
     /// </summary>
     private async Task<IReadOnlyList<ArtifactWarningDto>> WarningsAsync(Artifact artifact, CancellationToken cancellationToken)
     {
@@ -141,7 +144,8 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             return [];
         }
 
-        var plan = PlanDocument.ParseMarkdown(artifact.Content, maxFilesPerStep: null);
+        var preset = await presets.ForVersionAsync(artifact.ReleaseVersionId, cancellationToken, readBase: false);
+        var plan = PlanDocument.ParseMarkdown(artifact.Content, maxFilesPerStep: null, preset.PlanAgents(artifact.Type));
         if (plan.IsFailure)
         {
             return [];
@@ -153,9 +157,12 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             .OrderByDescending(a => a.Version)
             .Select(a => a.Content)
             .FirstOrDefaultAsync(cancellationToken);
-        return spec is null || PlanScope.Check(plan.Value, RequirementParser.Parse(spec).Requirements) is not { } warning
-            ? []
-            : [new ArtifactWarningDto(warning.Code, warning.Message, warning.Details)];
+        var requirements = spec is null ? null : RequirementParser.Parse(spec).Requirements;
+        return
+        [
+            .. PresetPlanValidator.AllWarnings(plan.Value, requirements, preset.Preset)
+                .Select(w => new ArtifactWarningDto(w.Code, w.Message, w.Details)),
+        ];
     }
 
     private Task<Artifact?> FindAsync(Guid projectId, ArtifactType type, int version, CancellationToken cancellationToken) =>

@@ -8,6 +8,7 @@ import type { User } from '../auth/auth-api'
 import { whenCollapsed } from './collapse-classes'
 import { projectSections, workspaceSections } from './nav-config'
 import { NavList } from './nav-list'
+import { PresetChip } from '../presets/preset-chip'
 import { ProjectSwitcher } from './project-switcher'
 import { ThemeMenu } from './theme-toggle'
 import type { ShellNav } from './use-shell-nav'
@@ -58,7 +59,10 @@ export function ShellNavigation({
           projectName={nav.projectName}
           badges={
             nav.projectName !== undefined ? (
-              <ProjectVersionBadges released={nav.releasedVersion} development={nav.developmentVersion} />
+              <>
+                <ProjectVersionBadges released={nav.releasedVersion} development={nav.developmentVersion} />
+                <PresetChip name={nav.presetName} version={nav.presetVersion} hideWhenNone />
+              </>
             ) : undefined
           }
           mode={mode}

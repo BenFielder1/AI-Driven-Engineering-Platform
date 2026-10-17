@@ -2,13 +2,24 @@ import type { Schemas } from '../../api/client'
 import { Alert } from '../../components/ui/alert'
 import { copyForCode } from '../../lib/errors'
 import { PLAN_BLOCK_LANGUAGE, readPlanDocument } from '../artifacts/plan-block'
+import { agentLabel, type PresetAgent } from '../presets/presets-api'
 import { dependencyWaves } from './plan-waves'
 
 /**
  * FR-55 Planning panel, FR-76: the plan's steps (number, title, specialist, declared files, dependencies, covered
  * requirement ids), a dependency view in waves, and the plan's coverage warnings when it records any.
  */
-/** FR-76, §4.13: the API's non-blocking findings about this plan version (e.g. UNCOVERED_REQUIREMENTS), with their ids. */
+/** FR-76, §4.11: a title and an ids-list label per plan warning code. */
+const warningTitles: Readonly<Record<string, { title: string; idsLabel: string }>> = {
+  UNCOVERED_REQUIREMENTS: { title: 'Uncovered requirements', idsLabel: 'Requirements not covered by any step' },
+  AGENT_SCOPE: { title: "Files outside the agent's owned paths", idsLabel: 'Steps and files outside their agent’s paths' },
+  PLAN_ORDER: { title: 'Plan order', idsLabel: 'Steps out of the recommended order' },
+}
+
+/**
+ * FR-76, §4.11, §4.13: the API's non-blocking findings about this plan version (UNCOVERED_REQUIREMENTS, and with a
+ * preset AGENT_SCOPE and PLAN_ORDER), each with its copy, the server's specifics and its ids.
+ */
 function PlanWarnings({ warnings }: { warnings: readonly Schemas['ArtifactWarningDto'][] }) {
   if (warnings.length === 0) {
     return null
@@ -19,11 +30,14 @@ function PlanWarnings({ warnings }: { warnings: readonly Schemas['ArtifactWarnin
         <Alert
           key={`${w.code}:${w.ids.join(',')}`}
           tone="warning"
-          title={w.code === 'UNCOVERED_REQUIREMENTS' ? 'Uncovered requirements' : 'Plan warning'}
+          title={warningTitles[w.code]?.title ?? 'Plan warning'}
         >
           <p>{copyForCode(w.code) ?? w.message}</p>
+          {copyForCode(w.code) && w.code !== 'UNCOVERED_REQUIREMENTS' && w.message && (
+            <p className="mt-1 text-muted-foreground">{w.message}</p>
+          )}
           {w.ids.length > 0 && (
-            <ul aria-label="Requirements not covered by any step" className="mt-1 flex flex-wrap gap-1">
+            <ul aria-label={warningTitles[w.code]?.idsLabel ?? 'Affected items'} className="mt-1 flex flex-wrap gap-1">
               {w.ids.map((id) => (
                 <li key={id}>
                   <code className="rounded border border-border px-1 text-xs">{id}</code>
@@ -37,7 +51,32 @@ function PlanWarnings({ warnings }: { warnings: readonly Schemas['ArtifactWarnin
   )
 }
 
-export function PlanPanel({ content, warnings = [] }: { content: string; warnings?: readonly Schemas['ArtifactWarningDto'][] }) {
+/** FR-76: the step's specialist: the catalogue agent's display name with its key, or v1's Code Generator. */
+function Specialist({ agent, agents }: { agent: string | null; agents: readonly PresetAgent[] | undefined }) {
+  if (!agent) {
+    return <>Code Generator</>
+  }
+  const label = agentLabel(agent, agents)
+  return label.name ? (
+    <span className="flex flex-col">
+      <span>{label.name}</span>
+      <code className="text-xs text-muted-foreground">{label.key}</code>
+    </span>
+  ) : (
+    <code className="text-xs">{label.key}</code>
+  )
+}
+
+export function PlanPanel({
+  content,
+  warnings = [],
+  agents,
+}: {
+  content: string
+  warnings?: readonly Schemas['ArtifactWarningDto'][]
+  /** FR-76: the plan's preset agent catalogue, for display names (undefined without a preset or while loading). */
+  agents?: readonly PresetAgent[]
+}) {
   const doc = readPlanDocument(content)
   if (!doc) {
     return (
@@ -81,7 +120,9 @@ export function PlanPanel({ content, warnings = [] }: { content: string; warning
                   {s.number}
                 </th>
                 <td className="px-3 py-2 break-words">{s.title}</td>
-                <td className="px-3 py-2">{s.agent ?? 'Code Generator'}</td>
+                <td className="px-3 py-2">
+                  <Specialist agent={s.agent} agents={agents} />
+                </td>
                 <td className="px-3 py-2">
                   <ul className="flex flex-col gap-0.5">
                     {s.files.map((f) => (

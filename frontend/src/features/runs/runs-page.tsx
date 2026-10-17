@@ -19,6 +19,7 @@ import {
 import { useProjectAccess } from '../projects/project-context'
 import { oneOf } from '../projects/projects-search'
 import { RelativeTime } from '../projects/relative-time'
+import { presetRef } from '../presets/presets-api'
 import { RunStatusBadge } from './run-badges'
 import { RunDetails } from './run-details'
 import { isUnfinished } from './run-format'
@@ -46,6 +47,8 @@ function runVersion(run: AgentRun, versionName: string | undefined): string {
 
 function RunRow({ run, onOpen, versionName }: { run: AgentRun; onOpen: () => void; versionName: string | undefined }) {
   const unfinished = isUnfinished(run)
+  // FR-74: the preset the run used, "nextjs-frontend@1.0.0".
+  const preset = presetRef(run.presetId, run.presetVersion)
   return (
     <tr className="border-b border-border last:border-b-0">
       <th scope="row" className="px-3 py-2 text-left font-medium">
@@ -59,6 +62,9 @@ function RunRow({ run, onOpen, versionName }: { run: AgentRun; onOpen: () => voi
         </button>
       </th>
       <td className="px-3 py-2">{run.agentKey ?? '—'}</td>
+      <td className="px-3 py-2" data-testid="run-preset">
+        {preset ? <code className="text-xs">{preset}</code> : '—'}
+      </td>
       <td className="px-3 py-2">
         <code className="text-xs">{run.model}</code>
       </td>
@@ -88,7 +94,7 @@ function RunsTable({ projectId, runs, onOpen }: { projectId: string; runs: Agent
   const versionName = useReleaseVersionNames(projectId)
   return (
     <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md">
-      <table className="w-full min-w-[64rem] border-collapse text-sm">
+      <table className="w-full min-w-[70rem] border-collapse text-sm">
         <caption className="sr-only">Agent runs, newest first. Open a run to see all its details.</caption>
         <thead>
           <tr className="border-b border-border/60 text-left text-xs text-muted-foreground">
@@ -97,6 +103,9 @@ function RunsTable({ projectId, runs, onOpen }: { projectId: string; runs: Agent
             </th>
             <th scope="col" className={head}>
               Specialist
+            </th>
+            <th scope="col" className={head}>
+              Preset
             </th>
             <th scope="col" className={head}>
               Model

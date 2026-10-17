@@ -6,12 +6,14 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
+using Aide.Domain.Presets;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
+using Aide.Infrastructure.Presets;
 using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -46,6 +48,7 @@ public sealed partial class ProjectCreator(
     IWorkingCopies workingCopies,
     IWorkspaceStore workspaces,
     JobEnqueuer jobs,
+    IPresetCatalog presets,
     IOptions<LocalGitOptions> localGit,
     TimeProvider time,
     ILogger<ProjectCreator> logger)
@@ -81,6 +84,13 @@ public sealed partial class ProjectCreator(
             return Result.Failure<Project>(validation.Error!);
         }
 
+        // FR-74: the wizard's Stack step, pinned on the version to develop.
+        var preset = Presets.PresetService.Resolve(presets, request.PresetId);
+        if (preset.IsFailure)
+        {
+            return Result.Failure<Project>(preset.Error!);
+        }
+
         var now = time.GetUtcNow();
         var project = new Project
         {
@@ -108,7 +118,7 @@ public sealed partial class ProjectCreator(
 
         try
         {
-            return await SaveAsync(request, project, start.Value, gitProvider, ownerId, actor, now, cancellationToken);
+            return await SaveAsync(request, project, start.Value, preset.Value, gitProvider, ownerId, actor, now, cancellationToken);
         }
         catch
         {
@@ -309,7 +319,7 @@ public sealed partial class ProjectCreator(
     }
 
     private async Task<Result<Project>> SaveAsync(
-        CreateProjectRequest request, Project project, RepositoryStart start, GitProvider gitProvider, Guid ownerId, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+        CreateProjectRequest request, Project project, RepositoryStart start, Preset? preset, GitProvider gitProvider, Guid ownerId, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var git = request.Git;
         var appRepo = start.AppRepo;
@@ -349,6 +359,7 @@ public sealed partial class ProjectCreator(
             BaseTag = start.ReleasedTag,
             BaseCommitSha = start.ReleasedCommit ?? start.HeadCommit,
         };
+        Presets.PresetService.Pin(version, preset);
         versions.Add(version);
         project.CurrentReleaseVersionId = version.Id;
         ReleaseVersionScope.Refresh(project, versions);
@@ -405,6 +416,8 @@ public sealed partial class ProjectCreator(
                 repoHasCode = appRepo?.HasCode,
                 importedTag = start.Imported ? start.ReleasedTag : null,
                 developmentVersion = version.Version,
+                presetId = version.PresetId,
+                presetVersion = version.PresetVersion,
             },
             actor,
             now);

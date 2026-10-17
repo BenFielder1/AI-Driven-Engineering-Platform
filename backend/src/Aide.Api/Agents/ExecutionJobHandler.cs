@@ -1,6 +1,7 @@
 using System.Globalization;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
+using Aide.Api.Features.Presets;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
@@ -48,6 +49,9 @@ public interface IExecutionCompletionHook
 /// <c>EXECUTION_COMPLETED</c> and calls <see cref="IExecutionCompletionHook"/>. Rejected: <c>STEP_REJECTED</c> with every
 /// violation; the fourth rejection blocks the step (<c>STEP_BLOCKED</c>) and raises an escalation gate (FR-33).</item>
 /// </list>
+/// FR-76: with a preset each step runs as its specialist (<see cref="AgentRunRequest.SpecialistAgentKey"/>: the run is
+/// <c>code_generator</c> with <c>agent_key</c> = the step's agent and the specialist prompt), and the Guardian adds the
+/// preset's protected paths (existing-on-base ones checked against the version's base commit).
 /// </summary>
 public sealed partial class ExecutionJobHandler(
     AideDbContext db,
@@ -57,6 +61,7 @@ public sealed partial class ExecutionJobHandler(
     IWorkingCopies workingCopies,
     LifecycleWriter writer,
     IExecutionCompletionHook completion,
+    VersionPresetReader presets,
     TimeProvider time,
     ILogger<ExecutionJobHandler> logger) : IJobHandler
 {
@@ -98,6 +103,7 @@ public sealed partial class ExecutionJobHandler(
         }
 
         var working = prepared.Value;
+        var preset = await presets.CurrentAsync(project.Id, cancellationToken);
         var existing = await Git(() => workingCopies.FindStepCommitAsync(project.Id, working.Branch, step.Id, cancellationToken));
         if (!resuming && !await BeginAttemptAsync(project, step, cancellationToken))
         {
@@ -109,7 +115,7 @@ public sealed partial class ExecutionJobHandler(
             // D17 redelivery: the warnings are those of the committed files, not of an earlier rejected attempt.
             LogAlreadyCommitted(logger, existing.Sha);
             var committed = existing.Files.Select(f => new ProducedFile(f.Path, f.Content)).ToList();
-            var check = ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, step.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], committed, project.MaxFilesPerStep));
+            var check = ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, step.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], committed, project.MaxFilesPerStep, preset.Preset, preset.ExistsOnBase));
             var runId = await StepAttemptRecorder.AttemptRunIdAsync(db, job.Id, step, cancellationToken);
             await CompleteAsync(project.Id, planId, step, steps, existing, [.. check.Warnings], working, runId, cancellationToken);
             return;
@@ -118,7 +124,7 @@ public sealed partial class ExecutionJobHandler(
         var outcome = await runner.RunAsync(await RequestAsync(job, project, planId, step, steps, cancellationToken), cancellationToken);
         var reply = CodeGeneration.Parse(outcome.Text);
         var result = reply.IsSuccess
-            ? ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, reply.Value.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], reply.Value.Files, project.MaxFilesPerStep))
+            ? ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, reply.Value.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], reply.Value.Files, project.MaxFilesPerStep, preset.Preset, preset.ExistsOnBase))
             : new GuardianResult([CodeGeneration.UnreadableViolation(reply.Error!)]);
         if (!result.Accepted)
         {
@@ -231,6 +237,9 @@ public sealed partial class ExecutionJobHandler(
             Job = job,
             StepId = step.Id,
             RunKey = StepAttemptRecorder.RunKey(step.Id, step.Attempt),
+
+            // FR-76: the step runs as its specialist (with a preset whose catalogue has the step's agent).
+            SpecialistAgentKey = step.AgentKey,
             Inputs = new Dictionary<string, string?>
             {
                 ["PROJECT_REQUEST"] = projectRequest?.Content,

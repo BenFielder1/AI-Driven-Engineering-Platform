@@ -30,6 +30,9 @@ export function VersionSummary({ version, className }: { version: ReleaseVersion
           </Row>
         )}
         <Row term="Checkpoints">{version.checkpoints.max}</Row>
+        <Row term="Preset">
+          {version.presetName ? `${version.presetName}${version.presetVersion ? ` ${version.presetVersion}` : ''}` : 'No preset'}
+        </Row>
         {version.branchName && (
           <Row term="Branch">
             <code className="font-mono">{version.branchName}</code>

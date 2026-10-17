@@ -1,4 +1,3 @@
-import { EmptyState } from '../../components/shared/empty-state'
 import { panelClass } from '../../components/shared/panel-class'
 import { StatusBadge } from '../../components/shared/status-badge'
 import { ErrorState, LoadingState } from '../../components/ui/states'
@@ -7,6 +6,7 @@ import { cn } from '../../lib/utils'
 import { useAdminLlmPolicy } from '../connections/connections-api'
 import { llmProviderLabels } from '../projects/labels'
 import { GitHubAppPanel } from './admin-github-app-panel'
+import { AdminPresetsPanel } from './admin-presets-panel'
 
 /**
  * Admin → Integrations → LLM system keys (FR-79): read-only. The policy comes from configuration
@@ -58,7 +58,7 @@ function LlmSystemKeysPanel() {
 }
 
 /**
- * /admin/integrations (SPEC §7.2): the GitHub App (FR-80) and the system-key policy; presets come later. `callback` is
+ * /admin/integrations (SPEC §7.2): the GitHub App (FR-80), the system-key policy and the presets (FR-74). `callback` is
  * the manifest flow's outcome from `?github=configured` / `?error=GITHUB_AUTH_FAILED`.
  */
 export function AdminIntegrationsPage({ callback }: { callback?: 'configured' | 'failed' }) {
@@ -70,12 +70,7 @@ export function AdminIntegrationsPage({ callback }: { callback?: 'configured' | 
       </h2>
       <GitHubAppPanel callback={callback} />
       <LlmSystemKeysPanel />
-      <EmptyState
-        variant="not_started"
-        headingLevel={3}
-        title="Presets"
-        description="The tech stack presets list is available in a later update."
-      />
+      <AdminPresetsPanel />
     </section>
   )
 }

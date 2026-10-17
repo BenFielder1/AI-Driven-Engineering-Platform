@@ -8,6 +8,7 @@ import { useDocumentTitle } from '../../../lib/use-document-title'
 import { cn } from '../../../lib/utils'
 import { useProjectAccess } from '../project-context'
 import { useProjectSettings, type ProjectSettings } from '../projects-api'
+import { PresetSettingsSection } from '../../presets/preset-settings'
 import { DangerZoneTab } from './danger-zone-tab'
 import { GeneralForm, GeneralReadOnly } from './general-tab'
 import { GitTab } from './git-tab'
@@ -96,7 +97,12 @@ export function ProjectSettingsPage({ section }: { section: SettingsTab | undefi
   let panel: ReactNode
   switch (section) {
     case 'general':
-      panel = isOwner ? <GeneralForm project={project} /> : <GeneralReadOnly project={project} />
+      panel = (
+        <>
+          {isOwner ? <GeneralForm project={project} /> : <GeneralReadOnly project={project} />}
+          <PresetSettingsSection project={project} canChange={canInProject(user, role, 'changePreset')} />
+        </>
+      )
       break
     case 'members':
       panel = <MembersTab />

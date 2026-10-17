@@ -2,10 +2,12 @@ using Aide.Api.Features.Versions;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
+using Aide.Domain.Presets;
 using Aide.Domain.Releases;
 using Aide.Domain.Specs;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
+using Aide.Infrastructure.Presets;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aide.Api.Agents;
@@ -14,7 +16,8 @@ namespace Aide.Api.Agents;
 /// What an agent job knows about the release version it works in (§4.10, §4.13, FR-70, FR-72): the version, whether it
 /// has existing code (a base commit: a new version, an import, a scratch project on a repository with code), whether it
 /// is an <b>iteration</b> (existing code or an earlier released/imported version), its <c>codebase_summary</c>, and the
-/// previous released version's locked spec and project request (the <b>baseline inputs</b>, read-only).
+/// previous released version's locked spec and project request (the <b>baseline inputs</b>, read-only). FR-74: the
+/// version's <see cref="Preset"/> (as shipped now), whose extra sections the spec must have (FR-75).
 /// </summary>
 public sealed record IterationContext(
     ReleaseVersion? Version,
@@ -26,15 +29,18 @@ public sealed record IterationContext(
 {
     public static IterationContext None { get; } = new(null, false, false, null, null, null);
 
-    /// <summary>§4.13: the spec validation context of this version (preset sections arrive with FR-74).</summary>
-    public SpecValidationContext SpecContext => SpecValidationContext.ForVersion(IsIteration, BaselineSpecification?.Content);
+    /// <summary>FR-74: the version's preset, or <c>null</c>.</summary>
+    public Preset? Preset { get; init; }
+
+    /// <summary>§4.13, FR-75: the spec validation context of this version, with the preset's extra sections.</summary>
+    public SpecValidationContext SpecContext => SpecValidationContext.ForVersion(IsIteration, BaselineSpecification?.Content, Preset?.SpecSectionTitles);
 
     /// <summary>The input artifacts these contribute to a run (summary and baselines that exist).</summary>
     public IEnumerable<Artifact> Artifacts => new[] { CodebaseSummary, BaselineProjectRequest, BaselineSpecification }.OfType<Artifact>();
 }
 
 /// <summary>Reads the <see cref="IterationContext"/> of a project's current release version, and its analyst's state.</summary>
-public sealed class IterationContextReader(AideDbContext db, AgentJobInputs inputs)
+public sealed class IterationContextReader(AideDbContext db, AgentJobInputs inputs, IPresetCatalog presets)
 {
     public async Task<IterationContext> ReadAsync(Guid projectId, CancellationToken cancellationToken)
     {
@@ -61,7 +67,10 @@ public sealed class IterationContextReader(AideDbContext db, AgentJobInputs inpu
         var summary = await inputs.CurrentAsync(projectId, ArtifactType.CodebaseSummary, cancellationToken);
         var baselineSpec = baseline is null ? null : await LockedAsync(projectId, baseline.Id, ArtifactType.TechnicalSpecification, cancellationToken);
         var baselineRequest = baseline is null ? null : await LockedAsync(projectId, baseline.Id, ArtifactType.ProjectRequest, cancellationToken);
-        return new IterationContext(version, hasCode, hasCode || baseline is not null || version.BaseTag is not null, summary, baselineSpec, baselineRequest);
+        return new IterationContext(version, hasCode, hasCode || baseline is not null || version.BaseTag is not null, summary, baselineSpec, baselineRequest)
+        {
+            Preset = presets.ForVersion(version),
+        };
     }
 
     /// <summary>FR-70: where the version's latest <c>repository_analysis</c> job is.</summary>

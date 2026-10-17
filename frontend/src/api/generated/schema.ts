@@ -543,10 +543,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The caller's projects (every project for Admins), paged, with search by name, phase, status and has-a-version-in-development filters and sorting. Rows carry the released and in-development version badges (FR-62). */
+        /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and preset (FR-74: the current version's preset id, or none for projects without a preset) filters and sorting. Rows carry the released and in-development version badges (FR-62) and the preset chip. */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -1392,6 +1392,57 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The tech stack presets (FR-74), ordered by id: name, version, description, stack chips, deployment targets and content hash. For the wizard's Stack step and the admin presets list. No preset (general) is the absence of one. */
+        get: operations["ListPresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/presets/{presetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A preset in full (FR-74): specialist agents (owned paths, skills), extra spec sections with guidance, required environment variables, review checklist and deterministic rules, protected paths. */
+        get: operations["GetPreset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/preset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change the preset of the version in development (Owner, FR-74): pins the preset id, version and content hash on it and records PRESET_CHANGED. presetId null means no preset. Allowed until the version's first implementation plan is locked; a new version can pick another preset. */
+        patch: operations["UpdateProjectPreset"];
         trace?: never;
     };
     "/api/me/notifications": {
@@ -2272,6 +2323,11 @@ export interface components {
              */
             source?: components["schemas"]["ProjectSource"];
             import?: null | components["schemas"]["CreateProjectImportRequest"];
+            /**
+             * @description FR-74 (wizard Stack step): a preset id from `GET /api/presets`, pinned (with its version and content hash) on
+             *     the version to develop; omitted or `null` = no preset (general). Unknown: 400 `PRESET_NOT_FOUND`.
+             */
+            presetId?: null | string;
         };
         /** @description A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again. */
         CreatedApiTokenDto: {
@@ -3167,6 +3223,76 @@ export interface components {
          * @enum {unknown}
          */
         PlanRunStatus: "pending" | "running" | "paused" | "completed" | "blocked" | "superseded";
+        /** @description A specialist agent of a preset (FR-76): the paths it owns (globs; `!` excludes) and its skills. */
+        PresetAgentDto: {
+            key: string;
+            name: string;
+            description: string;
+            owns: string[];
+            skills: string[];
+        };
+        /** @description A review checklist item (FR-77), mapped to a v1 compliance category. */
+        PresetChecklistItemDto: {
+            category: components["schemas"]["ReviewCategory"];
+            item: string;
+            severity: components["schemas"]["Severity"];
+        };
+        /** @description A preset in full (FR-74): the summary plus agents, spec sections, environment, review and protected paths. No prompt bodies. */
+        PresetDetailDto: {
+            id: string;
+            name: string;
+            version: string;
+            description: string;
+            stack: string[];
+            deployTargets: string[];
+            contentHash: string;
+            agents: components["schemas"]["PresetAgentDto"][];
+            specSections: components["schemas"]["PresetSpecSectionDto"][];
+            requiredEnv: components["schemas"]["PresetEnvVarDto"][];
+            review: components["schemas"]["PresetReviewDto"];
+            protectedPaths: components["schemas"]["PresetProtectedPathDto"][];
+        };
+        /** @description A required environment variable (FR-88): `targets` ⊆ production/preview/development. */
+        PresetEnvVarDto: {
+            key: string;
+            targets: string[];
+            sensitive: boolean;
+            description: string;
+        };
+        /**
+         * @description A protected path (§4.11): `existingOnBase` protects only files already on the version's base commit;
+         *     `except` globs stay writable.
+         */
+        PresetProtectedPathDto: {
+            glob: string;
+            existingOnBase: boolean;
+            except: string[];
+            reason: null | string;
+        };
+        /** @description The preset's review additions (FR-77): its checklist and deterministic rule ids. */
+        PresetReviewDto: {
+            checklist: components["schemas"]["PresetChecklistItemDto"][];
+            deterministic: string[];
+        };
+        /** @description An extra spec section the preset requires (FR-75) with its guidance. */
+        PresetSpecSectionDto: {
+            title: string;
+            guidance: string;
+        };
+        /**
+         * @description A tech stack preset card (FR-74, §7.2 wizard Stack step and admin presets list): `stack` are the chips,
+         *     `deployTargets` the supported deployment targets (`vercel`). `contentHash` is the SHA-256 of the
+         *     preset's files (D-V2-12).
+         */
+        PresetSummaryDto: {
+            id: string;
+            name: string;
+            version: string;
+            description: string;
+            stack: string[];
+            deployTargets: string[];
+            contentHash: string;
+        };
         ProblemDetails: {
             type?: null | string;
             title?: null | string;
@@ -3191,6 +3317,8 @@ export interface components {
          *     checkpoint within the current release version `releaseVersionId` (§4.10, D-V2-11: was `projectVersion`);
          *     `releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the
          *     version in development (`null`: none) (FR-62). `idea` is the request of the version in development.
+         *     `presetId`, `presetName` and `presetVersion` are the tech stack preset pinned on the current release
+         *     version (FR-74; all `null`: no preset).
          */
         ProjectDto: {
             /** Format: uuid */
@@ -3223,6 +3351,9 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            presetId: null | string;
+            presetName: null | string;
+            presetVersion: null | string;
         };
         /**
          * @description A project event pushed live to everyone viewing the project (FR-46): the SignalR `projectEvent` message.
@@ -3303,7 +3434,8 @@ export interface components {
         /**
          * @description A row of the projects list (FR-6, FR-62). `myRole` is `null` for an Admin who isn't a member;
          *     `releasedVersion` / `developmentVersion` are the two version badges (`null` when not released / nothing in
-         *     development); `checkpoint` was `projectVersion` (D-V2-11).
+         *     development); `checkpoint` was `projectVersion` (D-V2-11); `presetId`/`presetName`/`presetVersion`
+         *     are the preset chip (FR-74, §7.2; `null`: no preset).
          */
         ProjectSummaryDto: {
             /** Format: uuid */
@@ -3322,6 +3454,9 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            presetId: null | string;
+            presetName: null | string;
+            presetVersion: null | string;
         };
         /** @description A commit on the project branch that isn't on the default branch; `url` links it on GitHub (`null` for Local). */
         PullRequestCommitDto: {
@@ -3547,7 +3682,8 @@ export interface components {
          *     `baseCommitSha` are the released tag and merge commit the version started from (null for a first version);
          *     `branchName` and `pullRequestUrl` are the version's working branch and PR once they exist; `request` is
          *     what the version was started with (the project idea for a first version); `startedBy` is null for versions created
-         *     by migration or import.
+         *     by migration or import. `presetId`/`presetVersion` are the pinned preset (FR-74) and `presetName` its
+         *     name (the id when the preset is no longer shipped); all `null` without a preset.
          */
         ReleaseVersionDto: {
             /** Format: uuid */
@@ -3564,6 +3700,7 @@ export interface components {
             checkpoints: components["schemas"]["ReleaseVersionCheckpointsDto"];
             presetId: null | string;
             presetVersion: null | string;
+            presetName: null | string;
             request: string;
             startedBy: null | components["schemas"]["ActorDto"];
             /** Format: date-time */
@@ -3670,8 +3807,8 @@ export interface components {
         /**
          * @description FR-60: start a new release version. `version` is semver (a leading `v` is stripped, e.g. `v1.2.0` →
          *     `1.2.0`); `request` describes the new features, improvements or fixes and becomes the project idea for this
-         *     version; `presetId` picks a tech stack preset (presets arrive with FR-74: until then any value is
-         *     `PRESET_NOT_FOUND`).
+         *     version; `presetId` picks the tech stack preset of the new version (FR-74): omit it to keep the preset of the
+         *     version it builds on, send `null` for no preset; an unknown id is `PRESET_NOT_FOUND`.
          */
         StartReleaseVersionRequest: {
             version: string;
@@ -3796,6 +3933,13 @@ export interface components {
         /** @description Replaces the project's notification channels (FR-47). */
         UpdateNotificationSettingsRequest: {
             channels: components["schemas"]["NotificationChannelInput"][];
+        };
+        /**
+         * @description FR-74: change the preset of the version in development (Owner), until its first implementation plan is locked.
+         *     `presetId` is a preset id from `GET /api/presets`, or `null` for no preset (general).
+         */
+        UpdateProjectPresetRequest: {
+            presetId?: null | string;
         };
         /** @description Partial update of a project (FR-7). Omitted fields are unchanged. */
         UpdateProjectRequest: {
@@ -5510,6 +5654,7 @@ export interface operations {
                 phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
+                preset?: string;
                 sortBy?: "created" | "updated" | "name";
                 sortOrder?: "asc" | "desc";
             };
@@ -5570,7 +5715,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectDto"];
                 };
             };
-            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag) or TAG_NOT_FOUND (import: the released tag isn't in the repository) */
+            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository) or PRESET_NOT_FOUND */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8759,6 +8904,146 @@ export interface operations {
             };
             /** @description NOT_FOUND: the project, or a releaseVersionId of another project. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetSummaryDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetDetailDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: no preset with that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateProjectPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectPresetRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDto"];
+                };
+            };
+            /** @description PRESET_NOT_FOUND: no preset with that id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners change the preset. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PRESET_LOCKED (the version's implementation plan is locked, or no version is in development) or CONFLICT (a concurrent edit). */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

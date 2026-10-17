@@ -4,6 +4,7 @@ import type { Schemas } from '../../api/client'
 import { checkNewVersion, normalizeVersion } from '../../features/versions/semver'
 import { authDb } from './auth'
 import { addEvent } from './lifecycle'
+import { findPreset } from './preset-catalog'
 import { problem } from './problem'
 import {
   access,
@@ -68,7 +69,9 @@ export const versionHandlers = [
         errors: { request: ['The request is required.'] },
       })
     }
-    if (body?.presetId) {
+    // FR-74: omitted keeps the base version's preset, null is no preset, an unknown id is PRESET_NOT_FOUND.
+    const pickedPreset = body?.presetId ? findPreset(body.presetId) : undefined
+    if (body?.presetId && !pickedPreset) {
       return problem(400, 'PRESET_NOT_FOUND', 'The preset was not found.')
     }
     const version = normalizeVersion(body?.version)
@@ -96,8 +99,11 @@ export const versionHandlers = [
     }
 
     const user = authDb.users.find((u) => u.id === a.userId)
+    const keep = body?.presetId === undefined
     const started = makeReleaseVersion({
       version,
+      presetId: keep ? (released?.presetId ?? null) : (pickedPreset?.id ?? null),
+      presetVersion: keep ? (released?.presetVersion ?? null) : (pickedPreset?.version ?? null),
       status: 'in_development',
       baseTag: released?.tag ?? null,
       baseCommitSha: released?.mergeCommitSha ?? null,

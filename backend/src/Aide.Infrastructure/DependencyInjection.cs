@@ -3,6 +3,7 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
+using Aide.Infrastructure.Presets;
 using Aide.Infrastructure.RepoTools;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -96,6 +97,11 @@ public static class DependencyInjection
         services.AddSingleton<FakeLlmProvider>();
         services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<FakeLlmProvider>());
         services.AddSingleton<IPromptLibrary, EmbeddedPromptLibrary>();
+
+        // Tech stack presets (FR-74, §4.11): the shipped presets (embedded), loaded once at startup; tests add sources.
+        services.AddSingleton<IPresetSource>(EmbeddedPresetSource.Shipped);
+        services.TryAddSingleton<IPresetCatalog, PresetCatalog>();
+        services.AddHostedService<PresetCatalogStartup>();
         services.AddScoped<ILlmResolver, LlmResolver>();
         services.AddScoped<ILlmKeyValidator, LlmKeyValidator>();
 

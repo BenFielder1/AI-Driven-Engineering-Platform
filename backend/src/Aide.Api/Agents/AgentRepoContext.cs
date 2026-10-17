@@ -114,7 +114,7 @@ public sealed partial class AgentRepoContext(
     }
 
     /// <summary>GitHub projects: clone or fetch the repository into the working copy (Local repositories are already there).</summary>
-    private async Task<bool> FetchAsync(Guid projectId, CancellationToken cancellationToken)
+    public async Task<bool> FetchAsync(Guid projectId, CancellationToken cancellationToken)
     {
         var settings = await db.ProjectGitSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ProjectId == projectId, cancellationToken);
         if (settings is null || settings.Provider == GitProvider.Local)

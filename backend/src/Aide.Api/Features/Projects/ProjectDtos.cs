@@ -20,6 +20,8 @@ namespace Aide.Api.Features.Projects;
 /// checkpoint within the current release version <c>releaseVersionId</c> (§4.10, D-V2-11: was <c>projectVersion</c>);
 /// <c>releasedVersion</c> is the highest released version (<c>null</c>: not released) and <c>developmentVersion</c> the
 /// version in development (<c>null</c>: none) (FR-62). <c>idea</c> is the request of the version in development.
+/// <c>presetId</c>, <c>presetName</c> and <c>presetVersion</c> are the tech stack preset pinned on the current release
+/// version (FR-74; all <c>null</c>: no preset).
 /// </summary>
 public sealed record ProjectDto(
     Guid Id,
@@ -41,12 +43,16 @@ public sealed record ProjectDto(
     bool ExecutionPaused,
     ProjectRole? MyRole,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? PresetId,
+    string? PresetName,
+    string? PresetVersion);
 
 /// <summary>
 /// A row of the projects list (FR-6, FR-62). <c>myRole</c> is <c>null</c> for an Admin who isn't a member;
 /// <c>releasedVersion</c> / <c>developmentVersion</c> are the two version badges (<c>null</c> when not released / nothing in
-/// development); <c>checkpoint</c> was <c>projectVersion</c> (D-V2-11).
+/// development); <c>checkpoint</c> was <c>projectVersion</c> (D-V2-11); <c>presetId</c>/<c>presetName</c>/<c>presetVersion</c>
+/// are the preset chip (FR-74, §7.2; <c>null</c>: no preset).
 /// </summary>
 public sealed record ProjectSummaryDto(
     Guid Id,
@@ -60,7 +66,10 @@ public sealed record ProjectSummaryDto(
     ApprovalMode ApprovalMode,
     ProjectRole? MyRole,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? PresetId,
+    string? PresetName,
+    string? PresetVersion);
 
 /// <summary>Sort keys of the projects list (FR-6).</summary>
 public enum ProjectSortBy
@@ -207,6 +216,13 @@ public sealed record CreateProjectRequest
 
     /// <summary>FR-73: required with <c>source: import</c>, not allowed otherwise.</summary>
     public CreateProjectImportRequest? Import { get; init; }
+
+    /// <summary>
+    /// FR-74 (wizard Stack step): a preset id from <c>GET /api/presets</c>, pinned (with its version and content hash) on
+    /// the version to develop; omitted or <c>null</c> = no preset (general). Unknown: 400 <c>PRESET_NOT_FOUND</c>.
+    /// </summary>
+    [MaxLength(Aide.Domain.Presets.PresetRules.IdMaxLength)]
+    public string? PresetId { get; init; }
 }
 
 /// <summary>Partial update of a project (FR-7). Omitted fields are unchanged.</summary>

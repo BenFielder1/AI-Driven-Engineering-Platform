@@ -7,11 +7,13 @@ import { ErrorSummary } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
 import { ModalDialog } from '../../components/ui/modal-dialog'
+import { SelectField } from '../../components/ui/select-field'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { TextField } from '../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, isApiError, messageFor } from '../../lib/errors'
+import { usePresets } from '../presets/presets-api'
 import { checkNewVersion, normalizeVersion } from './semver'
-import { VERSION_REQUEST_MAX } from './start-version-rules'
+import { KEEP_PRESET, NO_PRESET, presetIdFor, VERSION_REQUEST_MAX } from './start-version-rules'
 import { useStartReleaseVersion, type ReleaseVersion } from './versions-api'
 
 function startVersionSchema(released: string | null, existing: readonly string[]) {
@@ -38,8 +40,8 @@ const versionCodes = ['VERSION_INVALID', 'VERSION_NOT_GREATER', 'TAG_EXISTS'] as
 /**
  * FR-60, FR-61 "Start new version" (SPEC §7.2 dialog, Owner): the version (prefilled with the suggested next minor,
  * validated live: semver with a leading `v` stripped, greater than the released version), the request, and a summary
- * of what happens. Server errors go through the one error map; version errors land on the version field. The preset
- * select arrives with presets (FR-74).
+ * of what happens. Server errors go through the one error map; version errors land on the version field. FR-74: an
+ * optional different preset (default: keep the released version's preset).
  */
 export function StartVersionDialog({
   projectId,
@@ -74,11 +76,21 @@ export function StartVersionDialog({
   const normalised = normalizeVersion(typed)
   const lastReleased = versions.find((v) => v.version === released)
   const tagPrefix = lastReleased?.tagPrefix ?? versions[0]?.tagPrefix ?? 'v'
+  const presets = usePresets()
+  const [presetChoice, setPresetChoice] = useState(KEEP_PRESET)
+  const currentPresetId = lastReleased?.presetId ?? null
+  const currentPresetLabel = lastReleased?.presetName
+    ? `${lastReleased.presetName}${lastReleased.presetVersion ? ` ${lastReleased.presetVersion}` : ''}`
+    : 'No preset (general)'
 
   const onSubmit = handleSubmit((values) => {
     setServerError(null)
     start.mutate(
-      { version: normalizeVersion(values.version) ?? values.version.trim(), request: values.request.trim() },
+      {
+        version: normalizeVersion(values.version) ?? values.version.trim(),
+        request: values.request.trim(),
+        ...presetIdFor(presetChoice, currentPresetId),
+      },
       {
         onSuccess: (result) => {
           onStarted(result.releaseVersion)
@@ -130,6 +142,25 @@ export function StartVersionDialog({
           error={errors.request?.message}
           {...register('request')}
         />
+        <SelectField
+          id={`${base}-preset`}
+          label="Tech stack preset"
+          hint="The specialist agents, specification sections and review checklist of the new version."
+          value={presetChoice}
+          onChange={(e) => {
+            setPresetChoice(e.target.value)
+          }}
+        >
+          <option value={KEEP_PRESET}>Keep the current preset ({currentPresetLabel})</option>
+          {presets.data
+            ?.filter((p) => p.id !== currentPresetId)
+            .map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} {p.version}
+              </option>
+            ))}
+          {currentPresetId !== null && <option value={NO_PRESET}>No preset (general)</option>}
+        </SelectField>
         <section aria-labelledby={`${base}-summary`} className="rounded-lg border border-border/60 p-3 text-sm">
           <h3 id={`${base}-summary`} className="font-semibold">
             What happens

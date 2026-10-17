@@ -235,6 +235,11 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
         var changes = iteration
             ? $"\n\n## Changes in this version\n- [new] FR-{newId}: {summary}\n- Every other requirement is unchanged."
             : string.Empty;
+
+        // FR-75: a preset's extra sections, after the eleven (and before "Changes in this version").
+        var presetSections = string.Concat(FakePrompt.PresetSpecSections(request).Select(title =>
+            $"\n\n## {title}\n{title} for {name}, following the preset's guidance and the requirements above."));
+        changes = presetSections + changes;
         return $"""
             ## 1. Overview
             {name}: {summary} Users manage {rs} through a JSON REST API. Non-goals: third-party integrations.
@@ -289,6 +294,7 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
 /// <summary>
 /// Fake Plan Generator (FR-29, D13): a valid four-step plan for the project's main resource, as the JSON the prompt asks
 /// for. Its files are ordinary repository files (no protected paths), so the Local Git provider can commit them later.
+/// FR-76: with a shipped preset in the prompt, the preset's scripted plan instead (<see cref="FakePresetScripts.Plan"/>).
 /// </summary>
 public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
 {
@@ -304,6 +310,12 @@ public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
         var scope = Domain.Specs.RequirementParser.Parse(FakePrompt.Tag(request, "technical_specification")).NewOrChangedIds;
         string[] apiCovers = scope.Count > 0 ? [.. scope] : ["FR-1", "FR-2", "FR-3", "FR-4"];
         string[] modelCovers = scope.Count > 0 ? [] : ["FR-1", "FR-4"];
+        if (FakePrompt.PresetId(request) is { } presetId
+            && FakePresetScripts.Plan(presetId, r, rs, [.. scope], FakePrompt.RepoHasCode(request)) is { } presetSteps)
+        {
+            return JsonSerializer.Serialize(new { steps = presetSteps });
+        }
+
         var steps = new object[]
         {
             Step(1, "Project skeleton and configuration", $"Create the Node.js project for {name}: package.json with start and test scripts, a README and an Express server entry point listening on PORT.", [], [], ("package.json", "create"), ("README.md", "create"), ("src/server.js", "create")),
@@ -330,7 +342,8 @@ public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
 /// <summary>
 /// Fake Code Generator (FR-31, D13): implements the requested step by writing exactly its declared files (read from the
 /// prompt's <c>&lt;declared_files&gt;</c> list), with deterministic content per file type, so execution runs end to end with
-/// the Fake and Local providers. The content never matches a secret pattern, so the Guardian accepts it.
+/// the Fake and Local providers. The content never matches a secret pattern, so the Guardian accepts it. FR-76: a specialist
+/// step (a preset role in the prompt) writes the preset's scripted files where it has them (<see cref="FakePresetScripts.Content"/>).
 /// </summary>
 public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
 {
@@ -347,9 +360,14 @@ public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
             : 1;
         var title = FakePrompt.Tag(request, "step_title") is { Length: > 0 } t ? t : $"Step {number}";
         var name = FakePrompt.Title(FakePrompt.Tag(request, "project_request"), "project");
+        var specialist = FakePrompt.SpecialistKey(request);
         var files = FilePattern().Matches(FakePrompt.Tag(request, "declared_files"))
             .Select(f => (Path: f.Groups["path"].Value.Trim(), Action: f.Groups["action"].Value))
-            .Select(f => new { path = f.Path, content = Content(f.Path, f.Action, name, number, title) })
+            .Select(f => new
+            {
+                path = f.Path,
+                content = (specialist is null ? null : FakePresetScripts.Content(specialist, f.Path, name, number, title)) ?? Content(f.Path, f.Action, name, number, title),
+            })
             .ToList();
         return JsonSerializer.Serialize(new
         {

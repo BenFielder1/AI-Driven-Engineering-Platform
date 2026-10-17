@@ -6,6 +6,7 @@ import { compareSemVer, normalizeVersion, parseSemVer } from '../../features/ver
 import type { ProjectRole } from '../../lib/permissions'
 import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from './auth'
 import { githubDb } from './github'
+import { findPreset, presetNameOf } from './preset-catalog'
 import { problem } from './problem'
 
 type Project = Schemas['ProjectDto']
@@ -37,7 +38,10 @@ interface StoredMember {
   createdAt: string
 }
 
-export interface StoredProject extends Omit<Project, 'myRole' | 'releaseVersionId' | 'releasedVersion' | 'developmentVersion'> {
+export interface StoredProject extends Omit<
+    Project,
+    'myRole' | 'releaseVersionId' | 'releasedVersion' | 'developmentVersion' | 'presetId' | 'presetName' | 'presetVersion'
+  > {
   members: StoredMember[]
   /**
    * Release versions in any order (FR-62); the project's released, development and current versions are derived from
@@ -209,6 +213,7 @@ export function makeReleaseVersion(overrides: Partial<ReleaseVersion> & Pick<Rel
     checkpoints: { current: 1, max: 1 },
     presetId: null,
     presetVersion: null,
+    presetName: presetNameOf(overrides.presetId),
     request: 'Track stock levels across warehouses.',
     startedBy: { id: null, name: 'Ada Owner', isSystem: false },
     createdAt: '2026-09-01T10:00:00Z',
@@ -327,9 +332,16 @@ export function roleOf(project: StoredProject, userId: string): ProjectRole | nu
   return project.members.find((m) => m.userId === userId)?.role ?? null
 }
 
-function toDto(project: StoredProject, userId: string): Project {
+/** FR-74: the preset chip of a project: the current release version's pinned preset (all null: none). */
+function presetFields(p: StoredProject): Pick<Project, 'presetId' | 'presetName' | 'presetVersion'> {
+  const v = currentVersionOf(p)
+  return { presetId: v?.presetId ?? null, presetName: presetNameOf(v?.presetId), presetVersion: v?.presetVersion ?? null }
+}
+
+export function projectDto(project: StoredProject, userId: string): Project {
   const p = project
   return {
+    ...presetFields(p),
     id: p.id,
     name: p.name,
     slug: p.slug,
@@ -368,6 +380,7 @@ function toSummary(project: StoredProject, userId: string): Summary {
     createdAt,
     updatedAt,
     myRole: roleOf(project, userId),
+    ...presetFields(project),
   }
 }
 
@@ -656,6 +669,7 @@ export const projectHandlers = [
     const phase = q.get('phase')
     const status = q.get('status')
     const hasDevelopment = q.get('hasDevelopmentVersion')
+    const preset = q.get('preset')
     const sortBy = q.get('sortBy') ?? 'updated'
     const dir = q.get('sortOrder') === 'asc' ? 1 : -1
     const items = projectsDb.projects
@@ -663,6 +677,7 @@ export const projectHandlers = [
       .filter((p) => !search || p.name.toLowerCase().includes(search))
       .filter((p) => !phase || p.currentPhase === phase)
       .filter((p) => !status || p.status === status)
+      .filter((p) => !preset || (currentVersionOf(p)?.presetId ?? 'none') === preset)
       .filter((p) => hasDevelopment === null || (developmentVersionOf(p) !== undefined) === (hasDevelopment === 'true'))
       .sort((a, b) => {
         const key = sortBy === 'name' ? 'name' : sortBy === 'created' ? 'createdAt' : 'updatedAt'
@@ -714,6 +729,17 @@ export const projectHandlers = [
     if (versions instanceof Response) {
       return versions
     }
+    // FR-74: the preset is pinned on the version to develop.
+    const preset = body.presetId ? findPreset(body.presetId) : undefined
+    if (body.presetId && !preset) {
+      return problem(400, 'PRESET_NOT_FOUND', `The preset '${body.presetId}' was not found.`)
+    }
+    const developing = versions.at(-1)
+    if (preset && developing) {
+      developing.presetId = preset.id
+      developing.presetVersion = preset.version
+      developing.presetName = preset.name
+    }
     const now = new Date().toISOString()
     const project = seedProject({
       name: body.name,
@@ -743,12 +769,12 @@ export const projectHandlers = [
     if (importing && development) {
       project.analyst = { [development.id]: { status: 'queued', runId: null, artifactId: null, artifactVersion: null } }
     }
-    return HttpResponse.json<Project>(toDto(project, user.id), { status: 201 })
+    return HttpResponse.json<Project>(projectDto(project, user.id), { status: 201 })
   }),
 
   http.get('*/api/projects/:id', ({ params }) => {
     const a = access(params.id)
-    return a instanceof Response ? a : HttpResponse.json<Project>(toDto(a.project, a.userId))
+    return a instanceof Response ? a : HttpResponse.json<Project>(projectDto(a.project, a.userId))
   }),
 
   http.patch('*/api/projects/:id', async ({ request, params }) => {
@@ -768,7 +794,7 @@ export const projectHandlers = [
     p.maxReviewCycles = body.maxReviewCycles ?? p.maxReviewCycles
     p.tokenBudget = body.clearTokenBudget ? null : (body.tokenBudget ?? p.tokenBudget)
     touch(p)
-    return HttpResponse.json<Project>(toDto(p, a.userId))
+    return HttpResponse.json<Project>(projectDto(p, a.userId))
   }),
 
   http.delete('*/api/projects/:id', async ({ request, params }) => {

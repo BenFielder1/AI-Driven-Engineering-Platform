@@ -67,6 +67,7 @@ describe('Agent runs page (FR-23)', () => {
     expect(headers).toEqual([
       'Agent',
       'Specialist',
+      'Preset',
       'Model',
       'Provider',
       'Credential',
@@ -98,8 +99,8 @@ describe('Agent runs page (FR-23)', () => {
     const running = rowFor('Plan generator')
     expect(within(running).getAllByText('Running…')).toHaveLength(2)
     expect(within(running).getByText('Fake (testing)')).toBeInTheDocument()
-    // Tokens and cost, plus the empty specialist and credential cells of a base-agent run with no recorded key.
-    expect(within(running).getAllByText('—')).toHaveLength(4)
+    // Tokens and cost, plus the empty specialist, preset and credential cells of a base-agent run with no recorded key.
+    expect(within(running).getAllByText('—')).toHaveLength(5)
   })
 
   it('FR23_ filter: the agent filter shows only that agent and is kept in the URL', async () => {
@@ -371,6 +372,17 @@ describe('Agent runs page (FR-23)', () => {
 })
 
 describe('Agent runs page (SPEC §7.2, v2 columns)', () => {
+  it('FR74_runs_table_shows_the_preset_as_id_at_version', async () => {
+    const project = seedProjectAs('viewer', (p) => {
+      seedRun(p, { agent: 'code_generator', agentKey: 'ui-engineer', presetId: 'nextjs-frontend', presetVersion: '1.0.0' })
+      seedRun(p, { agent: 'plan_generator' })
+    })
+    await openRuns(project)
+
+    expect(within(rowFor('Code generator')).getByTestId('run-preset')).toHaveTextContent('nextjs-frontend@1.0.0')
+    expect(within(rowFor('Plan generator')).getByTestId('run-preset')).toHaveTextContent('—')
+  })
+
   it('FR63_FR71_runs_table_shows_specialist_credential_tool_calls_and_version_checkpoint', async () => {
     const project = seedProjectAs('viewer', (p) => {
       p.checkpoint = 4

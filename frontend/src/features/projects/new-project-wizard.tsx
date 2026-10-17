@@ -22,6 +22,8 @@ import { useAuthProviders } from '../auth/auth-api'
 import { connectGitHubHref, useGitHubConnection, useGitHubRepoRefs, type GitHubRepo } from '../github/github-api'
 import { GitHubErrorAlert } from '../github/github-error-alert'
 import { RepoPicker } from '../github/repo-picker'
+import { PresetPicker } from '../presets/preset-picker'
+import { usePresets } from '../presets/presets-api'
 import { approvalModeDescriptions, approvalModeLabels, approvalModes } from './labels'
 import { useCreateProject } from './projects-api'
 import { ReleasedVersionField } from './released-version-field'
@@ -61,13 +63,14 @@ const fieldIds: Record<Field, string> = {
   releasedVersion: 'project-released-tag',
   developmentVersion: 'project-development-version',
   localSourcePath: 'project-local-source-path',
+  presetId: 'project-preset',
 }
 
 /**
- * SPEC §7.2 order: Source → Idea (or Request) → Repository → Version → Configuration → Review & create. Stack and
- * Deployment arrive with their phases.
+ * SPEC §7.2 order: Source → Idea (or Request) → Repository → Version → Stack (FR-74) → Configuration → Review & create.
+ * Deployment arrives with its phase.
  */
-const stepKeys = ['source', 'idea', 'repository', 'version', 'configuration', 'review'] as const
+const stepKeys = ['source', 'idea', 'repository', 'version', 'stack', 'configuration', 'review'] as const
 type StepKey = (typeof stepKeys)[number]
 
 const stepFields: Record<StepKey, readonly Field[]> = {
@@ -75,6 +78,7 @@ const stepFields: Record<StepKey, readonly Field[]> = {
   idea: ['name', 'idea'],
   repository: ['gitMode', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken', 'releasedTag', 'localSourcePath'],
   version: ['initialVersion', 'developmentVersion'],
+  stack: ['presetId'],
   configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget'],
   review: [],
 }
@@ -89,6 +93,8 @@ function stepTitle(key: StepKey, source: Source): string {
       return 'Repository'
     case 'version':
       return 'Version'
+    case 'stack':
+      return 'Stack'
     case 'configuration':
       return 'Configuration'
     case 'review':
@@ -123,6 +129,7 @@ const serverFieldMap: Record<string, Field> = {
   import: 'developmentVersion',
   'import.developmentversion': 'developmentVersion',
   'import.releasedtag': 'releasedTag',
+  presetid: 'presetId',
 }
 
 function firstStepWithError(errors: Partial<Record<Field, unknown>>): number {
@@ -148,9 +155,13 @@ function toGitRequest(v: WizardValues): Schemas['CreateProjectGitRequest'] {
 
 const versionText = (text: string) => normalizeVersion(text) ?? text.trim()
 
-/** FR-5, FR-66, FR-73: scratch sends `initialVersion`; import sends `import`, and `idea` is the version's request. */
+/**
+ * FR-5, FR-66, FR-73: scratch sends `initialVersion`; import sends `import`, and `idea` is the version's request.
+ * FR-74: `presetId` only when a preset is picked ("No preset (general)" omits it).
+ */
 function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
   const base = {
+    ...(v.presetId ? { presetId: v.presetId } : {}),
     name: v.name.trim(),
     idea: v.idea.trim(),
     approvalMode: v.approvalMode,
@@ -277,7 +288,7 @@ function AppRepository({
 }
 
 /**
- * /projects/new (FR-5, FR-66, FR-73, FR-86): six steps with per-step validation; "Import an existing repository" asks
+ * /projects/new (FR-5, FR-66, FR-73, FR-74, FR-86): seven steps with per-step validation; "Import an existing repository" asks
  * for the request, the repository with its released version, and the version to develop. Create navigates to the
  * new project.
  */
@@ -329,6 +340,7 @@ export function NewProjectWizard() {
   const repoHasCode = useWatch({ control, name: 'repoHasCode' })
   const releasedTag = useWatch({ control, name: 'releasedTag' })
   const releasedVersion = useWatch({ control, name: 'releasedVersion' })
+  const presetId = useWatch({ control, name: 'presetId' })
 
   // FR-86: the GitHub App option exists once an App is registered; it is the default when the user is connected.
   const providers = useAuthProviders()
@@ -460,6 +472,10 @@ export function NewProjectWizard() {
             // FR-73: the repository to import doesn't exist, or the token can't see it.
             setError('repoUrl', { type: 'server', message: errorMessage(error, 'createProject') })
             goTo(stepIndex('repository'))
+          } else if (isApiError(error, 'PRESET_NOT_FOUND')) {
+            // FR-74: the preset was withdrawn since the list loaded; pick again from the fresh list.
+            setError('presetId', { type: 'server', message: errorMessage(error, 'createProject') })
+            goTo(stepIndex('stack'))
           } else if (importValues && isApiError(error, 'TAG_NOT_FOUND')) {
             void refs.refetch()
             failVersion('releasedTag', error)
@@ -734,6 +750,15 @@ export function NewProjectWizard() {
               />
             ))}
 
+          {key === 'stack' && (
+            <PresetPicker
+              id={fieldIds.presetId}
+              selected={presetId}
+              inputProps={register('presetId')}
+              error={errors.presetId?.message}
+            />
+          )}
+
           {key === 'configuration' && (
             <>
               <RadioGroup
@@ -903,6 +928,16 @@ function SummarySection({ title, step, onEdit, children }: {
   )
 }
 
+/** The picked preset's name and version (from the cached list), or "No preset (general)". */
+function PresetName({ presetId }: { presetId: string }) {
+  const presets = usePresets(Boolean(presetId))
+  if (!presetId) {
+    return <>No preset (general)</>
+  }
+  const preset = presets.data?.find((p) => p.id === presetId)
+  return <>{preset ? `${preset.name} ${preset.version}` : presetId}</>
+}
+
 function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step: number) => void }) {
   const pat = values.gitMode === 'github_pat'
   const app = values.gitMode === 'github_app'
@@ -936,6 +971,11 @@ function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step
         ) : (
           <SummaryRow term="Initial version">{versionText(values.initialVersion)}</SummaryRow>
         )}
+      </SummarySection>
+      <SummarySection title="Stack" step="stack" onEdit={onEdit}>
+        <SummaryRow term="Preset">
+          <PresetName presetId={values.presetId} />
+        </SummaryRow>
       </SummarySection>
       <SummarySection title="Configuration" step="configuration" onEdit={onEdit}>
         <SummaryRow term="Approval mode">{approvalModeLabels[values.approvalMode]}</SummaryRow>

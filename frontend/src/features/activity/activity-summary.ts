@@ -97,6 +97,24 @@ function describeVersionStarted(payload: Payload): string | null {
   return base ? `Version ${v} started from ${base}` : `Version ${v} started`;
 }
 
+/** FR-74: "nextjs-frontend@1.0.0", or "no preset" when the id is null. */
+function presetAt(payload: Payload, idKey: string, versionKey: string): string {
+  const id = str(payload, idKey);
+  if (!id) {
+    return "no preset";
+  }
+  const v = str(payload, versionKey);
+  return v ? `${id}@${v}` : id;
+}
+
+/** FR-74, FR-92 PRESET_CHANGED: "Preset of 1.2.0 changed from no preset to nextjs-frontend@1.0.0". */
+function describePresetChanged(payload: Payload): string {
+  const v = str(payload, "version");
+  const from = presetAt(payload, "fromPresetId", "fromPresetVersion");
+  const to = presetAt(payload, "presetId", "presetVersion");
+  return `Preset${v ? ` of ${v}` : ""} changed from ${from} to ${to}`;
+}
+
 function describeGate(type: string, payload: Payload, names: VersionNameLookup | undefined): string | null {
   const gateType = oneOf(payload, "type", gateTypes);
   if (!gateType) {
@@ -457,6 +475,9 @@ export function describeActivity(
       break;
     case "VERSION_STARTED":
       text = describeVersionStarted(payload);
+      break;
+    case "PRESET_CHANGED":
+      text = describePresetChanged(payload);
       break;
     case "GATE_CREATED":
     case "GATE_APPROVED":

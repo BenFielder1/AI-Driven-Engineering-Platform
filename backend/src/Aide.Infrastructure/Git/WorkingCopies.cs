@@ -165,6 +165,12 @@ public interface IWorkingCopies
     Task<IReadOnlyList<Domain.Review.RepositoryFile>?> ListFilesAsync(Guid projectId, string branch, int maxEntries, CancellationToken cancellationToken);
 
     /// <summary>
+    /// §4.11: the paths of the files in commit <paramref name="commit"/> (path order, at most <paramref name="maxEntries"/>,
+    /// unsafe paths skipped), or <c>null</c> when there is no repository or the commit isn't in it.
+    /// </summary>
+    Task<IReadOnlyList<string>?> ListPathsAtCommitAsync(Guid projectId, string commit, int maxEntries, CancellationToken cancellationToken);
+
+    /// <summary>
     /// FR-38: the committed content of <paramref name="paths"/> on <paramref name="branch"/> (not the working tree, so
     /// uncommitted leftovers are never reviewed). Missing and binary files (a NUL byte) are left out.
     /// </summary>
@@ -578,6 +584,32 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
             }
 
             return files;
+        });
+    }
+
+    public Task<IReadOnlyList<string>?> ListPathsAtCommitAsync(Guid projectId, string commit, int maxEntries, CancellationToken cancellationToken)
+    {
+        RequireRevision(commit);
+        if (!IsRepository(projectId))
+        {
+            return Task.FromResult<IReadOnlyList<string>?>(null);
+        }
+
+        return WithLockAsync<IReadOnlyList<string>?>(projectId, async () =>
+        {
+            var root = PathFor(projectId);
+            if (await ResolveCoreAsync(root, commit, cancellationToken) is not { } resolved)
+            {
+                return null;
+            }
+
+            var listing = await RunAsync(root, ["ls-tree", "-r", "-z", "--name-only", "--full-tree", resolved], cancellationToken);
+            return
+            [
+                .. listing.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+                    .Where(p => !PathRules.IsUnsafe(PathRules.Normalize(p)))
+                    .Take(maxEntries),
+            ];
         });
     }
 

@@ -117,6 +117,12 @@ public static class ErrorCodes
     /// <summary>FR-74: the preset doesn't exist (until presets land, every preset id).</summary>
     public const string PresetNotFound = "PRESET_NOT_FOUND";
 
+    /// <summary>
+    /// FR-74 (409 on <c>PATCH /api/projects/:id/preset</c>): the version's first implementation plan is locked (or nothing
+    /// is in development), so its preset can't change; a new version can pick another one.
+    /// </summary>
+    public const string PresetLocked = "PRESET_LOCKED";
+
     /// <summary>FR-42, FR-43 (recorded on a failed release): Git or GitHub refused the merge, tag or push for good.</summary>
     public const string GitError = "GIT_ERROR";
 
@@ -170,6 +176,18 @@ public static class ErrorCodes
     /// <c>[new]</c>/<c>[changed]</c> requirement; the missing IDs are in the details.
     /// </summary>
     public const string UncoveredRequirements = "UNCOVERED_REQUIREMENTS";
+
+    /// <summary>
+    /// FR-76, §4.11 (a <b>warning</b>, never blocking): a plan step declares files outside its specialist agent's owned
+    /// paths; each offending step and file is in the details.
+    /// </summary>
+    public const string AgentScope = "AGENT_SCOPE";
+
+    /// <summary>
+    /// §4.11, §4.12 (a <b>warning</b>, never blocking): a <i>soft</i> preset ordering rule is broken (e.g. a
+    /// <c>lib/&lt;domain&gt;</c> step after an <c>app/**</c> step); hard ordering rules are <see cref="InvalidPlan"/>.
+    /// </summary>
+    public const string PlanOrder = "PLAN_ORDER";
 
     /// <summary>
     /// FR-71: a repo tool call beyond the run's limits (25 calls, 400 KB read); returned to the agent as the tool result,
@@ -242,6 +260,7 @@ public static class ErrorCodes
         [NotReleased] = 409,
         [TagNotFound] = 400,
         [PresetNotFound] = 400,
+        [PresetLocked] = 409,
         [CredentialInvalid] = 400,
         [CredentialNotOwner] = 403,
         [UpstreamError] = 502,

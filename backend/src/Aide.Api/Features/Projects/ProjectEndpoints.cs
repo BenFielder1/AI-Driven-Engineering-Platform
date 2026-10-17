@@ -28,6 +28,9 @@ namespace Aide.Api.Features.Projects;
 /// </summary>
 public static partial class ProjectEndpoints
 {
+    /// <summary>FR-74, §7.2: the projects-list <c>preset</c> filter value for "no preset".</summary>
+    public const string NoPresetFilter = "none";
+
     public static IEndpointRouteBuilder MapProjectEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/projects")
@@ -37,13 +40,13 @@ public static partial class ProjectEndpoints
 
         group.MapGet("/", ListProjects)
             .WithName("ListProjects")
-            .WithSummary("The caller's projects (every project for Admins), paged, with search by name, phase, status and has-a-version-in-development filters and sorting. Rows carry the released and in-development version badges (FR-62).")
+            .WithSummary("The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and preset (FR-74: the current version's preset id, or none for projects without a preset) filters and sorting. Rows carry the released and in-development version badges (FR-62) and the preset chip.")
             .Produces<PagedResult<ProjectSummaryDto>>()
             .ProducesValidationProblem();
 
         group.MapPost("/", CreateProject)
             .WithName("CreateProject")
-            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70).")
+            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND.")
             .Produces<ProjectDto>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -54,7 +57,7 @@ public static partial class ProjectEndpoints
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithRetryAfterOn429()
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag) or TAG_NOT_FOUND (import: the released tag isn't in the repository)"),
+                (StatusCodes.Status400BadRequest, "VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository) or PRESET_NOT_FOUND"),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN (github_app: the caller's GitHub account can't push to the repository)"),
                 (StatusCodes.Status404NotFound, "NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it)"),
                 (StatusCodes.Status409Conflict, "GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists)"),
@@ -96,6 +99,7 @@ public static partial class ProjectEndpoints
         ICurrentUser currentUser,
         SystemRoleLookup roles,
         AideDbContext db,
+        Infrastructure.Presets.IPresetCatalog presets,
         CancellationToken cancellationToken,
         [Range(1, int.MaxValue)] int page = 1,
         [Range(1, ProjectLimits.MaxPageLimit)] int limit = 20,
@@ -103,6 +107,7 @@ public static partial class ProjectEndpoints
         [WireEnum(typeof(Phase))] string? phase = null,
         [WireEnum(typeof(ProjectStatus))] string? status = null,
         bool? hasDevelopmentVersion = null,
+        [MaxLength(Domain.Presets.PresetRules.IdMaxLength)] string? preset = null,
         [WireEnum(typeof(ProjectSortBy))] string sortBy = "updated",
         [WireEnum(typeof(SortOrder))] string sortOrder = "desc")
     {
@@ -139,6 +144,20 @@ public static partial class ProjectEndpoints
             query = hasDevelopment ? query.Where(p => p.DevelopmentVersion != null) : query.Where(p => p.DevelopmentVersion == null);
         }
 
+        // FR-74, §7.2: the preset of the current release version (in development, else the latest).
+        if (!string.IsNullOrWhiteSpace(preset))
+        {
+            // "none": projects whose current version has no preset.
+            var wanted = preset.Trim() == NoPresetFilter ? null : preset.Trim();
+            query = query.Where(p => db.ReleaseVersions
+                .Where(v => v.ProjectId == p.Id)
+                .OrderByDescending(v => v.Id == p.CurrentReleaseVersionId)
+                .ThenByDescending(v => v.CreatedAt)
+                .ThenByDescending(v => v.Id)
+                .Select(v => v.PresetId)
+                .FirstOrDefault() == wanted);
+        }
+
         var total = await query.CountAsync(cancellationToken);
         var skip = (long)(page - 1) * limit;
         if (skip >= total)
@@ -155,10 +174,11 @@ public static partial class ProjectEndpoints
         };
         ordered = descending ? ordered.ThenByDescending(p => p.Id) : ordered.ThenBy(p => p.Id);
 
-        var items = await ordered
+        var rows = await ordered
             .Skip((int)skip)
             .Take(limit)
-            .Select(p => new ProjectSummaryDto(
+            .Select(p => new
+            {
                 p.Id,
                 p.Name,
                 p.Slug,
@@ -168,10 +188,38 @@ public static partial class ProjectEndpoints
                 p.ReleasedVersion,
                 p.DevelopmentVersion,
                 p.ApprovalMode,
-                db.ProjectMembers.Where(m => m.ProjectId == p.Id && m.UserId == userId).Select(m => (ProjectRole?)m.Role).FirstOrDefault(),
+                MyRole = db.ProjectMembers.Where(m => m.ProjectId == p.Id && m.UserId == userId).Select(m => (ProjectRole?)m.Role).FirstOrDefault(),
                 p.CreatedAt,
-                p.UpdatedAt))
+                p.UpdatedAt,
+                Preset = db.ReleaseVersions
+                    .Where(v => v.ProjectId == p.Id)
+                    .OrderByDescending(v => v.Id == p.CurrentReleaseVersionId)
+                    .ThenByDescending(v => v.CreatedAt)
+                    .ThenByDescending(v => v.Id)
+                    .Select(v => new { v.PresetId, v.PresetVersion })
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellationToken);
+        var items = rows.Select(r =>
+        {
+            var pinned = Presets.PresetService.Describe(presets, r.Preset?.PresetId, r.Preset?.PresetVersion);
+            return new ProjectSummaryDto(
+                r.Id,
+                r.Name,
+                r.Slug,
+                r.CurrentPhase,
+                r.Status,
+                r.Checkpoint,
+                r.ReleasedVersion,
+                r.DevelopmentVersion,
+                r.ApprovalMode,
+                r.MyRole,
+                r.CreatedAt,
+                r.UpdatedAt,
+                pinned.PresetId,
+                pinned.PresetName,
+                pinned.PresetVersion);
+        }).ToList();
         return TypedResults.Ok(new PagedResult<ProjectSummaryDto>(items, page, limit, total));
     }
 
@@ -179,6 +227,7 @@ public static partial class ProjectEndpoints
         CreateProjectRequest request,
         ICurrentUser currentUser,
         ProjectCreator creator,
+        Presets.PresetService presets,
         Infrastructure.GitHub.IGitHubAppStore apps,
         CancellationToken cancellationToken)
     {
@@ -191,13 +240,14 @@ public static partial class ProjectEndpoints
         }
 
         var project = created.Value;
-        return TypedResults.Created($"/api/projects/{project.Id}", ProjectMapping.ToDto(project, ProjectRole.Owner));
+        return TypedResults.Created($"/api/projects/{project.Id}", ProjectMapping.ToDto(project, ProjectRole.Owner, await presets.ForProjectAsync(project.Id, cancellationToken)));
     }
 
     private static async Task<Results<Ok<ProjectDto>, ProblemHttpResult>> GetProject(
         Guid id,
         IProjectAccess access,
         AideDbContext db,
+        Presets.PresetService presets,
         CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
@@ -209,7 +259,7 @@ public static partial class ProjectEndpoints
         var project = await db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
         return project is null
             ? ApiProblems.NotFound("The project was not found.")
-            : TypedResults.Ok(ProjectMapping.ToDto(project, grant.Value.ProjectRole));
+            : TypedResults.Ok(ProjectMapping.ToDto(project, grant.Value.ProjectRole, await presets.ForProjectAsync(id, cancellationToken)));
     }
 
     private static async Task<Results<Ok<ProjectDto>, ValidationProblem, ProblemHttpResult>> UpdateProject(
@@ -218,6 +268,7 @@ public static partial class ProjectEndpoints
         IProjectAccess access,
         ICurrentUser currentUser,
         AideDbContext db,
+        Presets.PresetService presets,
         TimeProvider time,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
@@ -289,7 +340,7 @@ public static partial class ProjectEndpoints
             LogUpdated(logger, project.Id, changes);
         }
 
-        return TypedResults.Ok(ProjectMapping.ToDto(project, grant.Value.ProjectRole));
+        return TypedResults.Ok(ProjectMapping.ToDto(project, grant.Value.ProjectRole, await presets.ForProjectAsync(id, cancellationToken)));
     }
 
     private static async Task<Results<NoContent, ProblemHttpResult>> DeleteProject(

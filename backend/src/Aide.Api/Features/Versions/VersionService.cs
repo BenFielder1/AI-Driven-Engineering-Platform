@@ -1,5 +1,6 @@
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Lifecycle;
+using Aide.Api.Features.Presets;
 using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -9,6 +10,7 @@ using Aide.Domain.Releases;
 using Aide.Domain.Rollback;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
+using Aide.Infrastructure.Presets;
 using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,6 +30,7 @@ public sealed partial class VersionService(
     JobEnqueuer jobs,
     IGitProviderResolver providers,
     ISecretProtector secrets,
+    IPresetCatalog presets,
     TimeProvider time,
     ILogger<VersionService> logger)
 {
@@ -35,19 +38,22 @@ public sealed partial class VersionService(
     public const int EventRequestMaxLength = 500;
 
     /// <summary>
-    /// FR-60, FR-61: starts <paramref name="request"/>'s version. Checks, in order: <c>PRESET_NOT_FOUND</c> (no presets yet),
+    /// FR-60, FR-61, FR-74: starts <paramref name="request"/>'s version. Checks, in order: <c>PRESET_NOT_FOUND</c> (a sent, unknown preset id),
     /// <c>VERSION_INVALID</c>, <c>VERSION_IN_PROGRESS</c>, <c>RELEASE_NOT_MERGED</c>, <c>NOT_RELEASED</c>,
     /// <c>VERSION_NOT_GREATER</c>, then <c>TAG_EXISTS</c> through the Git provider (<c>UPSTREAM_ERROR</c> when the repository
     /// can't be read). On success: the version is <c>in_development</c> (base = the released tag and merge commit, branch
     /// <c>aide/&lt;slug&gt;/v&lt;version&gt;</c>), the project is in refinement / active at checkpoint 1 with the request as its idea,
-    /// <c>VERSION_STARTED</c> is recorded and the Repository Analyst job is queued.
+    /// <c>VERSION_STARTED</c> is recorded and the Repository Analyst job is queued. The preset (FR-74) is the sent one
+    /// (<c>null</c>: none) or, when <c>presetId</c> is omitted, the base version's preset at its shipped version; it is
+    /// pinned with its version and content hash.
     /// </summary>
     public async Task<Result<ReleaseVersion>> StartAsync(Guid projectId, StartReleaseVersionRequest request, Guid userId, string actor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!string.IsNullOrWhiteSpace(request.PresetId))
+        var sentPreset = PresetService.Resolve(presets, request.PresetIdSent ? request.PresetId : null);
+        if (sentPreset.IsFailure)
         {
-            return Fail(ErrorCodes.PresetNotFound, $"The preset '{request.PresetId.Trim()}' was not found.");
+            return Result.Failure<ReleaseVersion>(sentPreset.Error!);
         }
 
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
@@ -108,6 +114,13 @@ public sealed partial class VersionService(
             StartedBy = userId,
             CreatedAt = now,
         };
+        var preset = request.PresetIdSent ? sentPreset.Value : presets.Find(baseVersion?.PresetId);
+        if (!request.PresetIdSent && baseVersion?.PresetId is { } inherited && preset is null)
+        {
+            LogInheritedPresetMissing(logger, project.Id, inherited);
+        }
+
+        PresetService.Pin(started, preset);
         db.ReleaseVersions.Add(started);
         versions.Add(started);
 
@@ -127,6 +140,7 @@ public sealed partial class VersionService(
                 baseCommitSha = started.BaseCommitSha,
                 branchName = ReleaseVersionRules.BranchName(project.Slug, project.Id, version),
                 presetId = started.PresetId,
+                presetVersion = started.PresetVersion,
                 request = cleanRequest.Length > EventRequestMaxLength ? cleanRequest[..EventRequestMaxLength] : cleanRequest,
             },
             actor,
@@ -163,7 +177,7 @@ public sealed partial class VersionService(
             .. versions
                 .OrderByDescending(v => SemVer.TryParse(v.Version, out var parsed) ? parsed : null)
                 .ThenByDescending(v => v.CreatedAt)
-                .Select(v => ToDto(v, Checkpoints(v.Id, project.CurrentReleaseVersionId, project.Checkpoint, checkpoints), actors)),
+                .Select(v => ToDto(v, Checkpoints(v.Id, project.CurrentReleaseVersionId, project.Checkpoint, checkpoints), actors, presets)),
         ];
     }
 
@@ -270,7 +284,7 @@ public sealed partial class VersionService(
         return new ReleaseVersionCheckpointsDto(current, Math.Max(max, current));
     }
 
-    internal static ReleaseVersionDto ToDto(ReleaseVersion v, ReleaseVersionCheckpointsDto checkpoints, Func<string, ActorDto> actors) => new(
+    internal static ReleaseVersionDto ToDto(ReleaseVersion v, ReleaseVersionCheckpointsDto checkpoints, Func<string, ActorDto> actors, IPresetCatalog presets) => new(
         v.Id,
         v.Version,
         v.Status,
@@ -284,6 +298,7 @@ public sealed partial class VersionService(
         checkpoints,
         v.PresetId,
         v.PresetVersion,
+        PresetService.Describe(presets, v.PresetId, v.PresetVersion).PresetName,
         v.Request,
         v.StartedBy is { } startedBy ? actors(startedBy.ToString()) : null,
         v.CreatedAt,
@@ -293,6 +308,9 @@ public sealed partial class VersionService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} started version {Version} (base {BaseTag})")]
     private static partial void LogStarted(ILogger logger, Guid projectId, string version, string? baseTag);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId}: the base version's preset {PresetId} is no longer shipped; the new version has no preset")]
+    private static partial void LogInheritedPresetMissing(ILogger logger, Guid projectId, string presetId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Checking the release tags of project {ProjectId} ({Provider}) failed")]
     private static partial void LogTagLookupFailed(ILogger logger, Guid projectId, GitProvider provider);

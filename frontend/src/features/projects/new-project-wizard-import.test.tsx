@@ -46,14 +46,14 @@ async function openImport({ app = true } = {}) {
   }
   renderRoute('/projects/new')
   const user = userEvent.setup()
-  await stepHeading(/Step 1 of 6: Source/)
+  await stepHeading(/Step 1 of 7: Source/)
   await user.click(screen.getByRole('radio', { name: 'Import an existing repository' }))
   await next(user)
-  await stepHeading(/Step 2 of 6: Request/)
+  await stepHeading(/Step 2 of 7: Request/)
   await user.type(screen.getByLabelText('Project name'), 'Shop')
   await user.type(screen.getByLabelText('What should this version deliver?'), 'Add CSV export')
   await next(user)
-  await stepHeading(/Step 3 of 6: Repository/)
+  await stepHeading(/Step 3 of 7: Repository/)
   return { user }
 }
 
@@ -66,9 +66,11 @@ async function pickShop(user: User) {
 /** Version → Configuration → Review & create. */
 async function toReview(user: User) {
   await next(user)
-  await stepHeading(/Step 5 of 6: Configuration/)
+  await stepHeading(/Step 5 of 7: Stack/)
   await next(user)
-  await stepHeading(/Step 6 of 6: Review & create/)
+  await stepHeading(/Step 6 of 7: Configuration/)
+  await next(user)
+  await stepHeading(/Step 7 of 7: Review & create/)
 }
 
 const createBody = () =>
@@ -107,7 +109,7 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     expect(screen.queryByText('This repository has code. AIDE will build on it')).not.toBeInTheDocument()
 
     await next(user)
-    await stepHeading(/Step 4 of 6: Version/)
+    await stepHeading(/Step 4 of 7: Version/)
     expect(screen.getByLabelText('Version to develop')).toHaveValue('2.4.0')
 
     await toReview(user)
@@ -139,7 +141,7 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     await pickShop(user)
     await user.click(screen.getByRole('radio', { name: 'v2.2.0' }))
     await next(user)
-    await stepHeading(/Step 4 of 6: Version/)
+    await stepHeading(/Step 4 of 7: Version/)
 
     const input = screen.getByLabelText('Version to develop')
     expect(input).toHaveValue('2.3.0')
@@ -164,7 +166,7 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     await pickShop(user)
     await user.click(screen.getByRole('radio', { name: 'Never released' }))
     await next(user)
-    await stepHeading(/Step 4 of 6: Version/)
+    await stepHeading(/Step 4 of 7: Version/)
     expect(screen.getByLabelText('Version to develop')).toHaveValue('0.1.0')
 
     await toReview(user)
@@ -184,11 +186,11 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     const { user } = await openImport()
     await pickShop(user)
     await next(user)
-    await stepHeading(/Step 4 of 6/)
+    await stepHeading(/Step 4 of 7/)
     await toReview(user)
     await user.click(screen.getByRole('button', { name: 'Create project' }))
 
-    expect(await stepHeading(/Step 3 of 6: Repository/)).toBeInTheDocument()
+    expect(await stepHeading(/Step 3 of 7: Repository/)).toBeInTheDocument()
     expect(screen.getAllByText(contextualErrorMessages.createProject.TAG_NOT_FOUND)).not.toHaveLength(0)
   })
 
@@ -198,11 +200,11 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     const { user } = await openImport()
     await pickShop(user)
     await next(user)
-    await stepHeading(/Step 4 of 6/)
+    await stepHeading(/Step 4 of 7/)
     await toReview(user)
     await user.click(screen.getByRole('button', { name: 'Create project' }))
 
-    expect(await stepHeading(/Step 4 of 6: Version/)).toBeInTheDocument()
+    expect(await stepHeading(/Step 4 of 7: Version/)).toBeInTheDocument()
     expect(screen.getAllByText(contextualErrorMessages.createProject.VERSION_NOT_GREATER)).not.toHaveLength(0)
     expect(screen.getByLabelText('Version to develop')).toHaveAttribute('aria-invalid', 'true')
   })
@@ -220,7 +222,7 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     await user.type(path, 'fixtures/shop')
     await user.type(screen.getByLabelText('Tag of the currently released version (optional)'), 'v1.4.0')
     await next(user)
-    await stepHeading(/Step 4 of 6: Version/)
+    await stepHeading(/Step 4 of 7: Version/)
     expect(screen.getByLabelText('Version to develop')).toHaveValue('1.5.0')
     await toReview(user)
     await user.click(screen.getByRole('button', { name: 'Create project' }))
@@ -235,11 +237,11 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     const { user } = await openImport({ app: false })
     await user.type(screen.getByLabelText('Repository URL'), 'https://github.com/ada/missing')
     await next(user)
-    await stepHeading(/Step 4 of 6/)
+    await stepHeading(/Step 4 of 7/)
     await toReview(user)
     await user.click(screen.getByRole('button', { name: 'Create project' }))
 
-    expect(await stepHeading(/Step 3 of 6: Repository/)).toBeInTheDocument()
+    expect(await stepHeading(/Step 3 of 7: Repository/)).toBeInTheDocument()
     expect(screen.getAllByText(contextualErrorMessages.createProject.NOT_FOUND)).not.toHaveLength(0)
     expect(screen.getByLabelText('Repository URL')).toHaveAttribute('aria-invalid', 'true')
   })
@@ -251,12 +253,12 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     seedShop()
     renderRoute('/projects/new')
     const user = userEvent.setup()
-    await stepHeading(/Step 1 of 6: Source/)
+    await stepHeading(/Step 1 of 7: Source/)
     await next(user)
     await user.type(await screen.findByLabelText('Project name'), 'Shop')
     await user.type(screen.getByLabelText('Your idea'), 'A shop')
     await next(user)
-    await stepHeading(/Step 3 of 6: Repository/)
+    await stepHeading(/Step 3 of 7: Repository/)
     await user.click(within(await screen.findByRole('list', { name: 'Repositories' })).getByRole('radio', { name: 'ada/shop' }))
 
     expect(await screen.findByText('This repository has code. AIDE will build on it')).toBeInTheDocument()

@@ -32,10 +32,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | FR-71 | Read-only repo tools (tool use, limits, path safety, redaction) | 3.3 | backend | 6 | done | RepoToolSession + LlmToolLoop + snapshots; FR71_* tests |
 | FR-72 | Iteration refinement inputs | 3.3 | backend | 6 | done | iteration refinement inputs; FR72_* tests |
 | FR-73 | Import existing repo wizard | 3.4 | both | 6 | done | import (App, PAT, Local) + wizard; FR73_* tests |
-| FR-74 | Presets: data bundles, wizard Stack step, pinned per version | 3.5, 4.11 | both | 8 | todo | — |
-| FR-75 | Preset spec sections; mandatory FR IDs + GWT | 3.5, 4.13 | backend | 6, 8 | partial (FR IDs + GWT done; preset sections phase 8) | SpecValidator; FR75_* tests |
-| FR-76 | Plan steps carry agent + covers; preset plan validation | 3.5, 4.11 | both | 8 | todo | — |
-| FR-77 | Preset review checklist + deterministic checks | 3.5 | backend | 8 | todo | — |
+| FR-74 | Presets: data bundles, wizard Stack step, pinned per version | 3.5, 4.11 | both | 8 | done | preset catalog + API + pinning + run stamping; FR74_* tests |
+| FR-75 | Preset spec sections; mandatory FR IDs + GWT | 3.5, 4.13 | backend | 6, 8 | done | SpecValidator + preset sections retry; FR75_* tests |
+| FR-76 | Plan steps carry agent + covers; preset plan validation | 3.5, 4.11 | both | 8 | done | plan rules + specialist execution; FR76_* tests |
+| FR-77 | Preset review checklist + deterministic checks | 3.5 | backend | 8 | done | checklist + rls_on_every_table + no_secret_env_in_client; FR77_* tests |
 | FR-78 | User LLM connections | 3.6 | both | 4 | done | me/connections/llm CRUD + test, list-models validation; FR78_* tests |
 | FR-79 | Bind Owner's LLM connection to project | 3.6 | both | 4 | done | binding + clearing rules under project lock, runs use bound key, Llm:AllowSystemKeys; FR79_* tests |
 | FR-80 | GitHub App manifest registration + App sign-in | 3.7 | both | 5 | done (stub-verified) | manifest flow + App sign-in PKCE (stub HTTP); FR80_* tests |
@@ -53,7 +53,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | FR-92 | New events + notification types | 3.9 | both | 10 | todo | — |
 | FR-93 | CLI additions | 3.9 | backend | 10 | todo | — |
 | §4.10 | Release versions, semver, checkpoints, rollback scope, migration | 4.10 | backend | 2 | done | SemVer, ReleaseVersionRules, NewVersion transition matrix; S4_10_* tests |
-| §4.11–4.12 | Preset format and the two presets | 4.11 | backend | 8 | todo | — |
+| §4.11–4.12 | Preset format and the two presets | 4.11 | backend | 8 | done | Presets/{nextjs-supabase,nextjs-frontend}, PresetLoader, PresetPathRules; S4_11_*/S4_12_* tests |
 | §4.13 | Iteration specs, review scope, plan scope | 4.13 | backend | 6 | done | SpecValidator tags, IterationReviewScope, PlanScope; S4_13_* tests |
 | §4.14 | GitHub permissions, tokens, polling, merge detection | 4.14 | backend | 5, 7 | todo | — |
 | §4.15 | Deployments (Vercel) states, polling, Fake provider | 4.15 | backend | 9 | todo | — |
@@ -98,7 +98,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
   - [x] aspnet-engineer (contract: GetMergeReadiness stub, git settings mergeStrategy/tagPrefix implemented, release fields, ExternalChecksDto, ProjectStatus awaiting_merge)
   - [x] aspnet-engineer (merge strategies, awaiting_merge, merge poll, GitHub Release + notes, merge readiness, check runs in review — 3162 backend tests) ‖ vite-react-engineer (settings Git, Release page readiness/awaiting/GitHub Release, review external checks — 601 frontend tests)
   - [x] gate (backend 3165, frontend 619, manifests) · review (0 Critical, 1 Major, 4 Minor — all fixed: rate-limited merge defers, tag reuse only at merge commit + annotated-tag commit resolution, merged-externally flag, readiness refresh throttle, tag-prefix client rule; backend 3165, frontend 619) · redeploy (smoke ✓; first attempt 2026-10-16 was stopped for low system memory, rerun 2026-10-17) · commit
-- [ ] 8 M14 Presets — IDs: FR-74–FR-77, §4.11–4.12
+- [x] 8 M14 Presets (base: c4a8565) — IDs: FR-74–FR-77, §4.11–4.12
+  - [x] aspnet-engineer A (preset model, loader, hash, readiness check, plan rules, preset API — 3248 backend tests; oasdiff additive) ‖ aspnet-engineer B (preset content from claude-kits@14ada86: 7/6 specialist prompts, skills, conventions)
+  - [x] aspnet-engineer C (spec/plan/code/review integration, deterministic preset checks, Guardian protected paths, Fake specialist scripts, "Demo: Recipe Finder" seed — 3300 backend tests; resumed once after a usage-limit stop) ‖ vite-react-engineer (wizard Stack step, preset chips + filter, change preset, start-version preset, planning agents/warnings, admin presets — 635 frontend tests)
+  - [x] gate (backend 3306, frontend 635, manifests, contract fresh, oasdiff additive) · review (0 Critical, 2 Major, 3 Minor — all fixed: base-commit immutable migrations enforced in plan + Guardian + Owner edits, case-insensitive preset paths, prompt wording, decision log) · redeploy (readiness: presets 2 loaded; smoke ✓) · commit
 - [ ] 9 M15 Vercel — IDs: FR-87–FR-91, §4.15
 - [ ] 10 M16 Integrate & harden — IDs: FR-92, FR-93, NFR-*2, E2E
 - [ ] Final — spec-verifier (v1 + v2) → fixes → github-ci-engineer → readme-writer
@@ -159,6 +162,17 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 - 2026-10-16 — GitHub refusing GitHub Release creation (403/404/422) is logged and the release completes without a URL (5xx retries) — FR-64 — SPEC updated: no
 - 2026-10-16 — Merge readiness is computed by a `merge_readiness` job when the pre-release gate is created and cached 5 min (MERGE_READINESS_CHECKED event); without GraphQL access, mergeStateStatus/reviewDecision are null and required approvals count as missing (§11 check) — FR-84 — SPEC updated: no
 - 2026-10-16 — Until phase 10 adds the dedicated type, "release awaiting merge" notifications reuse `release_failed` (Owners) with awaiting-merge wording — FR-92 — SPEC updated: no
+- 2026-10-17 — Preset content adapted from claude-kits@14ada86 (local marketplace clone at that exact commit). FR-89 `vercel.json` uses `{"git":{"deploymentEnabled":{"aide/**":false}}}` — confirm against Vercel docs/live project that branch keys are globs and API-triggered gitSource deploys are unaffected (§11 check) — SPEC updated: no
+- 2026-10-17 — With a preset, a plan step may declare a v1-protected path (`.github/workflows/**`, `.env.example`) only when the step's agent owns it (e.g. devops-engineer, project-scaffolder), consistent with §4.14 Workflows RW "when a step declares it"; lockfiles stay non-declarable (preset protectedPaths: see the later 2026-10-17 entry — owner may declare, except migrations existing on base); without a preset v1 rules are unchanged — §4.11 — SPEC updated: no
+- 2026-10-17 — Generated repos commit no lockfile (AIDE agents can't run npm); preset CI uses `npm ci` when a lockfile exists else `npm install`; db-engineer writes `lib/database.types.ts` by hand in the generator's shape — SPEC updated: no
+- 2026-10-17 — Preset format extensions beyond §4.11: `planRules.maxFilesPerStep[] {glob, max}` (`oneMigrationPerStep` shorthand), `soft`/`reason` on order/exclusive rules, protected paths `{glob, existingOnBase, except, reason}`, unknown properties = load error; globs without `/` match a file name at any depth; dependency-free glob matcher in Domain — §4.11 — SPEC updated: no
+- 2026-10-17 — Scaffolder steps are exempt from preset order rules (otherwise step 1's `app/layout.tsx` breaks "migrations before app/**"); soft order violations are warning `PLAN_ORDER` (spec names no code) — §4.12 — SPEC updated: no
+- 2026-10-17 — POST /versions without `presetId` keeps the base version's preset, re-pinned at the currently shipped version/hash; explicit null = no preset. "Plan locked" for PRESET_LOCKED = any implementation_plan of the version locked/approved — FR-74 — SPEC updated: no
+- 2026-10-17 — Preset protectedPaths follow §4.11's "unless declared in this step" exception for the owning agent (e.g. db-engineer may declare `lib/database.types.ts`); migrations already on the base commit are never declarable. Optimisation plans accept catalogue keys or generalist, protected paths enforced, ordering rules off — SPEC updated: no
+- 2026-10-17 — `no_secret_env_in_client` ignores NODE_ENV (inlined by Next.js, not secret); preset checklist items are numbered [Cn] in the review prompt and violations tagged [Cn] take that item's category/severity with no penalty; preset guidance is in a `<stack_preset>` platform-guidance block (prompt versions: spec 3, plan 3, code 4, review 5) — FR-77 — SPEC updated: no
+- 2026-10-17 — Projects list `?preset=none` filters projects without a preset — §7.2 — SPEC updated: no
+- 2026-10-17 — Migrations already on the version's base commit are immutable for everyone: agent plans, Owner-edited plans and the Guardian at execution all reject them; preset path matching is case-insensitive (like v1 PathRules) — §4.11/§4.12 — SPEC updated: no
+- 2026-10-17 — Plans are validated against the base commit's file list (fetched if not local); if it still can't be listed, a generated plan may not create any migration (fail closed). nextjs-supabase preset bumped to 1.0.1 (db-engineer prompt wording) — §4.11 — SPEC updated: no
 
 ## Known issues
 - `GitHub` paths (App, PAT import, repo tools over GitHub snapshots) verified only against stub HTTP handlers — orchestrator

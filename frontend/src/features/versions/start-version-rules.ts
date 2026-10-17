@@ -31,3 +31,18 @@ export function startVersionBlock(status: ProjectStatus, versions: readonly Rele
   }
   return null
 }
+
+/** The preset select's "keep the current preset" and "No preset" values (FR-74). */
+export const KEEP_PRESET = ':keep'
+export const NO_PRESET = ''
+
+/**
+ * FR-74: `presetId` for the request: omitted when the choice keeps the base version's preset (including picking that
+ * same preset again), `null` for "No preset", else the picked id.
+ */
+export function presetIdFor(choice: string, currentPresetId: string | null): { presetId?: string | null } {
+  if (choice === KEEP_PRESET || choice === (currentPresetId ?? NO_PRESET)) {
+    return {}
+  }
+  return { presetId: choice === NO_PRESET ? null : choice }
+}

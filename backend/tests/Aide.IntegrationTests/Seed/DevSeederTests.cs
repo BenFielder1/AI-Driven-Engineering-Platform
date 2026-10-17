@@ -36,7 +36,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
         {
             var admin = await db.Users.SingleAsync(u => u.Email == DevSeeder.AdminEmail, Ct);
             Assert.Equal((SystemRole.Admin, DevSeeder.AdminName), (admin.SystemRole, admin.Name));
-            var project = await db.Projects.SingleAsync(Ct);
+            var project = await db.Projects.SingleAsync(p => p.Name == DevSeeder.DemoProjectName, Ct);
             Assert.Equal((DevSeeder.DemoProjectName, Phase.Release, ProjectStatus.Released, ApprovalMode.Advisory), (project.Name, project.CurrentPhase, project.Status, project.ApprovalMode));
             var owner = await db.ProjectMembers.SingleAsync(m => m.ProjectId == project.Id, Ct);
             Assert.Equal((admin.Id, ProjectRole.Owner), (owner.UserId, owner.Role));
@@ -56,7 +56,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
 
         await WithDbAsync(app, async db =>
         {
-            var project = await db.Projects.SingleAsync(Ct);
+            var project = await db.Projects.SingleAsync(p => p.Name == DevSeeder.DemoProjectName, Ct);
             Assert.Equal(("0.1.0", (string?)null), (project.ReleasedVersion, project.DevelopmentVersion));
             var version = await db.ReleaseVersions.SingleAsync(v => v.ProjectId == project.Id, Ct);
             Assert.Equal((ReleaseVersionStatus.Released, "0.1.0", "v0.1.0"), (version.Status, version.Version, version.Tag));
@@ -69,6 +69,39 @@ public sealed class DevSeederTests(AideApiFactory factory)
             var git = app.Services.GetRequiredService<IWorkingCopies>();
             var tag = await git.TagAsync(project.Id, "v0.1.0", Ct);
             Assert.Equal(version.MergeCommitSha, tag?.Commit);
+        });
+    }
+
+    [Fact]
+    public async Task S9_A_second_demo_project_on_nextjs_frontend_is_seeded_in_planning_once_and_the_Fake_plans_it()
+    {
+        await using var app = await AppAsync();
+        await SeedAsync(app);
+        await SeedAsync(app);
+
+        var projectId = Guid.Empty;
+        await WithDbAsync(app, async db =>
+        {
+            var project = await db.Projects.SingleAsync(p => p.Name == DevSeeder.DemoPresetProjectName, Ct);
+            projectId = project.Id;
+            Assert.Equal((Phase.Planning, 3), (project.CurrentPhase, project.Checkpoint));
+            var version = await db.ReleaseVersions.SingleAsync(v => v.ProjectId == project.Id, Ct);
+            Assert.Equal((DevSeeder.DemoPresetId, ReleaseVersionStatus.InDevelopment), (version.PresetId, version.Status));
+            Assert.Equal(LlmProvider.Fake, (await db.ProjectLlmSettings.SingleAsync(s => s.ProjectId == project.Id, Ct)).Provider);
+            var artifacts = await db.Artifacts.Where(a => a.ProjectId == project.Id).OrderBy(a => a.Type).ToListAsync(Ct);
+            Assert.All(artifacts, a => Assert.Equal(Domain.Artifacts.ArtifactStatus.Locked, a.Status));
+            Assert.Contains("## Routes & Rendering Strategy", artifacts.Single(a => a.Type == Domain.Artifacts.ArtifactType.TechnicalSpecification).Content, StringComparison.Ordinal);
+            Assert.Single(await db.Events.Where(e => e.Type == EventTypes.DemoPresetProjectSeeded).ToListAsync(Ct));
+            Assert.Equal(2, await db.Projects.CountAsync(Ct));
+        });
+
+        var jobs = await Support.AgentJobs.RunQueuedAsync(app, projectId);
+
+        Assert.Equal((Domain.Jobs.JobTypes.PlanGeneration, Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
+        await WithDbAsync(app, async db =>
+        {
+            var plan = await db.Artifacts.SingleAsync(a => a.ProjectId == projectId && a.Type == Domain.Artifacts.ArtifactType.ImplementationPlan, Ct);
+            Assert.Contains("**Agent:** project-scaffolder", plan.Content, StringComparison.Ordinal);
         });
     }
 
@@ -91,7 +124,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
         {
             var user = await db.Users.SingleAsync(Ct);
             Assert.Equal(("Mine", SystemRole.User, hash), (user.Name, user.SystemRole, user.PasswordHash));
-            var project = await db.Projects.SingleAsync(Ct);
+            var project = await db.Projects.SingleAsync(p => p.Name == DevSeeder.DemoProjectName, Ct);
             Assert.True(await db.ProjectMembers.AnyAsync(m => m.ProjectId == project.Id && m.UserId == user.Id && m.Role == ProjectRole.Owner, Ct));
         });
     }
@@ -118,13 +151,14 @@ public sealed class DevSeederTests(AideApiFactory factory)
         await using var app = await AppAsync();
         await SeedAsync(app);
 
-        await WithDbAsync(app, async db => Assert.Equal(1, await db.Projects.ExecuteDeleteAsync(Ct)));
+        await WithDbAsync(app, async db => Assert.Equal(2, await db.Projects.ExecuteDeleteAsync(Ct)));
         await SeedAsync(app);
 
         await WithDbAsync(app, async db =>
         {
             Assert.False(await db.Projects.AnyAsync(Ct));
             Assert.Equal(1, await db.Events.CountAsync(e => e.Type == EventTypes.DemoProjectSeeded, Ct));
+            Assert.Equal(1, await db.Events.CountAsync(e => e.Type == EventTypes.DemoPresetProjectSeeded, Ct));
         });
     }
 
@@ -139,7 +173,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
 
         await WithDbAsync(app, async db =>
         {
-            Assert.Equal(1, await db.Projects.CountAsync(Ct));
+            Assert.Equal(1, await db.Projects.CountAsync(p => p.Name == DevSeeder.DemoProjectName, Ct));
             Assert.Equal(1, await db.Events.CountAsync(e => e.Type == EventTypes.DemoProjectSeeded, Ct));
         });
     }
@@ -172,7 +206,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
         await WithDbAsync(app, async db =>
         {
             Assert.True(await db.Users.AnyAsync(u => u.Email == DevSeeder.AdminEmail, Ct));
-            Assert.Equal(DevSeeder.DemoProjectName, (await db.Projects.SingleAsync(Ct)).Name);
+            Assert.Equal([DevSeeder.DemoPresetProjectName, DevSeeder.DemoProjectName], await db.Projects.OrderBy(p => p.Name).Select(p => p.Name).ToListAsync(Ct));
         });
     }
 

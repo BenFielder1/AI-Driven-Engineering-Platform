@@ -20,7 +20,8 @@ public sealed record ReleaseVersionCheckpointsDto(int Current, int Max);
 /// <c>baseCommitSha</c> are the released tag and merge commit the version started from (null for a first version);
 /// <c>branchName</c> and <c>pullRequestUrl</c> are the version's working branch and PR once they exist; <c>request</c> is
 /// what the version was started with (the project idea for a first version); <c>startedBy</c> is null for versions created
-/// by migration or import.
+/// by migration or import. <c>presetId</c>/<c>presetVersion</c> are the pinned preset (FR-74) and <c>presetName</c> its
+/// name (the id when the preset is no longer shipped); all <c>null</c> without a preset.
 /// </summary>
 public sealed record ReleaseVersionDto(
     Guid Id,
@@ -36,6 +37,7 @@ public sealed record ReleaseVersionDto(
     ReleaseVersionCheckpointsDto Checkpoints,
     string? PresetId,
     string? PresetVersion,
+    string? PresetName,
     string Request,
     ActorDto? StartedBy,
     DateTimeOffset CreatedAt,
@@ -44,11 +46,13 @@ public sealed record ReleaseVersionDto(
 /// <summary>
 /// FR-60: start a new release version. <c>version</c> is semver (a leading <c>v</c> is stripped, e.g. <c>v1.2.0</c> →
 /// <c>1.2.0</c>); <c>request</c> describes the new features, improvements or fixes and becomes the project idea for this
-/// version; <c>presetId</c> picks a tech stack preset (presets arrive with FR-74: until then any value is
-/// <c>PRESET_NOT_FOUND</c>).
+/// version; <c>presetId</c> picks the tech stack preset of the new version (FR-74): omit it to keep the preset of the
+/// version it builds on, send <c>null</c> for no preset; an unknown id is <c>PRESET_NOT_FOUND</c>.
 /// </summary>
 public sealed record StartReleaseVersionRequest
 {
+    private readonly string? _presetId;
+
     [Required]
     [StringLength(VersionLimits.VersionMaxLength, MinimumLength = 1)]
     public required string Version { get; init; }
@@ -58,7 +62,19 @@ public sealed record StartReleaseVersionRequest
     public required string Request { get; init; }
 
     [MaxLength(VersionLimits.PresetIdMaxLength)]
-    public string? PresetId { get; init; }
+    public string? PresetId
+    {
+        get => _presetId;
+        init
+        {
+            _presetId = value;
+            PresetIdSent = true;
+        }
+    }
+
+    /// <summary>Whether <c>presetId</c> was in the request (JSON setters run only for sent properties).</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool PresetIdSent { get; private init; }
 }
 
 /// <summary>FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1).</summary>

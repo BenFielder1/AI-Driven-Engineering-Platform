@@ -28,6 +28,7 @@ export type ProjectCapability =
   | 'requestRelease'
   | 'rollback'
   | 'startVersion'
+  | 'changePreset'
   | 'changeSettings'
   | 'manageMembers'
   | 'deleteProject'
@@ -49,6 +50,8 @@ const owner: readonly ProjectCapability[] = [
   'rollback',
   // FR-60 (SPEC §2 v2): only Owners start a new release version.
   'startVersion',
+  // FR-74 (SPEC §2 v2): only Owners choose the preset; Contributors and Viewers see it.
+  'changePreset',
   'changeSettings',
   'manageMembers',
   'deleteProject',

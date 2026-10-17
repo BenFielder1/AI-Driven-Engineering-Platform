@@ -162,6 +162,8 @@ export const wizardSchema = z
     developmentVersion: str,
     /** FR-73 import with `local` (development only): the server path of the repository to import. */
     localSourcePath: str,
+    /** FR-74 Stack step: a preset id from GET /api/presets, or '' for "No preset (general)". */
+    presetId: str,
   })
   .superRefine((v, ctx) => {
     const importing = v.source === 'import'
@@ -241,6 +243,7 @@ export const wizardDefaults: WizardValues = {
   releasedVersion: '',
   developmentVersion: DEFAULT_INITIAL_VERSION,
   localSourcePath: '',
+  presetId: '',
 }
 
 // ---- Settings → General (FR-7) ---------------------------------------------------------------------------------

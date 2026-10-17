@@ -64,6 +64,9 @@ public static class EventTypes
     /// survives deleting the project) and the project id in the payload; the seed never creates the demo again.</summary>
     public const string DemoProjectSeeded = "DEMO_PROJECT_SEEDED";
 
+    /// <summary>§9 seed marker: the dev seed created its preset demo project (<c>{projectId, presetId}</c>, project_id null).</summary>
+    public const string DemoPresetProjectSeeded = "DEMO_PRESET_PROJECT_SEEDED";
+
     // Lifecycle (FR-11)
     public const string PhaseChanged = "PHASE_CHANGED";
 
@@ -182,6 +185,12 @@ public static class EventTypes
     public const string VersionStarted = "VERSION_STARTED";
 
     /// <summary>
+    /// FR-74, FR-92: an Owner changed the preset of the version in development: <c>{releaseVersionId, version,
+    /// fromPresetId, fromPresetVersion, presetId, presetVersion, presetHash}</c> (ids <c>null</c> = no preset).
+    /// </summary>
+    public const string PresetChanged = "PRESET_CHANGED";
+
+    /// <summary>
     /// FR-70: the Repository Analyst stored a locked <c>codebase_summary</c>: <c>{artifactId, type, version,
     /// releaseVersionId, agentRunId}</c>. No gate: the summary is auto-locked.
     /// </summary>
@@ -214,7 +223,7 @@ public static class EventTypes
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted],
         [EventCategory.Rollback] = [RollbackCompleted],
-        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared],
+        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, PresetChanged],
         [EventCategory.Integrity] = [IntegrityAlert],
     };
 

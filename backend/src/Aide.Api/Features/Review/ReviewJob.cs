@@ -4,6 +4,7 @@ using Aide.Api.Agents;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
+using Aide.Api.Features.Presets;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
@@ -13,6 +14,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
+using Aide.Domain.Presets;
 using Aide.Domain.Review;
 using Aide.Domain.Specs;
 using Aide.Infrastructure.Git;
@@ -36,6 +38,9 @@ internal sealed record ReviewMaterial(
 
     /// <summary>FR-70: the version's codebase summary, an input of the review.</summary>
     public Artifact? CodebaseSummary { get; init; }
+
+    /// <summary>FR-77: the version's preset (checklist, deterministic rules, optimisation plan agents).</summary>
+    public VersionPreset Preset { get; init; } = VersionPreset.None;
 }
 
 /// <summary>The succeeded run whose reply was accepted, and the reply as read.</summary>
@@ -64,6 +69,10 @@ internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult 
 /// §4.13: in iterations (a spec with tagged requirements) the reply is scoped by <see cref="IterationReviewScope"/> before
 /// scoring: feature coverage is over <c>[new]</c>/<c>[changed]</c> requirements, and broken <c>[unchanged]</c> ones become
 /// regressions (stored in <c>compliance_report.regressions</c>). The agent has the repo tools on the project branch (FR-71).
+/// FR-77: with a preset the agent also scores against its review checklist (<see cref="PresetGuidance.Review"/>; failed items
+/// are agent violations mapped to the item's category and severity, without penalty, <see cref="PresetReviewChecklist"/>),
+/// the deterministic checks gain the preset's rules (<see cref="PresetReviewChecks"/>, penalised like v1's), and
+/// optimisation steps may name the preset's specialists (<see cref="Domain.Execution.PlanAgents.ForOptimization"/>).
 /// Redelivery is idempotent: run ids derive from the job, a succeeded run is reused, the cycle is read back from the job's
 /// <c>REVIEW_STARTED</c>, and one report is recorded per job. A rollback (cycle reset) or another review in between makes
 /// the job record nothing.
@@ -78,6 +87,7 @@ public sealed partial class ReviewJobHandler(
     IWorkingCopies workingCopies,
     LifecycleWriter writer,
     ExternalChecksCollector externalChecks,
+    VersionPresetReader presets,
     TimeProvider time,
     ILogger<ReviewJobHandler> logger) : IJobHandler
 {
@@ -237,9 +247,11 @@ public sealed partial class ReviewJobHandler(
         var specText = spec?.Content ?? string.Empty;
         var allowlist = SpecReading.AllowedDependencies(specText);
         var endpoints = SpecReading.EndpointPaths(specText);
+        var preset = await presets.CurrentAsync(project.Id, cancellationToken);
         var findings = DeterministicChecks.SecretScan(contents)
             .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents)))
             .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents))
+            .Concat(PresetReviewChecks.Run(preset.Preset, contents))
             .Concat(externalFindings ?? [])
             .ToList();
         LogGathered(logger, tree.Count, contents.Count, findings.Count);
@@ -255,6 +267,7 @@ public sealed partial class ReviewJobHandler(
         {
             Requirements = RequirementParser.Parse(specText).Requirements,
             CodebaseSummary = iteration.CodebaseSummary,
+            Preset = preset,
         };
     }
 
@@ -273,6 +286,8 @@ public sealed partial class ReviewJobHandler(
         CancellationToken cancellationToken)
     {
         var maxFiles = project.MaxFilesPerStep;
+        var preset = material.Preset.Preset;
+        var agents = material.Preset.PlanAgents(ArtifactType.OptimizationPlan);
         var plans = material.CurrentOptimizationPlan is { } optimization
             ? $"{material.ImplementationPlan?.Content}\n\n---\n\n# Optimization plan v{optimization.Version.ToString(CultureInfo.InvariantCulture)} (the latest cycle's steps)\n\n{optimization.Content}"
             : material.ImplementationPlan?.Content;
@@ -291,14 +306,22 @@ public sealed partial class ReviewJobHandler(
                 ["PREVIOUS_REVIEW"] = previousReview,
                 ["CODE"] = material.Code,
                 ["MAX_FILES_PER_STEP"] = maxFiles.ToString(CultureInfo.InvariantCulture),
+                ["PRESET_GUIDANCE"] = PresetGuidance.Review(preset),
             },
             InputArtifacts = [.. new[] { material.Specification, material.ImplementationPlan, material.CurrentOptimizationPlan, material.CodebaseSummary }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = runFeedback,
             Repo = RepoScope.WorkingTree,
         };
 
+        // FR-77: checklist violations take their item's category and severity (still agent violations: no penalty).
+        Result<CodeReviewResult> Parse(string text)
+        {
+            var read = CodeReviewOutput.Parse(text, maxFiles, agents);
+            return read.IsSuccess ? Result.Success(read.Value with { Violations = PresetReviewChecklist.Apply(read.Value.Violations, preset) }) : read;
+        }
+
         var first = await runner.RunAsync(Request(feedback) with { RunKey = null, Check = null }, cancellationToken);
-        var parsed = CodeReviewOutput.Parse(first.Text, maxFiles);
+        var parsed = Parse(first.Text);
         var problem = parsed.IsSuccess ? requirement(parsed.Value) : parsed.Error!;
         if (problem is null)
         {
@@ -310,10 +333,10 @@ public sealed partial class ReviewJobHandler(
             Request(ArtifactAgentJob.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem))) with
             {
                 RunKey = AgentOutput.CorrectiveRunKey,
-                Check = text => CodeReviewOutput.Parse(text, maxFiles) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
+                Check = text => CodeReviewOutput.Parse(text, maxFiles, agents) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
             },
             cancellationToken);
-        var reparsed = CodeReviewOutput.Parse(second.Text, maxFiles);
+        var reparsed = Parse(second.Text);
         return reparsed.IsSuccess
             ? new ReviewAgentOutcome(second, reparsed.Value)
             : throw new JobFailedException(reparsed.Error!.Message, transient: false, reparsed.Error.Code);

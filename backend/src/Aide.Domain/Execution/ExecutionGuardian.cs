@@ -1,17 +1,24 @@
 using Aide.Domain.Common;
+using Aide.Domain.Presets;
 
 namespace Aide.Domain.Execution;
 
 /// <summary>A file in the code generator's output.</summary>
 public sealed record ProducedFile(string Path, string Content);
 
-/// <summary>Everything the Guardian checks a step's output against.</summary>
+/// <summary>
+/// Everything the Guardian checks a step's output against. With a <see cref="Preset"/> (§4.11) its protected paths join
+/// v1's; <see cref="ExistsOnBase"/> answers "does this file exist on the version's base commit" for its
+/// <c>existingOnBase</c> entries (unknown: <c>false</c>).
+/// </summary>
 public sealed record GuardianInput(
     int RequestedStep,
     int OutputStep,
     IReadOnlyList<StepState> PlanSteps,
     IReadOnlyList<ProducedFile> Files,
-    int MaxFilesPerStep);
+    int MaxFilesPerStep,
+    Preset? Preset = null,
+    Func<string, bool>? ExistsOnBase = null);
 
 /// <summary>One violation (§4.6). Messages never include secret values.</summary>
 public sealed record GuardianViolation(GuardianCheck Check, string Code, ViolationSeverity Severity, string Message, string? Path = null);
@@ -28,7 +35,7 @@ public sealed record GuardianResult(IReadOnlyList<GuardianViolation> Violations)
 
 /// <summary>
 /// The Execution Guardian (§4.6, FR-32, D18): runs all six checks and reports every violation.
-/// Paths are normalised and compared exactly.
+/// Paths are normalised and compared exactly. FR-76, §4.11: a preset adds its protected paths to scope creep.
 /// </summary>
 public static class ExecutionGuardian
 {
@@ -148,6 +155,14 @@ public static class ExecutionGuardian
                 continue;
             }
 
+            // §4.11: a preset's immutable files (existingOnBase, e.g. committed migrations) can't be written even when declared.
+            if (input.Preset is { } immutablePreset && input.ExistsOnBase is { } existsOnBase
+                && immutablePreset.ProtectedPaths.FirstOrDefault(p => p.ExistingOnBase && p.Protects(path, existsOnBase)) is { } immutable)
+            {
+                yield return Error(GuardianCheck.ScopeCreep, ErrorCodes.Guardian.ProtectedPath, $"'{path}' already exists on the version's base commit and is immutable ({immutable.Reason ?? immutable.Glob.Pattern}); write a new file instead.", path);
+                continue;
+            }
+
             if (declared.Contains(path))
             {
                 continue;
@@ -161,6 +176,11 @@ public static class ExecutionGuardian
             if (PathRules.IsProtected(path))
             {
                 yield return Error(GuardianCheck.ScopeCreep, ErrorCodes.Guardian.ProtectedPath, $"'{path}' is a protected path and isn't declared for this step.", path);
+            }
+            else if (input.Preset is { } preset && preset.IsProtected(path, input.ExistsOnBase ?? (_ => false)))
+            {
+                // §4.11: the preset's protected paths, with the same "unless declared in this step" exception.
+                yield return Error(GuardianCheck.ScopeCreep, ErrorCodes.Guardian.ProtectedPath, $"'{path}' is protected by the {preset.Id} preset and isn't declared for this step.", path);
             }
         }
     }

@@ -21,6 +21,7 @@ import { stageStatuses } from '../shell/stage-states'
 import { PhaseBadge, StatusBadge } from './project-badges'
 import { currentView, ProjectContext, ReleaseViewContext } from './project-context'
 import { ProjectVersionBadges } from '../../components/shared/version-badge'
+import { PresetChip } from '../presets/preset-chip'
 import { ReadOnlyBanner } from '../versions/read-only-banner'
 import { useSelectedReleaseVersion } from '../versions/use-selected-release-version'
 import { checkpointLabel } from '../versions/version-label'
@@ -49,7 +50,18 @@ function ProjectNotFound() {
  * is in the shell header), the primary next-action button, and the horizontal stage stepper with Previous / Next stage. The Overview shows the
  * next action in its own card, so the header leaves the button out there.
  */
-function ProjectHeader({ project, onOverview, readOnly }: { project: Project; onOverview: boolean; readOnly: boolean }) {
+function ProjectHeader({
+  project,
+  onOverview,
+  readOnly,
+  preset,
+}: {
+  project: Project
+  onOverview: boolean
+  readOnly: boolean
+  /** FR-74: the preset of the release version on screen. */
+  preset: { name: string | null; version: string | null }
+}) {
   const state = useProjectState(project.id)
   const user = useCurrentUser()
   const role = effectiveProjectRole(user, project.myRole)
@@ -70,6 +82,7 @@ function ProjectHeader({ project, onOverview, readOnly }: { project: Project; on
             <PhaseBadge phase={project.currentPhase} />
             <StatusBadge status={project.status} />
             <ProjectVersionBadges released={project.releasedVersion} development={project.developmentVersion} />
+            <PresetChip name={preset.name} version={preset.version} hideWhenNone />
             <span className="font-mono tabular-nums">{checkpointLabel(project.developmentVersion ?? project.releasedVersion, project.checkpoint)}</span>
           </div>
         </div>
@@ -115,7 +128,16 @@ export function ProjectLayout({ projectId, children }: { projectId: string; chil
   return (
     <ProjectContext value={project.data}>
       <ReleaseViewContext value={onSettings ? currentView : view}>
-        <ProjectHeader project={project.data} onOverview={onOverview} readOnly={view.readOnly && !onSettings} />
+        <ProjectHeader
+          project={project.data}
+          onOverview={onOverview}
+          readOnly={view.readOnly && !onSettings}
+          preset={
+            view.readOnly && view.version && !onSettings
+              ? { name: view.version.presetName, version: view.version.presetVersion }
+              : { name: project.data.presetName, version: project.data.presetVersion }
+          }
+        />
         {view.readOnly && view.version && !onSettings && <ReadOnlyBanner version={view.version} />}
         {view.resolving ? <SkeletonPage /> : children}
       </ReleaseViewContext>

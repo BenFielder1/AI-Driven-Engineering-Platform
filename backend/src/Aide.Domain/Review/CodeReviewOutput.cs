@@ -37,7 +37,8 @@ public sealed record CodeReviewResult(
 /// FR-38: reads the Code Review agent's JSON reply. Every one of the six categories needs a score from 0 to 1; violations
 /// and drift areas need a known category/severity; the optimisation plan follows the implementation plan rules
 /// (<see cref="PlanValidator"/> with the project's max files per step, no protected paths — an agent may not declare them,
-/// §4.6) and must render to a document that reads back to the same steps. An unreadable reply is <c>INVALID_OUTPUT</c>; a
+/// §4.6; with a preset, the <c>agents</c> of <see cref="PlanAgents.ForOptimization"/>, FR-76) and must render to a
+/// document that reads back to the same steps. An unreadable reply is <c>INVALID_OUTPUT</c>; a
 /// readable reply with an invalid plan is <c>INVALID_PLAN</c>. Either way every reason is in <see cref="DomainError.Details"/>
 /// so the one corrective re-run can fix them all.
 /// </summary>
@@ -48,7 +49,7 @@ public static class CodeReviewOutput
 
     public const int MaxTextLength = 2000;
 
-    public static Result<CodeReviewResult> Parse(string text, int maxFilesPerStep)
+    public static Result<CodeReviewResult> Parse(string text, int maxFilesPerStep, PlanAgents? agents = null)
     {
         ArgumentNullException.ThrowIfNull(text);
         var json = AgentOutput.ExtractJsonObject(text);
@@ -87,7 +88,7 @@ public static class CodeReviewOutput
                 return Invalid(reasons);
             }
 
-            var plan = ReadPlan(root, maxFilesPerStep);
+            var plan = ReadPlan(root, maxFilesPerStep, agents);
             if (plan.IsFailure)
             {
                 return Result.Failure<CodeReviewResult>(plan.Error!);
@@ -344,7 +345,7 @@ public static class CodeReviewOutput
         return result;
     }
 
-    private static Result<(IReadOnlyList<PlanStep> Steps, string? Markdown)> ReadPlan(JsonElement root, int maxFilesPerStep)
+    private static Result<(IReadOnlyList<PlanStep> Steps, string? Markdown)> ReadPlan(JsonElement root, int maxFilesPerStep, PlanAgents? agents)
     {
         if (!root.TryGetProperty("optimizationPlan", out var plan) || plan.ValueKind == JsonValueKind.Null)
         {
@@ -363,13 +364,13 @@ public static class CodeReviewOutput
         }
 
         var parsed = PlanDocument.ParseJson(plan.GetRawText());
-        var validated = parsed.IsSuccess ? PlanValidator.Validate(parsed.Value, maxFilesPerStep, allowProtectedPaths: false) : parsed;
+        var validated = parsed.IsSuccess ? PlanValidator.Validate(parsed.Value, maxFilesPerStep, allowProtectedPaths: false, agents) : parsed;
         if (validated.IsFailure)
         {
             return Result.Failure<(IReadOnlyList<PlanStep>, string?)>(validated.Error!);
         }
 
-        var markdown = PlanDocument.RenderChecked(ArtifactType.OptimizationPlan, validated.Value, maxFilesPerStep);
+        var markdown = PlanDocument.RenderChecked(ArtifactType.OptimizationPlan, validated.Value, maxFilesPerStep, agents);
         return markdown.IsSuccess
             ? Result.Success<(IReadOnlyList<PlanStep>, string?)>((validated.Value, markdown.Value))
             : Result.Failure<(IReadOnlyList<PlanStep>, string?)>(markdown.Error!);

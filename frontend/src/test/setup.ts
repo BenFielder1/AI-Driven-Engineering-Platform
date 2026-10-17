@@ -7,6 +7,7 @@ import { resetAuthDb } from '../mocks/handlers/auth'
 import { resetConnectionsDb } from '../mocks/handlers/connections'
 import { resetGitHubDb } from '../mocks/handlers/github'
 import { resetNotificationsDb } from '../mocks/handlers/notifications'
+import { resetPresetCatalog } from '../mocks/handlers/preset-catalog'
 import { resetProjectsDb } from '../mocks/handlers/projects'
 import { server } from '../mocks/server'
 
@@ -66,6 +67,7 @@ afterEach(() => {
   resetAdminDb()
   resetConnectionsDb()
   resetGitHubDb()
+  resetPresetCatalog()
   localStorage.clear()
 })
 afterAll(() => {

@@ -11,6 +11,7 @@ using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
+using Aide.Infrastructure.Presets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -61,6 +62,12 @@ public sealed record AgentRunRequest
 
     /// <summary>Warnings known before the run (e.g. <c>summary_wait_timeout</c>), recorded with the run's own (FR-70, FR-71).</summary>
     public IReadOnlyList<string> Warnings { get; init; } = [];
+
+    /// <summary>
+    /// FR-76: the plan step's agent (a code generator run). With a preset whose catalogue has it, the run is that specialist:
+    /// its prompt is <see cref="Domain.Presets.SpecialistPrompt.Compose"/> of the base template, and <c>agent_key</c> records it.
+    /// </summary>
+    public string? SpecialistAgentKey { get; init; }
 }
 
 /// <summary>A succeeded run: its id, the provider's text, what it cost and when it completed.</summary>
@@ -95,12 +102,18 @@ public sealed record AgentRunOutcome(Guid RunId, string Text, string StopReason,
 /// <c>RUN_STARTED</c> records the job id, so <see cref="AgentRunJobEndedHook"/> can fail the runs a dead-lettered job
 /// left <c>running</c> (e.g. after its lease expired on the last attempt).
 /// Failures surface as <see cref="JobFailedException"/> carrying the error code. Every log entry carries <c>RunId</c>.
+/// <para>
+/// FR-74, FR-76: a run of a release version with a preset records <c>preset_id</c>/<c>preset_version</c> (the preset as
+/// shipped when the run starts, <see cref="PresetCatalogExtensions.StampRun"/>); a code generator run of a specialist step
+/// also records <c>agent_key</c> and gets the specialist prompt (base contract → conventions → role → skills).
+/// </para>
 /// </summary>
 public sealed partial class AgentRunner(
     AideDbContext db,
     ILlmResolver llm,
     IPromptLibrary prompts,
     ILlmProviderCatalog catalog,
+    IPresetCatalog presets,
     AgentRepoContext repoContext,
     IOptions<LlmOptions> options,
     TimeProvider time,
@@ -187,6 +200,12 @@ public sealed partial class AgentRunner(
         {
             await FailAsync(run, rendered.Error!.Code, rendered.Error.Message, deadLetter: false);
             throw new JobFailedException(rendered.Error.Message, transient: false, rendered.Error.Code);
+        }
+
+        // FR-76: a specialist step's prompt (the preset the run recorded, so a redelivery renders the same one).
+        if (run.AgentKey is { } agentKey && presets.Find(run.PresetId) is { } preset && preset.Agent(agentKey) is not null)
+        {
+            rendered = Domain.Presets.SpecialistPrompt.Compose(rendered.Value, preset, agentKey);
         }
 
         // D-V2-5: the project's bound connection pays for every run, whoever triggered it; the run records which one.
@@ -407,6 +426,12 @@ public sealed partial class AgentRunner(
         }
 
         var resolved = await llm.ResolveAsync(project.Id, request.Agent, cancellationToken);
+
+        // FR-74: the preset of the run's release version, as shipped now (null without one or when no longer shipped).
+        var version = project.CurrentReleaseVersionId is { } versionId
+            ? await db.ReleaseVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == versionId, cancellationToken)
+            : null;
+        var preset = version is null ? null : presets.ForVersion(version);
         var run = new AgentRun
         {
             Id = runId,
@@ -424,11 +449,12 @@ public sealed partial class AgentRunner(
             Status = AgentRunStatus.Running,
             CreatedAt = now,
         };
+        PresetCatalogExtensions.StampRun(run, preset, preset is not null && request.SpecialistAgentKey is { } key ? key : null);
         db.AgentRuns.Add(run);
         db.AddEvent(
             EventTypes.RunStarted,
             project.Id,
-            new { runId, jobId = request.Job.Id, agent = request.Agent.ToWire(), provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId },
+            new { runId, jobId = request.Job.Id, agent = request.Agent.ToWire(), provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, preset = preset?.RunLabel, agentKey = run.AgentKey },
             SystemActor.Name,
             now);
         await db.SaveChangesAsync(cancellationToken);

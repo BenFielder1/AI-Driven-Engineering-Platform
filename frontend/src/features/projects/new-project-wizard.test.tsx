@@ -22,10 +22,10 @@ async function startWizard() {
   signInAs({ systemRole: 'user' })
   const utils = renderRoute('/projects/new')
   const user = userEvent.setup()
-  await stepHeading(/Step 1 of 6: Source/)
+  await stepHeading(/Step 1 of 7: Source/)
   expect(screen.getByRole('radio', { name: 'Start from scratch' })).toBeChecked()
   await next(user)
-  await stepHeading(/Step 2 of 6: Project idea/)
+  await stepHeading(/Step 2 of 7: Project idea/)
   return { ...utils, user }
 }
 
@@ -33,31 +33,34 @@ async function fillIdea(user: User) {
   await user.type(screen.getByLabelText('Project name'), 'Inventory tracker')
   await user.type(screen.getByLabelText('Your idea'), 'Track stock across warehouses.')
   await next(user)
-  await stepHeading(/Step 3 of 6: Repository/)
+  await stepHeading(/Step 3 of 7: Repository/)
 }
 
 /** From the Repository step with Local chosen: Version (default kept) → Configuration. */
 async function localToConfiguration(user: User) {
   await user.click(screen.getByRole('radio', { name: 'Local repository' }))
   await next(user)
-  await stepHeading(/Step 4 of 6: Version/)
+  await stepHeading(/Step 4 of 7: Version/)
   await next(user)
-  await stepHeading(/Step 5 of 6: Configuration/)
+  await stepHeading(/Step 5 of 7: Stack/)
+  await next(user)
+  await stepHeading(/Step 6 of 7: Configuration/)
 }
 
 describe('New project wizard (FR-5, FR-73)', () => {
   it('FR73_source_step_first: the wizard starts with Source, scratch selected', async () => {
     signInAs({ systemRole: 'user' })
     renderRoute('/projects/new')
-    await stepHeading(/Step 1 of 6: Source/)
+    await stepHeading(/Step 1 of 7: Source/)
     const steps = screen.getByRole('list', { name: 'Wizard steps' })
     expect(within(steps).getAllByRole('listitem').map((li) => li.textContent.replace('Completed: ', ''))).toEqual([
       '1. Source',
       '2. Project idea',
       '3. Repository',
       '4. Version',
-      '5. Configuration',
-      '6. Review & create',
+      '5. Stack',
+      '6. Configuration',
+      '7. Review & create',
     ])
     expect(screen.getByRole('radio', { name: 'Import an existing repository' })).not.toBeChecked()
   })
@@ -71,7 +74,7 @@ describe('New project wizard (FR-5, FR-73)', () => {
     expect(screen.getAllByText('Describe your idea: what should the software do, and for whom?')).not.toHaveLength(0)
     expect(screen.getByLabelText('Project name')).toHaveFocus()
     expect(screen.getByLabelText('Project name')).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByRole('heading', { level: 2, name: /Step 2 of 6/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: /Step 2 of 7/ })).toBeInTheDocument()
   })
 
   it('FR-5: the step indicator marks the current step, and focus moves to the new step heading', async () => {
@@ -81,7 +84,7 @@ describe('New project wizard (FR-5, FR-73)', () => {
 
     await fillIdea(user)
 
-    expect(screen.getByRole('heading', { level: 2, name: /Step 3 of 6/ })).toHaveFocus()
+    expect(screen.getByRole('heading', { level: 2, name: /Step 3 of 7/ })).toHaveFocus()
     expect(within(steps).getByText(/3\. Repository/).closest('li')).toHaveAttribute('aria-current', 'step')
   })
 
@@ -109,7 +112,7 @@ describe('New project wizard (FR-5, FR-73)', () => {
     expect(
       screen.getAllByText('Enter a whole number of at least 1,000 tokens, or leave it empty for no limit.'),
     ).not.toHaveLength(0)
-    expect(screen.getByRole('heading', { level: 2, name: /Step 5 of 6/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: /Step 6 of 7/ })).toBeInTheDocument()
   })
 
   it('FR-5: the repository step requires a GitHub URL; Local explains the managed repository instead', async () => {
@@ -131,7 +134,7 @@ describe('New project wizard (FR-5, FR-73)', () => {
     expect(screen.queryByLabelText(/Path of an existing repository on the server/)).not.toBeInTheDocument()
 
     await next(user)
-    expect(await stepHeading(/Step 4 of 6: Version/)).toBeInTheDocument()
+    expect(await stepHeading(/Step 4 of 7: Version/)).toBeInTheDocument()
   })
 
   it('FR66_initial_version_defaults_to_0_1_0_and_is_validated', async () => {
@@ -139,7 +142,7 @@ describe('New project wizard (FR-5, FR-73)', () => {
     await fillIdea(user)
     await user.click(screen.getByRole('radio', { name: 'Local repository' }))
     await next(user)
-    await stepHeading(/Step 4 of 6: Version/)
+    await stepHeading(/Step 4 of 7: Version/)
 
     const input = screen.getByLabelText('Initial version')
     expect(input).toHaveValue('0.1.0')
@@ -152,9 +155,11 @@ describe('New project wizard (FR-5, FR-73)', () => {
     await user.clear(screen.getByLabelText('Initial version'))
     await user.type(screen.getByLabelText('Initial version'), 'v1.0.0')
     await next(user)
-    await stepHeading(/Step 5 of 6: Configuration/)
+    await stepHeading(/Step 5 of 7: Stack/)
     await next(user)
-    await stepHeading(/Step 6 of 6: Review & create/)
+    await stepHeading(/Step 6 of 7: Configuration/)
+    await next(user)
+    await stepHeading(/Step 7 of 7: Review & create/)
     expect(within(screen.getByRole('region', { name: 'Version' })).getByText('1.0.0')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Create project' }))
@@ -173,7 +178,7 @@ describe('New project wizard (FR-5, FR-73)', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }))
 
     expect(await screen.findByLabelText('Project name')).toHaveValue('Inventory tracker')
-    expect(screen.getByRole('heading', { level: 2, name: /Step 2 of 6/ })).toHaveFocus()
+    expect(screen.getByRole('heading', { level: 2, name: /Step 2 of 7/ })).toHaveFocus()
   })
 
   it('FR-5: review shows a summary without the token, and Create navigates to the new project', async () => {
@@ -184,9 +189,11 @@ describe('New project wizard (FR-5, FR-73)', () => {
     expect(tokenInput).toHaveAttribute('type', 'password')
     await user.type(tokenInput, TOKEN)
     await next(user)
-    await stepHeading(/Step 4 of 6: Version/)
+    await stepHeading(/Step 4 of 7: Version/)
     await next(user)
-    await stepHeading(/Step 5 of 6: Configuration/)
+    await stepHeading(/Step 5 of 7: Stack/)
+    await next(user)
+    await stepHeading(/Step 6 of 7: Configuration/)
     await user.click(screen.getByRole('radio', { name: 'Strict' }))
     await user.type(screen.getByLabelText('Token budget (optional)'), '50000')
     await next(user)
@@ -230,12 +237,12 @@ describe('New project wizard (FR-5, FR-73)', () => {
     await user.type(screen.getByLabelText('Project name'), 'Inventory tracker')
     await user.type(screen.getByLabelText('Your idea'), 'An idea')
     await next(user)
-    await stepHeading(/Step 3 of 6/)
+    await stepHeading(/Step 3 of 7/)
     await localToConfiguration(user)
     await next(user)
     await user.click(await screen.findByRole('button', { name: 'Create project' }))
 
-    expect(await stepHeading(/Step 2 of 6/)).toBeInTheDocument()
+    expect(await stepHeading(/Step 2 of 7/)).toBeInTheDocument()
     expect(screen.getAllByText('A project with this name already exists.')).not.toHaveLength(0)
     await waitFor(() => {
       expect(screen.getByLabelText('Project name')).toHaveAttribute('aria-invalid', 'true')

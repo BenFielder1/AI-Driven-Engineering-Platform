@@ -18,6 +18,8 @@ import { SelectField } from '../../components/ui/select-field'
 import { TextField } from '../../components/ui/text-field'
 import { cn } from '../../lib/utils'
 import { formatDateTime, formatNumber, phaseLabels, phases, roleLabels, statusLabels, statuses } from './labels'
+import { PresetChip } from '../presets/preset-chip'
+import { usePresets } from '../presets/presets-api'
 import { PhaseBadge, StatusBadge } from './project-badges'
 import { KPI_SAMPLE_SIZE, projectKpis } from './project-kpis'
 import { PROJECTS_PAGE_SIZE, useProjects, type ProjectSortBy, type ProjectSummary, type SortOrder } from './projects-api'
@@ -51,6 +53,9 @@ function ProjectKpiRow() {
   )
 }
 
+/** `?preset=none`: projects whose current version has no preset (FR-74). */
+const NO_PRESET_FILTER = 'none'
+
 const sortKeys: Partial<Record<string, ProjectSortBy>> = { name: 'name', updated: 'updated' }
 
 const columns: DataTableColumn<ProjectSummary>[] = [
@@ -70,6 +75,7 @@ const columns: DataTableColumn<ProjectSummary>[] = [
       </Link>
     ),
   },
+  { key: 'preset', header: 'Preset', cell: (p) => <PresetChip name={p.presetName} version={p.presetVersion} /> },
   { key: 'phase', header: 'Phase', cell: (p) => <PhaseBadge phase={p.currentPhase} /> },
   { key: 'status', header: 'Status', cell: (p) => <StatusBadge status={p.status} /> },
   {
@@ -101,10 +107,12 @@ export function ProjectsListPage({ search, onSearchChange }: ProjectsListPagePro
     phase: search.phase,
     status: search.status,
     hasDevelopmentVersion: search.hasDevelopmentVersion,
+    preset: search.preset,
     sortBy,
     sortOrder,
   })
-  const filtered = Boolean(search.search ?? search.phase ?? search.status) || search.hasDevelopmentVersion !== undefined
+  const filtered =
+    Boolean(search.search ?? search.phase ?? search.status ?? search.preset) || search.hasDevelopmentVersion !== undefined
 
   /** Any filter change goes back to page 1. */
   const update = (patch: Partial<ProjectsSearch>) => {
@@ -226,7 +234,7 @@ function ProjectFilters({ search, onChange }: { search: ProjectsSearch; onChange
         e.preventDefault()
         onChange({ search: text.trim() || undefined })
       }}
-      className={cn(panelClass, 'mb-5 grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6')}>
+      className={cn(panelClass, 'mb-5 grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7')}>
       <TextField
         id="projects-search"
         label="Search by name"
@@ -281,6 +289,12 @@ function ProjectFilters({ search, onChange }: { search: ProjectsSearch; onChange
         <option value="true">Yes</option>
         <option value="false">No</option>
       </SelectField>
+      <PresetFilter
+        value={search.preset}
+        onChange={(preset) => {
+          onChange({ preset })
+        }}
+      />
       <SelectField
         id="projects-sort-by"
         label="Sort by"
@@ -312,5 +326,30 @@ function ProjectFilters({ search, onChange }: { search: ProjectsSearch; onChange
         ))}
       </SelectField>
     </form>
+  )
+}
+
+/** FR-74, SPEC §7.2: filter by the current version's preset: any, none (`preset=none`) or one preset id. */
+function PresetFilter({ value, onChange }: { value: string | undefined; onChange: (preset: string | undefined) => void }) {
+  const presets = usePresets()
+  const listed = presets.data ?? []
+  return (
+    <SelectField
+      id="projects-preset"
+      label="Preset"
+      value={value ?? ''}
+      onChange={(e) => {
+        onChange(e.target.value || undefined)
+      }}
+    >
+      <option value="">Any preset</option>
+      <option value={NO_PRESET_FILTER}>No preset</option>
+      {listed.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name}
+        </option>
+      ))}
+      {value && value !== NO_PRESET_FILTER && !listed.some((p) => p.id === value) && <option value={value}>{value}</option>}
+    </SelectField>
   )
 }

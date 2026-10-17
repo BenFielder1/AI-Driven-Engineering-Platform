@@ -3,6 +3,7 @@ using Aide.Infrastructure;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Identity;
+using Aide.Infrastructure.Presets;
 using Aide.Infrastructure.Security;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Hosting;
@@ -79,6 +80,9 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
             services.AddHttpClient<AnthropicLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
             services.AddHttpClient<OpenAiLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
             services.AddHttpClient<OllamaLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
+
+            // FR-74: the test-only fixture preset (tests/Fixtures/Presets/test-stack) next to the shipped ones.
+            services.AddSingleton<IPresetSource>(new EmbeddedPresetSource(typeof(AideApiFactory).Assembly, TestPresetId.Prefix));
         });
 
         // Tests share one client IP; the limits themselves are tested with their real values in RateLimitTests.
