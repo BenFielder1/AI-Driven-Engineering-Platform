@@ -31,6 +31,12 @@ public sealed record TransitionRequest(TransitionKind Kind, Phase? TargetPhase =
 
     public static TransitionRequest ReleaseCompleted(string? reason = null) => new(TransitionKind.ReleaseCompleted, Phase.Release, Reason: reason);
 
+    /// <summary>FR-65: the release merge was refused or the strategy is manual (<c>releasing → awaiting_merge</c>).</summary>
+    public static TransitionRequest ReleaseAwaitingMerge(string? reason = null) => new(TransitionKind.ReleaseAwaitingMerge, Phase.Release, Reason: reason);
+
+    /// <summary>FR-65: <c>PR_CLOSED</c> or <c>MERGE_TIMEOUT</c> (<c>awaiting_merge → releasing</c>).</summary>
+    public static TransitionRequest ReleaseMergeAbandoned(string? reason = null) => new(TransitionKind.ReleaseMergeAbandoned, Phase.Release, Reason: reason);
+
     /// <summary>§4.10, FR-60: start a new release version (<c>release → refinement</c>, checkpoint 1).</summary>
     public static TransitionRequest NewVersion(string? reason = null) => new(TransitionKind.NewVersion, Phase.Refinement, Reason: reason);
 }

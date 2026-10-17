@@ -123,6 +123,18 @@ public static class ErrorCodes
     /// <summary>FR-44 (recorded on a release): a rollback cancelled the release before it ran.</summary>
     public const string ReleaseCancelled = "RELEASE_CANCELLED";
 
+    /// <summary>
+    /// FR-65, §4.14 (recorded on a release attempt, not returned by an endpoint): the PR stayed unmerged for the whole merge
+    /// poll (14 days). The project stays in <c>release</c>; an Owner can retry with <c>POST /release</c>.
+    /// </summary>
+    public const string MergeTimeout = "MERGE_TIMEOUT";
+
+    /// <summary>
+    /// FR-65 (recorded on a release attempt, not returned by an endpoint): the PR was closed without being merged while the
+    /// release was awaiting its merge. The project stays in <c>release</c>; an Owner can reopen it on GitHub and retry.
+    /// </summary>
+    public const string PrClosed = "PR_CLOSED";
+
     // Approval links
     public const string LinkExpired = "LINK_EXPIRED";
     public const string LinkUsed = "LINK_USED";

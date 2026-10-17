@@ -37,6 +37,15 @@ public sealed record NotificationFacts(NotificationType Type, string ProjectName
     public int? TargetVersion { get; init; }
 
     public string? Reason { get; init; }
+
+    /// <summary>FR-65: a <c>release_failed</c> notification raised by <c>RELEASE_AWAITING_MERGE</c>: the release waits for a merge on GitHub.</summary>
+    public bool AwaitingMerge { get; init; }
+
+    /// <summary>FR-65: the version's PR (awaiting merge).</summary>
+    public string? PullRequestUrl { get; init; }
+
+    /// <summary>FR-65, FR-84: the merge-readiness reasons (messages) why AIDE couldn't merge.</summary>
+    public IReadOnlyList<string> MergeReasons { get; init; } = [];
 }
 
 /// <summary>A composed notification: a short title and a one-paragraph body (plain text, no secrets, no tokens).</summary>
@@ -86,6 +95,9 @@ public static class NotificationMessages
             NotificationType.ReleaseCompleted => (
                 $"{project}: released {facts.Tag ?? string.Empty}".TrimEnd(),
                 $"{project} was released{(facts.Tag is { } tag ? $" as {OneLine(tag, 100)}" : string.Empty)}."),
+            NotificationType.ReleaseFailed when facts.AwaitingMerge => (
+                $"{project}: release {facts.Tag ?? string.Empty} awaits a merge on GitHub".Replace("  ", " ", StringComparison.Ordinal),
+                $"AIDE can't merge the pull request of {project}{(facts.PullRequestUrl is { } url ? $" ({OneLine(url, 300)})" : string.Empty)} itself. Merge it on GitHub; AIDE then tags the merge commit and completes the release.{MergeReasonsText(facts.MergeReasons)}"),
             NotificationType.ReleaseFailed => (
                 $"{project}: release failed",
                 $"Releasing {project} failed{(facts.ErrorCode is { } code ? $" ({OneLine(code, 60)})" : string.Empty)}. An Owner can retry the release from the project page."),
@@ -106,6 +118,9 @@ public static class NotificationMessages
         GateType.Escalation => "An escalation",
         _ => "An approval",
     };
+
+    private static string MergeReasonsText(IReadOnlyList<string> reasons) =>
+        reasons.Count == 0 ? string.Empty : $" Reasons: {OneLine(string.Join(" ", reasons), 600)}";
 
     private static string Subject(NotificationFacts facts) =>
         facts.ArtifactType is { } a

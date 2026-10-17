@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { Alert } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
+import { rollbackBlockedMessages } from '../../lib/errors'
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import { phaseLabels } from '../projects/labels'
 import { RelativeTime } from '../projects/relative-time'
@@ -50,20 +51,25 @@ export function RollbackSection({
   developmentVersion,
   releasedVersion,
   currentCheckpoint,
+  awaitingMerge = false,
 }: {
   projectId: string
   /** The version in development; `null` when the project is released with nothing in development. */
   developmentVersion: string | null
   releasedVersion: string | null
   currentCheckpoint: number
+  /** FR-65, §4.8: the release is awaiting its merge (ROLLBACK_BLOCKED release_partially_applied). */
+  awaitingMerge?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [done, setDone] = useState<Rollback | null>(null)
   // FR-63, D-V2-3: a released version is closed; the way forward is a new version.
-  const closed = developmentVersion === null
-  const closedReason = releasedVersion
-    ? `Version ${releasedVersion} is released and closed, so it can't be rolled back. Start a new version to make changes.`
-    : 'There is no version in development to roll back.'
+  const closed = developmentVersion === null || awaitingMerge
+  const closedReason = awaitingMerge
+    ? rollbackBlockedMessages.awaitingMerge
+    : releasedVersion
+      ? `Version ${releasedVersion} is released and closed, so it can't be rolled back. Start a new version to make changes.`
+      : 'There is no version in development to roll back.'
 
   return (
     <section aria-labelledby="rollback-title" className="flex flex-col gap-3 rounded-lg border border-destructive p-4">

@@ -15,7 +15,7 @@ export const phaseLabels: Record<Schemas['Phase'], string> = {
   release: 'Release',
 }
 
-export const statuses = ['active', 'building', 'reviewing', 'releasing', 'released', 'rolled_back'] as const satisfies
+export const statuses = ['active', 'building', 'reviewing', 'releasing', 'awaiting_merge', 'released', 'rolled_back'] as const satisfies
   readonly Schemas['ProjectStatus'][]
 
 export const statusLabels: Record<Schemas['ProjectStatus'], string> = {
@@ -23,6 +23,7 @@ export const statusLabels: Record<Schemas['ProjectStatus'], string> = {
   building: 'Building',
   reviewing: 'Reviewing',
   releasing: 'Releasing',
+  awaiting_merge: 'Awaiting merge',
   released: 'Released',
   rolled_back: 'Rolled back',
 }
@@ -525,4 +526,51 @@ export const stepAttemptOutcomeLabels: Record<Schemas['StepAttemptOutcome'], str
   accepted: 'Accepted',
   rejected: 'Rejected by the Guardian',
   error: 'Failed with an error',
+}
+
+// ---- Merge readiness and checks (FR-64, FR-65, FR-84, FR-85) -----------------------------------------------------
+
+/** FR-65: the project's merge strategy, as Settings → Git and the Release page name it. */
+export const mergeStrategyLabels: Record<Schemas['MergeStrategy'], string> = {
+  aide_merges: 'AIDE merges the pull request',
+  manual: 'Merge manually on GitHub — AIDE waits and tags the merge',
+}
+
+export const mergeStrategyDescriptions: Record<Schemas['MergeStrategy'], string> = {
+  aide_merges:
+    'When the release is approved, AIDE merges the pull request. If GitHub refuses (required reviews or checks, branch protection), the release waits for a merge on GitHub.',
+  manual:
+    'AIDE never merges. It marks the pull request ready for review and waits; once someone merges it on GitHub, AIDE tags the merge commit and creates the GitHub Release.',
+}
+
+/** FR-84: why AIDE can't merge the version's PR itself (fallback when a reason has no message). */
+export const mergeReasonLabels: Record<Schemas['MergeReadinessReasonCode'], string> = {
+  review_required: 'An approving review is required',
+  changes_requested: 'A reviewer requested changes',
+  checks_failing: 'Required checks are failing',
+  checks_pending: 'Required checks are still running',
+  branch_protected: 'Branch protection blocks the merge',
+  merge_conflict: 'The pull request has merge conflicts',
+  no_permission: "AIDE's access can't merge into the default branch",
+  merge_method_not_allowed: "The repository doesn't allow AIDE's merge method",
+  pr_not_open: "The pull request isn't open",
+  manual_strategy: 'The project merges manually',
+}
+
+/** FR-84, FR-85: a check run's state while it hasn't completed. */
+export const checkRunStatusLabels: Record<Schemas['CheckRunStatus'], string> = {
+  queued: 'Queued',
+  in_progress: 'Running',
+  completed: 'Completed',
+}
+
+/** FR-84, FR-85: a completed check run's conclusion. */
+export const checkRunConclusionLabels: Record<NonNullable<Schemas['CheckRunConclusion']>, string> = {
+  success: 'Passed',
+  failure: 'Failed',
+  neutral: 'Neutral',
+  cancelled: 'Cancelled',
+  skipped: 'Skipped',
+  timed_out: 'Timed out',
+  action_required: 'Action required',
 }

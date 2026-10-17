@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 
 import type { Schemas } from '../../api/client'
+import { checkTagPrefix } from '../../features/projects/settings/release-settings-rules'
 import { compareSemVer, normalizeVersion, parseSemVer } from '../../features/versions/semver'
 import type { ProjectRole } from '../../lib/permissions'
 import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from './auth'
@@ -95,6 +96,10 @@ export interface StoredProject extends Omit<Project, 'myRole' | 'releaseVersionI
   lastRollbackAt?: number
   /** A step or agent run is in progress: POST /rollback answers 409 ROLLBACK_BLOCKED (FR-45). */
   rollbackBlocked?: boolean
+  /** FR-84: the last merge-readiness result (GET /git/merge-readiness); unset derives a mergeable one. */
+  mergeReadiness?: Schemas['MergeReadinessDto']
+  /** FR-84: what the next `refresh=true` check returns (then becomes `mergeReadiness`). */
+  mergeReadinessOnRefresh?: Schemas['MergeReadinessDto']
 }
 
 /** A refinement round as stored: the round DTO plus the questions its run asked (null until it succeeds). */
@@ -111,7 +116,7 @@ export type StoredExecutionStep = Schemas['ExecutionStepDto'] & {
 /** A compliance report plus the v2 detail fields (FR-56) that the v1 DTO lacks. */
 export type StoredComplianceReport = Schemas['ComplianceReportDto'] & {
   regressions?: Schemas['RegressionDto'][]
-  externalChecks?: unknown
+  externalChecks?: Schemas['ExternalChecksDto'] | null
 }
 
 /** A request the mock API received (for assertions such as "the token was sent but never shown"). */
@@ -146,6 +151,8 @@ export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
     repoId: app ? 4242 : null,
     appInstalledOnRepo: null,
     canSwitchToApp: false,
+    mergeStrategy: 'aide_merges',
+    tagPrefix: 'v',
     ...overrides,
     repoFullName,
     provider,
@@ -526,7 +533,20 @@ function latestReleaseSummary(releases: Schemas['ReleaseDto'][] | undefined): Sc
     return null
   }
   const { id, releaseVersionId, checkpoint, status, tag, startedAt } = latest
-  return { id, releaseVersionId, checkpoint, status, tag, startedAt }
+  const { pullRequestUrl, githubReleaseUrl, awaitingMergeSince, mergeReasons, mergeStrategy } = latest
+  return {
+    id,
+    releaseVersionId,
+    checkpoint,
+    status,
+    tag,
+    startedAt,
+    pullRequestUrl,
+    githubReleaseUrl,
+    awaitingMergeSince,
+    mergeReasons,
+    mergeStrategy,
+  }
 }
 
 export type Access = { project: StoredProject; userId: string; level: 'owner' | 'contributor' | 'viewer' | 'admin' } | Response
@@ -876,7 +896,24 @@ export const projectHandlers = [
       git.repoId = null
       git.repoFullName = null
     }
+    // §4.10, FR-64, FR-65: release settings. The prefix can't change while a release is awaiting merge or in progress.
+    if (body.tagPrefix !== undefined && body.tagPrefix !== null && body.tagPrefix !== git.tagPrefix) {
+      if (checkTagPrefix(body.tagPrefix) !== null) {
+        return validation({
+          tagPrefix: ['Use up to 20 letters, digits, ".", "_", "/" or "-", not starting with ".", "/" or "-".'],
+        })
+      }
+      const releasing =
+        developmentVersionOf(a.project)?.status === 'awaiting_merge' ||
+        a.project.releases?.at(-1)?.status === 'in_progress' ||
+        a.project.releases?.at(-1)?.status === 'awaiting_merge'
+      if (releasing) {
+        return problem(409, 'CONFLICT', 'The tag prefix can’t change while a release is in progress or awaiting its merge.')
+      }
+    }
     git.defaultBranch = body.defaultBranch ?? git.defaultBranch
+    git.mergeStrategy = body.mergeStrategy ?? git.mergeStrategy
+    git.tagPrefix = body.tagPrefix ?? git.tagPrefix
     if (body.clearToken) {
       git.hasToken = false
     } else if (body.token) {

@@ -77,6 +77,7 @@ public sealed partial class ReviewJobHandler(
     WorkingCopyPreparer preparer,
     IWorkingCopies workingCopies,
     LifecycleWriter writer,
+    ExternalChecksCollector externalChecks,
     TimeProvider time,
     ILogger<ReviewJobHandler> logger) : IJobHandler
 {
@@ -116,7 +117,10 @@ public sealed partial class ReviewJobHandler(
         }
 
         using var scope = logger.BeginScope(new Dictionary<string, object?> { ["ReviewCycle"] = cycle });
-        var material = await GatherAsync(project, cancellationToken);
+
+        // FR-85: the PR head's checks are a deterministic input; pending ones are waited for (the job defers itself) first.
+        var checks = await externalChecks.CollectAsync(project, payload, cancellationToken);
+        var material = await GatherAsync(project, cancellationToken, checks is null ? [] : ExternalCheckRules.Findings(checks.Checks));
 
         // §4.5 row 4: the previous score is the latest earlier cycle's report in the current review timeline (§4.8).
         var previous = await ReviewTimeline.Current(db, project)
@@ -136,7 +140,7 @@ public sealed partial class ReviewJobHandler(
         }
 
         var outcome = await RunAgentAsync(job, project, cycle, material, previousText, payload.Feedback, MissingPlan, cancellationToken);
-        await RecordAsync(job, cycle, material, outcome, previous?.Score, cancellationToken);
+        await RecordAsync(job, cycle, material, outcome, previous?.Score, checks, cancellationToken);
     }
 
     private static IterationReviewResult Assess(CodeReviewResult result, ReviewMaterial material, Project project, int cycle, decimal? previousScore) =>
@@ -192,7 +196,10 @@ public sealed partial class ReviewJobHandler(
         return project.ReviewCycle;
     }
 
-    private async Task<ReviewMaterial> GatherAsync(Project project, CancellationToken cancellationToken)
+    /// <param name="project">The project in review.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <param name="externalFindings">FR-85: findings from failed required checks, added to the deterministic ones.</param>
+    private async Task<ReviewMaterial> GatherAsync(Project project, CancellationToken cancellationToken, IReadOnlyList<ReviewFinding>? externalFindings = null)
     {
         var preparation = await preparer.TryPrepareAsync(project.Id, cancellationToken);
         if (preparation.Result.IsFailure)
@@ -233,6 +240,7 @@ public sealed partial class ReviewJobHandler(
         var findings = DeterministicChecks.SecretScan(contents)
             .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents)))
             .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents))
+            .Concat(externalFindings ?? [])
             .ToList();
         LogGathered(logger, tree.Count, contents.Count, findings.Count);
         var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
@@ -311,7 +319,8 @@ public sealed partial class ReviewJobHandler(
             : throw new JobFailedException(reparsed.Error!.Message, transient: false, reparsed.Error.Code);
     }
 
-    private async Task RecordAsync(JobExecution job, int cycle, ReviewMaterial material, ReviewAgentOutcome outcome, decimal? previousScore, CancellationToken cancellationToken)
+    private async Task RecordAsync(
+        JobExecution job, int cycle, ReviewMaterial material, ReviewAgentOutcome outcome, decimal? previousScore, CollectedChecks? checks, CancellationToken cancellationToken)
     {
         // The run's completion bumped the project row (tokens used): re-read it so its xmin is current.
         db.ChangeTracker.Clear();
@@ -362,6 +371,7 @@ public sealed partial class ReviewJobHandler(
             AgentRunId = outcome.Run.RunId,
             Threshold = project.ComplianceThreshold,
             OptimizationPlanArtifactId = draft?.Id,
+            ExternalChecks = checks?.ToJson(),
             CreatedAt = now,
         };
         db.ComplianceReports.Add(report);
@@ -406,6 +416,7 @@ public sealed partial class ReviewJobHandler(
                 optimizationPlanArtifactId = draft?.Id,
                 runId = outcome.Run.RunId,
                 regressionCount = scoped.Regressions.Count,
+                checksTimedOut = checks?.TimedOut ?? false,
             },
             SystemActor.Name,
             now);

@@ -39,6 +39,7 @@ public class NotificationRulesTests
     [InlineData(EventTypes.ReviewCompleted, NotificationType.ReviewCompleted)]
     [InlineData(EventTypes.ReleaseCompleted, NotificationType.ReleaseCompleted)]
     [InlineData(EventTypes.ReleaseFailed, NotificationType.ReleaseFailed)]
+    [InlineData(EventTypes.ReleaseAwaitingMerge, NotificationType.ReleaseFailed)]
     [InlineData(EventTypes.RollbackCompleted, NotificationType.Rollback)]
     public void FR47_Each_listed_event_raises_its_notification(string eventType, NotificationType expected) =>
         Assert.Equal(expected, NotificationRules.ForEvent(eventType));

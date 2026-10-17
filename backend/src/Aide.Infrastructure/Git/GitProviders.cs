@@ -22,6 +22,7 @@ internal sealed partial class GitHubGitProvider(
     IWorkingCopies workingCopies,
     IWorkspaceStore workspaces,
     IOptions<GitHubGitOptions> options,
+    GitHub.GitHubApi api,
     ILogger<GitHubGitProvider> logger) : IGitProvider
 {
     public const string HttpClientName = "github";
@@ -301,14 +302,16 @@ internal sealed partial class GitHubGitProvider(
                 return ReleaseOutcome.Failed(ErrorCodes.GitError, reason, GitHubFailures.IsTransientGitError(reason));
             }
 
-            // The tag holding the branch head (or the PR's merge) is the release already made; on another commit it is a
-            // TAG_EXISTS failure before anything is merged (FR-64: tags are never moved).
+            // FR-64: a tag pointing at the PR's merge commit is the release already made (reused); a tag anywhere else — even
+            // a later commit that contains the merge — is TAG_EXISTS before anything is merged or recorded (tags never move).
+            // ls-remote may list an annotated tag's object rather than its commit: peel it in the working copy (it was fetched).
             ExistingReleaseTag? existing = null;
+            string? taggedCommit = null;
             if (listed.Tags.Count > 0 && listed.Tags[0] is { } found)
             {
-                var contains = await workingCopies.IsAncestorAsync(id, head, found.Commit, cancellationToken)
-                    || (pr.Merged && pr.MergeCommitSha is { } prMerge && IsCommitId(prMerge) && await workingCopies.IsAncestorAsync(id, prMerge, found.Commit, cancellationToken));
-                existing = new ExistingReleaseTag(found.Tag, contains);
+                taggedCommit = await workingCopies.ResolveCommitAsync(id, found.Commit, cancellationToken) ?? found.Commit;
+                var atMerge = pr.Merged && pr.MergeCommitSha is { } prMerge && IsCommitId(prMerge) && taggedCommit == prMerge;
+                existing = new ExistingReleaseTag(found.Tag, atMerge);
             }
 
             var decision = ReleaseRules.DecideTag(request.Tag, existing);
@@ -319,11 +322,12 @@ internal sealed partial class GitHubGitProvider(
 
             if (decision.Value)
             {
-                return ReleaseOutcome.Released(listed.Tags[0].Commit, request.Tag, alreadyTagged: true);
+                return ReleaseOutcome.Released(taggedCommit!, request.Tag, alreadyTagged: true);
             }
 
             var tagName = request.Tag;
             string mergeSha;
+            var mergedExternally = false;
             if (pr.Merged)
             {
                 if (pr.MergeCommitSha is not { } merged || !IsCommitId(merged))
@@ -332,13 +336,27 @@ internal sealed partial class GitHubGitProvider(
                 }
 
                 mergeSha = merged;
+                mergedExternally = true;
             }
             else
             {
                 if (pr.State == "closed")
                 {
                     return ReleaseOutcome.Failed(
-                        ErrorCodes.GitError, $"Pull request #{number} was closed without merging. Reopen it on GitHub, then retry the release.", transient: false);
+                        ErrorCodes.PrClosed, $"Pull request #{number} was closed without merging. Reopen it on GitHub, then retry the release.", transient: false);
+                }
+
+                // FR-65: a draft PR can't be merged or reviewed: mark it ready for review (both strategies).
+                if (pr.Draft && pr.NodeId is { Length: > 0 } nodeId)
+                {
+                    var marked = await api.MarkReadyForReviewAsync(token!, nodeId, cancellationToken);
+                    LogMarkedReady(logger, id, number, marked);
+                }
+
+                if (!request.Merge)
+                {
+                    return ReleaseOutcome.Awaiting(
+                        $"The merge strategy is manual: AIDE never merges. Pull request #{number} is ready for review; merge it on GitHub.", refused: false);
                 }
 
                 if (pr.Mergeable == false)
@@ -362,7 +380,14 @@ internal sealed partial class GitHubGitProvider(
                 {
                     if (merge.NotMergeable)
                     {
-                        return await ConflictAsync(settings, request, head, cancellationToken) ?? merge.Failure!;
+                        // FR-65: refused without conflicts (branch protection, reviews, checks): a merge on GitHub is needed.
+                        return await ConflictAsync(settings, request, head, cancellationToken)
+                            ?? ReleaseOutcome.Awaiting(merge.Failure!.Reason!, refused: true);
+                    }
+
+                    if (merge.Refused)
+                    {
+                        return ReleaseOutcome.Awaiting(merge.Failure!.Reason!, refused: true);
                     }
 
                     return merge.Failure!;
@@ -396,7 +421,7 @@ internal sealed partial class GitHubGitProvider(
                 return ReleaseOutcome.Failed(ErrorCodes.GitError, reason, transient);
             }
 
-            return ReleaseOutcome.Released(mergeSha, tagName, alreadyTagged: false);
+            return ReleaseOutcome.Released(mergeSha, tagName, alreadyTagged: false) with { MergedExternally = mergedExternally };
         }
         catch (GitCommandException ex)
         {
@@ -504,7 +529,11 @@ internal sealed partial class GitHubGitProvider(
                 root.TryGetProperty("mergeable", out var mergeable) && mergeable.ValueKind is JsonValueKind.True or JsonValueKind.False ? mergeable.GetBoolean() : null,
                 Text(root, "merge_commit_sha"),
                 root.TryGetProperty("head", out var prHead) && prHead.ValueKind == JsonValueKind.Object ? Text(prHead, "sha") : null,
-                null);
+                null)
+            {
+                Draft = root.TryGetProperty("draft", out var draft) && draft.ValueKind == JsonValueKind.True,
+                NodeId = Text(root, "node_id"),
+            };
         }
         catch (JsonException)
         {
@@ -546,10 +575,23 @@ internal sealed partial class GitHubGitProvider(
 
         var reason = await DescribeFailureAsync(response, cancellationToken);
         LogMergeFailed(logger, number, (int)response.StatusCode);
+
+        // §4.14: a rate-limited (or secondary rate-limited) 403 is not a refusal: the job waits for the reset and merges then.
+        if (response.StatusCode == HttpStatusCode.Forbidden
+            && (IsRateLimited(response) || reason.Contains("rate limit", StringComparison.OrdinalIgnoreCase)))
+        {
+            var now = TimeProvider.System.GetUtcNow();
+            throw new GitHub.GitHubRateLimitedException(GitHub.GitHubApi.RateLimitResetAt(response, now) ?? now + TimeSpan.FromMinutes(1));
+        }
+
+        // 405: not mergeable (conflicts, or branch protection: required reviews/checks); 409: the head moved since it was
+        // fetched (retry); 403/422: AIDE may not merge (permission, merge method) — FR-65 awaits a merge on GitHub.
         return response.StatusCode switch
         {
             HttpStatusCode.MethodNotAllowed => new MergeAttempt(null, true, ReleaseOutcome.Failed(ErrorCodes.GitError, reason, transient: false)),
             HttpStatusCode.Conflict => new MergeAttempt(null, false, ReleaseOutcome.Failed(ErrorCodes.GitError, reason, transient: true)),
+            HttpStatusCode.Forbidden or HttpStatusCode.UnprocessableEntity =>
+                new MergeAttempt(null, false, ReleaseOutcome.Failed(ErrorCodes.GitError, reason, transient: false)) { Refused = true },
             _ => new MergeAttempt(null, false, ReleaseOutcome.Failed(ErrorCodes.GitError, reason, GitHubFailures.IsTransientStatus(response.StatusCode, IsRateLimited(response)))),
         };
     }
@@ -562,11 +604,21 @@ internal sealed partial class GitHubGitProvider(
     /// <summary>The project PR as the release needs it, or the failure reading it.</summary>
     private sealed record PullState(string? State, bool Merged, bool? Mergeable, string? MergeCommitSha, string? HeadSha, ReleaseOutcome? Failure)
     {
+        public bool Draft { get; init; }
+
+        public string? NodeId { get; init; }
+
         public static PullState Failed(ReleaseOutcome failure) => new(null, false, null, null, null, failure);
     }
 
-    /// <summary>The merge API's answer: the merge commit, or whether GitHub found the PR not mergeable (405), or the failure.</summary>
-    private sealed record MergeAttempt(string? Sha, bool NotMergeable, ReleaseOutcome? Failure);
+    /// <summary>
+    /// The merge API's answer: the merge commit, or whether GitHub found the PR not mergeable (405), or refused the merge
+    /// for missing permission or an invalid request (403 without a rate limit, 422) — FR-65 awaiting merge — or the failure.
+    /// </summary>
+    private sealed record MergeAttempt(string? Sha, bool NotMergeable, ReleaseOutcome? Failure)
+    {
+        public bool Refused { get; init; }
+    }
 
     /// <summary>
     /// Brings a reused open PR's title and description up to date (they describe the plan that just completed). A transient
@@ -821,6 +873,9 @@ internal sealed partial class GitHubGitProvider(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Merging pull request #{Number} failed with HTTP {Status}")]
     private static partial void LogMergeFailed(ILogger logger, int number, int status);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Draft pull request #{Number} of project {ProjectId} marked ready for review: {Marked}")]
+    private static partial void LogMarkedReady(ILogger logger, Guid projectId, int number, bool marked);
 }
 
 /// <summary>
@@ -915,10 +970,13 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
                 return ReleaseOutcome.Failed(ErrorCodes.GitError, $"The project branch '{request.Branch}' doesn't exist in the local repository.", transient: false);
             }
 
+            // FR-64: reused only when the tag points at the commit that merged the branch (not merely one containing it).
             var found = await workingCopies.TagAsync(id, request.Tag, cancellationToken);
             var existing = found is null
                 ? null
-                : new ExistingReleaseTag(found.Tag, await workingCopies.IsAncestorAsync(id, head, found.Commit, cancellationToken));
+                : new ExistingReleaseTag(
+                    found.Tag,
+                    await workingCopies.FindMergeCommitAsync(id, $"refs/heads/{settings.DefaultBranch}", head, cancellationToken) == found.Commit);
             var decision = ReleaseRules.DecideTag(request.Tag, existing);
             if (decision.IsFailure)
             {
@@ -928,6 +986,27 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
             if (decision.Value)
             {
                 return ReleaseOutcome.Released(found!.Commit, request.Tag, alreadyTagged: true);
+            }
+
+            if (!request.Merge)
+            {
+                // FR-65 manual (and the merge poll): never merge; a branch someone else merged into the default branch is
+                // tagged on the commit that brought it in (first-parent history; the head itself after a fast-forward).
+                var mergedBySomeone = await workingCopies.FindMergeCommitAsync(id, $"refs/heads/{settings.DefaultBranch}", head, cancellationToken);
+                if (mergedBySomeone is null)
+                {
+                    return ReleaseOutcome.Awaiting(
+                        $"The merge strategy is manual: AIDE never merges. Merge {request.Branch} into {settings.DefaultBranch} in the local repository.", refused: false);
+                }
+
+                if (request.OnMerged is { } recordMerge)
+                {
+                    await recordMerge(mergedBySomeone, cancellationToken);
+                }
+
+                await workingCopies.CreateTagAsync(
+                    id, request.Tag, mergedBySomeone, ReleaseRules.TagMessage(request.ProjectName, request.Tag, request.Version), cancellationToken);
+                return ReleaseOutcome.Released(mergedBySomeone, request.Tag, alreadyTagged: false) with { MergedExternally = true };
             }
 
             var merged = await workingCopies.MergeIntoDefaultAsync(

@@ -21,8 +21,8 @@ public class EnumStringsTests
         Assert.Equal(["refinement", "specification", "planning", "execution", "review", "release"], EnumStrings.Values<Phase>());
 
     [Fact]
-    public void S5_Project_status_values() =>
-        Assert.Equal(["active", "building", "reviewing", "releasing", "released", "rolled_back"], EnumStrings.Values<ProjectStatus>());
+    public void S5_FR65_Project_status_values() =>
+        Assert.Equal(["active", "building", "reviewing", "releasing", "released", "rolled_back", "awaiting_merge"], EnumStrings.Values<ProjectStatus>());
 
     [Fact]
     public void S5_Gate_values()
@@ -162,6 +162,14 @@ public class ErrorCodesTests
         Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.MissingSections));
         Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.InvalidOutput));
         Assert.All(ErrorCodes.Guardian.All, c => Assert.Null(ErrorCodes.StatusCodeFor(c)));
+    }
+
+    [Fact]
+    public void FR65_MERGE_TIMEOUT_and_PR_CLOSED_are_release_failure_codes_not_http_errors()
+    {
+        Assert.Equal(("MERGE_TIMEOUT", "PR_CLOSED"), (ErrorCodes.MergeTimeout, ErrorCodes.PrClosed));
+        Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.MergeTimeout));
+        Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.PrClosed));
     }
 }
 

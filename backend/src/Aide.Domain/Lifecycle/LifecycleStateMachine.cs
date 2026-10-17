@@ -26,6 +26,8 @@ public static class LifecycleStateMachine
             TransitionKind.ReleaseNoop => ReleaseNoop(state, request),
             TransitionKind.ReleaseCompleted => ReleaseCompleted(state, request),
             TransitionKind.NewVersion => NewVersion(state, request, snapshot),
+            TransitionKind.ReleaseAwaitingMerge => ReleaseStatusChange(state, request, ProjectStatus.Releasing, ProjectStatus.AwaitingMerge, "Release awaiting merge"),
+            TransitionKind.ReleaseMergeAbandoned => ReleaseStatusChange(state, request, ProjectStatus.AwaitingMerge, ProjectStatus.Releasing, "Awaited merge abandoned"),
             _ => throw new ArgumentOutOfRangeException(nameof(request), request.Kind, null),
         };
     }
@@ -214,15 +216,37 @@ public static class LifecycleStateMachine
         return Success(state, Phase.Release, state.Status, state.Version, request, "No-op");
     }
 
+    /// <summary>
+    /// The release job (from <c>releasing</c>) or the merge poll (from <c>awaiting_merge</c>, FR-65) finished: status
+    /// <c>released</c>, checkpoint unchanged.
+    /// </summary>
     private static Result<PhaseTransition> ReleaseCompleted(LifecycleState state, TransitionRequest request)
     {
-        if (state.Phase != Phase.Release || state.Status != ProjectStatus.Releasing)
+        if (state.Phase != Phase.Release || state.Status is not (ProjectStatus.Releasing or ProjectStatus.AwaitingMerge))
         {
             return Result.Failure<PhaseTransition>(new DomainError(ErrorCodes.NotReleasing, "The project is not releasing."));
         }
 
         // §4.10 (amends §4.1): release completion no longer creates a checkpoint.
         return Success(state, Phase.Release, ProjectStatus.Released, state.Version, request, "Release completed");
+    }
+
+    /// <summary>FR-65: a status-only move within release (<paramref name="from"/> → <paramref name="to"/>), checkpoint unchanged.</summary>
+    private static Result<PhaseTransition> ReleaseStatusChange(LifecycleState state, TransitionRequest request, ProjectStatus from, ProjectStatus to, string defaultReason)
+    {
+        if (request.TargetPhase is { } target && target != Phase.Release)
+        {
+            return WrongPhase("Awaiting a release merge stays in the release phase.");
+        }
+
+        if (state.Phase != Phase.Release || state.Status != from)
+        {
+            return Result.Failure<PhaseTransition>(new DomainError(
+                ErrorCodes.NotReleasing,
+                $"The project is in {state.Phase.ToWire()} with status {state.Status.ToWire()}, not release with status {from.ToWire()}."));
+        }
+
+        return Success(state, Phase.Release, to, state.Version, request, defaultReason);
     }
 
     /// <summary>

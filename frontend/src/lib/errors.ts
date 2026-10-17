@@ -73,6 +73,10 @@ export const errorMessages = {
   // Import an existing repository (FR-73)
   TAG_NOT_FOUND: "That tag isn't in the repository. Pick another released version, or choose Never released.",
   RELEASE_CANCELLED: "A rollback cancelled this release before it ran.",
+  // Recorded on a release attempt that was awaiting its merge (FR-65, §4.14)
+  PR_CLOSED: "The pull request was closed without merging. Reopen it on GitHub, then retry.",
+  MERGE_TIMEOUT:
+    "The pull request wasn't merged within 14 days, so AIDE stopped waiting. Merge it on GitHub or fix what blocks it, then retry the release.",
   // Approval links
   LINK_EXPIRED: "This approval link has expired.",
   LINK_USED: "This approval link has already been used.",
@@ -203,6 +207,16 @@ export const contextualErrorMessages = {
       "Git or GitHub refused the merge, tag or push. Check the repository access and the project branch, then retry the release.",
     RELEASE_CANCELLED:
       "A rollback cancelled this release before it ran. Retry the release once the project is ready again.",
+  },
+  /** PATCH /api/projects/:id/settings/git — the release settings: merge strategy and tag prefix (FR-64, FR-65, §4.10). */
+  releaseSettings: {
+    CONFLICT:
+      "The tag prefix can't change while a release is in progress or awaiting its merge on GitHub. Try again once the release finishes.",
+    FORBIDDEN: "Only project Owners can change the release settings.",
+  },
+  /** GET /api/projects/:id/git/merge-readiness (FR-84). */
+  mergeReadiness: {
+    WRONG_PHASE: "Merge readiness is checked once the project reaches Review, and until it's released.",
   },
   /** POST /api/projects/:id/versions — Start new version (FR-60, FR-61). */
   startVersion: {
@@ -476,7 +490,10 @@ export const rollbackBlockedMessages = {
   versionReleased:
     "This version is released and closed, so it can't be rolled back. Start a new version to make changes.",
   releasePartiallyApplied:
-    "A rollback isn't possible because the release was partially applied (merged or tagged, but not finished). Retry the release first.",
+    "A rollback isn't possible because the release is partially applied: it's awaiting its merge on GitHub, or it was merged or tagged but didn't finish. Merge or close the pull request, or retry the release, first.",
+  /** Shown before asking: the release is awaiting its merge on GitHub (FR-65; the API says release_partially_applied). */
+  awaitingMerge:
+    "A rollback isn't possible while the release is awaiting its merge on GitHub (the release is partially applied). Merge or close the pull request first.",
   releaseRunning:
     "A rollback isn't possible while a release is merging and tagging. Wait for it to finish, then try again.",
 } as const;
@@ -537,6 +554,12 @@ function waitCopy(seconds: number): string {
   return `${String(Math.ceil(seconds / 60))} minutes`;
 }
 
+/**
+ * 501 NOT_IMPLEMENTED: a contract stub whose backend hasn't landed yet (ApiProblems.NotImplementedCode; not a domain
+ * code, so it isn't in `errorMessages` and maps by status).
+ */
+export const notImplementedMessage = "This isn't available yet. It arrives in a later AIDE update.";
+
 /** User-facing copy for any thrown error; `context` selects overrides from `contextualErrorMessages`. */
 export function errorMessage(error: unknown, context?: ErrorContext): string {
   if (error instanceof ApiError) {
@@ -561,6 +584,9 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
     }
     if (error.errorCode) {
       return messageFor(error.errorCode, context);
+    }
+    if (error.status === 501) {
+      return notImplementedMessage;
     }
     return "Something went wrong on our side. Try again.";
   }

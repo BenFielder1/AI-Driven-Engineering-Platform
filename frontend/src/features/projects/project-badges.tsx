@@ -9,6 +9,8 @@ const statusTones: Record<ProjectStatus, StatusTone> = {
   building: 'info',
   reviewing: 'warning',
   releasing: 'warning',
+  // FR-65: waiting on a merge on GitHub (the merge poll is running).
+  awaiting_merge: 'warning',
   released: 'success',
   rolled_back: 'destructive',
 }
@@ -16,7 +18,7 @@ const statusTones: Record<ProjectStatus, StatusTone> = {
 /** The project status as a StatusBadge (SPEC §7.1); running states pulse. */
 export function StatusBadge({ status }: { status: ProjectStatus }) {
   return (
-    <SharedStatusBadge tone={statusTones[status]} pulse={status === 'building' || status === 'reviewing' || status === 'releasing'}>
+    <SharedStatusBadge tone={statusTones[status]} pulse={status === 'building' || status === 'reviewing' || status === 'releasing' || status === 'awaiting_merge'}>
       {statusLabels[status]}
     </SharedStatusBadge>
   )

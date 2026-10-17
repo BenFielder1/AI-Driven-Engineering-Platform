@@ -36,7 +36,10 @@ internal static class ProjectMapping
     /// <param name="branchName">The working branch of the project's current release version (§4.10), if recorded.</param>
     /// <param name="appInstalledOnRepo">FR-83: whether the App can access a PAT project's repo (<c>null</c>: unknown).</param>
     /// <param name="canSwitchToApp">FR-83: the App can access the repo and the caller is an Owner.</param>
-    public static GitSettingsDto ToDto(ProjectGitSettings s, string? branchName, bool? appInstalledOnRepo = null, bool canSwitchToApp = false) =>
+    /// <param name="mergeStrategy">FR-65: the project's merge strategy.</param>
+    /// <param name="tagPrefix">§4.10: the project's tag prefix.</param>
+    public static GitSettingsDto ToDto(
+        ProjectGitSettings s, string? branchName, MergeStrategy mergeStrategy, string tagPrefix, bool? appInstalledOnRepo = null, bool canSwitchToApp = false) =>
         new(
             s.Provider,
             s.RepoUrl,
@@ -48,7 +51,9 @@ internal static class ProjectMapping
             s.RepoId,
             s.RepoFullName,
             appInstalledOnRepo,
-            canSwitchToApp);
+            canSwitchToApp,
+            mergeStrategy,
+            tagPrefix);
 
     /// <param name="s">The project's LLM settings.</param>
     /// <param name="catalog">The system LLM configuration.</param>

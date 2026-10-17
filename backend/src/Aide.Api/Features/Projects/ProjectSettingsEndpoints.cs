@@ -41,9 +41,13 @@ public static partial class ProjectSettingsEndpoints
 
         group.MapPatch("/git", UpdateGitSettings)
             .WithName("UpdateGitSettings")
-            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL.")
+            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress).")
             .Produces<GitSettingsDto>()
-            .ProducesValidationProblem();
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .WithResponseDescriptions(
+                (StatusCodes.Status400BadRequest, "VALIDATION: invalid Git settings or tag prefix."),
+                (StatusCodes.Status409Conflict, "CONFLICT: the tag prefix can't change while a release is in progress or awaiting its merge, or a concurrent change."));
 
         group.MapPost("/git/switch-to-app", SwitchGitToApp)
             .WithName("SwitchGitToApp")
@@ -111,7 +115,7 @@ public static partial class ProjectSettingsEndpoints
         }
 
         return TypedResults.Ok(new ProjectSettingsDto(
-            ProjectMapping.ToDto(git, await CurrentBranchAsync(db, id, cancellationToken), appInstalled, appInstalled == true),
+            await GitDtoAsync(db, git, appInstalled, appInstalled == true, cancellationToken),
             ProjectMapping.ToDto(llm, catalog, await LlmBindings.LoadAsync(db, llm, cancellationToken), LlmBindings.CanBind(grant.Value.ProjectRole)),
             ProjectMapping.ToDto(notifications)));
     }
@@ -159,13 +163,49 @@ public static partial class ProjectSettingsEndpoints
         var branch = request.DefaultBranch?.Trim() ?? settings.DefaultBranch;
         var validation = Validation.Combine(
             ProjectSettingsRules.ValidateProviderChange(settings.Provider, provider),
-            ProjectSettingsRules.ValidateGit(provider, repoUrl, branch, request.Token, request.ClearToken));
+            ProjectSettingsRules.ValidateGit(provider, repoUrl, branch, request.Token, request.ClearToken),
+            ProjectSettingsRules.ValidateTagPrefix(request.TagPrefix));
         if (validation.IsFailure)
         {
             return ApiProblems.Validation(validation.Error!);
         }
 
         var changes = new List<string>();
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+        if (project is null)
+        {
+            return ApiProblems.NotFound("The project was not found.");
+        }
+
+        // FR-65: the merge strategy and §4.10 tag prefix live on the project (xmin-guarded).
+        if (request.MergeStrategy is { } mergeStrategy && mergeStrategy != project.MergeStrategy)
+        {
+            project.MergeStrategy = mergeStrategy;
+            changes.Add("mergeStrategy");
+        }
+
+        if (request.TagPrefix is { } tagPrefix && tagPrefix != project.TagPrefix)
+        {
+            var development = await db.CurrentReleaseVersionAsync(id, cancellationToken);
+            var developmentStatus = development?.Status is ReleaseVersionStatus.InDevelopment or ReleaseVersionStatus.AwaitingMerge
+                ? development.Status
+                : (ReleaseVersionStatus?)null;
+            var releaseInProgress = await Release.ReleaseRecords.JobActiveAsync(db, id, cancellationToken)
+                || await db.Releases.AnyAsync(r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress, cancellationToken);
+            var allowed = ProjectSettingsRules.CanChangeTagPrefix(developmentStatus, releaseInProgress);
+            if (allowed.IsFailure)
+            {
+                return ApiProblems.FromError(allowed.Error!);
+            }
+
+            project.TagPrefix = tagPrefix;
+            if (development is not null && developmentStatus == ReleaseVersionStatus.InDevelopment)
+            {
+                development.TagPrefix = tagPrefix;
+            }
+
+            changes.Add("tagPrefix");
+        }
         var previousProvider = settings.Provider;
         var normalizedUrl = ProjectSettingsRules.NormalizeRepoUrl(provider, repoUrl);
         if (provider != settings.Provider)
@@ -223,7 +263,7 @@ public static partial class ProjectSettingsEndpoints
             changes.Add("token");
         }
 
-        if (changes.Count > 0 && await db.Projects.FirstOrDefaultAsync(p => p.Id == id, cancellationToken) is { } project)
+        if (changes.Count > 0)
         {
             // FR-36: with no PR recorded for the current plan (e.g. the job failed for a bad token, or the repository just
             // changed), new settings queue the pull request job again; RequestAsync applies the same rule as the retry
@@ -235,8 +275,14 @@ public static partial class ProjectSettingsEndpoints
             }
         }
 
+        if (changes.Contains("mergeStrategy") || changes.Contains("tagPrefix"))
+        {
+            project.UpdatedAt = now;
+        }
+
+        // A concurrent change to the project (xmin) becomes 409 CONFLICT in the exception handler.
         await SaveChangesAsync(db, id, "git", changes, currentUser, time, loggers, cancellationToken);
-        return TypedResults.Ok(ProjectMapping.ToDto(settings, await CurrentBranchAsync(db, id, cancellationToken)));
+        return TypedResults.Ok(await GitDtoAsync(db, settings, null, false, cancellationToken));
     }
 
     private static async Task<Results<Ok<LlmSettingsDto>, ValidationProblem, ProblemHttpResult>> UpdateLlmSettings(
@@ -449,6 +495,24 @@ public static partial class ProjectSettingsEndpoints
     }
 
     /// <summary>The working branch recorded on the project's current release version (§4.10).</summary>
+    /// <summary>The Git settings DTO with the project branch and the project's release settings (FR-65, §4.10).</summary>
+    private static async Task<GitSettingsDto> GitDtoAsync(
+        AideDbContext db, ProjectGitSettings settings, bool? appInstalledOnRepo, bool canSwitchToApp, CancellationToken cancellationToken)
+    {
+        var release = await db.Projects.AsNoTracking()
+            .Where(p => p.Id == settings.ProjectId)
+            .Select(p => new { p.MergeStrategy, p.TagPrefix })
+            .FirstOrDefaultAsync(cancellationToken);
+        var tracked = db.ChangeTracker.Entries<Project>().FirstOrDefault(e => e.Entity.Id == settings.ProjectId)?.Entity;
+        return ProjectMapping.ToDto(
+            settings,
+            await CurrentBranchAsync(db, settings.ProjectId, cancellationToken),
+            tracked?.MergeStrategy ?? release?.MergeStrategy ?? MergeStrategy.AideMerges,
+            tracked?.TagPrefix ?? release?.TagPrefix ?? ReleaseVersion.DefaultTagPrefix,
+            appInstalledOnRepo,
+            canSwitchToApp);
+    }
+
     private static async Task<string?> CurrentBranchAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken) =>
         await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken) is { } versionId
             ? await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == versionId).Select(v => v.BranchName).FirstOrDefaultAsync(cancellationToken)
@@ -498,7 +562,7 @@ public static partial class ProjectSettingsEndpoints
         settings.RepoUrl = null;
         settings.TokenEncrypted = null;
         await SaveChangesAsync(db, id, "git", ["provider", "installationId", "repoId", "repoFullName", "token"], currentUser, time, loggers, cancellationToken);
-        return TypedResults.Ok(ProjectMapping.ToDto(settings, await CurrentBranchAsync(db, id, cancellationToken)));
+        return TypedResults.Ok(await GitDtoAsync(db, settings, null, false, cancellationToken));
     }
 
     private static async Task<Results<Ok<GitTestResultDto>, ProblemHttpResult>> TestGitConnection(

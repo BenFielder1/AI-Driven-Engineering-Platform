@@ -205,6 +205,13 @@ public interface IWorkingCopies
     /// <summary>Whether commit <paramref name="ancestor"/> is <paramref name="descendant"/> or one of its ancestors (false if either is unknown).</summary>
     Task<bool> IsAncestorAsync(Guid projectId, string ancestor, string descendant, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// FR-65 (Local merged by someone else): the commit on <paramref name="defaultRef"/>'s first-parent history that brought
+    /// <paramref name="head"/> in — the oldest first-parent commit that contains it (the merge commit; <paramref name="head"/>
+    /// itself after a fast-forward); <c>null</c> when <paramref name="defaultRef"/> doesn't contain it.
+    /// </summary>
+    Task<string?> FindMergeCommitAsync(Guid projectId, string defaultRef, string head, CancellationToken cancellationToken);
+
     /// <summary>The local tag <paramref name="tag"/> with its (peeled) commit; <c>null</c> when it or the repository doesn't exist.</summary>
     Task<ReleaseTagRef?> TagAsync(Guid projectId, string tag, CancellationToken cancellationToken);
 
@@ -768,6 +775,65 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
         return WithLockAsync(projectId, async () =>
             (await RunAsync(PathFor(projectId), ["merge-base", "--is-ancestor", ancestor, descendant], cancellationToken, allowFailure: true)).Succeeded);
+    }
+
+    /// <summary>The longest first-parent history searched for the merge commit.</summary>
+    public const int MaxFirstParentCommits = 20_000;
+
+    public Task<string?> FindMergeCommitAsync(Guid projectId, string defaultRef, string head, CancellationToken cancellationToken)
+    {
+        RequireRevision(defaultRef);
+        RequireRevision(head);
+        if (!IsRepository(projectId))
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        return WithLockAsync(projectId, async () =>
+        {
+            var root = PathFor(projectId);
+            if (await ResolveCoreAsync(root, head, cancellationToken) is not { } headSha
+                || !(await RunAsync(root, ["merge-base", "--is-ancestor", headSha, defaultRef], cancellationToken, allowFailure: true)).Succeeded)
+            {
+                return null;
+            }
+
+            // The first-parent chain of the default branch down to (not into) the head's history, newest first. Containing the
+            // head is monotonic along it, so a binary search finds the oldest commit that contains it: the merge.
+            var listed = await RunAsync(
+                root,
+                ["rev-list", "--first-parent", $"--max-count={MaxFirstParentCommits.ToString(System.Globalization.CultureInfo.InvariantCulture)}", defaultRef, $"^{headSha}"],
+                cancellationToken);
+            var chain = listed.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (chain.Length == 0)
+            {
+                return headSha; // the default branch is at the head (fast-forward)
+            }
+
+            int low = 0, high = chain.Length - 1, oldest = -1;
+            while (low <= high)
+            {
+                var middle = low + ((high - low) / 2);
+                if ((await RunAsync(root, ["merge-base", "--is-ancestor", headSha, chain[middle]], cancellationToken, allowFailure: true)).Succeeded)
+                {
+                    oldest = middle;
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle - 1;
+                }
+            }
+
+            if (oldest < 0)
+            {
+                return headSha;
+            }
+
+            // A fast-forward put the head itself on the chain: its first child there contains it through its first parent.
+            var firstParent = await ResolveCoreAsync(root, $"{chain[oldest]}^1", cancellationToken);
+            return firstParent == headSha ? headSha : chain[oldest];
+        });
     }
 
     public Task<ReleaseTagRef?> TagAsync(Guid projectId, string tag, CancellationToken cancellationToken)

@@ -48,7 +48,7 @@ public static class RestoreRules
     public static Result<RestorePlan> Check(RestoreFacts facts)
     {
         ArgumentNullException.ThrowIfNull(facts);
-        if (facts.ProjectStatus == ProjectStatus.Releasing)
+        if (facts.ProjectStatus is ProjectStatus.Releasing or ProjectStatus.AwaitingMerge)
         {
             return NotAllowed(RestoreReasons.Releasing, "A release is in progress; versions can't be restored until it finishes.");
         }

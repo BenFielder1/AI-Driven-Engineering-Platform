@@ -51,6 +51,7 @@ export function DangerZoneTab({ project }: { project: Project }) {
         developmentVersion={project.developmentVersion}
         releasedVersion={project.releasedVersion}
         currentCheckpoint={project.checkpoint}
+        awaitingMerge={project.status === 'awaiting_merge'}
       />
 
       <section aria-labelledby="delete-title" className="rounded-lg border border-destructive p-4">

@@ -11,6 +11,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
+using Aide.Domain.Releases;
 using Aide.Domain.RepoTools;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
@@ -209,7 +210,11 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         Assert.Equal(["CSV export"], cycle1.MissingFeatures);
         Assert.Equal(["auth"], cycle1.DriftAreas.Select(d => d.Area));
         Assert.Equal([("FR-3", ReviewCategory.FeatureCoverage)], cycle1.Regressions.Select(r => (r.RequirementId, r.Category)));
-        Assert.Equal("success", cycle1.ExternalChecks!.Value.GetProperty("checkRuns").GetString());
+        Assert.Equal(
+            [new ExternalCheckDto("ci / test", CheckRunConclusion.Failure, true, "https://github.com/acme/widgets/runs/1")],
+            cycle1.ExternalChecks!.Checks);
+        Assert.Equal((90, false), (cycle1.ExternalChecks.ChecksWaitedSeconds, cycle1.ExternalChecks.ChecksTimedOut));
+        Assert.Null(cycle1.ExternalChecks.Preview);
         Assert.Equal(new ReportPlanDto(seeded.FixPlans[0].Id, 1, ArtifactStatus.Locked), cycle1.OptimizationPlan);
         Assert.Equal(seeded.FixPlans[0].Id, cycle1.ExecutionRunId);
         Assert.Null(cycle1.EscalationReason);
@@ -404,7 +409,7 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
             AgentRunId = run.Id,
             OptimizationPlanArtifactId = planId,
             Regressions = """[{"requirementId":"FR-3","category":"feature_coverage","description":"Export broke","evidence":"src/export.js"}]""",
-            ExternalChecks = """{"checkRuns":"success"}""",
+            ExternalChecks = """{"checks":[{"name":"ci / test","conclusion":"failure","required":true,"detailsUrl":"https://github.com/acme/widgets/runs/1"}],"checksWaitedSeconds":90,"checksTimedOut":false,"preview":null}""",
             CreatedAt = at,
         };
         db.AgentRuns.Add(run);

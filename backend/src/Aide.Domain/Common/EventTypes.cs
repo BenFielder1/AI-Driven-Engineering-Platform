@@ -162,6 +162,20 @@ public static class EventTypes
     public const string ReleaseFailed = "RELEASE_FAILED";
 
     /// <summary>
+    /// FR-65: the release merge was refused (branch protection, required reviews or checks, missing permission) or the merge
+    /// strategy is <c>manual</c>: <c>{releaseId, releaseVersionId, version, checkpoint, tag, attempt, pullRequestUrl,
+    /// mergeStrategy, awaitingMerge: true, reasons[{code, message}]}</c>. Owners are notified with the PR link and the reasons; the merge poll waits (§4.14).
+    /// </summary>
+    public const string ReleaseAwaitingMerge = "RELEASE_AWAITING_MERGE";
+
+    /// <summary>
+    /// FR-65, §4.14: the merge poll saw the PR merged on GitHub (or the Local branch merged by someone else):
+    /// <c>{releaseId, releaseVersionId, version, checkpoint, tag, mergeCommitSha, githubReleaseUrl, pullRequestUrl}</c>. Followed by
+    /// <see cref="ReleaseCompleted"/> once tagged.
+    /// </summary>
+    public const string ReleaseMergedExternally = "RELEASE_MERGED_EXTERNALLY";
+
+    /// <summary>
     /// FR-60: an Owner started a new release version: <c>{releaseVersionId, version, baseTag, baseCommitSha, branchName,
     /// presetId, request}</c> (the request is truncated). The project is then in refinement at checkpoint 1.
     /// </summary>
@@ -183,6 +197,13 @@ public static class EventTypes
     /// </summary>
     public const string DeadLetterRetried = "DEAD_LETTER_RETRIED";
 
+    /// <summary>
+    /// FR-84: merge readiness of the version's PR was checked (when the pre-release gate was created, or on demand):
+    /// <c>{releaseVersionId, readiness}</c> with the readiness as the API returns it. The latest one is what
+    /// <c>GET /git/merge-readiness</c> returns while it is fresh. Uncategorised: an operations record, not an activity entry.
+    /// </summary>
+    public const string MergeReadinessChecked = "MERGE_READINESS_CHECKED";
+
     private static readonly Dictionary<EventCategory, IReadOnlyList<string>> ByCategory = new()
     {
         [EventCategory.Transition] = [PhaseChanged],
@@ -191,7 +212,7 @@ public static class EventTypes
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
-        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, VersionStarted],
+        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted],
         [EventCategory.Rollback] = [RollbackCompleted],
         [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared],
         [EventCategory.Integrity] = [IntegrityAlert],

@@ -143,7 +143,7 @@ describe('FR-54: next action', () => {
     const failed = state({
       phase: 'release',
       status: 'releasing',
-      latestRelease: { id: 'r1', releaseVersionId: 'rv1', checkpoint: 6, status: 'failed', tag: 'v6', startedAt: '2026-09-01T10:00:00Z' },
+      latestRelease: { id: 'r1', releaseVersionId: 'rv1', checkpoint: 6, status: 'failed', tag: 'v6', startedAt: '2026-09-01T10:00:00Z', pullRequestUrl: null, githubReleaseUrl: null, awaitingMergeSince: null, mergeReasons: null, mergeStrategy: 'aide_merges' },
     })
     expect(nextAction(failed, as('owner'))).toMatchObject({ key: 'retry_release', to: '/projects/$projectId/release' })
     expect(nextAction(failed, as('contributor'))?.disabledReason).toBe('Waiting for a project Owner to retry the release.')

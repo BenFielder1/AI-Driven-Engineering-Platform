@@ -49,6 +49,8 @@ export const projectKeys = {
   execution: (id: string) => [...projectKeys.detail(id), 'execution'] as const,
   /** GET /git/pull-request: the recorded PR and its branch comparison (FR-36; see features/git/pull-request-api.ts). */
   pullRequest: (id: string) => [...projectKeys.detail(id), 'git', 'pull-request'] as const,
+  /** GET /git/merge-readiness: whether AIDE can merge the version's PR, with its checks (FR-84; see features/release/merge-readiness-api.ts). */
+  mergeReadiness: (id: string) => [...projectKeys.detail(id), 'git', 'merge-readiness'] as const,
   /** Every compliance query of the project: latest report, trend and drift (FR-38–FR-41; see features/review/review-api.ts). */
   review: (id: string) => [...projectKeys.detail(id), 'review'] as const,
   /** GET /releases: every release attempt, newest first (FR-42, FR-43; see features/release/release-api.ts). */

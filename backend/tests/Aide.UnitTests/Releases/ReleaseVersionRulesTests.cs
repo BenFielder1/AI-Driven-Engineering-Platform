@@ -231,7 +231,8 @@ public class ReleaseVersionRulesTests
     {
         var allowed = (from, to) is (ReleaseVersionStatus.InDevelopment, ReleaseVersionStatus.AwaitingMerge)
             or (ReleaseVersionStatus.InDevelopment, ReleaseVersionStatus.Released)
-            or (ReleaseVersionStatus.AwaitingMerge, ReleaseVersionStatus.Released);
+            or (ReleaseVersionStatus.AwaitingMerge, ReleaseVersionStatus.Released)
+            or (ReleaseVersionStatus.AwaitingMerge, ReleaseVersionStatus.InDevelopment); // FR-65: PR_CLOSED / MERGE_TIMEOUT
 
         Assert.Equal(allowed, ReleaseVersionRules.CanTransition(from, to));
     }

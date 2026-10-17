@@ -139,6 +139,12 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
                 stepNumber = blockedStep.StepNumber,
             };
         db.AddEvent(EventTypes.GateCreated, project.Id, payload, actor, now);
+        if (type == GateType.PreRelease)
+        {
+            // FR-84: merge readiness is checked when the pre-release gate is created (stored for the gate and Release page).
+            jobs.Enqueue(JobTypes.MergeReadiness, new Features.Git.MergeReadinessJobPayload(project.Id, gate.Id), project.Id, now);
+        }
+
         return gate;
     }
 }

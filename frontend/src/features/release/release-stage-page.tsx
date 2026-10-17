@@ -10,6 +10,9 @@ import { IntegrationSlot } from '../stages/integration-slot'
 import { StageGates } from '../stages/stage-gates'
 import { StageHeader } from '../stages/stage-header'
 import { stageGates } from '../stages/stage-model'
+import { GitHubReleaseSection } from './github-release-section'
+import { MergeReadinessPanel, MergeReadinessSummary } from './merge-readiness-panel'
+import { mergeReadinessApplies } from './merge-readiness-rules'
 import { ReleaseHistory, ReleasePanel } from './release-panel'
 import { useReleases } from './release-api'
 
@@ -31,7 +34,7 @@ function PastReleases({ projectId, releaseVersionId }: { projectId: string; rele
 
 /**
  * /projects/:id/release (FR-55 stage page): the pre-release gate (decided in place), the release panel (FR-42, FR-43,
- * FR-64: attempts, tag, pull request) and, for Owners, Start new version
+ * FR-64, FR-65: attempts, awaiting merge, tag, pull request), merge readiness (FR-84), the GitHub Release link and, for Owners, Start new version
  * (FR-60; disabled with the reason until the project is released and merged). Before the project reaches Release, an
  * empty state says what has to happen first. A past version (FR-62) shows its summary and release attempts, read-only.
  */
@@ -81,7 +84,12 @@ export function ReleaseStagePage() {
         awaitingApproval={s.phase === 'release' && s.pendingGates.some((g) => g.type === 'pre_release')}
         actions={can('startVersion') ? <StartVersionButton projectId={project.id} state={s} /> : undefined}
       />
-      <StageGates types={stageGates.release} />
+      <StageGates
+        types={stageGates.release}
+        pendingDetails={(gate) =>
+          gate.type === 'pre_release' && mergeReadinessApplies(s) ? <MergeReadinessSummary projectId={project.id} /> : null
+        }
+      />
       {started ? (
         // The release panel holds the attempts, the tag and the pull request.
         <ReleasePanel projectId={project.id} state={s} canRelease={can('requestRelease')} />
@@ -93,16 +101,8 @@ export function ReleaseStagePage() {
           description="The release starts once review finds the build release-eligible and the project moves to Release."
         />
       )}
-      <IntegrationSlot
-        id="release-merge-readiness"
-        title="Merge readiness"
-        description="Whether the release pull request can merge (checks, reviews, conflicts) will show here once the GitHub integration reports it."
-      />
-      <IntegrationSlot
-        id="release-github-release"
-        title="GitHub Release"
-        description="The GitHub Release created for this version's tag will be linked here."
-      />
+      <MergeReadinessPanel projectId={project.id} state={s} />
+      <GitHubReleaseSection projectId={project.id} state={s} />
       <IntegrationSlot
         id="release-production-deployment"
         title="Production deployment"

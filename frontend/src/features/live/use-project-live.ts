@@ -26,6 +26,8 @@ export const NOTIFYING_EVENT_TYPES: ReadonlySet<string> = new Set([
   'REVIEW_COMPLETED',
   'RELEASE_COMPLETED',
   'RELEASE_FAILED',
+  // FR-65, FR-92: Owners are told when a release waits for a merge on GitHub.
+  'RELEASE_AWAITING_MERGE',
   'ROLLBACK_COMPLETED',
 ])
 

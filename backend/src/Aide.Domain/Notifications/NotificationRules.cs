@@ -34,6 +34,10 @@ public static class NotificationRules
         EventTypes.ReviewCompleted => NotificationType.ReviewCompleted,
         EventTypes.ReleaseCompleted => NotificationType.ReleaseCompleted,
         EventTypes.ReleaseFailed => NotificationType.ReleaseFailed,
+
+        // FR-65: Owners are told the release awaits a merge on GitHub (PR link and reasons). Until FR-92 adds a dedicated
+        // type, it travels as release_failed with its own wording (NotificationFacts.AwaitingMerge).
+        EventTypes.ReleaseAwaitingMerge => NotificationType.ReleaseFailed,
         EventTypes.RollbackCompleted => NotificationType.Rollback,
         _ => null,
     };

@@ -131,7 +131,9 @@ public static class ReleaseRecords
             cancellationToken);
     }
 
-    public static ReleaseDto ToDto(ReleaseEntity release)
+    /// <param name="release">The release attempt.</param>
+    /// <param name="mergeStrategy">The project's merge strategy (FR-65).</param>
+    public static ReleaseDto ToDto(ReleaseEntity release, MergeStrategy mergeStrategy)
     {
         ArgumentNullException.ThrowIfNull(release);
         return new ReleaseDto(
@@ -147,7 +149,39 @@ public static class ReleaseRecords
             release.ErrorMessage,
             release.Attempt,
             release.CreatedAt,
-            release.CompletedAt);
+            release.CompletedAt,
+            release.GithubReleaseUrl,
+            release.AwaitingMergeSince,
+            Git.MergeReasonsJson.Read(release.MergeReasons),
+            mergeStrategy);
+    }
+
+    /// <summary>The latest attempt for the project state (FR-42, FR-43, FR-65).</summary>
+    public static ReleaseSummaryDto ToSummary(ReleaseEntity release, MergeStrategy mergeStrategy)
+    {
+        ArgumentNullException.ThrowIfNull(release);
+        return new ReleaseSummaryDto(
+            release.Id,
+            release.ReleaseVersionId,
+            release.Checkpoint,
+            release.Status,
+            release.Tag,
+            release.CreatedAt,
+            release.PrUrl,
+            release.GithubReleaseUrl,
+            release.AwaitingMergeSince,
+            Git.MergeReasonsJson.Read(release.MergeReasons),
+            mergeStrategy);
+    }
+
+    /// <summary>The project's merge strategy (FR-65; <c>aide_merges</c> when the project is missing).</summary>
+    public static async Task<MergeStrategy> MergeStrategyAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return await db.Projects.AsNoTracking()
+            .Where(p => p.Id == projectId)
+            .Select(p => (MergeStrategy?)p.MergeStrategy)
+            .FirstOrDefaultAsync(cancellationToken) ?? MergeStrategy.AideMerges;
     }
 }
 
@@ -204,7 +238,8 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, T
             .OrderByDescending(r => r.CreatedAt)
             .ThenByDescending(r => r.Id)
             .ToListAsync(cancellationToken);
-        return [.. releases.Select(ReleaseRecords.ToDto)];
+        var strategy = await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken);
+        return [.. releases.Select(r => ReleaseRecords.ToDto(r, strategy))];
     }
 
     /// <summary>The latest release attempt, or <c>null</c> before the first release.</summary>
@@ -215,7 +250,7 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, T
             .OrderByDescending(r => r.CreatedAt)
             .ThenByDescending(r => r.Id)
             .FirstOrDefaultAsync(cancellationToken);
-        return release is null ? null : ReleaseRecords.ToDto(release);
+        return release is null ? null : ReleaseRecords.ToDto(release, await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken));
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: release at checkpoint {Checkpoint} retried (attempt {Attempt})")]

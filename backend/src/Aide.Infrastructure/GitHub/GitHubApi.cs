@@ -142,8 +142,10 @@ public sealed record GitHubUserTokens(string AccessToken, DateTimeOffset? Access
 /// never appear in exceptions or logs. Rate limits throw <see cref="GitHubRateLimitedException"/>; other failures
 /// <see cref="GitHubApiException"/>.
 /// </summary>
-public sealed class GitHubApi(IHttpClientFactory clients, TimeProvider time)
+public sealed partial class GitHubApi(IHttpClientFactory clients, TimeProvider time)
 {
+    private IHttpClientFactory Clients => clients;
+
     /// <summary>The HttpClient for https://github.com/ (OAuth token refresh).</summary>
     public const string WebHttpClientName = "github-web";
 

@@ -35,6 +35,15 @@ public static class JobTypes
     public const string Release = "release";
 
     /// <summary>
+    /// FR-65, §4.14: polls the version's PR of an <c>awaiting_merge</c> release attempt (every 2 minutes for an hour, then
+    /// every 10 minutes, up to 14 days) by deferring itself between polls; completes the release when it is merged.
+    /// </summary>
+    public const string MergePoll = "merge_poll";
+
+    /// <summary>FR-84: checks merge readiness of the version's PR when the pre-release gate is created (stored for the gate).</summary>
+    public const string MergeReadiness = "merge_readiness";
+
+    /// <summary>
     /// FR-70: the Repository Analyst summarises the codebase at a version's base commit into a locked
     /// <c>codebase_summary</c>. Queued when a version with existing code starts: a new version (FR-60), an import's first
     /// version (FR-73) and a scratch project on a repository that already has code (FR-86).

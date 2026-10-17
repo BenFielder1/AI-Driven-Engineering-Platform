@@ -331,7 +331,9 @@ function describeReview(type: string, payload: Payload): string | null {
       ].filter((p): p is string => p !== null);
       const base =
         parts.length === 0 ? `${review} completed` : `${review} completed: ${parts.join(", ")}`;
-      return reason ? `${base} (${escalationReasonLabels[reason].toLowerCase()})` : base;
+      const withReason = reason ? `${base} (${escalationReasonLabels[reason].toLowerCase()})` : base;
+      // FR-85: review stopped waiting for pending checks.
+      return payload.checksTimedOut === true ? `${withReason}; stopped waiting for checks` : withReason;
     }
     default:
       return null;
@@ -352,9 +354,41 @@ function describeRelease(type: string, payload: Payload): string | null {
         ? `${release} started (attempt ${String(attempt)})`
         : `${release} started`;
     }
-    case "RELEASE_COMPLETED":
-      return tag ? `Released: merged and tagged ${tag}` : "Released: merged and tagged";
+    case "RELEASE_COMPLETED": {
+      const how = payload.mergedExternally === true ? "merged on GitHub and tagged" : "merged and tagged";
+      return tag ? `Released: ${how} ${tag}` : `Released: ${how}`;
+    }
+    case "RELEASE_AWAITING_MERGE": {
+      const reasons = Array.isArray(payload.reasons) ? payload.reasons : [];
+      const first: unknown = reasons[0];
+      const message =
+        typeof first === "object" && first !== null && "message" in first && typeof first.message === "string"
+          ? first.message
+          : null;
+      const base = `${release} is waiting for its pull request to be merged on GitHub`;
+      if (message === null) {
+        return base;
+      }
+      return reasons.length > 1 ? `${base}: ${message} (+${String(reasons.length - 1)} more)` : `${base}: ${message}`;
+    }
+    case "MERGE_READINESS_CHECKED": {
+      if (payload.willAutoMerge === true) {
+        return "Merge readiness checked: AIDE will merge automatically";
+      }
+      if (payload.willAutoMerge === false) {
+        return "Merge readiness checked: a merge on GitHub will be needed";
+      }
+      return "Merge readiness checked";
+    }
+    case "RELEASE_MERGED_EXTERNALLY":
+      return `${release}: the pull request was merged on GitHub`;
     case "RELEASE_FAILED": {
+      if (str(payload, "errorCode") === "PR_CLOSED") {
+        return `${release} failed: the pull request was closed without merging`;
+      }
+      if (str(payload, "errorCode") === "MERGE_TIMEOUT") {
+        return `${release} failed: the pull request wasn't merged within 14 days`;
+      }
       if (str(payload, "errorCode") === "MERGE_CONFLICT") {
         const files = payload.conflictingFiles;
         const n = Array.isArray(files) ? files.length : 0;
@@ -437,6 +471,9 @@ export function describeActivity(
     case "RELEASE_STARTED":
     case "RELEASE_COMPLETED":
     case "RELEASE_FAILED":
+    case "RELEASE_AWAITING_MERGE":
+    case "RELEASE_MERGED_EXTERNALLY":
+    case "MERGE_READINESS_CHECKED":
       text = describeRelease(type, payload);
       break;
     case "RUN_STARTED":

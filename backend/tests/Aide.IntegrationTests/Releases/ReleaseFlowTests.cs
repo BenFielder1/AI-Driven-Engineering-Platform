@@ -415,19 +415,21 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     {
         using var remote = await BareRemote.CreateAsync(Ct);
         var branch = new string[1];
+        string? mergedAs = null;
         var api = new FakeGitHubApi()
             .On(HttpMethod.Get, Pulls, HttpStatusCode.OK, "[]")
             .On(HttpMethod.Post, Pulls, HttpStatusCode.Created, $$"""{"number":42,"html_url":"{{PrUrl}}"}""")
             .On(HttpMethod.Get, Pull, _ => (HttpStatusCode.OK, JsonSerializer.Serialize(new
             {
                 number = 42,
-                state = "open",
-                merged = false,
+                state = mergedAs is null ? "open" : "closed",
+                merged = mergedAs is not null,
+                merge_commit_sha = mergedAs,
                 mergeable = true,
                 html_url = PrUrl,
                 head = new { sha = BareSha(remote, $"refs/heads/{branch[0]}") },
             })))
-            .On(HttpMethod.Put, Pull + "/merge", _ => (HttpStatusCode.OK, JsonSerializer.Serialize(new { sha = MergeInBare(remote, branch[0]), merged = true })));
+            .On(HttpMethod.Put, Pull + "/merge", _ => (HttpStatusCode.OK, JsonSerializer.Serialize(new { sha = mergedAs = MergeInBare(remote, branch[0]), merged = true })));
         await using var app = remote.App(ReleaseEligible(), api, out var git);
         using var fixture = await ProjectApi.FixtureAsync(app, git: new { provider = "github_pat", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
         var id = fixture.Project.Id;
@@ -467,6 +469,10 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         await UnrecordAsync(app, id);
         await RedeliverAsync(app, Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Release));
         Assert.Equal(1, api.Count(HttpMethod.Put, Pull + "/merge"));
+        var redelivered = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Release);
+        Assert.True(redelivered.Status == JobStatus.Succeeded, redelivered.LastError);
+        var again = await LatestAsync(fixture.Viewer.Client, id);
+        Assert.True(again.Status == ReleaseStatus.Succeeded, $"{again.Status} {again.ErrorCode} {again.ErrorMessage}");
         Assert.Equal(ProjectStatus.Released, (await LifecycleSeed.ProjectAsync(app, id)).Status);
     }
 
@@ -558,7 +564,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     private static List<string?> Details(JsonElement problem) => [.. problem.GetProperty("details").EnumerateArray().Select(d => d.GetString())];
 
     /// <summary>A Local project (advisory, checkpoint 4) whose 2-step plan ran, opened its PR and passed review: a pre_release gate is pending.</summary>
-    private static async Task<ProjectFixture> ReleasableAsync(WebApplicationFactory<Program> app, string? initialVersion = null)
+    internal static async Task<ProjectFixture> ReleasableAsync(WebApplicationFactory<Program> app, string? initialVersion = null)
     {
         var fixture = await ProjectApi.FixtureAsync(app, initialVersion: initialVersion);
         await StartExecutionAsync(app, fixture);
@@ -567,7 +573,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         return fixture;
     }
 
-    private static async Task StartExecutionAsync(WebApplicationFactory<Program> app, ProjectFixture fixture)
+    internal static async Task StartExecutionAsync(WebApplicationFactory<Program> app, ProjectFixture fixture)
     {
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory);
@@ -592,7 +598,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
             await fixture.Contributor.Client.PostAsJsonAsync($"{fixture.Path}/execution/start", new { }, Ct), HttpStatusCode.Accepted);
     }
 
-    private static async Task ApproveReleaseGateAsync(WebApplicationFactory<Program> app, ProjectFixture fixture)
+    internal static async Task ApproveReleaseGateAsync(WebApplicationFactory<Program> app, ProjectFixture fixture)
     {
         var gate = Assert.Single(await LifecycleSeed.GatesAsync(app, fixture.Project.Id), g => g.Status == GateStatus.Pending);
         Assert.Equal(GateType.PreRelease, gate.Type);
@@ -636,11 +642,11 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     private string WorkingCopy(Guid id) => Path.Combine(factory.WorkspacesRoot, id.ToString("D"));
 
     /// <summary>The commit <paramref name="revision"/> names in the bare repository.</summary>
-    private static string BareSha(BareRemote remote, string revision) =>
+    internal static string BareSha(BareRemote remote, string revision) =>
         TestGit.RunAsync(remote.BarePath, CancellationToken.None, "rev-parse", revision).GetAwaiter().GetResult();
 
     /// <summary>What GitHub's merge API does: a merge commit of the project branch on main, in the bare repository.</summary>
-    private static string MergeInBare(BareRemote remote, string branch)
+    internal static string MergeInBare(BareRemote remote, string branch)
     {
         var clone = Path.Combine(remote.Root, "merge-" + Guid.NewGuid().ToString("N"));
         Run(remote.Root, "clone", "-q", remote.BarePath, clone);
@@ -650,7 +656,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     }
 
     /// <summary>A commit on main in the bare repository that writes <paramref name="path"/>.</summary>
-    private static void CommitInBare(BareRemote remote, string path, string content)
+    internal static void CommitInBare(BareRemote remote, string path, string content)
     {
         var clone = Path.Combine(remote.Root, "edit-" + Guid.NewGuid().ToString("N"));
         Run(remote.Root, "clone", "-q", remote.BarePath, clone);
@@ -661,7 +667,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         Run(clone, "push", "-q", "origin", "main");
     }
 
-    private static string Run(string directory, params string[] arguments) =>
+    internal static string Run(string directory, params string[] arguments) =>
         TestGit.RunAsync(directory, CancellationToken.None, arguments).GetAwaiter().GetResult();
 
     private static Task<HttpResponseMessage> StartVersionAsync(HttpClient client, Guid id, string version) =>

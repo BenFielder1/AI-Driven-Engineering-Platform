@@ -175,3 +175,66 @@ describe('Review cycles (FR-56)', () => {
     expect(chart.querySelectorAll('circle[data-selected="true"]')).toHaveLength(1)
   })
 })
+
+describe('External checks in the cycle detail (FR-85)', () => {
+  it('FR85_a_failing_required_check_is_shown_with_its_link_and_the_wait', async () => {
+    const project = seedProjectAs('owner', (p) => {
+      seedReviewPhase(p)
+      seedComplianceReport(p, {
+        externalChecks: {
+          checks: [
+            { name: 'lint', conclusion: 'success', required: false, detailsUrl: null },
+            { name: 'ci / test', conclusion: 'failure', required: true, detailsUrl: 'https://github.com/acme/inventory/actions/runs/9' },
+          ],
+          checksWaitedSeconds: 240,
+          checksTimedOut: false,
+          preview: null,
+        },
+      })
+    })
+    await openReview(project)
+
+    const section = await screen.findByRole('region', { name: 'External checks' })
+    expect(within(section).getByText('1 required check failed')).toBeInTheDocument()
+    expect(within(section).getByText('Waited 4 min for checks')).toBeInTheDocument()
+    const [first] = within(within(section).getByRole('list', { name: 'External checks' })).getAllByRole('listitem')
+    expect(first).toHaveAccessibleName('ci / test')
+    expect(first).toHaveTextContent('Failed')
+    expect(first).toHaveTextContent('Required')
+    expect(within(screen.getByRole('listitem', { name: 'ci / test' })).getByRole('link', { name: /Details of ci \/ test/ })).toHaveAttribute(
+      'href',
+      'https://github.com/acme/inventory/actions/runs/9',
+    )
+    expect(within(section).getByTestId('report-preview-slot')).toBeInTheDocument()
+  })
+
+  it('FR85_timed_out_checks_show_a_warning', async () => {
+    const project = seedProjectAs('owner', (p) => {
+      seedReviewPhase(p)
+      seedComplianceReport(p, {
+        externalChecks: {
+          checks: [{ name: 'e2e', conclusion: null, required: true, detailsUrl: null }],
+          checksWaitedSeconds: 900,
+          checksTimedOut: true,
+          preview: null,
+        },
+      })
+    })
+    await openReview(project)
+
+    const section = await screen.findByRole('region', { name: 'External checks' })
+    expect(within(section).getByText('Review stopped waiting for checks')).toBeInTheDocument()
+    expect(within(section).getByText(/still pending after 15 min/)).toBeInTheDocument()
+    expect(within(section).getByRole('listitem', { name: 'e2e' })).toHaveTextContent('Pending')
+  })
+
+  it('FR85_no_external_checks_says_so', async () => {
+    const project = seedProjectAs('owner', (p) => {
+      seedReviewPhase(p)
+      seedComplianceReport(p)
+    })
+    await openReview(project)
+    const section = await screen.findByRole('region', { name: 'External checks' })
+    expect(within(section).getByText(/No external checks were collected/)).toBeInTheDocument()
+  })
+})

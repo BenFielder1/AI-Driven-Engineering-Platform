@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest'
 
 import { authDb } from '../../../mocks/handlers/auth'
 import { configureGitHubApp, connectGitHub, githubDb, INSTALL_URL } from '../../../mocks/handlers/github'
-import { gitSettings, projectsDb } from '../../../mocks/handlers/projects'
-import { openOwnerSettings, requestsTo } from '../../../test/project-settings'
+import { gitSettings, projectsDb, seedProject } from '../../../mocks/handlers/projects'
+import { contextualErrorMessages } from '../../../lib/errors'
+import { seedAwaitingMerge, seedRelease } from '../../../mocks/handlers/release'
+import { openOwnerSettings, openSettings, requestsTo, signInAsOwner } from '../../../test/project-settings'
 
 const TOKEN = 'ghp_newsecrettoken456'
 
@@ -230,5 +232,87 @@ describe('Settings → Git: mode and GitHub App (FR-83)', () => {
     expect(
       await screen.findByText('Only project Owners with write access to the repository on GitHub can switch it to the GitHub App.'),
     ).toBeInTheDocument()
+  })
+})
+
+describe('Settings → Git: release settings (FR-64, FR-65, §4.10)', () => {
+  const releaseForm = () => screen.getByRole('form', { name: 'Release' })
+
+  it('FR65_manual_strategy_is_saved_and_shown', async () => {
+    const { user, project } = await openGit()
+    const form = releaseForm()
+    expect(within(form).getByLabelText('AIDE merges the pull request')).toBeChecked()
+
+    await user.click(within(form).getByLabelText('Merge manually on GitHub — AIDE waits and tags the merge'))
+    await user.click(within(form).getByRole('button', { name: 'Save release settings' }))
+
+    expect(await screen.findByText('Release settings saved.')).toBeInTheDocument()
+    const [patch] = requestsTo('PATCH', '/settings/git')
+    expect(patch?.body).toEqual({ mergeStrategy: 'manual' })
+    expect(project.git.mergeStrategy).toBe('manual')
+    await waitFor(() => {
+      expect(screen.getByTestId('git-merge-strategy')).toHaveTextContent('Merge manually on GitHub')
+    })
+  })
+
+  it('FR64_tag_prefix_validates_live_previews_the_tag_and_saves', async () => {
+    const { user, project } = await openGit()
+    const form = releaseForm()
+    const prefix = within(form).getByLabelText('Tag prefix')
+    expect(within(form).getByTestId('tag-preview')).toHaveTextContent('Tags will look like v0.1.0')
+
+    await user.clear(prefix)
+    await user.type(prefix, '-rel')
+    expect(await within(form).findByText('The prefix can’t start with ".", "/" or "-".')).toBeInTheDocument()
+    expect(prefix).toHaveAttribute('aria-invalid', 'true')
+
+    await user.clear(prefix)
+    await user.type(prefix, 'rel v')
+    expect(await within(form).findByText('Use only letters, digits, ".", "_", "/" or "-".')).toBeInTheDocument()
+
+    await user.clear(prefix)
+    await user.type(prefix, 'release/')
+    await waitFor(() => {
+      expect(within(form).getByTestId('tag-preview')).toHaveTextContent('Tags will look like release/0.1.0')
+    })
+    await user.click(within(form).getByRole('button', { name: 'Save release settings' }))
+
+    expect(await screen.findByText('Release settings saved.')).toBeInTheDocument()
+    expect(requestsTo('PATCH', '/settings/git').at(-1)?.body).toEqual({ mergeStrategy: 'aide_merges', tagPrefix: 'release/' })
+    expect(project.git.tagPrefix).toBe('release/')
+  })
+
+  it('FR64_an_empty_prefix_is_allowed_for_bare_tags', async () => {
+    const { user } = await openGit()
+    const form = releaseForm()
+    await user.clear(within(form).getByLabelText('Tag prefix'))
+    await waitFor(() => {
+      expect(within(form).getByTestId('tag-preview')).toHaveTextContent('Tags will look like 0.1.0')
+    })
+  })
+
+  it('FR65_tag_prefix_is_locked_with_the_reason_while_awaiting_merge', async () => {
+    signInAsOwner()
+    const project = seedProject({ git: gitSettings({ provider: 'github_pat', hasToken: true }) })
+    seedAwaitingMerge(project)
+    await openSettings('git', project)
+    const form = await screen.findByRole('form', { name: 'Release' })
+    await waitFor(() => {
+      expect(within(form).getByLabelText('Tag prefix')).toBeDisabled()
+    })
+    expect(within(form).getByText('The tag prefix can’t change while the release is awaiting its merge on GitHub.')).toBeInTheDocument()
+  })
+
+  it('FR64_a_409_conflict_on_the_tag_prefix_shows_the_release_copy', async () => {
+    const { user, project } = await openGit()
+    const form = releaseForm()
+    // A release starts after the page loaded.
+    seedRelease(project, { status: 'in_progress', completedAt: null })
+    const prefix = within(form).getByLabelText('Tag prefix')
+    await user.clear(prefix)
+    await user.type(prefix, 'rel-')
+    await user.click(within(form).getByRole('button', { name: 'Save release settings' }))
+
+    expect(await within(form).findByText(contextualErrorMessages.releaseSettings.CONFLICT)).toBeInTheDocument()
   })
 })

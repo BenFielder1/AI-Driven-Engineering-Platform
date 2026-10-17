@@ -66,6 +66,30 @@ public static partial class SpecSections
         return [.. required.Where(name => !headings.Contains(Normalise(name)))];
     }
 
+    /// <summary>
+    /// The body of the first section titled <paramref name="title"/> (matched as for <see cref="Missing(string)"/>): the lines
+    /// after its heading up to the next heading of the same or a higher level, trimmed; <c>null</c> when there is no such
+    /// section or it is empty. Used for the release notes' "Changes in this version" (FR-64).
+    /// </summary>
+    public static string? Extract(string markdown, string title)
+    {
+        ArgumentNullException.ThrowIfNull(markdown);
+        ArgumentNullException.ThrowIfNull(title);
+        var headings = Headings(markdown).ToList();
+        var start = headings.FindIndex(h => SameTitle(h.Title, title));
+        if (start < 0)
+        {
+            return null;
+        }
+
+        var heading = headings[start];
+        var end = headings.Skip(start + 1).FirstOrDefault(h => h.Level <= heading.Level);
+        var lines = markdown.ReplaceLineEndings("\n").Split('\n');
+        var last = end == default ? lines.Length : end.Line;
+        var body = string.Join('\n', lines[(heading.Line + 1)..last]).Trim();
+        return body.Length == 0 ? null : body;
+    }
+
     /// <summary>A Markdown heading outside code fences: its level (1–6), raw title text and 0-based line index.</summary>
     internal readonly record struct Heading(int Level, string Title, int Line);
 

@@ -81,8 +81,16 @@ public static class AgentJobs
             }
             catch (JobDeferredException ex)
             {
+                var payload = ex.Payload ?? job.Payload;
                 await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id)
-                    .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Queued).SetProperty(j => j.Attempts, attempt - 1).SetProperty(j => j.RunAfter, ex.RunAfter).SetProperty(j => j.LastError, ex.Message), Ct));
+                    .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Queued).SetProperty(j => j.Attempts, attempt - 1).SetProperty(j => j.RunAfter, ex.RunAfter).SetProperty(j => j.Payload, payload).SetProperty(j => j.LastError, ex.Message), Ct));
+                return true;
+            }
+            catch (Aide.Infrastructure.GitHub.GitHubRateLimitedException ex)
+            {
+                // §4.14: like the worker, wait for the reset without counting the attempt.
+                await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id)
+                    .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Queued).SetProperty(j => j.Attempts, attempt - 1).SetProperty(j => j.RunAfter, JobPolicy.DeferUntil(DateTimeOffset.UtcNow, ex.ResetAt)).SetProperty(j => j.LastError, $"GITHUB_RATE_LIMITED: {ex.Message}"), Ct));
                 return true;
             }
             catch (JobFailedException ex)

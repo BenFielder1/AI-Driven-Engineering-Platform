@@ -157,5 +157,19 @@ public sealed class JobDeferredException : Exception
         RunAfter = runAfter;
     }
 
+    /// <summary>
+    /// As <see cref="JobDeferredException(string, DateTimeOffset)"/>, replacing the job's payload with
+    /// <paramref name="payload"/> (raw JSON) for the next run, e.g. the merge poll's ETag or when review started waiting for
+    /// checks (§4.14) — so the state survives a restart.
+    /// </summary>
+    public JobDeferredException(string message, DateTimeOffset runAfter, string? payload)
+        : this(message, runAfter)
+    {
+        Payload = payload;
+    }
+
     public DateTimeOffset RunAfter { get; }
+
+    /// <summary>The payload for the next run (raw JSON), or <c>null</c> to keep the current one.</summary>
+    public string? Payload { get; }
 }

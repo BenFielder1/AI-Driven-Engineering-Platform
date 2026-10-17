@@ -171,8 +171,8 @@ public sealed class ReviewReader(AideDbContext db, ExecutionRunReader runs)
         }
     }
 
-    /// <summary>The report's external checks (schemaless JSON), or <c>null</c> when none were collected or they can't be read.</summary>
-    public static JsonElement? ReadExternalChecks(string? json)
+    /// <summary>The report's external checks (FR-85), or <c>null</c> when none were collected or they can't be read.</summary>
+    public static ExternalChecksDto? ReadExternalChecks(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
@@ -182,13 +182,28 @@ public sealed class ReviewReader(AideDbContext db, ExecutionRunReader runs)
         try
         {
             using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.ValueKind == JsonValueKind.Null ? null : doc.RootElement.Clone();
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            var stored = AideJson.Deserialize<StoredExternalChecks>(json);
+            JsonElement? preview = root.TryGetProperty("preview", out var p) && p.ValueKind != JsonValueKind.Null ? p.Clone() : null;
+            return new ExternalChecksDto(
+                [.. (stored.Checks ?? []).OfType<ExternalCheckDto>().Where(c => !string.IsNullOrEmpty(c.Name))],
+                stored.ChecksWaitedSeconds,
+                stored.ChecksTimedOut,
+                preview);
         }
         catch (JsonException)
         {
             return null;
         }
     }
+
+    /// <summary>The stored shape of <c>compliance_report.external_checks</c> (<c>preview</c> is read separately).</summary>
+    private sealed record StoredExternalChecks(List<ExternalCheckDto?>? Checks, int? ChecksWaitedSeconds, bool ChecksTimedOut);
 
     public async Task<ComplianceReportDto?> LatestAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
@@ -272,6 +287,7 @@ public static class ReviewServiceCollectionExtensions
     {
         services.AddScoped<ReviewService>();
         services.AddScoped<ReviewReader>();
+        services.AddScoped<ExternalChecksCollector>();
         services.AddScoped<IJobEndedHook, ReviewJobEndedHook>();
         services.AddJobHandler<ReviewJobHandler>(JobTypes.Review);
         return services;

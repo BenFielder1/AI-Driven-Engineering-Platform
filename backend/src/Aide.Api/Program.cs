@@ -166,6 +166,7 @@ builder.Services.AddReview();
 
 // Release and rollback (FR-42–FR-45): the release job, retries, rollback, history and versions.
 builder.Services.AddReleases();
+builder.Services.AddMergeReadiness();
 builder.Services.AddScoped<RollbackService>();
 builder.Services.AddReleaseVersions();
 

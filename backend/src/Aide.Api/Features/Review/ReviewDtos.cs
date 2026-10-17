@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Aide.Domain.Artifacts;
+using Aide.Domain.Releases;
 using Aide.Domain.Review;
 
 namespace Aide.Api.Features.Review;
@@ -101,6 +102,24 @@ public sealed record ComplianceReportSummaryDto(
 /// </summary>
 public sealed record RegressionDto(string RequirementId, ReviewCategory Category, string Description, string? Evidence);
 
+/// <summary>
+/// FR-85: a GitHub check run or commit status on the PR head as review saw it. <c>conclusion</c> is <c>null</c> for a check
+/// still pending when review stopped waiting. A failed <c>required</c> check is a major <c>testing</c> finding.
+/// </summary>
+public sealed record ExternalCheckDto(string Name, CheckRunConclusion? Conclusion, bool Required, string? DetailsUrl);
+
+/// <summary>
+/// The external inputs a review cycle collected (FR-85, FR-89): the PR head's <c>checks</c>, how long review waited for
+/// pending checks (<c>checksWaitedSeconds</c>, up to 15 minutes; <c>null</c> when it didn't wait) and whether it gave up
+/// waiting (<c>checksTimedOut</c>, recorded as a warning). <c>preview</c> is the preview deployment (FR-89; schemaless
+/// until that lands, <c>null</c> when none).
+/// </summary>
+public sealed record ExternalChecksDto(
+    IReadOnlyList<ExternalCheckDto> Checks,
+    int? ChecksWaitedSeconds,
+    bool ChecksTimedOut,
+    JsonElement? Preview);
+
 /// <summary>The optimisation plan a review cycle produced (FR-40): its artifact id, version and status.</summary>
 public sealed record ReportPlanDto(Guid ArtifactId, int Version, ArtifactStatus Status);
 
@@ -108,7 +127,7 @@ public sealed record ReportPlanDto(Guid ArtifactId, int Version, ArtifactStatus 
 /// The full compliance report of one review cycle (FR-56): the category breakdown, every violation with its evidence,
 /// the deterministic findings alone (<c>deterministicFindings</c>, the violations whose source is <c>deterministic</c>),
 /// missing features, drift areas, the decision and its <c>escalationReason</c>, regressions (§4.13), the external checks
-/// collected (check runs, preview deployment; schemaless, <c>null</c> when none), the optimisation plan it produced and
+/// collected (FR-85 check runs, preview deployment; <c>null</c> when none), the optimisation plan it produced and
 /// <c>executionRunId</c>, the review-fix run that plan produced (the plan artifact id, see <c>ListExecutionRuns</c>).
 /// </summary>
 public sealed record ComplianceReportDetailDto(
@@ -127,7 +146,7 @@ public sealed record ComplianceReportDetailDto(
     ReviewDecision Decision,
     EscalationReason? EscalationReason,
     IReadOnlyList<RegressionDto> Regressions,
-    JsonElement? ExternalChecks,
+    ExternalChecksDto? ExternalChecks,
     ReportPlanDto? OptimizationPlan,
     Guid? ExecutionRunId,
     DateTimeOffset CreatedAt);

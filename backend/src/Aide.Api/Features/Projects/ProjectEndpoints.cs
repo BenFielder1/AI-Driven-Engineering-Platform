@@ -465,8 +465,9 @@ public static partial class ProjectEndpoints
                 .Where(r => r.ProjectId == id && r.ReleaseVersionId == versionId)
                 .OrderByDescending(r => r.CreatedAt)
                 .ThenByDescending(r => r.Id)
-                .Select(r => new ReleaseSummaryDto(r.Id, r.ReleaseVersionId, r.Checkpoint, r.Status, r.Tag, r.CreatedAt))
-                .FirstOrDefaultAsync(cancellationToken));
+                .FirstOrDefaultAsync(cancellationToken) is { } latestRelease
+                ? ReleaseRecords.ToSummary(latestRelease, project.MergeStrategy)
+                : null);
     }
 
     internal static ProblemHttpResult ConcurrentEdit() =>

@@ -19,7 +19,7 @@ public static class ReleaseEndpoints
 
         group.MapPost("/release", RetryRelease)
             .WithName("RetryRelease")
-            .WithSummary("Retry a failed release (Owner, FR-43): queues the release job again for the current project version (merge the project PR or branch into the default branch, tag v<version>-aide, or the first free v<version>-aide.<k> when a version number reused after a rollback is already tagged elsewhere; an existing tag of the version holding the branch is a no-op). Only in the release phase with status releasing, after the latest attempt failed (e.g. MERGE_CONFLICT resolved on the branch). Returns 202 with the new in_progress release; the outcome arrives on the live channel.")
+            .WithSummary("Retry a failed release (Owner, FR-43 amended by FR-64, FR-65): queues the release job again for the version in development at its current checkpoint (merge the version's PR, or the branch for Local, under the project's merge strategy; tag <tagPrefix><version> on the merge commit, reusing a tag that already points at it; create the GitHub Release). Only in the release phase with status releasing, after the latest attempt failed, e.g. MERGE_CONFLICT resolved on the branch, or PR_CLOSED (PR reopened on GitHub) / MERGE_TIMEOUT, after which the project stays in release. Not while awaiting_merge: the merge poll completes that attempt. Returns 202 with the new in_progress release; the outcome (succeeded, awaiting_merge or failed) arrives on the live channel.")
             .Produces<ReleaseDto>(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -28,7 +28,7 @@ public static class ReleaseEndpoints
                 (StatusCodes.Status202Accepted, "The release job was queued; the release is in_progress."),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN: only Owners release."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project."),
-                (StatusCodes.Status409Conflict, "NOT_RELEASING (not in the release phase with status releasing, e.g. already released), RELEASE_IN_PROGRESS (a release job is queued or running) or CONFLICT (a concurrent change)."));
+                (StatusCodes.Status409Conflict, "NOT_RELEASING (not in the release phase with status releasing, e.g. already released or awaiting_merge), RELEASE_IN_PROGRESS (a release job is queued or running) or CONFLICT (a concurrent change)."));
 
         group.MapGet("/releases", ListReleases)
             .WithName("ListReleases")
@@ -52,6 +52,7 @@ public static class ReleaseEndpoints
         IProjectAccess access,
         ICurrentUser currentUser,
         ReleaseService releases,
+        AideDbContext db,
         CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(id, ProjectAction.RequestRelease, cancellationToken);
@@ -62,7 +63,7 @@ public static class ReleaseEndpoints
 
         var retried = await releases.RetryAsync(id, currentUser.Actor, cancellationToken);
         return retried.IsSuccess
-            ? TypedResults.Accepted($"/api/projects/{id}/releases/latest", ReleaseRecords.ToDto(retried.Value))
+            ? TypedResults.Accepted($"/api/projects/{id}/releases/latest", ReleaseRecords.ToDto(retried.Value, await ReleaseRecords.MergeStrategyAsync(db, id, cancellationToken)))
             : ApiProblems.FromError(retried.Error!);
     }
 

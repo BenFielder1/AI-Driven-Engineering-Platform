@@ -32,7 +32,7 @@ public partial class EventTypesTests
     [Fact]
     public void FR50_Every_event_type_except_the_operations_markers_has_exactly_one_category()
     {
-        string[] uncategorised = [EventTypes.DemoProjectSeeded, EventTypes.DeadLetterRetried];
+        string[] uncategorised = [EventTypes.DemoProjectSeeded, EventTypes.DeadLetterRetried, EventTypes.MergeReadinessChecked];
         foreach (var type in AllTypes.Except(uncategorised))
         {
             var category = EventTypes.CategoryOf(type);

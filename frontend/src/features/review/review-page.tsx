@@ -42,7 +42,14 @@ import {
   type ReviewDecision,
   type ReviewRunStatus,
 } from './review-api'
-import { CategoryBreakdown, DriftSection, MissingFeaturesSection, ReportSection, ViolationsSection } from './review-report'
+import {
+  CategoryBreakdown,
+  DriftSection,
+  ExternalChecksSection,
+  MissingFeaturesSection,
+  ReportSection,
+  ViolationsSection,
+} from './review-report'
 
 const statusTones: Record<ReviewRunStatus, BadgeTone> = {
   idle: 'neutral',
@@ -326,6 +333,7 @@ function CycleDetail({
       <DeterministicFindings report={r} />
       <MissingFeaturesSection report={r} />
       <Regressions report={r} />
+      <ExternalChecksSection report={r} />
     </div>
   )
 }

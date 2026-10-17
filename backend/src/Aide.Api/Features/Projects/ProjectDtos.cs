@@ -9,6 +9,7 @@ using Aide.Domain.Execution;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
+using Aide.Domain.Releases;
 using Aide.Domain.Review;
 
 namespace Aide.Api.Features.Projects;
@@ -310,7 +311,8 @@ public sealed record UpdateMemberRoleRequest
 /// For <c>github_app</c>, <c>installationId</c>, <c>repoId</c> and <c>repoFullName</c> identify the repo (else
 /// <c>null</c>). <c>appInstalledOnRepo</c> says whether the AIDE GitHub App can access a <c>github_pat</c> project's repo
 /// (<c>null</c>: not checked, no App, or not a PAT project); <c>canSwitchToApp</c> is true when it can and the caller is an
-/// Owner ("Switch to GitHub App").
+/// Owner ("Switch to GitHub App"). <c>mergeStrategy</c> (FR-65: <c>aide_merges</c>, the default, or <c>manual</c>) and
+/// <c>tagPrefix</c> (§4.10, FR-64: default <c>v</c>, so tags read <c>v1.2.0</c>) are the project's release settings.
 /// </summary>
 public sealed record GitSettingsDto(
     GitProvider Provider,
@@ -323,7 +325,9 @@ public sealed record GitSettingsDto(
     long? RepoId,
     string? RepoFullName,
     bool? AppInstalledOnRepo,
-    bool CanSwitchToApp);
+    bool CanSwitchToApp,
+    MergeStrategy MergeStrategy,
+    string TagPrefix);
 
 /// <summary>Model id per agent; an omitted or <c>null</c> agent uses the default model.</summary>
 public sealed record AgentModelsDto
@@ -416,6 +420,16 @@ public sealed record UpdateGitSettingsRequest
     public string? Token { get; init; }
 
     public bool ClearToken { get; init; }
+
+    /// <summary>FR-65: <c>aide_merges</c> (AIDE merges the PR on release) or <c>manual</c> (AIDE never merges; the release
+    /// marks the PR ready for review and waits for the merge on GitHub). Applies to the next release attempt.</summary>
+    public MergeStrategy? MergeStrategy { get; init; }
+
+    /// <summary>§4.10, FR-64: the tag prefix (<c>^[A-Za-z0-9._/-]{0,20}$</c>, not starting with <c>.</c>, <c>/</c> or
+    /// <c>-</c>; empty for bare <c>1.2.0</c> tags; else 400 <c>VALIDATION</c>). It also applies to the version in
+    /// development. 409 <c>CONFLICT</c> while that version is <c>awaiting_merge</c> or a release attempt is in progress.</summary>
+    [MaxLength(ReleaseVersionRules.TagPrefixMaxLength)]
+    public string? TagPrefix { get; init; }
 }
 
 /// <summary>

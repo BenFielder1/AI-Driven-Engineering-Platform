@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from 'react'
 
+import { Alert } from '../../components/ui/alert'
 import { Badge, type BadgeTone } from '../../components/ui/badge'
+import { isFailingCheck } from '../git/check-run-rules'
+import { CheckRunList } from '../git/check-runs'
 import {
   driftLevelLabels,
   findingSeverities,
@@ -208,6 +211,59 @@ export function MissingFeaturesSection({ report }: { report: Report }) {
           ))}
         </ul>
       )}
+    </ReportSection>
+  )
+}
+
+/** "45 s", "4 min", "1 min 30 s". */
+function waitedCopy(seconds: number): string {
+  if (seconds < 60) {
+    return `${String(seconds)} s`
+  }
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  return rest === 0 ? `${String(minutes)} min` : `${String(minutes)} min ${String(rest)} s`
+}
+
+/**
+ * FR-85: the PR head's check runs and commit statuses as this review cycle saw them (a failed required check is a
+ * major testing finding), how long review waited for pending checks, and a warning when it gave up waiting. The
+ * preview deployment (FR-89) arrives in a later phase.
+ */
+export function ExternalChecksSection({ report }: { report: Pick<ComplianceReportDetail, 'externalChecks'> }) {
+  const external = report.externalChecks
+  const failingRequired = external?.checks.filter((c) => c.required && isFailingCheck(c)) ?? []
+  return (
+    <ReportSection id="report-external-checks" title="External checks">
+      {external === null ? (
+        <p className="text-sm text-muted-foreground">
+          No external checks were collected for this cycle (no GitHub checks on the pull request, or a Local project).
+        </p>
+      ) : (
+        <>
+          {failingRequired.length > 0 && (
+            <Alert tone="error" title={`${plural(failingRequired.length, 'required check')} failed`}>
+              <p>Each failed required check is a major testing finding in this report.</p>
+            </Alert>
+          )}
+          {external.checksTimedOut && (
+            <Alert tone="warning" title="Review stopped waiting for checks">
+              <p>
+                Some checks were still pending after{' '}
+                {external.checksWaitedSeconds !== null ? waitedCopy(external.checksWaitedSeconds) : '15 minutes'}, so the
+                review scored without them.
+              </p>
+            </Alert>
+          )}
+          {!external.checksTimedOut && external.checksWaitedSeconds !== null && external.checksWaitedSeconds > 0 && (
+            <p className="text-sm text-muted-foreground">{`Waited ${waitedCopy(external.checksWaitedSeconds)} for checks`}</p>
+          )}
+          <CheckRunList checks={external.checks} label="External checks" empty="No checks are reported on the pull request." />
+        </>
+      )}
+      <p data-testid="report-preview-slot" className="text-sm text-muted-foreground">
+        A preview deployment of the reviewed branch will show here once a deployment target is set.
+      </p>
     </ReportSection>
   )
 }

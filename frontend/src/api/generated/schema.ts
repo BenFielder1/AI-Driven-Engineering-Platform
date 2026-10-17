@@ -656,7 +656,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. */
+        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). */
         patch: operations["UpdateGitSettings"];
         trace?: never;
     };
@@ -1155,6 +1155,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/git/merge-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: "AIDE will merge automatically", else "A merge on GitHub will be needed" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. The merge itself stays authoritative (FR-65). */
+        get: operations["GetMergeReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/review": {
         parameters: {
             query?: never;
@@ -1266,7 +1283,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Retry a failed release (Owner, FR-43): queues the release job again for the current project version (merge the project PR or branch into the default branch, tag v<version>-aide, or the first free v<version>-aide.<k> when a version number reused after a rollback is already tagged elsewhere; an existing tag of the version holding the branch is a no-op). Only in the release phase with status releasing, after the latest attempt failed (e.g. MERGE_CONFLICT resolved on the branch). Returns 202 with the new in_progress release; the outcome arrives on the live channel. */
+        /** Retry a failed release (Owner, FR-43 amended by FR-64, FR-65): queues the release job again for the version in development at its current checkpoint (merge the version's PR, or the branch for Local, under the project's merge strategy; tag <tagPrefix><version> on the merge commit, reusing a tag that already points at it; create the GitHub Release). Only in the release phase with status releasing, after the latest attempt failed, e.g. MERGE_CONFLICT resolved on the branch, or PR_CLOSED (PR reopened on GitHub) / MERGE_TIMEOUT, after which the project stays in release. Not while awaiting_merge: the merge poll completes that attempt. Returns 202 with the new in_progress release; the outcome (succeeded, awaiting_merge or failed) arrives on the live channel. */
         post: operations["RetryRelease"];
         delete?: never;
         options?: never;
@@ -1948,6 +1965,25 @@ export interface components {
             systemRole: components["schemas"]["SystemRole"];
         };
         /** @enum {unknown} */
+        CheckRunConclusion: "success" | "failure" | "neutral" | "cancelled" | "skipped" | "timed_out" | "action_required" | null;
+        /**
+         * @description FR-84, FR-85: a check run or commit status on the PR head. `conclusion` is set once `status` is
+         *     `completed` (else `null`). `required` is true when the default branch's rules require it.
+         *     `detailsUrl` links the check on GitHub (or the CI provider), when known.
+         */
+        CheckRunDto: {
+            name: string;
+            status: components["schemas"]["CheckRunStatus"];
+            conclusion: null | components["schemas"]["CheckRunConclusion"];
+            required: boolean;
+            detailsUrl: null | string;
+        };
+        /**
+         * @description FR-84, FR-85: a GitHub check run's (or commit status's) state. Wire values `queued`, `in_progress`, `completed`.
+         * @enum {unknown}
+         */
+        CheckRunStatus: "queued" | "in_progress" | "completed";
+        /** @enum {unknown} */
         CheckpointBlock: "current_checkpoint" | "release_phase" | "version_released" | null;
         /**
          * @description A lifecycle checkpoint of a release version (FR-44, FR-63), for the rollback target picker: the phase entered at that
@@ -2002,7 +2038,7 @@ export interface components {
          * @description The full compliance report of one review cycle (FR-56): the category breakdown, every violation with its evidence,
          *     the deterministic findings alone (`deterministicFindings`, the violations whose source is `deterministic`),
          *     missing features, drift areas, the decision and its `escalationReason`, regressions (§4.13), the external checks
-         *     collected (check runs, preview deployment; schemaless, `null` when none), the optimisation plan it produced and
+         *     collected (FR-85 check runs, preview deployment; `null` when none), the optimisation plan it produced and
          *     `executionRunId`, the review-fix run that plan produced (the plan artifact id, see `ListExecutionRuns`).
          */
         ComplianceReportDetailDto: {
@@ -2027,7 +2063,7 @@ export interface components {
             decision: components["schemas"]["ReviewDecision"];
             escalationReason: null | components["schemas"]["EscalationReason"];
             regressions: components["schemas"]["RegressionDto"][];
-            externalChecks: null | components["schemas"]["JsonElement"];
+            externalChecks: null | components["schemas"]["ExternalChecksDto"];
             optimizationPlan: null | components["schemas"]["ReportPlanDto"];
             /** Format: uuid */
             executionRunId: null | string;
@@ -2472,6 +2508,29 @@ export interface components {
             steps: components["schemas"]["ExecutionStepDto"][];
         };
         /**
+         * @description FR-85: a GitHub check run or commit status on the PR head as review saw it. `conclusion` is `null` for a check
+         *     still pending when review stopped waiting. A failed `required` check is a major `testing` finding.
+         */
+        ExternalCheckDto: {
+            name: string;
+            conclusion: null | components["schemas"]["CheckRunConclusion"];
+            required: boolean;
+            detailsUrl: null | string;
+        };
+        /**
+         * @description The external inputs a review cycle collected (FR-85, FR-89): the PR head's `checks`, how long review waited for
+         *     pending checks (`checksWaitedSeconds`, up to 15 minutes; `null` when it didn't wait) and whether it gave up
+         *     waiting (`checksTimedOut`, recorded as a warning). `preview` is the preview deployment (FR-89; schemaless
+         *     until that lands, `null` when none).
+         */
+        ExternalChecksDto: {
+            checks: components["schemas"]["ExternalCheckDto"][];
+            /** Format: int32 */
+            checksWaitedSeconds: null | number;
+            checksTimedOut: boolean;
+            preview: null | components["schemas"]["JsonElement"];
+        };
+        /**
          * @description Declared action for a file in a plan step (FR-29).
          * @enum {unknown}
          */
@@ -2716,7 +2775,8 @@ export interface components {
          *     For `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else
          *     `null`). `appInstalledOnRepo` says whether the AIDE GitHub App can access a `github_pat` project's repo
          *     (`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an
-         *     Owner ("Switch to GitHub App").
+         *     Owner ("Switch to GitHub App"). `mergeStrategy` (FR-65: `aide_merges`, the default, or `manual`) and
+         *     `tagPrefix` (§4.10, FR-64: default `v`, so tags read `v1.2.0`) are the project's release settings.
          */
         GitSettingsDto: {
             provider: components["schemas"]["GitProvider"];
@@ -2732,6 +2792,8 @@ export interface components {
             repoFullName: null | string;
             appInstalledOnRepo: null | boolean;
             canSwitchToApp: boolean;
+            mergeStrategy: components["schemas"]["MergeStrategy"];
+            tagPrefix: string;
         };
         /** @description Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false. */
         GitTestResultDto: {
@@ -2898,6 +2960,45 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /**
+         * @description FR-84 merge readiness of the version's PR, as of `checkedAt`. `canMerge` is whether AIDE's token may merge it
+         *     now (repository permission and allowed merge methods, branch rules, the PR's `mergeStateStatus` and
+         *     `reviewDecision`, required checks). `willAutoMerge` is `canMerge` under the `aide_merges` strategy
+         *     ("AIDE will merge automatically"); otherwise "A merge on GitHub will be needed" with `reasons` (empty when
+         *     `canMerge`, except `manual_strategy`). `checks` are the PR head's check runs and commit statuses.
+         *     `mergeStateStatus` and `reviewDecision` are GitHub's GraphQL values verbatim (e.g. `CLEAN`,
+         *     `BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a Local project
+         *     `canMerge` is true with no checks. The merge itself stays authoritative (FR-65).
+         */
+        MergeReadinessDto: {
+            canMerge: boolean;
+            willAutoMerge: boolean;
+            mergeStrategy: components["schemas"]["MergeStrategy"];
+            reasons: components["schemas"]["MergeReadinessReasonDto"][];
+            checks: components["schemas"]["CheckRunDto"][];
+            mergeStateStatus: null | string;
+            reviewDecision: null | string;
+            /** Format: date-time */
+            checkedAt: string;
+        };
+        /**
+         * @description FR-84: why AIDE can't merge the version's PR itself (wire values `review_required`, `changes_requested`,
+         *     `checks_failing`, `checks_pending`, `branch_protected`, `merge_conflict`, `no_permission`,
+         *     `merge_method_not_allowed`, `pr_not_open`, `manual_strategy`). Also recorded on an `awaiting_merge`
+         *     release attempt (FR-65).
+         * @enum {unknown}
+         */
+        MergeReadinessReasonCode: "review_required" | "changes_requested" | "checks_failing" | "checks_pending" | "branch_protected" | "merge_conflict" | "no_permission" | "merge_method_not_allowed" | "pr_not_open" | "manual_strategy";
+        /** @description FR-84: one reason AIDE can't merge the version's PR itself, with copy for the Release page and the gate. */
+        MergeReadinessReasonDto: {
+            code: components["schemas"]["MergeReadinessReasonCode"];
+            message: string;
+        };
+        /**
+         * @description FR-65 merge strategy. Wire values: `aide_merges`, `manual`.
+         * @enum {unknown}
+         */
+        MergeStrategy: "aide_merges" | "manual";
         /**
          * @description A notification channel (FR-47). Secrets are never returned, only `hasSecret`. For `email` and
          *     `webhook`, `target` is the saved address or URL and the secret is a webhook's HMAC signing key. For
@@ -3195,10 +3296,10 @@ export interface components {
             latestRelease: null | components["schemas"]["ReleaseSummaryDto"];
         };
         /**
-         * @description Project status (§4.1: status follows phase; `released` and `rolled_back` are special).
+         * @description Project status (§4.1: status follows phase; `released`, `rolled_back` and `awaiting_merge` are special).
          * @enum {unknown}
          */
-        ProjectStatus: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back";
+        ProjectStatus: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
         /**
          * @description A row of the projects list (FR-6, FR-62). `myRole` is `null` for an Admin who isn't a member;
          *     `releasedVersion` / `developmentVersion` are the two version badges (`null` when not released / nothing in
@@ -3360,13 +3461,21 @@ export interface components {
         /**
          * @description A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint
          *     `checkpoint`. `status` is `in_progress` while the release job is queued or running, then
-         *     `succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`.
+         *     `succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`, or
+         *     `awaiting_merge` (FR-65) when the merge was refused or the strategy is `manual`: `awaitingMergeSince` is
+         *     when it started waiting and `mergeReasons` are the merge-readiness reasons (FR-84) recorded then (`null`
+         *     otherwise); the merge poll then completes it once the PR is merged on GitHub (§4.14).
          *     A failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict
          *     `conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`
          *     for Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).
          *     `completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`
          *     (e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails
          *     the release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.
+         *     Failure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,
+         *     `GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and
+         *     `MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can
+         *     retry with `POST /release`. `githubReleaseUrl` is the GitHub Release created for the tag (FR-64; `null`
+         *     for Local or before it exists). `mergeStrategy` is the project's current merge strategy (FR-65).
          */
         ReleaseDto: {
             /** Format: uuid */
@@ -3388,13 +3497,21 @@ export interface components {
             startedAt: string;
             /** Format: date-time */
             completedAt: null | string;
+            githubReleaseUrl: null | string;
+            /** Format: date-time */
+            awaitingMergeSince: null | string;
+            mergeReasons: null | components["schemas"]["MergeReadinessReasonDto"][];
+            mergeStrategy: components["schemas"]["MergeStrategy"];
         };
         /**
          * @description Outcome of a release attempt (FR-42, FR-43).
          * @enum {unknown}
          */
         ReleaseStatus: "succeeded" | "failed" | "in_progress" | "awaiting_merge";
-        /** @description The latest release attempt in the project state (FR-42, FR-43): enough for the overview's release banner. */
+        /**
+         * @description The latest release attempt in the project state (FR-42, FR-43, FR-64, FR-65): enough for the overview's release banner,
+         *     including "Awaiting merge" with the PR link and reasons, and the GitHub Release link. Fields as in `ReleaseDto`.
+         */
         ReleaseSummaryDto: {
             /** Format: uuid */
             id: string;
@@ -3406,6 +3523,12 @@ export interface components {
             tag: string;
             /** Format: date-time */
             startedAt: string;
+            pullRequestUrl: null | string;
+            githubReleaseUrl: null | string;
+            /** Format: date-time */
+            awaitingMergeSince: null | string;
+            mergeReasons: null | components["schemas"]["MergeReadinessReasonDto"][];
+            mergeStrategy: components["schemas"]["MergeStrategy"];
         };
         /**
          * @description The lifecycle checkpoints of a release version (§4.10): `current` is the project's checkpoint for the version in
@@ -3635,6 +3758,13 @@ export interface components {
             /** @description Sets the access token. To remove it, send `clearToken: true`. */
             token?: null | string;
             clearToken?: boolean;
+            mergeStrategy?: null | components["schemas"]["MergeStrategy"];
+            /**
+             * @description §4.10, FR-64: the tag prefix (`^[A-Za-z0-9._/-]{0,20}$`, not starting with `.`, `/` or
+             *         `-`; empty for bare `1.2.0` tags; else 400 `VALIDATION`). It also applies to the version in
+             *         development. 409 `CONFLICT` while that version is `awaiting_merge` or a release attempt is in progress.
+             */
+            tagPrefix?: null | string;
         };
         /** @description Rename an LLM connection (FR-78). */
         UpdateLlmCredentialRequest: {
@@ -5378,7 +5508,7 @@ export interface operations {
                 limit?: number;
                 search?: string;
                 phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
-                status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back";
+                status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
                 sortBy?: "created" | "updated" | "name";
                 sortOrder?: "asc" | "desc";
@@ -6018,7 +6148,7 @@ export interface operations {
                     "application/json": components["schemas"]["GitSettingsDto"];
                 };
             };
-            /** @description Bad Request */
+            /** @description VALIDATION: invalid Git settings or tag prefix. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6047,6 +6177,15 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT: the tag prefix can't change while a release is in progress or awaiting its merge, or a concurrent change. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7855,6 +7994,77 @@ export interface operations {
             };
         };
     };
+    GetMergeReadiness: {
+        parameters: {
+            query?: {
+                refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MergeReadinessDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description WRONG_PHASE: not in the review or release phase. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset). */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR: GitHub failed or couldn't be reached. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     StartReview: {
         parameters: {
             query?: never;
@@ -8181,7 +8391,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description NOT_RELEASING (not in the release phase with status releasing, e.g. already released), RELEASE_IN_PROGRESS (a release job is queued or running) or CONFLICT (a concurrent change). */
+            /** @description NOT_RELEASING (not in the release phase with status releasing, e.g. already released or awaiting_merge), RELEASE_IN_PROGRESS (a release job is queued or running) or CONFLICT (a concurrent change). */
             409: {
                 headers: {
                     [name: string]: unknown;

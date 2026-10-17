@@ -277,11 +277,11 @@ public class LifecycleStateMachineTests
 
     [Theory]
     [MemberData(nameof(AllPhaseStatusPairs))]
-    public void FR42_amended_by_S4_10_ReleaseCompleted_only_from_release_releasing_and_keeps_the_checkpoint(Phase phase, ProjectStatus status)
+    public void FR42_amended_by_S4_10_FR65_ReleaseCompleted_only_from_release_releasing_or_awaiting_merge_and_keeps_the_checkpoint(Phase phase, ProjectStatus status)
     {
         var result = LifecycleStateMachine.Apply(new LifecycleState(phase, status, 7), TransitionRequest.ReleaseCompleted(), LifecycleSnapshot.Empty);
 
-        if (phase == Phase.Release && status == ProjectStatus.Releasing)
+        if (phase == Phase.Release && status is ProjectStatus.Releasing or ProjectStatus.AwaitingMerge)
         {
             Assert.True(result.IsSuccess);
             Assert.Equal(ProjectStatus.Released, result.Value.Status);
@@ -291,6 +291,63 @@ public class LifecycleStateMachineTests
         {
             Assert.Equal(ErrorCodes.NotReleasing, result.Error!.Code);
         }
+    }
+
+    // ---- FR-65: awaiting merge (status-only moves within release, checkpoint unchanged) ----
+
+    [Theory]
+    [MemberData(nameof(AllPhaseStatusPairs))]
+    public void FR65_ReleaseAwaitingMerge_only_from_release_releasing(Phase phase, ProjectStatus status)
+    {
+        var result = LifecycleStateMachine.Apply(new LifecycleState(phase, status, 7), TransitionRequest.ReleaseAwaitingMerge(), LifecycleSnapshot.Empty);
+
+        if (phase == Phase.Release && status == ProjectStatus.Releasing)
+        {
+            Assert.Equal(new LifecycleState(Phase.Release, ProjectStatus.AwaitingMerge, 7), result.Value.NewState);
+            Assert.Equal(TransitionKind.ReleaseAwaitingMerge, result.Value.Kind);
+        }
+        else
+        {
+            Assert.Equal(ErrorCodes.NotReleasing, result.Error!.Code);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(AllPhaseStatusPairs))]
+    public void FR65_ReleaseMergeAbandoned_only_from_release_awaiting_merge_back_to_releasing(Phase phase, ProjectStatus status)
+    {
+        var result = LifecycleStateMachine.Apply(new LifecycleState(phase, status, 7), TransitionRequest.ReleaseMergeAbandoned(), LifecycleSnapshot.Empty);
+
+        if (phase == Phase.Release && status == ProjectStatus.AwaitingMerge)
+        {
+            Assert.Equal(new LifecycleState(Phase.Release, ProjectStatus.Releasing, 7), result.Value.NewState);
+        }
+        else
+        {
+            Assert.Equal(ErrorCodes.NotReleasing, result.Error!.Code);
+        }
+    }
+
+    [Theory]
+    [InlineData(TransitionKind.ReleaseAwaitingMerge, ProjectStatus.Releasing)]
+    [InlineData(TransitionKind.ReleaseMergeAbandoned, ProjectStatus.AwaitingMerge)]
+    public void FR65_Awaiting_merge_moves_never_leave_the_release_phase(TransitionKind kind, ProjectStatus status)
+    {
+        foreach (var target in PhaseOrder.All.Where(p => p != Phase.Release))
+        {
+            var result = LifecycleStateMachine.Apply(new LifecycleState(Phase.Release, status, 7), new TransitionRequest(kind, target), LifecycleSnapshot.Empty);
+            Assert.Equal(ErrorCodes.WrongPhase, result.Error!.Code);
+        }
+    }
+
+    [Fact]
+    public void FR65_A_project_awaiting_merge_can_not_advance_review_cycle_or_start_a_new_version()
+    {
+        var state = new LifecycleState(Phase.Release, ProjectStatus.AwaitingMerge, 7);
+
+        Assert.Equal(ErrorCodes.WrongPhase, LifecycleStateMachine.Apply(state, TransitionRequest.Advance(), AllMet).Error!.Code);
+        Assert.Equal(ErrorCodes.WrongPhase, LifecycleStateMachine.Apply(state, TransitionRequest.ReviewCycle(), AllMet).Error!.Code);
+        Assert.Equal(ErrorCodes.NotReleased, LifecycleStateMachine.Apply(state, TransitionRequest.NewVersion(), LifecycleSnapshot.Empty).Error!.Code);
     }
 
     [Fact]

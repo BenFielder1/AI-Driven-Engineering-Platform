@@ -247,7 +247,7 @@ describe('Stage pages (FR-55)', () => {
     ).toEqual([[1, 3], [2], [4]])
   })
 
-  it('FR55_release_page_decides_the_pre_release_gate_in_place_and_holds_the_integration_slots', async () => {
+  it('FR55_release_page_decides_the_pre_release_gate_in_place_and_holds_the_deployment_slot', async () => {
     const project = seedProjectAs('owner', (p) => {
       p.currentPhase = 'release'
       p.status = 'active'
@@ -259,9 +259,10 @@ describe('Stage pages (FR-55)', () => {
     const gates = screen.getByRole('region', { name: 'Gates' })
     expect(within(gates).getByRole('listitem', { name: 'Release approval' })).toBeInTheDocument()
     expect(within(gates).getByRole('button', { name: 'Approve' })).toBeInTheDocument()
-    for (const slot of ['Merge readiness', 'GitHub Release', 'Production deployment']) {
-      expect(screen.getByRole('region', { name: slot })).toHaveTextContent('Not available yet')
-    }
+    // FR-84, FR-64: merge readiness and the GitHub Release are real panels; the deployment is still a slot.
+    expect(screen.getByRole('region', { name: 'Merge readiness' })).not.toHaveTextContent('Not available yet')
+    expect(screen.getByRole('region', { name: 'GitHub Release' })).not.toHaveTextContent('Not available yet')
+    expect(screen.getByRole('region', { name: 'Production deployment' })).toHaveTextContent('Not available yet')
     // FR-60: Owners get Start new version (disabled with the reason until released and merged).
     expect(screen.getByRole('button', { name: /Start new version/ })).toBeInTheDocument()
   })

@@ -237,6 +237,25 @@ public static partial class ProjectSettingsRules
             ? Result.Failure(Invalid("provider: Use Switch to GitHub App to move this project onto the AIDE GitHub App."))
             : Result.Success();
 
+    /// <summary>§4.10, FR-64: a sent tag prefix must be <c>^[A-Za-z0-9._/-]{0,20}$</c> and a safe Git ref start (<c>null</c>: unchanged).</summary>
+    public static Result ValidateTagPrefix(string? tagPrefix) =>
+        tagPrefix is null || Releases.ReleaseVersionRules.IsValidTagPrefix(tagPrefix)
+            ? Result.Success()
+            : Result.Failure(Invalid(
+                $"tagPrefix: Use at most {Releases.ReleaseVersionRules.TagPrefixMaxLength} letters, digits or . _ / - (not starting with . / or -, without .. or //)."));
+
+    /// <summary>
+    /// FR-64, FR-65: the tag prefix can't change while the development version is <c>awaiting_merge</c> or a release attempt
+    /// is in progress, because the tag being created is already fixed (<c>CONFLICT</c>). Otherwise the new prefix also
+    /// applies to the version in development.
+    /// </summary>
+    public static Result CanChangeTagPrefix(ReleaseVersionStatus? developmentStatus, bool releaseInProgress) =>
+        developmentStatus == ReleaseVersionStatus.AwaitingMerge || releaseInProgress
+            ? Result.Failure(new DomainError(
+                ErrorCodes.Conflict,
+                "The tag prefix can't change while a release is in progress or waiting for its pull request to be merged."))
+            : Result.Success();
+
     private static DomainError Invalid(string detail) =>
         new(ErrorCodes.Validation, "The Git settings are invalid.") { Details = [detail] };
 

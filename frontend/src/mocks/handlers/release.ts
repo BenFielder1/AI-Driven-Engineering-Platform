@@ -7,6 +7,7 @@ import { problem } from './problem'
 import { access, currentVersionId, currentVersionOf, developmentVersionOf, ownerMutation, record, type StoredProject } from './projects'
 
 type Release = Schemas['ReleaseDto']
+type MergeReadiness = Schemas['MergeReadinessDto']
 type Rollback = Schemas['RollbackDto']
 type Checkpoint = Schemas['CheckpointDto']
 type Phase = Schemas['Phase']
@@ -40,6 +41,10 @@ export function seedRelease(p: StoredProject, overrides: Partial<Release> = {}):
     attempt: releases.filter((r) => r.checkpoint === (overrides.checkpoint ?? p.checkpoint)).length + 1,
     startedAt: new Date(Date.parse('2026-09-05T10:00:00Z') + releases.length * 3_600_000).toISOString(),
     completedAt: new Date(Date.parse('2026-09-05T10:05:00Z') + releases.length * 3_600_000).toISOString(),
+    githubReleaseUrl: null,
+    awaitingMergeSince: null,
+    mergeReasons: null,
+    mergeStrategy: p.git.mergeStrategy,
     ...overrides,
   }
   releases.push(release)
@@ -56,6 +61,44 @@ export function seedVersions(p: StoredProject, phasesByVersion: readonly Phase[]
   if (current) {
     p.currentPhase = current
   }
+}
+
+/** FR-84: a merge-readiness result. Defaults: mergeable under `aide_merges`, with one passing required check. */
+export function mergeReadiness(overrides: Partial<MergeReadiness> = {}): MergeReadiness {
+  const reasons = overrides.reasons ?? []
+  const canMerge = overrides.canMerge ?? reasons.every((r) => r.code === 'manual_strategy')
+  const mergeStrategy = overrides.mergeStrategy ?? 'aide_merges'
+  return {
+    canMerge,
+    willAutoMerge: canMerge && mergeStrategy === 'aide_merges',
+    mergeStrategy,
+    reasons,
+    checks: [
+      { name: 'ci / test', status: 'completed', conclusion: 'success', required: true, detailsUrl: 'https://github.com/acme/inventory/actions/runs/1' },
+    ],
+    mergeStateStatus: canMerge ? 'CLEAN' : 'BLOCKED',
+    reviewDecision: canMerge ? 'APPROVED' : null,
+    checkedAt: '2026-09-05T09:55:00Z',
+    ...overrides,
+  }
+}
+
+/** Puts the current release attempt into `awaiting_merge` (FR-65), with the version awaiting merge too. */
+export function seedAwaitingMerge(p: StoredProject, overrides: Partial<Release> = {}): Release {
+  seedReleasePhase(p)
+  p.status = 'awaiting_merge'
+  const development = developmentVersionOf(p)
+  if (development) {
+    development.status = 'awaiting_merge'
+  }
+  return seedRelease(p, {
+    status: 'awaiting_merge',
+    mergeCommitSha: null,
+    completedAt: null,
+    awaitingMergeSince: '2026-09-05T10:01:00Z',
+    mergeReasons: [{ code: 'review_required', message: 'The default branch requires 1 approving review.' }],
+    ...overrides,
+  })
 }
 
 // ---- Derivations --------------------------------------------------------------------------------------------------
@@ -93,6 +136,33 @@ export function checkpointsOf(p: StoredProject): Checkpoint[] {
 const notFound = () => problem(404, 'NOT_FOUND', 'No release has started yet.')
 
 export const releaseHandlers = [
+  // FR-84: merge readiness of the version's PR (members; review and release phases only, else 409 WRONG_PHASE).
+  http.get('*/api/projects/:id/git/merge-readiness', async ({ request, params }) => {
+    const a = access(params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    const p = a.project
+    if (p.currentPhase !== 'review' && p.currentPhase !== 'release') {
+      return problem(409, 'WRONG_PHASE', 'Merge readiness is checked in the review and release phases.')
+    }
+    const refresh = new URL(request.url).searchParams.get('refresh') === 'true'
+    if (refresh) {
+      await record(request)
+      const next = p.mergeReadinessOnRefresh ?? p.mergeReadiness ?? mergeReadiness({ mergeStrategy: p.git.mergeStrategy })
+      p.mergeReadiness = { ...next, checkedAt: new Date().toISOString() }
+      p.mergeReadinessOnRefresh = undefined
+    }
+    p.mergeReadiness ??= mergeReadiness({
+      mergeStrategy: p.git.mergeStrategy,
+      reasons:
+        p.git.mergeStrategy === 'manual'
+          ? [{ code: 'manual_strategy', message: 'The project merges manually: merge the pull request on GitHub.' }]
+          : [],
+    })
+    return HttpResponse.json<MergeReadiness>(p.mergeReadiness)
+  }),
+
   // FR-42, FR-43, FR-64: release attempts of a release version (default: the current one), newest first.
   http.get('*/api/projects/:id/releases', ({ request, params }) => {
     const a = access(params.id)

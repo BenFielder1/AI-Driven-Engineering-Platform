@@ -15,9 +15,10 @@ import { TextField } from '../../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, isApiError } from '../../../lib/errors'
 import { useSwitchGitToApp } from '../../github/github-api'
 import { GitHubErrorAlert, GitHubLink } from '../../github/github-error-alert'
-import { gitProviderLabels } from '../labels'
+import { gitProviderLabels, mergeStrategyLabels } from '../labels'
 import { useTestGitConnection, useUpdateGitSettings, type GitSettings, type GitTestResult } from '../projects-api'
 import { checkBranch, checkRepoUrl, checkSecret, limits } from '../schemas'
+import { ReleaseSettingsForm } from './release-settings-form'
 import { SecretField, type SecretAction } from './secret-field'
 
 const gitSchema = z
@@ -56,12 +57,6 @@ const toValues = (g: GitSettings): GitValues => ({
   token: '',
 })
 
-/** Display-only fields a later contract may add to GitSettingsDto (phase 7: merge strategy, tag prefix). */
-interface FutureGitFields {
-  mergeStrategy?: string | null
-  tagPrefix?: string | null
-}
-
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="grid gap-1 py-2 sm:grid-cols-3">
@@ -73,7 +68,6 @@ function Row({ term, children }: { term: string; children: ReactNode }) {
 
 /** FR-83: which mode is in use, the repository, App access and the PAT flag (never a token). */
 function GitModeSummary({ git }: { git: GitSettings }) {
-  const future = git as GitSettings & FutureGitFields
   const repo = git.mode === 'github_app' ? git.repoFullName : git.mode === 'github_pat' ? git.repoUrl : null
   return (
     <section aria-labelledby="git-mode-title" className="rounded-lg border border-border/60 bg-background/40 p-4">
@@ -111,8 +105,12 @@ function GitModeSummary({ git }: { git: GitSettings }) {
             </Row>
           </>
         )}
-        {future.mergeStrategy && <Row term="Merge strategy">{future.mergeStrategy}</Row>}
-        {future.tagPrefix && <Row term="Tag prefix">{future.tagPrefix}</Row>}
+        <Row term="Merge strategy">
+          <span data-testid="git-merge-strategy">{mergeStrategyLabels[git.mergeStrategy]}</span>
+        </Row>
+        <Row term="Tag prefix">
+          {git.tagPrefix ? <code className="font-mono">{git.tagPrefix}</code> : <span className="text-muted-foreground">None (bare version tags)</span>}
+        </Row>
       </dl>
     </section>
   )
@@ -179,7 +177,7 @@ function SwitchToApp({ projectId, git }: { projectId: string; git: GitSettings }
 }
 
 /**
- * Settings → Git (FR-9, FR-10, FR-35, FR-83). The token is write-only: only "Set" / "Not set" is ever shown. A project
+ * Settings → Git (FR-9, FR-10, FR-35, FR-83, and the release settings of FR-64/FR-65). The token is write-only: only "Set" / "Not set" is ever shown. A project
  * moves onto the GitHub App only through "Switch to GitHub App" (or the wizard), never through this form.
  */
 export function GitTab({ projectId, git }: { projectId: string; git: GitSettings }) {
@@ -190,6 +188,7 @@ export function GitTab({ projectId, git }: { projectId: string; git: GitSettings
       {/* Remount when the mode changes (Switch to GitHub App), so the form starts from the saved settings. */}
       <GitForm key={git.mode} projectId={projectId} git={git} />
       <TestConnection projectId={projectId} />
+      <ReleaseSettingsForm projectId={projectId} git={git} />
     </div>
   )
 }

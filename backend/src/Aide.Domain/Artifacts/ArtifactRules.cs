@@ -202,7 +202,7 @@ public static class ArtifactRules
     /// FR-18: can a new draft of <paramref name="type"/> be saved now? A type can be edited from the phase that
     /// produces it onwards (a later edit is approved like any version and cascades per §4.4); the optimisation plan
     /// only during review (it belongs to a review cycle); and nothing while a release is in progress
-    /// (<see cref="ProjectStatus.Releasing"/>). Otherwise <c>WRONG_PHASE</c>. The auto-locked <c>codebase_summary</c> is
+    /// (<see cref="ProjectStatus.Releasing"/>, or <see cref="ProjectStatus.AwaitingMerge"/>, FR-65). Otherwise <c>WRONG_PHASE</c>. The auto-locked <c>codebase_summary</c> is
     /// never drafted: <c>ARTIFACT_LOCKED</c> (FR-70).
     /// </summary>
     public static Result CanCreateDraft(ArtifactType type, Phase phase, ProjectStatus status)
@@ -216,7 +216,7 @@ public static class ArtifactRules
         }
 
         var producing = ProducingPhase(type);
-        if (status == ProjectStatus.Releasing)
+        if (status is ProjectStatus.Releasing or ProjectStatus.AwaitingMerge)
         {
             return WrongPhase($"A release is in progress; {type.ToWire()} can't be edited until it finishes.");
         }

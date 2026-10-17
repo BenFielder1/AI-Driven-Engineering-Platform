@@ -89,7 +89,8 @@ export function restoreBlockReason(input: {
   if (readOnly || project.developmentVersion === null || version.releaseVersion !== project.developmentVersion) {
     return 'other_release_version'
   }
-  if (project.status === 'releasing') {
+  // FR-65: a release awaiting its merge is still releasing the version.
+  if (project.status === 'releasing' || project.status === 'awaiting_merge') {
     return 'releasing'
   }
   const at = phases.indexOf(project.currentPhase)

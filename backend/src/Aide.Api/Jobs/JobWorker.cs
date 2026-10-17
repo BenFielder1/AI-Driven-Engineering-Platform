@@ -254,6 +254,7 @@ public sealed partial class JobWorker : BackgroundService
         var succeeded = false;
         var released = false;
         DateTimeOffset? deferredUntil = null;
+        string? deferredPayload = null;
         var transient = true;
         string? error = null;
         string? spanError = null; // an error code or exception type name, never a message (NFR-SEC)
@@ -285,6 +286,7 @@ public sealed partial class JobWorker : BackgroundService
         {
             // FR-70: the handler waits for something (e.g. the codebase summary): run again later, attempt not counted.
             deferredUntil = JobPolicy.DeferUntil(_time.GetUtcNow(), ex.RunAfter);
+            deferredPayload = ex.Payload;
             error = ex.Message;
             LogDeferred(_logger, deferredUntil.Value);
         }
@@ -320,7 +322,7 @@ public sealed partial class JobWorker : BackgroundService
         try
         {
             var outcome = deferredUntil is { } until
-                ? await DeferAsync(job, until, error)
+                ? await DeferAsync(job, until, error, deferredPayload)
                 : await CompleteAsync(job, succeeded, released, transient, error);
             TagOutcome(activity, outcome, spanError);
         }
@@ -406,17 +408,19 @@ public sealed partial class JobWorker : BackgroundService
     /// attempt (its error is kept as the last error). Returns <see cref="JobOutcomes.Retry"/>, or <c>null</c> when the lease
     /// was lost.
     /// </summary>
-    private async Task<string?> DeferAsync(Job job, DateTimeOffset runAfter, string? error)
+    private async Task<string?> DeferAsync(Job job, DateTimeOffset runAfter, string? error, string? payload)
     {
         await using var scope = _scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
         var lastError = Truncate(error);
+        var nextPayload = payload ?? job.Payload;
         var updated = await db.Jobs
             .Where(j => j.Id == job.Id && j.Status == JobStatus.Running && j.LockedBy == WorkerId)
             .ExecuteUpdateAsync(
                 s => s.SetProperty(j => j.Status, JobStatus.Queued)
                     .SetProperty(j => j.Attempts, Math.Max(0, job.Attempts - 1))
                     .SetProperty(j => j.RunAfter, runAfter)
+                    .SetProperty(j => j.Payload, nextPayload)
                     .SetProperty(j => j.LastError, lastError)
                     .SetProperty(j => j.LockedBy, (string?)null)
                     .SetProperty(j => j.LockedAt, (DateTimeOffset?)null),

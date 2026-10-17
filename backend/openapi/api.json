@@ -2223,7 +2223,8 @@
                 "reviewing",
                 "releasing",
                 "released",
-                "rolled_back"
+                "rolled_back",
+                "awaiting_merge"
               ],
               "type": "string"
             }
@@ -3035,7 +3036,7 @@
         "tags": [
           "Project settings"
         ],
-        "summary": "Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL.",
+        "summary": "Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress).",
         "operationId": "UpdateGitSettings",
         "parameters": [
           {
@@ -3100,11 +3101,21 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "VALIDATION: invalid Git settings or tag prefix.",
             "content": {
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT: the tag prefix can't change while a release is in progress or awaiting its merge, or a concurrent change.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -5774,6 +5785,105 @@
         }
       }
     },
+    "/api/projects/{id}/git/merge-readiness": {
+      "get": {
+        "tags": [
+          "Git"
+        ],
+        "summary": "Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: \"AIDE will merge automatically\", else \"A merge on GitHub will be needed\" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. The merge itself stays authoritative (FR-65).",
+        "operationId": "GetMergeReadiness",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergeReadinessDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "WRONG_PHASE: not in the review or release phase.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the action is allowed again.",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR: GitHub failed or couldn't be reached.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/review": {
       "post": {
         "tags": [
@@ -6183,7 +6293,7 @@
         "tags": [
           "Release"
         ],
-        "summary": "Retry a failed release (Owner, FR-43): queues the release job again for the current project version (merge the project PR or branch into the default branch, tag v<version>-aide, or the first free v<version>-aide.<k> when a version number reused after a rollback is already tagged elsewhere; an existing tag of the version holding the branch is a no-op). Only in the release phase with status releasing, after the latest attempt failed (e.g. MERGE_CONFLICT resolved on the branch). Returns 202 with the new in_progress release; the outcome arrives on the live channel.",
+        "summary": "Retry a failed release (Owner, FR-43 amended by FR-64, FR-65): queues the release job again for the version in development at its current checkpoint (merge the version's PR, or the branch for Local, under the project's merge strategy; tag <tagPrefix><version> on the merge commit, reusing a tag that already points at it; create the GitHub Release). Only in the release phase with status releasing, after the latest attempt failed, e.g. MERGE_CONFLICT resolved on the branch, or PR_CLOSED (PR reopened on GitHub) / MERGE_TIMEOUT, after which the project stays in release. Not while awaiting_merge: the merge poll completes that attempt. Returns 202 with the new in_progress release; the outcome (succeeded, awaiting_merge or failed) arrives on the live channel.",
         "operationId": "RetryRelease",
         "parameters": [
           {
@@ -6238,7 +6348,7 @@
             }
           },
           "409": {
-            "description": "NOT_RELEASING (not in the release phase with status releasing, e.g. already released), RELEASE_IN_PROGRESS (a release job is queued or running) or CONFLICT (a concurrent change).",
+            "description": "NOT_RELEASING (not in the release phase with status releasing, e.g. already released or awaiting_merge), RELEASE_IN_PROGRESS (a release job is queued or running) or CONFLICT (a concurrent change).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8562,6 +8672,64 @@
           }
         }
       },
+      "CheckRunConclusion": {
+        "enum": [
+          "success",
+          "failure",
+          "neutral",
+          "cancelled",
+          "skipped",
+          "timed_out",
+          "action_required",
+          null
+        ]
+      },
+      "CheckRunDto": {
+        "required": [
+          "name",
+          "status",
+          "conclusion",
+          "required",
+          "detailsUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CheckRunStatus"
+          },
+          "conclusion": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CheckRunConclusion"
+              }
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "detailsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-84, FR-85: a check run or commit status on the PR head. `conclusion` is set once `status` is\n`completed` (else `null`). `required` is true when the default branch's rules require it.\n`detailsUrl` links the check on GitHub (or the CI provider), when known."
+      },
+      "CheckRunStatus": {
+        "enum": [
+          "queued",
+          "in_progress",
+          "completed"
+        ],
+        "description": "FR-84, FR-85: a GitHub check run's (or commit status's) state. Wire values `queued`, `in_progress`, `completed`."
+      },
       "CheckpointBlock": {
         "enum": [
           "current_checkpoint",
@@ -8789,7 +8957,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/JsonElement"
+                "$ref": "#/components/schemas/ExternalChecksDto"
               }
             ]
           },
@@ -8815,7 +8983,7 @@
             "format": "date-time"
           }
         },
-        "description": "The full compliance report of one review cycle (FR-56): the category breakdown, every violation with its evidence,\nthe deterministic findings alone (`deterministicFindings`, the violations whose source is `deterministic`),\nmissing features, drift areas, the decision and its `escalationReason`, regressions (§4.13), the external checks\ncollected (check runs, preview deployment; schemaless, `null` when none), the optimisation plan it produced and\n`executionRunId`, the review-fix run that plan produced (the plan artifact id, see `ListExecutionRuns`)."
+        "description": "The full compliance report of one review cycle (FR-56): the category breakdown, every violation with its evidence,\nthe deterministic findings alone (`deterministicFindings`, the violations whose source is `deterministic`),\nmissing features, drift areas, the decision and its `escalationReason`, regressions (§4.13), the external checks\ncollected (FR-85 check runs, preview deployment; `null` when none), the optimisation plan it produced and\n`executionRunId`, the review-fix run that plan produced (the plan artifact id, see `ListExecutionRuns`)."
       },
       "ComplianceReportDto": {
         "required": [
@@ -10023,6 +10191,78 @@
         },
         "description": "A plan version's execution steps in step order (FR-30); `plan` is `null` (and no steps) before any plan is approved."
       },
+      "ExternalCheckDto": {
+        "required": [
+          "name",
+          "conclusion",
+          "required",
+          "detailsUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "conclusion": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CheckRunConclusion"
+              }
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "detailsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-85: a GitHub check run or commit status on the PR head as review saw it. `conclusion` is `null` for a check\nstill pending when review stopped waiting. A failed `required` check is a major `testing` finding."
+      },
+      "ExternalChecksDto": {
+        "required": [
+          "checks",
+          "checksWaitedSeconds",
+          "checksTimedOut",
+          "preview"
+        ],
+        "type": "object",
+        "properties": {
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExternalCheckDto"
+            }
+          },
+          "checksWaitedSeconds": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "checksTimedOut": {
+            "type": "boolean"
+          },
+          "preview": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          }
+        },
+        "description": "The external inputs a review cycle collected (FR-85, FR-89): the PR head's `checks`, how long review waited for\npending checks (`checksWaitedSeconds`, up to 15 minutes; `null` when it didn't wait) and whether it gave up\nwaiting (`checksTimedOut`, recorded as a warning). `preview` is the preview deployment (FR-89; schemaless\nuntil that lands, `null` when none)."
+      },
       "FileAction": {
         "enum": [
           "create",
@@ -10694,7 +10934,9 @@
           "repoId",
           "repoFullName",
           "appInstalledOnRepo",
-          "canSwitchToApp"
+          "canSwitchToApp",
+          "mergeStrategy",
+          "tagPrefix"
         ],
         "type": "object",
         "properties": {
@@ -10750,9 +10992,15 @@
           },
           "canSwitchToApp": {
             "type": "boolean"
+          },
+          "mergeStrategy": {
+            "$ref": "#/components/schemas/MergeStrategy"
+          },
+          "tagPrefix": {
+            "type": "string"
           }
         },
-        "description": "Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the\nproject branch, once the working copy has been prepared. `mode` is the v2 name of `provider` (always equal).\nFor `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else\n`null`). `appInstalledOnRepo` says whether the AIDE GitHub App can access a `github_pat` project's repo\n(`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an\nOwner (\"Switch to GitHub App\")."
+        "description": "Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the\nproject branch, once the working copy has been prepared. `mode` is the v2 name of `provider` (always equal).\nFor `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else\n`null`). `appInstalledOnRepo` says whether the AIDE GitHub App can access a `github_pat` project's repo\n(`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an\nOwner (\"Switch to GitHub App\"). `mergeStrategy` (FR-65: `aide_merges`, the default, or `manual`) and\n`tagPrefix` (§4.10, FR-64: default `v`, so tags read `v1.2.0`) are the project's release settings."
       },
       "GitTestResultDto": {
         "required": [
@@ -11246,6 +11494,97 @@
           }
         },
         "description": "A project member (FR-8)."
+      },
+      "MergeReadinessDto": {
+        "required": [
+          "canMerge",
+          "willAutoMerge",
+          "mergeStrategy",
+          "reasons",
+          "checks",
+          "mergeStateStatus",
+          "reviewDecision",
+          "checkedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "canMerge": {
+            "type": "boolean"
+          },
+          "willAutoMerge": {
+            "type": "boolean"
+          },
+          "mergeStrategy": {
+            "$ref": "#/components/schemas/MergeStrategy"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MergeReadinessReasonDto"
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckRunDto"
+            }
+          },
+          "mergeStateStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reviewDecision": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "FR-84 merge readiness of the version's PR, as of `checkedAt`. `canMerge` is whether AIDE's token may merge it\nnow (repository permission and allowed merge methods, branch rules, the PR's `mergeStateStatus` and\n`reviewDecision`, required checks). `willAutoMerge` is `canMerge` under the `aide_merges` strategy\n(\"AIDE will merge automatically\"); otherwise \"A merge on GitHub will be needed\" with `reasons` (empty when\n`canMerge`, except `manual_strategy`). `checks` are the PR head's check runs and commit statuses.\n`mergeStateStatus` and `reviewDecision` are GitHub's GraphQL values verbatim (e.g. `CLEAN`,\n`BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a Local project\n`canMerge` is true with no checks. The merge itself stays authoritative (FR-65)."
+      },
+      "MergeReadinessReasonCode": {
+        "enum": [
+          "review_required",
+          "changes_requested",
+          "checks_failing",
+          "checks_pending",
+          "branch_protected",
+          "merge_conflict",
+          "no_permission",
+          "merge_method_not_allowed",
+          "pr_not_open",
+          "manual_strategy"
+        ],
+        "description": "FR-84: why AIDE can't merge the version's PR itself (wire values `review_required`, `changes_requested`,\n`checks_failing`, `checks_pending`, `branch_protected`, `merge_conflict`, `no_permission`,\n`merge_method_not_allowed`, `pr_not_open`, `manual_strategy`). Also recorded on an `awaiting_merge`\nrelease attempt (FR-65)."
+      },
+      "MergeReadinessReasonDto": {
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/MergeReadinessReasonCode"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "description": "FR-84: one reason AIDE can't merge the version's PR itself, with copy for the Release page and the gate."
+      },
+      "MergeStrategy": {
+        "enum": [
+          "aide_merges",
+          "manual"
+        ],
+        "description": "FR-65 merge strategy. Wire values: `aide_merges`, `manual`."
       },
       "NotificationChannelDto": {
         "required": [
@@ -12064,9 +12403,10 @@
           "reviewing",
           "releasing",
           "released",
-          "rolled_back"
+          "rolled_back",
+          "awaiting_merge"
         ],
-        "description": "Project status (§4.1: status follows phase; `released` and `rolled_back` are special)."
+        "description": "Project status (§4.1: status follows phase; `released`, `rolled_back` and `awaiting_merge` are special)."
       },
       "ProjectSummaryDto": {
         "required": [
@@ -12586,7 +12926,11 @@
           "errorMessage",
           "attempt",
           "startedAt",
-          "completedAt"
+          "completedAt",
+          "githubReleaseUrl",
+          "awaitingMergeSince",
+          "mergeReasons",
+          "mergeStrategy"
         ],
         "type": "object",
         "properties": {
@@ -12652,9 +12996,34 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "githubReleaseUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "awaitingMergeSince": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "mergeReasons": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/MergeReadinessReasonDto"
+            }
+          },
+          "mergeStrategy": {
+            "$ref": "#/components/schemas/MergeStrategy"
           }
         },
-        "description": "A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint\n`checkpoint`. `status` is `in_progress` while the release job is queued or running, then\n`succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`.\nA failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict\n`conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`\nfor Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).\n`completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`\n(e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails\nthe release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging."
+        "description": "A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint\n`checkpoint`. `status` is `in_progress` while the release job is queued or running, then\n`succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`, or\n`awaiting_merge` (FR-65) when the merge was refused or the strategy is `manual`: `awaitingMergeSince` is\nwhen it started waiting and `mergeReasons` are the merge-readiness reasons (FR-84) recorded then (`null`\notherwise); the merge poll then completes it once the PR is merged on GitHub (§4.14).\nA failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict\n`conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`\nfor Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).\n`completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`\n(e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails\nthe release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.\nFailure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,\n`GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and\n`MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can\nretry with `POST /release`. `githubReleaseUrl` is the GitHub Release created for the tag (FR-64; `null`\nfor Local or before it exists). `mergeStrategy` is the project's current merge strategy (FR-65)."
       },
       "ReleaseStatus": {
         "enum": [
@@ -12672,7 +13041,12 @@
           "checkpoint",
           "status",
           "tag",
-          "startedAt"
+          "startedAt",
+          "pullRequestUrl",
+          "githubReleaseUrl",
+          "awaitingMergeSince",
+          "mergeReasons",
+          "mergeStrategy"
         ],
         "type": "object",
         "properties": {
@@ -12697,9 +13071,40 @@
           "startedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "pullRequestUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "githubReleaseUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "awaitingMergeSince": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "mergeReasons": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/MergeReadinessReasonDto"
+            }
+          },
+          "mergeStrategy": {
+            "$ref": "#/components/schemas/MergeStrategy"
           }
         },
-        "description": "The latest release attempt in the project state (FR-42, FR-43): enough for the overview's release banner."
+        "description": "The latest release attempt in the project state (FR-42, FR-43, FR-64, FR-65): enough for the overview's release banner,\nincluding \"Awaiting merge\" with the PR link and reasons, and the GitHub Release link. Fields as in `ReleaseDto`."
       },
       "ReleaseVersionCheckpointsDto": {
         "required": [
@@ -13399,6 +13804,25 @@
           },
           "clearToken": {
             "type": "boolean"
+          },
+          "mergeStrategy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-65: `aide_merges` (AIDE merges the PR on release) or `manual` (AIDE never merges; the release\r\n    marks the PR ready for review and waits for the merge on GitHub). Applies to the next release attempt.",
+                "$ref": "#/components/schemas/MergeStrategy"
+              }
+            ]
+          },
+          "tagPrefix": {
+            "maxLength": 20,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "§4.10, FR-64: the tag prefix (`^[A-Za-z0-9._/-]{0,20}$`, not starting with `.`, `/` or\n    `-`; empty for bare `1.2.0` tags; else 400 `VALIDATION`). It also applies to the version in\n    development. 409 `CONFLICT` while that version is `awaiting_merge` or a release attempt is in progress."
           }
         },
         "description": "Partial update of the Git settings. Omitted fields are unchanged."

@@ -109,7 +109,15 @@ public sealed record ReleaseRequest(
     string Version,
     string ProjectName,
     int? PullRequestNumber,
-    Func<string, CancellationToken, Task>? OnMerged = null);
+    Func<string, CancellationToken, Task>? OnMerged = null)
+{
+    /// <summary>
+    /// FR-65: whether AIDE may merge (<c>aide_merges</c>). <c>false</c> (<c>manual</c>, and the merge poll): never merge —
+    /// a PR (or Local branch) already merged by someone else is tagged on its merge commit and released; one not merged yet
+    /// is <see cref="ReleaseOutcomeKind.AwaitingMerge"/> (GitHub: a draft PR is marked ready for review first).
+    /// </summary>
+    public bool Merge { get; init; } = true;
+}
 
 /// <summary>How a release attempt ended at the provider.</summary>
 public enum ReleaseOutcomeKind
@@ -122,6 +130,13 @@ public enum ReleaseOutcomeKind
 
     /// <summary>Another failure; <see cref="ReleaseOutcome.Transient"/> says whether a retry could help.</summary>
     Failed = 2,
+
+    /// <summary>
+    /// FR-65: not merged yet, and AIDE won't (or can't) merge it: the strategy is <c>manual</c>, or GitHub refused the merge
+    /// (branch protection, required reviews or checks, missing permission). <see cref="ReleaseOutcome.Reason"/> says why.
+    /// Nothing was merged or tagged.
+    /// </summary>
+    AwaitingMerge = 3,
 }
 
 /// <summary>
@@ -148,6 +163,16 @@ public sealed record ReleaseOutcome(
 
     public static ReleaseOutcome Failed(string errorCode, string reason, bool transient) =>
         new(ReleaseOutcomeKind.Failed, null, false, [], errorCode, reason, transient);
+
+    /// <summary>FR-65: waiting for a merge by someone else; <see cref="MergeRefused"/> when GitHub refused AIDE's merge.</summary>
+    public static ReleaseOutcome Awaiting(string reason, bool refused) =>
+        new(ReleaseOutcomeKind.AwaitingMerge, null, false, [], null, reason, false) { MergeRefused = refused };
+
+    /// <summary>FR-65: GitHub refused AIDE's merge (as opposed to the <c>manual</c> strategy not trying).</summary>
+    public bool MergeRefused { get; init; }
+
+    /// <summary>FR-65: released on a merge someone else made (the PR was already merged on GitHub, or the Local branch by hand).</summary>
+    public bool MergedExternally { get; init; }
 }
 
 /// <summary>The project PR to open (FR-36).</summary>

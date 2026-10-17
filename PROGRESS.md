@@ -24,8 +24,8 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | FR-61 | Version validation errors | 3.2, 4.10 | backend | 2 | done | SemVer + VERSION_* errors; FR61_* tests |
 | FR-62 | Released + in-development badges, version switcher, read-only past | 3.2 | both | 2 | done | badges, switcher, ?release= read-only, list filter; FR62_* tests |
 | FR-63 | Checkpoints per release version; rollback scoped; released closed | 3.2, 4.10 | both | 2 | done | checkpoints, scoped rollback, version_released; FR63_*/FR44_amended_* tests |
-| FR-64 | Release tags user semver; GitHub Release (GitHub part phase 7) | 3.2 | backend | 2, 7 | partial (Local/tag done; GitHub Release phase 7) | DecideTag, FR42_amended_by_FR64_* |
-| FR-65 | Merge strategy, awaiting_merge, merge poll | 3.2, 4.14 | both | 7 | todo | — |
+| FR-64 | Release tags user semver; GitHub Release (GitHub part phase 7) | 3.2 | backend | 2, 7 | done | DecideTag, GitHub Release + ReleaseNotes; FR64_*/FR42_amended_by_FR64_* tests |
+| FR-65 | Merge strategy, awaiting_merge, merge poll | 3.2, 4.14 | both | 7 | done (stub-verified) | merge strategies, awaiting_merge, merge_poll job; FR65_*/S4_14_* tests |
 | FR-66 | Initial version for new projects | 3.2 | both | 2 | done | initialVersion + wizard Version step; FR66_* tests |
 | FR-67 | v1 project migration to release versions | 3.2, 4.10 | backend | 2 | done | migration ReleaseVersions backfill; FR67_* migration tests; applied on k8s |
 | FR-70 | Repository Analyst → codebase_summary (auto-locked) | 3.3 | backend | 6 | done | Repository Analyst job → locked codebase_summary; FR70_* tests |
@@ -42,8 +42,8 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | FR-81 | User GitHub connection, repo picker, create repo | 3.7 | both | 5 | done (stub-verified) | connection + refresh, picker, create repo; FR81_* tests |
 | FR-82 | `github_app` provider, installation tokens, per-version branch | 3.7 | backend | 5 | done (stub-verified) | github_app provider, scoped installation tokens ≤55 min; FR82_*/S4_14_* tests |
 | FR-83 | PAT fallback | 3.7 | both | 5 | done (stub-verified) | PAT mode + switch-to-app with push check; FR83_* tests |
-| FR-84 | Merge readiness | 3.7 | both | 7 | todo | — |
-| FR-85 | Check runs as review input | 3.7 | backend | 7 | todo | — |
+| FR-84 | Merge readiness | 3.7 | both | 7 | done (stub-verified) | MergeReadinessService (branch rules + GraphQL, fallback); FR84_* tests |
+| FR-85 | Check runs as review input | 3.7 | backend | 7 | done (stub-verified) | required check runs → testing finding, 15-min wait; FR85_* tests |
 | FR-86 | Wizard Repository step | 3.7 | frontend | 5 | done (stub-verified) | wizard Repository step, has-code warning; FR86_* tests |
 | FR-87 | Vercel connection | 3.8 | both | 9 | todo | — |
 | FR-88 | Deployment settings + env vars | 3.8 | both | 9 | todo | — |
@@ -94,7 +94,10 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
   - [x] aspnet-engineer A (§4.13 + FR-75 domain rules, import contract; oasdiff additive) ‖ aspnet-engineer B (repo tools, snapshots, LlmToolLoop for Anthropic/OpenAI/Ollama fallback, Fake scripts — ~98 FR71_* tests)
   - [x] aspnet-engineer C (Repository Analyst job, refinement wait + iteration inputs, spec/review/plan integration, import implementation — 2938 backend tests) ‖ vite-react-engineer (import wizard, codebase summary, tool calls, e2e wizard selectors — 573 frontend tests)
   - [x] gate (backend 2945, frontend 579, manifests, contract fresh, no vulnerable packages) · review (0 Critical, 3 Major, 4 Minor — all fixed: linear-time regex + per-line budget, tool-loop tokens counted + mid-loop budget stop, exact tag lookups + paginated picker, link-safe Local import, snapshot cleanup, /tmp sizeLimit 6Gi, tool error copy in errors.ts) · redeploy (smoke ✓) · commit
-- [ ] 7 M13b Merge strategies + GitHub release — IDs: FR-64 (GitHub), FR-65, FR-84, FR-85
+- [x] 7 M13b Merge strategies + GitHub release (base: 77ddc9a) — IDs: FR-64 (GitHub), FR-65, FR-84, FR-85
+  - [x] aspnet-engineer (contract: GetMergeReadiness stub, git settings mergeStrategy/tagPrefix implemented, release fields, ExternalChecksDto, ProjectStatus awaiting_merge)
+  - [x] aspnet-engineer (merge strategies, awaiting_merge, merge poll, GitHub Release + notes, merge readiness, check runs in review — 3162 backend tests) ‖ vite-react-engineer (settings Git, Release page readiness/awaiting/GitHub Release, review external checks — 601 frontend tests)
+  - [x] gate (backend 3165, frontend 619, manifests) · review (0 Critical, 1 Major, 4 Minor — all fixed: rate-limited merge defers, tag reuse only at merge commit + annotated-tag commit resolution, merged-externally flag, readiness refresh throttle, tag-prefix client rule; backend 3165, frontend 619) · redeploy (smoke ✓; first attempt 2026-10-16 was stopped for low system memory, rerun 2026-10-17) · commit
 - [ ] 8 M14 Presets — IDs: FR-74–FR-77, §4.11–4.12
 - [ ] 9 M15 Vercel — IDs: FR-87–FR-91, §4.15
 - [ ] 10 M16 Integrate & harden — IDs: FR-92, FR-93, NFR-*2, E2E
@@ -149,6 +152,13 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 - 2026-10-16 — Plan warnings (UNCOVERED_REQUIREMENTS) are computed on read against the version's latest locked spec and returned as ArtifactDto.warnings for implementation_plan — §4.13 — SPEC updated: no
 - 2026-10-16 — PAT import lists tags via the REST API with the token (not git ls-remote); Local import clones `--no-hardlinks` from under `Git:Local:ImportRoot` (empty = disabled) — FR-73 — SPEC updated: no
 - 2026-10-16 — AgentKind enum gains `repository_analyst` (response enum value added; oasdiff flags it — accepted, same precedent as D-V2-11) — SPEC updated: no
+- 2026-10-16 — ProjectStatus enum gains `awaiting_merge` and ComplianceReportDetailDto.externalChecks becomes typed ExternalChecksDto (oasdiff: enum-value-added + one-of-added, accepted — FR-65/FR-85) — SPEC updated: no
+- 2026-10-16 — Changing tagPrefix is blocked (409 CONFLICT) while a version is awaiting_merge or a release attempt/job is in progress; a new prefix also applies to the in-development version. Release DTO `mergeStrategy` is the project's current strategy (not stored per attempt) — SPEC updated: no
+- 2026-10-16 — Merge poll is one self-deferring `merge_poll` job with the ETag and wait state in its payload (restart-safe). PR_CLOSED / MERGE_TIMEOUT return the project to status `releasing` in phase release so an Owner can retry `POST /release` — FR-65 — SPEC updated: no
+- 2026-10-16 — Local manual-merge detection: the merge commit is the oldest first-parent commit on the default branch that contains the branch head (the head itself after a fast-forward) — FR-65 — SPEC updated: no
+- 2026-10-16 — GitHub refusing GitHub Release creation (403/404/422) is logged and the release completes without a URL (5xx retries) — FR-64 — SPEC updated: no
+- 2026-10-16 — Merge readiness is computed by a `merge_readiness` job when the pre-release gate is created and cached 5 min (MERGE_READINESS_CHECKED event); without GraphQL access, mergeStateStatus/reviewDecision are null and required approvals count as missing (§11 check) — FR-84 — SPEC updated: no
+- 2026-10-16 — Until phase 10 adds the dedicated type, "release awaiting merge" notifications reuse `release_failed` (Owners) with awaiting-merge wording — FR-92 — SPEC updated: no
 
 ## Known issues
 - `GitHub` paths (App, PAT import, repo tools over GitHub snapshots) verified only against stub HTTP handlers — orchestrator

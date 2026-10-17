@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import type { Schemas } from '../../api/client'
@@ -31,7 +31,16 @@ const RECENT_DECIDED = 5
  * (escalations: Decide) for Owners, then the most recent decided ones, each with its release version. A gate belongs to
  * the release version it was created in (`GateDto.releaseVersionId`); a past version (FR-62) lists its gates read-only.
  */
-export function StageGates({ types, filter }: { types: readonly GateType[]; filter?: (gate: Gate) => boolean }) {
+export function StageGates({
+  types,
+  filter,
+  pendingDetails,
+}: {
+  types: readonly GateType[]
+  filter?: (gate: Gate) => boolean
+  /** Extra context on a pending gate's card (e.g. merge readiness on the pre-release gate, FR-84). */
+  pendingDetails?: (gate: Gate) => ReactNode
+}) {
   const { project, can, readOnly, view } = useProjectAccess()
   const gates = useGates(project.id)
   const [dialog, setDialog] = useState<OpenDialog>(null)
@@ -84,6 +93,7 @@ export function StageGates({ types, filter }: { types: readonly GateType[]; filt
                   <GateStepRef projectId={project.id} gate={gate} />
                   {gate.escalationReason && <span>Reason: {escalationReasonLabels[gate.escalationReason]}</span>}
                   {gate.reason && <span className="text-muted-foreground">{gate.reason}</span>}
+                  {pendingDetails?.(gate)}
                 </div>
                 {canDecide ? (
                   <div className="flex flex-wrap gap-2">

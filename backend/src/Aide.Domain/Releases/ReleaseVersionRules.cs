@@ -30,6 +30,9 @@ public static partial class ReleaseVersionRules
         (ReleaseVersionStatus.InDevelopment, ReleaseVersionStatus.AwaitingMerge) => true,
         (ReleaseVersionStatus.InDevelopment, ReleaseVersionStatus.Released) => true,
         (ReleaseVersionStatus.AwaitingMerge, ReleaseVersionStatus.Released) => true,
+
+        // FR-65: the awaited merge won't happen (PR_CLOSED, MERGE_TIMEOUT): back in development, so the release can be retried.
+        (ReleaseVersionStatus.AwaitingMerge, ReleaseVersionStatus.InDevelopment) => true,
         _ => false,
     };
 
