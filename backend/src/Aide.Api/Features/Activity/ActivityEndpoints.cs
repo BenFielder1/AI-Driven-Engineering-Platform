@@ -189,7 +189,9 @@ internal static class ActivitySummary
             EventTypes.RunCompleted => $"{Get("agent") ?? "Agent"} run completed ({Get("inputTokens") ?? "?"} in / {Get("outputTokens") ?? "?"} out tokens)",
             EventTypes.RunFailed => $"{Get("agent") ?? "Agent"} run failed: {Get("errorCode") ?? "error"}",
             EventTypes.BudgetExceeded => $"{Get("agent") ?? "Agent"} run refused: token budget used up",
-            EventTypes.ConnectionInvalid => $"{Get("provider") ?? "LLM"} rejected the bound connection's key; it is marked invalid",
+            EventTypes.ConnectionInvalid => Get("provider") == "vercel"
+                ? "Vercel rejected the connection's token; it is marked invalid"
+                : $"{Get("provider") ?? "LLM"} rejected the bound connection's key; it is marked invalid",
             EventTypes.LlmBindingCleared => $"LLM binding cleared ({Get("reason") ?? "?"})",
             EventTypes.StepStarted => $"Step {Get("stepNumber") ?? "?"} started (attempt {Get("attempt") ?? "?"})",
             EventTypes.StepCompleted => $"Step {Get("stepNumber") ?? "?"} completed",
@@ -217,6 +219,10 @@ internal static class ActivitySummary
             EventTypes.MemberRoleChanged => "Member role changed",
             EventTypes.MemberRemoved => "Member removed",
             EventTypes.SettingsUpdated => "Settings updated",
+            EventTypes.DeploymentCreated => $"{Get("target") ?? "Deployment"} deployment of {Get("gitRef") ?? "?"} recorded ({Get("trigger") ?? "auto"})",
+            EventTypes.DeploymentUpdated => $"{Get("target") ?? "Deployment"} deployment {Get("status") ?? "updated"}{(Get("errorCode") is { } code ? $" ({code})" : string.Empty)}",
+            EventTypes.DeploymentFailed => $"{Get("target") ?? "Production"} deployment failed: {Get("errorCode") ?? "error"}",
+            EventTypes.DeploymentPreviewReady => $"Preview ready{(Get("url") is { } url ? $" at {url}" : string.Empty)}",
             EventTypes.DeadLetterRetried => $"Dead-lettered {Get("jobType") ?? "?"} job retried by an Admin",
             _ when Get("type") is { } artifactType && Get("version") is { } version
                 => $"{Humanize(type)}: {artifactType} v{version}",

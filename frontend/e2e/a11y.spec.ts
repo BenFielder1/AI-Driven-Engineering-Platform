@@ -46,10 +46,10 @@ const targets: Target[] = [
     name: 'wizard (idea step, with errors)',
     path: () => '/projects/new',
     signedIn: true,
-    ready: (p) => p.getByRole('heading', { name: 'Step 1 of 7: Source' }),
+    ready: (p) => p.getByRole('heading', { name: 'Step 1 of 8: Source' }),
     prepare: async (p) => {
       await p.getByRole('button', { name: 'Next' }).click()
-      await expect(p.getByRole('heading', { name: 'Step 2 of 7: Project idea' })).toBeVisible()
+      await expect(p.getByRole('heading', { name: 'Step 2 of 8: Project idea' })).toBeVisible()
       await p.getByRole('button', { name: 'Next' }).click()
       await expect(p.getByText('Check this step')).toBeVisible()
     },
@@ -58,20 +58,20 @@ const targets: Target[] = [
     name: 'wizard (configuration step)',
     path: () => '/projects/new',
     signedIn: true,
-    ready: (p) => p.getByRole('heading', { name: 'Step 1 of 7: Source' }),
+    ready: (p) => p.getByRole('heading', { name: 'Step 1 of 8: Source' }),
     prepare: async (p) => {
       await p.getByRole('button', { name: 'Next' }).click()
       await p.getByLabel('Project name').fill('A11y wizard')
       await p.getByLabel('Your idea').fill('Checking the configuration step for accessibility.')
       await p.getByRole('button', { name: 'Next' }).click()
-      await expect(p.getByRole('heading', { name: 'Step 3 of 7: Repository' })).toBeVisible()
+      await expect(p.getByRole('heading', { name: 'Step 3 of 8: Repository' })).toBeVisible()
       await p.getByRole('radio', { name: /^Local repository/ }).check()
       await p.getByRole('button', { name: 'Next' }).click()
-      await expect(p.getByRole('heading', { name: 'Step 4 of 7: Version' })).toBeVisible()
+      await expect(p.getByRole('heading', { name: 'Step 4 of 8: Version' })).toBeVisible()
       await p.getByRole('button', { name: 'Next' }).click()
-      await expect(p.getByRole('heading', { name: 'Step 5 of 7: Stack' })).toBeVisible()
+      await expect(p.getByRole('heading', { name: 'Step 5 of 8: Stack' })).toBeVisible()
       await p.getByRole('button', { name: 'Next' }).click()
-      await expect(p.getByRole('heading', { name: 'Step 6 of 7: Configuration' })).toBeVisible()
+      await expect(p.getByRole('heading', { name: 'Step 6 of 8: Configuration' })).toBeVisible()
     },
   },
   {

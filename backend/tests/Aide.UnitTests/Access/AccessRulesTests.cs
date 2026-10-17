@@ -7,12 +7,16 @@ namespace Aide.UnitTests.Access;
 public class ProjectPermissionsTests
 {
     private static readonly ProjectAction[] WriterActions =
-        [ProjectAction.RunAgents, ProjectAction.ControlExecution, ProjectAction.CreateDraft, ProjectAction.TriggerReview, ProjectAction.AdvancePhase];
+    [
+        ProjectAction.RunAgents, ProjectAction.ControlExecution, ProjectAction.CreateDraft, ProjectAction.TriggerReview, ProjectAction.AdvancePhase,
+        ProjectAction.TriggerDeployment,
+    ];
 
     private static readonly ProjectAction[] OwnerActions =
     [
         ProjectAction.DecideGate, ProjectAction.DecideArtifact, ProjectAction.RequestRelease, ProjectAction.Rollback,
         ProjectAction.ChangeSettings, ProjectAction.ManageMembers, ProjectAction.DeleteProject, ProjectAction.StartVersion,
+        ProjectAction.ManageDeployments,
     ];
 
     public static TheoryData<ProjectRole, ProjectAction> RoleActionMatrix()

@@ -123,6 +123,30 @@ public static class ErrorCodes
     /// </summary>
     public const string PresetLocked = "PRESET_LOCKED";
 
+    // Vercel deployments (FR-87–FR-91, §4.15)
+
+    /// <summary>
+    /// FR-88 (409 on <c>PATCH /settings/deployment</c> and <c>POST /api/projects</c>): Vercel's GitHub App can't access the
+    /// project's repository. The ProblemDetails carries an <c>installUrl</c> extension (Vercel's install link) when known.
+    /// </summary>
+    public const string VercelGitNotConnected = "VERCEL_GIT_NOT_CONNECTED";
+
+    /// <summary>FR-88: the Vercel plan doesn't allow it (a Hobby account linking an organisation-owned repository).</summary>
+    public const string VercelPlanLimit = "VERCEL_PLAN_LIMIT";
+
+    /// <summary>FR-90 (409 on <c>POST /deployments/preview</c>): the project has no deployment settings (no provider bound).</summary>
+    public const string DeploymentNotConfigured = "DEPLOYMENT_NOT_CONFIGURED";
+
+    /// <summary>FR-91 (409 on promote): only a <c>ready</c> production deployment can be promoted.</summary>
+    public const string InvalidDeployment = "INVALID_DEPLOYMENT";
+
+    /// <summary>§4.15 (recorded on a deployment, not returned by an endpoint): still not finished after the 30-minute poll ceiling.</summary>
+    public const string DeploymentTimeout = "DEPLOYMENT_TIMEOUT";
+
+    /// <summary>FR-90, FR-91 (recorded on a deployment, not returned by an endpoint): Vercel reported the build or deployment
+    /// as failed, or refused to create it; the message and build-log tail say why.</summary>
+    public const string VercelError = "VERCEL_ERROR";
+
     /// <summary>FR-42, FR-43 (recorded on a failed release): Git or GitHub refused the merge, tag or push for good.</summary>
     public const string GitError = "GIT_ERROR";
 
@@ -268,6 +292,10 @@ public static class ErrorCodes
         [GitHubAppNotInstalled] = 409,
         [RepoNameTaken] = 409,
         [GitHubRateLimited] = 429,
+        [VercelGitNotConnected] = 409,
+        [VercelPlanLimit] = 409,
+        [DeploymentNotConfigured] = 409,
+        [InvalidDeployment] = 409,
         [LinkExpired] = 410,
         [LinkUsed] = 409,
     };

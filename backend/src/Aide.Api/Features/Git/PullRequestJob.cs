@@ -115,6 +115,7 @@ public sealed partial class PullRequestJobHandler(
     IWorkingCopies workingCopies,
     AgentJobInputs inputs,
     LifecycleService lifecycle,
+    Deployments.DeploymentScheduler deployments,
     Microsoft.Extensions.Options.IOptions<Notifications.AppOptions> appOptions,
     TimeProvider time,
     ILogger<PullRequestJobHandler> logger) : IJobHandler
@@ -209,6 +210,14 @@ public sealed partial class PullRequestJobHandler(
         {
             version.PullRequestNumber = opened.Number;
             version.PullRequestUrl = opened.Url;
+
+            // FR-90: the PR opened or updated, so its head is deployed as a preview (when Vercel is set up); the review that
+            // follows waits for it. Recorded in this transaction, built by the deployment job.
+            var head = comparison?.HeadSha ?? await HeadAsync(project.Id, working.Branch, cancellationToken);
+            if (head is not null)
+            {
+                await deployments.AutoPreviewAsync(project.Id, version.Id, working.Branch, head, now, cancellationToken);
+            }
         }
 
         if (!after.Recorded)
@@ -263,6 +272,19 @@ public sealed partial class PullRequestJobHandler(
                 LogAdvanceRefused(logger, advanced.Error.Code, advanced.Error.Message);
                 await SaveAsync(cancellationToken);
                 return;
+        }
+    }
+
+    /// <summary>The branch head in the working copy, or <c>null</c> when it can't be read.</summary>
+    private async Task<string?> HeadAsync(Guid projectId, string branch, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await workingCopies.ResolveCommitAsync(projectId, $"refs/heads/{branch}", cancellationToken);
+        }
+        catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException)
+        {
+            return null;
         }
     }
 

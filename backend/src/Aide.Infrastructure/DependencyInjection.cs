@@ -1,4 +1,5 @@
 using Aide.Infrastructure.Agents;
+using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
@@ -151,6 +152,20 @@ public static class DependencyInjection
         services.AddSingleton<GitHubAppInfoCache>();
         services.AddScoped<IGitProvider, GitHubAppGitProvider>();
         services.AddScoped<IGitProviderResolver, GitProviderResolver>();
+
+        // Deployments (FR-87–FR-91, §4.15, D-V2-10): Vercel's REST API on the fixed host api.vercel.com (§8: never
+        // configurable, so no SSRF), the deterministic Fake (Deployments:Provider=Fake) and the env write limiter.
+        services.AddOptions<DeploymentOptions>().BindConfiguration(DeploymentOptions.SectionName);
+        services.AddHttpClient(VercelDeploymentProvider.HttpClientName, client =>
+        {
+            client.BaseAddress = new Uri(VercelDeploymentProvider.ApiBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(20);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+        });
+        services.AddSingleton<VercelEnvWriteLimiter>();
+        services.AddSingleton<VercelDeploymentProvider>();
+        services.AddSingleton<FakeDeploymentProvider>();
+        services.AddSingleton<IDeploymentProviderResolver, DeploymentProviderResolver>();
 
         return services;
     }

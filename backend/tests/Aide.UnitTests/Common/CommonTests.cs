@@ -138,6 +138,10 @@ public class ErrorCodesTests
             ["GITHUB_APP_NOT_INSTALLED"] = 409,
             ["REPO_NAME_TAKEN"] = 409,
             ["GITHUB_RATE_LIMITED"] = 429,
+            ["VERCEL_GIT_NOT_CONNECTED"] = 409,
+            ["VERCEL_PLAN_LIMIT"] = 409,
+            ["DEPLOYMENT_NOT_CONFIGURED"] = 409,
+            ["INVALID_DEPLOYMENT"] = 409,
         };
 
         foreach (var (code, status) in expected)

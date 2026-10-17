@@ -41,7 +41,7 @@ internal sealed class ProblemDetailsSchemaTransformer : IOpenApiSchemaTransforme
         schema.Properties[ApiProblems.InstallUrlKey] = new OpenApiSchema
         {
             Type = JsonSchemaType.String,
-            Description = "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83).",
+            Description = "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88).",
         };
         return Task.CompletedTask;
     }

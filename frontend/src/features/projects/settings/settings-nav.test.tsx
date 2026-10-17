@@ -19,6 +19,7 @@ describe('Settings secondary nav (SPEC §7.2)', () => {
       'Members',
       'Git',
       'LLM',
+      'Deployment',
       'Notifications',
       'Danger zone',
     ])

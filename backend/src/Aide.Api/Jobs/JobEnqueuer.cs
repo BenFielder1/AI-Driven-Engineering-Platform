@@ -90,7 +90,8 @@ public sealed record LifecycleJobPayload(
     Guid? GateId = null,
     Guid? ArtifactId = null,
     IReadOnlyList<RefinementAnswer>? Answers = null,
-    DateTimeOffset? ChecksWaitSince = null)
+    DateTimeOffset? ChecksWaitSince = null,
+    DateTimeOffset? PreviewWaitSince = null)
 {
     /// <summary>FR-27: a writer started a refinement round (<see cref="Answers"/> are the answers given).</summary>
     public const string UserRequested = "user_requested";

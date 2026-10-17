@@ -189,12 +189,26 @@ public sealed class ReviewReader(AideDbContext db, ExecutionRunReader runs)
             }
 
             var stored = AideJson.Deserialize<StoredExternalChecks>(json);
-            JsonElement? preview = root.TryGetProperty("preview", out var p) && p.ValueKind != JsonValueKind.Null ? p.Clone() : null;
+            var preview = root.TryGetProperty("preview", out var p) && p.ValueKind == JsonValueKind.Object ? ReadPreview(p) : null;
             return new ExternalChecksDto(
                 [.. (stored.Checks ?? []).OfType<ExternalCheckDto>().Where(c => !string.IsNullOrEmpty(c.Name))],
                 stored.ChecksWaitedSeconds,
                 stored.ChecksTimedOut,
                 preview);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>FR-90: the stored preview deployment (the <see cref="Deployments.PreviewCheckDto"/> shape), or <c>null</c> when
+    /// it can't be read.</summary>
+    private static Deployments.PreviewCheckDto? ReadPreview(JsonElement preview)
+    {
+        try
+        {
+            return preview.Deserialize<Deployments.PreviewCheckDto>(AideJson.Options);
         }
         catch (JsonException)
         {
@@ -288,6 +302,7 @@ public static class ReviewServiceCollectionExtensions
         services.AddScoped<ReviewService>();
         services.AddScoped<ReviewReader>();
         services.AddScoped<ExternalChecksCollector>();
+        services.AddScoped<PreviewCollector>();
         services.AddScoped<IJobEndedHook, ReviewJobEndedHook>();
         services.AddJobHandler<ReviewJobHandler>(JobTypes.Review);
         return services;

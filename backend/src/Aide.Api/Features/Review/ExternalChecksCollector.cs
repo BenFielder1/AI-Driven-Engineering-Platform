@@ -15,14 +15,23 @@ namespace Aide.Api.Features.Review;
 /// <summary>The PR head's checks as review used them (FR-85), how long it waited and whether it gave up waiting.</summary>
 public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int? WaitedSeconds, bool TimedOut)
 {
-    /// <summary>The <c>compliance_report.external_checks</c> JSON (the <see cref="ExternalChecksDto"/> shape; no preview yet).</summary>
-    public string ToJson() => AideJson.Serialize(new
-    {
-        checks = Checks.Select(c => new ExternalCheckDto(c.Name, c.Status == CheckRunStatus.Completed ? c.Conclusion : null, c.Required, c.DetailsUrl)),
-        checksWaitedSeconds = WaitedSeconds,
-        checksTimedOut = TimedOut,
-        preview = (object?)null,
-    });
+    /// <summary>The <c>compliance_report.external_checks</c> JSON (the <see cref="ExternalChecksDto"/> shape) without a preview.</summary>
+    public string ToJson() => Compose(this, null)!;
+
+    /// <summary>
+    /// The <c>compliance_report.external_checks</c> JSON (the <see cref="ExternalChecksDto"/> shape): the PR head's checks
+    /// (FR-85) and the preview deployment review waited for (FR-90); <c>null</c> when there is neither.
+    /// </summary>
+    public static string? Compose(CollectedChecks? checks, Deployments.PreviewCheckDto? preview) =>
+        checks is null && preview is null
+            ? null
+            : AideJson.Serialize(new
+            {
+                checks = (checks?.Checks ?? []).Select(c => new ExternalCheckDto(c.Name, c.Status == CheckRunStatus.Completed ? c.Conclusion : null, c.Required, c.DetailsUrl)),
+                checksWaitedSeconds = checks?.WaitedSeconds,
+                checksTimedOut = checks?.TimedOut ?? false,
+                preview,
+            });
 }
 
 /// <summary>

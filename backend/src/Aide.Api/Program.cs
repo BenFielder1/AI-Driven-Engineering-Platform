@@ -8,6 +8,7 @@ using Aide.Api.Features.Approvals;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
 using Aide.Api.Features.Connections;
+using Aide.Api.Features.Deployments;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Git;
@@ -171,6 +172,9 @@ builder.Services.AddMergeReadiness();
 builder.Services.AddScoped<RollbackService>();
 builder.Services.AddReleaseVersions();
 
+// Vercel deployments (FR-87–FR-91, §4.15): settings, env sync, previews, production and the poll job.
+builder.Services.AddDeployments();
+
 // Tech stack presets (FR-74): pinning and the preset API; the catalogue is loaded by the infrastructure.
 builder.Services.AddPresets();
 
@@ -204,6 +208,7 @@ app.MapHealthEndpoints();
 app.MapAuthEndpoints();
 app.MapApiTokenEndpoints();
 app.MapLlmConnectionEndpoints();
+app.MapVercelConnectionEndpoints();
 app.MapGitHubEndpoints();
 app.MapAdminUserEndpoints();
 app.MapAdminOperationsEndpoints();
@@ -211,6 +216,7 @@ app.MapAdminIntegrationEndpoints();
 app.MapProjectEndpoints();
 app.MapProjectMemberEndpoints();
 app.MapProjectSettingsEndpoints();
+app.MapDeploymentEndpoints();
 app.MapLifecycleEndpoints();
 app.MapGateEndpoints();
 app.MapActivityEndpoints();

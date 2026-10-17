@@ -6,7 +6,7 @@ import { useProjectState } from '../projects/projects-api'
 import { StartVersionButton } from '../versions/start-version-button'
 import { useReleaseVersionNames } from '../versions/version-label'
 import { VersionSummary } from '../versions/version-summary'
-import { IntegrationSlot } from '../stages/integration-slot'
+import { ProductionDeploymentSection } from '../deployments/stage-deployment-sections'
 import { StageGates } from '../stages/stage-gates'
 import { StageHeader } from '../stages/stage-header'
 import { stageGates } from '../stages/stage-model'
@@ -34,7 +34,8 @@ function PastReleases({ projectId, releaseVersionId }: { projectId: string; rele
 
 /**
  * /projects/:id/release (FR-55 stage page): the pre-release gate (decided in place), the release panel (FR-42, FR-43,
- * FR-64, FR-65: attempts, awaiting merge, tag, pull request), merge readiness (FR-84), the GitHub Release link and, for Owners, Start new version
+ * FR-64, FR-65: attempts, awaiting merge, tag, pull request), merge readiness (FR-84), the GitHub Release link, the
+ * production deployment (FR-91) and, for Owners, Start new version
  * (FR-60; disabled with the reason until the project is released and merged). Before the project reaches Release, an
  * empty state says what has to happen first. A past version (FR-62) shows its summary and release attempts, read-only.
  */
@@ -42,6 +43,8 @@ export function ReleaseStagePage() {
   const { project, can, readOnly, releaseVersionId, view } = useProjectAccess()
   useDocumentTitle(`Release · ${project.name}`)
   const state = useProjectState(project.id)
+  // FR-91: the newest release attempt carries the production deployment.
+  const releases = useReleases(project.id, !readOnly)
 
   if (readOnly && releaseVersionId && view.version) {
     return (
@@ -103,11 +106,7 @@ export function ReleaseStagePage() {
       )}
       <MergeReadinessPanel projectId={project.id} state={s} />
       <GitHubReleaseSection projectId={project.id} state={s} />
-      <IntegrationSlot
-        id="release-production-deployment"
-        title="Production deployment"
-        description="The production deployment of this version will show here once a deployment target is set."
-      />
+      <ProductionDeploymentSection release={releases.data?.[0] ?? null} />
     </section>
   )
 }

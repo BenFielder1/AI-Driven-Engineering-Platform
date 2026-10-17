@@ -173,6 +173,7 @@ public static partial class ProjectMemberEndpoints
 
             // FR-79: a binding Owner who is no longer an Owner takes their connection with them.
             await LlmBindings.ClearForMemberAsync(db, id, userId, request.Role, currentUser.Actor, now, cancellationToken);
+            await Deployments.DeploymentBindings.ClearForMemberAsync(db, id, userId, request.Role, currentUser.Actor, now, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             var logger = loggers.CreateLogger(typeof(ProjectMemberEndpoints));
             LogRoleChanged(logger, id, userId, previous, request.Role);
@@ -219,6 +220,7 @@ public static partial class ProjectMemberEndpoints
 
             // FR-79: so does a binding Owner who leaves or is removed.
             await LlmBindings.ClearForMemberAsync(db, id, userId, newRole: null, currentUser.Actor, now, cancellationToken);
+            await Deployments.DeploymentBindings.ClearForMemberAsync(db, id, userId, newRole: null, currentUser.Actor, now, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
         }
 

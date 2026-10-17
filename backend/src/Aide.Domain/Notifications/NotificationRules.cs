@@ -39,6 +39,11 @@ public static class NotificationRules
         // type, it travels as release_failed with its own wording (NotificationFacts.AwaitingMerge).
         EventTypes.ReleaseAwaitingMerge => NotificationType.ReleaseFailed,
         EventTypes.RollbackCompleted => NotificationType.Rollback,
+
+        // FR-91, FR-90: until FR-92 adds dedicated types, a failed deployment travels as release_failed (Owners) and a ready
+        // preview as review_completed (every member, linking to the Review page), each with its own wording.
+        EventTypes.DeploymentFailed => NotificationType.ReleaseFailed,
+        EventTypes.DeploymentPreviewReady => NotificationType.ReviewCompleted,
         _ => null,
     };
 

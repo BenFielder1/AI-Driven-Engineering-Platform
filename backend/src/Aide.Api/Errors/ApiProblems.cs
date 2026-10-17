@@ -15,7 +15,8 @@ public static class ApiProblems
     public const string DetailsKey = "details";
     public const string ReasonKey = "reason";
 
-    /// <summary>FR-81, FR-83: the AIDE GitHub App's install link on a <c>GITHUB_APP_NOT_INSTALLED</c> problem.</summary>
+    /// <summary>FR-81, FR-83: the AIDE GitHub App's install link on a <c>GITHUB_APP_NOT_INSTALLED</c> problem; FR-88: Vercel's
+    /// GitHub App install link on a <c>VERCEL_GIT_NOT_CONNECTED</c> problem.</summary>
     public const string InstallUrlKey = "installUrl";
 
     /// <summary>
@@ -64,6 +65,18 @@ public static class ApiProblems
         }
 
         return TypedResults.Problem(title: title, statusCode: StatusFor(ErrorCodes.GitHubAppNotInstalled), extensions: extensions);
+    }
+
+    /// <summary>409 <c>VERCEL_GIT_NOT_CONNECTED</c> (FR-88) with Vercel's GitHub App install link, when known.</summary>
+    public static ProblemHttpResult VercelGitNotConnected(string? installUrl, string title = "Vercel's GitHub App can't access this repository.")
+    {
+        var extensions = new Dictionary<string, object?> { [ErrorCodeKey] = ErrorCodes.VercelGitNotConnected };
+        if (installUrl is not null)
+        {
+            extensions[InstallUrlKey] = installUrl;
+        }
+
+        return TypedResults.Problem(title: title, statusCode: StatusFor(ErrorCodes.VercelGitNotConnected), extensions: extensions);
     }
 
     public static ProblemHttpResult NotFound(string title = "The resource was not found.") => Of(ErrorCodes.NotFound, title);

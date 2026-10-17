@@ -81,6 +81,9 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
             services.AddHttpClient<OpenAiLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
             services.AddHttpClient<OllamaLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
 
+            // §8, CLAUDE.md rule 11 for deployments: no test reaches api.vercel.com; Vercel tests swap in a stub handler.
+            services.AddHttpClient(Aide.Infrastructure.Deployments.VercelDeploymentProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
+
             // FR-74: the test-only fixture preset (tests/Fixtures/Presets/test-stack) next to the shipped ones.
             services.AddSingleton<IPresetSource>(new EmbeddedPresetSource(typeof(AideApiFactory).Assembly, TestPresetId.Prefix));
         });

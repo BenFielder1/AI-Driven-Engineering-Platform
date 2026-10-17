@@ -73,6 +73,16 @@ export const errorMessages = {
   REPO_NAME_TAKEN: "A repository with this name already exists for that owner. Choose another name.",
   GITHUB_RATE_LIMITED: "GitHub's rate limit was reached. Wait a moment and try again.",
   GIT_ERROR: "Git or GitHub refused the operation.",
+  // Vercel deployments (FR-87–FR-91, §4.15)
+  VERCEL_GIT_NOT_CONNECTED:
+    "Vercel's GitHub App can't access this repository. Install it on the repository's owner (or give it access to the repository), then try again.",
+  VERCEL_PLAN_LIMIT:
+    "Your Vercel plan doesn't allow this: a Hobby account can't deploy a repository owned by a GitHub organisation. Use a token for a Pro team, or a repository on your personal account.",
+  DEPLOYMENT_NOT_CONFIGURED:
+    "Deployment isn't set up for this project. An Owner can set up Vercel in Settings → Deployment.",
+  INVALID_DEPLOYMENT: "Only a ready production deployment can be promoted.",
+  DEPLOYMENT_TIMEOUT: "The deployment didn't finish within 30 minutes, so AIDE stopped waiting for it.",
+  VERCEL_ERROR: "Vercel reported the build or deployment as failed. The build log says why.",
   // Import an existing repository (FR-73)
   TAG_NOT_FOUND: "That tag isn't in the repository. Pick another released version, or choose Never released.",
   RELEASE_CANCELLED: "A rollback cancelled this release before it ran.",
@@ -279,6 +289,45 @@ export const contextualErrorMessages = {
     CREDENTIAL_INVALID:
       "The provider rejected this key, so it wasn't saved. Check that you copied the whole key and that it is active.",
   },
+  /** POST /api/me/connections/vercel · /:id/test (FR-87). */
+  vercelConnection: {
+    UPSTREAM_ERROR: "We couldn't reach Vercel to check the token. Nothing changed; try again in a moment.",
+    FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
+    CREDENTIAL_INVALID:
+      "Vercel rejected this token, so it wasn't saved. Check that you copied the whole token, that it hasn't expired and, for a team token, that it can access the team.",
+  },
+  /** PATCH /api/projects/:id/settings/deployment (FR-88). */
+  deploymentSettings: {
+    FORBIDDEN: "Only project Owners can change the deployment settings.",
+    CREDENTIAL_NOT_OWNER:
+      "Changing the Vercel project uses your own Vercel connection: pick one of yours, which rebinds the project to it. Add a token under Connections → Vercel if you have none.",
+    VALIDATION: "Deployment needs a GitHub-backed project: a Local repository can't deploy to Vercel.",
+    UPSTREAM_ERROR: "Vercel failed or couldn't be reached, so nothing changed. Try again in a moment.",
+    CONFLICT: "Someone else changed the deployment settings at the same time. The page now shows the latest; try again.",
+  },
+  /** PUT /api/projects/:id/settings/deployment/env/:key (FR-88): 502 means saved in AIDE but not pushed to Vercel. */
+  deploymentEnvSave: {
+    FORBIDDEN: "Only project Owners can edit environment variables.",
+    UPSTREAM_ERROR:
+      "Saved in AIDE, but pushing it to Vercel failed. AIDE pushes it again on the next save or deployment.",
+  },
+  /** DELETE /api/projects/:id/settings/deployment/env/:key (FR-88): nothing is deleted when Vercel can't delete it. */
+  deploymentEnvDelete: {
+    FORBIDDEN: "Only project Owners can delete environment variables.",
+    UPSTREAM_ERROR: "Vercel couldn't delete it, so nothing was deleted. Try again in a moment.",
+  },
+  /** POST /api/projects/:id/deployments/preview · /:deploymentId/redeploy (FR-90, FR-91). */
+  deploy: {
+    FORBIDDEN: "Only Contributors and Owners can deploy a preview, and only Owners can redeploy production.",
+    UPSTREAM_ERROR: "Vercel failed or couldn't be reached, so no deployment was created. Try again in a moment.",
+  },
+  /** POST /api/projects/:id/deployments/:deploymentId/promote (FR-91). */
+  promoteDeployment: {
+    FORBIDDEN: "Only project Owners can promote a production deployment.",
+    INVALID_DEPLOYMENT:
+      "This deployment can't be promoted: only a ready production deployment can. The list now shows the latest.",
+    UPSTREAM_ERROR: "Vercel failed or couldn't be reached, so nothing was promoted. Try again in a moment.",
+  },
   /** PATCH /api/projects/:id/settings/llm (FR-79). */
   llmBinding: {
     FORBIDDEN: "Only project Owners can change the LLM settings or the bound connection.",
@@ -334,6 +383,7 @@ export const contextualErrorMessages = {
       "That tag isn't in the repository (it may have been deleted). Pick another released version, or choose Never released.",
     NOT_FOUND:
       "We couldn't find that repository, or the access token can't see it. Check the URL and the token's repository access.",
+    CREDENTIAL_NOT_OWNER: "You can only use one of your own Vercel connections. Pick another, or skip deployment.",
   },
   /** PATCH /api/admin/users/:id/role (FR-3). */
   changeSystemRole: {

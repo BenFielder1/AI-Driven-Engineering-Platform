@@ -279,6 +279,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/connections/vercel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's Vercel connections, newest first (no tokens: label, last 4, account, team, scope, expiry, status, bound projects). */
+        get: operations["ListVercelConnections"];
+        put?: never;
+        /** Add a Vercel access token. It is checked with Vercel first (GET /v2/user, and the team for a team-scoped token): 400 CREDENTIAL_INVALID if rejected (nothing saved), 502 UPSTREAM_ERROR if Vercel can't be reached. Browser session only. */
+        post: operations["CreateVercelConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/vercel/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete one of the caller's Vercel connections. Projects it was bound to lose their binding (their deployment settings and history stay); new deployments then fail with DEPLOYMENT_NOT_CONFIGURED until an Owner binds another. Browser session only. */
+        delete: operations["DeleteVercelConnection"];
+        options?: never;
+        head?: never;
+        /** Rename one of the caller's Vercel connections. Browser session only. */
+        patch: operations["RenameVercelConnection"];
+        trace?: never;
+    };
+    "/api/me/connections/vercel/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check the token with Vercel again and record the result (status valid or invalid, lastValidatedAt; account and team refreshed). 502 UPSTREAM_ERROR if Vercel can't be reached (status unchanged). Browser session only. */
+        post: operations["TestVercelConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/connections/github": {
         parameters: {
             query?: never;
@@ -546,7 +599,7 @@ export interface paths {
         /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and preset (FR-74: the current version's preset id, or none for projects without a preset) filters and sorting. Rows carry the released and in-development version badges (FR-62) and the preset chip. */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -723,6 +776,127 @@ export interface paths {
         put?: never;
         /** Test the saved Git settings: repo reachable, writable, default branch exists (Owner). Never changes settings. */
         post: operations["TestGitConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Settings → Deployment for any member (FR-88): provider, supported, the binding ("connected by <name>", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the preset's required env vars with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not). */
+        get: operations["GetDeploymentSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set the deployment provider (vercel, or null to turn deployment off), bind one of the caller's own Vercel connections (connectionId), and link an existing Vercel project (vercelProjectId) or create one linked to the GitHub repo (create {name, rootDirectory}) (Owner, FR-88). A Local Git project can't deploy (400 VALIDATION). */
+        patch: operations["UpdateDeploymentSettings"];
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/env": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's environment variables (Owner, FR-88): key, targets, sensitive, hasValue (always true), updatedAt and the Vercel sync state. Values are never returned. */
+        get: operations["ListDeploymentEnv"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/env/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Create or replace an environment variable (Owner, FR-88): key ^[A-Za-z_][A-Za-z0-9_]*$ (up to 256), value up to 64 KB, targets preview and/or production, sensitive. The value is encrypted and pushed to Vercel (upsert by key and target). If the push fails the value is still saved, with syncError set, and the response is 502 UPSTREAM_ERROR; the next save or deployment pushes it again. */
+        put: operations["PutDeploymentEnv"];
+        post?: never;
+        /** Delete an environment variable in AIDE and in Vercel (Owner, FR-88). If Vercel can't delete it, nothing is deleted (502 UPSTREAM_ERROR) so it can be retried. */
+        delete: operations["DeleteDeploymentEnv"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's deployments, newest first (members, FR-91): target, version, SHA, state, URL, time and who triggered it. Filter by target (preview, production) and releaseVersionId. */
+        get: operations["ListDeployments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/deployments/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deploy the head of the version branch as a preview now (writer, FR-90); AIDE polls it (§4.15). 409 DEPLOYMENT_NOT_CONFIGURED without deployment settings. */
+        post: operations["CreatePreviewDeployment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/deployments/{deploymentId}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Promote an earlier ready production deployment (Owner, FR-91): a production rollback that leaves Git alone. Records a new promote row. 409 INVALID_DEPLOYMENT when the deployment isn't a ready production deployment. */
+        post: operations["PromoteDeployment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/deployments/{deploymentId}/redeploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deploy the same commit again as a new row (FR-90, FR-91): a preview needs a writer, production an Owner. AIDE polls it (§4.15). */
+        post: operations["RedeployDeployment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2253,6 +2427,18 @@ export interface components {
             apiKey: string;
         };
         /**
+         * @description Deployment step of the new-project wizard (FR-88): `provider` `vercel`, one of the caller's own Vercel
+         *     connections, and an existing Vercel project (`vercelProjectId`) or a new one (`create`), not both. Needs a
+         *     GitHub-backed project (`git.mode` `local`: 400 `VALIDATION`).
+         */
+        CreateProjectDeploymentRequest: {
+            provider: components["schemas"]["DeploymentProvider"];
+            /** Format: uuid */
+            connectionId: string;
+            vercelProjectId?: null | string;
+            create?: null | components["schemas"]["CreateVercelProjectRequest"];
+        };
+        /**
          * @description Repository step of the new-project wizard (FR-5, FR-35, FR-82, FR-86). `mode` picks the Git provider.
          *     `github_app`: a repo picked or created through the AIDE GitHub App; send `installationId` and
          *     `repoFullName` (`owner/name`), no `repoUrl` or `token` (409 `GITHUB_APP_NOT_INSTALLED` when the
@@ -2328,6 +2514,22 @@ export interface components {
              *     the version to develop; omitted or `null` = no preset (general). Unknown: 400 `PRESET_NOT_FOUND`.
              */
             presetId?: null | string;
+            deployment?: null | components["schemas"]["CreateProjectDeploymentRequest"];
+        };
+        /**
+         * @description Add a Vercel connection (FR-87): a label and an access token (team- or account-scoped, ideally with an expiry).
+         *         The token is checked with Vercel before anything is saved.
+         */
+        CreateVercelConnectionRequest: {
+            label: string;
+            token: string;
+        };
+        /** @description FR-88: create a new Vercel project linked to the GitHub repo (framework `nextjs`). */
+        CreateVercelProjectRequest: {
+            /** @description Lowercase letters, digits, `.`, `_`, `-`, up to 100, without `---`. */
+            name: string;
+            /** @description The app's directory in the repository (default `.`). */
+            rootDirectory?: null | string;
         };
         /** @description A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again. */
         CreatedApiTokenDto: {
@@ -2382,6 +2584,120 @@ export interface components {
             path: string;
             action: components["schemas"]["FileAction"];
             protected: boolean;
+        };
+        /**
+         * @description The project's Vercel binding (FR-88): which connection, "connected by &lt;name&gt;", and the connection's status.
+         *         Never the token.
+         */
+        DeploymentBindingDto: {
+            /** Format: uuid */
+            connectionId: string;
+            label: string;
+            last4: string;
+            teamSlug: null | string;
+            boundBy: components["schemas"]["DeploymentUserDto"];
+            status: components["schemas"]["VercelConnectionStatus"];
+        };
+        /**
+         * @description A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |
+         *     canceled`. `url` is the deployment URL once known, `inspectorUrl` Vercel's inspector page. `gitRef`
+         *     and `gitSha` are what was deployed; `releaseVersion` is the version (e.g. `1.2.0`) of
+         *     `releaseVersionId`; `releaseId` is the release attempt of a production deployment (`null` for previews).
+         *     A failed deployment carries `errorCode` (`VERCEL_ERROR`, `DEPLOYMENT_TIMEOUT`), `errorMessage` and
+         *     `buildLogTail` (the end of the build log). `trigger` is `auto` (AIDE, after execution or the release
+         *     merge), `manual`, `promote` or `redeploy`; `triggeredBy` is `null` for `auto` (or a
+         *     deleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` row promoted.
+         */
+        DeploymentDto: {
+            /** Format: uuid */
+            id: string;
+            target: components["schemas"]["DeploymentTarget"];
+            provider: components["schemas"]["DeploymentProvider"];
+            status: components["schemas"]["DeploymentStatus"];
+            url: null | string;
+            inspectorUrl: null | string;
+            gitRef: string;
+            gitSha: string;
+            /** Format: uuid */
+            releaseVersionId: string;
+            releaseVersion: string;
+            /** Format: uuid */
+            releaseId: null | string;
+            errorCode: null | string;
+            errorMessage: null | string;
+            buildLogTail: null | string;
+            trigger: components["schemas"]["DeploymentTrigger"];
+            triggeredBy: null | components["schemas"]["DeploymentUserDto"];
+            /** Format: uuid */
+            promotedFromDeploymentId: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            readyAt: null | string;
+        };
+        /**
+         * @description A project environment variable (FR-88, Owner only). The value is never returned: `hasValue` is always `true`.
+         *     `syncedAt` is when the current value was pushed to Vercel (`null`: not yet); `syncError` is the last push
+         *     failure (`null` after a successful push).
+         */
+        DeploymentEnvVarDto: {
+            key: string;
+            targets: components["schemas"]["DeploymentTarget"][];
+            sensitive: boolean;
+            hasValue: boolean;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            syncedAt: null | string;
+            syncError: null | string;
+        };
+        /**
+         * @description Deployment provider (§4.15). Wire values: `vercel`, `fake` (deterministic, tests and E2E).
+         * @enum {unknown}
+         */
+        DeploymentProvider: "vercel" | "fake";
+        /**
+         * @description Settings → Deployment (FR-88), for any member. `provider` is `vercel` (or `fake` in test environments)
+         *     once deployment is set, else `null`. `supported`: the preset supports Vercel, or an Owner opted in by setting
+         *     a provider. `binding` is the bound connection ("connected by &lt;name&gt;"; `null`: none) and `canBind`
+         *     whether the caller may bind one of their own (Owners). `vercelProject` is the linked Vercel project (`null`:
+         *     none yet). `rootDirectory` and `framework` are what the Vercel project builds. `requiredEnv` lists the
+         *     preset's required env vars with `present`. `gitConnected` is whether Vercel's GitHub App can access the repo
+         *     (`null`: not checked), with Vercel's `installUrl` when it can't.
+         */
+        DeploymentSettingsDto: {
+            provider: null | components["schemas"]["DeploymentProvider"];
+            supported: boolean;
+            binding: null | components["schemas"]["DeploymentBindingDto"];
+            canBind: boolean;
+            vercelProject: null | components["schemas"]["VercelProjectDto"];
+            rootDirectory: string;
+            framework: string;
+            requiredEnv: components["schemas"]["RequiredEnvVarDto"][];
+            gitConnected: null | boolean;
+            installUrl: null | string;
+        };
+        /**
+         * @description §4.15 deployment states: `queued → building → ready | error | canceled`.
+         * @enum {unknown}
+         */
+        DeploymentStatus: "queued" | "building" | "ready" | "error" | "canceled";
+        /**
+         * @description Deployment target, also a Vercel env target (FR-88). Wire values: `preview`, `production`.
+         * @enum {unknown}
+         */
+        DeploymentTarget: "preview" | "production";
+        /**
+         * @description Why a deployment row exists (FR-90, FR-91). Wire values: `auto` (AIDE after execution or release),
+         *                 `manual`, `promote`, `redeploy`.
+         * @enum {unknown}
+         */
+        DeploymentTrigger: "auto" | "manual" | "promote" | "redeploy";
+        /** @description A user named on a deployment or binding: "connected by &lt;name&gt;", "triggered by &lt;name&gt;". */
+        DeploymentUserDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
         };
         /**
          * @description One line of a diff between two versions (FR-21). `oldLine` is the 1-based line number in the `from` version
@@ -2576,15 +2892,15 @@ export interface components {
         /**
          * @description The external inputs a review cycle collected (FR-85, FR-89): the PR head's `checks`, how long review waited for
          *     pending checks (`checksWaitedSeconds`, up to 15 minutes; `null` when it didn't wait) and whether it gave up
-         *     waiting (`checksTimedOut`, recorded as a warning). `preview` is the preview deployment (FR-89; schemaless
-         *     until that lands, `null` when none).
+         *     waiting (`checksTimedOut`, recorded as a warning). `preview` is the preview deployment review waited for
+         *     (FR-90; `null` when none, e.g. Vercel not configured).
          */
         ExternalChecksDto: {
             checks: components["schemas"]["ExternalCheckDto"][];
             /** Format: int32 */
             checksWaitedSeconds: null | number;
             checksTimedOut: boolean;
-            preview: null | components["schemas"]["JsonElement"];
+            preview: null | components["schemas"]["PreviewCheckDto"];
         };
         /**
          * @description Declared action for a file in a plan step (FR-29).
@@ -2893,7 +3209,7 @@ export interface components {
             details?: string[];
             /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
             reason?: string;
-            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). */
+            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88). */
             installUrl?: string;
         };
         /** @description A background job (§4.9): the job queued by a dead-letter retry (FR-51). */
@@ -3293,6 +3609,21 @@ export interface components {
             deployTargets: string[];
             contentHash: string;
         };
+        /**
+         * @description FR-90: the preview deployment a review cycle waited for (`compliance_report.external_checks.preview`): its id, final
+         *     (or last seen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 20
+         *     minutes; `null` when it didn't wait) and whether it gave up waiting (`timedOut`).
+         */
+        PreviewCheckDto: {
+            /** Format: uuid */
+            deploymentId: string;
+            status: components["schemas"]["DeploymentStatus"];
+            url: null | string;
+            buildLogTail: null | string;
+            /** Format: int32 */
+            waitedSeconds: null | number;
+            timedOut: boolean;
+        };
         ProblemDetails: {
             type?: null | string;
             title?: null | string;
@@ -3308,7 +3639,7 @@ export interface components {
             details?: string[];
             /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
             reason?: string;
-            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). */
+            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88). */
             installUrl?: string;
         };
         /**
@@ -3318,7 +3649,8 @@ export interface components {
          *     `releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the
          *     version in development (`null`: none) (FR-62). `idea` is the request of the version in development.
          *     `presetId`, `presetName` and `presetVersion` are the tech stack preset pinned on the current release
-         *     version (FR-74; all `null`: no preset).
+         *     version (FR-74; all `null`: no preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so
+         *     the Deployments page is in its navigation (§7.2).
          */
         ProjectDto: {
             /** Format: uuid */
@@ -3354,6 +3686,7 @@ export interface components {
             presetId: null | string;
             presetName: null | string;
             presetVersion: null | string;
+            deploymentsEnabled: boolean;
         };
         /**
          * @description A project event pushed live to everyone viewing the project (FR-46): the SignalR `projectEvent` message.
@@ -3399,7 +3732,8 @@ export interface components {
          *     FR-43), else `null`. Artifacts, steps, review and gates are those of the current release version
          *     `releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was
          *     `projectVersion` (D-V2-11). `suggestedNextVersion` prefills "Start new version" (FR-60: the next minor of the
-         *     released version).
+         *     released version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:
+         *     none), for the overview and `aide status`.
          */
         ProjectStateDto: {
             /** Format: uuid */
@@ -3425,6 +3759,7 @@ export interface components {
             executionStatus: components["schemas"]["ExecutionRunStatus"];
             pullRequest: null | components["schemas"]["PullRequestSummaryDto"];
             latestRelease: null | components["schemas"]["ReleaseSummaryDto"];
+            latestDeployment: null | components["schemas"]["DeploymentDto"];
         };
         /**
          * @description Project status (§4.1: status follows phase; `released`, `rolled_back` and `awaiting_merge` are special).
@@ -3509,6 +3844,15 @@ export interface components {
             url: null | string;
             /** Format: date-time */
             openedAt: string;
+        };
+        /**
+         * @description Create or replace an environment variable (FR-88): the value (up to 64 KB; encrypted in AIDE and never returned), its
+         *     targets (`preview`, `production`, at least one) and whether Vercel stores it as sensitive.
+         */
+        PutDeploymentEnvRequest: {
+            value: string;
+            targets: components["schemas"]["DeploymentTarget"][];
+            sensitive?: boolean;
         };
         /** @description An answer given to the agent: `questionId` when it answered a question of a round, and the question text. */
         RefinementAnswerDto: {
@@ -3611,6 +3955,8 @@ export interface components {
          *     `MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can
          *     retry with `POST /release`. `githubReleaseUrl` is the GitHub Release created for the tag (FR-64; `null`
          *     for Local or before it exists). `mergeStrategy` is the project's current merge strategy (FR-65).
+         *     `productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including
+         *     redeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release.
          */
         ReleaseDto: {
             /** Format: uuid */
@@ -3637,6 +3983,7 @@ export interface components {
             awaitingMergeSince: null | string;
             mergeReasons: null | components["schemas"]["MergeReadinessReasonDto"][];
             mergeStrategy: components["schemas"]["MergeStrategy"];
+            productionDeployment: null | components["schemas"]["DeploymentDto"];
         };
         /**
          * @description Outcome of a release attempt (FR-42, FR-43).
@@ -3720,6 +4067,17 @@ export interface components {
             /** Format: int32 */
             version: number;
             status: components["schemas"]["ArtifactStatus"];
+        };
+        /**
+         * @description An environment variable the project's preset requires (FR-88, §4.11 preset env): its key, targets, whether it is
+         *     sensitive, what it is for, and whether the project has it (`present`; missing ones are flagged).
+         */
+        RequiredEnvVarDto: {
+            key: string;
+            targets: components["schemas"]["DeploymentTarget"][];
+            sensitive: boolean;
+            description: string;
+            present: boolean;
         };
         /**
          * @description Compliance categories (§4.7).
@@ -3886,6 +4244,19 @@ export interface components {
             /** Format: int32 */
             unreadCount: number;
         };
+        /**
+         * @description Settings → Deployment (FR-88, Owner). `provider` (required) is `vercel`, or `null` to turn deployment
+         *     off (other fields not allowed then; history is kept). `connectionId` binds one of the caller's own Vercel
+         *     connections (omitted: keep the bound one). Send `vercelProjectId` to link an existing Vercel project or
+         *     `create` to create one, not both (omitted: keep the linked one).
+         */
+        UpdateDeploymentSettingsRequest: {
+            provider: null | components["schemas"]["DeploymentProvider"];
+            /** Format: uuid */
+            connectionId?: null | string;
+            vercelProjectId?: null | string;
+            create?: null | components["schemas"]["CreateVercelProjectRequest"];
+        };
         /** @description Partial update of the Git settings. Omitted fields are unchanged. */
         UpdateGitSettingsRequest: {
             provider?: null | components["schemas"]["GitProvider"];
@@ -3959,6 +4330,10 @@ export interface components {
             /** @description `true` removes the token budget (unlimited). Can't be combined with `tokenBudget`. */
             clearTokenBudget?: boolean;
         };
+        /** @description Rename a Vercel connection (FR-87). */
+        UpdateVercelConnectionRequest: {
+            label: string;
+        };
         /** @description The signed-in user (or a user, for admins). */
         UserDto: {
             /** Format: uuid */
@@ -3969,6 +4344,55 @@ export interface components {
             avatarUrl: null | string;
             githubLinked: boolean;
         };
+        /** @description A project that has a Vercel connection bound for deployment (FR-88). */
+        VercelBoundProjectDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /**
+         * @description One of the caller's Vercel connections (FR-87). The token is never returned: only the label, its last 4 characters,
+         *     the Vercel account (`accountName`, the Vercel username; `null` when unknown) and, for a team-scoped token,
+         *     `teamId`/`teamSlug`, the `scope` (`account` or `team`), the token's expiry (`null`: none),
+         *     the validation status (`valid`, `invalid`, `unchecked`) and when it was last checked, plus the projects
+         *     it is bound to.
+         */
+        VercelConnectionDto: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+            last4: string;
+            accountName: null | string;
+            teamId: null | string;
+            teamSlug: null | string;
+            scope: components["schemas"]["VercelTokenScope"];
+            /** Format: date-time */
+            expiresAt: null | string;
+            status: components["schemas"]["VercelConnectionStatus"];
+            /** Format: date-time */
+            lastValidatedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            boundProjects: components["schemas"]["VercelBoundProjectDto"][];
+        };
+        /**
+         * @description Validation state of a Vercel connection (FR-87: a token Vercel rejects marks it invalid). Wire values:
+         *                 `valid`, `invalid`, `unchecked`.
+         * @enum {unknown}
+         */
+        VercelConnectionStatus: "valid" | "invalid" | "unchecked";
+        /** @description The linked Vercel project (FR-88): id (`prj_…`), name, its Vercel URL and the production URL once known. */
+        VercelProjectDto: {
+            id: string;
+            name: string;
+            url: null | string;
+            productionUrl: null | string;
+        };
+        /**
+         * @description Scope of a Vercel token (FR-87). Wire values: `account`, `team`.
+         * @enum {unknown}
+         */
+        VercelTokenScope: "account" | "team";
         /** @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known. */
         ViolationDto: {
             category: components["schemas"]["ReviewCategory"];
@@ -4678,6 +5102,262 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LlmCredentialDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListVercelConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VercelConnectionDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateVercelConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVercelConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VercelConnectionDto"];
+                };
+            };
+            /** @description VALIDATION, or CREDENTIAL_INVALID (Vercel rejected the token; nothing is saved) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached; nothing is saved) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteVercelConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RenameVercelConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateVercelConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VercelConnectionDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestVercelConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VercelConnectionDto"];
                 };
             };
             /** @description Unauthorized */
@@ -5733,7 +6413,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) */
+            /** @description FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) or CREDENTIAL_NOT_OWNER (deployment: another user's Vercel connection) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5742,7 +6422,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it) */
+            /** @description NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it; deployment: unknown Vercel connection or project) */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5751,7 +6431,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists) */
+            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists); deployment: VERCEL_GIT_NOT_CONNECTED (extension installUrl) or VERCEL_PLAN_LIMIT */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6631,6 +7311,577 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetDeploymentSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentSettingsDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateDeploymentSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDeploymentSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentSettingsDto"];
+                };
+            };
+            /** @description VALIDATION (including a Local Git project, or both vercelProjectId and create) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection, or changing the deployment with another Owner's bound connection without sending your own connectionId) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project, connection or Vercel project) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description VERCEL_GIT_NOT_CONNECTED (extension installUrl: Vercel's GitHub App install link), VERCEL_PLAN_LIMIT (Hobby plan with an organisation-owned repo) or CONFLICT (concurrent change) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListDeploymentEnv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentEnvVarDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PutDeploymentEnv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutDeploymentEnvRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentEnvVarDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (saved in AIDE with syncError; Vercel failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteDeploymentEnv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListDeployments: {
+        parameters: {
+            query?: {
+                target?: "preview" | "production";
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDto"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreatePreviewDeployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description DEPLOYMENT_NOT_CONFIGURED (no deployment settings or no bound connection) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PromoteDeployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                deploymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description INVALID_DEPLOYMENT (not a ready production deployment) or DEPLOYMENT_NOT_CONFIGURED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RedeployDeployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                deploymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (a Viewer, or a Contributor redeploying production) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description DEPLOYMENT_NOT_CONFIGURED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

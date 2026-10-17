@@ -19,6 +19,7 @@ import { useDeleteLlmConnection, useLlmConnections, useTestLlmConnection, type L
 import { CredentialStatusBadge } from './credential-status-badge'
 import { GitHubConnectionSection } from './github-connection-section'
 import { AddLlmKeyDialog, RenameLlmKeyDialog } from './llm-connection-dialogs'
+import { VercelConnectionSection } from './vercel-connection-section'
 
 const keylessDescriptions: Partial<Record<LlmCredential['provider'], string>> = {
   ollama: 'Uses the Ollama server configured for AIDE. No key needed.',
@@ -285,9 +286,8 @@ function LlmProvidersSection() {
 }
 
 /**
- * /connections (alias /account/connections; SPEC §7.2): the user's LLM providers (FR-78) and GitHub (FR-81). Vercel
- * comes in a later update, so it's shown as not connected without inventing APIs. `githubError` is a failed Connect
- * GitHub coming back as `?error=GITHUB_AUTH_FAILED&reason=…`.
+ * /connections (alias /account/connections; SPEC §7.2): the user's LLM providers (FR-78), GitHub (FR-81) and Vercel
+ * (FR-87). `githubError` is a failed Connect GitHub coming back as `?error=GITHUB_AUTH_FAILED&reason=…`.
  */
 export function ConnectionsPage({
   githubError,
@@ -302,17 +302,7 @@ export function ConnectionsPage({
       <PageHeader title="Connections" description="LLM providers, GitHub and Vercel, connected to your account." />
       <LlmProvidersSection />
       <GitHubConnectionSection callbackError={githubError} installed={githubInstalled} />
-      <section aria-labelledby="vercel-connection-title" className="flex flex-col gap-2">
-        <h2 id="vercel-connection-title" className="text-lg">
-          Vercel
-        </h2>
-        <EmptyState
-          variant="not_connected"
-          headingLevel={3}
-          title="Not connected"
-          description="Connecting Vercel for deployments is available in a later update."
-        />
-      </section>
+      <VercelConnectionSection />
     </div>
   )
 }

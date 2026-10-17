@@ -36,6 +36,12 @@ public static class SecretPurposes
 
     /// <summary>GitHub user-to-server access and refresh tokens (<c>github_connections.*_token_encrypted</c>, FR-81).</summary>
     public const string GitHubUserToken = "Aide.Secrets.GitHubUserToken";
+
+    /// <summary>Vercel access tokens (<c>vercel_connections.token_encrypted</c>, FR-87).</summary>
+    public const string VercelToken = "Aide.Secrets.VercelToken";
+
+    /// <summary>Deployment environment variable values (<c>deployment_env_vars.value_encrypted</c>, FR-88).</summary>
+    public const string DeploymentEnvValue = "Aide.Secrets.DeploymentEnvValue";
 }
 
 /// <summary>§8: a <see cref="ISecretProtector"/> per secret kind (purpose), e.g. <see cref="SecretPurposes.GitHubUserToken"/>.</summary>

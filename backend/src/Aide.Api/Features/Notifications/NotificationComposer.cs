@@ -117,6 +117,11 @@ public sealed class NotificationComposer(AideDbContext db)
             Reason = type == NotificationType.Rollback ? Text(root, "reason") : null,
             AwaitingMerge = type == NotificationType.ReleaseFailed && root.TryGetProperty("awaitingMerge", out var awaiting) && awaiting.ValueKind == JsonValueKind.True,
             PullRequestUrl = Text(root, "pullRequestUrl"),
+            DeploymentFailed = type == NotificationType.ReleaseFailed && root.TryGetProperty("deploymentFailed", out var failed) && failed.ValueKind == JsonValueKind.True,
+            PreviewReady = type == NotificationType.ReviewCompleted && root.TryGetProperty("previewReady", out var ready) && ready.ValueKind == JsonValueKind.True,
+            DeploymentTarget = Text(root, "target"),
+            DeploymentUrl = Text(root, "url"),
+            ReleaseVersion = Text(root, "releaseVersion"),
             MergeReasons = root.TryGetProperty("reasons", out var reasons) && reasons.ValueKind == JsonValueKind.Array
                 ? [.. reasons.EnumerateArray().Select(r => r.ValueKind == JsonValueKind.Object ? Text(r, "message") : null).OfType<string>()]
                 : [],

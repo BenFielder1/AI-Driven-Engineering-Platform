@@ -205,7 +205,7 @@ describe('External checks in the cycle detail (FR-85)', () => {
       'href',
       'https://github.com/acme/inventory/actions/runs/9',
     )
-    expect(within(section).getByTestId('report-preview-slot')).toBeInTheDocument()
+    expect(within(section).getByTestId('report-preview')).toHaveTextContent('No preview deployment was checked')
   })
 
   it('FR85_timed_out_checks_show_a_warning', async () => {

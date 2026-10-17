@@ -8,6 +8,8 @@ using Aide.Api.Features.Review;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
+using Aide.Domain.Deployments;
+using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
@@ -46,7 +48,7 @@ public static partial class ProjectEndpoints
 
         group.MapPost("/", CreateProject)
             .WithName("CreateProject")
-            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND.")
+            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT.")
             .Produces<ProjectDto>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -58,9 +60,9 @@ public static partial class ProjectEndpoints
             .WithRetryAfterOn429()
             .WithResponseDescriptions(
                 (StatusCodes.Status400BadRequest, "VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository) or PRESET_NOT_FOUND"),
-                (StatusCodes.Status403Forbidden, "FORBIDDEN (github_app: the caller's GitHub account can't push to the repository)"),
-                (StatusCodes.Status404NotFound, "NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it)"),
-                (StatusCodes.Status409Conflict, "GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists)"),
+                (StatusCodes.Status403Forbidden, "FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) or CREDENTIAL_NOT_OWNER (deployment: another user's Vercel connection)"),
+                (StatusCodes.Status404NotFound, "NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it; deployment: unknown Vercel connection or project)"),
+                (StatusCodes.Status409Conflict, "GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists); deployment: VERCEL_GIT_NOT_CONNECTED (extension installUrl) or VERCEL_PLAN_LIMIT"),
                 (StatusCodes.Status429TooManyRequests, "GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset)"),
                 (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (GitHub failed or couldn't be reached)"));
 
@@ -229,8 +231,58 @@ public static partial class ProjectEndpoints
         ProjectCreator creator,
         Presets.PresetService presets,
         Infrastructure.GitHub.IGitHubAppStore apps,
+        AideDbContext db,
+        Deployments.DeploymentAccess deploymentAccess,
+        Deployments.DeploymentSettingsService deploymentSettings,
         CancellationToken cancellationToken)
     {
+        Deployments.PreparedDeployment? preparedDeployment = null;
+        if (request.Deployment is { } deployment)
+        {
+            // FR-88 (wizard Deployment step): validated, the connection must be the caller's own, and Vercel is asked
+            // (link or create the Vercel project) before the project is created, so a refusal saves nothing.
+            var git = request.Git.ModeSent || request.Git.ProviderSent
+                ? (request.Git.ModeSent ? request.Git.Mode : request.Git.Provider)
+                : GitProvider.GithubApp;
+            var validation = DeploymentSettingsRules.Validate(
+                deployment.Provider,
+                deployment.ConnectionId,
+                deployment.VercelProjectId,
+                deployment.Create is not null,
+                deployment.Create?.Name,
+                deployment.Create?.RootDirectory,
+                git,
+                allowFake: deploymentAccess.UsesFake,
+                requireConnection: true,
+                fieldPrefix: "deployment.");
+            if (validation.IsFailure)
+            {
+                return ApiProblems.Validation(validation.Error!);
+            }
+
+            if (await Deployments.DeploymentEndpoints.CanBindAsync(db, currentUser.RequiredUserId, deployment.ConnectionId, cancellationToken) is { } bindProblem)
+            {
+                return bindProblem;
+            }
+
+            var repoFullName = git switch
+            {
+                GitProvider.GithubApp => request.Git.RepoFullName,
+                GitProvider.GithubPat when ProjectSettingsRules.TryParseGitHubRepo(request.Git.RepoUrl, out var repo) => $"{repo.Owner}/{repo.Name}",
+                _ => null,
+            };
+            var prepared = await deploymentSettings.PrepareAsync(
+                deployment.Provider, deployment.ConnectionId, deployment.VercelProjectId, deployment.Create, repoFullName, "deployment.", cancellationToken);
+            if (prepared.IsFailure)
+            {
+                return prepared.Error!.Code == ErrorCodes.Validation
+                    ? ApiProblems.Validation(prepared.Error!)
+                    : Deployments.DeploymentSettingsService.Problem(prepared.Error!);
+            }
+
+            preparedDeployment = prepared.Value;
+        }
+
         var created = await creator.CreateAsync(request, currentUser.RequiredUserId, currentUser.Actor, cancellationToken);
         if (created.IsFailure)
         {
@@ -240,7 +292,15 @@ public static partial class ProjectEndpoints
         }
 
         var project = created.Value;
-        return TypedResults.Created($"/api/projects/{project.Id}", ProjectMapping.ToDto(project, ProjectRole.Owner, await presets.ForProjectAsync(project.Id, cancellationToken)));
+        if (preparedDeployment is not null)
+        {
+            await deploymentSettings.ApplyAsync(project.Id, currentUser.RequiredUserId, preparedDeployment, bindConnection: true, currentUser.Actor, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return TypedResults.Created(
+            $"/api/projects/{project.Id}",
+            ProjectMapping.ToDto(project, ProjectRole.Owner, await presets.ForProjectAsync(project.Id, cancellationToken), preparedDeployment is not null));
     }
 
     private static async Task<Results<Ok<ProjectDto>, ProblemHttpResult>> GetProject(
@@ -259,7 +319,7 @@ public static partial class ProjectEndpoints
         var project = await db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
         return project is null
             ? ApiProblems.NotFound("The project was not found.")
-            : TypedResults.Ok(ProjectMapping.ToDto(project, grant.Value.ProjectRole, await presets.ForProjectAsync(id, cancellationToken)));
+            : TypedResults.Ok(ProjectMapping.ToDto(project, grant.Value.ProjectRole, await presets.ForProjectAsync(id, cancellationToken), await DeploymentsEnabledAsync(db, id, cancellationToken)));
     }
 
     private static async Task<Results<Ok<ProjectDto>, ValidationProblem, ProblemHttpResult>> UpdateProject(
@@ -340,7 +400,7 @@ public static partial class ProjectEndpoints
             LogUpdated(logger, project.Id, changes);
         }
 
-        return TypedResults.Ok(ProjectMapping.ToDto(project, grant.Value.ProjectRole, await presets.ForProjectAsync(id, cancellationToken)));
+        return TypedResults.Ok(ProjectMapping.ToDto(project, grant.Value.ProjectRole, await presets.ForProjectAsync(id, cancellationToken), await DeploymentsEnabledAsync(db, id, cancellationToken)));
     }
 
     private static async Task<Results<NoContent, ProblemHttpResult>> DeleteProject(
@@ -518,8 +578,13 @@ public static partial class ProjectEndpoints
                 .ThenByDescending(r => r.Id)
                 .FirstOrDefaultAsync(cancellationToken) is { } latestRelease
                 ? ReleaseRecords.ToSummary(latestRelease, project.MergeStrategy)
-                : null);
+                : null,
+            LatestDeployment: await Deployments.DeploymentReader.LatestAsync(db, id, cancellationToken));
     }
+
+    /// <summary>FR-88, §7.2: the project has deployment settings, so its navigation shows Deployments.</summary>
+    internal static Task<bool> DeploymentsEnabledAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken) =>
+        db.ProjectDeploymentSettings.AsNoTracking().AnyAsync(s => s.ProjectId == projectId, cancellationToken);
 
     internal static ProblemHttpResult ConcurrentEdit() =>
         ApiProblems.Of(ErrorCodes.Conflict, "The project was changed by someone else. Reload and try again.");

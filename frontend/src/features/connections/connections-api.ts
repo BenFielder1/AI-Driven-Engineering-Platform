@@ -15,6 +15,8 @@ export const keyedProviders = ['anthropic', 'openai'] as const satisfies readonl
 export const connectionKeys = {
   all: ['me', 'connections'] as const,
   llm: () => [...connectionKeys.all, 'llm'] as const,
+  /** GET /api/me/connections/vercel (FR-87). */
+  vercel: () => [...connectionKeys.all, 'vercel'] as const,
   adminLlmPolicy: () => ['admin', 'integrations', 'llm'] as const,
 }
 
@@ -31,7 +33,7 @@ export function useLlmConnections(enabled = true) {
  * A connection change can change any project's binding (delete clears bindings; FR-79), so the project settings
  * caches are refreshed too.
  */
-function useInvalidateConnections() {
+export function useInvalidateConnections() {
   const queryClient = useQueryClient()
   return () =>
     Promise.all([
@@ -44,7 +46,7 @@ function useInvalidateConnections() {
  * FR-78: adds a key; the API checks it with the provider first (CREDENTIAL_INVALID → nothing saved). The variables
  * carry the plaintext key, so the mutation is garbage-collected as soon as it has no observer (`gcTime: 0`): callers
  * `reset()` it after every outcome, which drops it from the MutationCache. Use the same pattern for any secret
- * (e.g. a future Vercel token).
+ * (the Vercel token, FR-87, and deployment env values, FR-88).
  */
 export function useCreateLlmConnection() {
   const invalidate = useInvalidateConnections()

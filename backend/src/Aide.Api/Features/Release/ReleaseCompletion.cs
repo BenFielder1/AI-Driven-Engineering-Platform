@@ -23,7 +23,13 @@ public sealed record MergePollJobPayload(Guid ProjectId, Guid ReleaseId, string?
 /// machine for the project's status (CLAUDE.md rule 9); the release version and the project's denormalised versions
 /// change in the same transaction (§5).
 /// </summary>
-public sealed partial class ReleaseCompletion(AideDbContext db, LifecycleWriter writer, JobEnqueuer jobs, TimeProvider time, ILogger<ReleaseCompletion> logger)
+public sealed partial class ReleaseCompletion(
+    AideDbContext db,
+    LifecycleWriter writer,
+    JobEnqueuer jobs,
+    Deployments.DeploymentScheduler deployments,
+    TimeProvider time,
+    ILogger<ReleaseCompletion> logger)
 {
     public const string CompletedReason = "Release completed: merged and tagged";
 
@@ -33,7 +39,9 @@ public sealed partial class ReleaseCompletion(AideDbContext db, LifecycleWriter 
     /// Released: the attempt (in progress, or awaiting its merge) succeeds (tag, merge commit, GitHub Release URL,
     /// completed_at), the version becomes <c>released</c>, the project <c>released</c> with this version as its released
     /// version and nothing in development, and <c>RELEASE_COMPLETED</c> (after <c>RELEASE_MERGED_EXTERNALLY</c> when the merge
-    /// happened on GitHub). If the project moved on meanwhile, the Git facts are recorded on the attempt only.
+    /// happened on GitHub). If the project moved on meanwhile, the Git facts are recorded on the attempt only. FR-91: with
+    /// Vercel set up, the production deployment of the merge commit is recorded and queued in the same transaction (a
+    /// failed deployment never undoes the release, D-V2-10).
     /// </summary>
     public async Task SucceedAsync(Guid releaseId, ReleaseOutcome outcome, string? githubReleaseUrl, bool mergedExternally, CancellationToken cancellationToken)
     {
@@ -117,6 +125,11 @@ public sealed partial class ReleaseCompletion(AideDbContext db, LifecycleWriter 
             },
             SystemActor.Name,
             now);
+        var defaultBranch = await db.ProjectGitSettings.AsNoTracking()
+            .Where(s => s.ProjectId == release.ProjectId)
+            .Select(s => s.DefaultBranch)
+            .FirstOrDefaultAsync(cancellationToken) ?? "main";
+        await deployments.AutoProductionAsync(release, defaultBranch, now, cancellationToken);
         await SaveAsync(cancellationToken);
         LogReleased(logger, release.ProjectId, release.Tag, outcome.AlreadyTagged, mergedExternally);
     }

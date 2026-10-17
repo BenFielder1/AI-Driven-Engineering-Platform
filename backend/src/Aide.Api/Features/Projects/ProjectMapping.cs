@@ -10,7 +10,11 @@ namespace Aide.Api.Features.Projects;
 /// <summary>Entity → DTO mapping for the projects feature. Secrets only ever become set / not set flags.</summary>
 internal static class ProjectMapping
 {
-    public static ProjectDto ToDto(Project p, ProjectRole? myRole, Presets.ProjectPresetRef preset) => new(
+    /// <param name="p">The project.</param>
+    /// <param name="myRole">The caller's project role.</param>
+    /// <param name="preset">The preset pinned on the current release version.</param>
+    /// <param name="deploymentsEnabled">FR-88: the project has deployment settings.</param>
+    public static ProjectDto ToDto(Project p, ProjectRole? myRole, Presets.ProjectPresetRef preset, bool deploymentsEnabled) => new(
         p.Id,
         p.Name,
         p.Slug,
@@ -33,7 +37,8 @@ internal static class ProjectMapping
         p.UpdatedAt,
         preset.PresetId,
         preset.PresetName,
-        preset.PresetVersion);
+        preset.PresetVersion,
+        deploymentsEnabled);
 
     /// <param name="s">The project's Git settings.</param>
     /// <param name="branchName">The working branch of the project's current release version (§4.10), if recorded.</param>

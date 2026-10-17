@@ -247,7 +247,7 @@ describe('Stage pages (FR-55)', () => {
     ).toEqual([[1, 3], [2], [4]])
   })
 
-  it('FR55_release_page_decides_the_pre_release_gate_in_place_and_holds_the_deployment_slot', async () => {
+  it('FR55_release_page_decides_the_pre_release_gate_in_place_and_shows_the_production_deployment', async () => {
     const project = seedProjectAs('owner', (p) => {
       p.currentPhase = 'release'
       p.status = 'active'
@@ -259,22 +259,22 @@ describe('Stage pages (FR-55)', () => {
     const gates = screen.getByRole('region', { name: 'Gates' })
     expect(within(gates).getByRole('listitem', { name: 'Release approval' })).toBeInTheDocument()
     expect(within(gates).getByRole('button', { name: 'Approve' })).toBeInTheDocument()
-    // FR-84, FR-64: merge readiness and the GitHub Release are real panels; the deployment is still a slot.
+    // FR-84, FR-64, FR-91: merge readiness, the GitHub Release and the production deployment are real panels.
     expect(screen.getByRole('region', { name: 'Merge readiness' })).not.toHaveTextContent('Not available yet')
     expect(screen.getByRole('region', { name: 'GitHub Release' })).not.toHaveTextContent('Not available yet')
-    expect(screen.getByRole('region', { name: 'Production deployment' })).toHaveTextContent('Not available yet')
+    expect(screen.getByRole('region', { name: 'Production deployment' })).toHaveTextContent("Deployment isn't set up")
     // FR-60: Owners get Start new version (disabled with the reason until released and merged).
     expect(screen.getByRole('button', { name: /Start new version/ })).toBeInTheDocument()
   })
 
-  it('FR55_review_page_has_the_preview_deployment_slot', async () => {
+  it('FR55_review_page_has_the_preview_deployment_panel', async () => {
     const project = seedProjectAs('owner', (p) => {
       p.currentPhase = 'review'
       p.status = 'reviewing'
     })
     renderRoute(`/projects/${project.id}/review`)
     await screen.findByRole('heading', { level: 2, name: 'Review' })
-    expect(await screen.findByRole('region', { name: 'Preview deployment' })).toHaveTextContent('Not available yet')
+    expect(await screen.findByRole('region', { name: 'Preview deployment' })).toHaveTextContent("Deployment isn't set up")
   })
 
   it('FR55_a_past_release_version_is_read_only_and_lists_only_its_own_gates_with_their_version', async () => {

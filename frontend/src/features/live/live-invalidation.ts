@@ -51,6 +51,8 @@ export const liveInvalidation: Record<EventCategory, (id: string) => Target[]> =
   // RELEASE_STARTED/COMPLETED/FAILED (FR-42, FR-43, FR-64): /state's latestRelease and status, the release attempts,
   // the release versions and the version badges on the header and the list. VERSION_STARTED (FR-60) is a release
   // event too and resets the lifecycle to refinement at checkpoint 1, so everything about the project is refreshed.
+  // DEPLOYMENT_CREATED/UPDATED/FAILED/PREVIEW_READY (FR-90, FR-91) are release events: the deployments list, /state's
+  // latestDeployment, the release's production deployment and the review preview all live under the project key.
   release: (id) => [everything(id), lists()],
   // A rollback changes version, phase, artifacts and steps (§4.8).
   rollback: (id) => [everything(id), lists()],

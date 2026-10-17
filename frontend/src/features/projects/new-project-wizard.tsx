@@ -22,11 +22,17 @@ import { useAuthProviders } from '../auth/auth-api'
 import { connectGitHubHref, useGitHubConnection, useGitHubRepoRefs, type GitHubRepo } from '../github/github-api'
 import { GitHubErrorAlert } from '../github/github-error-alert'
 import { RepoPicker } from '../github/repo-picker'
+import { connectionLabel } from '../connections/connection-format'
+import { useVercelConnections } from '../connections/vercel-connections-api'
+import { VercelGitAlert } from '../deployments/vercel-git-alert'
+import { suggestVercelProjectName } from '../deployments/vercel-project-rules'
 import { PresetPicker } from '../presets/preset-picker'
 import { usePresets } from '../presets/presets-api'
 import { approvalModeDescriptions, approvalModeLabels, approvalModes } from './labels'
 import { useCreateProject } from './projects-api'
 import { ReleasedVersionField } from './released-version-field'
+import { deploymentFieldIds } from './wizard-deployment-ids'
+import { WizardDeploymentStep } from './wizard-deployment-step'
 import { defaultReleasedTag, releasedOptions, semverOfTag } from './released-versions'
 import {
   limits,
@@ -64,13 +70,14 @@ const fieldIds: Record<Field, string> = {
   developmentVersion: 'project-development-version',
   localSourcePath: 'project-local-source-path',
   presetId: 'project-preset',
+  ...deploymentFieldIds,
 }
 
 /**
- * SPEC §7.2 order: Source → Idea (or Request) → Repository → Version → Stack (FR-74) → Configuration → Review & create.
- * Deployment arrives with its phase.
+ * SPEC §7.2 order: Source → Idea (or Request) → Repository → Version → Stack (FR-74) → Configuration → Deployment
+ * (FR-88, optional) → Review & create.
  */
-const stepKeys = ['source', 'idea', 'repository', 'version', 'stack', 'configuration', 'review'] as const
+const stepKeys = ['source', 'idea', 'repository', 'version', 'stack', 'configuration', 'deployment', 'review'] as const
 type StepKey = (typeof stepKeys)[number]
 
 const stepFields: Record<StepKey, readonly Field[]> = {
@@ -80,6 +87,7 @@ const stepFields: Record<StepKey, readonly Field[]> = {
   version: ['initialVersion', 'developmentVersion'],
   stack: ['presetId'],
   configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget'],
+  deployment: ['deploymentMode', 'vercelConnectionId', 'vercelProjectMode', 'vercelProjectName', 'vercelRootDirectory', 'vercelProjectId'],
   review: [],
 }
 
@@ -97,6 +105,8 @@ function stepTitle(key: StepKey, source: Source): string {
       return 'Stack'
     case 'configuration':
       return 'Configuration'
+    case 'deployment':
+      return 'Deployment'
     case 'review':
       return 'Review & create'
   }
@@ -130,6 +140,15 @@ const serverFieldMap: Record<string, Field> = {
   'import.developmentversion': 'developmentVersion',
   'import.releasedtag': 'releasedTag',
   presetid: 'presetId',
+  deployment: 'deploymentMode',
+  // A Local project without the Fake provider: VALIDATION on the deployment (FR-88).
+  provider: 'deploymentMode',
+  'deployment.provider': 'deploymentMode',
+  'deployment.connectionid': 'vercelConnectionId',
+  'deployment.vercelprojectid': 'vercelProjectId',
+  'deployment.create': 'vercelProjectName',
+  'deployment.create.name': 'vercelProjectName',
+  'deployment.create.rootdirectory': 'vercelRootDirectory',
 }
 
 function firstStepWithError(errors: Partial<Record<Field, unknown>>): number {
@@ -155,11 +174,26 @@ function toGitRequest(v: WizardValues): Schemas['CreateProjectGitRequest'] {
 
 const versionText = (text: string) => normalizeVersion(text) ?? text.trim()
 
+/** FR-88: the optional `deployment` (Vercel with an own connection and a new or existing project). */
+function toDeploymentRequest(v: WizardValues): Schemas['CreateProjectDeploymentRequest'] | null {
+  if (v.deploymentMode !== 'vercel') {
+    return null
+  }
+  return {
+    provider: 'vercel',
+    connectionId: v.vercelConnectionId,
+    ...(v.vercelProjectMode === 'create'
+      ? { create: { name: v.vercelProjectName.trim(), rootDirectory: v.vercelRootDirectory.trim() || '.' } }
+      : { vercelProjectId: v.vercelProjectId.trim() }),
+  }
+}
+
 /**
  * FR-5, FR-66, FR-73: scratch sends `initialVersion`; import sends `import`, and `idea` is the version's request.
  * FR-74: `presetId` only when a preset is picked ("No preset (general)" omits it).
  */
 function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
+  const deployment = toDeploymentRequest(v)
   const base = {
     ...(v.presetId ? { presetId: v.presetId } : {}),
     name: v.name.trim(),
@@ -170,6 +204,8 @@ function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
     maxReviewCycles: Number(v.maxReviewCycles),
     tokenBudget: toBudget(v.tokenBudget),
     git: toGitRequest(v),
+    // FR-88: `deployment` only when Vercel is chosen (skipping omits it).
+    ...(deployment ? { deployment } : {}),
   }
   return v.source === 'import'
     ? {
@@ -288,7 +324,7 @@ function AppRepository({
 }
 
 /**
- * /projects/new (FR-5, FR-66, FR-73, FR-74, FR-86): seven steps with per-step validation; "Import an existing repository" asks
+ * /projects/new (FR-5, FR-66, FR-73, FR-74, FR-86, FR-88): eight steps with per-step validation; "Import an existing repository" asks
  * for the request, the repository with its released version, and the version to develop. Create navigates to the
  * new project.
  */
@@ -341,6 +377,16 @@ export function NewProjectWizard() {
   const releasedTag = useWatch({ control, name: 'releasedTag' })
   const releasedVersion = useWatch({ control, name: 'releasedVersion' })
   const presetId = useWatch({ control, name: 'presetId' })
+  const deploymentMode = useWatch({ control, name: 'deploymentMode' })
+  const vercelProjectMode = useWatch({ control, name: 'vercelProjectMode' })
+  const vercelConnectionId = useWatch({ control, name: 'vercelConnectionId' })
+
+  // FR-88: suggest the new Vercel project's name from the project name when the step opens.
+  useEffect(() => {
+    if (key === 'deployment' && !getValues('vercelProjectName')) {
+      setValue('vercelProjectName', suggestVercelProjectName(getValues('name')))
+    }
+  }, [key, getValues, setValue])
 
   // FR-86: the GitHub App option exists once an App is registered; it is the default when the user is connected.
   const providers = useAuthProviders()
@@ -476,6 +522,13 @@ export function NewProjectWizard() {
             // FR-74: the preset was withdrawn since the list loaded; pick again from the fresh list.
             setError('presetId', { type: 'server', message: errorMessage(error, 'createProject') })
             goTo(stepIndex('stack'))
+          } else if (isApiError(error, 'CREDENTIAL_NOT_OWNER')) {
+            // FR-88: only the caller's own Vercel connections can be used.
+            setError('vercelConnectionId', { type: 'server', message: errorMessage(error, 'createProject') })
+            goTo(stepIndex('deployment'))
+          } else if (isApiError(error, 'VERCEL_GIT_NOT_CONNECTED') || isApiError(error, 'VERCEL_PLAN_LIMIT')) {
+            goTo(stepIndex('deployment'))
+            setServerError({ message: errorMessage(error, 'createProject'), error })
           } else if (importValues && isApiError(error, 'TAG_NOT_FOUND')) {
             void refs.refetch()
             failVersion('releasedTag', error)
@@ -526,8 +579,10 @@ export function NewProjectWizard() {
         <ErrorSummary title="Check this step" errors={stepErrors} />
         {serverError && (
           <div className="mb-4">
-            {isApiError(serverError.error, 'GITHUB_APP_NOT_INSTALLED') ||
-            isApiError(serverError.error, 'GITHUB_NOT_CONNECTED') ? (
+            {isApiError(serverError.error, 'VERCEL_GIT_NOT_CONNECTED') ? (
+              <VercelGitAlert error={serverError.error} title="We couldn't create the project" />
+            ) : isApiError(serverError.error, 'GITHUB_APP_NOT_INSTALLED') ||
+              isApiError(serverError.error, 'GITHUB_NOT_CONNECTED') ? (
               <GitHubErrorAlert
                 error={serverError.error}
                 title="We couldn't create the project"
@@ -824,6 +879,14 @@ export function NewProjectWizard() {
             </>
           )}
 
+          {key === 'deployment' && (
+            <WizardDeploymentStep
+              register={register}
+              errors={errors}
+              values={{ gitMode, presetId, deploymentMode, vercelProjectMode, vercelConnectionId }}
+            />
+          )}
+
           {key === 'review' && <ReviewSummary values={getValues()} onEdit={goTo} />}
         </div>
 
@@ -938,6 +1001,27 @@ function PresetName({ presetId }: { presetId: string }) {
   return <>{preset ? `${preset.name} ${preset.version}` : presetId}</>
 }
 
+/** FR-88: the Deployment step in the summary ("Vercel", the connection, and the new or existing Vercel project). */
+function DeploymentSummary({ values }: { values: WizardValues }) {
+  const request = toDeploymentRequest(values)
+  const connections = useVercelConnections(request !== null)
+  if (!request) {
+    return <SummaryRow term="Deployment">Skipped</SummaryRow>
+  }
+  const connection = connections.data?.find((c) => c.id === request.connectionId)
+  return (
+    <>
+      <SummaryRow term="Provider">Vercel</SummaryRow>
+      <SummaryRow term="Connection">{connection ? connectionLabel(connection) : request.connectionId}</SummaryRow>
+      <SummaryRow term="Vercel project">
+        {request.create
+          ? `New project ${request.create.name} (root ${request.create.rootDirectory ?? '.'})`
+          : `Existing project ${request.vercelProjectId ?? ''}`}
+      </SummaryRow>
+    </>
+  )
+}
+
 function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step: number) => void }) {
   const pat = values.gitMode === 'github_pat'
   const app = values.gitMode === 'github_app'
@@ -985,6 +1069,9 @@ function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step
         <SummaryRow term="Token budget">
           {values.tokenBudget.trim() ? `${Number(values.tokenBudget).toLocaleString()} tokens` : 'No limit'}
         </SummaryRow>
+      </SummarySection>
+      <SummarySection title="Deployment" step="deployment" onEdit={onEdit}>
+        <DeploymentSummary values={values} />
       </SummarySection>
     </div>
   )

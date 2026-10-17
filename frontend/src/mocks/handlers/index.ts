@@ -2,6 +2,7 @@ import { adminHandlers } from './admin'
 import { artifactHandlers } from './artifacts'
 import { authHandlers } from './auth'
 import { connectionHandlers } from './connections'
+import { deploymentHandlers } from './deployments'
 import { executionHandlers } from './execution'
 import { githubHandlers } from './github'
 import { refinementHandlers } from './refinement'
@@ -21,6 +22,7 @@ export const handlers = [
   ...presetHandlers,
   ...projectHandlers,
   ...connectionHandlers,
+  ...deploymentHandlers,
   ...githubHandlers,
   ...lifecycleHandlers,
   ...artifactHandlers,

@@ -12,6 +12,8 @@ import {
   formatPercent,
   reviewCategoryLabels,
 } from '../projects/labels'
+import { BuildLogTail, DeploymentLink, DeploymentStatusPill } from '../deployments/deployment-parts'
+import type { PreviewCheck } from '../deployments/deployments-api'
 import { CategoryBarsChart } from './category-bars-chart'
 import type { CategoryScore, ComplianceReportDetail, FindingSeverity } from './review-api'
 
@@ -230,6 +232,54 @@ function waitedCopy(seconds: number): string {
  * major testing finding), how long review waited for pending checks, and a warning when it gave up waiting. The
  * preview deployment (FR-89) arrives in a later phase.
  */
+/**
+ * FR-90: the preview deployment the cycle waited for: its final state, URL, how long review waited and whether it gave
+ * up, and the build-log tail. An `error` preview is a critical architecture finding in the report ("Vercel preview
+ * build failed"), listed under Violations.
+ */
+function PreviewCheckBlock({ preview }: { preview: PreviewCheck | null }) {
+  return (
+    <section aria-labelledby="report-preview-title" data-testid="report-preview" className="flex flex-col gap-2 border-t border-border/60 pt-3">
+      <h4 id="report-preview-title" className="flex flex-wrap items-center gap-2 font-semibold">
+        Preview deployment
+        {preview && <DeploymentStatusPill status={preview.status} />}
+      </h4>
+      {preview === null ? (
+        <p className="text-sm text-muted-foreground">
+          No preview deployment was checked for this cycle (deployment isn't set up, or there was no preview of the pull request
+          head).
+        </p>
+      ) : (
+        <>
+          <p className="text-sm">
+            <DeploymentLink url={preview.url} />
+          </p>
+          {preview.timedOut ? (
+            <Alert tone="warning" title="Review stopped waiting for the preview">
+              <p>
+                The preview was still building after{' '}
+                {preview.waitedSeconds !== null ? waitedCopy(preview.waitedSeconds) : '20 minutes'}, so the review scored
+                without it.
+              </p>
+            </Alert>
+          ) : (
+            preview.waitedSeconds !== null &&
+            preview.waitedSeconds > 0 && (
+              <p className="text-sm text-muted-foreground">{`Waited ${waitedCopy(preview.waitedSeconds)} for the preview`}</p>
+            )
+          )}
+          {preview.status === 'error' && (
+            <Alert tone="error" title="Vercel preview build failed">
+              <p>This is a critical architecture finding in this report: the optimisation plan has to fix the build.</p>
+            </Alert>
+          )}
+          <BuildLogTail log={preview.buildLogTail} defaultOpen={preview.status === 'error'} />
+        </>
+      )}
+    </section>
+  )
+}
+
 export function ExternalChecksSection({ report }: { report: Pick<ComplianceReportDetail, 'externalChecks'> }) {
   const external = report.externalChecks
   const failingRequired = external?.checks.filter((c) => c.required && isFailingCheck(c)) ?? []
@@ -261,9 +311,7 @@ export function ExternalChecksSection({ report }: { report: Pick<ComplianceRepor
           <CheckRunList checks={external.checks} label="External checks" empty="No checks are reported on the pull request." />
         </>
       )}
-      <p data-testid="report-preview-slot" className="text-sm text-muted-foreground">
-        A preview deployment of the reviewed branch will show here once a deployment target is set.
-      </p>
+      <PreviewCheckBlock preview={external?.preview ?? null} />
     </ReportSection>
   )
 }

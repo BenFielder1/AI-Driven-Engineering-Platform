@@ -441,8 +441,47 @@ export const llmBindingClearedReasonLabels = {
 
 const bindingClearedReasons = Object.keys(llmBindingClearedReasonLabels) as (keyof typeof llmBindingClearedReasonLabels)[];
 
-/** LLM connection events (FR-78, FR-79). */
+const deploymentTargetWords = { preview: "Preview", production: "Production" } as const;
+const deploymentStatusWords = {
+  queued: "queued",
+  building: "building",
+  ready: "ready",
+  error: "failed",
+  canceled: "canceled",
+} as const;
+
+/** FR-90, FR-91, §4.15: "Preview deployment of 1.2.0 (3f2a9c1) ready at https://…". */
+function describeDeployment(type: string, payload: Payload): string | null {
+  const target = oneOf(payload, "target", ["preview", "production"] as const);
+  if (!target) {
+    return null;
+  }
+  const sha = str(payload, "gitSha");
+  const version = str(payload, "releaseVersion");
+  const subject = `${deploymentTargetWords[target]} deployment${version ? ` of ${version}` : ""}${sha ? ` (${sha.slice(0, 7)})` : ""}`;
+  const url = str(payload, "url");
+  if (type === "DEPLOYMENT_FAILED") {
+    return `${subject} failed`;
+  }
+  if (type === "DEPLOYMENT_PREVIEW_READY") {
+    return `${subject} ready${url ? ` at ${url}` : ""}`;
+  }
+  if (type === "DEPLOYMENT_CREATED") {
+    const trigger = oneOf(payload, "trigger", ["auto", "manual", "promote", "redeploy"] as const);
+    return trigger === "promote" ? `${subject} promoted` : trigger === "redeploy" ? `${subject} redeployed` : `${subject} created`;
+  }
+  const status = oneOf(payload, "status", ["queued", "building", "ready", "error", "canceled"] as const);
+  if (!status) {
+    return null;
+  }
+  return `${subject} ${deploymentStatusWords[status]}${status === "ready" && url ? ` at ${url}` : ""}`;
+}
+
+/** LLM and Vercel connection events (FR-78, FR-79, FR-87). */
 function describeConnection(type: string, payload: Payload): string | null {
+  if (type === "CONNECTION_INVALID" && payload.provider === "vercel") {
+    return "Vercel connection marked invalid: Vercel rejected its token";
+  }
   const provider = oneOf(payload, "provider", llmProviders);
   const name = provider ? llmProviderLabels[provider] : "LLM";
   switch (type) {
@@ -524,6 +563,12 @@ export function describeActivity(
     case "CONNECTION_INVALID":
     case "LLM_BINDING_CLEARED":
       text = describeConnection(type, payload);
+      break;
+    case "DEPLOYMENT_CREATED":
+    case "DEPLOYMENT_UPDATED":
+    case "DEPLOYMENT_FAILED":
+    case "DEPLOYMENT_PREVIEW_READY":
+      text = describeDeployment(type, payload);
       break;
     case "PULL_REQUEST_OPENED":
     case "PULL_REQUEST_FAILED":

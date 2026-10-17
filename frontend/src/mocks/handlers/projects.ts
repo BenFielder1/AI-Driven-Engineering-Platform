@@ -5,6 +5,7 @@ import { checkTagPrefix } from '../../features/projects/settings/release-setting
 import { compareSemVer, normalizeVersion, parseSemVer } from '../../features/versions/semver'
 import type { ProjectRole } from '../../lib/permissions'
 import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from './auth'
+import { applyVercelSetup } from './deployments'
 import { githubDb } from './github'
 import { findPreset, presetNameOf } from './preset-catalog'
 import { problem } from './problem'
@@ -40,7 +41,14 @@ interface StoredMember {
 
 export interface StoredProject extends Omit<
     Project,
-    'myRole' | 'releaseVersionId' | 'releasedVersion' | 'developmentVersion' | 'presetId' | 'presetName' | 'presetVersion'
+    | 'myRole'
+    | 'releaseVersionId'
+    | 'releasedVersion'
+    | 'developmentVersion'
+    | 'presetId'
+    | 'presetName'
+    | 'presetVersion'
+    | 'deploymentsEnabled'
   > {
   members: StoredMember[]
   /**
@@ -104,7 +112,30 @@ export interface StoredProject extends Omit<
   mergeReadiness?: Schemas['MergeReadinessDto']
   /** FR-84: what the next `refresh=true` check returns (then becomes `mergeReadiness`). */
   mergeReadinessOnRefresh?: Schemas['MergeReadinessDto']
+  /** FR-88: Settings → Deployment as stored (unset: never configured); see mocks/handlers/deployments.ts. */
+  deployment?: StoredDeploymentSettings
+  /** FR-88: environment variables with their values (never returned); see mocks/handlers/deployments.ts. */
+  deploymentEnv?: StoredEnvVar[]
+  /** FR-90, FR-91: deployments, any order (the API lists newest first); see mocks/handlers/deployments.ts. */
+  deployments?: Schemas['DeploymentDto'][]
 }
+
+/** FR-88: the stored deployment settings; `present` on required env and `canBind` are derived per request. */
+export interface StoredDeploymentSettings {
+  provider: Schemas['DeploymentProvider'] | null
+  /** The preset supports Vercel (an Owner can opt in otherwise by setting a provider). */
+  supported: boolean
+  binding: Schemas['DeploymentBindingDto'] | null
+  vercelProject: Schemas['VercelProjectDto'] | null
+  rootDirectory: string
+  framework: string
+  requiredEnv: Omit<Schemas['RequiredEnvVarDto'], 'present'>[]
+  gitConnected: boolean | null
+  installUrl: string | null
+}
+
+/** An env var with its plaintext value (the mock's stand-in for the encrypted column). */
+export type StoredEnvVar = Schemas['DeploymentEnvVarDto'] & { value: string }
 
 /** A refinement round as stored: the round DTO plus the questions its run asked (null until it succeeds). */
 export type StoredRefinementRound = Schemas['RefinementRoundDto'] & {
@@ -362,6 +393,7 @@ export function projectDto(project: StoredProject, userId: string): Project {
     myRole: roleOf(p, userId),
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
+    deploymentsEnabled: p.deployment?.provider != null,
   }
 }
 
@@ -536,6 +568,7 @@ export function stateDto(p: StoredProject): State {
     tokenBudget: p.tokenBudget,
     pullRequest: pullRequestSummary(p.pullRequest),
     latestRelease: latestReleaseSummary(p.releases),
+    latestDeployment: [...(p.deployments ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null,
   }
 }
 
@@ -764,6 +797,14 @@ export const projectHandlers = [
       members: [{ userId: user.id, role: 'owner' }],
       releaseVersions: versions,
     })
+    // FR-88: the optional Deployment step (one of the caller's own Vercel connections; Local can't deploy).
+    if (body.deployment) {
+      const failed = applyVercelSetup(project, user.id, body.deployment)
+      if (failed) {
+        projectsDb.projects = projectsDb.projects.filter((p) => p !== project)
+        return failed
+      }
+    }
     // FR-70: an import queues the Repository Analyst for the version to develop.
     const development = developmentVersionOf(project)
     if (importing && development) {

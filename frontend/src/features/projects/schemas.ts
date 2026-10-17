@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { checkRootDirectory, checkVercelProjectName } from '../deployments/vercel-project-rules'
 import { checkNewVersion, DEFAULT_INITIAL_VERSION, normalizeVersion } from '../versions/semver'
 import { approvalModes } from './labels'
 
@@ -164,6 +165,14 @@ export const wizardSchema = z
     localSourcePath: str,
     /** FR-74 Stack step: a preset id from GET /api/presets, or '' for "No preset (general)". */
     presetId: str,
+    /** FR-88 Deployment step (optional): skip, or Vercel with one of the caller's own connections. */
+    deploymentMode: z.enum(['none', 'vercel']),
+    vercelConnectionId: str,
+    /** Create a new Vercel project (name, root directory) or link an existing one (id or name). */
+    vercelProjectMode: z.enum(['create', 'link']),
+    vercelProjectName: str,
+    vercelRootDirectory: str,
+    vercelProjectId: str,
   })
   .superRefine((v, ctx) => {
     const importing = v.source === 'import'
@@ -218,6 +227,16 @@ export const wizardSchema = z
     if (v.gitMode === 'github_app' && (!v.repoFullName || !v.installationId)) {
       addCheck(ctx, 'repoFullName', 'Pick a repository, or create one.')
     }
+    // FR-88: the server decides whether a Local project can deploy (VALIDATION unless it runs the Fake provider).
+    if (v.deploymentMode === 'vercel') {
+      addCheck(ctx, 'vercelConnectionId', v.vercelConnectionId ? null : 'Pick one of your Vercel connections, or skip deployment.')
+      if (v.vercelProjectMode === 'create') {
+        addCheck(ctx, 'vercelProjectName', checkVercelProjectName(v.vercelProjectName))
+        addCheck(ctx, 'vercelRootDirectory', checkRootDirectory(v.vercelRootDirectory))
+      } else {
+        addCheck(ctx, 'vercelProjectId', v.vercelProjectId.trim() ? null : 'Enter the Vercel project id (prj_…) or name.')
+      }
+    }
   })
 
 export type WizardValues = z.infer<typeof wizardSchema>
@@ -244,6 +263,12 @@ export const wizardDefaults: WizardValues = {
   developmentVersion: DEFAULT_INITIAL_VERSION,
   localSourcePath: '',
   presetId: '',
+  deploymentMode: 'none',
+  vercelConnectionId: '',
+  vercelProjectMode: 'create',
+  vercelProjectName: '',
+  vercelRootDirectory: '',
+  vercelProjectId: '',
 }
 
 // ---- Settings → General (FR-7) ---------------------------------------------------------------------------------

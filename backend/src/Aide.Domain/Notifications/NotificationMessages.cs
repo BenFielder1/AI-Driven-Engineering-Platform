@@ -46,6 +46,21 @@ public sealed record NotificationFacts(NotificationType Type, string ProjectName
 
     /// <summary>FR-65, FR-84: the merge-readiness reasons (messages) why AIDE couldn't merge.</summary>
     public IReadOnlyList<string> MergeReasons { get; init; } = [];
+
+    /// <summary>FR-91: a <c>release_failed</c> notification raised by <c>DEPLOYMENT_FAILED</c>.</summary>
+    public bool DeploymentFailed { get; init; }
+
+    /// <summary>FR-90: a <c>review_completed</c> notification raised by <c>DEPLOYMENT_PREVIEW_READY</c>.</summary>
+    public bool PreviewReady { get; init; }
+
+    /// <summary>FR-90, FR-91: the deployment's target (<c>preview</c>, <c>production</c>).</summary>
+    public string? DeploymentTarget { get; init; }
+
+    /// <summary>FR-90, FR-91: the deployment URL.</summary>
+    public string? DeploymentUrl { get; init; }
+
+    /// <summary>FR-90, FR-91: the release version deployed (e.g. <c>1.2.0</c>).</summary>
+    public string? ReleaseVersion { get; init; }
 }
 
 /// <summary>A composed notification: a short title and a one-paragraph body (plain text, no secrets, no tokens).</summary>
@@ -89,6 +104,9 @@ public static class NotificationMessages
             NotificationType.BudgetExceeded => (
                 $"{project}: token budget used up",
                 $"The {Agent(facts)} run on {project} was refused: the project's token budget is used up. Raise the budget in the project settings to continue."),
+            NotificationType.ReviewCompleted when facts.PreviewReady => (
+                $"{project}: preview{VersionText(facts)} is ready",
+                $"The Vercel preview of {project}{VersionText(facts)} is ready{(facts.DeploymentUrl is { } url ? $" at {OneLine(url, 300)}" : string.Empty)}."),
             NotificationType.ReviewCompleted => (
                 $"{project}: review cycle {Opt(facts.Cycle)} completed",
                 $"Review cycle {Opt(facts.Cycle)} on {project} completed with score {facts.Score ?? "?"}: {Humanize(facts.Decision ?? "unknown")}."),
@@ -98,6 +116,10 @@ public static class NotificationMessages
             NotificationType.ReleaseFailed when facts.AwaitingMerge => (
                 $"{project}: release {facts.Tag ?? string.Empty} awaits a merge on GitHub".Replace("  ", " ", StringComparison.Ordinal),
                 $"AIDE can't merge the pull request of {project}{(facts.PullRequestUrl is { } url ? $" ({OneLine(url, 300)})" : string.Empty)} itself. Merge it on GitHub; AIDE then tags the merge commit and completes the release.{MergeReasonsText(facts.MergeReasons)}"),
+            NotificationType.ReleaseFailed when facts.DeploymentFailed => (
+                $"{project}: {facts.DeploymentTarget ?? "production"} deployment failed",
+                $"The Vercel {facts.DeploymentTarget ?? "production"} deployment of {project}{VersionText(facts)} failed{(facts.ErrorCode is { } code ? $" ({OneLine(code, 60)})" : string.Empty)}. "
+                + (facts.DeploymentTarget == "preview" ? "Check the project's Vercel connection, then redeploy." : "The release stands; an Owner can redeploy from the Release page.")),
             NotificationType.ReleaseFailed => (
                 $"{project}: release failed",
                 $"Releasing {project} failed{(facts.ErrorCode is { } code ? $" ({OneLine(code, 60)})" : string.Empty)}. An Owner can retry the release from the project page."),
@@ -118,6 +140,9 @@ public static class NotificationMessages
         GateType.Escalation => "An escalation",
         _ => "An approval",
     };
+
+    private static string VersionText(NotificationFacts facts) =>
+        facts.ReleaseVersion is { } v ? $" {OneLine(v, 60)}" : string.Empty;
 
     private static string MergeReasonsText(IReadOnlyList<string> reasons) =>
         reasons.Count == 0 ? string.Empty : $" Reasons: {OneLine(string.Join(" ", reasons), 600)}";

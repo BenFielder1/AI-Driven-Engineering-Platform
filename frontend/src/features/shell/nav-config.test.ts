@@ -51,6 +51,15 @@ describe('FR-54: project navigation', () => {
     ])
   })
 
+  it('FR91_nav_deployments: Deployments shows between Activity and Settings only when the project has a deployment target', () => {
+    expect(projectSections({ deploymentsEnabled: false })[1]?.items.map((i) => i.label)).not.toContain('Deployments')
+    const project = projectSections({ deploymentsEnabled: true })[1]
+    expect(project?.items.map((i) => i.label)).toEqual(['Overview', 'Artifacts', 'Agent runs', 'Activity', 'Deployments', 'Settings'])
+    expect(hrefFor(project?.items[4] ?? { to: '/projects' }, { projectId: 'p1' })).toBe('/projects/p1/deployments')
+    expect(paletteEntries(user, { id: 'p1', name: 'P' }).map((e) => e.label)).not.toContain('Deployments')
+    expect(paletteEntries(user, { id: 'p1', name: 'P', deploymentsEnabled: true }).map((e) => e.label)).toContain('Deployments')
+  })
+
   it('FR54_nav_config: stage items link to /projects/:id/<stage>', () => {
     const lifecycle = projectSections()[0]
     expect(lifecycle?.items.map((i) => hrefFor(i, { projectId: 'p1' }))).toEqual([

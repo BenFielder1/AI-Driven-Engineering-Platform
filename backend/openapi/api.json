@@ -827,6 +827,316 @@
         }
       }
     },
+    "/api/me/connections/vercel": {
+      "get": {
+        "tags": [
+          "Connections"
+        ],
+        "summary": "The caller's Vercel connections, newest first (no tokens: label, last 4, account, team, scope, expiry, status, bound projects).",
+        "operationId": "ListVercelConnections",
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VercelConnectionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Add a Vercel access token. It is checked with Vercel first (GET /v2/user, and the team for a team-scoped token): 400 CREDENTIAL_INVALID if rejected (nothing saved), 502 UPSTREAM_ERROR if Vercel can't be reached. Browser session only.",
+        "operationId": "CreateVercelConnection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVercelConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VercelConnectionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION, or CREDENTIAL_INVALID (Vercel rejected the token; nothing is saved)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR (Vercel failed or couldn't be reached; nothing is saved)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/connections/vercel/{id}": {
+      "patch": {
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Rename one of the caller's Vercel connections. Browser session only.",
+        "operationId": "RenameVercelConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVercelConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VercelConnectionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Delete one of the caller's Vercel connections. Projects it was bound to lose their binding (their deployment settings and history stay); new deployments then fail with DEPLOYMENT_NOT_CONFIGURED until an Owner binds another. Browser session only.",
+        "operationId": "DeleteVercelConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/connections/vercel/{id}/test": {
+      "post": {
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Check the token with Vercel again and record the result (status valid or invalid, lastValidatedAt; account and team refreshed). 502 UPSTREAM_ERROR if Vercel can't be reached (status unchanged). Browser session only.",
+        "operationId": "TestVercelConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VercelConnectionDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/connections/github": {
       "get": {
         "tags": [
@@ -2307,7 +2617,7 @@
         "tags": [
           "Projects"
         ],
-        "summary": "Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND.",
+        "summary": "Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT.",
         "operationId": "CreateProject",
         "requestBody": {
           "content": {
@@ -2351,7 +2661,7 @@
             }
           },
           "403": {
-            "description": "FORBIDDEN (github_app: the caller's GitHub account can't push to the repository)",
+            "description": "FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) or CREDENTIAL_NOT_OWNER (deployment: another user's Vercel connection)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2361,7 +2671,7 @@
             }
           },
           "404": {
-            "description": "NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it)",
+            "description": "NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it; deployment: unknown Vercel connection or project)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2371,7 +2681,7 @@
             }
           },
           "409": {
-            "description": "GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists)",
+            "description": "GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists); deployment: VERCEL_GIT_NOT_CONNECTED (extension installUrl) or VERCEL_PLAN_LIMIT",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3511,6 +3821,762 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GitTestResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings/deployment": {
+      "get": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Settings → Deployment for any member (FR-88): provider, supported, the binding (\"connected by <name>\", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the preset's required env vars with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not).",
+        "operationId": "GetDeploymentSettings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Set the deployment provider (vercel, or null to turn deployment off), bind one of the caller's own Vercel connections (connectionId), and link an existing Vercel project (vercelProjectId) or create one linked to the GitHub repo (create {name, rootDirectory}) (Owner, FR-88). A Local Git project can't deploy (400 VALIDATION).",
+        "operationId": "UpdateDeploymentSettings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDeploymentSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection, or changing the deployment with another Owner's bound connection without sending your own connectionId)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND (project, connection or Vercel project)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentSettingsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION (including a Local Git project, or both vercelProjectId and create)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "VERCEL_GIT_NOT_CONNECTED (extension installUrl: Vercel's GitHub App install link), VERCEL_PLAN_LIMIT (Hobby plan with an organisation-owned repo) or CONFLICT (concurrent change)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR (Vercel failed or couldn't be reached)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings/deployment/env": {
+      "get": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "The project's environment variables (Owner, FR-88): key, targets, sensitive, hasValue (always true), updatedAt and the Vercel sync state. Values are never returned.",
+        "operationId": "ListDeploymentEnv",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeploymentEnvVarDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings/deployment/env/{key}": {
+      "put": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Create or replace an environment variable (Owner, FR-88): key ^[A-Za-z_][A-Za-z0-9_]*$ (up to 256), value up to 64 KB, targets preview and/or production, sensitive. The value is encrypted and pushed to Vercel (upsert by key and target). If the push fails the value is still saved, with syncError set, and the response is 502 UPSTREAM_ERROR; the next save or deployment pushes it again.",
+        "operationId": "PutDeploymentEnv",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutDeploymentEnvRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentEnvVarDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR (saved in AIDE with syncError; Vercel failed or couldn't be reached)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Delete an environment variable in AIDE and in Vercel (Owner, FR-88). If Vercel can't delete it, nothing is deleted (502 UPSTREAM_ERROR) so it can be retried.",
+        "operationId": "DeleteDeploymentEnv",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/deployments": {
+      "get": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "The project's deployments, newest first (members, FR-91): target, version, SHA, state, URL, time and who triggered it. Filter by target (preview, production) and releaseVersionId.",
+        "operationId": "ListDeployments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "preview",
+                "production"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "releaseVersionId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeploymentDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/deployments/preview": {
+      "post": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Deploy the head of the version branch as a preview now (writer, FR-90); AIDE polls it (§4.15). 409 DEPLOYMENT_NOT_CONFIGURED without deployment settings.",
+        "operationId": "CreatePreviewDeployment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "DEPLOYMENT_NOT_CONFIGURED (no deployment settings or no bound connection)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR (Vercel failed or couldn't be reached)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/deployments/{deploymentId}/promote": {
+      "post": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Promote an earlier ready production deployment (Owner, FR-91): a production rollback that leaves Git alone. Records a new promote row. 409 INVALID_DEPLOYMENT when the deployment isn't a ready production deployment.",
+        "operationId": "PromoteDeployment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "deploymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "INVALID_DEPLOYMENT (not a ready production deployment) or DEPLOYMENT_NOT_CONFIGURED",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR (Vercel failed or couldn't be reached)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/deployments/{deploymentId}/redeploy": {
+      "post": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Deploy the same commit again as a new row (FR-90, FR-91): a preview needs a writer, production an Owner. AIDE polls it (§4.15).",
+        "operationId": "RedeployDeployment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "deploymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN (a Viewer, or a Contributor redeploying production)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "DEPLOYMENT_NOT_CONFIGURED",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR (Vercel failed or couldn't be reached)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -9511,6 +10577,40 @@
         },
         "description": "Add an LLM connection (FR-78): `anthropic` or `openai`, a label and the key. The key is checked with\n    the provider before anything is saved."
       },
+      "CreateProjectDeploymentRequest": {
+        "required": [
+          "provider",
+          "connectionId"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/DeploymentProvider"
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "vercelProjectId": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "create": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CreateVercelProjectRequest"
+              }
+            ]
+          }
+        },
+        "description": "Deployment step of the new-project wizard (FR-88): `provider` `vercel`, one of the caller's own Vercel\nconnections, and an existing Vercel project (`vercelProjectId`) or a new one (`create`), not both. Needs a\nGitHub-backed project (`git.mode` `local`: 400 `VALIDATION`)."
+      },
       "CreateProjectGitRequest": {
         "type": "object",
         "properties": {
@@ -9674,9 +10774,60 @@
               "string"
             ],
             "description": "FR-74 (wizard Stack step): a preset id from `GET /api/presets`, pinned (with its version and content hash) on\nthe version to develop; omitted or `null` = no preset (general). Unknown: 400 `PRESET_NOT_FOUND`."
+          },
+          "deployment": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-88 (wizard Deployment step): deploy to Vercel with one of the caller's own Vercel connections, linking an existing\r\nVercel project or creating one; omitted or `null` = no deployment (it can be set later in Settings →\r\nDeployment). Needs a GitHub-backed project (400 `VALIDATION` on `deployment.provider` for Local).",
+                "$ref": "#/components/schemas/CreateProjectDeploymentRequest"
+              }
+            ]
           }
         },
         "description": "The new-project wizard (FR-5). Omitted settings take the FR-5 defaults."
+      },
+      "CreateVercelConnectionRequest": {
+        "required": [
+          "label",
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 1000,
+            "type": "string"
+          }
+        },
+        "description": "Add a Vercel connection (FR-87): a label and an access token (team- or account-scoped, ideally with an expiry).\n    The token is checked with Vercel before anything is saved."
+      },
+      "CreateVercelProjectRequest": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "type": "string",
+            "description": "Lowercase letters, digits, `.`, `_`, `-`, up to 100, without `---`."
+          },
+          "rootDirectory": {
+            "maxLength": 256,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The app's directory in the repository (default `.`)."
+          }
+        },
+        "description": "FR-88: create a new Vercel project linked to the GitHub repo (framework `nextjs`)."
       },
       "CreatedApiTokenDto": {
         "required": [
@@ -9836,6 +10987,338 @@
           }
         },
         "description": "A file a step declares it creates or modifies (FR-29). `protected` marks a protected path (§4.6: .git/, .aide/, CI\nworkflows, lockfiles, .env files) — only an Owner-edited plan can declare one; the step may then write it."
+      },
+      "DeploymentBindingDto": {
+        "required": [
+          "connectionId",
+          "label",
+          "last4",
+          "teamSlug",
+          "boundBy",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "last4": {
+            "type": "string"
+          },
+          "teamSlug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "boundBy": {
+            "$ref": "#/components/schemas/DeploymentUserDto"
+          },
+          "status": {
+            "$ref": "#/components/schemas/VercelConnectionStatus"
+          }
+        },
+        "description": "The project's Vercel binding (FR-88): which connection, \"connected by &lt;name&gt;\", and the connection's status.\n    Never the token."
+      },
+      "DeploymentDto": {
+        "required": [
+          "id",
+          "target",
+          "provider",
+          "status",
+          "url",
+          "inspectorUrl",
+          "gitRef",
+          "gitSha",
+          "releaseVersionId",
+          "releaseVersion",
+          "releaseId",
+          "errorCode",
+          "errorMessage",
+          "buildLogTail",
+          "trigger",
+          "triggeredBy",
+          "promotedFromDeploymentId",
+          "createdAt",
+          "readyAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target": {
+            "$ref": "#/components/schemas/DeploymentTarget"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/DeploymentProvider"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DeploymentStatus"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inspectorUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "gitRef": {
+            "type": "string"
+          },
+          "gitSha": {
+            "type": "string"
+          },
+          "releaseVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "releaseVersion": {
+            "type": "string"
+          },
+          "releaseId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "errorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errorMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "buildLogTail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/DeploymentTrigger"
+          },
+          "triggeredBy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentUserDto"
+              }
+            ]
+          },
+          "promotedFromDeploymentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "readyAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |\ncanceled`. `url` is the deployment URL once known, `inspectorUrl` Vercel's inspector page. `gitRef`\nand `gitSha` are what was deployed; `releaseVersion` is the version (e.g. `1.2.0`) of\n`releaseVersionId`; `releaseId` is the release attempt of a production deployment (`null` for previews).\nA failed deployment carries `errorCode` (`VERCEL_ERROR`, `DEPLOYMENT_TIMEOUT`), `errorMessage` and\n`buildLogTail` (the end of the build log). `trigger` is `auto` (AIDE, after execution or the release\nmerge), `manual`, `promote` or `redeploy`; `triggeredBy` is `null` for `auto` (or a\ndeleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` row promoted."
+      },
+      "DeploymentEnvVarDto": {
+        "required": [
+          "key",
+          "targets",
+          "sensitive",
+          "hasValue",
+          "updatedAt",
+          "syncedAt",
+          "syncError"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentTarget"
+            }
+          },
+          "sensitive": {
+            "type": "boolean"
+          },
+          "hasValue": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "syncedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "syncError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A project environment variable (FR-88, Owner only). The value is never returned: `hasValue` is always `true`.\n`syncedAt` is when the current value was pushed to Vercel (`null`: not yet); `syncError` is the last push\nfailure (`null` after a successful push)."
+      },
+      "DeploymentProvider": {
+        "enum": [
+          "vercel",
+          "fake"
+        ],
+        "description": "Deployment provider (§4.15). Wire values: `vercel`, `fake` (deterministic, tests and E2E)."
+      },
+      "DeploymentSettingsDto": {
+        "required": [
+          "provider",
+          "supported",
+          "binding",
+          "canBind",
+          "vercelProject",
+          "rootDirectory",
+          "framework",
+          "requiredEnv",
+          "gitConnected",
+          "installUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentProvider"
+              }
+            ]
+          },
+          "supported": {
+            "type": "boolean"
+          },
+          "binding": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentBindingDto"
+              }
+            ]
+          },
+          "canBind": {
+            "type": "boolean"
+          },
+          "vercelProject": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/VercelProjectDto"
+              }
+            ]
+          },
+          "rootDirectory": {
+            "type": "string"
+          },
+          "framework": {
+            "type": "string"
+          },
+          "requiredEnv": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequiredEnvVarDto"
+            }
+          },
+          "gitConnected": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "installUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Settings → Deployment (FR-88), for any member. `provider` is `vercel` (or `fake` in test environments)\nonce deployment is set, else `null`. `supported`: the preset supports Vercel, or an Owner opted in by setting\na provider. `binding` is the bound connection (\"connected by &lt;name&gt;\"; `null`: none) and `canBind`\nwhether the caller may bind one of their own (Owners). `vercelProject` is the linked Vercel project (`null`:\nnone yet). `rootDirectory` and `framework` are what the Vercel project builds. `requiredEnv` lists the\npreset's required env vars with `present`. `gitConnected` is whether Vercel's GitHub App can access the repo\n(`null`: not checked), with Vercel's `installUrl` when it can't."
+      },
+      "DeploymentStatus": {
+        "enum": [
+          "queued",
+          "building",
+          "ready",
+          "error",
+          "canceled"
+        ],
+        "description": "§4.15 deployment states: `queued → building → ready | error | canceled`."
+      },
+      "DeploymentTarget": {
+        "enum": [
+          "preview",
+          "production"
+        ],
+        "description": "Deployment target, also a Vercel env target (FR-88). Wire values: `preview`, `production`."
+      },
+      "DeploymentTrigger": {
+        "enum": [
+          "auto",
+          "manual",
+          "promote",
+          "redeploy"
+        ],
+        "description": "Why a deployment row exists (FR-90, FR-91). Wire values: `auto` (AIDE after execution or release),\n            `manual`, `promote`, `redeploy`."
+      },
+      "DeploymentUserDto": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "description": "A user named on a deployment or binding: \"connected by &lt;name&gt;\", \"triggered by &lt;name&gt;\"."
       },
       "DiffLineDto": {
         "required": [
@@ -10449,12 +11932,12 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/JsonElement"
+                "$ref": "#/components/schemas/PreviewCheckDto"
               }
             ]
           }
         },
-        "description": "The external inputs a review cycle collected (FR-85, FR-89): the PR head's `checks`, how long review waited for\npending checks (`checksWaitedSeconds`, up to 15 minutes; `null` when it didn't wait) and whether it gave up\nwaiting (`checksTimedOut`, recorded as a warning). `preview` is the preview deployment (FR-89; schemaless\nuntil that lands, `null` when none)."
+        "description": "The external inputs a review cycle collected (FR-85, FR-89): the PR head's `checks`, how long review waited for\npending checks (`checksWaitedSeconds`, up to 15 minutes; `null` when it didn't wait) and whether it gave up\nwaiting (`checksTimedOut`, recorded as a warning). `preview` is the preview deployment review waited for\n(FR-90; `null` when none, e.g. Vercel not configured)."
       },
       "FileAction": {
         "enum": [
@@ -11348,7 +12831,7 @@
           },
           "installUrl": {
             "type": "string",
-            "description": "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83)."
+            "description": "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88)."
           }
         }
       },
@@ -12478,6 +13961,49 @@
         },
         "description": "A tech stack preset card (FR-74, §7.2 wizard Stack step and admin presets list): `stack` are the chips,\n`deployTargets` the supported deployment targets (`vercel`). `contentHash` is the SHA-256 of the\npreset's files (D-V2-12)."
       },
+      "PreviewCheckDto": {
+        "required": [
+          "deploymentId",
+          "status",
+          "url",
+          "buildLogTail",
+          "waitedSeconds",
+          "timedOut"
+        ],
+        "type": "object",
+        "properties": {
+          "deploymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DeploymentStatus"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "buildLogTail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "waitedSeconds": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "timedOut": {
+            "type": "boolean"
+          }
+        },
+        "description": "FR-90: the preview deployment a review cycle waited for (`compliance_report.external_checks.preview`): its id, final\n(or last seen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 20\nminutes; `null` when it didn't wait) and whether it gave up waiting (`timedOut`)."
+      },
       "ProblemDetails": {
         "type": "object",
         "properties": {
@@ -12533,7 +14059,7 @@
           },
           "installUrl": {
             "type": "string",
-            "description": "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83)."
+            "description": "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88)."
           }
         }
       },
@@ -12561,7 +14087,8 @@
           "updatedAt",
           "presetId",
           "presetName",
-          "presetVersion"
+          "presetVersion",
+          "deploymentsEnabled"
         ],
         "type": "object",
         "properties": {
@@ -12671,9 +14198,12 @@
               "null",
               "string"
             ]
+          },
+          "deploymentsEnabled": {
+            "type": "boolean"
           }
         },
-        "description": "A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null`\nfor an Admin who isn't a member); a `null` `tokenBudget` means unlimited. `checkpoint` is the lifecycle\ncheckpoint within the current release version `releaseVersionId` (§4.10, D-V2-11: was `projectVersion`);\n`releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the\nversion in development (`null`: none) (FR-62). `idea` is the request of the version in development.\n`presetId`, `presetName` and `presetVersion` are the tech stack preset pinned on the current release\nversion (FR-74; all `null`: no preset)."
+        "description": "A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null`\nfor an Admin who isn't a member); a `null` `tokenBudget` means unlimited. `checkpoint` is the lifecycle\ncheckpoint within the current release version `releaseVersionId` (§4.10, D-V2-11: was `projectVersion`);\n`releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the\nversion in development (`null`: none) (FR-62). `idea` is the request of the version in development.\n`presetId`, `presetName` and `presetVersion` are the tech stack preset pinned on the current release\nversion (FR-74; all `null`: no preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so\nthe Deployments page is in its navigation (§7.2)."
       },
       "ProjectEventMessage": {
         "required": [
@@ -12777,7 +14307,8 @@
           "tokenBudget",
           "executionStatus",
           "pullRequest",
-          "latestRelease"
+          "latestRelease",
+          "latestDeployment"
         ],
         "type": "object",
         "properties": {
@@ -12871,9 +14402,19 @@
                 "$ref": "#/components/schemas/ReleaseSummaryDto"
               }
             ]
+          },
+          "latestDeployment": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentDto"
+              }
+            ]
           }
         },
-        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`\ncounts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the\nexecution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened\nit (FR-36), else `null`. `latestRelease` is the latest release attempt of the current release version (FR-42,\nFR-43), else `null`. Artifacts, steps, review and gates are those of the current release version\n`releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was\n`projectVersion` (D-V2-11). `suggestedNextVersion` prefills \"Start new version\" (FR-60: the next minor of the\nreleased version)."
+        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`\ncounts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the\nexecution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened\nit (FR-36), else `null`. `latestRelease` is the latest release attempt of the current release version (FR-42,\nFR-43), else `null`. Artifacts, steps, review and gates are those of the current release version\n`releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was\n`projectVersion` (D-V2-11). `suggestedNextVersion` prefills \"Start new version\" (FR-60: the next minor of the\nreleased version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:\nnone), for the overview and `aide status`."
       },
       "ProjectStatus": {
         "enum": [
@@ -13146,6 +14687,28 @@
           }
         },
         "description": "The project PR once recorded (FR-36): provider, base (default) and head (project) branch, and for GitHub its number and\nweb URL (both `null` for Local, whose \"PR\" is the recorded branch comparison). `openedAt` is when AIDE last\nopened or reused it."
+      },
+      "PutDeploymentEnvRequest": {
+        "required": [
+          "value",
+          "targets"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentTarget"
+            }
+          },
+          "sensitive": {
+            "type": "boolean"
+          }
+        },
+        "description": "Create or replace an environment variable (FR-88): the value (up to 64 KB; encrypted in AIDE and never returned), its\ntargets (`preview`, `production`, at least one) and whether Vercel stores it as sensitive."
       },
       "RefinementAnswerDto": {
         "required": [
@@ -13430,7 +14993,8 @@
           "githubReleaseUrl",
           "awaitingMergeSince",
           "mergeReasons",
-          "mergeStrategy"
+          "mergeStrategy",
+          "productionDeployment"
         ],
         "type": "object",
         "properties": {
@@ -13521,9 +15085,19 @@
           },
           "mergeStrategy": {
             "$ref": "#/components/schemas/MergeStrategy"
+          },
+          "productionDeployment": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentDto"
+              }
+            ]
           }
         },
-        "description": "A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint\n`checkpoint`. `status` is `in_progress` while the release job is queued or running, then\n`succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`, or\n`awaiting_merge` (FR-65) when the merge was refused or the strategy is `manual`: `awaitingMergeSince` is\nwhen it started waiting and `mergeReasons` are the merge-readiness reasons (FR-84) recorded then (`null`\notherwise); the merge poll then completes it once the PR is merged on GitHub (§4.14).\nA failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict\n`conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`\nfor Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).\n`completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`\n(e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails\nthe release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.\nFailure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,\n`GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and\n`MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can\nretry with `POST /release`. `githubReleaseUrl` is the GitHub Release created for the tag (FR-64; `null`\nfor Local or before it exists). `mergeStrategy` is the project's current merge strategy (FR-65)."
+        "description": "A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint\n`checkpoint`. `status` is `in_progress` while the release job is queued or running, then\n`succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`, or\n`awaiting_merge` (FR-65) when the merge was refused or the strategy is `manual`: `awaitingMergeSince` is\nwhen it started waiting and `mergeReasons` are the merge-readiness reasons (FR-84) recorded then (`null`\notherwise); the merge poll then completes it once the PR is merged on GitHub (§4.14).\nA failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict\n`conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`\nfor Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).\n`completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`\n(e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails\nthe release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.\nFailure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,\n`GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and\n`MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can\nretry with `POST /release`. `githubReleaseUrl` is the GitHub Release created for the tag (FR-64; `null`\nfor Local or before it exists). `mergeStrategy` is the project's current merge strategy (FR-65).\n`productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including\nredeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release."
       },
       "ReleaseStatus": {
         "enum": [
@@ -13774,6 +15348,37 @@
           }
         },
         "description": "The optimisation plan a review cycle produced (FR-40): its artifact id, version and status."
+      },
+      "RequiredEnvVarDto": {
+        "required": [
+          "key",
+          "targets",
+          "sensitive",
+          "description",
+          "present"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentTarget"
+            }
+          },
+          "sensitive": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "present": {
+            "type": "boolean"
+          }
+        },
+        "description": "An environment variable the project's preset requires (FR-88, §4.11 preset env): its key, targets, whether it is\nsensitive, what it is for, and whether the project has it (`present`; missing ones are flagged)."
       },
       "ReviewCategory": {
         "enum": [
@@ -14271,6 +15876,49 @@
         },
         "description": "The number of the caller's unread notifications (the bell badge)."
       },
+      "UpdateDeploymentSettingsRequest": {
+        "required": [
+          "provider"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentProvider"
+              }
+            ]
+          },
+          "connectionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "vercelProjectId": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "create": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CreateVercelProjectRequest"
+              }
+            ]
+          }
+        },
+        "description": "Settings → Deployment (FR-88, Owner). `provider` (required) is `vercel`, or `null` to turn deployment\noff (other fields not allowed then; history is kept). `connectionId` binds one of the caller's own Vercel\nconnections (omitted: keep the bound one). Send `vercelProjectId` to link an existing Vercel project or\n`create` to create one, not both (omitted: keep the linked one)."
+      },
       "UpdateGitSettingsRequest": {
         "type": "object",
         "properties": {
@@ -14510,6 +16158,19 @@
         },
         "description": "Partial update of a project (FR-7). Omitted fields are unchanged."
       },
+      "UpdateVercelConnectionRequest": {
+        "required": [
+          "label"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
+        "description": "Rename a Vercel connection (FR-87)."
+      },
       "UserDto": {
         "required": [
           "id",
@@ -14545,6 +16206,146 @@
           }
         },
         "description": "The signed-in user (or a user, for admins)."
+      },
+      "VercelBoundProjectDto": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "description": "A project that has a Vercel connection bound for deployment (FR-88)."
+      },
+      "VercelConnectionDto": {
+        "required": [
+          "id",
+          "label",
+          "last4",
+          "accountName",
+          "teamId",
+          "teamSlug",
+          "scope",
+          "expiresAt",
+          "status",
+          "lastValidatedAt",
+          "createdAt",
+          "boundProjects"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "last4": {
+            "type": "string"
+          },
+          "accountName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "teamId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "teamSlug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/VercelTokenScope"
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/VercelConnectionStatus"
+          },
+          "lastValidatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "boundProjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VercelBoundProjectDto"
+            }
+          }
+        },
+        "description": "One of the caller's Vercel connections (FR-87). The token is never returned: only the label, its last 4 characters,\nthe Vercel account (`accountName`, the Vercel username; `null` when unknown) and, for a team-scoped token,\n`teamId`/`teamSlug`, the `scope` (`account` or `team`), the token's expiry (`null`: none),\nthe validation status (`valid`, `invalid`, `unchecked`) and when it was last checked, plus the projects\nit is bound to."
+      },
+      "VercelConnectionStatus": {
+        "enum": [
+          "valid",
+          "invalid",
+          "unchecked"
+        ],
+        "description": "Validation state of a Vercel connection (FR-87: a token Vercel rejects marks it invalid). Wire values:\n            `valid`, `invalid`, `unchecked`."
+      },
+      "VercelProjectDto": {
+        "required": [
+          "id",
+          "name",
+          "url",
+          "productionUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "productionUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The linked Vercel project (FR-88): id (`prj_…`), name, its Vercel URL and the production URL once known."
+      },
+      "VercelTokenScope": {
+        "enum": [
+          "account",
+          "team"
+        ],
+        "description": "Scope of a Vercel token (FR-87). Wire values: `account`, `team`."
       },
       "ViolationDto": {
         "required": [
@@ -14619,6 +16420,9 @@
     },
     {
       "name": "Project settings"
+    },
+    {
+      "name": "Deployments"
     },
     {
       "name": "Lifecycle"

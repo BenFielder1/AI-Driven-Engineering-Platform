@@ -31,6 +31,7 @@ import { Route as AppProjectsProjectIdRouteImport } from './routes/_app/projects
 import { Route as AppProjectsNewRouteImport } from './routes/_app/projects/new'
 import { Route as AppProjectsProjectIdIndexRouteImport } from './routes/_app/projects/$projectId/index'
 import { Route as AppProjectsProjectIdActivityRouteImport } from './routes/_app/projects/$projectId/activity'
+import { Route as AppProjectsProjectIdDeploymentsRouteImport } from './routes/_app/projects/$projectId/deployments'
 import { Route as AppProjectsProjectIdExecutionRouteImport } from './routes/_app/projects/$projectId/execution'
 import { Route as AppProjectsProjectIdPlanningRouteImport } from './routes/_app/projects/$projectId/planning'
 import { Route as AppProjectsProjectIdRefinementRouteImport } from './routes/_app/projects/$projectId/refinement'
@@ -154,6 +155,12 @@ const AppProjectsProjectIdActivityRoute =
     path: '/activity',
     getParentRoute: () => AppProjectsProjectIdRoute,
   } as any)
+const AppProjectsProjectIdDeploymentsRoute =
+  AppProjectsProjectIdDeploymentsRouteImport.update({
+    id: '/deployments',
+    path: '/deployments',
+    getParentRoute: () => AppProjectsProjectIdRoute,
+  } as any)
 const AppProjectsProjectIdExecutionRoute =
   AppProjectsProjectIdExecutionRouteImport.update({
     id: '/execution',
@@ -247,6 +254,7 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AppAdminIndexRoute
   '/projects/': typeof AppProjectsIndexRoute
   '/projects/$projectId/activity': typeof AppProjectsProjectIdActivityRoute
+  '/projects/$projectId/deployments': typeof AppProjectsProjectIdDeploymentsRoute
   '/projects/$projectId/execution': typeof AppProjectsProjectIdExecutionRoute
   '/projects/$projectId/planning': typeof AppProjectsProjectIdPlanningRoute
   '/projects/$projectId/refinement': typeof AppProjectsProjectIdRefinementRoute
@@ -279,6 +287,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AppAdminIndexRoute
   '/projects': typeof AppProjectsIndexRoute
   '/projects/$projectId/activity': typeof AppProjectsProjectIdActivityRoute
+  '/projects/$projectId/deployments': typeof AppProjectsProjectIdDeploymentsRoute
   '/projects/$projectId/execution': typeof AppProjectsProjectIdExecutionRoute
   '/projects/$projectId/planning': typeof AppProjectsProjectIdPlanningRoute
   '/projects/$projectId/refinement': typeof AppProjectsProjectIdRefinementRoute
@@ -315,6 +324,7 @@ export interface FileRoutesById {
   '/_app/admin/': typeof AppAdminIndexRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/projects/$projectId/activity': typeof AppProjectsProjectIdActivityRoute
+  '/_app/projects/$projectId/deployments': typeof AppProjectsProjectIdDeploymentsRoute
   '/_app/projects/$projectId/execution': typeof AppProjectsProjectIdExecutionRoute
   '/_app/projects/$projectId/planning': typeof AppProjectsProjectIdPlanningRoute
   '/_app/projects/$projectId/refinement': typeof AppProjectsProjectIdRefinementRoute
@@ -351,6 +361,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/projects/'
     | '/projects/$projectId/activity'
+    | '/projects/$projectId/deployments'
     | '/projects/$projectId/execution'
     | '/projects/$projectId/planning'
     | '/projects/$projectId/refinement'
@@ -383,6 +394,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/projects'
     | '/projects/$projectId/activity'
+    | '/projects/$projectId/deployments'
     | '/projects/$projectId/execution'
     | '/projects/$projectId/planning'
     | '/projects/$projectId/refinement'
@@ -418,6 +430,7 @@ export interface FileRouteTypes {
     | '/_app/admin/'
     | '/_app/projects/'
     | '/_app/projects/$projectId/activity'
+    | '/_app/projects/$projectId/deployments'
     | '/_app/projects/$projectId/execution'
     | '/_app/projects/$projectId/planning'
     | '/_app/projects/$projectId/refinement'
@@ -595,6 +608,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsProjectIdActivityRouteImport
       parentRoute: typeof AppProjectsProjectIdRoute
     }
+    '/_app/projects/$projectId/deployments': {
+      id: '/_app/projects/$projectId/deployments'
+      path: '/deployments'
+      fullPath: '/projects/$projectId/deployments'
+      preLoaderRoute: typeof AppProjectsProjectIdDeploymentsRouteImport
+      parentRoute: typeof AppProjectsProjectIdRoute
+    }
     '/_app/projects/$projectId/execution': {
       id: '/_app/projects/$projectId/execution'
       path: '/execution'
@@ -724,6 +744,7 @@ const AppProjectsProjectIdSettingsRouteWithChildren =
 
 interface AppProjectsProjectIdRouteChildren {
   AppProjectsProjectIdActivityRoute: typeof AppProjectsProjectIdActivityRoute
+  AppProjectsProjectIdDeploymentsRoute: typeof AppProjectsProjectIdDeploymentsRoute
   AppProjectsProjectIdExecutionRoute: typeof AppProjectsProjectIdExecutionRoute
   AppProjectsProjectIdPlanningRoute: typeof AppProjectsProjectIdPlanningRoute
   AppProjectsProjectIdRefinementRoute: typeof AppProjectsProjectIdRefinementRoute
@@ -739,6 +760,7 @@ interface AppProjectsProjectIdRouteChildren {
 
 const AppProjectsProjectIdRouteChildren: AppProjectsProjectIdRouteChildren = {
   AppProjectsProjectIdActivityRoute: AppProjectsProjectIdActivityRoute,
+  AppProjectsProjectIdDeploymentsRoute: AppProjectsProjectIdDeploymentsRoute,
   AppProjectsProjectIdExecutionRoute: AppProjectsProjectIdExecutionRoute,
   AppProjectsProjectIdPlanningRoute: AppProjectsProjectIdPlanningRoute,
   AppProjectsProjectIdRefinementRoute: AppProjectsProjectIdRefinementRoute,

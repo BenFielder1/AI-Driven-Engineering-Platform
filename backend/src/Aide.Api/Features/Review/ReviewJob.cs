@@ -73,6 +73,8 @@ internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult 
 /// are agent violations mapped to the item's category and severity, without penalty, <see cref="PresetReviewChecklist"/>),
 /// the deterministic checks gain the preset's rules (<see cref="PresetReviewChecks"/>, penalised like v1's), and
 /// optimisation steps may name the preset's specialists (<see cref="Domain.Execution.PlanAgents.ForOptimization"/>).
+/// FR-90: the version's latest Vercel preview is waited for first (<see cref="PreviewCollector"/>); a failed build is a
+/// critical <c>architecture</c> finding and the preview is stored in <c>external_checks.preview</c>.
 /// Redelivery is idempotent: run ids derive from the job, a succeeded run is reused, the cycle is read back from the job's
 /// <c>REVIEW_STARTED</c>, and one report is recorded per job. A rollback (cycle reset) or another review in between makes
 /// the job record nothing.
@@ -87,6 +89,7 @@ public sealed partial class ReviewJobHandler(
     IWorkingCopies workingCopies,
     LifecycleWriter writer,
     ExternalChecksCollector externalChecks,
+    PreviewCollector previews,
     VersionPresetReader presets,
     TimeProvider time,
     ILogger<ReviewJobHandler> logger) : IJobHandler
@@ -128,9 +131,15 @@ public sealed partial class ReviewJobHandler(
 
         using var scope = logger.BeginScope(new Dictionary<string, object?> { ["ReviewCycle"] = cycle });
 
+        // FR-90: the preview of the PR head is waited for (the job defers itself) and a failed build is a finding.
+        var preview = await previews.CollectAsync(project, payload, cancellationToken);
+
         // FR-85: the PR head's checks are a deterministic input; pending ones are waited for (the job defers itself) first.
         var checks = await externalChecks.CollectAsync(project, payload, cancellationToken);
-        var material = await GatherAsync(project, cancellationToken, checks is null ? [] : ExternalCheckRules.Findings(checks.Checks));
+        var material = await GatherAsync(
+            project,
+            cancellationToken,
+            [.. checks is null ? [] : ExternalCheckRules.Findings(checks.Checks), .. preview?.Findings ?? []]);
 
         // §4.5 row 4: the previous score is the latest earlier cycle's report in the current review timeline (§4.8).
         var previous = await ReviewTimeline.Current(db, project)
@@ -150,7 +159,7 @@ public sealed partial class ReviewJobHandler(
         }
 
         var outcome = await RunAgentAsync(job, project, cycle, material, previousText, payload.Feedback, MissingPlan, cancellationToken);
-        await RecordAsync(job, cycle, material, outcome, previous?.Score, checks, cancellationToken);
+        await RecordAsync(job, cycle, material, outcome, previous?.Score, checks, preview, cancellationToken);
     }
 
     private static IterationReviewResult Assess(CodeReviewResult result, ReviewMaterial material, Project project, int cycle, decimal? previousScore) =>
@@ -343,7 +352,14 @@ public sealed partial class ReviewJobHandler(
     }
 
     private async Task RecordAsync(
-        JobExecution job, int cycle, ReviewMaterial material, ReviewAgentOutcome outcome, decimal? previousScore, CollectedChecks? checks, CancellationToken cancellationToken)
+        JobExecution job,
+        int cycle,
+        ReviewMaterial material,
+        ReviewAgentOutcome outcome,
+        decimal? previousScore,
+        CollectedChecks? checks,
+        CollectedPreview? preview,
+        CancellationToken cancellationToken)
     {
         // The run's completion bumped the project row (tokens used): re-read it so its xmin is current.
         db.ChangeTracker.Clear();
@@ -394,7 +410,7 @@ public sealed partial class ReviewJobHandler(
             AgentRunId = outcome.Run.RunId,
             Threshold = project.ComplianceThreshold,
             OptimizationPlanArtifactId = draft?.Id,
-            ExternalChecks = checks?.ToJson(),
+            ExternalChecks = CollectedChecks.Compose(checks, preview?.Check),
             CreatedAt = now,
         };
         db.ComplianceReports.Add(report);
@@ -440,6 +456,8 @@ public sealed partial class ReviewJobHandler(
                 runId = outcome.Run.RunId,
                 regressionCount = scoped.Regressions.Count,
                 checksTimedOut = checks?.TimedOut ?? false,
+                previewDeploymentId = preview?.Check.DeploymentId,
+                previewStatus = preview?.Check.Status,
             },
             SystemActor.Name,
             now);

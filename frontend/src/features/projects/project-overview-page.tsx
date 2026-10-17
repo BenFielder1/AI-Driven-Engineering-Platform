@@ -10,6 +10,8 @@ import { ErrorState } from '../../components/ui/states'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { cn } from '../../lib/utils'
 import { ActivityFeed } from '../activity/activity-feed'
+import { deploymentTargetLabels, shortSha, triggeredByLabel } from '../deployments/deployment-format'
+import { DeploymentLink, DeploymentStatusPill } from '../deployments/deployment-parts'
 import { GateHistory } from '../gates/gate-history'
 import { PendingGatesPanel } from '../gates/pending-gates-panel'
 import { LifecycleCard } from '../lifecycle/lifecycle-card'
@@ -27,6 +29,7 @@ import {
 } from './labels'
 import { useProjectAccess } from './project-context'
 import { useProjectState, type ProjectState } from './projects-api'
+import { RelativeTime } from './relative-time'
 
 const decisionLabels: Record<NonNullable<ProjectState['review']['latestDecision']>, string> = {
   release_eligible: 'Release eligible',
@@ -65,12 +68,35 @@ function Stat({ term, children }: { term: string; children: ReactNode }) {
   )
 }
 
+/** FR-90, FR-91: the project's newest deployment of any target, with its live state pill. */
+function LatestDeployment({ deployment: d }: { deployment: ProjectState['latestDeployment'] }) {
+  if (!d) {
+    return <p className="text-sm text-muted-foreground">No deployments yet.</p>
+  }
+  return (
+    <div className="flex flex-col gap-2" data-testid="latest-deployment">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <DeploymentStatusPill status={d.status} />
+        <span className="font-medium">{deploymentTargetLabels[d.target]}</span>
+        <span className="font-mono">{d.releaseVersion}</span>
+        <code className="font-mono text-xs text-muted-foreground">{shortSha(d.gitSha)}</code>
+      </div>
+      <p className="text-sm">
+        <DeploymentLink url={d.url} />
+      </p>
+      <p className="text-sm text-muted-foreground">
+        {triggeredByLabel(d)} · <RelativeTime iso={d.createdAt} />
+      </p>
+    </div>
+  )
+}
+
 type HistoryTab = 'activity' | 'gates'
 
 /**
  * /projects/:id overview (SPEC §7.2): the next-action card (FR-54; the stage stepper is in the project header), KPI
  * tiles, pending gates with Owner decisions (FR-13–FR-15), the release (FR-42, FR-43), artifacts and review summaries,
- * the token budget (FR-26), and the activity preview and gate history (FR-50).
+ * the latest deployment (FR-90, FR-91), the token budget (FR-26), and the activity preview and gate history (FR-50).
  */
 export function ProjectOverviewPage() {
   const { project, can, readOnly, releaseVersionId, view } = useProjectAccess()
@@ -216,6 +242,22 @@ export function ProjectOverviewPage() {
               </dl>
             )}
           </Card>
+          {(project.deploymentsEnabled || s.latestDeployment !== null) && (
+            <Card
+              title="Latest deployment"
+              action={
+                <Link
+                  to="/projects/$projectId/deployments"
+                  params={{ projectId: project.id }}
+                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  All deployments
+                </Link>
+              }
+            >
+              <LatestDeployment deployment={s.latestDeployment} />
+            </Card>
+          )}
           <Card title="Review">
             <dl>
               <Stat term="Cycle">

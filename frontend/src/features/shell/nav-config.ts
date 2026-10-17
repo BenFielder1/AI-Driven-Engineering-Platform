@@ -7,6 +7,7 @@ import {
   Bell,
   Bot,
   ClipboardCheck,
+  CloudUpload,
   Compass,
   FileStack,
   FileText,
@@ -138,11 +139,15 @@ const LIFECYCLE: NavSection = {
   })),
 }
 
-/*
- * Deployments (FR-91) joins this section, between Activity and Settings, once a project can have a deployment target:
- * add `{ key: 'deployments', label: 'Deployments', to: '/projects/$projectId/deployments', icon: … }` and show it only
- * when the target is set (a `visible` rule on NavItem).
- */
+/** FR-91: the Deployments page, shown between Activity and Settings only when the project has a deployment target. */
+const DEPLOYMENTS_ITEM: NavItem = {
+  key: 'deployments',
+  label: 'Deployments',
+  to: '/projects/$projectId/deployments',
+  icon: CloudUpload,
+  keywords: ['vercel', 'preview', 'production', 'promote', 'redeploy'],
+}
+
 const PROJECT: NavSection = {
   key: 'project',
   label: 'Project',
@@ -155,9 +160,22 @@ const PROJECT: NavSection = {
   ],
 }
 
-/** Sidebar / drawer sections inside a project (FR-54): Lifecycle (one item per stage), then Project. */
-export function projectSections(): NavSection[] {
-  return [LIFECYCLE, PROJECT]
+/** What decides the optional project items (FR-54): `deploymentsEnabled` is `ProjectDto.deploymentsEnabled` (FR-88). */
+export interface ProjectNavOptions {
+  deploymentsEnabled?: boolean
+}
+
+/**
+ * Sidebar / drawer sections inside a project (FR-54): Lifecycle (one item per stage), then Project. Deployments
+ * (FR-91) shows only when the project has a deployment target.
+ */
+export function projectSections(options: ProjectNavOptions = {}): NavSection[] {
+  if (!options.deploymentsEnabled) {
+    return [LIFECYCLE, PROJECT]
+  }
+  const items = [...PROJECT.items]
+  items.splice(items.length - 1, 0, DEPLOYMENTS_ITEM)
+  return [LIFECYCLE, { ...PROJECT, items }]
 }
 
 /** Routes that aren't sidebar items but are in the palette and breadcrumbs. */
@@ -204,7 +222,7 @@ export interface FoundItem {
 export function findNavItem(pathname: string, viewer: NavViewer): FoundItem | undefined {
   const projectId = projectIdFromPath(pathname)
   const candidates: FoundItem[] = projectId
-    ? projectSections().flatMap((section) => section.items.map((item) => ({ item, section })))
+    ? projectSections({ deploymentsEnabled: true }).flatMap((section) => section.items.map((item) => ({ item, section })))
     : [
         ...workspaceSections(viewer).flatMap((section) => section.items.map((item) => ({ item, section }))),
         ...EXTRA_ITEMS.map((item) => ({ item, section: null })),
@@ -286,7 +304,10 @@ export interface PaletteEntry {
 }
 
 /** Every page the viewer can go to from ⌘K: the current project's pages first (in project mode), then the workspace. */
-export function paletteEntries(viewer: NavViewer, project?: { id: string; name: string }): PaletteEntry[] {
+export function paletteEntries(
+  viewer: NavViewer,
+  project?: { id: string; name: string; deploymentsEnabled?: boolean },
+): PaletteEntry[] {
   const entries: PaletteEntry[] = []
   const add = (item: NavItem, group: string, params: PathParams = {}) => {
     entries.push({
@@ -299,7 +320,7 @@ export function paletteEntries(viewer: NavViewer, project?: { id: string; name: 
     })
   }
   if (project) {
-    for (const section of projectSections()) {
+    for (const section of projectSections({ deploymentsEnabled: project.deploymentsEnabled })) {
       for (const item of section.items) {
         add(item, `${project.name} · ${section.label}`, { projectId: project.id })
       }

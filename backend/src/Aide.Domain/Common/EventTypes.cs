@@ -106,7 +106,8 @@ public static class EventTypes
     /// <summary>
     /// FR-78: the provider rejected a bound connection's key during a run (HTTP 401), so the connection was marked
     /// <c>invalid</c>: <c>{credentialId, userId, provider, runId}</c> (no secret). Its owner is notified through the run's
-    /// <see cref="RunFailed"/> notification until FR-92 adds the "connection invalid" notification type.
+    /// <see cref="RunFailed"/> notification until FR-92 adds the "connection invalid" notification type. Also written when
+    /// Vercel rejects a connection's token (FR-87): <c>{connectionId, userId, provider: "vercel"}</c>.
     /// </summary>
     public const string ConnectionInvalid = "CONNECTION_INVALID";
 
@@ -196,6 +197,34 @@ public static class EventTypes
     /// </summary>
     public const string CodebaseSummaryCreated = "CODEBASE_SUMMARY_CREATED";
 
+    // Deployments (FR-90, FR-91, §4.15): category release.
+
+    /// <summary>
+    /// FR-90, FR-91: a deployment row was recorded: <c>{deploymentId, target, provider, trigger, gitRef, gitSha,
+    /// releaseVersionId, releaseId, promotedFromDeploymentId}</c>.
+    /// </summary>
+    public const string DeploymentCreated = "DEPLOYMENT_CREATED";
+
+    /// <summary>
+    /// §4.15: a deployment changed state: <c>{deploymentId, target, status, url, errorCode}</c> (never env values or the
+    /// build log).
+    /// </summary>
+    public const string DeploymentUpdated = "DEPLOYMENT_UPDATED";
+
+    /// <summary>
+    /// FR-91: a deployment failed in a way Owners act on — a production deployment (the release stands; "Redeploy"), or any
+    /// deployment whose Vercel token was rejected: <c>{deploymentId, target, status, errorCode, releaseVersion, gitSha,
+    /// url}</c>. Owners are notified (as <c>release_failed</c> with its own wording until FR-92 adds the
+    /// <c>deployment_failed</c> type).
+    /// </summary>
+    public const string DeploymentFailed = "DEPLOYMENT_FAILED";
+
+    /// <summary>
+    /// FR-90: a preview deployment became ready: <c>{deploymentId, target, status, url, releaseVersion, gitSha}</c>. Every
+    /// member is notified (as <c>review_completed</c> with its own wording, linking to the Review page, until FR-92).
+    /// </summary>
+    public const string DeploymentPreviewReady = "DEPLOYMENT_PREVIEW_READY";
+
     // Rollback (FR-44, FR-45)
     public const string RollbackCompleted = "ROLLBACK_COMPLETED";
 
@@ -221,7 +250,7 @@ public static class EventTypes
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
-        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted],
+        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady],
         [EventCategory.Rollback] = [RollbackCompleted],
         [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, PresetChanged],
         [EventCategory.Integrity] = [IntegrityAlert],

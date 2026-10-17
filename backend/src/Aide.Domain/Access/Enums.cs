@@ -32,6 +32,12 @@ public enum ProjectAction
 
     /// <summary>FR-60: start a new release version.</summary>
     StartVersion = 13,
+
+    /// <summary>FR-90: trigger (or redeploy) a preview deployment.</summary>
+    TriggerDeployment = 14,
+
+    /// <summary>FR-88, FR-91: deployment settings and env vars, promote and production redeploy.</summary>
+    ManageDeployments = 15,
 }
 
 public enum AccessDecision

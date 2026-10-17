@@ -45,6 +45,7 @@ export function seedRelease(p: StoredProject, overrides: Partial<Release> = {}):
     awaitingMergeSince: null,
     mergeReasons: null,
     mergeStrategy: p.git.mergeStrategy,
+    productionDeployment: null,
     ...overrides,
   }
   releases.push(release)

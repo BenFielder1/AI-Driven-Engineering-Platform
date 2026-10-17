@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Releases;
 using Aide.Domain.Review;
@@ -111,14 +110,14 @@ public sealed record ExternalCheckDto(string Name, CheckRunConclusion? Conclusio
 /// <summary>
 /// The external inputs a review cycle collected (FR-85, FR-89): the PR head's <c>checks</c>, how long review waited for
 /// pending checks (<c>checksWaitedSeconds</c>, up to 15 minutes; <c>null</c> when it didn't wait) and whether it gave up
-/// waiting (<c>checksTimedOut</c>, recorded as a warning). <c>preview</c> is the preview deployment (FR-89; schemaless
-/// until that lands, <c>null</c> when none).
+/// waiting (<c>checksTimedOut</c>, recorded as a warning). <c>preview</c> is the preview deployment review waited for
+/// (FR-90; <c>null</c> when none, e.g. Vercel not configured).
 /// </summary>
 public sealed record ExternalChecksDto(
     IReadOnlyList<ExternalCheckDto> Checks,
     int? ChecksWaitedSeconds,
     bool ChecksTimedOut,
-    JsonElement? Preview);
+    Deployments.PreviewCheckDto? Preview);
 
 /// <summary>The optimisation plan a review cycle produced (FR-40): its artifact id, version and status.</summary>
 public sealed record ReportPlanDto(Guid ArtifactId, int Version, ArtifactStatus Status);

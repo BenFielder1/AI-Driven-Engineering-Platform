@@ -43,8 +43,8 @@ describe('/connections → LLM providers (FR-78)', () => {
     expect(within(keyless).getByText('Ollama')).toBeInTheDocument()
     expect(within(keyless).getByText('Fake (testing)')).toBeInTheDocument()
 
-    // Vercel isn't available yet; GitHub is covered by github-connection.test.tsx (FR-81).
-    expect(screen.getByRole('region', { name: 'Vercel' })).toHaveTextContent('available in a later update')
+    // GitHub is covered by github-connection.test.tsx (FR-81), Vercel by vercel-connection.test.tsx (FR-87).
+    expect(await within(screen.getByRole('region', { name: 'Vercel' })).findByText('Not connected')).toBeInTheDocument()
   })
 
   it('FR78_add_key_rejected: a key the provider rejects shows CREDENTIAL_INVALID copy, is cleared, and nothing is listed', async () => {

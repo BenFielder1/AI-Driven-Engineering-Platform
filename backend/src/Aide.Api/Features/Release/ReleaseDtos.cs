@@ -21,6 +21,8 @@ namespace Aide.Api.Features.Release;
 /// <c>MERGE_TIMEOUT</c> (not merged within 14 days); after either the project stays in <c>release</c> and an Owner can
 /// retry with <c>POST /release</c>. <c>githubReleaseUrl</c> is the GitHub Release created for the tag (FR-64; <c>null</c>
 /// for Local or before it exists). <c>mergeStrategy</c> is the project's current merge strategy (FR-65).
+/// <c>productionDeployment</c> is the release's production deployment (FR-91: the newest for this release attempt, including
+/// redeploys; <c>null</c> when deployment isn't configured or not created yet). A failed one doesn't undo the release.
 /// </summary>
 public sealed record ReleaseDto(
     Guid Id,
@@ -39,7 +41,8 @@ public sealed record ReleaseDto(
     string? GithubReleaseUrl,
     DateTimeOffset? AwaitingMergeSince,
     IReadOnlyList<MergeReadinessReasonDto>? MergeReasons,
-    MergeStrategy MergeStrategy);
+    MergeStrategy MergeStrategy,
+    Deployments.DeploymentDto? ProductionDeployment);
 
 /// <summary>
 /// The latest release attempt in the project state (FR-42, FR-43, FR-64, FR-65): enough for the overview's release banner,

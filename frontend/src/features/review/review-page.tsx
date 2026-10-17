@@ -23,7 +23,7 @@ import {
 } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
 import { useProjectState, type ProjectState } from '../projects/projects-api'
-import { IntegrationSlot } from '../stages/integration-slot'
+import { PreviewDeploymentSection } from '../deployments/stage-deployment-sections'
 import { StageArtifact } from '../stages/stage-artifact'
 import { StageGates } from '../stages/stage-gates'
 import { StageHeader } from '../stages/stage-header'
@@ -552,13 +552,7 @@ export function ReviewPage({
           type="optimization_plan"
           notStarted="A review cycle that finds more work drafts an optimisation plan. Execution has to complete and a review has to run first."
         />
-        {!readOnly && (
-          <IntegrationSlot
-            id="review-preview-deployment"
-            title="Preview deployment"
-            description="A preview deployment of the reviewed branch will be linked here once a deployment target is set."
-          />
-        )}
+        {!readOnly && <PreviewDeploymentSection />}
         <StageGates types={stageGates.review} filter={(g) => g.stepNumber === null} />
         <StageRuns agent="code_review" />
       </div>

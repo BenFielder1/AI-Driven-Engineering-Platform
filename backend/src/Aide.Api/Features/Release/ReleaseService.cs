@@ -133,7 +133,8 @@ public static class ReleaseRecords
 
     /// <param name="release">The release attempt.</param>
     /// <param name="mergeStrategy">The project's merge strategy (FR-65).</param>
-    public static ReleaseDto ToDto(ReleaseEntity release, MergeStrategy mergeStrategy)
+    /// <param name="productionDeployment">FR-91: the release's production deployment, if any.</param>
+    public static ReleaseDto ToDto(ReleaseEntity release, MergeStrategy mergeStrategy, Deployments.DeploymentDto? productionDeployment = null)
     {
         ArgumentNullException.ThrowIfNull(release);
         return new ReleaseDto(
@@ -153,7 +154,8 @@ public static class ReleaseRecords
             release.GithubReleaseUrl,
             release.AwaitingMergeSince,
             Git.MergeReasonsJson.Read(release.MergeReasons),
-            mergeStrategy);
+            mergeStrategy,
+            productionDeployment);
     }
 
     /// <summary>The latest attempt for the project state (FR-42, FR-43, FR-65).</summary>
@@ -239,7 +241,8 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, T
             .ThenByDescending(r => r.Id)
             .ToListAsync(cancellationToken);
         var strategy = await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken);
-        return [.. releases.Select(r => ReleaseRecords.ToDto(r, strategy))];
+        var production = await Deployments.DeploymentReader.ProductionByReleaseAsync(db, [.. releases.Select(r => r.Id)], cancellationToken);
+        return [.. releases.Select(r => ReleaseRecords.ToDto(r, strategy, production.GetValueOrDefault(r.Id)))];
     }
 
     /// <summary>The latest release attempt, or <c>null</c> before the first release.</summary>
@@ -250,7 +253,13 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, T
             .OrderByDescending(r => r.CreatedAt)
             .ThenByDescending(r => r.Id)
             .FirstOrDefaultAsync(cancellationToken);
-        return release is null ? null : ReleaseRecords.ToDto(release, await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken));
+        if (release is null)
+        {
+            return null;
+        }
+
+        var production = await Deployments.DeploymentReader.ProductionByReleaseAsync(db, [release.Id], cancellationToken);
+        return ReleaseRecords.ToDto(release, await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken), production.GetValueOrDefault(release.Id));
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: release at checkpoint {Checkpoint} retried (attempt {Attempt})")]

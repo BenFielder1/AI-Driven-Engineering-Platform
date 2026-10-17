@@ -2,6 +2,7 @@ using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Projects;
 using Aide.Domain.Access;
+using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Presets;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -66,6 +67,7 @@ public static class PresetEndpoints
         IProjectAccess access,
         ICurrentUser currentUser,
         PresetService presets,
+        AideDbContext db,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -81,6 +83,6 @@ public static class PresetEndpoints
             return ApiProblems.FromError(changed.Error!);
         }
 
-        return TypedResults.Ok(ProjectMapping.ToDto(changed.Value, grant.Value.ProjectRole, await presets.ForProjectAsync(id, cancellationToken)));
+        return TypedResults.Ok(ProjectMapping.ToDto(changed.Value, grant.Value.ProjectRole, await presets.ForProjectAsync(id, cancellationToken), await ProjectEndpoints.DeploymentsEnabledAsync(db, id, cancellationToken)));
     }
 }

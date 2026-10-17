@@ -45,18 +45,18 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | FR-84 | Merge readiness | 3.7 | both | 7 | done (stub-verified) | MergeReadinessService (branch rules + GraphQL, fallback); FR84_* tests |
 | FR-85 | Check runs as review input | 3.7 | backend | 7 | done (stub-verified) | required check runs → testing finding, 15-min wait; FR85_* tests |
 | FR-86 | Wizard Repository step | 3.7 | frontend | 5 | done (stub-verified) | wizard Repository step, has-code warning; FR86_* tests |
-| FR-87 | Vercel connection | 3.8 | both | 9 | todo | — |
-| FR-88 | Deployment settings + env vars | 3.8 | both | 9 | todo | — |
-| FR-89 | vercel.json disables aide/** auto deploys | 3.8 | backend | 9 | todo | — |
-| FR-90 | Preview deployments in review | 3.8 | both | 9 | todo | — |
-| FR-91 | Production deployments, promote, Deployments page | 3.8 | both | 9 | todo | — |
+| FR-87 | Vercel connection | 3.8 | both | 9 | done (stub/Fake-verified) | Vercel connections; FR87_* tests |
+| FR-88 | Deployment settings + env vars | 3.8 | both | 9 | done (stub/Fake-verified) | deployment settings, project link/create, env sync; FR88_* tests |
+| FR-89 | vercel.json disables aide/** auto deploys | 3.8 | backend | 9 | done (stub/Fake-verified) | preset scaffolders write vercel.json aide/** disable (syntax to confirm live) |
+| FR-90 | Preview deployments in review | 3.8 | both | 9 | done (stub/Fake-verified) | preview deployments + review wait + build-failed finding; FR90_* tests |
+| FR-91 | Production deployments, promote, Deployments page | 3.8 | both | 9 | done (stub/Fake-verified) | production deployments, promote, Deployments page; FR91_* tests |
 | FR-92 | New events + notification types | 3.9 | both | 10 | todo | — |
 | FR-93 | CLI additions | 3.9 | backend | 10 | todo | — |
 | §4.10 | Release versions, semver, checkpoints, rollback scope, migration | 4.10 | backend | 2 | done | SemVer, ReleaseVersionRules, NewVersion transition matrix; S4_10_* tests |
 | §4.11–4.12 | Preset format and the two presets | 4.11 | backend | 8 | done | Presets/{nextjs-supabase,nextjs-frontend}, PresetLoader, PresetPathRules; S4_11_*/S4_12_* tests |
 | §4.13 | Iteration specs, review scope, plan scope | 4.13 | backend | 6 | done | SpecValidator tags, IterationReviewScope, PlanScope; S4_13_* tests |
 | §4.14 | GitHub permissions, tokens, polling, merge detection | 4.14 | backend | 5, 7 | todo | — |
-| §4.15 | Deployments (Vercel) states, polling, Fake provider | 4.15 | backend | 9 | todo | — |
+| §4.15 | Deployments (Vercel) states, polling, Fake provider | 4.15 | backend | 9 | done | DeploymentPolling, IDeploymentProvider (Vercel, Fake); S4_15_* tests |
 | NFR-SEC2 | Secret encryption, scoped tokens, fixed hosts, signed state | 8 | backend | 4–9 | todo | — |
 | NFR-REL2 | Polls as jobs, restart resume, rate-limit backoff | 8 | backend | 7, 9 | todo | — |
 | NFR-PERF2 | List p95 < 300 ms with badges; runs/cycles p95 < 300 ms | 8 | backend | 10 | todo | — |
@@ -102,7 +102,11 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
   - [x] aspnet-engineer A (preset model, loader, hash, readiness check, plan rules, preset API — 3248 backend tests; oasdiff additive) ‖ aspnet-engineer B (preset content from claude-kits@14ada86: 7/6 specialist prompts, skills, conventions)
   - [x] aspnet-engineer C (spec/plan/code/review integration, deterministic preset checks, Guardian protected paths, Fake specialist scripts, "Demo: Recipe Finder" seed — 3300 backend tests; resumed once after a usage-limit stop) ‖ vite-react-engineer (wizard Stack step, preset chips + filter, change preset, start-version preset, planning agents/warnings, admin presets — 635 frontend tests)
   - [x] gate (backend 3306, frontend 635, manifests, contract fresh, oasdiff additive) · review (0 Critical, 2 Major, 3 Minor — all fixed: base-commit immutable migrations enforced in plan + Guardian + Owner edits, case-insensitive preset paths, prompt wording, decision log) · redeploy (readiness: presets 2 loaded; smoke ✓) · commit
-- [ ] 9 M15 Vercel — IDs: FR-87–FR-91, §4.15
+- [x] 9 M15 Vercel (base: f2c9a8a) — IDs: FR-87–FR-91, §4.15
+  - [x] ef-data-engineer (migration VercelDeployments, additive)
+  - [x] aspnet-engineer (contract stubs; oasdiff: only externalChecks.preview typing)
+  - [x] aspnet-engineer (connection, project link/create, env sync, preview/production deployments + polls, promote, Fake provider; migration regenerated as 20261017171130_VercelDeployments with vercel_username — 3491 backend tests) ‖ vite-react-engineer (connections Vercel, settings Deployment + env, wizard Deployment step, review preview, release production, Deployments page — 675 frontend tests)
+  - [x] gate (backend 3515, frontend 677, manifests) · review (0 Critical, 1 Major, 4 Minor — all fixed: co-Owner can't use another Owner's Vercel binding, mask-then-cut build logs, dot-only project ids rejected, idempotent deployment creation + orphan cancel, Fake provider guard; backend 3515, frontend 677) · redeploy (migration VercelDeployments applied; smoke ✓; first attempt stopped for low system memory, rerun) · commit
 - [ ] 10 M16 Integrate & harden — IDs: FR-92, FR-93, NFR-*2, E2E
 - [ ] Final — spec-verifier (v1 + v2) → fixes → github-ci-engineer → readme-writer
 
@@ -173,10 +177,21 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 - 2026-10-17 — Projects list `?preset=none` filters projects without a preset — §7.2 — SPEC updated: no
 - 2026-10-17 — Migrations already on the version's base commit are immutable for everyone: agent plans, Owner-edited plans and the Guardian at execution all reject them; preset path matching is case-insensitive (like v1 PathRules) — §4.11/§4.12 — SPEC updated: no
 - 2026-10-17 — Plans are validated against the base commit's file list (fetched if not local); if it still can't be listed, a generated plan may not create any migration (fail closed). nextjs-supabase preset bumped to 1.0.1 (db-engineer prompt wording) — §4.11 — SPEC updated: no
+- 2026-10-17 — Redeploy permissions: a preview redeploy needs a writer (FR-90 "a Contributor can redeploy"), a production redeploy an Owner (§6) — SPEC updated: no
+- 2026-10-17 — Env var PUT saves locally and returns 502 UPSTREAM_ERROR with `syncError` when the Vercel push fails (retried on next save/deployment); DELETE is all-or-nothing (502, nothing deleted) — FR-88 — SPEC updated: no
+- 2026-10-17 — Local Git projects may use deployments only when `Deployments:Provider=Fake` (enables the §8 E2E with Local Git + Fake deployments); Vercel requires a GitHub-backed project — FR-88 — SPEC updated: no
+- 2026-10-17 — A superseded preview row is marked `canceled` (with reason); review waits for the version's newest preview row (created by the PR job from the PR head); adopting Vercel's own production deployment of the merge SHA (within 30 s) only with the Vercel provider — §4.15 — SPEC updated: no
+- 2026-10-17 — Build-log tails are masked (project env values, the token and secret-shaped text removed) before storage/display; only 401 or 403 `invalidToken` invalidates a Vercel connection — NFR-SEC2 — SPEC updated: no
+- 2026-10-17 — Until phase 10: DEPLOYMENT_FAILED reaches Owners via `release_failed`, preview ready reaches members via `review_completed` (own wording); new events DEPLOYMENT_FAILED, DEPLOYMENT_PREVIEW_READY; binding-cleared notifications deferred — FR-92 — SPEC updated: no
+- 2026-10-17 — Vercel §11 checks from API knowledge, not verified live: env create v10 (upsert) / edit+delete v9; promote doesn't rebuild; `/v5/user/tokens/current` introspection, `/v6/deployments` sha filter (also checks meta.githubCommitSha), `/v3/deployments/{id}/events` shape, error-message matching for git-not-connected/plan-limit — to confirm with a real Vercel account — SPEC updated: no
+- 2026-10-17 — Changing the Vercel provider/project requires the binding Owner or the caller's own connection (rebinds to them); other Owner actions (env, promote, production redeploy) act on the binder's behalf per §2 — FR-88 — SPEC updated: no
+- 2026-10-17 — Deployment creation is idempotent: the AIDE row id goes in Vercel `meta.aideDeploymentId`; retries adopt an existing deployment, builds for rows stopped mid-create are cancelled — §4.15 — SPEC updated: no
+- 2026-10-17 — Fake deployment provider outside Development/Testing requires `Deployments:AllowFake=true` as well (startup refuses otherwise; warning logged every boot) — §9 — SPEC updated: no
 
 ## Known issues
 - `GitHub` paths (App, PAT import, repo tools over GitHub snapshots) verified only against stub HTTP handlers — orchestrator
-- E2E against k8s needs `Git__Local__ImportRoot` set (and a seeded "existing" repo under it) for the import E2E — local-k8s-engineer (phase 10)
+- Vercel flows verified only against stub HTTP handlers + Fake provider (no real Vercel account) — Ben
+- E2E against k8s needs `Deployments__Provider=Fake` + `Deployments__AllowFake=true`; it also needs `Git__Local__ImportRoot` set (and a seeded "existing" repo under it) for the import E2E — local-k8s-engineer (phase 10)
 - §11 to confirm on first real App registration: manifest `hook_attributes {active:false}` accepted without a `url`; GitHub App flows are verified only against stub HTTP handlers (no real App registered) — Ben
 - New-project wizard loses entered values when the user leaves to Connect GitHub (the page warns); persist the draft in sessionStorage if wanted — vite-react-engineer
 - E2E lifecycle spec lost its rollback-after-release scenario (FR-63 blocks it); add a rollback-before-release scenario — e2e-qa-engineer (phase 10)

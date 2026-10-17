@@ -51,6 +51,13 @@ public static class JobTypes
     public const string RepositoryAnalysis = "repository_analysis";
 
     /// <summary>
+    /// FR-90, FR-91, §4.15, NFR-REL2: one deployment row: creates it at the provider (a production deployment first adopts the
+    /// one Vercel made for the merge commit) and polls it — every 10 seconds for 2 minutes, then every 30, up to 30 minutes —
+    /// by deferring itself between polls, so polling survives restarts.
+    /// </summary>
+    public const string Deployment = "deployment";
+
+    /// <summary>
     /// FR-47: fan out one notification-worthy event (or a gate reminder, FR-15): in-app notifications for its recipients,
     /// one delivery row per subscribed project channel, then a first delivery attempt. Queued in the event's transaction.
     /// </summary>

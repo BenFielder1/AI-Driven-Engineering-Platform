@@ -43,6 +43,14 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<GitHubConnection> GitHubConnections => Set<GitHubConnection>();
 
+    public DbSet<VercelConnection> VercelConnections => Set<VercelConnection>();
+
+    public DbSet<ProjectDeploymentSettings> ProjectDeploymentSettings => Set<ProjectDeploymentSettings>();
+
+    public DbSet<DeploymentEnvVar> DeploymentEnvVars => Set<DeploymentEnvVar>();
+
+    public DbSet<Deployment> Deployments => Set<Deployment>();
+
     public DbSet<Artifact> Artifacts => Set<Artifact>();
 
     public DbSet<ApprovalGate> ApprovalGates => Set<ApprovalGate>();
@@ -98,6 +106,12 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<GitProvider>(configurationBuilder);
         MapEnum<GitHubOwnerType>(configurationBuilder);
         MapEnum<GitHubConnectionStatus>(configurationBuilder);
+        MapEnum<VercelTokenScope>(configurationBuilder);
+        MapEnum<VercelConnectionStatus>(configurationBuilder);
+        MapEnum<DeploymentProvider>(configurationBuilder);
+        MapEnum<DeploymentTarget>(configurationBuilder);
+        MapEnum<DeploymentStatus>(configurationBuilder);
+        MapEnum<DeploymentTrigger>(configurationBuilder);
         MapEnum<DriftLevel>(configurationBuilder);
         MapEnum<ReviewDecision>(configurationBuilder);
         MapEnum<EscalationReason>(configurationBuilder);

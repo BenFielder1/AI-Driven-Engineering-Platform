@@ -21,7 +21,8 @@ namespace Aide.Api.Features.Projects;
 /// <c>releasedVersion</c> is the highest released version (<c>null</c>: not released) and <c>developmentVersion</c> the
 /// version in development (<c>null</c>: none) (FR-62). <c>idea</c> is the request of the version in development.
 /// <c>presetId</c>, <c>presetName</c> and <c>presetVersion</c> are the tech stack preset pinned on the current release
-/// version (FR-74; all <c>null</c>: no preset).
+/// version (FR-74; all <c>null</c>: no preset). <c>deploymentsEnabled</c>: the project has deployment settings (FR-88), so
+/// the Deployments page is in its navigation (§7.2).
 /// </summary>
 public sealed record ProjectDto(
     Guid Id,
@@ -46,7 +47,8 @@ public sealed record ProjectDto(
     DateTimeOffset UpdatedAt,
     string? PresetId,
     string? PresetName,
-    string? PresetVersion);
+    string? PresetVersion,
+    bool DeploymentsEnabled);
 
 /// <summary>
 /// A row of the projects list (FR-6, FR-62). <c>myRole</c> is <c>null</c> for an Admin who isn't a member;
@@ -223,6 +225,13 @@ public sealed record CreateProjectRequest
     /// </summary>
     [MaxLength(Aide.Domain.Presets.PresetRules.IdMaxLength)]
     public string? PresetId { get; init; }
+
+    /// <summary>
+    /// FR-88 (wizard Deployment step): deploy to Vercel with one of the caller's own Vercel connections, linking an existing
+    /// Vercel project or creating one; omitted or <c>null</c> = no deployment (it can be set later in Settings →
+    /// Deployment). Needs a GitHub-backed project (400 <c>VALIDATION</c> on <c>deployment.provider</c> for Local).
+    /// </summary>
+    public Deployments.CreateProjectDeploymentRequest? Deployment { get; init; }
 }
 
 /// <summary>Partial update of a project (FR-7). Omitted fields are unchanged.</summary>
@@ -280,7 +289,8 @@ public sealed record GateSummaryDto(Guid Id, GateType Type, DateTimeOffset Creat
 /// FR-43), else <c>null</c>. Artifacts, steps, review and gates are those of the current release version
 /// <c>releaseVersionId</c> (the version in development, else the latest released; §4.10). <c>checkpoint</c> was
 /// <c>projectVersion</c> (D-V2-11). <c>suggestedNextVersion</c> prefills "Start new version" (FR-60: the next minor of the
-/// released version).
+/// released version). <c>latestDeployment</c> is the project's newest deployment of any target (FR-90, FR-91; <c>null</c>:
+/// none), for the overview and <c>aide status</c>.
 /// </summary>
 public sealed record ProjectStateDto(
     Guid ProjectId,
@@ -300,7 +310,8 @@ public sealed record ProjectStateDto(
     long? TokenBudget,
     ExecutionRunStatus ExecutionStatus,
     PullRequestSummaryDto? PullRequest,
-    ReleaseSummaryDto? LatestRelease);
+    ReleaseSummaryDto? LatestRelease,
+    Deployments.DeploymentDto? LatestDeployment);
 
 /// <summary>A project member (FR-8).</summary>
 public sealed record MemberDto(Guid UserId, string Email, string Name, string? AvatarUrl, ProjectRole Role, DateTimeOffset CreatedAt);

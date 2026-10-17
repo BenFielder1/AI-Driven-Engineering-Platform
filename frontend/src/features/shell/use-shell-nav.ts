@@ -21,6 +21,8 @@ export interface ShellNav {
   /** FR-74: the current version's preset chip (name and version; null: no preset). */
   presetName: string | null | undefined
   presetVersion: string | null | undefined
+  /** FR-88/FR-91: the project has a deployment target, so the Deployments item shows. */
+  deploymentsEnabled: boolean
   /** Lifecycle stage states once /state has loaded. */
   stages: StageStatus[] | undefined
 }
@@ -41,6 +43,7 @@ export function useShellNav(user: User): ShellNav {
     developmentVersion: projectId ? project.data?.developmentVersion : undefined,
     presetName: projectId ? project.data?.presetName : undefined,
     presetVersion: projectId ? project.data?.presetVersion : undefined,
+    deploymentsEnabled: projectId ? project.data?.deploymentsEnabled === true : false,
     stages: projectId && state.data ? stageStatuses(state.data) : undefined,
   }
 }
