@@ -2,14 +2,26 @@
 
 AIDE (AI-Driven Engineering Framework) turns an idea into released software through a governed lifecycle: Refinement, Specification, Planning, Execution, Review, Release. AI agents produce versioned artifacts. People approve them at gates. Every state change is logged and can be rolled back.
 
-Key features:
+Key features (v1):
 
-- Six-phase lifecycle state machine with approval gates (strict, advisory, autonomous) and rollback to any earlier version.
+- Six-phase lifecycle state machine with approval gates (strict, advisory, autonomous).
 - Versioned, hash-checked artifacts with diffs, invalidation cascade and integrity alerts.
 - Five agents behind one LLM abstraction: Anthropic, OpenAI, Ollama and a deterministic Fake provider.
 - Stepwise code generation with an Execution Guardian, Git sync (GitHub or Local), pull request, review cycles, merge and tag.
 - Live project updates (SignalR), notifications (in-app, email, Slack, Teams, signed webhooks) and one-click approval links.
 - Admin pages (events, runs, dead letters) and the `aide` command-line tool.
+
+Added in v2:
+
+- **Release versions.** Each release has a semver version with internal checkpoints. Rollback is limited to the version in development, and a released version is closed. After a merged release you can start the next version. Two badges show the released and in-development versions.
+- **Import an existing repo.** Pick a GitHub repo (or a Local one in E2E) and its released tag. A Repository Analyst writes a codebase summary first.
+- **Repo tools for agents.** Read-only `list_files`, `read_file` and `search_code` run on a credential-free snapshot, with limits and secret redaction.
+- **Tech stack presets.** `nextjs-supabase` and `nextjs-frontend` add specialist agents per plan step, spec sections, a review checklist and protected paths.
+- **GitHub App.** An Admin registers it through the manifest flow. Background Git work uses short-lived installation tokens. The personal access token stays as a fallback.
+- **Per-user LLM connections.** A user adds provider keys, and a project Owner binds one to the project.
+- **Merge strategies.** `aide_merges` or `manual`, a merge-poll job, merge readiness, check runs as review input and GitHub Releases.
+- **Vercel deployments.** Preview deployments in review and production deployments on release, with promote and redeploy. A deterministic Fake provider covers tests.
+- **New UI shell** with a side navigation, one page per lifecycle stage, and full execution and review history. More notification types and `aide` commands for versions and deployments.
 
 `SPEC.md` is the source of truth for behaviour. `CLAUDE.md` holds the conventions. `PROGRESS.md` logs build decisions.
 
@@ -23,7 +35,8 @@ flowchart LR
   Api --> Db[("PostgreSQL 17<br/>data + job/outbox table")]
   Api --> Vol[/"aide-data volume<br/>working copies, Data Protection keys"/]
   Api -.-> LLM["Anthropic / OpenAI / Ollama"]
-  Api -.-> GH["GitHub (Git, API, OAuth)"]
+  Api -.-> GH["GitHub (Git, API, App)"]
+  Api -.-> Vc["Vercel API"]
   Api -.-> Out["SMTP, Slack, Teams, webhooks"]
   Mig["db-migrate Job (EF bundle)"] --> Db
 ```
@@ -40,7 +53,8 @@ flowchart LR
 backend/
   src/Aide.Api/             endpoints, auth, ProblemDetails, OpenAPI, hosted workers
   src/Aide.Domain/          pure business rules: state machine, gates, versioning, guardian, review scoring
-  src/Aide.Infrastructure/  EF Core (Persistence, Migrations), LLM and Git providers, notification channels, prompts
+  src/Aide.Infrastructure/  EF Core (Persistence, Migrations), LLM, Git, GitHub and Vercel providers, notifications,
+                            Agents/Prompts and Agents/Presets (embedded)
   src/Aide.Cli/             `aide` .NET global tool
   tests/                    Aide.UnitTests, Aide.IntegrationTests (Testcontainers)
   openapi/api.json          GENERATED contract (committed)
@@ -50,11 +64,14 @@ frontend/
   src/routes/               TanStack Router file routes
   e2e/                      Playwright
 deploy/
-  k8s/base, k8s/overlays/local   Kustomize manifests
-  scripts/                  deploy-local.sh, teardown-local.sh, smoke.sh, validate-manifests.sh
-scripts/ci, scripts/perf    generated-file check, NFR-PERF script
+  k8s/base, k8s/overlays/local, k8s/overlays/local-e2e   Kustomize manifests
+  scripts/                  deploy-local.sh, teardown-local.sh, smoke.sh, validate-manifests.sh, seed-e2e-repo.sh
+docs/v1, docs/v2/brand      frozen v1 spec and build log; AIDE logo source
+scripts/ci, scripts/perf    generated-file check, E2E seed for CI, perf scripts (nfr-perf.mjs, v2-perf.mjs)
 docker-compose.yml          dev-loop database only
 ```
+
+Merge and deployment polls are self-deferring jobs in the same table, so a restart resumes them. Presets are data folders under `Aide.Infrastructure/Agents/Presets`, content-hashed and pinned per release version.
 
 Business rules live in `Aide.Domain`. Endpoints stay thin. The contract flows one way: backend build writes `backend/openapi/api.json`, then `npm run gen:api` writes `frontend/src/api/generated/`. Never hand-edit either. See `CLAUDE.md` for the full rules.
 
@@ -105,7 +122,7 @@ npm --prefix frontend run dev                # http://localhost:5173 (proxies /a
 | API | http://localhost:5080 |
 | Database | localhost:5432 |
 
-The Development environment enables the seed. On first start it creates the Admin `admin@aide.local` and the project "Demo: Todo API" (Fake provider, Local Git). The generated password is logged once at Warning in the `dotnet run` console. Look for `Seeded admin admin@aide.local with password ...`. If you missed it, sign in with another account (the first registered user is Admin) or reset the database volume.
+The Development environment enables the seed. On first start it creates the Admin `admin@aide.local`, the project "Demo: Todo API" (Fake provider, Local Git, released at `0.1.0`, so you can try "Start new version" at once) and "Demo: Recipe Finder" (`nextjs-frontend` preset, in planning). A v1 database keeps its demo project, and an untouched one is upgraded to a released `0.1.0`. The generated password is logged once at Warning in the `dotnet run` console. Look for `Seeded admin admin@aide.local with password ...`. If you missed it, sign in with another account (the first registered user is Admin) or reset the database volume.
 
 New migration: `dotnet ef migrations add <Name> --project src/Aide.Infrastructure --startup-project src/Aide.Api` (from `backend/`). Never edit a committed migration.
 
@@ -118,13 +135,15 @@ New migration: `dotnet ef migrations add <Name> --project src/Aide.Infrastructur
 The script builds the `aide-api` and `aide-web` images, tags them with the git SHA, applies the manifests in two passes, runs the `db-migrate` Job, rolls out `api` and `web`, then runs `smoke.sh`. It is safe to re-run and never deletes data. Run it from the repo root in Git Bash or WSL.
 
 - **App:** http://localhost:8080 (namespace `aide`).
-- **secrets.env:** if `deploy/k8s/overlays/local/secrets.env` is missing, the script copies `secrets.env.example` and generates the database password, the matching connection string and `Approvals__SigningKey`. It is git-ignored. Edit it to add LLM keys, GitHub OAuth, SMTP; then re-run the script. The script refuses to generate a new password while the database volume exists.
-- **Seed admin:** `admin@aide.local`. The password is logged once by the pod that creates it:
+- **secrets.env:** if `deploy/k8s/overlays/local/secrets.env` is missing, the script copies `secrets.env.example` and generates the database password, the matching connection string and `Approvals__SigningKey`. It is git-ignored. Edit it to add LLM keys, GitHub App or OAuth values, SMTP; then re-run the script. The script refuses to generate a new password while the database volume exists.
+- **Seed admin:** `admin@aide.local`. The password is logged once by the pod that creates it (a Warning line, `Seeded admin admin@aide.local with password ...`):
   `kubectl --context docker-desktop -n aide logs deploy/api | grep -i 'Seeded admin'`
   After a redeploy the line is gone. Note it on the first deploy.
 - **Logs:** `kubectl --context docker-desktop -n aide logs deploy/api` (also `deploy/web`, `statefulset/db`, `job/db-migrate`). Logs are JSON.
-- **Smoke test only:** `./deploy/scripts/smoke.sh` (checks `/`, a SPA route and `/api/health/ready`).
-- **Teardown:** `./deploy/scripts/teardown-local.sh` removes workloads, services, config and secrets. It keeps the namespace and the volumes, so data survives.
+- **Smoke test only:** `./deploy/scripts/smoke.sh` (checks `/`, a SPA route and `/api/health/ready`; `deploy-local.sh` runs it at the end). Health also fails if an embedded preset does not load.
+- **E2E mode:** `./deploy/scripts/deploy-local.sh --e2e` is the only switch. It applies `deploy/k8s/overlays/local-e2e`: `Deployments__Provider=Fake`, `Deployments__AllowFake=true`, `Git__Local__ImportRoot=/data/import` and `Llm__DefaultProvider=fake`. It also seeds the Local import repo `/data/import/existing-app` (tags `v0.1.0`, `v0.2.0`) with `seed-e2e-repo.sh`. The API logs a warning on every boot while Fake deployments are on. Use it only for Playwright runs.
+- **Switch back:** run `./deploy/scripts/deploy-local.sh` again without `--e2e`. The API pod restarts with Vercel deployments and no Local import. The seeded repo stays on the volume, unused.
+- **Teardown:** `./deploy/scripts/teardown-local.sh` (no flags) removes workloads, services, config and secrets. It keeps the namespace and the volumes, so data survives.
 - **`--wipe-data`:** `./deploy/scripts/teardown-local.sh --wipe-data` also deletes the whole `aide` namespace: the database and the `aide-data` volume (working copies, encryption keys). You must type `aide` to confirm. Saved project secrets cannot be decrypted afterwards.
 
 ### Troubleshooting
@@ -140,6 +159,8 @@ The script builds the `aide-api` and `aide-web` images, tags them with the git S
 | `429 RATE_LIMITED` on register or login | Limit is 5 per minute per IP. Wait for the `Retry-After` time. Dev loop: set `Auth__RateLimits__RegisterPerMinute` |
 | API ignores `Llm__Anthropic__ApiKey` | Old key name. Use `Llm__Providers__Anthropic__ApiKey` (same for OpenAI) |
 | Blank `Smtp__Port=` breaks startup | Blank non-string values fail binding. The script comments them out. Leave them unset |
+| API refuses to start with the Fake deployment provider | Outside Development it also needs `Deployments__AllowFake=true`. Use `deploy-local.sh --e2e`, which sets both |
+| Import E2E cannot find the Local repo | `Git__Local__ImportRoot` is unset. Deploy with `--e2e`, which also seeds `/data/import/existing-app` |
 | API pod not ready | Check `kubectl ... logs deploy/api`, `get events`. A failed migration leaves the old pods running |
 
 ## Configuration reference
@@ -160,7 +181,7 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `DataProtection:KeysPath` | Key ring directory | `/data/keys` in a container, else `%LOCALAPPDATA%/aide/keys` | no |
 | `Workspaces:Root` | Git working copies and local repos | `/data/workspaces` in a container, else `%LOCALAPPDATA%/aide/workspaces` | no |
 | `Telemetry:ConsoleExporter` | OpenTelemetry console exporter | `false` (`true` in Development) | no |
-| `Seed:Enabled` | Create the seed admin and demo project | `false` (`true` in Development and the local k8s overlay) | no |
+| `Seed:Enabled` | Create the seed admin and demo projects | `false` (`true` in Development and the local k8s overlay) | no |
 | `App:PublicBaseUrl` | Browser-facing base URL (absolute http(s), validated at start-up): notification links, the GitHub App manifest's callback and setup URLs, PR links back to AIDE | `http://localhost:8080` (`http://localhost:5173` in Development) | no |
 | `Approvals:SigningKey` | HMAC key for one-click approval links, at least 32 chars | none: no links are created | yes |
 | `Auth:Cookie:SecurePolicy` | Auth cookie `Always`, `SameAsRequest` or `None` | `SameAsRequest` | no |
@@ -192,6 +213,9 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `GitHub:GitBaseUrl` | Where repos are cloned from and pushed to | `https://github.com/` | no |
 | `GitHub:ApiBaseUrl` | GitHub REST API | `https://api.github.com/` | no |
 | `GitHub:ReleaseMergeMethod` | PR merge at release: `merge`, `squash`, `rebase` | `merge` | no |
+| `Git:Local:ImportRoot` | Folder under which a Local import (`git.localSourcePath`) must live. Empty disables Local import. E2E and dev only | unset (`/data/import` in the E2E overlay) | no |
+| `Deployments:Provider` | `Vercel` or `Fake`. Fake makes every deployment check deterministic and lets Local Git projects use deployments | `Vercel` (`Fake` in the E2E overlay) | no |
+| `Deployments:AllowFake` | Allows `Fake` outside Development and Testing. Without it the API refuses to start with Fake | `false` (`true` in the E2E overlay) | no |
 | `Notifications:AllowPrivateTargets` | Let Slack, Teams, webhooks reach private addresses (local testing only) | `false` | no |
 | `Notifications:RequestTimeout` | One webhook request, at most 60 s | `00:00:10` | no |
 | `Notifications:SweepEnabled` | Run delivery retries and gate reminders | `true` | no |
@@ -209,6 +233,17 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | Trust nginx `X-Forwarded-*` | `true` in the k8s configmap | no |
 
 `GitHub:AllowInsecureGitBaseUrl` exists for tests only. Do not set it.
+
+Where each value lives:
+
+| Kind | Dev loop | Kubernetes |
+| --- | --- | --- |
+| Secrets (marked "yes") | `dotnet user-secrets set "<Key>" "<value>" --project backend/src/Aide.Api` | `deploy/k8s/overlays/local/secrets.env`, as `Key__Sub=value` |
+| `App:PublicBaseUrl` | `appsettings.Development.json` (`http://localhost:5173`) | `app-config-local.yaml` |
+| `Deployments:*`, `Git:Local:ImportRoot`, `Llm:DefaultProvider` for E2E | environment variables | `deploy/k8s/overlays/local-e2e/app-config-e2e.yaml` (`--e2e` only) |
+| Other non-secrets | `appsettings*.json` or environment variables | `deploy/k8s/base/configmap.yaml` |
+
+Vercel tokens, user LLM keys, GitHub user tokens, the registered GitHub App and deployment env values are not configuration. They are stored encrypted in the database and are never shown.
 
 ### a. GitHub sign-in (OAuth App)
 
@@ -261,6 +296,19 @@ Default model IDs (from `appsettings.json`):
 
 Override per agent with `Llm__Providers__<Name>__Models__<Agent>`. Agent names: `IdeaRefinement` and the other `AgentKind` values (names are case-insensitive). Costs come from `Llm:Pricing:<model-id>`. Add an entry for any unpriced model, for example `Llm__Pricing__gpt-6-astra__InputPerMTok`. A project token budget caps total tokens.
 
+### c2. Vercel deployments
+
+- Each user adds a Vercel access token under Account, Connections, Vercel. AIDE checks it, stores it encrypted and never shows it again.
+- A project Owner binds a connection in Settings, Deployment (or the wizard). AIDE can create a Vercel project linked to the GitHub repo or link an existing one. Project environment variables are encrypted in AIDE and pushed on save.
+- AIDE creates a preview deployment when execution opens or updates the PR, and review waits for it. A failed build is a critical finding. After the release merge it creates a production deployment. Owners can promote an earlier ready one.
+- Both presets write a `vercel.json` that turns off Vercel's own deploys of `aide/**` branches. The review adds a finding if it is missing.
+- Vercel needs a GitHub-backed project. Without a Vercel account, run in E2E mode (`Deployments__Provider=Fake`).
+- Vercel flows are tested only against stub HTTP and the Fake provider so far.
+
+### c3. Presets
+
+`nextjs-supabase` and `nextjs-frontend` live in `backend/src/Aide.Infrastructure/Agents/Presets/`. Pick one in the wizard Stack step. An Owner can change it until the implementation plan is locked, and again when starting a version. Each run records the preset and its version.
+
 ### d. Notifications
 
 - **Email:** set `Smtp__Host` plus `Smtp__Username`, `Smtp__Password`, and optionally `Smtp__Port`, `Smtp__From`, `Smtp__EnableSsl`, `Smtp__Timeout` (at most 60 seconds). Without a host, email deliveries are marked skipped and a warning is logged.
@@ -268,6 +316,7 @@ Override per agent with `Llm__Providers__<Name>__Models__<Agent>`. Agent names: 
 - **Links in messages:** `App__PublicBaseUrl` is set to `http://localhost:8080` for Kubernetes.
 - **Slack, Teams, webhook:** configured per project (Settings, Notifications tab). Webhook URLs are stored encrypted. Targets must be public https hosts. For a receiver on your own machine, set `Notifications__AllowPrivateTargets=true`. Use it for local testing only.
 - **Webhook receivers:** a webhook channel needs a signing secret. Each POST has these headers: `X-AIDE-Signature: sha256=<lowercase hex>` (HMAC-SHA256 of the raw body keyed with the secret), `X-AIDE-Timestamp`, `X-AIDE-Delivery`, `X-AIDE-Event` and `Idempotency-Key`. Recompute the HMAC over the raw bytes, compare in constant time, and reject old timestamps.
+- **v2 types:** release awaiting merge and deployment failed (Owners), preview ready (members), connection invalid (the connection's owner only, in-app and account email), LLM binding cleared (Owners). Channels opt in to the new events.
 - **Retries:** 5 attempts per channel with 1 min, 5 min, 30 min, 2 h backoff. A channel that succeeded is not re-sent.
 
 ## Testing
@@ -279,9 +328,14 @@ Override per agent with `Llm__Providers__<Name>__Models__<Agent>`. Agent names: 
 | E2E | `cd frontend && npm run test:e2e` | Playwright. Starts `npm run dev` unless `BASE_URL` is set |
 | E2E on Kubernetes | `BASE_URL=http://localhost:8080 npm run test:e2e` | Needs a deployed app |
 | One browser | `npx playwright test --project=chromium` | Projects: `chromium`, `firefox`, `webkit`, `msedge` (only if Edge is installed or `E2E_MSEDGE=1`), `a11y-setup`, `a11y` |
-| Performance | `node scripts/perf/nfr-perf.mjs` | Targets `http://localhost:8080`; set `BASE_URL` to change. Creates a perf user and 50 projects in that database |
+| Cross-browser | `BASE_URL=http://localhost:8080 npx playwright test --project=firefox --workers=1` | Also `webkit`, `msedge`. Runs the smoke, auth, lifecycle and permissions specs. Use `--workers=1`: registrations are limited to 5 per minute per IP |
+| Accessibility | `npx playwright test --project=a11y` | axe, both themes. Admin pages need `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD`, otherwise that scan is skipped |
+| Performance (v1) | `node scripts/perf/nfr-perf.mjs` | Targets `http://localhost:8080`; set `BASE_URL` to change. Creates a perf user and 50 projects in that database |
+| Performance (v2) | `node scripts/perf/v2-perf.mjs` | Project list, execution runs and review cycles p95. Same target and the same side effect: it writes a perf user and projects |
 
-First time: `cd frontend && npx playwright install`. For the dev loop, the API and database must already run. E2E uses the Fake provider and Local Git, so it needs no keys. Registrations are limited to 5 per minute per IP. The specs wait for it.
+First time: `cd frontend && npx playwright install`. For the dev loop, the API and database must already run. E2E uses the Fake provider and Local Git, so it needs no keys.
+
+The v2 specs (`versions`, `import`, `preset`) need E2E settings. On Kubernetes, deploy with `./deploy/scripts/deploy-local.sh --e2e` first. In the dev loop, start the API with `Deployments__Provider=Fake`, `Deployments__AllowFake=true`, `Llm__DefaultProvider=fake` and `Git__Local__ImportRoot` pointing at a seeded repo (`scripts/ci/seed-e2e-repo-local.sh <dir>` creates `existing-app`; set `AIDE_IMPORT_ROOT` to the same folder for the specs). Registrations are limited to 5 per minute per IP. The specs wait for it.
 
 Regenerate generated files:
 
@@ -315,12 +369,16 @@ Create the token on the Account page of the app (shown once). Then:
 | --- | --- |
 | `aide projects list` | List your projects (`--search`, `--phase`, `--status`, paging) |
 | `aide project init` | Create a project (like the wizard). A GitHub token is read from `AIDE_GIT_TOKEN` or prompted |
-| `aide status <id>` | Phase, status, version, artifacts, execution, review, gates |
+| `aide status <id>` | Phase, status, released and in-development versions, checkpoint, preset, latest deployment, artifacts, execution, review, gates |
+| `aide version start <id> <semver> --request <text\|@file> [--preset <id>]` | Start a new version of a released project (Owner). `@-` reads stdin |
+| `aide versions <id>` | List release versions |
+| `aide deployments <id> [--target preview\|production]` | List deployments |
 | `aide artifact list\|history\|show\|approve\|reject\|edit <id> ...` | Work with artifacts. `type` accepts `spec`, `plan` aliases |
+| `aide artifact restore <id> <type> <version>` | Restore an older version as a new draft |
 | `aide execute <id> [--pause\|--resume]` | Start, pause or resume execution |
 | `aide review <id>` | Start a review cycle |
 | `aide release <id>` | Approve the pending pre-release gate, else retry the release |
-| `aide rollback <id> <version> --reason "..."` | Roll back to an earlier version |
+| `aide rollback <id> <checkpoint> --reason "..."` | Roll back to an earlier checkpoint of the version in development |
 | `aide logs <id> [--type] [--follow]` | Activity feed |
 | `aide config set\|get\|path`, `aide logout` | Settings and saved token |
 
@@ -337,14 +395,15 @@ A saved token is bound to the URL it was saved for and is sent only there. Plain
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`) runs on pull requests, pushes to `main` and manual dispatch. Doc-only changes are skipped.
+GitHub Actions (`.github/workflows/ci.yml`) runs on pull requests, pushes to `main` and manual dispatch. Changes only to `docs/**`, `.claude/**` or `*.md` are skipped.
 
 | Job | Checks |
 | --- | --- |
 | backend | Release build with warnings as errors, `openapi/api.json` up to date, no pending EF model changes, CLI packs, tests (Testcontainers), `dotnet format` |
 | frontend | Client regenerated and unchanged, typecheck, lint, tests, build, route tree unchanged |
-| manifests | `validate-manifests.sh`: Kustomize render plus kubeconform |
+| manifests | `validate-manifests.sh`: Kustomize render plus kubeconform for both overlays (`local`, `local-e2e`) |
+| scripts | `bash -n` on the shell scripts, shellcheck at error severity |
 | images | `api` and `web` images build (no push) |
-| e2e | Playwright `chromium` project against the API (Fake LLM, Local Git) and Vite |
+| e2e | Three shards on `chromium` against the API (E2E mode: Fake LLM, Fake deployments, Local Git with a seeded import repo) and Vite: `v1` specs, `v2` specs (versions, import, preset), and `a11y` |
 
-CI uses no secrets and no real LLM or GitHub access. The Firefox, WebKit, Edge and a11y projects run locally or against Kubernetes.
+CI uses no secrets and no real LLM, GitHub or Vercel access. The Firefox, WebKit and Edge projects and the perf scripts run locally or against Kubernetes. The E2E shards have not yet run on GitHub.

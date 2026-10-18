@@ -95,7 +95,7 @@ Auth: v1 cookie auth, API tokens and antiforgery are unchanged. **GitHub sign-in
    | Release | `/projects/:id/release` | Pre-release gate, merge readiness (FR-84), release attempts, tag, GitHub Release link, production deployment, "Start new version" (FR-60) |
 
    - A stage that hasn't started shows an empty state explaining what produces it and what has to happen first.
-   - Every stage page accepts `?version=<semver>`, which shows that release version's history read-only (FR-62).
+   - Every stage page accepts `?release=<semver>`, which shows that release version's history read-only (FR-62). *(decision 2026-10-15: `?release=`, not `?version=`, because artifact pages already use `?version=N` for the artifact version. The selection is kept across project navigation.)*
    - Given a project in `execution`, when the user opens `/projects/:id/specification`, then they see the locked spec with its version, approver and the run that produced it, and no approve or edit actions.
 4. **FR-56** The Review page lists **every review cycle** of the selected release version, newest first. Each row shows cycle number, score, threshold, drift, decision and date.
    - Selecting a cycle shows its category breakdown (agent score, penalty, final, weight), violations with evidence, missing features, drift areas, deterministic findings, escalation reason, its optimisation plan and the execution run that plan produced.
@@ -114,7 +114,7 @@ Auth: v1 cookie auth, API tokens and antiforgery are unchanged. **GitHub sign-in
    - the project is not `releasing`,
    - the chosen version belongs to that release version and is not `corrupted`.
    
-   Otherwise: `RESTORE_NOT_ALLOWED → 409` with a reason (`stage_completed`, `other_release_version`, `corrupted`, `releasing`). Restoring the current latest is `VALIDATION`. `ARTIFACT_RESTORED` is recorded.
+   Otherwise: `RESTORE_NOT_ALLOWED → 409` with a reason (`stage_completed`, `stage_not_reached`, `other_release_version`, `corrupted`, `releasing`). *(decision 2026-10-16: `stage_not_reached` means the project is before the producing phase, e.g. after a rollback.)* Restoring the current latest is `VALIDATION`. `ARTIFACT_RESTORED` is recorded.
    - Given spec v2 (locked) and v3 (locked, current), with the project still in `specification`, when a Writer restores v2, then spec v4 `draft` exists with v2's content and hash, parent 3, `restored_from_version` 2.
    - Given the project has advanced to `planning`, when anyone restores spec v2, then `RESTORE_NOT_ALLOWED` (`stage_completed`). The UI hides the action and explains: "Specification is complete. Roll back the project to change it."
 7. **FR-59** The Artifacts page stays. It shows a card per type (latest version, status, integrity) for the selected release version, plus a version filter. Artifact detail (v1 FR-21) keeps history, diff and edit, and adds restore (FR-58) and the release version each version belongs to. Diff works across release versions (e.g. spec at 1.1.0 vs 1.2.0).
@@ -337,7 +337,10 @@ Auth: v1 cookie auth, API tokens and antiforgery are unchanged. **GitHub sign-in
     - Hobby plan with an org-owned repo: `VERCEL_PLAN_LIMIT → 409`.
     - Requires a GitHub-backed project. Local provider: `VALIDATION`.
     - Given a `nextjs-supabase` project, when Deployment settings load, then `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are listed as required, and any that are missing are flagged.
-35. **FR-89** The generated repo of a Vercel project stops Vercel's automatic deploys of AIDE branches: the preset scaffolder writes `vercel.json` `git.deploymentEnabled` for `aide/**`. Verify the syntax against Vercel docs at build time. AIDE then triggers deployments **explicitly**, so it knows the deployment id. Production auto-deploys from the default branch are left on.
+35. **FR-89** The generated repo of a Vercel project stops Vercel's automatic deploys of AIDE branches: the preset scaffolder writes `vercel.json` `git.deploymentEnabled` for `aide/**`. The syntax built is `{"git":{"deploymentEnabled":{"aide/**":false}}}`; confirm it against a live Vercel project (§11).
+    - *(decision 2026-10-18)* Review check, real Vercel provider only (never Fake): a major `architecture` finding when `<RootDirectory>/vercel.json` is missing or does not disable `aide/**`. It needs a Vercel settings row. The review reads the file directly, not limited by the tree cap.
+    - *(decision 2026-10-18)* The plan warning `MISSING_VERCEL_CONFIG` is preset-keyed, because `vercel.json` is scaffolded before deployment is bound. It appears only when the base files are known to lack a root `vercel.json` (in practice new repos).
+    - Both look for `<RootDirectory>/vercel.json` with one case-sensitive match. AIDE then triggers deployments **explicitly**, so it knows the deployment id. Production auto-deploys from the default branch are left on.
 36. **FR-90** **Preview deployments.** When execution of a run completes (the PR opens or updates), AIDE creates a preview deployment of the branch head (`POST /v13/deployments`, `gitSource` ref and sha) and polls it (§4.15).
     - The Review page shows its URL, state and build-log tail. A Contributor can redeploy.
     - The review cycle waits for `READY`/`ERROR` (up to 20 minutes) before scoring.
@@ -563,6 +566,7 @@ v1 §6 applies. All new routes are under `/api`, with ProblemDetails `errorCode`
 | Method | Route | Body / query | Response | Errors (code → status) | Auth |
 | --- | --- | --- | --- | --- | --- |
 | GET | /api/presets · /presets/:id | — | preset summaries / detail (agents, sections, env, targets) | `NOT_FOUND → 404` | user |
+| GET | /api/projects/kpis | same filters as the list | KPI counts: active, in review, awaiting gates, released *(decision 2026-10-18)* | — | user |
 | GET | /api/projects/:id/versions | — | release versions (status, tag, checkpoints, dates, preset) | — | member |
 | POST | /api/projects/:id/versions | version, request, presetId? | 201 release version + state | `VERSION_INVALID → 400`, `VERSION_NOT_GREATER → 409`, `TAG_EXISTS → 409`, `VERSION_IN_PROGRESS → 409`, `RELEASE_NOT_MERGED → 409`, `NOT_RELEASED → 409` | owner |
 | GET | /api/projects/:id/checkpoints | releaseVersionId? | checkpoints with phase (replaces `/versions` from v1, D-V2-11) | — | member |
@@ -670,7 +674,7 @@ Port the *design*, not the Next.js code. AIDE stays React + Vite + TanStack Rout
 | Route | Page | Key content / states |
 | --- | --- | --- |
 | /login, /register | Auth | Centred frosted card with lockup; "Continue with GitHub" (App or OAuth); error · loading |
-| /projects | Projects | KPI row (active, in review, awaiting gates, released); table/cards with name, preset chip, phase, status, **released + in-development badges**, updated; search, filters (phase, status, has development version, preset), sort, paging; empty · loading · error |
+| /projects | Projects | KPI row (active, in review, awaiting gates, released) from `GET /api/projects/kpis` *(decision 2026-10-18: same filters as the list; awaiting gates = pending gates across the filtered projects)*; table/cards with name, preset chip, phase, status, **released + in-development badges**, updated; search, filters (phase, status, has development version, preset), sort, paging; empty · loading · error |
 | /projects/new | New project wizard | Stepper: **Source** (scratch / import) → Idea or Request → **Repository** (picker / create / PAT / Local; release-tag picker for import) → **Version** → **Stack** (preset cards) → Configuration (v1) → **Deployment** (optional Vercel) → Review & create; per-step validation |
 | /projects/:id | Overview | Stage stepper, next-action card, KPI tiles (checkpoint, latest compliance, steps done, tokens used / budget), pending gates, latest deployment, activity preview |
 | /projects/:id/{refinement,specification,planning,execution,review,release} | Stage pages | FR-55–FR-57, FR-90, FR-91; not started · running · awaiting approval · done · read-only (past version) |
@@ -731,7 +735,9 @@ v1 §9 applies, plus:
 - **Seed (dev):**
   - The demo project is released at `0.1.0` (Fake + Local) so "Start new version" can be tried at once.
   - A second demo project uses the `nextjs-frontend` preset in `planning`.
-- **Fake deployment provider** is enabled when `Deployments:Provider=Fake` (Development and E2E).
+- **Fake deployment provider** is enabled when `Deployments:Provider=Fake` (Development and E2E). Outside Development and Testing it also needs `Deployments:AllowFake=true`, or the API refuses to start; it logs a warning on every boot. *(decision 2026-10-17)*
+- **E2E mode on Kubernetes** *(decision 2026-10-17)*: `./deploy/scripts/deploy-local.sh --e2e` (the only switch) applies `deploy/k8s/overlays/local-e2e`: `Deployments:Provider=Fake`, `Deployments:AllowFake=true`, `Git:Local:ImportRoot=/data/import` and `Llm:DefaultProvider=fake`. It seeds `/data/import/existing-app` (tags `v0.1.0`, `v0.2.0`). A plain `deploy-local.sh` switches back (Vercel, no Local import).
+- **Seed upgrade** *(decision 2026-10-18)*: a v1-seeded "Demo: Todo API" is upgraded to a released `0.1.0` on startup only if it is strictly untouched (initial checkpoint, the seed admin as only Owner, no artifacts, runs, gates, steps, reports, releases, rollbacks or deployments, and only the `PROJECT_CREATED` event). The marker event is `DEMO_PROJECT_RELEASE_UPGRADED`.
 
 ## 10. Decisions
 
@@ -753,6 +759,81 @@ v1 decisions D1–D21 (`docs/v1/SPEC.md` §10) stand. v2 decisions:
 - **D-V2-14 — Execution attempt history is stored** (`execution_step_attempt`). Old: only the latest violations were kept on the step.
 - **D-V2-15 — Artifact restore creates a new version.** History is never rewritten (CLAUDE.md rule 10). "Rollback an artifact" is a new draft with the old content, approved as usual, and is only allowed while its stage is still open.
 
+### 10.1 Build-time amendments (v2)
+
+Behaviour that differs from, or adds to, the sections above. Each item is a decision logged in `PROGRESS.md`. Items already inline above (marked "decision") are not repeated.
+
+**Versions and data (§3.2, §4.10, §5, §6)**
+- *(2026-10-15, FR-67)* The migration assigns v1 rows to release versions by `created_at` window (version i = after release i-1, up to release i), not by checkpoint range, because rolled-back projects have overlapping ranges. Live state at or before the first post-release rollback target moves to the in-development version.
+- *(2026-10-15, §5)* `projects.current_release_version_id` points at the latest released version when nothing is in development, so every version-scoped read has a default.
+- *(2026-10-15, §5)* Release uniqueness is `(release_version_id, checkpoint, attempt)`, because checkpoints restart per version.
+- *(2026-10-15, §4.10)* The `version_released` check runs before `INVALID_TARGET_VERSION`, so callers get the useful reason. The two v1 re-release-after-rollback behaviours are gone (D-V2-3).
+- *(2026-10-15, §6)* `POST /versions` returns `UPSTREAM_ERROR → 502` when the repo's tags cannot be checked.
+- *(2026-10-15, §6, D-V2-11)* The renames also cover rollback and gate fields: `targetVersion` becomes `targetCheckpoint`, and `fromVersion`/`toVersion` become `fromCheckpoint`/`toCheckpoint`.
+- *(2026-10-15, §6)* The activity `releaseVersionId` filter is a time window (version start to the next version start), because events have no version column.
+- *(2026-10-15, §6)* Artifact history accepts `allReleaseVersions=true` (additive) for the cross-version diff (FR-59).
+- *(2026-10-16, FR-56)* Compliance reports carry an `id`. `GET .../reports/:cycle` also accepts `reportId`, and runs carry `complianceReportId`, because cycle numbers restart after a rollback. For the version in development, pre-rollback reports stay hidden (v1 §4.8).
+- *(2026-10-15, FR-82)* The branch `aide/<slug>/v<version>` is stored on `release_versions.branch_name` when the working copy is first prepared. `VERSION_STARTED` records the intended name.
+- *(2026-10-18, FR-55)* `RefinementDto` gains `rounds` (newest first, latest 50 per release version).
+- *(2026-10-17, §7.2)* The projects list accepts `?preset=none` for projects without a preset.
+
+**UI (§3.1, §7)**
+- *(2026-10-15, FR-62)* Settings pages stay editable while a past version is shown, because settings are not versioned.
+- *(2026-10-15, FR-92)* `ARTIFACT_RESTORED` also triggers the "artifact ready" notification, like `ARTIFACT_CREATED`.
+- *(2026-10-15 and 2026-10-18, §7.1, NFR-A11Y2)* Token values were adjusted to pass WCAG AA: dark `muted-foreground` is L 0.63, dark `destructive-foreground` is near-black, light `success` is 0.50/0.15, and light `primary`, `ring` and `sidebar-primary` are oklch(0.44 0.15 195). A `field-border` token gives form fields a 3:1 border. The contrast test also checks tinted pairs. Reasons are in `frontend/src/lib/ui/tokens.ts`.
+- *(2026-10-18, FR-46, FR-55)* v1 FR-46 live updates: the first project-hub join refetches the project's queries that are older than page open, restarting in-flight ones, so nothing is lost between page open and the join. A rejoin refetches all, and a failed rejoin still refetches. `RUN_COMPLETED` restarts artifact fetches. Stage empty states poll only while a producing run is active or a draft is expected.
+
+**LLM connections (§3.6)**
+- *(2026-10-16, FR-79)* `GET /api/projects/:id/settings/llm` lets every member see the binding ("connected by ..."). `GET /settings` stays Owner-only.
+- *(2026-10-16, FR-79)* An Owner may unbind the connection. Only choosing a keyed provider with no usable key is `VALIDATION`. An undecryptable bound key gives `PROVIDER_NOT_CONFIGURED`, with no silent system-key fallback.
+- *(2026-10-16, FR-92)* New event `LLM_BINDING_CLEARED {reason: owner_role_lost | member_removed | connection_deleted}`.
+- *(2026-10-16, §2)* Admins see the system-key policy read-only at `GET /api/admin/integrations/llm`. It is set by `Llm:AllowSystemKeys`, not from the UI.
+
+**GitHub (§3.7, §4.14)**
+- *(2026-10-16, §5)* `github_connection` refresh fields are nullable (no refresh token when token expiry is off). A `github_app` project must have installation id, repo id and repo full name (check constraint).
+- *(2026-10-16, FR-80, §8)* The manifest `state` is Data Protection time-limited (10 minutes) plus a single-use nonce bound to the Admin, held in memory. A restart means the Admin restarts the flow.
+- *(2026-10-16, FR-86)* "Repo has code" is stored as the in-development version's `base_commit_sha` (the head) with no base tag ("Never released"), plus `repoHasCode` in `PROJECT_CREATED`. A repo with only GitHub starter files (README, LICENSE, .gitignore) counts as empty.
+- *(2026-10-16, NFR-REL2)* On a GitHub rate limit, request paths return `429 GITHUB_RATE_LIMITED` with `Retry-After`. Jobs are re-queued at the reset without counting an attempt (capped at 1 hour), for PAT projects too.
+- *(2026-10-16, FR-82)* Push access (push, maintain or admin, with the caller's own token) is checked when a project is bound to a repo (create, switch to App). It is not re-checked, so members keep working via the App on the binding Owner's behalf.
+- *(2026-10-16, FR-84)* A `merge_readiness` job runs when the pre-release gate is created, and the result is cached 5 minutes (`MERGE_READINESS_CHECKED`). Without GraphQL access, `mergeStateStatus` and `reviewDecision` are null and required approvals count as missing.
+
+**Iteration, import and repo tools (§3.3, §3.4, §4.13)**
+- *(2026-10-16, §4.13)* `[removed]` requirements need no Given/When/Then. Regressions reported on `[new]`/`[changed]` IDs count as missing features; on removed or unknown IDs they are dropped. Import also rejects a development tag that already exists (`TAG_EXISTS`). For import, the project `idea` field carries the version request.
+- *(2026-10-16, §4.13)* Plan warnings (`UNCOVERED_REQUIREMENTS`) are computed on read against the version's latest locked spec and returned as `ArtifactDto.warnings` for `implementation_plan`.
+- *(2026-10-16, §8)* Local import (E2E and dev only): `git.mode=local` with `git.localSourcePath` resolved under `Git:Local:ImportRoot`; empty disables it. It clones with `--no-hardlinks` and is link-safe.
+- *(2026-10-16, FR-73)* PAT import lists tags through the REST API with the token, not `git ls-remote`.
+- *(2026-10-16, FR-71)* Every tool's output counts toward the 400 KB run cap. After `TOOL_LIMIT` (or 28 turns) the next turn is forced to answer (`tool_choice: none`; tools omitted for Ollama). `.aide/` reads as `NOT_FOUND` and `.git` as `UNSAFE_PATH`. Search runs on redacted text, and `search_code` has an optional `regex` flag. The no-tools fallback appends a depth-2 file listing. Snapshots live under `{temp}/aide-snapshots` (at most 8 per project and commit).
+- *(2026-10-16, FR-70, FR-71)* Run warnings (`tools_unsupported`, `snapshot_unavailable`, `summary_wait_timeout`, `summary_unavailable`) are stored in the run output and the `RUN_COMPLETED` payload, and shown on `AgentRunDetailDto`.
+
+**Release and merge (FR-64, FR-65)**
+- *(2026-10-16, FR-65)* Changing `tagPrefix` returns `409 CONFLICT` while a version is `awaiting_merge` or a release attempt or job is in progress. A new prefix also applies to the in-development version. The release DTO `mergeStrategy` is the project's current strategy.
+- *(2026-10-16, FR-65)* The merge poll is one self-deferring `merge_poll` job with the ETag and wait state in its payload. `PR_CLOSED` and `MERGE_TIMEOUT` return the project to status `releasing` in phase `release`, so an Owner can retry `POST /release`.
+- *(2026-10-16, FR-65)* Local manual-merge detection: the merge commit is the oldest first-parent commit on the default branch that contains the branch head (the head itself after a fast-forward).
+- *(2026-10-16, FR-64)* If GitHub refuses to create the GitHub Release (403, 404, 422), it is logged and the release completes without a URL. 5xx errors retry.
+
+**Presets (§3.5, §4.11, §4.12)**
+- *(2026-10-17, FR-74)* `POST /versions` without `presetId` keeps the base version's preset, re-pinned at the shipped version and hash. An explicit `null` means no preset. "Plan locked" for `PRESET_LOCKED` means any implementation plan of the version is locked or approved.
+- *(2026-10-17, §4.11)* Format extensions: `planRules.maxFilesPerStep[] {glob, max}` (with a `oneMigrationPerStep` shorthand), `soft` and `reason` on order and exclusive rules, and protected paths as `{glob, existingOnBase, except, reason}`. Unknown properties are a load error. Globs without `/` match a file name at any depth.
+- *(2026-10-17, §4.11)* With a preset, a step may declare a v1-protected path (`.github/workflows/**`, `.env.example`) or a preset-protected path only when its agent owns it (for example `devops-engineer`, or `db-engineer` for `lib/database.types.ts`). Lockfiles stay non-declarable. Without a preset the v1 rules are unchanged.
+- *(2026-10-17 and 2026-10-18, §4.11, §4.12)* Migrations already on the version's base commit are immutable for everyone: agent plans, Owner-edited plans and the Guardian reject them. Preset paths match case-insensitively. Plans are validated against the base commit's file list (fetched if not local). If it cannot be listed, a generated plan may not create any migration. Optimisation plans accept catalogue keys or `generalist`, enforce protected paths and skip ordering rules.
+- *(2026-10-17, §4.12)* Scaffolder steps are exempt from preset order rules. Soft order violations are the warning `PLAN_ORDER`.
+- *(2026-10-17, §4.12)* Generated repos commit no lockfile (agents cannot run npm). Preset CI uses `npm ci` when a lockfile exists, else `npm install`. `db-engineer` writes `lib/database.types.ts` by hand in the generator's shape.
+- *(2026-10-17, FR-77)* `no_secret_env_in_client` ignores `NODE_ENV`. Preset checklist items are numbered `[Cn]` in the review prompt, and a violation tagged `[Cn]` takes that item's category and severity with no penalty. Preset guidance sits in a `<stack_preset>` block.
+
+**Vercel (§3.8, §4.15, §8)**
+- *(2026-10-17, FR-90, §6)* A preview redeploy needs a writer (a Contributor can redeploy). A production redeploy and promote need an Owner.
+- *(2026-10-17, FR-88)* An env var `PUT` saves locally and returns `502 UPSTREAM_ERROR` with `syncError` when the Vercel push fails; it is retried on the next save or deployment. `DELETE` is all-or-nothing (502, nothing deleted).
+- *(2026-10-17, FR-88)* Local Git projects may use deployments only when `Deployments:Provider=Fake`. Vercel needs a GitHub-backed project.
+- *(2026-10-17, FR-88)* Changing the Vercel provider or project needs the binding Owner or the caller's own connection (which rebinds to them). Other Owner actions act on the binder's behalf (§2).
+- *(2026-10-17, §4.15)* A superseded preview row is marked `canceled` with a reason. Review waits for the newest preview row, created by the PR job from the PR head. Adopting Vercel's own production deployment of the merge SHA (within 30 seconds) happens only with the Vercel provider.
+- *(2026-10-17, §4.15)* Deployment creation is idempotent: the AIDE row id goes in Vercel `meta.aideDeploymentId`. Retries adopt an existing deployment, and builds for rows stopped mid-create are cancelled.
+- *(2026-10-17, NFR-SEC2)* Build-log tails are masked (project env values, the token and secret-shaped text) before storage and display. Only a 401, or a 403 `invalidToken`, invalidates a Vercel connection.
+- *(2026-10-17, §11)* The Vercel API details (env create v10 upsert and edit/delete v9, promote without a rebuild, `/v5/user/tokens/current`, the `/v6/deployments` sha filter, the `/v3/deployments/{id}/events` shape, error-message matching for git-not-connected and plan limit) come from API knowledge and are not verified against a real account.
+
+**Notifications and CLI (§3.9)**
+- *(2026-10-17, FR-92)* Channels subscribed to `release_failed` or `review_completed` do not receive awaiting-merge, deployment-failed or preview-ready messages unless they opt into the new events. `connection_invalid` is personal (in-app and account email, never project channels; muting stops both).
+- *(2026-10-17, FR-93)* The CLI disables System.CommandLine `@response-file` expansion, so `--request @file` reads the file (`@-` is stdin).
+
 ## 11. Open questions
 
 - [ ] Sign in with Vercel: switch from pasted tokens once its API-request permissions leave private beta? (Proposed: revisit in v3.) — Ben
@@ -760,7 +841,7 @@ v1 decisions D1–D21 (`docs/v1/SPEC.md` §10) stand. v2 decisions:
 - [ ] Abandon a version in development (e.g. scrap 1.2.0 and start 1.2.1 instead)? It isn't requested for v2. Rollback to checkpoint 1 covers most cases. (Proposed: v3.) — Ben
 - [ ] Should `nextjs-supabase` later provision Supabase (Management API) and run `supabase db push` on release? Out of scope for v2 by decision D-V2-10. — Ben
 - [ ] Build-time checks to confirm against current vendor docs (not questions for Ben):
-  - `vercel.json` `git.deploymentEnabled` glob syntax
+  - `vercel.json` `git.deploymentEnabled` glob syntax (built as `{"aide/**": false}`; not yet confirmed live)
   - `POST /v10/projects/{id}/env` vs `/v9`
   - promote without a rebuild
   - GraphQL `mergeStateStatus`/`reviewDecision`/`viewerCanMergeAsAdmin` availability for App installation tokens
