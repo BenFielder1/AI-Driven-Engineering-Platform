@@ -19,6 +19,8 @@ export type ProjectStatus = Schemas['ProjectStatus']
 export type ApprovalMode = Schemas['ApprovalMode']
 
 export type ProjectListParams = NonNullable<paths['/api/projects']['get']['parameters']['query']>
+export type ProjectKpiFilters = NonNullable<paths['/api/projects/kpis']['get']['parameters']['query']>
+export type ProjectKpis = Schemas['ProjectKpisDto']
 export type ProjectSortBy = NonNullable<ProjectListParams['sortBy']>
 export type SortOrder = NonNullable<ProjectListParams['sortOrder']>
 
@@ -29,6 +31,8 @@ export const projectKeys = {
   all: ['projects'] as const,
   lists: () => [...projectKeys.all, 'list'] as const,
   list: (params: ProjectListParams) => [...projectKeys.lists(), params] as const,
+  /** Under `lists()`: whatever refreshes the projects list (create, delete, live events) refreshes the KPI row too. */
+  kpis: (filters: ProjectKpiFilters) => [...projectKeys.lists(), 'kpis', filters] as const,
   detail: (id: string) => [...projectKeys.all, 'detail', id] as const,
   state: (id: string) => [...projectKeys.detail(id), 'state'] as const,
   members: (id: string) => [...projectKeys.detail(id), 'members'] as const,
@@ -90,6 +94,15 @@ export const projectsQueryOptions = (params: ProjectListParams) =>
 /** FR-6: the caller's projects (all projects for Admins), paged, searched, filtered and sorted. */
 export function useProjects(params: ProjectListParams) {
   return useQuery(projectsQueryOptions(params))
+}
+
+/** §7.2: the /projects KPI row over the projects matching the list's filters. */
+export function useProjectKpis(filters: ProjectKpiFilters) {
+  return useQuery({
+    queryKey: projectKeys.kpis(filters),
+    queryFn: async ({ signal }) => unwrap(await api.GET('/api/projects/kpis', { params: { query: filters }, signal })),
+    placeholderData: keepPreviousData,
+  })
 }
 
 export const projectQueryOptions = (id: string) =>

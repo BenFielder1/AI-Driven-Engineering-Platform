@@ -13,6 +13,7 @@
 - [ ] New behaviour has tests named after the requirement IDs
 - [ ] Redeployed to Docker Desktop (`./deploy/scripts/deploy-local.sh`) and the smoke test passes (if Kubernetes is available)
 - [ ] E2E (`npm run test:e2e`), if UI flows changed
+- [ ] v2 E2E (versions/import/preset) against `./deploy/scripts/deploy-local.sh --e2e` (Fake deployments, seeded import repo), if those flows changed
 
 ## Contract
 

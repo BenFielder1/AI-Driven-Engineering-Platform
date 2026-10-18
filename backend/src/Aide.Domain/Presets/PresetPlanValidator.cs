@@ -103,9 +103,12 @@ public static class PresetPlanValidator
 
     /// <summary>
     /// Every plan warning (FR-76): <c>UNCOVERED_REQUIREMENTS</c> (§4.13, when <paramref name="requirements"/> are given),
-    /// then the preset warnings (when <paramref name="preset"/> is set).
+    /// then the preset warnings (when <paramref name="preset"/> is set), then FR-89's <c>MISSING_VERCEL_CONFIG</c>
+    /// (<see cref="Deployments.VercelConfigRules.PlanWarning"/>; only when <paramref name="baseFiles"/> are known), checked in
+    /// the Vercel root directory <paramref name="vercelRootDirectory"/> (<c>null</c>: the repository root).
     /// </summary>
-    public static IReadOnlyList<ValidationWarning> AllWarnings(IReadOnlyList<PlanStep> steps, IEnumerable<SpecRequirement>? requirements, Preset? preset)
+    public static IReadOnlyList<ValidationWarning> AllWarnings(
+        IReadOnlyList<PlanStep> steps, IEnumerable<SpecRequirement>? requirements, Preset? preset, IReadOnlySet<string>? baseFiles = null, string? vercelRootDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(steps);
         var warnings = new List<ValidationWarning>();
@@ -117,6 +120,10 @@ public static class PresetPlanValidator
         if (preset is not null)
         {
             warnings.AddRange(Warnings(steps, preset));
+            if (Deployments.VercelConfigRules.PlanWarning(steps, preset, baseFiles, vercelRootDirectory) is { } vercel)
+            {
+                warnings.Add(vercel);
+            }
         }
 
         return warnings;

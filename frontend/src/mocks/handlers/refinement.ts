@@ -110,6 +110,36 @@ export function failRefinementRound(project: StoredProject, error: string) {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const toDto = ({ questions, ...dto }: StoredRefinementRound): Round => dto
 
+/**
+ * FR-55: every round, newest first, numbered oldest = 1. A round's questions carry the answer given to them by the
+ * latest round started up to (and including) the next succeeded round.
+ */
+function roundHistory(rounds: StoredRefinementRound[]): Schemas['RefinementRoundHistoryDto'][] {
+  return rounds
+    .map((r, i) => {
+      const later = rounds.slice(i + 1)
+      const nextSucceeded = later.findIndex((x) => x.status === 'succeeded')
+      const answering = nextSucceeded === -1 ? later.at(-1) : later[nextSucceeded]
+      const given = new Map((answering?.answers ?? []).flatMap((a) => (a.questionId ? [[a.questionId, a.answer] as const] : [])))
+      return {
+        round: i + 1,
+        runId: r.runId,
+        jobId: r.jobId,
+        trigger: r.trigger,
+        status: r.status,
+        error: r.error,
+        startedAt: r.createdAt,
+        completedAt: r.completedAt,
+        questions: (r.questions ?? []).map((q) => ({ ...q, answer: given.get(q.id) ?? null })),
+        answers: r.answers,
+        feedback: r.feedback,
+        draftArtifactId: r.draftArtifactId,
+        draftArtifactVersion: r.draftVersion,
+      }
+    })
+    .reverse()
+}
+
 /** Mirrors RefinementService.GetAsync. */
 function refinementDto(project: StoredProject, releaseVersionId: string): Schemas['RefinementDto'] {
   const drafts = project.artifacts
@@ -142,6 +172,7 @@ function refinementDto(project: StoredProject, releaseVersionId: string): Schema
     questionsRunId: completed?.runId ?? null,
     questions: (completed?.questions ?? []).map((q) => ({ ...q, answer: given.get(q.id) ?? null })),
     codebaseSummary: codebaseSummaryOf(project, releaseVersionId),
+    rounds: roundHistory(roundsOf),
   }
 }
 

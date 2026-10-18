@@ -688,8 +688,40 @@ function importVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[]
   ]
 }
 
+/** GET /projects and /projects/kpis: the caller's projects (all for Admins) matching search, phase, status, preset and dev version. */
+function listFiltered(user: { id: string; systemRole: string }, q: URLSearchParams) {
+  const search = q.get('search')?.toLowerCase()
+  const phase = q.get('phase')
+  const status = q.get('status')
+  const hasDevelopment = q.get('hasDevelopmentVersion')
+  const preset = q.get('preset')
+  return projectsDb.projects
+    .filter((p) => user.systemRole === 'admin' || roleOf(p, user.id))
+    .filter((p) => !search || p.name.toLowerCase().includes(search))
+    .filter((p) => !phase || p.currentPhase === phase)
+    .filter((p) => !status || p.status === status)
+    .filter((p) => !preset || (currentVersionOf(p)?.presetId ?? 'none') === preset)
+    .filter((p) => hasDevelopment === null || (developmentVersionOf(p) !== undefined) === (hasDevelopment === 'true'))
+}
+
 export const projectHandlers = [
   // ---- Projects ----
+  // §7.2: the KPI row over the projects matching the list's filters (mirrors GetProjectKpis).
+  http.get('*/api/projects/kpis', ({ request }) => {
+    const user = currentUser()
+    if (!user) {
+      return unauthenticated()
+    }
+    const items = listFiltered(user, new URL(request.url).searchParams)
+    return HttpResponse.json<Schemas['ProjectKpisDto']>({
+      total: items.length,
+      active: items.filter((p) => p.status !== 'released').length,
+      inReview: items.filter((p) => p.status === 'reviewing').length,
+      awaitingGates: items.reduce((n, p) => n + p.gates.filter((g) => g.status === 'pending').length, 0),
+      released: items.filter((p) => p.status === 'released').length,
+    })
+  }),
+
   http.get('*/api/projects', ({ request }) => {
     const user = currentUser()
     if (!user) {
@@ -698,20 +730,9 @@ export const projectHandlers = [
     const q = new URL(request.url).searchParams
     const page = Number(q.get('page') ?? 1)
     const limit = Number(q.get('limit') ?? 20)
-    const search = q.get('search')?.toLowerCase()
-    const phase = q.get('phase')
-    const status = q.get('status')
-    const hasDevelopment = q.get('hasDevelopmentVersion')
-    const preset = q.get('preset')
     const sortBy = q.get('sortBy') ?? 'updated'
     const dir = q.get('sortOrder') === 'asc' ? 1 : -1
-    const items = projectsDb.projects
-      .filter((p) => user.systemRole === 'admin' || roleOf(p, user.id))
-      .filter((p) => !search || p.name.toLowerCase().includes(search))
-      .filter((p) => !phase || p.currentPhase === phase)
-      .filter((p) => !status || p.status === status)
-      .filter((p) => !preset || (currentVersionOf(p)?.presetId ?? 'none') === preset)
-      .filter((p) => hasDevelopment === null || (developmentVersionOf(p) !== undefined) === (hasDevelopment === 'true'))
+    const items = listFiltered(user, q)
       .sort((a, b) => {
         const key = sortBy === 'name' ? 'name' : sortBy === 'created' ? 'createdAt' : 'updatedAt'
         return a[key].localeCompare(b[key]) * dir

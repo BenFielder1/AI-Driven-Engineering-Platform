@@ -93,6 +93,45 @@ public sealed class RefinementTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task FR55_FR27_The_refinement_state_lists_every_round_with_its_questions_and_the_answers_given()
+    {
+        using var fixture = await ProjectApi.FixtureAsync(factory);
+        var id = fixture.Project.Id;
+        Assert.Empty((await GetAsync(fixture.Viewer.Client, id)).Rounds);
+
+        var first = await ProjectApi.ReadAsync<RefinementRoundDto>(await StartAsync(fixture.Contributor.Client, id), HttpStatusCode.Accepted);
+        await AgentJobs.RunQueuedAsync(factory, id);
+        var second = await ProjectApi.ReadAsync<RefinementRoundDto>(
+            await StartAsync(fixture.Contributor.Client, id, new { questionId = "q1", answer = "Small teams" }, new { questionId = "q2", answer = "API only" }),
+            HttpStatusCode.Accepted);
+
+        // While the second round is queued, the first round's questions already show its answers.
+        var pending = await GetAsync(fixture.Viewer.Client, id);
+        Assert.Equal([(2, AgentRunStatus.Queued), (1, AgentRunStatus.Succeeded)], pending.Rounds.Select(r => (r.Round, r.Status)));
+        Assert.Equal(["Small teams", "API only", null], pending.Rounds[1].Questions.Select(q => q.Answer));
+        Assert.Empty(pending.Rounds[0].Questions);
+
+        await AgentJobs.RunQueuedAsync(factory, id);
+
+        var state = await GetAsync(fixture.Viewer.Client, id);
+        Assert.Equal([2, 1], state.Rounds.Select(r => r.Round));
+        Assert.Equal([second.JobId, first.JobId], state.Rounds.Select(r => r.JobId));
+        var older = state.Rounds[1];
+        Assert.Equal((first.RunId, AgentRunStatus.Succeeded, (int?)1), (older.RunId, older.Status, older.DraftArtifactVersion));
+        Assert.Equal(["q1", "q2", "q3"], older.Questions.Select(q => q.Id));
+        Assert.Equal(["Small teams", "API only", null], older.Questions.Select(q => q.Answer));
+        Assert.Empty(older.Answers);
+        Assert.NotNull(older.CompletedAt);
+        Assert.True(older.CompletedAt >= older.StartedAt);
+        var newer = state.Rounds[0];
+        Assert.Equal((second.RunId, AgentRunStatus.Succeeded, (int?)2), (newer.RunId, newer.Status, newer.DraftArtifactVersion));
+        Assert.Equal(state.LatestDraft!.Id, newer.DraftArtifactId);
+        Assert.Equal(["q3"], newer.Questions.Select(q => q.Id));
+        Assert.All(newer.Questions, q => Assert.Null(q.Answer));
+        Assert.Equal(["q1", "q2"], newer.Answers.Select(a => a.QuestionId));
+    }
+
+    [Fact]
     public async Task FR27_A_free_question_can_be_answered_and_a_round_without_answers_is_fine()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);

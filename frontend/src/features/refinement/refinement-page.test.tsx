@@ -41,6 +41,42 @@ async function openRefinement(project: StoredProject) {
 const draftArticle = (version: number) => screen.findByRole('article', { name: `Project request v${String(version)}` })
 
 describe('Refinement page (FR-27)', () => {
+  it('FR55_FR27_every_round_is_listed_newest_first_with_its_questions_and_the_answers_given', async () => {
+    const project = seedInRefinement('owner', (p) => {
+      seedRefinementRound(p, { draft: '# v1', questions: questions.slice(0, 2) })
+      seedRefinementRound(p, {
+        draft: '# v2',
+        answers: [{ questionId: 'q1', question: 'Who uses the tracker?', answer: 'Warehouse staff.' }],
+        questions: [{ id: 'q9', question: 'Which ERP?', reason: null }],
+      })
+    })
+    const { user } = await openRefinement(project)
+
+    const history = screen.getByRole('list', { name: 'Refinement rounds, newest first' })
+    const items = within(history).getAllByTestId('refinement-round')
+    expect(items).toHaveLength(2)
+    const [latest, first] = items
+    if (!latest || !first) {
+      throw new Error('rounds')
+    }
+    // The latest round is expanded; older rounds are collapsed.
+    expect(latest.querySelector('details')).toHaveAttribute('open')
+    expect(first.querySelector('details')).not.toHaveAttribute('open')
+    expect(within(latest).getByText('Round 2')).toBeInTheDocument()
+    expect(within(latest).getByText('Which ERP?')).toBeVisible()
+    expect(within(latest).getByText('Warehouse staff.')).toBeInTheDocument()
+
+    await user.click(within(first).getByText('Round 1'))
+    expect(first.querySelector('details')).toHaveAttribute('open')
+    expect(within(first).getByText('Who uses the tracker?')).toBeInTheDocument()
+    expect(within(first).getByText('How many warehouses?')).toBeInTheDocument()
+    // Round 1's question carries the answer round 2 sent for it; the unanswered one has none.
+    expect(within(first).getAllByText('Your answer:', { exact: false })).toHaveLength(1)
+    expect(within(first).getByText(/draft v1/)).toBeInTheDocument()
+    // Read-only: no answer fields in the history.
+    expect(within(history).queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
   it('FR27_start_round_on_idea_then_shows_draft_and_questions', async () => {
     const project = seedInRefinement('contributor')
     const { user, live } = await openRefinement(project)
@@ -61,7 +97,7 @@ describe('Refinement page (FR-27)', () => {
     expect(within(article).getByRole('heading', { name: 'Inventory tracker' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Project request' })).toHaveTextContent('v1')
     expect(screen.getByLabelText('Who uses the tracker?')).toHaveValue('')
-    expect(screen.getByText('Shapes the roles.')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Clarifying questions' })).getByText('Shapes the roles.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Run another round' })).toBeInTheDocument()
   })
 
@@ -159,7 +195,7 @@ describe('Refinement page (FR-27)', () => {
     await draftArticle(1)
 
     expect(screen.getByText(/Only Contributors and Owners can answer questions/)).toBeInTheDocument()
-    expect(screen.getByText('How many warehouses?')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Clarifying questions' })).getByText('How many warehouses?')).toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Run another round' })).not.toBeInTheDocument()
   })

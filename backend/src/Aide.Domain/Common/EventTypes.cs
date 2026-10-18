@@ -67,6 +67,12 @@ public static class EventTypes
     /// <summary>§9 seed marker: the dev seed created its preset demo project (<c>{projectId, presetId}</c>, project_id null).</summary>
     public const string DemoPresetProjectSeeded = "DEMO_PRESET_PROJECT_SEEDED";
 
+    /// <summary>
+    /// DEP-V2 (§9) seed marker: the one-off upgrade of a v1-seeded demo project to released 0.1.0 ran
+    /// (<c>{projectId, outcome}</c>, project_id null; <c>outcome</c> <c>released</c>, or why it was skipped).
+    /// </summary>
+    public const string DemoProjectReleaseUpgraded = "DEMO_PROJECT_RELEASE_UPGRADED";
+
     // Lifecycle (FR-11)
     public const string PhaseChanged = "PHASE_CHANGED";
 
@@ -281,7 +287,7 @@ public static class EventTypes
     public static IReadOnlyList<string> InCategory(EventCategory category) =>
         ByCategory.TryGetValue(category, out var types) ? types : [];
 
-    /// <summary>The category of an event type; <c>null</c> for internal markers such as <see cref="DemoProjectSeeded"/>.</summary>
+    /// <summary>The category of an event type; <c>null</c> for internal markers such as <see cref="DemoProjectSeeded"/> and <see cref="DemoProjectReleaseUpgraded"/>.</summary>
     public static EventCategory? CategoryOf(string type) =>
         CategoryByType.TryGetValue(type, out var category) ? category : null;
 

@@ -17,6 +17,7 @@ using Aide.Domain.Lifecycle;
 using Aide.Domain.Presets;
 using Aide.Domain.Review;
 using Aide.Domain.Specs;
+using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
@@ -91,6 +92,7 @@ public sealed partial class ReviewJobHandler(
     ExternalChecksCollector externalChecks,
     PreviewCollector previews,
     VersionPresetReader presets,
+    IDeploymentProviderResolver deploymentProviders,
     TimeProvider time,
     ILogger<ReviewJobHandler> logger) : IJobHandler
 {
@@ -261,6 +263,7 @@ public sealed partial class ReviewJobHandler(
             .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents)))
             .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents))
             .Concat(PresetReviewChecks.Run(preset.Preset, contents))
+            .Concat(await VercelConfigFindingsAsync(project.Id, working.Branch, contents, cancellationToken))
             .Concat(externalFindings ?? [])
             .ToList();
         LogGathered(logger, tree.Count, contents.Count, findings.Count);
@@ -532,6 +535,42 @@ public sealed partial class ReviewJobHandler(
             // A rollback, settings change or concurrent writer changed the project: retry, which re-checks everything.
             throw new JobFailedException($"{char.ToUpperInvariant(what[0])}{what[1..]} collided with a concurrent change: {ex.GetType().Name}.", transient: true, ErrorCodes.Conflict);
         }
+    }
+
+    /// <summary>
+    /// FR-89: for a project deploying with Vercel, the branch's <c>vercel.json</c> (in the Vercel root directory) must stop
+    /// Vercel's automatic deploys of <c>aide/**</c> (<see cref="Domain.Deployments.VercelConfigRules.ReviewFindings"/>). The
+    /// file is read even when the review's file selection or listed tree left it out. No real Vercel deployment (no settings,
+    /// Fake settings, or the Fake provider in use): no finding.
+    /// </summary>
+    private async Task<IReadOnlyList<ReviewFinding>> VercelConfigFindingsAsync(
+        Guid projectId, string branch, IReadOnlyList<SourceFile> contents, CancellationToken cancellationToken)
+    {
+        // Only real Vercel deploys on its own: the Fake provider (Deployments:Provider=Fake) and Fake settings never do.
+        if (deploymentProviders.UsesFake)
+        {
+            return [];
+        }
+
+        var rootDirectory = await db.ProjectDeploymentSettings.AsNoTracking()
+            .Where(s => s.ProjectId == projectId && s.Provider == DeploymentProvider.Vercel)
+            .Select(s => s.RootDirectory)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (rootDirectory is null)
+        {
+            return [];
+        }
+
+        var path = Domain.Deployments.VercelConfigRules.ConfigPath(rootDirectory);
+        var file = contents.FirstOrDefault(f => Domain.Deployments.VercelConfigRules.IsConfigPath(f.Path, path));
+        if (file is null)
+        {
+            // Not read for review (too large, over the budget, or beyond the listed tree): read it on its own.
+            var read = await Git(() => workingCopies.ReadCommittedAsync(projectId, branch, [path], cancellationToken)) ?? [];
+            file = read.Count > 0 ? read[0] : null;
+        }
+
+        return Domain.Deployments.VercelConfigRules.ReviewFindings(path, file?.Content);
     }
 
     /// <summary>Git and working-copy failures retry the job; an unsafe working copy fails it.</summary>

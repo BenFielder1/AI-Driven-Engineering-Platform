@@ -46,6 +46,12 @@ public static partial class ProjectEndpoints
             .Produces<PagedResult<ProjectSummaryDto>>()
             .ProducesValidationProblem();
 
+        group.MapGet("/kpis", GetProjectKpis)
+            .WithName("GetProjectKpis")
+            .WithSummary("§7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion and preset filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released).")
+            .Produces<ProjectKpisDto>()
+            .ProducesValidationProblem();
+
         group.MapPost("/", CreateProject)
             .WithName("CreateProject")
             .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT.")
@@ -114,51 +120,7 @@ public static partial class ProjectEndpoints
         [WireEnum(typeof(SortOrder))] string sortOrder = "desc")
     {
         var userId = currentUser.RequiredUserId;
-        var isAdmin = await roles.GetAsync(userId, cancellationToken) == SystemRole.Admin;
-
-        var query = db.Projects.AsNoTracking();
-        if (!isAdmin)
-        {
-            query = query.Where(p => db.ProjectMembers.Any(m => m.ProjectId == p.Id && m.UserId == userId));
-        }
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var pattern = $"%{EscapeLike(search.Trim())}%";
-            query = query.Where(p => EF.Functions.ILike(p.Name, pattern, "\\"));
-        }
-
-        if (phase is not null)
-        {
-            var wanted = EnumStrings.Parse<Phase>(phase);
-            query = query.Where(p => p.CurrentPhase == wanted);
-        }
-
-        if (status is not null)
-        {
-            var wanted = EnumStrings.Parse<ProjectStatus>(status);
-            query = query.Where(p => p.Status == wanted);
-        }
-
-        // FR-62: the denormalised development_version column keeps this filter (and the badges) cheap.
-        if (hasDevelopmentVersion is { } hasDevelopment)
-        {
-            query = hasDevelopment ? query.Where(p => p.DevelopmentVersion != null) : query.Where(p => p.DevelopmentVersion == null);
-        }
-
-        // FR-74, §7.2: the preset of the current release version (in development, else the latest).
-        if (!string.IsNullOrWhiteSpace(preset))
-        {
-            // "none": projects whose current version has no preset.
-            var wanted = preset.Trim() == NoPresetFilter ? null : preset.Trim();
-            query = query.Where(p => db.ReleaseVersions
-                .Where(v => v.ProjectId == p.Id)
-                .OrderByDescending(v => v.Id == p.CurrentReleaseVersionId)
-                .ThenByDescending(v => v.CreatedAt)
-                .ThenByDescending(v => v.Id)
-                .Select(v => v.PresetId)
-                .FirstOrDefault() == wanted);
-        }
+        var query = await FilteredAsync(db, roles, userId, search, phase, status, hasDevelopmentVersion, preset, cancellationToken);
 
         var total = await query.CountAsync(cancellationToken);
         var skip = (long)(page - 1) * limit;
@@ -223,6 +185,100 @@ public static partial class ProjectEndpoints
                 pinned.PresetVersion);
         }).ToList();
         return TypedResults.Ok(new PagedResult<ProjectSummaryDto>(items, page, limit, total));
+    }
+
+    private static async Task<Ok<ProjectKpisDto>> GetProjectKpis(
+        ICurrentUser currentUser,
+        SystemRoleLookup roles,
+        AideDbContext db,
+        CancellationToken cancellationToken,
+        [MaxLength(ProjectLimits.SearchMaxLength)] string? search = null,
+        [WireEnum(typeof(Phase))] string? phase = null,
+        [WireEnum(typeof(ProjectStatus))] string? status = null,
+        bool? hasDevelopmentVersion = null,
+        [MaxLength(Domain.Presets.PresetRules.IdMaxLength)] string? preset = null)
+    {
+        var query = await FilteredAsync(db, roles, currentUser.RequiredUserId, search, phase, status, hasDevelopmentVersion, preset, cancellationToken);
+
+        // One aggregate query over the filtered projects; the gate count is a correlated subquery per project row in SQL.
+        var counts = await query
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                Total = g.Count(),
+                Active = g.Count(p => p.Status != ProjectStatus.Released),
+                InReview = g.Count(p => p.Status == ProjectStatus.Reviewing),
+                Released = g.Count(p => p.Status == ProjectStatus.Released),
+                AwaitingGates = g.Sum(p => db.ApprovalGates.Count(gate => gate.ProjectId == p.Id && gate.Status == GateStatus.Pending)),
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        return TypedResults.Ok(counts is null
+            ? new ProjectKpisDto(0, 0, 0, 0, 0)
+            : new ProjectKpisDto(counts.Total, counts.Active, counts.InReview, counts.AwaitingGates, counts.Released));
+    }
+
+    /// <summary>
+    /// The projects the caller sees (members; Admins: every project) matching the list filters — shared by the list and
+    /// its KPI row (§7.2) so both count the same projects.
+    /// </summary>
+    private static async Task<IQueryable<Project>> FilteredAsync(
+        AideDbContext db,
+        SystemRoleLookup roles,
+        Guid userId,
+        string? search,
+        string? phase,
+        string? status,
+        bool? hasDevelopmentVersion,
+        string? preset,
+        CancellationToken cancellationToken)
+    {
+        var isAdmin = await roles.GetAsync(userId, cancellationToken) == SystemRole.Admin;
+
+        var query = db.Projects.AsNoTracking();
+        if (!isAdmin)
+        {
+            query = query.Where(p => db.ProjectMembers.Any(m => m.ProjectId == p.Id && m.UserId == userId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = $"%{EscapeLike(search.Trim())}%";
+            query = query.Where(p => EF.Functions.ILike(p.Name, pattern, "\\"));
+        }
+
+        if (phase is not null)
+        {
+            var wanted = EnumStrings.Parse<Phase>(phase);
+            query = query.Where(p => p.CurrentPhase == wanted);
+        }
+
+        if (status is not null)
+        {
+            var wanted = EnumStrings.Parse<ProjectStatus>(status);
+            query = query.Where(p => p.Status == wanted);
+        }
+
+        // FR-62: the denormalised development_version column keeps this filter (and the badges) cheap.
+        if (hasDevelopmentVersion is { } hasDevelopment)
+        {
+            query = hasDevelopment ? query.Where(p => p.DevelopmentVersion != null) : query.Where(p => p.DevelopmentVersion == null);
+        }
+
+        // FR-74, §7.2: the preset of the current release version (in development, else the latest).
+        if (!string.IsNullOrWhiteSpace(preset))
+        {
+            // "none": projects whose current version has no preset.
+            var wanted = preset.Trim() == NoPresetFilter ? null : preset.Trim();
+            query = query.Where(p => db.ReleaseVersions
+                .Where(v => v.ProjectId == p.Id)
+                .OrderByDescending(v => v.Id == p.CurrentReleaseVersionId)
+                .ThenByDescending(v => v.CreatedAt)
+                .ThenByDescending(v => v.Id)
+                .Select(v => v.PresetId)
+                .FirstOrDefault() == wanted);
+        }
+
+        return query;
     }
 
     private static async Task<Results<Created<ProjectDto>, ValidationProblem, ProblemHttpResult>> CreateProject(

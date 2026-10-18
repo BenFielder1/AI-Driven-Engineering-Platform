@@ -23,7 +23,7 @@ import { StageSection } from './stage-section'
 
 type Phase = Schemas['Phase']
 
-/** How often a current stage with no artifact version yet re-checks its history. */
+/** How often a current stage with no artifact version yet re-checks its history while a draft is expected. */
 export const STAGE_EMPTY_POLL_MS = 10_000
 
 function versionOption(a: ArtifactSummary, newest: number | null, current: number | null) {
@@ -44,6 +44,7 @@ export function StageArtifact({
   onVersionChange,
   notStarted,
   expectedLatest = null,
+  awaitingDraft = false,
   children,
 }: {
   stage: Phase
@@ -55,19 +56,24 @@ export function StageArtifact({
   notStarted: string
   /** A newer version the page already knows of (e.g. from GET /refinement): the history is refetched to show it. */
   expectedLatest?: number | null
+  /**
+   * A draft is on its way: the producing run is queued or running, or (Review) the latest cycle asked for an
+   * optimisation plan. Only then does an empty history poll; otherwise nothing is coming and the page waits for events.
+   */
+  awaitingDraft?: boolean
   /** The stage panel for the shown version (outline, step table…). */
   children?: (artifact: Artifact) => ReactNode
 }) {
   const { project, can, readOnly, releaseVersionId } = useProjectAccess()
   const label = artifactTypeLabels[type]
   const progress = stageProgress(stage, project, readOnly)
-  // A safety net under the live updates (FR-46): while the current stage has no version yet, poll its history so the
-  // producing run's draft appears even if its live event was missed.
+  // A safety net under the live updates (FR-46): while the current stage has no version yet and a draft is expected,
+  // poll its history so the producing run's draft appears even if its live event was missed.
   const history = useArtifactHistory(
     project.id,
     type,
     releaseVersionId,
-    progress === 'current' ? STAGE_EMPTY_POLL_MS : undefined,
+    progress === 'current' && awaitingDraft ? STAGE_EMPTY_POLL_MS : undefined,
   )
   const versions = history.data ?? []
   const newest = versions[0]?.version ?? null

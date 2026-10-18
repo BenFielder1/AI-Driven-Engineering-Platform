@@ -600,6 +600,85 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         Assert.Equal((Severity.Critical, "src/config.js"), (secret.Severity, secret.File));
     }
 
+    // ---------- FR-89: vercel.json on the branch ----------
+
+    private const string GoodVercelJson = "{\n  \"git\": { \"deploymentEnabled\": { \"aide/**\": false } }\n}\n";
+
+    private static Task SeedDeploymentSettingsAsync(WebApplicationFactory<Program> app, Guid projectId, DeploymentProvider provider, string rootDirectory = ".") =>
+        ProjectApi.WithDbAsync(app, async db =>
+        {
+            db.ProjectDeploymentSettings.Add(new ProjectDeploymentSettings { ProjectId = projectId, Provider = provider, RootDirectory = rootDirectory, UpdatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync(Ct);
+        });
+
+    /// <summary>Commits <paramref name="files"/> (if any) to the project branch, runs another review cycle and returns its report.</summary>
+    private static async Task<ComplianceReportDto> ReviewAgainAsync(WebApplicationFactory<Program> app, ProjectFixture fixture, params ProducedFile[] files)
+    {
+        var id = fixture.Project.Id;
+        if (files.Length > 0)
+        {
+            var branch = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().Where(v => v.ProjectId == id).Select(v => v.BranchName!).SingleAsync(Ct));
+            var stepId = Guid.NewGuid();
+            var paths = files.Select(f => f.Path).ToList();
+            await app.Services.GetRequiredService<Aide.Infrastructure.Git.IWorkingCopies>().CommitStepAsync(
+                id, branch, stepId, files, CodeGeneration.CommitMessage(9, "Vercel config", paths, stepId), Ct);
+        }
+
+        await ProjectApi.ReadAsync<ReviewStartedDto>(await fixture.Contributor.Client.PostAsJsonAsync($"{fixture.Path}/review", new { }, Ct), HttpStatusCode.Accepted);
+        await AgentJobs.RunQueuedAsync(app, id);
+        var latest = await GetAsync<ComplianceReportDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/latest");
+        Assert.Equal(2, latest.Cycle);
+        return latest;
+    }
+
+    private static bool IsVercelConfigFinding(ViolationDto v) =>
+        v.Source == FindingSource.Deterministic && v.Message.Contains("(FR-89)", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task FR89_A_Vercel_settings_row_without_vercel_json_in_its_root_directory_is_a_major_architecture_finding()
+    {
+        var app = App(factory, new FakeCodeReviewScript { ScoresByCycle = [0.93m, 0.93m] });
+        using var fixture = await ReviewedAsync(app);
+        var id = fixture.Project.Id;
+        var first = await GetAsync<ComplianceReportDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/latest");
+        Assert.DoesNotContain(first.Violations, IsVercelConfigFinding); // no deployment settings: no finding
+
+        await SeedDeploymentSettingsAsync(app, id, DeploymentProvider.Vercel, rootDirectory: "web");
+        var report = await ReviewAgainAsync(app, fixture, new ProducedFile("vercel.json", GoodVercelJson)); // the wrong place
+
+        var finding = Assert.Single(report.Violations, IsVercelConfigFinding);
+        Assert.Equal((ReviewCategory.Architecture, Severity.Major, "web/vercel.json"), (finding.Category, finding.Severity, finding.File));
+        Assert.Contains("missing", finding.Message, StringComparison.Ordinal);
+        var architecture = report.CategoryScores.Single(c => c.Category == ReviewCategory.Architecture);
+        Assert.True(architecture.Penalty > 0m);
+    }
+
+    [Fact]
+    public async Task FR89_A_Fake_settings_row_gives_no_vercel_json_finding()
+    {
+        var app = App(factory, new FakeCodeReviewScript { ScoresByCycle = [0.93m, 0.93m] });
+        using var fixture = await ReviewedAsync(app);
+        await SeedDeploymentSettingsAsync(app, fixture.Project.Id, DeploymentProvider.Fake);
+
+        var report = await ReviewAgainAsync(app, fixture);
+
+        Assert.DoesNotContain(report.Violations, IsVercelConfigFinding);
+    }
+
+    [Fact]
+    public async Task FR89_vercel_json_is_read_even_when_the_review_selection_leaves_it_out()
+    {
+        var app = App(factory, new FakeCodeReviewScript { ScoresByCycle = [0.93m, 0.93m] });
+        using var fixture = await ReviewedAsync(app);
+        await SeedDeploymentSettingsAsync(app, fixture.Project.Id, DeploymentProvider.Vercel);
+
+        // Over the per-file review limit, so the file selection skips it; the FR-89 check reads it on its own.
+        var padded = GoodVercelJson + new string(' ', (int)ReviewLimits.Default.MaxFileBytes + 1);
+        var report = await ReviewAgainAsync(app, fixture, new ProducedFile("vercel.json", padded));
+
+        Assert.DoesNotContain(report.Violations, IsVercelConfigFinding);
+    }
+
     /// <summary>Wraps a responder and records the user message of every request it answers.</summary>
     private sealed class RecordingResponder(IFakeAgentResponder inner) : IFakeAgentResponder
     {

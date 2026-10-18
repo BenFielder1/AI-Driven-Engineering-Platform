@@ -4,6 +4,7 @@ import { http } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { seedUser, signInAs } from '../../mocks/handlers/auth'
+import { seedGate } from '../../mocks/handlers/lifecycle'
 import { problem } from '../../mocks/handlers/problem'
 import { projectsDb, seedProject } from '../../mocks/handlers/projects'
 import { seedReleaseVersions } from '../../mocks/handlers/versions'
@@ -180,10 +181,12 @@ describe('Projects list (FR-6)', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 
-  it('FR53_projects_list: a KPI row counts active, in review and released projects; awaiting gates is not reported yet', async () => {
+  it('FR53_projects_list: the KPI row comes from GET /projects/kpis, awaiting gates included, and follows the filters', async () => {
     signInAsUser()
     seedProject({ name: 'Alpha', status: 'active' })
-    seedProject({ name: 'Beta', currentPhase: 'review', status: 'reviewing' })
+    const beta = seedProject({ name: 'Beta', currentPhase: 'review', status: 'reviewing' })
+    seedGate(beta, { type: 'escalation' })
+    seedGate(beta, { type: 'pre_release' })
     seedProject({ name: 'Gamma', currentPhase: 'release', status: 'released' })
     renderRoute('/projects')
 
@@ -194,7 +197,20 @@ describe('Projects list (FR-6)', () => {
     })
     expect(tile('In review')).toHaveTextContent('1')
     expect(tile('Released')).toHaveTextContent('1')
-    expect(tile('Awaiting gates')).toHaveTextContent('—')
+    expect(tile('Awaiting gates')).toHaveTextContent('2')
+  })
+
+  it('FR53_projects_list: the KPI row counts only the projects matching the filters', async () => {
+    signInAsUser()
+    seedProject({ name: 'Alpha', status: 'active' })
+    seedProject({ name: 'Gamma', currentPhase: 'release', status: 'released' })
+    renderRoute('/projects?status=released')
+    const filteredTotals = await screen.findByRole('region', { name: 'Project totals' })
+    await waitFor(() => {
+      expect(within(filteredTotals).getByText('Active').nextElementSibling).toHaveTextContent('0')
+    })
+    expect(within(filteredTotals).getByText('Released').nextElementSibling).toHaveTextContent('1')
+    expect(within(filteredTotals).getAllByText('Of 1 matching project')).toHaveLength(4)
   })
 
   it('FR53_projects_list: from md up the projects are a sortable table; the header sort is kept in the URL', async () => {

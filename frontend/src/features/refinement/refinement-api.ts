@@ -6,6 +6,7 @@ import { projectKeys, unwrap } from '../projects/projects-api'
 export type Refinement = Schemas['RefinementDto']
 export type RefinementRound = Schemas['RefinementRoundDto']
 export type RefinementQuestion = Schemas['RefinementQuestionDto']
+export type RefinementRoundHistory = Schemas['RefinementRoundHistoryDto']
 export type RefinementAnswerRequest = Schemas['RefinementAnswerRequest']
 
 export const refinementKeys = {

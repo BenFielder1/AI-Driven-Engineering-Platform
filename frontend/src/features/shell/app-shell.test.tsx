@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { Schemas } from '../../api/client'
 import { authDb, seedUser, signInAs } from '../../mocks/handlers/auth'
@@ -202,6 +202,53 @@ describe('FR-53: app shell', () => {
     expect(authDb.currentUserId).toBeNull()
     expect(queryClient.getQueryData(['me', 'tokens', 'list'])).toBeUndefined()
     expect(queryClient.getQueryData(authKeys.me())).toBeNull()
+  })
+
+  it('NFR-A11Y2: right after Account navigates, or while the menu is still closing, a click on the trigger opens the menu', async () => {
+    // jsdom runs no CSS animations: report the menu's enter/exit animation names (an inline `animation-name` wins, as in
+    // a browser) so a closed menu stays mounted for its exit animation.
+    const realStyle = window.getComputedStyle.bind(window)
+    const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) => {
+      const style = realStyle(element, pseudo)
+      if (!(element instanceof HTMLElement) || !element.matches('[data-slot=dropdown-menu-content]')) {
+        return style
+      }
+      return new Proxy(style, {
+        get(target, prop) {
+          if (prop === 'animationName') {
+            return element.style.animationName || (element.getAttribute('data-state') === 'closed' ? 'exit' : 'enter')
+          }
+          const value: unknown = Reflect.get(target, prop)
+          return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value
+        },
+      })
+    })
+    const trigger = () => within(sidebar()).getByRole('button', { name: /Account menu for/ })
+    try {
+      signInAs({ name: 'Bob Builder' })
+      renderRoute('/projects')
+      const user = userEvent.setup()
+      await screen.findByRole('heading', { level: 1, name: 'Projects' })
+
+      // Choosing Account closes the menu at once (no exit animation left over the page), so the next click opens it.
+      const menu = await openUserMenu(user)
+      await user.click(within(menu).getByRole('menuitem', { name: /Account/ }))
+      expect(await screen.findByRole('heading', { level: 1, name: 'Account' })).toBeInTheDocument()
+      expect(screen.queryByRole('menu', { hidden: true })).not.toBeInTheDocument()
+      await user.click(trigger())
+      expect(await screen.findByRole('menu')).toHaveAttribute('data-state', 'open')
+
+      // Escape animates the close; a click on the trigger meanwhile reopens it instead of being dismissed as "outside".
+      await user.keyboard('{Escape}')
+      expect(screen.getByRole('menu', { hidden: true })).toHaveAttribute('data-state', 'closed')
+      await user.click(trigger())
+      await waitFor(() => {
+        expect(screen.getByRole('menu')).toHaveAttribute('data-state', 'open')
+      })
+      expect(trigger()).toHaveAttribute('aria-expanded', 'true')
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('NFR-A11Y: has a skip link to the main landmark, and the user menu closes with Escape back to its trigger', async () => {

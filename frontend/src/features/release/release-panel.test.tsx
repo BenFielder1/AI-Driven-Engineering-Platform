@@ -155,7 +155,7 @@ describe('Release and rollback events (FR-46, FR-50)', () => {
   it('FR46, FR60: a release event (including VERSION_STARTED) refreshes the whole project and the list', async () => {
     const client = new QueryClient()
     const spy = vi.spyOn(client, 'invalidateQueries')
-    await invalidateForEvent(client, 'p1', 'release')
+    await invalidateForEvent(client, 'p1', 'release', 'RELEASE_COMPLETED')
     const keys = spy.mock.calls.map(([filters]) => filters?.queryKey)
     // The detail key prefixes the releases, release versions and state queries.
     expect(keys).toContainEqual(projectKeys.detail('p1'))

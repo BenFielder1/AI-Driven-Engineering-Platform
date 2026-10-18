@@ -107,12 +107,13 @@ describe('Stage pages (FR-55)', () => {
     )
   })
 
-  it('FR46_current_stage_without_a_version_polls_so_a_missed_live_event_cannot_leave_it_empty', async () => {
+  it('FR46_current_stage_without_a_version_polls_while_its_run_is_running_so_a_missed_live_event_cannot_leave_it_empty', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const project = seedProjectAs('owner', (p) => {
         p.currentPhase = 'planning'
         seedGate(p, { type: 'plan_approval' })
+        seedRun(p, { agent: 'plan_generator', status: 'running' })
       })
       await openStage(project, 'planning', 'Planning')
       expect(screen.getByRole('heading', { name: 'No implementation plan yet' })).toBeInTheDocument()
@@ -125,6 +126,26 @@ describe('Stage pages (FR-55)', () => {
         expect(screen.queryByRole('heading', { name: 'No implementation plan yet' })).not.toBeInTheDocument()
       })
       expect(await within(stageArtifact()).findByText('Build it.')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('FR46_current_stage_without_a_version_does_not_poll_when_no_draft_is_expected', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const project = seedProjectAs('owner', (p) => {
+        p.currentPhase = 'planning'
+        seedRun(p, { agent: 'plan_generator', status: 'failed' })
+      })
+      await openStage(project, 'planning', 'Planning')
+      expect(screen.getByRole('heading', { name: 'No implementation plan yet' })).toBeInTheDocument()
+
+      // Nothing is producing a plan: the page doesn't re-check the history on a timer (live events still refresh it).
+      seedArtifact(project, { type: 'implementation_plan', content: '# Plan' })
+      await vi.advanceTimersByTimeAsync(STAGE_EMPTY_POLL_MS * 2)
+
+      expect(screen.getByRole('heading', { name: 'No implementation plan yet' })).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }
@@ -258,6 +279,24 @@ describe('Stage pages (FR-55)', () => {
     expect(screen.getByText(errorMessages.UNCOVERED_REQUIREMENTS)).toBeInTheDocument()
     const ids = screen.getByRole('list', { name: 'Requirements not covered by any step' })
     expect(within(ids).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['FR-3', 'FR-5'])
+  })
+
+  it('FR89_planning_shows_the_missing_vercel_config_warning_with_the_server_specifics', async () => {
+    const block = { format: 1, steps: [{ number: 1, title: 'Scaffold', covers: ['FR-1'], files: [{ path: 'package.json', action: 'create' }], dependencies: [] }] }
+    const content = `# Plan\n\n\`\`\`aide-plan\n${JSON.stringify(block)}\n\`\`\`\n`
+    const project = seedProjectAs('owner', (p) => {
+      p.currentPhase = 'planning'
+      seedArtifact(p, {
+        type: 'implementation_plan',
+        content,
+        warnings: [{ code: 'MISSING_VERCEL_CONFIG', message: 'No step declares vercel.json, and the repository has none.', ids: [] }],
+      })
+    })
+    await openStage(project, 'planning', 'Planning')
+
+    expect(await screen.findByText('No vercel.json')).toBeInTheDocument()
+    expect(screen.getByText(errorMessages.MISSING_VERCEL_CONFIG)).toBeInTheDocument()
+    expect(screen.getByText('No step declares vercel.json, and the repository has none.')).toBeInTheDocument()
   })
 
   it('FR55_dependency_waves_follow_the_latest_dependency', () => {

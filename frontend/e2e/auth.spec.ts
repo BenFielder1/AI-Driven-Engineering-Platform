@@ -7,8 +7,8 @@ import { password, registerViaApi, registerViaUi } from './support/api.ts'
 // through support/api.ts's register lock and waits out a 429 (Retry-After). Only FR-1 registers through the form.
 
 async function openUserMenu(page: Page) {
-  // The menu is non-modal: a menu that is still playing its close animation (after a menuitem navigated) dismisses
-  // on the next outside pointerdown, swallowing a reopen click. Wait for it to unmount, then open and confirm.
+  // Choosing a menu item closes the menu at once, and the trigger always reopens it (dropdown-menu.tsx); waiting for
+  // any previous menu to be gone first just keeps the "menu visible" check below about the menu this click opened.
   await expect(page.getByRole('menu')).toHaveCount(0)
   await page.getByRole('button', { name: /Account menu for/ }).click()
   await expect(page.getByRole('menu')).toBeVisible()

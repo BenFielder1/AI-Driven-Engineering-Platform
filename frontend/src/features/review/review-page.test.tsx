@@ -263,6 +263,23 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
     expect(within(latest).queryByText(/Why it escalated/)).not.toBeInTheDocument()
   })
 
+  it('FR89_a_missing_vercel_json_is_a_deterministic_finding_with_its_file', async () => {
+    const message =
+      `vercel.json is missing: add it with git.deploymentEnabled { "aide/**": false } so Vercel doesn't deploy AIDE branches on its own (FR-89).`
+    const project = seedReview('owner', (p) => {
+      seedComplianceReport(p, {
+        categoryScores: categoryScores(0.85),
+        decision: 'review_required',
+        violations: [{ category: 'architecture', severity: 'major', source: 'deterministic', message, file: 'vercel.json', evidence: null }],
+      })
+    })
+    await openReview(project)
+
+    const findings = region(/^Deterministic findings/)
+    expect(within(findings).getByText(message)).toBeInTheDocument()
+    expect(within(findings).getByText(/· vercel\.json$/)).toBeInTheDocument()
+  })
+
   it('FR39_decision_copy_review_required_links_the_optimisation_plan_that_needs_approval', async () => {
     const project = seedReview('contributor', (p) => {
       seedComplianceReport(p, {

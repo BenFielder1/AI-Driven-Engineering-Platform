@@ -21,8 +21,15 @@ import { formatDateTime, formatNumber, phaseLabels, phases, roleLabels, statusLa
 import { PresetChip } from '../presets/preset-chip'
 import { usePresets } from '../presets/presets-api'
 import { PhaseBadge, StatusBadge } from './project-badges'
-import { KPI_SAMPLE_SIZE, projectKpis } from './project-kpis'
-import { PROJECTS_PAGE_SIZE, useProjects, type ProjectSortBy, type ProjectSummary, type SortOrder } from './projects-api'
+import {
+  PROJECTS_PAGE_SIZE,
+  useProjectKpis,
+  useProjects,
+  type ProjectKpiFilters,
+  type ProjectSortBy,
+  type ProjectSummary,
+  type SortOrder,
+} from './projects-api'
 import { oneOf, SEARCH_DEBOUNCE_MS, type ProjectsSearch } from './projects-search'
 
 const sortByOptions: Record<ProjectSortBy, string> = { updated: 'Last updated', created: 'Created', name: 'Name' }
@@ -33,22 +40,24 @@ interface ProjectsListPageProps {
   onSearchChange: (next: ProjectsSearch) => void
 }
 
-/** SPEC 7.2 KPI row: active, in review, awaiting gates, released, from the newest projects the list returns. */
-function ProjectKpiRow() {
-  const sample = useProjects({ page: 1, limit: KPI_SAMPLE_SIZE, sortBy: 'updated', sortOrder: 'desc' })
-  if (sample.isPending) {
+/**
+ * SPEC 7.2 KPI row (FR-53): active, in review, awaiting gates and released, counted by GET /projects/kpis over the
+ * projects matching the list's filters.
+ */
+function ProjectKpiRow({ filters, filtered }: { filters: ProjectKpiFilters; filtered: boolean }) {
+  const kpis = useProjectKpis(filters)
+  if (kpis.isPending) {
     return <SkeletonCards className="mb-5" />
   }
   // The list itself reports load errors; the tiles just stay empty.
-  const kpis = sample.data ? projectKpis(sample.data.items, sample.data.total) : null
-  const value = (n: number | null | undefined) => (n === null || n === undefined ? '—' : formatNumber(n))
-  const footer = kpis?.partial ? `Of your ${String(KPI_SAMPLE_SIZE)} most recently updated projects` : undefined
+  const value = (n: number | undefined) => (n === undefined ? '—' : formatNumber(n))
+  const footer = filtered && kpis.data ? `Of ${formatNumber(kpis.data.total)} matching ${kpis.data.total === 1 ? 'project' : 'projects'}` : undefined
   return (
     <section aria-label="Project totals" className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <MetricCard label="Active" value={value(kpis?.active)} footer={footer} />
-      <MetricCard label="In review" value={value(kpis?.inReview)} footer={footer} />
-      <MetricCard label="Awaiting gates" value={value(kpis?.awaitingGates)} footer="Shown on each project's overview" />
-      <MetricCard label="Released" value={value(kpis?.released)} footer={footer} />
+      <MetricCard label="Active" value={value(kpis.data?.active)} footer={footer} />
+      <MetricCard label="In review" value={value(kpis.data?.inReview)} footer={footer} />
+      <MetricCard label="Awaiting gates" value={value(kpis.data?.awaitingGates)} footer={footer} />
+      <MetricCard label="Released" value={value(kpis.data?.released)} footer={footer} />
     </section>
   )
 }
@@ -100,17 +109,14 @@ export function ProjectsListPage({ search, onSearchChange }: ProjectsListPagePro
   const page = search.page ?? 1
   const sortBy = search.sortBy ?? 'updated'
   const sortOrder = search.sortOrder ?? 'desc'
-  const projects = useProjects({
-    page,
-    limit: PROJECTS_PAGE_SIZE,
+  const filters: ProjectKpiFilters = {
     search: search.search,
     phase: search.phase,
     status: search.status,
     hasDevelopmentVersion: search.hasDevelopmentVersion,
     preset: search.preset,
-    sortBy,
-    sortOrder,
-  })
+  }
+  const projects = useProjects({ page, limit: PROJECTS_PAGE_SIZE, ...filters, sortBy, sortOrder })
   const filtered =
     Boolean(search.search ?? search.phase ?? search.status ?? search.preset) || search.hasDevelopmentVersion !== undefined
 
@@ -135,7 +141,7 @@ export function ProjectsListPage({ search, onSearchChange }: ProjectsListPagePro
         }
       />
 
-      <ProjectKpiRow />
+      <ProjectKpiRow filters={filters} filtered={filtered} />
 
       <ProjectFilters search={search} onChange={update} />
 

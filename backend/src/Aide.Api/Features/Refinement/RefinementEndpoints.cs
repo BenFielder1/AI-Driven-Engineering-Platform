@@ -24,7 +24,7 @@ public static class RefinementEndpoints
 
         group.MapGet("/", GetRefinement)
             .WithName("GetRefinement")
-            .WithSummary("The refinement state of a release version (default: the version in development, else the latest released), members: its latest project request version, its latest round with its status, and the clarifying questions of its latest completed round with any answers already given.")
+            .WithSummary("The refinement state of a release version (default: the version in development, else the latest released), members: its latest project request version, its latest round with its status, and the clarifying questions of its latest completed round with any answers already given, and (FR-55) every round of the version, newest first, with the questions each asked and the answers given to them.")
             .Produces<RefinementDto>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or the release version in this project."));

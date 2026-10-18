@@ -214,6 +214,12 @@ public static class ErrorCodes
     public const string PlanOrder = "PLAN_ORDER";
 
     /// <summary>
+    /// FR-89 (a <b>warning</b>, never blocking): the version's preset deploys to Vercel, the base commit has no
+    /// <c>vercel.json</c> and no plan step declares one, so nothing would stop Vercel's automatic deploys of <c>aide/**</c>.
+    /// </summary>
+    public const string MissingVercelConfig = "MISSING_VERCEL_CONFIG";
+
+    /// <summary>
     /// FR-71: a repo tool call beyond the run's limits (25 calls, 400 KB read); returned to the agent as the tool result,
     /// which must then answer with what it has. Unsafe tool paths reuse <see cref="Guardian.UnsafePath"/> (<c>UNSAFE_PATH</c>).
     /// </summary>

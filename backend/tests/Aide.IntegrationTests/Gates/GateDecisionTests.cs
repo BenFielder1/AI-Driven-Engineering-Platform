@@ -199,6 +199,46 @@ public sealed class GateDecisionTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task FR62_Gates_are_filtered_by_release_version()
+    {
+        using var fixture = await ProjectApi.FixtureAsync(factory);
+        var id = fixture.Project.Id;
+        var current = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
+        var earlier = await LifecycleSeed.AddGateAsync(factory, id, GateType.SpecApproval, createdAt: DateTimeOffset.UtcNow.AddDays(-6));
+        var currentVersion = Guid.Empty;
+        var releasedVersion = Guid.Empty;
+        await ProjectApi.WithDbAsync(factory, async db =>
+        {
+            currentVersion = await db.Projects.AsNoTracking().Where(p => p.Id == id).Select(p => p.CurrentReleaseVersionId!.Value).SingleAsync(Ct);
+            var released = new Domain.Entities.ReleaseVersion
+            {
+                ProjectId = id,
+                Version = "0.0.9",
+                Status = Domain.Entities.ReleaseVersionStatus.Released,
+                Tag = "v0.0.9",
+                Request = "Earlier release",
+                CreatedAt = DateTimeOffset.UtcNow.AddDays(-7),
+                ReleasedAt = DateTimeOffset.UtcNow.AddDays(-6),
+            };
+            db.ReleaseVersions.Add(released);
+            await db.SaveChangesAsync(Ct);
+            releasedVersion = released.Id;
+            await db.ApprovalGates.Where(g => g.Id == earlier.Id).ExecuteUpdateAsync(s => s.SetProperty(g => g.ReleaseVersionId, released.Id), Ct);
+        });
+
+        var ofCurrent = await ProjectApi.ReadAsync<List<GateDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/gates?releaseVersionId={currentVersion}", UriKind.Relative), Ct));
+        var ofReleased = await ProjectApi.ReadAsync<List<GateDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/gates?releaseVersionId={releasedVersion}&status=pending", UriKind.Relative), Ct));
+        var ofUnknown = await ProjectApi.ReadAsync<List<GateDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/gates?releaseVersionId={Guid.NewGuid()}", UriKind.Relative), Ct));
+
+        Assert.Equal([current.Id], ofCurrent.Select(g => g.Id));
+        Assert.Equal([earlier.Id], ofReleased.Select(g => g.Id));
+        Assert.Equal(releasedVersion, ofReleased[0].ReleaseVersionId);
+        Assert.Empty(ofUnknown);
+        using var malformed = await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/gates?releaseVersionId=nope", UriKind.Relative), Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode);
+    }
+
+    [Fact]
     public async Task FR14_Continue_allows_one_more_review_cycle()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);

@@ -51,6 +51,13 @@ public sealed record ProjectDto(
     bool DeploymentsEnabled);
 
 /// <summary>
+/// §7.2: the projects-list KPI row, over the projects matching the list's filters. <c>active</c>: not <c>released</c> (any
+/// phase, including rolled back); <c>inReview</c>: status <c>reviewing</c>; <c>awaitingGates</c>: pending gates across
+/// those projects; <c>released</c>: status <c>released</c>; <c>total</c>: the projects counted.
+/// </summary>
+public sealed record ProjectKpisDto(int Total, int Active, int InReview, int AwaitingGates, int Released);
+
+/// <summary>
 /// A row of the projects list (FR-6, FR-62). <c>myRole</c> is <c>null</c> for an Admin who isn't a member;
 /// <c>releasedVersion</c> / <c>developmentVersion</c> are the two version badges (<c>null</c> when not released / nothing in
 /// development); <c>checkpoint</c> was <c>projectVersion</c> (D-V2-11); <c>presetId</c>/<c>presetName</c>/<c>presetVersion</c>

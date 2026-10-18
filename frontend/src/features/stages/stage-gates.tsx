@@ -42,7 +42,8 @@ export function StageGates({
   pendingDetails?: (gate: Gate) => ReactNode
 }) {
   const { project, can, readOnly, view } = useProjectAccess()
-  const gates = useGates(project.id)
+  // The API scopes the list to the release version on screen (FR-62).
+  const gates = useGates(project.id, view.version?.id)
   const [dialog, setDialog] = useState<OpenDialog>(null)
   const headingRef = useRef<HTMLParagraphElement>(null)
   if (types.length === 0) {
@@ -50,9 +51,7 @@ export function StageGates({
   }
   const canDecide = can('decideGates')
   const versionOf = (gate: Gate) => view.versions.find((v) => v.id === gate.releaseVersionId)
-  const shownVersionId = view.version?.id ?? null
-  const inShownVersion = (gate: Gate) => shownVersionId === null || gate.releaseVersionId === shownVersionId
-  const mine = (gates.data ?? []).filter((g) => types.includes(g.type) && inShownVersion(g) && (filter?.(g) ?? true))
+  const mine = (gates.data ?? []).filter((g) => types.includes(g.type) && (filter?.(g) ?? true))
   const pending = mine.filter((g) => g.status === 'pending')
   const decided = mine.filter((g) => g.status !== 'pending').slice(0, RECENT_DECIDED)
 

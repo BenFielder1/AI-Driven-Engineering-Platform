@@ -302,8 +302,12 @@ export const lifecycleHandlers = [
     if (a instanceof Response) {
       return a
     }
-    const status = new URL(request.url).searchParams.get('status')
-    return HttpResponse.json<Gate[]>(a.project.gates.filter((g) => !status || g.status === status))
+    const q = new URL(request.url).searchParams
+    const status = q.get('status')
+    const releaseVersionId = q.get('releaseVersionId')
+    return HttpResponse.json<Gate[]>(
+      a.project.gates.filter((g) => (!status || g.status === status) && (!releaseVersionId || g.releaseVersionId === releaseVersionId)),
+    )
   }),
 
   // FR-13, FR-14: approve (escalation gates take a decision).

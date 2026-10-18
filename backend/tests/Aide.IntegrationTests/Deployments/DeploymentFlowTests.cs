@@ -151,6 +151,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         var finding = Assert.Single(report.Violations, v => v.Message == "Vercel preview build failed");
         Assert.Equal((ReviewCategory.Architecture, Severity.Critical, FindingSource.Deterministic), (finding.Category, finding.Severity, finding.Source));
         Assert.Contains("Type error", finding.Evidence, StringComparison.Ordinal);
+        Assert.DoesNotContain(report.Violations, v => v.Message.Contains("(FR-89)", StringComparison.Ordinal)); // FR-89: never with the Fake provider
         var architecture = report.CategoryScores.Single(c => c.Category == ReviewCategory.Architecture);
         Assert.Equal(0.20m, architecture.AgentScore - architecture.Score);
         Assert.Equal(ReviewDecision.ReleaseEligible, report.Decision);

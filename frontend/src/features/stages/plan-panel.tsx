@@ -14,11 +14,12 @@ const warningTitles: Readonly<Record<string, { title: string; idsLabel: string }
   UNCOVERED_REQUIREMENTS: { title: 'Uncovered requirements', idsLabel: 'Requirements not covered by any step' },
   AGENT_SCOPE: { title: "Files outside the agent's owned paths", idsLabel: 'Steps and files outside their agent’s paths' },
   PLAN_ORDER: { title: 'Plan order', idsLabel: 'Steps out of the recommended order' },
+  MISSING_VERCEL_CONFIG: { title: 'No vercel.json', idsLabel: 'Affected items' },
 }
 
 /**
  * FR-76, §4.11, §4.13: the API's non-blocking findings about this plan version (UNCOVERED_REQUIREMENTS, and with a
- * preset AGENT_SCOPE and PLAN_ORDER), each with its copy, the server's specifics and its ids.
+ * preset AGENT_SCOPE and PLAN_ORDER, and for a Vercel preset MISSING_VERCEL_CONFIG, FR-89), each with its copy, the server's specifics and its ids.
  */
 function PlanWarnings({ warnings }: { warnings: readonly Schemas['ArtifactWarningDto'][] }) {
   if (warnings.length === 0) {

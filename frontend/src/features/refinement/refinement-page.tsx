@@ -29,6 +29,7 @@ import {
   type RefinementAnswerRequest,
   type RefinementQuestion,
   type RefinementRound,
+  type RefinementRoundHistory,
 } from './refinement-api'
 import { answersSchema, type AnswersValues } from './refinement-schemas'
 
@@ -167,6 +168,70 @@ function QuestionList({ questions }: { questions: RefinementQuestion[] }) {
         </li>
       ))}
     </ol>
+  )
+}
+
+/**
+ * FR-55, FR-27: every round of the release version, newest first, each collapsible (the latest open): its status, run,
+ * trigger and draft, the clarifying questions it asked with the answers given to them, and what its agent was given.
+ * Always read-only; the current questions are answered in the card above.
+ */
+function RoundHistory({ projectId, rounds }: { projectId: string; rounds: RefinementRoundHistory[] }) {
+  return (
+    <StageSection id="refinement-rounds" title="Rounds">
+      <ol aria-label="Refinement rounds, newest first" className="flex flex-col gap-2">
+        {rounds.map((r, i) => (
+          <li key={r.jobId} data-testid="refinement-round">
+            <details open={i === 0} className="group rounded-lg border border-border/60 p-3">
+              <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium">Round {r.round}</span>
+                <RunStatusBadge status={r.status} />
+                <span className="text-muted-foreground">
+                  {r.questions.length === 1 ? '1 question' : `${String(r.questions.length)} questions`}
+                  {r.draftArtifactVersion !== null && ` · draft v${String(r.draftArtifactVersion)}`}
+                </span>
+                <span className="text-muted-foreground">
+                  · <RelativeTime iso={r.startedAt} />
+                </span>
+              </summary>
+              <div className="mt-3 flex flex-col gap-3">
+                <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                  {r.trigger && <span>{triggerLabels[r.trigger]}</span>}
+                  {r.status !== 'queued' && (
+                    <Link to="/projects/$projectId/runs" params={{ projectId }} search={{ run: r.runId }} className="text-primary underline">
+                      View the agent run<span className="sr-only"> for round {r.round}</span>
+                    </Link>
+                  )}
+                </p>
+                {r.status === 'failed' && r.error && (
+                  <p className="text-sm break-words text-destructive">{describeRunError(r.error).message}</p>
+                )}
+                {r.feedback && (
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-sm font-semibold">Feedback given to the agent</h4>
+                    <p className="text-sm whitespace-pre-wrap break-words">{r.feedback}</p>
+                  </div>
+                )}
+                {r.answers.length > 0 && (
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-sm font-semibold">Answers sent with this round</h4>
+                    <AnswerList answers={r.answers} />
+                  </div>
+                )}
+                {r.questions.length > 0 ? (
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-sm font-semibold">Clarifying questions it asked</h4>
+                    <QuestionList questions={r.questions} />
+                  </div>
+                ) : (
+                  r.status === 'succeeded' && <p className="text-sm text-muted-foreground">This round asked no clarifying questions.</p>
+                )}
+              </div>
+            </details>
+          </li>
+        ))}
+      </ol>
+    </StageSection>
   )
 }
 
@@ -380,7 +445,7 @@ export function RefinementPage() {
   } else if (refinement.isError) {
     rounds = <ErrorState error={refinement.error} title="Refinement couldn't load" onRetry={() => void refinement.refetch()} />
   } else {
-    const { latestDraft, latestRound, questions, questionsRunId } = refinement.data
+    const { latestDraft, latestRound, questions, questionsRunId, rounds: history } = refinement.data
     const pending = isRoundPending(latestRound)
     const canRun = writer && inPhase && !pending
     rounds = (
@@ -391,6 +456,7 @@ export function RefinementPage() {
           stage="refinement"
           type="project_request"
           expectedLatest={latestDraft?.version ?? null}
+          awaitingDraft={pending}
           notStarted="The Idea Refinement agent turns the project idea (the request above) into a project request. Start the first round below; the agent may ask clarifying questions."
         />
 
@@ -419,6 +485,8 @@ export function RefinementPage() {
             )}
           </Card>
         )}
+
+        {history.length > 0 && <RoundHistory projectId={project.id} rounds={history} />}
       </>
     )
   }

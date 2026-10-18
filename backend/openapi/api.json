@@ -2722,6 +2722,103 @@
         }
       }
     },
+    "/api/projects/kpis": {
+      "get": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "§7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion and preset filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released).",
+        "operationId": "GetProjectKpis",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "name": "phase",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "refinement",
+                "specification",
+                "planning",
+                "execution",
+                "review",
+                "release"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "active",
+                "building",
+                "reviewing",
+                "releasing",
+                "released",
+                "rolled_back",
+                "awaiting_merge"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasDevelopmentVersion",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "preset",
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectKpisDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}": {
       "get": {
         "tags": [
@@ -4687,7 +4784,7 @@
         "tags": [
           "Gates"
         ],
-        "summary": "The project's gates, newest first, optionally filtered by status (members).",
+        "summary": "The project's gates, newest first, optionally filtered by status and by releaseVersionId (FR-62: the gates of one release version; an id of another project's version gives an empty list) (members).",
         "operationId": "ListGates",
         "parameters": [
           {
@@ -4710,6 +4807,14 @@
                 "cancelled"
               ],
               "type": "string"
+            }
+          },
+          {
+            "name": "releaseVersionId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -6144,7 +6249,7 @@
         "tags": [
           "Refinement"
         ],
-        "summary": "The refinement state of a release version (default: the version in development, else the latest released), members: its latest project request version, its latest round with its status, and the clarifying questions of its latest completed round with any answers already given.",
+        "summary": "The refinement state of a release version (default: the version in development, else the latest released), members: its latest project request version, its latest round with its status, and the clarifying questions of its latest completed round with any answers already given, and (FR-55) every round of the version, newest first, with the questions each asked and the answers given to them.",
         "operationId": "GetRefinement",
         "parameters": [
           {
@@ -14262,6 +14367,39 @@
         },
         "description": "A project event pushed live to everyone viewing the project (FR-46): the SignalR `projectEvent` message.\n`id`, `type`, `payload` and `createdAt` are the stored audit event (FR-50); `category` tells the\npage which data to refresh. Not an HTTP response: the schema is added to the OpenAPI components by\nLiveContractDocumentTransformer so the generated client has the type."
       },
+      "ProjectKpisDto": {
+        "required": [
+          "total",
+          "active",
+          "inReview",
+          "awaitingGates",
+          "released"
+        ],
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "active": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inReview": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "awaitingGates": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "released": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "§7.2: the projects-list KPI row, over the projects matching the list's filters. `active`: not `released` (any\nphase, including rolled back); `inReview`: status `reviewing`; `awaitingGates`: pending gates across\nthose projects; `released`: status `released`; `total`: the projects counted."
+      },
       "ProjectRole": {
         "enum": [
           "viewer",
@@ -14776,7 +14914,8 @@
           "latestRound",
           "questionsRunId",
           "questions",
-          "codebaseSummary"
+          "codebaseSummary",
+          "rounds"
         ],
         "type": "object",
         "properties": {
@@ -14815,9 +14954,15 @@
           },
           "codebaseSummary": {
             "$ref": "#/components/schemas/CodebaseSummaryStatusDto"
+          },
+          "rounds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RefinementRoundHistoryDto"
+            }
           }
         },
-        "description": "The refinement page (FR-27): the latest project request version (`latestDraft`, without content — read it from\nthe artifacts API), the latest round and its status, and the clarifying questions of the latest completed round\n(`questionsRunId`) with any answers already given. `codebaseSummary` is the Repository Analyst's state for\nthe version (FR-70)."
+        "description": "The refinement page (FR-27): the latest project request version (`latestDraft`, without content — read it from\nthe artifacts API), the latest round and its status, and the clarifying questions of the latest completed round\n(`questionsRunId`) with any answers already given. `codebaseSummary` is the Repository Analyst's state for\nthe version (FR-70). `rounds` (FR-55) is every round of the selected release version, newest first (at most\n`50`, the latest), with the questions each asked and the answers they were given."
       },
       "RefinementQuestionDto": {
         "required": [
@@ -14931,6 +15076,101 @@
           }
         },
         "description": "One refinement round (FR-27): an idea refinement job and its agent run. `runId` is the run that produced (or will\nproduce) the draft — the corrective re-run when the first reply couldn't be read; the run appears under\n`/runs/{runId}` once the job has started. `status` is `queued` until then. `trigger` says who started\nit: a writer (`user_requested`), or a rejected or corrupted project request. A round that ended without a draft\nbecause the project no longer allowed one (e.g. a release in progress) is `cancelled`, with the reason in `error`. `answers` and `feedback` are\nwhat the agent was given; `draftArtifactId`/`draftVersion` the project request version it created."
+      },
+      "RefinementRoundHistoryDto": {
+        "required": [
+          "round",
+          "runId",
+          "jobId",
+          "trigger",
+          "status",
+          "error",
+          "startedAt",
+          "completedAt",
+          "questions",
+          "answers",
+          "feedback",
+          "draftArtifactId",
+          "draftArtifactVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "round": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trigger": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentJobTrigger"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentRunStatus"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RefinementQuestionDto"
+            }
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RefinementAnswerDto"
+            }
+          },
+          "feedback": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "draftArtifactId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "draftArtifactVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "One round of the refinement history (FR-55, FR-27). `round` is its 1-based number within the release version\n(oldest = 1). `startedAt` is when it was queued, `completedAt` when its run (or job) ended. `questions` are\nthe clarifying questions this round asked (empty unless it `succeeded`), each with the `answer` a later round\ngave it (the latest round started before the next succeeded round, as on the page), else `null`. `answers` and\n`feedback` are what this round's agent was given; `draftArtifactId`/`draftArtifactVersion` the project\nrequest version it created."
       },
       "RegisterRequest": {
         "required": [

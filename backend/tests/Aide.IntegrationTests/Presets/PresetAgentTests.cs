@@ -160,9 +160,40 @@ public sealed class PresetAgentTests(AideApiFactory factory)
         Assert.Equal(JobStatus.Succeeded, Assert.Single(await AgentJobs.RunQueuedAsync(app, id)).Status);
 
         var plan = await ArtifactApi.ReadAsync(await ArtifactApi.GetAsync(fixture.Viewer.Client, id, "/implementation_plan/latest"));
-        var warning = Assert.Single(plan.Warnings);
-        Assert.Equal(ErrorCodes.AgentScope, warning.Code);
+        var warning = Assert.Single(plan.Warnings, w => w.Code == ErrorCodes.AgentScope);
         Assert.Contains("'components/TaskList.tsx'", Assert.Single(warning.Ids), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FR89_The_plan_read_surfaces_MISSING_VERCEL_CONFIG_against_the_deployment_root_directory()
+    {
+        var reply = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            steps = new object[]
+            {
+                new { number = 1, title = "Skeleton", task = "Scaffold.", files = new[] { new { path = "package.json", action = "create" }, new { path = "web/vercel.json", action = "create" } }, dependencies = Array.Empty<int>(), agent = "project-scaffolder", covers = Fr1 },
+            },
+        });
+        await using var app = AgentJobs.WithResponders(factory, new ScriptedResponder(AgentKind.PlanGenerator, reply));
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        var id = fixture.Project.Id;
+        await PlanningReadyAsync(app, id, Shipped("nextjs-frontend"));
+        await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(await AgentJobs.RunQueuedAsync(app, id)).Status);
+
+        // No deployment settings: vercel.json belongs at the repository root, and no step declares it there.
+        var plan = await ArtifactApi.ReadAsync(await ArtifactApi.GetAsync(fixture.Viewer.Client, id, "/implementation_plan/latest"));
+        var warning = Assert.Single(plan.Warnings, w => w.Code == ErrorCodes.MissingVercelConfig);
+        Assert.Contains("aide/**", Assert.Single(warning.Ids), StringComparison.Ordinal);
+
+        // With the Vercel project rooted at web/, the declared web/vercel.json clears it (warnings are computed on read).
+        await ProjectApi.WithDbAsync(app, async db =>
+        {
+            db.ProjectDeploymentSettings.Add(new ProjectDeploymentSettings { ProjectId = id, Provider = DeploymentProvider.Vercel, RootDirectory = "web", UpdatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync(Ct);
+        });
+        plan = await ArtifactApi.ReadAsync(await ArtifactApi.GetAsync(fixture.Viewer.Client, id, "/implementation_plan/latest"));
+        Assert.DoesNotContain(plan.Warnings, w => w.Code == ErrorCodes.MissingVercelConfig);
     }
 
     [Fact]

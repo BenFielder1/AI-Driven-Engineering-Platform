@@ -135,7 +135,10 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     /// <summary>
     /// FR-76, §4.13: an implementation plan's warnings, computed on read (<see cref="PresetPlanValidator.AllWarnings"/>):
     /// coverage (<c>UNCOVERED_REQUIREMENTS</c>, against the latest locked specification of its release version, so it follows
-    /// the spec it is checked against) and, with the version's preset, <c>AGENT_SCOPE</c> and <c>PLAN_ORDER</c>.
+    /// the spec it is checked against) and, with the version's preset, <c>AGENT_SCOPE</c>, <c>PLAN_ORDER</c> and (FR-89)
+    /// <c>MISSING_VERCEL_CONFIG</c>. The base commit isn't listed on read, so the Vercel warning applies to versions without
+    /// a base commit (a new repository); with existing code its base files are unknown and it is skipped. It looks for
+    /// <c>vercel.json</c> in the project's deployment root directory (the repository root without deployment settings).
     /// </summary>
     private async Task<IReadOnlyList<ArtifactWarningDto>> WarningsAsync(Artifact artifact, CancellationToken cancellationToken)
     {
@@ -158,9 +161,13 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             .Select(a => a.Content)
             .FirstOrDefaultAsync(cancellationToken);
         var requirements = spec is null ? null : RequirementParser.Parse(spec).Requirements;
+        var rootDirectory = await db.ProjectDeploymentSettings.AsNoTracking()
+            .Where(s => s.ProjectId == artifact.ProjectId)
+            .Select(s => s.RootDirectory)
+            .FirstOrDefaultAsync(cancellationToken);
         return
         [
-            .. PresetPlanValidator.AllWarnings(plan.Value, requirements, preset.Preset)
+            .. PresetPlanValidator.AllWarnings(plan.Value, requirements, preset.Preset, preset.BaseFiles, rootDirectory)
                 .Select(w => new ArtifactWarningDto(w.Code, w.Message, w.Details)),
         ];
     }

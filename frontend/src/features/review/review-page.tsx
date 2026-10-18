@@ -550,6 +550,9 @@ export function ReviewPage({
         <StageArtifact
           stage="review"
           type="optimization_plan"
+          // FR-40: a plan is only coming while a review runs or after a cycle decided review_required (the history polls
+          // only while it is still empty, i.e. none exists yet).
+          awaitingDraft={review.status === 'running' || latestReport?.decision === 'review_required'}
           notStarted="A review cycle that finds more work drafts an optimisation plan. Execution has to complete and a review has to run first."
         />
         {!readOnly && <PreviewDeploymentSection />}

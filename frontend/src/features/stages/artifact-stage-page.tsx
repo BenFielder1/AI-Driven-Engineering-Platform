@@ -12,6 +12,7 @@ import { StageGates } from './stage-gates'
 import { StageHeader } from './stage-header'
 import { stageGates } from './stage-model'
 import { StageRuns } from './stage-runs'
+import { useProducingRunActive } from './use-producing-run-active'
 
 interface ArtifactStageProps {
   /** `?version=N`: the artifact version on screen (the newest when absent). */
@@ -41,6 +42,7 @@ export function SpecificationPage({ version, onVersionChange }: ArtifactStagePro
   const { project } = useProjectAccess()
   useDocumentTitle(`${phaseLabels.specification} · ${project.name}`)
   const awaiting = useAwaitingApproval('specification', 'technical_specification')
+  const drafting = useProducingRunActive('spec_generator')
   return (
     <section aria-labelledby="specification-title" className="flex flex-col gap-5">
       <StageHeader stage="specification" awaitingApproval={awaiting} />
@@ -49,6 +51,7 @@ export function SpecificationPage({ version, onVersionChange }: ArtifactStagePro
         type="technical_specification"
         version={version}
         onVersionChange={onVersionChange}
+        awaitingDraft={drafting}
         notStarted="The Spec Generator writes the technical specification from the approved project request. Refinement has to finish first: approve the project request and advance to Specification."
       >
         {(artifact) => <SpecPanel content={artifact.content} />}
@@ -76,6 +79,7 @@ export function PlanningPage({ version, onVersionChange }: ArtifactStageProps) {
   const { project } = useProjectAccess()
   useDocumentTitle(`${phaseLabels.planning} · ${project.name}`)
   const awaiting = useAwaitingApproval('planning', 'implementation_plan')
+  const drafting = useProducingRunActive('plan_generator')
   return (
     <section aria-labelledby="planning-title" className="flex flex-col gap-5">
       <StageHeader stage="planning" awaitingApproval={awaiting} />
@@ -84,6 +88,7 @@ export function PlanningPage({ version, onVersionChange }: ArtifactStageProps) {
         type="implementation_plan"
         version={version}
         onVersionChange={onVersionChange}
+        awaitingDraft={drafting}
         notStarted="The Plan Generator writes the implementation plan from the approved specification. The specification has to be approved and the project advanced to Planning first."
       >
         {(artifact) => <PlanWithAgents artifact={artifact} projectId={project.id} />}

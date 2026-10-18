@@ -607,6 +607,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/kpis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** §7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion and preset filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released). */
+        get: operations["GetProjectKpis"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}": {
         parameters: {
             query?: never;
@@ -927,7 +944,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's gates, newest first, optionally filtered by status (members). */
+        /** The project's gates, newest first, optionally filtered by status and by releaseVersionId (FR-62: the gates of one release version; an id of another project's version gives an empty list) (members). */
         get: operations["ListGates"];
         put?: never;
         post?: never;
@@ -1182,7 +1199,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The refinement state of a release version (default: the version in development, else the latest released), members: its latest project request version, its latest round with its status, and the clarifying questions of its latest completed round with any answers already given. */
+        /** The refinement state of a release version (default: the version in development, else the latest released), members: its latest project request version, its latest round with its status, and the clarifying questions of its latest completed round with any answers already given, and (FR-55) every round of the version, newest first, with the questions each asked and the answers given to them. */
         get: operations["GetRefinement"];
         put?: never;
         post?: never;
@@ -3713,6 +3730,23 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /**
+         * @description §7.2: the projects-list KPI row, over the projects matching the list's filters. `active`: not `released` (any
+         *     phase, including rolled back); `inReview`: status `reviewing`; `awaitingGates`: pending gates across
+         *     those projects; `released`: status `released`; `total`: the projects counted.
+         */
+        ProjectKpisDto: {
+            /** Format: int32 */
+            total: number;
+            /** Format: int32 */
+            active: number;
+            /** Format: int32 */
+            inReview: number;
+            /** Format: int32 */
+            awaitingGates: number;
+            /** Format: int32 */
+            released: number;
+        };
         /** @enum {unknown} */
         ProjectRole: "viewer" | "contributor" | "owner" | null;
         /** @description All project settings with secrets as set / not set flags (FR-9). */
@@ -3875,7 +3909,8 @@ export interface components {
          * @description The refinement page (FR-27): the latest project request version (`latestDraft`, without content — read it from
          *     the artifacts API), the latest round and its status, and the clarifying questions of the latest completed round
          *     (`questionsRunId`) with any answers already given. `codebaseSummary` is the Repository Analyst's state for
-         *     the version (FR-70).
+         *     the version (FR-70). `rounds` (FR-55) is every round of the selected release version, newest first (at most
+         *     `50`, the latest), with the questions each asked and the answers they were given.
          */
         RefinementDto: {
             latestDraft: null | components["schemas"]["ArtifactSummaryDto"];
@@ -3884,6 +3919,7 @@ export interface components {
             questionsRunId: null | string;
             questions: components["schemas"]["RefinementQuestionDto"][];
             codebaseSummary: components["schemas"]["CodebaseSummaryStatusDto"];
+            rounds: components["schemas"]["RefinementRoundHistoryDto"][];
         };
         /**
          * @description A clarifying question of the latest completed round (FR-27). `answer` is the answer already given for the next
@@ -3921,6 +3957,36 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             completedAt: null | string;
+        };
+        /**
+         * @description One round of the refinement history (FR-55, FR-27). `round` is its 1-based number within the release version
+         *     (oldest = 1). `startedAt` is when it was queued, `completedAt` when its run (or job) ended. `questions` are
+         *     the clarifying questions this round asked (empty unless it `succeeded`), each with the `answer` a later round
+         *     gave it (the latest round started before the next succeeded round, as on the page), else `null`. `answers` and
+         *     `feedback` are what this round's agent was given; `draftArtifactId`/`draftArtifactVersion` the project
+         *     request version it created.
+         */
+        RefinementRoundHistoryDto: {
+            /** Format: int32 */
+            round: number;
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            jobId: string;
+            trigger: null | components["schemas"]["AgentJobTrigger"];
+            status: components["schemas"]["AgentRunStatus"];
+            error: null | string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+            questions: components["schemas"]["RefinementQuestionDto"][];
+            answers: components["schemas"]["RefinementAnswerDto"][];
+            feedback: null | string;
+            /** Format: uuid */
+            draftArtifactId: null | string;
+            /** Format: int32 */
+            draftArtifactVersion: null | number;
         };
         /** @description FR-1 registration. */
         RegisterRequest: {
@@ -6464,6 +6530,50 @@ export interface operations {
             };
         };
     };
+    GetProjectKpis: {
+        parameters: {
+            query?: {
+                search?: string;
+                phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+                status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
+                hasDevelopmentVersion?: boolean;
+                preset?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectKpisDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     GetProject: {
         parameters: {
             query?: never;
@@ -7968,6 +8078,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "pending" | "approved" | "rejected" | "cancelled";
+                releaseVersionId?: string;
             };
             header?: never;
             path: {

@@ -136,7 +136,62 @@ public sealed partial class RefinementService(
             .Select(q => new RefinementQuestionDto(q.Id, q.Question, q.Reason, given.GetValueOrDefault(q.Id)))
             .ToList();
 
-        return new RefinementDto(latestDraft, latest?.Dto, completed?.Dto.RunId, questions, await CodebaseSummaryAsync(projectId, versionId, cancellationToken));
+        return new RefinementDto(
+            latestDraft,
+            latest?.Dto,
+            completed?.Dto.RunId,
+            questions,
+            await CodebaseSummaryAsync(projectId, versionId, cancellationToken),
+            History(rounds));
+    }
+
+    /// <summary>
+    /// FR-55: every loaded round, newest first, numbered oldest = 1, with the questions each succeeded round asked and the
+    /// answers given to them: by the latest round started after it and up to the next succeeded round (the round that
+    /// answered them, or the latest retry when that one failed), matching <see cref="GetAsync"/> for the latest round.
+    /// </summary>
+    internal static IReadOnlyList<RefinementRoundHistoryDto> History(IReadOnlyList<Round> rounds)
+    {
+        var result = new RefinementRoundHistoryDto[rounds.Count];
+        for (var i = 0; i < rounds.Count; i++)
+        {
+            var round = rounds[i];
+            Round? answering = null;
+            if (round.Questions is not null)
+            {
+                // Newer rounds sit at lower indexes: walk forwards in time until the next round that asked questions.
+                for (var j = i - 1; j >= 0; j--)
+                {
+                    answering = rounds[j];
+                    if (rounds[j].Questions is not null)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            var given = (answering?.Dto.Answers ?? [])
+                .Where(a => a.QuestionId is not null)
+                .GroupBy(a => a.QuestionId!, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First().Answer, StringComparer.Ordinal);
+            var dto = round.Dto;
+            result[i] = new RefinementRoundHistoryDto(
+                round.Number,
+                dto.RunId,
+                dto.JobId,
+                dto.Trigger,
+                dto.Status,
+                dto.Error,
+                dto.CreatedAt,
+                dto.CompletedAt,
+                [.. (round.Questions ?? []).Select(q => new RefinementQuestionDto(q.Id, q.Question, q.Reason, given.GetValueOrDefault(q.Id)))],
+                dto.Answers,
+                dto.Feedback,
+                dto.DraftArtifactId,
+                dto.DraftVersion);
+        }
+
+        return result;
     }
 
     /// <summary>FR-70: the Repository Analyst's state for release version <paramref name="versionId"/>.</summary>
@@ -199,6 +254,11 @@ public sealed partial class RefinementService(
             return [];
         }
 
+        // FR-55: round numbers count every round of the version, also those older than the ones read.
+        var total = roundJobs.Count < RoundsRead
+            ? roundJobs.Count
+            : await db.Jobs.CountAsync(j => j.ProjectId == projectId && j.Type == JobTypes.IdeaRefinement && j.CreatedAt >= since && j.CreatedAt < until, cancellationToken);
+
         var runIds = roundJobs.SelectMany(j => new[] { AgentRunRules.RunId(j.Id), AgentRunRules.RunId(j.Id, AgentOutput.CorrectiveRunKey) }).ToList();
         var runs = await db.AgentRuns.AsNoTracking()
             .Where(r => r.ProjectId == projectId && runIds.Contains(r.Id))
@@ -241,7 +301,8 @@ public sealed partial class RefinementService(
                     draft?.Version,
                     job.CreatedAt,
                     final?.CompletedAt ?? job.CompletedAt),
-                questions));
+                questions,
+                total - result.Count));
         }
 
         return result;
@@ -275,7 +336,8 @@ public sealed partial class RefinementService(
         }
     }
 
-    private sealed record Round(RefinementRoundDto Dto, IReadOnlyList<RefinementQuestion>? Questions);
+    /// <summary>A loaded round: <c>Number</c> is its 1-based position within the release version (oldest = 1).</summary>
+    internal sealed record Round(RefinementRoundDto Dto, IReadOnlyList<RefinementQuestion>? Questions, int Number);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: refinement round queued as job {JobId} with {AnswerCount} answers")]
     private static partial void LogStarted(ILogger logger, Guid projectId, Guid jobId, int answerCount);

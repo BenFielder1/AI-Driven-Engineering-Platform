@@ -46,6 +46,10 @@ public sealed class SeedOptions
 /// locked, and the plan generation job is queued, so the Fake's scripted specialist plan appears as a draft. It has its own
 /// marker (<see cref="EventTypes.DemoPresetProjectSeeded"/>), so databases seeded before it get it on the next start.
 /// </para>
+/// <para>
+/// DEP-V2: on a database seeded under v1, the demo project (still in refinement) is upgraded once to released 0.1.0 when
+/// it is untouched (<see cref="UpgradeV1DemoAsync"/>), with its own marker (<see cref="EventTypes.DemoProjectReleaseUpgraded"/>).
+/// </para>
 /// </summary>
 public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSeeder> logger) : IHostedService
 {
@@ -56,6 +60,15 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
 
     /// <summary>DEP-V2: the version the demo project is seeded as released at.</summary>
     public const string DemoReleasedVersion = "0.1.0";
+
+    /// <summary>The <see cref="EventTypes.DemoProjectReleaseUpgraded"/> outcome when the v1 demo was moved to released 0.1.0.</summary>
+    public const string UpgradeReleased = "released";
+
+    /// <summary>The upgrade outcome when the demo project no longer exists.</summary>
+    public const string UpgradeSkippedMissing = "skipped_missing";
+
+    /// <summary>The upgrade outcome when the demo project was used or edited (or is already released).</summary>
+    public const string UpgradeSkippedTouched = "skipped_touched";
 
     /// <summary>The reason recorded on the demo's seeded transition into release.</summary>
     public const string DemoReleasedReason = "Demo project seeded as released 0.1.0";
@@ -118,6 +131,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         string? newPassword = null;
         Guid? demoProjectId = null;
         Guid? presetProjectId = null;
+        Guid? upgradedProjectId = null;
 
         await using (var transaction = await db.Database.BeginTransactionAsync(cancellationToken))
         {
@@ -137,6 +151,10 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
             if (!await DemoAlreadySeededAsync(services, db, admin, cancellationToken))
             {
                 demoProjectId = await CreateDemoProjectAsync(services, db, admin, cancellationToken);
+            }
+            else if (!await db.Events.AnyAsync(e => e.Type == EventTypes.DemoProjectReleaseUpgraded, cancellationToken))
+            {
+                upgradedProjectId = await UpgradeV1DemoAsync(services, db, admin, cancellationToken);
             }
 
             if (!await db.Events.AnyAsync(e => e.Type == EventTypes.DemoPresetProjectSeeded, cancellationToken))
@@ -161,6 +179,128 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         {
             LogDemoProject(logger, presetProject);
         }
+
+        if (upgradedProjectId is { } upgraded)
+        {
+            LogDemoUpgraded(logger, upgraded, DemoReleasedVersion);
+        }
+    }
+
+    /// <summary>
+    /// DEP-V2 (§9), once per database (its <see cref="EventTypes.DemoProjectReleaseUpgraded"/> marker is written whatever
+    /// the outcome): a demo project seeded under v1 sits in refinement; when it is <b>untouched</b> (<see cref="IsUntouchedAsync"/>)
+    /// it is moved to released 0.1.0 exactly as a fresh seed does (<see cref="MarkDemoReleasedAsync"/>: Local repository
+    /// tagged <c>v0.1.0</c>, the release version released, a succeeded release, the project released). A demo anyone used
+    /// (or one already released by a v2 seed) is left as it is. Returns the upgraded project, or <c>null</c>.
+    /// </summary>
+    private static async Task<Guid?> UpgradeV1DemoAsync(IServiceProvider services, AideDbContext db, AppUser admin, CancellationToken cancellationToken)
+    {
+        var projectId = await DemoProjectIdAsync(db, admin, cancellationToken);
+        var project = projectId is { } id ? await db.Projects.FirstOrDefaultAsync(p => p.Id == id, cancellationToken) : null;
+        var outcome = project is null
+            ? UpgradeSkippedMissing
+            : await IsUntouchedAsync(db, project, admin, cancellationToken) ? UpgradeReleased : UpgradeSkippedTouched;
+        if (outcome == UpgradeReleased)
+        {
+            await UseFakeLlmAsync(services, db, project!.Id, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+            await MarkDemoReleasedAsync(services, db, project, cancellationToken);
+        }
+
+        db.AddEvent(
+            EventTypes.DemoProjectReleaseUpgraded,
+            projectId: null,
+            new { projectId = project?.Id, outcome, version = outcome == UpgradeReleased ? DemoReleasedVersion : null },
+            SystemActor.Name,
+            services.GetRequiredService<TimeProvider>().GetUtcNow());
+        await db.SaveChangesAsync(cancellationToken);
+        return outcome == UpgradeReleased ? project!.Id : null;
+    }
+
+    /// <summary>The demo project: the one the <see cref="EventTypes.DemoProjectSeeded"/> marker names, else the seed Admin's project named <see cref="DemoProjectName"/>.</summary>
+    private static async Task<Guid?> DemoProjectIdAsync(AideDbContext db, AppUser admin, CancellationToken cancellationToken)
+    {
+        var payload = await db.Events.AsNoTracking()
+            .Where(e => e.Type == EventTypes.DemoProjectSeeded)
+            .OrderBy(e => e.CreatedAt)
+            .Select(e => e.Payload)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (payload is not null)
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(payload);
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("projectId", out var value)
+                    && value.ValueKind == System.Text.Json.JsonValueKind.String
+                    && value.TryGetGuid(out var id))
+                {
+                    return id;
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Not a payload the seed wrote: fall back to the name.
+            }
+        }
+
+        return await db.ProjectMembers
+            .Where(m => m.UserId == admin.Id)
+            .Join(db.Projects.Where(p => p.Name == DemoProjectName), m => m.ProjectId, p => p.Id, (m, p) => (Guid?)p.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// DEP-V2: "untouched" is conservative: the demo still looks exactly as the v1 seed created it.
+    /// <list type="bullet">
+    /// <item>Named <see cref="DemoProjectName"/>, in refinement / active at the initial checkpoint, never released, with the
+    /// seed Admin as its only member (an Owner).</item>
+    /// <item>One release version (the current one), in development, untagged, with no base commit.</item>
+    /// <item>No artifacts, agent runs, gates, execution steps, review reports, releases, rollbacks or deployments; no jobs
+    /// but notifications; no state transition but the creation one; and no project event but <c>PROJECT_CREATED</c> (so no
+    /// settings, member, LLM or preset edits).</item>
+    /// </list>
+    /// Anything else means someone used it, and the upgrade leaves it alone.
+    /// </summary>
+    private static async Task<bool> IsUntouchedAsync(AideDbContext db, Project project, AppUser admin, CancellationToken cancellationToken)
+    {
+        var id = project.Id;
+        if (project.Name != DemoProjectName
+            || project.CurrentPhase != Phase.Refinement
+            || project.Status != ProjectStatus.Active
+            || project.Checkpoint != LifecycleState.Initial.Version
+            || project.ReleasedVersion is not null)
+        {
+            return false;
+        }
+
+        var members = await db.ProjectMembers.AsNoTracking().Where(m => m.ProjectId == id).Select(m => new { m.UserId, m.Role }).ToListAsync(cancellationToken);
+        if (members.Count != 1 || members[0].UserId != admin.Id || members[0].Role != ProjectRole.Owner)
+        {
+            return false;
+        }
+
+        var versions = await db.ReleaseVersions.AsNoTracking().Where(v => v.ProjectId == id).ToListAsync(cancellationToken);
+        if (versions.Count != 1
+            || versions[0].Id != project.CurrentReleaseVersionId
+            || versions[0].Status != ReleaseVersionStatus.InDevelopment
+            || versions[0].Tag is not null
+            || !string.IsNullOrWhiteSpace(versions[0].BaseCommitSha))
+        {
+            return false;
+        }
+
+        return !await db.Artifacts.AnyAsync(a => a.ProjectId == id, cancellationToken)
+            && !await db.AgentRuns.AnyAsync(r => r.ProjectId == id, cancellationToken)
+            && !await db.ApprovalGates.AnyAsync(g => g.ProjectId == id, cancellationToken)
+            && !await db.ExecutionSteps.AnyAsync(s => s.ProjectId == id, cancellationToken)
+            && !await db.ComplianceReports.AnyAsync(r => r.ProjectId == id, cancellationToken)
+            && !await db.Releases.AnyAsync(r => r.ProjectId == id, cancellationToken)
+            && !await db.RollbackEvents.AnyAsync(r => r.ProjectId == id, cancellationToken)
+            && !await db.Deployments.AnyAsync(d => d.ProjectId == id, cancellationToken)
+            && !await db.Jobs.AnyAsync(j => j.ProjectId == id && j.Type != JobTypes.Notification, cancellationToken)
+            && !await db.StateTransitions.AnyAsync(t => t.ProjectId == id && t.FromPhase != null, cancellationToken)
+            && !await db.Events.AnyAsync(e => e.ProjectId == id && e.Type != EventTypes.ProjectCreated, cancellationToken);
     }
 
     /// <summary>
@@ -458,6 +598,9 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Seeded admin {Email} with password {Password} (shown once; change it after signing in)")]
     private static partial void LogAdminSeeded(ILogger logger, string email, string password);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Upgraded the untouched v1 demo project {ProjectId} to released {Version}")]
+    private static partial void LogDemoUpgraded(ILogger logger, Guid projectId, string version);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Seeded demo project {ProjectId}")]
     private static partial void LogDemoProject(ILogger logger, Guid projectId);

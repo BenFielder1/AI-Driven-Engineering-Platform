@@ -1,7 +1,9 @@
 # Mirrors the CLAUDE.md gate, plus contract/client/route-tree freshness, EF model drift, CLI packaging, manifest
-# validation (kubeconform), image build checks and a Playwright E2E run against the dev loop.
+# validation of both overlays (local, local-e2e; kubeconform), shell script checks, image build checks and Playwright E2E
+# against the dev loop in E2E mode (v1 specs, v2 specs and a11y as parallel shards).
 # Nothing is pushed: images are built and discarded. No registry, repository or LLM/GitHub secrets are used:
-# E2E runs with the offline Fake LLM provider and the Local Git provider, and the database is a throwaway service.
+# E2E runs with the offline Fake LLM and Fake deployment providers and the Local Git provider, and the database is a
+# throwaway service.
 name: CI
 
 on:
@@ -106,11 +108,39 @@ jobs:
         run: |
           chmod +x scripts/ci/shims/kubeconform
           echo "$GITHUB_WORKSPACE/scripts/ci/shims" >> "$GITHUB_PATH"
-      - name: Render and validate (same script as the local gate)
+      # Renders and kubeconform-validates BOTH variants: overlays/local (normal deploy) and overlays/local-e2e
+      # (deploy-local.sh --e2e), with the script's guards that Fake deployments and the Local import root appear only
+      # in the E2E variant. The checks below make sure neither render is silently dropped from the script.
+      - name: Render and validate both overlays (same script as the local gate)
         run: |
           kubectl version --client
           command -v kubeconform
-          ./deploy/scripts/validate-manifests.sh
+          ./deploy/scripts/validate-manifests.sh | tee "$RUNNER_TEMP/validate.log"
+          for overlay in overlays/local overlays/local-e2e; do
+            grep -qE "^kustomize: $overlay rendered [1-9]" "$RUNNER_TEMP/validate.log" \
+              || { echo "::error::$overlay was not rendered by validate-manifests.sh"; exit 1; }
+          done
+          test "$(grep -c '^Summary:' "$RUNNER_TEMP/validate.log")" -eq 2 \
+            || { echo "::error::kubeconform did not validate both renders"; exit 1; }
+
+  scripts:
+    name: Shell scripts (bash -n, shellcheck errors)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Syntax (bash -n)
+        run: |
+          for f in deploy/scripts/*.sh scripts/ci/*.sh scripts/ci/shims/*; do
+            echo "bash -n $f"
+            bash -n "$f"
+          done
+      # Error severity only: the deploy scripts carry warning/style findings that are not bugs (lib.sh variables
+      # used by the scripts that source it). Pinned image, so local runs match.
+      - name: shellcheck (severity error)
+        run: >-
+          docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.11.0 -S error -x
+          deploy/scripts/*.sh scripts/ci/*.sh scripts/ci/shims/*
 
   images:
     name: Image build (${{ matrix.image }})
@@ -137,13 +167,22 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
-  # NFR-TEST: Playwright against the dev loop (API on 5080 + Vite dev server on 5173, started by playwright.config.ts).
-  # Chromium only; the a11y projects (axe, which build a fully released project first) and the cross-browser
-  # projects run locally / on Kubernetes, not here, to keep CI time reasonable.
+  # NFR-TEST / NFR-TEST2 / NFR-A11Y2: Playwright against the dev loop (API on 5080 + Vite dev server on 5173, started by
+  # playwright.config.ts), in E2E mode: Fake LLM, Fake deployments, Local Git with an import root holding the seeded
+  # "existing" repo (same content as deploy/scripts/seed-e2e-repo.sh, seeded locally: no kubectl in CI).
+  # Three parallel shards, each with its own throwaway database and API:
+  #   v1    chromium, every spec except the v2 and a11y ones (new specs land here automatically)
+  #   v2    chromium, versions + import + preset (the long agent-driven flows)
+  #   a11y  the a11y project (axe; its a11y-setup dependency builds a released project first)
+  # Firefox/WebKit/Edge run locally / on Kubernetes, not here, to keep CI time reasonable.
   e2e:
-    name: E2E (Playwright, chromium)
+    name: E2E (${{ matrix.suite }})
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [v1, v2, a11y]
     services:
       db:
         image: postgres:17
@@ -163,6 +202,8 @@ jobs:
       ConnectionStrings__Aide: Host=localhost;Port=5432;Database=aide;Username=aide
       # The committed contract is checked by the backend job; don't rewrite it here.
       OpenApiGenerateDocuments: "false"
+      # frontend/e2e/import.spec.ts types this absolute path into the wizard (same as on Kubernetes).
+      AIDE_IMPORT_ROOT: /data/import
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -173,6 +214,11 @@ jobs:
           node-version-file: frontend/.nvmrc
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Seed the Local import repo (existing-app, tags v0.1.0 and v0.2.0)
+        run: |
+          sudo mkdir -p "$AIDE_IMPORT_ROOT"
+          sudo chown "$(id -u):$(id -g)" "$AIDE_IMPORT_ROOT"
+          bash scripts/ci/seed-e2e-repo-local.sh "$AIDE_IMPORT_ROOT"
       - name: Build the API and apply migrations
         working-directory: backend
         run: |
@@ -180,40 +226,96 @@ jobs:
           dotnet build src/Aide.Api -c Release
           dotnet ef database update --project src/Aide.Infrastructure --startup-project src/Aide.Api \
             --configuration Release --no-build
-      - name: Start the API (Development with seed, Fake LLM provider and no keys, Local Git)
+      - name: Start the API (Development + seed, E2E mode, no provider keys)
         working-directory: backend/src/Aide.Api
         env:
           ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://localhost:5080
+          App__PublicBaseUrl: http://localhost:5173
+          Telemetry__ConsoleExporter: "false"
+          Workspaces__Root: ${{ runner.temp }}/aide-workspaces
           # Never call a real provider: Fake by default and no provider keys at all.
           Llm__DefaultProvider: fake
           Llm__Providers__Anthropic__ApiKey: ""
           Llm__Providers__OpenAI__ApiKey: ""
-          ASPNETCORE_URLS: http://localhost:5080
-          Telemetry__ConsoleExporter: "false"
-          Workspaces__Root: ${{ runner.temp }}/aide-workspaces
+          # Same E2E settings as deploy/k8s/overlays/local-e2e: Fake deployments for Local Git projects (§4.15),
+          # Local import under the seeded root (FR-73).
+          Deployments__Provider: Fake
+          Deployments__AllowFake: "true"
+          Git__Local__ImportRoot: ${{ env.AIDE_IMPORT_ROOT }}
           # Registration/login limits (5/min per IP) are honoured by the specs' register lock; raising them only
           # removes the waiting. Rate limiting itself is covered by the backend integration tests.
           Auth__RateLimits__RegisterPerMinute: "100"
           Auth__RateLimits__LoginPerMinute: "100"
         run: |
           nohup dotnet run -c Release --no-build --no-launch-profile > "$RUNNER_TEMP/api.log" 2>&1 &
+          # /api/health/ready also fails if an embedded tech stack preset doesn't load.
           for _ in $(seq 1 60); do
             if curl -fsS http://localhost:5080/api/health/ready > /dev/null; then echo "API ready"; exit 0; fi
             sleep 2
           done
           echo "::error::API did not become ready"; tail -n 100 "$RUNNER_TEMP/api.log"; exit 1
+      # The a11y admin-integrations scan needs an Admin. The dev seeder creates admin@aide.local on this fresh
+      # database and logs its generated password once; it is masked here and dies with the throwaway database.
+      - name: Expose the seeded admin to the a11y project
+        if: matrix.suite == 'a11y'
+        run: |
+          for _ in $(seq 1 30); do
+            password="$(grep -oE '"Password": ?"[A-Za-z0-9]+"' "$RUNNER_TEMP/api.log" | head -n 1 | cut -d'"' -f4 || true)"
+            if [ -n "$password" ]; then
+              echo "::add-mask::$password"
+              { echo "E2E_ADMIN_EMAIL=admin@aide.local"; echo "E2E_ADMIN_PASSWORD=$password"; } >> "$GITHUB_ENV"
+              echo "Seeded admin found"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::warning::Seeded admin password not found in the API log; the admin-integrations a11y scan will skip."
       - name: Install frontend dependencies and Chromium
         working-directory: frontend
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Playwright (chromium project)
+      - name: Playwright (${{ matrix.suite }})
         working-directory: frontend
-        run: npx playwright test --project=chromium
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: |
+          v2_specs='versions|import|preset'
+          case "$SUITE" in
+            v1)
+              mapfile -t specs < <(find e2e -maxdepth 1 -name '*.spec.ts' | sort | grep -vE "/(a11y|$v2_specs)\.spec\.ts$")
+              echo "v1 specs: ${specs[*]}"
+              npx playwright test --project=chromium "${specs[@]}"
+              ;;
+            v2)
+              npx playwright test --project=chromium e2e/versions.spec.ts e2e/import.spec.ts e2e/preset.spec.ts
+              ;;
+            a11y)
+              npx playwright test --project=a11y
+              ;;
+            *)
+              echo "::error::unknown suite $SUITE"; exit 1
+              ;;
+          esac
+      # ::add-mask:: only masks console output, so scrub the seeded admin's password from the API log before it is
+      # uploaded. The seeder logs it as the JSON state field "Password" and inside the rendered "with password <pw>".
+      - name: Redact secrets from the API log
+        if: failure()
+        run: |
+          log="$RUNNER_TEMP/api.log"
+          [ -f "$log" ] || exit 0
+          sed -i -E \
+            -e 's/("Password"[[:space:]]*:[[:space:]]*")[^"]*"/\1***REDACTED***"/Ig' \
+            -e 's/(with password )[^ ",]+/\1***REDACTED***/Ig' \
+            "$log" || true
+          if grep -qiE '"Password"[[:space:]]*:[[:space:]]*"[^*"]|with password [^*]' "$log"; then
+            echo "::warning::API log may still contain a password; dropping it from the artifact."
+            : > "$log"
+          fi
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: e2e-report
+          name: e2e-report-${{ matrix.suite }}
           path: |
             frontend/playwright-report
             frontend/test-results

@@ -73,6 +73,110 @@ public sealed class DevSeederTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task DEPV2_An_untouched_v1_demo_in_refinement_is_upgraded_once_to_released_0_1_0()
+    {
+        await using var app = await AppAsync();
+        var projectId = await SeedV1DemoAsync(app);
+
+        await SeedAsync(app);
+        await SeedAsync(app);
+
+        await WithDbAsync(app, async db =>
+        {
+            var project = await db.Projects.SingleAsync(p => p.Id == projectId, Ct);
+            Assert.Equal((Phase.Release, ProjectStatus.Released, "0.1.0", (string?)null), (project.CurrentPhase, project.Status, project.ReleasedVersion, project.DevelopmentVersion));
+            var version = await db.ReleaseVersions.SingleAsync(v => v.ProjectId == projectId, Ct);
+            Assert.Equal((ReleaseVersionStatus.Released, "0.1.0", "v0.1.0"), (version.Status, version.Version, version.Tag));
+            Assert.NotNull(version.MergeCommitSha);
+            var release = await db.Releases.SingleAsync(r => r.ProjectId == projectId, Ct);
+            Assert.Equal((ReleaseStatus.Succeeded, "v0.1.0"), (release.Status, release.Tag));
+            Assert.Single(await db.StateTransitions.Where(t => t.ProjectId == projectId && t.Reason == DevSeeder.DemoReleasedReason).ToListAsync(Ct));
+            var marker = await db.Events.SingleAsync(e => e.Type == EventTypes.DemoProjectReleaseUpgraded, Ct);
+            Assert.Null(marker.ProjectId);
+            Assert.Equal(DevSeeder.UpgradeReleased, Outcome(marker.Payload));
+            Assert.Equal(1, await db.Projects.CountAsync(p => p.Name == DevSeeder.DemoProjectName, Ct));
+
+            var tag = await app.Services.GetRequiredService<IWorkingCopies>().TagAsync(projectId, "v0.1.0", Ct);
+            Assert.Equal(version.MergeCommitSha, tag?.Commit);
+        });
+    }
+
+    [Fact]
+    public async Task DEPV2_A_v1_demo_someone_used_is_left_in_refinement_and_the_upgrade_does_not_run_again()
+    {
+        await using var app = await AppAsync();
+        var projectId = await SeedV1DemoAsync(app);
+        await WithDbAsync(app, async db =>
+        {
+            db.AddEvent(EventTypes.ProjectUpdated, projectId, new { field = "approvalMode" }, "someone", DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync(Ct);
+        });
+
+        await SeedAsync(app);
+        await WithDbAsync(app, db => db.Events.Where(e => e.ProjectId == projectId && e.Type == EventTypes.ProjectUpdated).ExecuteDeleteAsync(Ct));
+        await SeedAsync(app);
+
+        await WithDbAsync(app, async db =>
+        {
+            var project = await db.Projects.SingleAsync(p => p.Id == projectId, Ct);
+            Assert.Equal((Phase.Refinement, ProjectStatus.Active, (string?)null), (project.CurrentPhase, project.Status, project.ReleasedVersion));
+            Assert.Equal(ReleaseVersionStatus.InDevelopment, (await db.ReleaseVersions.SingleAsync(v => v.ProjectId == projectId, Ct)).Status);
+            Assert.False(await db.Releases.AnyAsync(r => r.ProjectId == projectId, Ct));
+            var marker = await db.Events.SingleAsync(e => e.Type == EventTypes.DemoProjectReleaseUpgraded, Ct);
+            Assert.Equal(DevSeeder.UpgradeSkippedTouched, Outcome(marker.Payload));
+        });
+    }
+
+    [Fact]
+    public async Task DEPV2_A_fresh_seed_is_not_upgraded_twice()
+    {
+        await using var app = await AppAsync();
+        await SeedAsync(app);
+        await SeedAsync(app);
+
+        await WithDbAsync(app, async db =>
+        {
+            var project = await db.Projects.SingleAsync(p => p.Name == DevSeeder.DemoProjectName, Ct);
+            Assert.Single(await db.Releases.Where(r => r.ProjectId == project.Id).ToListAsync(Ct));
+            Assert.Single(await db.StateTransitions.Where(t => t.ProjectId == project.Id && t.Reason == DevSeeder.DemoReleasedReason).ToListAsync(Ct));
+            var marker = await db.Events.SingleAsync(e => e.Type == EventTypes.DemoProjectReleaseUpgraded, Ct);
+            Assert.Equal(DevSeeder.UpgradeSkippedTouched, Outcome(marker.Payload));
+        });
+    }
+
+    private static string? Outcome(string payload)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(payload);
+        return doc.RootElement.GetProperty("outcome").GetString();
+    }
+
+    /// <summary>A database as the v1 seed left it: the seed Admin and the demo project in refinement, with its marker.</summary>
+    private static async Task<Guid> SeedV1DemoAsync(WebApplicationFactory<Program> app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var admin = new AppUser { Email = DevSeeder.AdminEmail, UserName = DevSeeder.AdminEmail, Name = DevSeeder.AdminName, SystemRole = SystemRole.Admin, EmailConfirmed = true, CreatedAt = DateTimeOffset.UtcNow };
+        Assert.True((await services.GetRequiredService<UserManager<AppUser>>().CreateAsync(admin, AideApiFactory.Password)).Succeeded);
+        var created = await services.GetRequiredService<Api.Features.Projects.ProjectCreator>().CreateAsync(
+            new Api.Features.Projects.CreateProjectRequest
+            {
+                Name = DevSeeder.DemoProjectName,
+                Idea = DevSeeder.DemoIdea,
+                ApprovalMode = ApprovalMode.Advisory,
+                Git = new Api.Features.Projects.CreateProjectGitRequest { Provider = GitProvider.Local },
+            },
+            admin.Id,
+            SystemActor.Name,
+            Ct);
+        Assert.True(created.IsSuccess);
+        var db = services.GetRequiredService<AideDbContext>();
+        db.AddEvent(EventTypes.DemoProjectSeeded, projectId: null, new { projectId = created.Value.Id }, SystemActor.Name, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync(Ct);
+        Assert.Equal(Phase.Refinement, (await db.Projects.AsNoTracking().SingleAsync(p => p.Id == created.Value.Id, Ct)).CurrentPhase);
+        return created.Value.Id;
+    }
+
+    [Fact]
     public async Task S9_A_second_demo_project_on_nextjs_frontend_is_seeded_in_planning_once_and_the_Fake_plans_it()
     {
         await using var app = await AppAsync();

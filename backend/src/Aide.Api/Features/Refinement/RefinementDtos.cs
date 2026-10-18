@@ -71,14 +71,39 @@ public sealed record RefinementRoundDto(
 public sealed record CodebaseSummaryStatusDto(CodebaseSummaryState Status, Guid? RunId, Guid? ArtifactId, int? ArtifactVersion);
 
 /// <summary>
+/// One round of the refinement history (FR-55, FR-27). <c>round</c> is its 1-based number within the release version
+/// (oldest = 1). <c>startedAt</c> is when it was queued, <c>completedAt</c> when its run (or job) ended. <c>questions</c> are
+/// the clarifying questions this round asked (empty unless it <c>succeeded</c>), each with the <c>answer</c> a later round
+/// gave it (the latest round started before the next succeeded round, as on the page), else <c>null</c>. <c>answers</c> and
+/// <c>feedback</c> are what this round's agent was given; <c>draftArtifactId</c>/<c>draftArtifactVersion</c> the project
+/// request version it created.
+/// </summary>
+public sealed record RefinementRoundHistoryDto(
+    int Round,
+    Guid RunId,
+    Guid JobId,
+    AgentJobTrigger? Trigger,
+    AgentRunStatus Status,
+    string? Error,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    IReadOnlyList<RefinementQuestionDto> Questions,
+    IReadOnlyList<RefinementAnswerDto> Answers,
+    string? Feedback,
+    Guid? DraftArtifactId,
+    int? DraftArtifactVersion);
+
+/// <summary>
 /// The refinement page (FR-27): the latest project request version (<c>latestDraft</c>, without content — read it from
 /// the artifacts API), the latest round and its status, and the clarifying questions of the latest completed round
 /// (<c>questionsRunId</c>) with any answers already given. <c>codebaseSummary</c> is the Repository Analyst's state for
-/// the version (FR-70).
+/// the version (FR-70). <c>rounds</c> (FR-55) is every round of the selected release version, newest first (at most
+/// <c>50</c>, the latest), with the questions each asked and the answers they were given.
 /// </summary>
 public sealed record RefinementDto(
     ArtifactSummaryDto? LatestDraft,
     RefinementRoundDto? LatestRound,
     Guid? QuestionsRunId,
     IReadOnlyList<RefinementQuestionDto> Questions,
-    CodebaseSummaryStatusDto CodebaseSummary);
+    CodebaseSummaryStatusDto CodebaseSummary,
+    IReadOnlyList<RefinementRoundHistoryDto> Rounds);

@@ -11,12 +11,20 @@ export type EscalationDecision = NonNullable<Schemas['EscalationDecision']>
 export type EscalationReason = NonNullable<Schemas['EscalationReason']>
 export type DecideGateRequest = Schemas['DecideGateRequest']
 
-/** FR-12–FR-15: every gate of the project, newest first (members). */
-export function useGates(id: string) {
+/**
+ * FR-12–FR-15: every gate of the project, newest first (members); with `releaseVersionId`, only that release
+ * version's gates (FR-62), filtered by the API.
+ */
+export function useGates(id: string, releaseVersionId?: string) {
   return useQuery({
-    queryKey: projectKeys.gates(id),
+    queryKey: releaseVersionId ? [...projectKeys.gates(id), 'version', releaseVersionId] : projectKeys.gates(id),
     queryFn: async ({ signal }) =>
-      unwrap(await api.GET('/api/projects/{id}/gates', { params: { path: { id } }, signal })),
+      unwrap(
+        await api.GET('/api/projects/{id}/gates', {
+          params: { path: { id }, query: releaseVersionId ? { releaseVersionId } : {} },
+          signal,
+        }),
+      ),
   })
 }
 

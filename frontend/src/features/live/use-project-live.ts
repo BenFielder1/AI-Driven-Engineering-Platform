@@ -41,8 +41,8 @@ export const NOTIFICATION_REFRESH_DEBOUNCE_MS = 500
 
 /**
  * FR-46: while a project page is open, receive its events over the projects hub and refresh the affected queries.
- * Joins the project's group on connect and after every automatic reconnect, then refetches what may have been missed,
- * leaves it and closes the connection on unmount.
+ * Joins the project's group on connect and after every automatic reconnect, then refetches what may have been missed
+ * (see `invalidateAfterJoin`), leaves it and closes the connection on unmount.
  */
 export function useProjectLive(projectId: string): LiveStatus {
   const factory = useContext(LiveConnectionContext)
@@ -58,24 +58,30 @@ export function useProjectLive(projectId: string): LiveStatus {
         setStatus(next)
       }
     }
-    const join = async () => {
+    const join = async (rejoin: boolean) => {
       try {
         await connection.invoke('Join', projectId)
         if (disposed) {
           return
         }
-        // Events sent before the join completed were never delivered here: refetch what they may have changed.
+        // Events sent before the join completed (while the page was opening, or while disconnected) never reach this
+        // client, so everything about the project is refetched now, the page's first-load queries included.
         void invalidateAfterJoin(queryClient, projectId)
         update('live')
       } catch {
-        // FORBIDDEN (no longer a member) or the hub is unavailable: stay usable without live updates.
+        // FORBIDDEN (no longer a member) or the hub is unavailable: stay usable without live updates. After a
+        // reconnect, events were lost while disconnected and none will arrive now, so refetch once anyway (the join is
+        // tried again on the next reconnect).
+        if (rejoin && !disposed) {
+          void invalidateAfterJoin(queryClient, projectId)
+        }
         update('offline')
       }
     }
 
     connection.onProjectEvent((message) => {
       if (!disposed && message.projectId === projectId) {
-        void invalidateForEvent(queryClient, projectId, message.category)
+        void invalidateForEvent(queryClient, projectId, message.category, message.type)
         // FR-47: an event that may notify someone refreshes the bell's unread count and the notification lists soon rather
         // than at the next 30 s poll (which stays as the fallback). Debounced, and without cancelling an in-flight fetch,
         // so a burst of events doesn't abort and restart the same requests over and over.
@@ -99,7 +105,7 @@ export function useProjectLive(projectId: string): LiveStatus {
       }
       // Events sent while we were disconnected are lost: rejoin, then refresh everything about the project (after the
       // join, so nothing sent during the rejoin is missed either).
-      void join()
+      void join(true)
     })
     connection.onClose(() => {
       update('offline')
@@ -107,7 +113,7 @@ export function useProjectLive(projectId: string): LiveStatus {
 
     void connection
       .start()
-      .then(() => (disposed ? undefined : join()))
+      .then(() => (disposed ? undefined : join(false)))
       .catch(() => {
         update('offline')
       })

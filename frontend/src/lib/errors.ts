@@ -110,6 +110,8 @@ export const errorMessages = {
     "Some plan steps declare files outside the paths their specialist agent owns. This is a warning: the plan can still be approved.",
   PLAN_ORDER:
     "Some plan steps break the preset's recommended order. This is a warning: the plan can still be approved.",
+  MISSING_VERCEL_CONFIG:
+    "This plan doesn't create vercel.json, so Vercel would deploy AIDE branches automatically, on top of the deployments AIDE makes. Add vercel.json to a step with git.deploymentEnabled set to { \"aide/**\": false }. This is a warning: the plan can still be approved.",
   TOOL_LIMIT:
     "The agent reached its repository tool limit (25 calls or 400 KB read per run) and answered with what it had read.",
   PROVIDER_NOT_CONFIGURED:

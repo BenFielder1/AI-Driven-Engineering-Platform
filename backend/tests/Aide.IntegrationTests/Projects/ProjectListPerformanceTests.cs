@@ -103,8 +103,23 @@ public sealed class ProjectListPerformanceTests(AideApiFactory factory)
         Assert.Contains(manyPage.Items, p => p.PresetId == "nextjs-supabase");
         Assert.Contains(manyPage.Items, p => p.PresetId is null);
 
+        // §7.2: the KPI row is one aggregate query (plus the role lookup), however many projects there are.
+        async Task<(ProjectKpisDto Kpis, int Queries)> KpisAsync(ApiSession session)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await session.Client.GetAsync(new Uri("/api/projects/kpis", UriKind.Relative), Ct)).StatusCode); // warm-up
+            var before = counter.Count;
+            var kpis = await ProjectApi.ReadAsync<ProjectKpisDto>(await session.Client.GetAsync(new Uri("/api/projects/kpis", UriKind.Relative), Ct));
+            return (kpis, counter.Count - before);
+        }
+
+        var (fewKpis, fewKpiQueries) = await KpisAsync(few);
+        var (manyKpis, manyKpiQueries) = await KpisAsync(many);
+        Assert.Equal((10, ManyProjects, ManyProjects), (fewKpis.Total, manyKpis.Total, manyKpis.Active));
+        Assert.Equal(fewKpiQueries, manyKpiQueries);
+        Assert.InRange(manyKpiQueries, 1, 2);
+
         // §8: p95 over sequential requests, for the default page (20) and the largest (100), sorted and filtered as the list page does.
-        foreach (var path in new[] { "/api/projects", "/api/projects?limit=100", "/api/projects?sortBy=name&sortOrder=asc&hasDevelopmentVersion=true", "/api/projects?preset=nextjs-supabase" })
+        foreach (var path in new[] { "/api/projects", "/api/projects?limit=100", "/api/projects?sortBy=name&sortOrder=asc&hasDevelopmentVersion=true", "/api/projects?preset=nextjs-supabase", "/api/projects/kpis" })
         {
             var samples = await Latency.SampleAsync(Samples, async () =>
                 Assert.Equal(HttpStatusCode.OK, (await many.Client.GetAsync(new Uri(path, UriKind.Relative), Ct)).StatusCode));
