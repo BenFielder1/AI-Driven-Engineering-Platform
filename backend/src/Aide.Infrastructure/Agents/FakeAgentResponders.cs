@@ -236,6 +236,20 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
             ? $"\n\n## Changes in this version\n- [new] FR-{newId}: {summary}\n- Every other requirement is unchanged."
             : string.Empty;
 
+        // FR-75: with a preset, the stack, dependencies and endpoints are the Fake specialists' (FakePresetScripts), so the
+        // review's deterministic checks match what they generate.
+        var preset = FakePrompt.PresetId(request) is not null;
+        var architecture = preset
+            ? "A Next.js (App Router) app in TypeScript strict with Tailwind; thin Zod-validated route handlers under app/api."
+            : "A Node.js 22 HTTP service using Express 5, with an in-process data layer behind a repository module.";
+        var dependencies = preset
+            ? string.Join("\n", FakePresetScripts.Dependencies.Concat(FakePresetScripts.DevDependencies).Select(d => $"- {d.Name}"))
+            : "- express\n- jest\n- supertest";
+        var endpoints = preset
+            ? string.Join("\n", FakePresetScripts.Endpoints(rs).Select(e => $"| {e.Method} | {e.Path} | {(e.Method == "POST" ? $"201 {r}" : e.Method == "DELETE" ? "204" : "200")} | 400, 404 |"))
+            : $"| GET | /api/{rs} | 200 list | — |\n| POST | /api/{rs} | 201 {r} | 400 |\n| GET | /api/{rs}/{{id}} | 200 {r} | 404 |\n| PUT | /api/{rs}/{{id}} | 200 {r} | 400, 404 |\n| DELETE | /api/{rs}/{{id}} | 204 | 404 |";
+        var testing = preset ? "Vitest and Testing Library for units and route handlers, Playwright end to end." : "Jest and Supertest";
+
         // FR-75: a preset's extra sections, after the eleven (and before "Changes in this version").
         var presetSections = string.Concat(FakePrompt.PresetSpecSections(request).Select(title =>
             $"\n\n## {title}\n{title} for {name}, following the preset's guidance and the requirements above."));
@@ -251,12 +265,10 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
             - **FR-4**{tag} Invalid input returns 400 with the field errors. Given a blank title, when it is posted, then 400 lists the field errors.{newRequirement}
 
             ## 3. Technical Architecture
-            A Node.js 22 HTTP service using Express 5, with an in-process data layer behind a repository module.
+            {architecture}
 
             ### Dependencies
-            - express
-            - jest
-            - supertest
+            {dependencies}
 
             ## 4. Data Models
             **{entity}**: `id` (string, required, unique), `title` (string, required, 1–200 chars), `details` (string, optional), `createdAt`, `updatedAt` (timestamps, required).
@@ -264,11 +276,7 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
             ## 5. API Contracts
             | Method | Path | Success | Errors |
             | --- | --- | --- | --- |
-            | GET | /api/{rs} | 200 list | — |
-            | POST | /api/{rs} | 201 {r} | 400 |
-            | GET | /api/{rs}/{"{id}"} | 200 {r} | 404 |
-            | PUT | /api/{rs}/{"{id}"} | 200 {r} | 400, 404 |
-            | DELETE | /api/{rs}/{"{id}"} | 204 | 404 |
+            {endpoints}
 
             ## 6. Feature Specifications
             Titles are trimmed; empty titles are rejected. Updates replace title and details and refresh `updatedAt`.
@@ -280,7 +288,7 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
             No authentication in the first release (single user, local deployment). All input is validated; errors never echo internals.
 
             ## 9. Testing Strategy
-            Unit tests for the {r} model and integration tests for every endpoint with Jest and Supertest.
+            Unit tests for the {r} model and integration tests for every endpoint with {testing}.
 
             ## 10. Deployment & Infrastructure
             `npm start` runs the server on `PORT` (default 3000). Configuration comes from environment variables; no secrets are committed.

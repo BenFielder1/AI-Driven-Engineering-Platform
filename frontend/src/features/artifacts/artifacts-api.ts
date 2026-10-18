@@ -48,9 +48,19 @@ export function useArtifacts(id: string, releaseVersionId?: string) {
 }
 
 /** FR-21: every version of a type (summaries, no content), newest first. */
-export function useArtifactHistory(id: string, type: ArtifactType, releaseVersionId?: string) {
-  return useQuery({
+export function useArtifactHistory(
+  id: string,
+  type: ArtifactType,
+  releaseVersionId?: string,
+  /** Poll every this many ms while the history is still empty (a stage page waiting for its producing run). */
+  pollWhileEmptyMs?: number,
+) {
+  return useQuery<ArtifactSummary[]>({
     queryKey: artifactKeys.history(id, type, releaseVersionId),
+    refetchInterval: (query) =>
+      pollWhileEmptyMs !== undefined && query.state.status === 'success' && query.state.data?.length === 0
+        ? pollWhileEmptyMs
+        : false,
     queryFn: async ({ signal }) => {
       const versions = unwrap(
         await api.GET('/api/projects/{id}/artifacts/{type}/history', {

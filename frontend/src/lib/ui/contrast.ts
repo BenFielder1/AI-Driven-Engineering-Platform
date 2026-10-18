@@ -65,3 +65,20 @@ export function contrastRatio(fg: string, bg: string): number {
 export const WCAG_AA_TEXT = 4.5
 /** WCAG 2.2 AA: user-interface component boundaries (1.4.11). */
 export const WCAG_AA_NON_TEXT = 3
+
+type Srgb = [number, number, number]
+
+/** `top` at `alpha` (0..1) composited over the opaque `bottom`, as browsers do it: in gamma-encoded sRGB. */
+export function compositeOver(top: string, alpha: number, bottom: string): Srgb {
+  const t = oklchToSrgb(parseOklch(top))
+  const b = oklchToSrgb(parseOklch(bottom))
+  return [0, 1, 2].map((i) => (t[i] ?? 0) * alpha + (b[i] ?? 0) * (1 - alpha)) as Srgb
+}
+
+/** WCAG contrast ratio of `fg` text on an already-composited sRGB surface (e.g. `bg-primary/15` over the sidebar). */
+export function contrastOnSrgb(fg: string, surface: Srgb): number {
+  const l1 = relativeLuminance(oklchToSrgb(parseOklch(fg)))
+  const l2 = relativeLuminance(surface)
+  const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1]
+  return (hi + 0.05) / (lo + 0.05)
+}

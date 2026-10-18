@@ -6,8 +6,14 @@ import { cn } from '../../lib/utils'
 
 /** shadcn/ui "new-york" DropdownMenu on radix-ui (SPEC §7.1): role="menu", arrow keys, Escape returns focus. */
 
-export function DropdownMenu(props: ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
+/**
+ * Non-modal by default: a menu is not a dialog (WAI-ARIA menu button pattern), so the page behind it is neither
+ * `aria-hidden` nor blocked. Radix's modal mode hides the rest of the page from assistive tech while the skip link,
+ * sidebar and forms stay focusable (axe `aria-hidden-focus`). Focus still moves into the menu, arrow keys move within it,
+ * Escape returns focus to the trigger, and Tab or a click outside closes it.
+ */
+export function DropdownMenu({ modal = false, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" modal={modal} {...props} />
 }
 
 export function DropdownMenuTrigger(props: ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {

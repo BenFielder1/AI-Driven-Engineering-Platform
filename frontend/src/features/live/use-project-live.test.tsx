@@ -19,13 +19,16 @@ const OTHER = '00000000-0000-7000-8000-000000000002'
 
 function setup(hub = new FakeLiveHub()) {
   const queryClient = createTestQueryClient()
-  // Seed the caches a project page would hold.
-  queryClient.setQueryData(projectKeys.detail(PROJECT), { id: PROJECT })
-  queryClient.setQueryData(projectKeys.state(PROJECT), { projectId: PROJECT })
-  queryClient.setQueryData(projectKeys.gates(PROJECT), [])
-  queryClient.setQueryData(projectKeys.activity(PROJECT, null), { pages: [] })
-  queryClient.setQueryData(artifactKeys.list(PROJECT), [])
-  queryClient.setQueryData(projectKeys.gates(OTHER), [])
+  // Seed the caches a project page would hold (again after the join, which refreshes them once, to start fresh).
+  const seed = () => {
+    queryClient.setQueryData(projectKeys.detail(PROJECT), { id: PROJECT })
+    queryClient.setQueryData(projectKeys.state(PROJECT), { projectId: PROJECT })
+    queryClient.setQueryData(projectKeys.gates(PROJECT), [])
+    queryClient.setQueryData(projectKeys.activity(PROJECT, null), { pages: [] })
+    queryClient.setQueryData(artifactKeys.list(PROJECT), [])
+    queryClient.setQueryData(projectKeys.gates(OTHER), [])
+  }
+  seed()
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
       <LiveConnectionContext value={hub.factory}>{children}</LiveConnectionContext>
@@ -33,7 +36,14 @@ function setup(hub = new FakeLiveHub()) {
   )
   const utils = renderHook(() => useProjectLive(PROJECT), { wrapper })
   const stale = (key: readonly unknown[]) => queryClient.getQueryState(key)?.isInvalidated ?? false
-  return { ...utils, hub, queryClient, stale }
+  /** Waits until joined, then re-seeds the caches so only what an event invalidates afterwards is stale. */
+  const joined = async () => {
+    await waitFor(() => {
+      expect(utils.result.current).toBe('live')
+    })
+    seed()
+  }
+  return { ...utils, hub, queryClient, stale, joined }
 }
 
 interface InvalidateSpy {
@@ -55,11 +65,9 @@ describe('useProjectLive (FR-46)', () => {
     expect(hub.latest.calls).toEqual([{ method: 'Join', projectId: PROJECT }])
   })
 
-  it('FR-46: a gate event invalidates the project, state, gates and activity, but not artifacts', async () => {
-    const { hub, result, stale } = setup()
-    await waitFor(() => {
-      expect(result.current).toBe('live')
-    })
+  it('FR-46: a gate event invalidates the project, state, gates, activity and the artifacts (the draft it gates)', async () => {
+    const { hub, stale, joined } = setup()
+    await joined()
 
     hub.latest.emit(projectEvent(PROJECT, 'gate', { type: 'GATE_APPROVED' }))
 
@@ -67,14 +75,13 @@ describe('useProjectLive (FR-46)', () => {
     expect(stale(projectKeys.state(PROJECT))).toBe(true)
     expect(stale(projectKeys.gates(PROJECT))).toBe(true)
     expect(stale(projectKeys.activity(PROJECT, null))).toBe(true)
-    expect(stale(artifactKeys.list(PROJECT))).toBe(false)
+    expect(stale(artifactKeys.list(PROJECT))).toBe(true)
+    expect(stale(projectKeys.gates(OTHER))).toBe(false)
   })
 
   it('FR-46: an artifact event invalidates the artifact queries; other projects are ignored', async () => {
-    const { hub, result, stale } = setup()
-    await waitFor(() => {
-      expect(result.current).toBe('live')
-    })
+    const { hub, stale, joined } = setup()
+    await joined()
 
     hub.latest.emit(projectEvent(OTHER, 'gate'))
     expect(stale(projectKeys.gates(OTHER))).toBe(false)
@@ -86,13 +93,11 @@ describe('useProjectLive (FR-46)', () => {
     expect(stale(projectKeys.gates(PROJECT))).toBe(false)
   })
 
-  it('FR23_ live: a run event invalidates the runs list and detail, the state (tokens used) and the activity', async () => {
-    const { hub, result, stale, queryClient } = setup()
+  it('FR23_ live: a run event invalidates the runs list and detail, the state (tokens used), the activity and the artifacts', async () => {
+    const { hub, stale, queryClient, joined } = setup()
+    await joined()
     queryClient.setQueryData(runKeys.list(PROJECT, null, 1), { items: [] })
     queryClient.setQueryData(runKeys.detail(PROJECT, 'run-1'), { id: 'run-1' })
-    await waitFor(() => {
-      expect(result.current).toBe('live')
-    })
 
     hub.latest.emit(projectEvent(PROJECT, 'run', { type: 'RUN_COMPLETED' }))
 
@@ -100,22 +105,39 @@ describe('useProjectLive (FR-46)', () => {
     expect(stale(runKeys.detail(PROJECT, 'run-1'))).toBe(true)
     expect(stale(projectKeys.state(PROJECT))).toBe(true)
     expect(stale(projectKeys.activity(PROJECT, null))).toBe(true)
-    expect(stale(artifactKeys.list(PROJECT))).toBe(false)
+    // A completed run's draft must show even if its artifact event was missed.
+    expect(stale(artifactKeys.list(PROJECT))).toBe(true)
     expect(stale(projectKeys.gates(PROJECT))).toBe(false)
   })
 
-  it('FR-46: after a reconnect it rejoins and refreshes everything that may have been missed', async () => {
-    const { hub, result, stale } = setup()
+  it('FR-46: an event sent before the join completed is covered: the project is refetched once after joining', async () => {
+    // The artifact event happened while the page was opening (before Join): this client never receives it.
+    const { stale, hub } = setup()
+    expect(stale(artifactKeys.list(PROJECT))).toBe(false)
     await waitFor(() => {
-      expect(result.current).toBe('live')
+      expect(hub.latest.joined(PROJECT)).toBe(1)
     })
+    await waitFor(() => {
+      expect(stale(artifactKeys.list(PROJECT))).toBe(true)
+    })
+    expect(stale(projectKeys.state(PROJECT))).toBe(true)
+    expect(stale(projectKeys.gates(PROJECT))).toBe(true)
+    // Other projects are left alone.
+    expect(stale(projectKeys.gates(OTHER))).toBe(false)
+  })
+
+  it('FR-46: after a reconnect it rejoins and refreshes everything that may have been missed', async () => {
+    const { hub, result, stale, joined } = setup()
+    await joined()
 
     hub.latest.dropAndReconnect()
 
     await waitFor(() => {
       expect(hub.latest.joined(PROJECT)).toBe(2)
     })
-    expect(stale(artifactKeys.list(PROJECT))).toBe(true)
+    await waitFor(() => {
+      expect(stale(artifactKeys.list(PROJECT))).toBe(true)
+    })
     expect(stale(projectKeys.gates(PROJECT))).toBe(true)
     await waitFor(() => {
       expect(result.current).toBe('live')

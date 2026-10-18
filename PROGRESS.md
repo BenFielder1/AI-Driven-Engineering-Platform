@@ -59,9 +59,9 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 | §4.15 | Deployments (Vercel) states, polling, Fake provider | 4.15 | backend | 9 | done | DeploymentPolling, IDeploymentProvider (Vercel, Fake); S4_15_* tests |
 | NFR-SEC2 | Secret encryption, scoped tokens, fixed hosts, signed state | 8 | backend | 4–9 | todo | — |
 | NFR-REL2 | Polls as jobs, restart resume, rate-limit backoff | 8 | backend | 7, 9 | todo | — |
-| NFR-PERF2 | List p95 < 300 ms with badges; runs/cycles p95 < 300 ms | 8 | backend | 10 | todo | — |
-| NFR-A11Y2 | WCAG AA both themes (token test), keyboard nav, chart tables, axe | 8 | frontend | 1, 10 | todo | — |
-| NFR-TEST2 | Domain worked-example tests, stub HTTP, two-version/import/preset E2E | 8 | both | all, 10 | todo | — |
+| NFR-PERF2 | List p95 < 300 ms with badges; runs/cycles p95 < 300 ms | 8 | backend | 10 | done | backend perf tests + scripts/perf/v2-perf.mjs p95 ≤ 11 ms on k8s |
+| NFR-A11Y2 | WCAG AA both themes (token test), keyboard nav, chart tables, axe | 8 | frontend | 1, 10 | done | token + tinted-pair contrast tests; a11y.spec 116 passed both themes; keyboard sidebar/stepper |
+| NFR-TEST2 | Domain worked-example tests, stub HTTP, two-version/import/preset E2E | 8 | both | all, 10 | done | e2e versions/import/preset specs pass on k8s (Chromium); domain worked-example tests per phase |
 | DEP-V2 | Public base URL, optional App secrets, dev seed, Fake deployments | 9 | deploy | 2, 5, 9, 10 | todo | — |
 
 ## Phases
@@ -107,13 +107,14 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
   - [x] aspnet-engineer (contract stubs; oasdiff: only externalChecks.preview typing)
   - [x] aspnet-engineer (connection, project link/create, env sync, preview/production deployments + polls, promote, Fake provider; migration regenerated as 20261017171130_VercelDeployments with vercel_username — 3491 backend tests) ‖ vite-react-engineer (connections Vercel, settings Deployment + env, wizard Deployment step, review preview, release production, Deployments page — 675 frontend tests)
   - [x] gate (backend 3515, frontend 677, manifests) · review (0 Critical, 1 Major, 4 Minor — all fixed: co-Owner can't use another Owner's Vercel binding, mask-then-cut build logs, dot-only project ids rejected, idempotent deployment creation + orphan cancel, Fake provider guard; backend 3515, frontend 677) · redeploy (migration VercelDeployments applied; smoke ✓; first attempt stopped for low system memory, rerun) · commit
-- [ ] 10 M16 Integrate & harden (base: 38afcc0) — IDs: FR-92, FR-93, NFR-*2, E2E
+- [x] 10 M16 Integrate & harden (base: 38afcc0) — IDs: FR-92, FR-93, NFR-*2, E2E
   - [x] aspnet-engineer (5 notification types, FR-92 events live/activity/admin, CLI version/versions/deployments/artifact restore/status, NFR-PERF2 tests — 3591 backend tests) ‖ local-k8s-engineer (E2E overlay `deploy-local.sh --e2e`, seed-e2e-repo.sh)
   - [x] vite-react-engineer (notification types, preferences, channel events, activity — 689 frontend tests)
   - [x] local-k8s-engineer (deploy --e2e + seed: cluster in E2E mode, readiness Healthy, /data/import/existing-app with v0.1.0/v0.2.0)
   - [x] checkpoint gate (backend 3591, frontend 689, manifests both variants) · review (0 Critical, 0 Major, 3 Minor — all fixed: CLI bare `@`, `--e2e` only switch, log grep pipefail) · commit (phase 10a)
-  - [ ] e2e-qa-engineer (two-version, import, preset E2E, axe, perf) — first run stopped by Ben 2026-10-17 partway (partial versions.spec.ts, support/v2.ts kept uncommitted); relaunch one suite at a time
-  - [ ] gate · review · commit
+  - [x] e2e-qa-engineer, one suite per agent (first run was stopped by Ben 2026-10-17): versions.spec (two-version, 3/3 passes ~3.8 min), import.spec (2 tests, 3/3), preset.spec (fail-build path passes; main path exposed a Fake-script bug → fixed in backend), a11y.spec (118 tests, 46 failed on 6 real contrast/focus bugs → frontend fixing), scripts/perf/v2-perf.mjs (p95 list 7.4 ms, runs 11.5 ms, reports 6.2 ms at 4 clients)
+  - [x] fixes: live artifact refresh, Fake preset spec/deps consistency, a11y contrast + user-menu focus → redeploy --e2e → full E2E rerun on Chromium: v2 5/5 (5.8 min), a11y 116 passed / 2 skipped (admin creds), v1 11/11 (2 stale tests fixed), perf p95 ≤ 10.6 ms; firefox/webkit/edge not run (memory)
+  - [x] gate (backend 3595, frontend 731, manifests) · review (0 Critical, 0 Major, 5 Minor — logged for the Final fix round) · commit (phase 10b)
 - [ ] Final — spec-verifier (v1 + v2) → fixes → github-ci-engineer → readme-writer
 
 ## Decisions
@@ -196,8 +197,15 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 - 2026-10-17 — FR-92 notification types replace the interim mappings; channels subscribed to `release_failed`/`review_completed` don't receive awaiting-merge/deployment-failed/preview-ready unless they opt into the new events; `connection_invalid` is personal (in-app + account email, never project channels; muting stops both) — FR-92 — SPEC updated: no
 - 2026-10-17 — CLI: System.CommandLine `@response-file` expansion disabled so `--request @file` reads the file (`@-` = stdin) — FR-93 — SPEC updated: no
 - 2026-10-17 — E2E mode on k8s: `deploy-local.sh --e2e` (overlay local-e2e: Fake deployments + AllowFake, ImportRoot /data/import, Fake default LLM) + seeded `/data/import/existing-app` (tags v0.1.0, v0.2.0); plain deploy-local.sh switches back — §8/§9 — SPEC updated: no
+- 2026-10-18 — Perf on k8s measured with ~10 review cycles × ~13 steps (Fake LLM step counts aren't controllable via the API); the full 10 × 30 case is covered by the backend integration test that seeds directly — NFR-PERF2 — SPEC updated: no
+- 2026-10-18 — Light `primary`/`ring`/`sidebar-primary` deepened oklch(0.50 0.19 195) → (0.44 0.15 195) and dark `muted-foreground` 0.59 → 0.63 so tinted surfaces pass AA (axe found 3.7:1 avatar initials etc.); token test now checks tinted pairs (`TINTED_TEXT_PAIRS`). DropdownMenu defaults to Radix `modal={false}` to fix aria-hidden-focus — NFR-A11Y2 — SPEC updated: no
 
 ## Known issues
+- Phase 10b review Minors (Final fix round, vite-react-engineer unless noted): Review stage polls optimization_plan history every 10 s even when no plan is expected (stage-artifact.tsx:64); invalidateAfterJoin also runs on first join → ~2× initial fetches (use-project-live.ts:67); reconnect + failed Join never refetches (use-project-live.ts:62-103); run/gate events invalidate artifacts with cancelRefetch:true → aborted refetches in event bursts (live-invalidation.ts:295,305); dropdown-menu.tsx doc comment says Tab closes the menu (verify); v2-perf.mjs prints PASS even if fewer than 10 cycles were seeded (e2e-qa-engineer)
+- User menu: reopening right after choosing Account/Connections ignores the first click (non-modal Radix menu still mounted during close animation) — vite-react-engineer (final fixes)
+- E2E on firefox/webkit/edge not rerun for v2 (machine memory); Chromium + a11y only — e2e-qa-engineer
+- a11y E2E runs with `--project=a11y` (not chromium); admin-integrations axe check is skipped unless E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD are set (seed admin password is only logged on first creation) — e2e-qa-engineer
+- scripts/perf/v2-perf.mjs writes a perf user and projects to the k8s DB (reused on re-runs) — Ben
 - `GitHub` paths (App, PAT import, repo tools over GitHub snapshots) verified only against stub HTTP handlers — orchestrator
 - Vercel flows verified only against stub HTTP handlers + Fake provider (no real Vercel account) — Ben
 - E2E against k8s needs `Deployments__Provider=Fake` + `Deployments__AllowFake=true`; it also needs `Git__Local__ImportRoot` set (and a seeded "existing" repo under it) for the import E2E — local-k8s-engineer (phase 10)

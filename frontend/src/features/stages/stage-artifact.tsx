@@ -23,6 +23,9 @@ import { StageSection } from './stage-section'
 
 type Phase = Schemas['Phase']
 
+/** How often a current stage with no artifact version yet re-checks its history. */
+export const STAGE_EMPTY_POLL_MS = 10_000
+
 function versionOption(a: ArtifactSummary, newest: number | null, current: number | null) {
   const marks = [a.version === newest ? 'latest' : null, a.version === current ? 'current' : null].filter(Boolean)
   return `v${String(a.version)} · ${a.status ? artifactStatusLabels[a.status] : 'Unknown'}${marks.length > 0 ? ` (${marks.join(', ')})` : ''}`
@@ -58,7 +61,14 @@ export function StageArtifact({
   const { project, can, readOnly, releaseVersionId } = useProjectAccess()
   const label = artifactTypeLabels[type]
   const progress = stageProgress(stage, project, readOnly)
-  const history = useArtifactHistory(project.id, type, releaseVersionId)
+  // A safety net under the live updates (FR-46): while the current stage has no version yet, poll its history so the
+  // producing run's draft appears even if its live event was missed.
+  const history = useArtifactHistory(
+    project.id,
+    type,
+    releaseVersionId,
+    progress === 'current' ? STAGE_EMPTY_POLL_MS : undefined,
+  )
   const versions = history.data ?? []
   const newest = versions[0]?.version ?? null
   const current = currentLockedVersion(versions)

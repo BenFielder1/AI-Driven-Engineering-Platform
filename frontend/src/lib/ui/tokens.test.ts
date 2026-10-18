@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import css from '../../index.css?raw'
-import { contrastRatio, oklchToSrgb, parseOklch, relativeLuminance, WCAG_AA_NON_TEXT, WCAG_AA_TEXT } from './contrast'
-import { NON_TEXT_PAIRS, RADIUS, TEXT_PAIRS, TOKEN_NAMES, tokens, type ThemeName } from './tokens'
+import { compositeOver, contrastOnSrgb, contrastRatio, oklchToSrgb, parseOklch, relativeLuminance, WCAG_AA_NON_TEXT, WCAG_AA_TEXT } from './contrast'
+import { NON_TEXT_PAIRS, RADIUS, TEXT_PAIRS, TINTED_TEXT_PAIRS, TOKEN_NAMES, tokens, type ThemeName } from './tokens'
 
 const THEMES: ThemeName[] = ['dark', 'light']
 
@@ -19,6 +19,13 @@ describe('oklch colour maths', () => {
     expect(contrastRatio('oklch(1 0 0)', 'oklch(0 0 0)')).toBeCloseTo(21, 1)
   })
 
+  it('composites a tint over a surface in sRGB (the v2 axe run: #007f84 at 15% over the light sidebar)', () => {
+    const surface = compositeOver('oklch(0.50 0.19 195)', 0.15, 'oklch(0.98 0.003 260)')
+    // axe measured 3.74:1 for the old light primary on this surface (#d3e7e9).
+    expect(contrastOnSrgb('oklch(0.50 0.19 195)', surface)).toBeCloseTo(3.7, 1)
+    expect(contrastOnSrgb('oklch(1 0 0)', compositeOver('oklch(0 0 0)', 0, 'oklch(1 0 0)'))).toBeCloseTo(1, 3)
+  })
+
   it('is symmetric', () => {
     expect(contrastRatio('oklch(0.97 0.005 260)', 'oklch(0.06 0.01 260)')).toBe(
       contrastRatio('oklch(0.06 0.01 260)', 'oklch(0.97 0.005 260)'),
@@ -31,6 +38,13 @@ describe('NFR-A11Y2: design tokens meet WCAG 2.2 AA in both themes', () => {
     for (const [fg, bg] of TEXT_PAIRS) {
       const ratio = contrastRatio(tokens[theme][fg], tokens[theme][bg])
       it(`NFR_A11Y2_${theme}: text ${fg} on ${bg} >= 4.5:1 (${ratio.toFixed(2)}:1)`, () => {
+        expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_TEXT)
+      })
+    }
+    for (const [fg, tint, alpha, surface] of TINTED_TEXT_PAIRS) {
+      const t = tokens[theme]
+      const ratio = contrastOnSrgb(t[fg], compositeOver(t[tint], alpha, t[surface]))
+      it(`NFR_A11Y2_${theme}: text ${fg} on ${tint}/${String(alpha * 100)} over ${surface} >= 4.5:1 (${ratio.toFixed(2)}:1)`, () => {
         expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_TEXT)
       })
     }

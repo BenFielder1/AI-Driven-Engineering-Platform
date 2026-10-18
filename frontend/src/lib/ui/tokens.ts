@@ -4,8 +4,14 @@
  * themes (NFR-A11Y2). Change a value here and in index.css together.
  *
  * Values are Space Worm Analytics' `globals.css` (the reference design), except where they fail AIDE's contrast test:
- * - `muted-foreground` (dark) is `oklch(0.59 0.01 260)` instead of 0.57: 0.57 gives 4.35:1 on `secondary` and 4.46:1
- *   on `sidebar-accent` (hovered sidebar items).
+ * - `muted-foreground` (dark) is `oklch(0.63 0.01 260)` instead of 0.57: 0.57 gives 4.35:1 on `secondary` and 4.46:1
+ *   on `sidebar-accent` (hovered sidebar items). v1/v2 used 0.59 until the v2 axe run: that gives 4.43:1 on a checked
+ *   radio option (`bg-primary/10` over the background) and 4.39:1 in the command palette, so it is 0.63 now.
+ * - `primary` (light), and with it `ring`, `sidebar-primary` and `sidebar-ring`, is `oklch(0.44 0.15 195)` instead of
+ *   0.50 / 0.19: the reference passes on plain surfaces but primary text on tinted ones failed the v2 axe run — avatar
+ *   initials on `bg-primary/15` (3.74:1), the selected review cycle's link on `bg-primary/10` (4.18:1), links in unread
+ *   notifications on `bg-muted` (4.4:1). The slightly deeper teal keeps the look and clears 4.5:1 on all of them
+ *   (`TINTED_TEXT_PAIRS`).
  * - `destructive-foreground` (dark) is a dark red-black, `oklch(0.10 0.02 25)`: the reference's near-white gives
  *   3.89:1 on the dark `destructive` fill (danger buttons).
  * - `success` (light) is `oklch(0.50 0.15 155)` instead of 0.55 / 0.20: the reference gives 4.04:1 as text on the
@@ -72,7 +78,7 @@ export const tokens: Record<ThemeName, ThemeTokens> = {
     secondary: 'oklch(0.16 0.015 260)',
     'secondary-foreground': 'oklch(0.97 0.005 260)',
     muted: 'oklch(0.13 0.01 260)',
-    'muted-foreground': 'oklch(0.59 0.01 260)',
+    'muted-foreground': 'oklch(0.63 0.01 260)',
     accent: 'oklch(0.16 0.015 260)',
     'accent-foreground': 'oklch(0.97 0.005 260)',
     destructive: 'oklch(0.62 0.25 25)',
@@ -106,7 +112,7 @@ export const tokens: Record<ThemeName, ThemeTokens> = {
     'card-foreground': 'oklch(0.10 0.02 260)',
     popover: 'oklch(1 0 0)',
     'popover-foreground': 'oklch(0.10 0.02 260)',
-    primary: 'oklch(0.50 0.19 195)',
+    primary: 'oklch(0.44 0.15 195)',
     'primary-foreground': 'oklch(0.98 0.005 195)',
     secondary: 'oklch(0.96 0.006 260)',
     'secondary-foreground': 'oklch(0.10 0.02 260)',
@@ -123,7 +129,7 @@ export const tokens: Record<ThemeName, ThemeTokens> = {
     border: 'oklch(0.93 0.006 260)',
     input: 'oklch(0.93 0.006 260)',
     'field-border': 'oklch(0.58 0.015 260)',
-    ring: 'oklch(0.50 0.19 195)',
+    ring: 'oklch(0.44 0.15 195)',
     'chart-1': 'oklch(0.58 0.14 195)',
     'chart-2': 'oklch(0.55 0.22 300)',
     'chart-3': 'oklch(0.58 0.15 165)',
@@ -131,12 +137,12 @@ export const tokens: Record<ThemeName, ThemeTokens> = {
     'chart-5': 'oklch(0.58 0.22 340)',
     sidebar: 'oklch(0.98 0.003 260)',
     'sidebar-foreground': 'oklch(0.10 0.02 260)',
-    'sidebar-primary': 'oklch(0.50 0.19 195)',
+    'sidebar-primary': 'oklch(0.44 0.15 195)',
     'sidebar-primary-foreground': 'oklch(0.98 0.005 195)',
     'sidebar-accent': 'oklch(0.95 0.006 260)',
     'sidebar-accent-foreground': 'oklch(0.10 0.02 260)',
     'sidebar-border': 'oklch(0.93 0.006 260)',
-    'sidebar-ring': 'oklch(0.50 0.19 195)',
+    'sidebar-ring': 'oklch(0.44 0.15 195)',
   },
 }
 
@@ -163,6 +169,16 @@ export const TEXT_PAIRS: readonly (readonly [fg: TokenName, bg: TokenName])[] = 
   // Coloured text: links and active icons (primary), errors (destructive), success messages.
   ['primary', 'background'],
   ['primary', 'card'],
+  // Links on muted surfaces: unread notifications (`bg-muted`), hovered/selected rows and menus (accent, secondary).
+  ['primary', 'muted'],
+  ['primary', 'accent'],
+  ['primary', 'secondary'],
+  ['primary', 'popover'],
+  ['primary', 'sidebar'],
+  ['primary', 'sidebar-accent'],
+  // Muted text in menus, the command palette and dialogs (popover) and on hovered items (accent).
+  ['muted-foreground', 'popover'],
+  ['muted-foreground', 'accent'],
   ['destructive', 'background'],
   ['destructive', 'card'],
   ['success', 'background'],
@@ -170,6 +186,27 @@ export const TEXT_PAIRS: readonly (readonly [fg: TokenName, bg: TokenName])[] = 
   ['sidebar-foreground', 'sidebar'],
   ['sidebar-accent-foreground', 'sidebar-accent'],
   ['sidebar-primary-foreground', 'sidebar-primary'],
+]
+
+/**
+ * Text on a translucent tint (`bg-<tint>/<alpha>`) composited over an opaque surface, as the UI really renders it.
+ * Checked at 4.5:1 in both themes (NFR-A11Y2): `[fg, tint, alpha, surface]`.
+ */
+export const TINTED_TEXT_PAIRS: readonly (readonly [fg: TokenName, tint: TokenName, alpha: number, surface: TokenName])[] = [
+  // Avatar initials (`bg-primary/15 text-primary`) in the sidebar, its hovered row, the mobile drawer and menus.
+  ['primary', 'primary', 0.15, 'sidebar'],
+  ['primary', 'primary', 0.15, 'sidebar-accent'],
+  ['primary', 'primary', 0.15, 'background'],
+  ['primary', 'primary', 0.15, 'card'],
+  ['primary', 'primary', 0.15, 'popover'],
+  // Selected rows (`bg-primary/10`, e.g. the selected review cycle) with a primary link.
+  ['primary', 'primary', 0.1, 'card'],
+  ['primary', 'primary', 0.1, 'background'],
+  // Descriptions under a checked radio option (`has-checked:bg-primary/10`).
+  ['muted-foreground', 'primary', 0.1, 'background'],
+  ['muted-foreground', 'primary', 0.1, 'card'],
+  ['muted-foreground', 'primary', 0.1, 'muted'],
+  ['foreground', 'primary', 0.15, 'card'],
 ]
 
 /** Non-text UI pairs that must meet WCAG AA (3:1): form-field outlines, focus rings, the active nav icon. */

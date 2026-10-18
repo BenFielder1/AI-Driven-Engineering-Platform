@@ -2,9 +2,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useContext, useEffect, useState } from 'react'
 
 import { notificationKeys } from '../notifications/notifications-api'
-import { projectKeys } from '../projects/projects-api'
 import { LiveConnectionContext } from './live-connection'
-import { invalidateForEvent } from './live-invalidation'
+import { invalidateAfterJoin, invalidateForEvent } from './live-invalidation'
 
 /**
  * `connecting` until joined; `live` while receiving events; `reconnecting` while SignalR retries; `offline` when the
@@ -42,7 +41,7 @@ export const NOTIFICATION_REFRESH_DEBOUNCE_MS = 500
 
 /**
  * FR-46: while a project page is open, receive its events over the projects hub and refresh the affected queries.
- * Joins the project's group on connect and after every automatic reconnect (refetching what may have been missed),
+ * Joins the project's group on connect and after every automatic reconnect, then refetches what may have been missed,
  * leaves it and closes the connection on unmount.
  */
 export function useProjectLive(projectId: string): LiveStatus {
@@ -62,6 +61,11 @@ export function useProjectLive(projectId: string): LiveStatus {
     const join = async () => {
       try {
         await connection.invoke('Join', projectId)
+        if (disposed) {
+          return
+        }
+        // Events sent before the join completed were never delivered here: refetch what they may have changed.
+        void invalidateAfterJoin(queryClient, projectId)
         update('live')
       } catch {
         // FORBIDDEN (no longer a member) or the hub is unavailable: stay usable without live updates.
@@ -93,8 +97,8 @@ export function useProjectLive(projectId: string): LiveStatus {
       if (disposed) {
         return
       }
-      // Events sent while we were disconnected are lost: refresh everything about the project, then rejoin.
-      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) })
+      // Events sent while we were disconnected are lost: rejoin, then refresh everything about the project (after the
+      // join, so nothing sent during the rejoin is missed either).
       void join()
     })
     connection.onClose(() => {

@@ -73,6 +73,25 @@ public static class FakePresetScripts
     public static IReadOnlyList<string> PlannedPresets { get; } = ["nextjs-frontend", "nextjs-supabase"];
 
     /// <summary>
+    /// The runtime dependencies (name, version) the Fake scaffolder's <c>package.json</c> declares. The Fake spec's
+    /// <c>### Dependencies</c> lists exactly these and <see cref="DevDependencies"/> (one source, so the review's allowlist
+    /// check finds nothing).
+    /// </summary>
+    public static IReadOnlyList<(string Name, string Version)> Dependencies { get; } =
+        [("next", "16.0.0"), ("react", "19.2.0"), ("react-dom", "19.2.0"), ("zod", "4.1.0")];
+
+    /// <summary>The dev dependencies of the Fake scaffolder's <c>package.json</c> (see <see cref="Dependencies"/>).</summary>
+    public static IReadOnlyList<(string Name, string Version)> DevDependencies { get; } =
+        [("typescript", "5.9.0"), ("vitest", "3.2.0"), ("@playwright/test", "1.56.0")];
+
+    /// <summary>
+    /// The endpoints (method, path) of the Fake API step for <paramref name="resources"/>: the Fake spec's API contracts
+    /// list them and the generated route handler names them, so the review's endpoint check finds every one.
+    /// </summary>
+    public static IReadOnlyList<(string Method, string Path)> Endpoints(string resources) =>
+        [("GET", $"/api/{resources}"), ("POST", $"/api/{resources}"), ("GET", $"/api/{resources}/{{id}}"), ("PUT", $"/api/{resources}/{{id}}"), ("DELETE", $"/api/{resources}/{{id}}")];
+
+    /// <summary>
     /// The plan steps (as the plan generator's JSON objects) for <paramref name="presetId"/>, or <c>null</c> for a preset this
     /// script doesn't know. On an empty repository the scaffolder goes first and the devops engineer last; an iteration
     /// (<paramref name="repoHasCode"/>) adds the feature steps only, covering <paramref name="scope"/>.
@@ -152,8 +171,8 @@ public static class FakePresetScripts
                             ["test"] = "vitest run",
                             ["test:e2e"] = "playwright test",
                         },
-                        dependencies = new Dictionary<string, string> { ["next"] = "16.0.0", ["react"] = "19.2.0", ["react-dom"] = "19.2.0", ["zod"] = "4.1.0" },
-                        devDependencies = new Dictionary<string, string> { ["typescript"] = "5.9.0", ["vitest"] = "3.2.0", ["@playwright/test"] = "1.56.0" },
+                        dependencies = Dependencies.ToDictionary(d => d.Name, d => d.Version, StringComparer.Ordinal),
+                        devDependencies = DevDependencies.ToDictionary(d => d.Name, d => d.Version, StringComparer.Ordinal),
                     },
                     Indented) + "\n";
             case "vercel.json":
@@ -188,6 +207,14 @@ public static class FakePresetScripts
                 return $"# {header}\nname: checks\non:\n  pull_request:\n  push:\n    branches: [main]\njobs:\n  checks:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version-file: .nvmrc\n      - run: if [ -f package-lock.json ]; then npm ci; else npm install; fi\n      - run: npm run typecheck\n      - run: npm run lint\n      - run: npm test\n      - run: npm run build\n";
             default:
                 break;
+        }
+
+        // The API step's route handler names the endpoints the Fake spec lists (app/api/<resources>/route.ts).
+        var segments = path.Split('/');
+        if (segments is ["app", "api", var resources, "route.ts"])
+        {
+            var routes = string.Join(", ", Endpoints(resources).Select(e => $"{e.Method} {e.Path.Replace("{id}", ":id", StringComparison.Ordinal)}"));
+            return $"// {header}\n// Routes: {routes}\nexport async function GET() {{\n  return Response.json([]);\n}}\n";
         }
 
         if (path.StartsWith("supabase/migrations/", StringComparison.Ordinal) && fileName.EndsWith(".sql", StringComparison.Ordinal))

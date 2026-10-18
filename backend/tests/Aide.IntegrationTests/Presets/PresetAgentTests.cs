@@ -330,6 +330,48 @@ public sealed class PresetAgentTests(AideApiFactory factory)
         Assert.Equal("nextjs-supabase", (await AgentJobs.RunsAsync(app, id)).Single(r => r.Agent == AgentKind.CodeReview).PresetId);
     }
 
+    // ---------- §8: the Fake preset path end to end ----------
+
+    [Fact]
+    public async Task S8_A_Fake_nextjs_frontend_project_goes_spec_plan_execution_review_to_release_eligible()
+    {
+        using var fixture = await ProjectApi.FixtureAsync(factory);
+        var id = fixture.Project.Id;
+        await SetPresetAsync(factory, id, Shipped("nextjs-frontend"));
+        await LifecycleSeed.SetProjectAsync(factory, id, Phase.Refinement, 1, ApprovalMode.Autonomous);
+        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, content: ProjectRequest);
+
+        // Specification, then planning: each Fake draft approved and the project advanced.
+        foreach (var type in new[] { ArtifactType.TechnicalSpecification, ArtifactType.ImplementationPlan })
+        {
+            await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
+            Assert.All(await AgentJobs.RunQueuedAsync(factory, id), j => Assert.Equal(JobStatus.Succeeded, j.Status));
+            var draft = (await AgentJobs.ArtifactsAsync(factory, id, type)).Single();
+            await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
+        }
+
+        await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
+        await ProjectApi.ReadAsync<ExecutionStateDto>(await fixture.Contributor.Client.PostAsJsonAsync($"{fixture.Path}/execution/start", new { }, Ct), HttpStatusCode.Accepted);
+        await AgentJobs.RunQueuedAsync(factory, id);
+
+        var report = await LatestReportAsync(fixture);
+        Assert.DoesNotContain(report.Violations, v => v.Source == FindingSource.Deterministic);
+        if (report.Decision == ReviewDecision.ReviewRequired)
+        {
+            // The default Fake review asks for one optimisation loop; approving its plan runs it and review cycle 2.
+            var optimization = (await AgentJobs.ArtifactsAsync(factory, id, ArtifactType.OptimizationPlan)).Single();
+            await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, optimization.Id, "approve"));
+            await AgentJobs.RunQueuedAsync(factory, id);
+            report = await LatestReportAsync(fixture);
+        }
+
+        Assert.Equal(ReviewDecision.ReleaseEligible, report.Decision);
+        Assert.DoesNotContain(report.Violations, v => v.Source == FindingSource.Deterministic);
+    }
+
+    private static async Task<ComplianceReportDto> LatestReportAsync(ProjectFixture fixture) =>
+        await ProjectApi.ReadAsync<ComplianceReportDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/compliance/latest", UriKind.Relative), Ct));
+
     // ---------- FR-74: projects list filter ----------
 
     [Fact]

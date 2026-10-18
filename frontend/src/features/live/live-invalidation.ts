@@ -31,15 +31,18 @@ const everything = (id: string): Target => ({ queryKey: projectKeys.detail(id) }
 export const liveInvalidation: Record<EventCategory, (id: string) => Target[]> = {
   // Phase or status change: header, timeline, state and the projects list all change.
   transition: (id) => [everything(id), lists()],
-  // Gate created/decided: approving moves the phase (that also arrives as a transition event).
-  gate: (id) => [project(id), state(id), gates(id), activity(id)],
+  // Gate created/decided: approving moves the phase (that also arrives as a transition event). A gate is created for
+  // a draft the next stage's run just produced, so the artifact queries are refreshed too: the page must never show
+  // "awaiting approval" next to "no plan yet" if the draft's own artifact event was missed.
+  gate: (id) => [project(id), state(id), gates(id), activity(id), artifacts(id)],
   // New version, approval, rejection, invalidation cascade (§4.4) or corruption. A new project request draft ends a
   // refinement round (FR-27); approving a plan creates its execution steps and invalidates older ones (FR-30).
   artifact: (id) => [artifacts(id), state(id), activity(id), refinement(id), execution(id)],
   integrity: (id) => [artifacts(id), activity(id)],
   // Agent runs (started, completed, failed, refused by the budget) change the runs list and the tokens used; the
-  // artifacts they produce arrive as artifact events (FR-23, FR-26). A refinement round's status is its run's (FR-27).
-  run: (id) => [project(id), state(id), runs(id), activity(id), refinement(id)],
+  // artifacts they produce also arrive as artifact events (FR-23, FR-26), but a completed run refreshes the artifact
+  // queries as well so a missed artifact event can't leave a stage page empty. A refinement round's status is its run's (FR-27).
+  run: (id) => [project(id), state(id), runs(id), activity(id), refinement(id), artifacts(id)],
   // STEP_STARTED/COMPLETED/REJECTED/BLOCKED (FR-31–FR-34) and pause/resume (FR-37): steps, counts and the pause flag
   // (on both /state and the project). A blocked step's escalation gate arrives as a gate event. PULL_REQUEST_OPENED/
   // FAILED and GIT_PUSH_FAILED are step events too: /state's pullRequest summary and the PR comparison change (FR-36).
@@ -58,6 +61,14 @@ export const liveInvalidation: Record<EventCategory, (id: string) => Target[]> =
   rollback: (id) => [everything(id), lists()],
   // Settings, members, rename.
   project: (id) => [everything(id), lists()],
+}
+
+/**
+ * FR-46: after joining (or rejoining) a project's group, everything about the project is refreshed once: events sent
+ * before the join completed (e.g. a draft created while the page was opening) never reach this client.
+ */
+export function invalidateAfterJoin(queryClient: QueryClient, id: string) {
+  return queryClient.invalidateQueries(everything(id), { cancelRefetch: false })
 }
 
 /** Invalidates what a live event of `category` affects for project `id`. */

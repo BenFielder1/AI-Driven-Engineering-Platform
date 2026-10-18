@@ -4,6 +4,7 @@ import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
 
 import { A11Y_FIXTURE, type A11yFixture } from './support/a11y-fixture.ts'
+import { v2Targets } from './support/a11y-v2-targets.ts'
 
 /**
  * NFR-A11Y: automated WCAG 2.2 AA checks (axe-core) on the core flows, in the light and the dark theme (the app
@@ -52,26 +53,6 @@ const targets: Target[] = [
       await expect(p.getByRole('heading', { name: 'Step 2 of 8: Project idea' })).toBeVisible()
       await p.getByRole('button', { name: 'Next' }).click()
       await expect(p.getByText('Check this step')).toBeVisible()
-    },
-  },
-  {
-    name: 'wizard (configuration step)',
-    path: () => '/projects/new',
-    signedIn: true,
-    ready: (p) => p.getByRole('heading', { name: 'Step 1 of 8: Source' }),
-    prepare: async (p) => {
-      await p.getByRole('button', { name: 'Next' }).click()
-      await p.getByLabel('Project name').fill('A11y wizard')
-      await p.getByLabel('Your idea').fill('Checking the configuration step for accessibility.')
-      await p.getByRole('button', { name: 'Next' }).click()
-      await expect(p.getByRole('heading', { name: 'Step 3 of 8: Repository' })).toBeVisible()
-      await p.getByRole('radio', { name: /^Local repository/ }).check()
-      await p.getByRole('button', { name: 'Next' }).click()
-      await expect(p.getByRole('heading', { name: 'Step 4 of 8: Version' })).toBeVisible()
-      await p.getByRole('button', { name: 'Next' }).click()
-      await expect(p.getByRole('heading', { name: 'Step 5 of 8: Stack' })).toBeVisible()
-      await p.getByRole('button', { name: 'Next' }).click()
-      await expect(p.getByRole('heading', { name: 'Step 6 of 8: Configuration' })).toBeVisible()
     },
   },
   {
@@ -147,6 +128,7 @@ const targets: Target[] = [
     signedIn: true,
     ready: (p) => p.getByRole('table', { name: /^Agent runs, newest first/ }),
   },
+  ...v2Targets(fixture),
 ]
 
 /**
@@ -169,6 +151,12 @@ const shellStates: ShellState[] = [
     path: () => `/projects/${fixture().projectId}/review`,
     width: 1440,
     ready: (p) => p.getByRole('navigation', { name: 'Lifecycle stages' }),
+  },
+  {
+    name: 'sidebar collapsed to icons at lg (1100 px)',
+    path: () => `/projects/${fixture().projectId}/artifacts`,
+    width: 1100,
+    ready: (p) => p.getByRole('complementary', { name: 'Sidebar' }).getByRole('button', { name: 'Expand sidebar' }),
   },
   {
     name: 'mobile drawer open (375 px)',
@@ -260,6 +248,103 @@ test('FR54: the stage stepper is keyboard navigable and marks the current stage'
     await context.close()
   }
 })
+
+/** Tabs forward (at most `max` times) until focus is on or inside `target`; returns whether it got there. */
+async function tabTo(page: Page, target: Locator, max = 60): Promise<boolean> {
+  await target.evaluate((el) => {
+    el.setAttribute('data-tab-target', '')
+  })
+  for (let i = 0; i < max; i++) {
+    await page.keyboard.press('Tab')
+    if (await page.evaluate(() => document.activeElement?.closest('[data-tab-target]') != null)) {
+      await target.evaluate((el) => {
+        el.removeAttribute('data-tab-target')
+      })
+      return true
+    }
+  }
+  return false
+}
+
+test('NFR-A11Y2, FR-53: sidebar items are reachable by Tab and the active item has aria-current', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: fixture().storageState, viewport: { width: 1440, height: 900 } })
+  try {
+    const page = await context.newPage()
+    await page.goto(`/projects/${fixture().projectId}/artifacts`)
+    const sidebar = page.getByRole('complementary', { name: 'Sidebar' })
+    await expect(sidebar.getByRole('navigation', { name: 'Project sections' })).toBeVisible({ timeout: 20_000 })
+    const current = sidebar.locator('a[aria-current="page"]')
+    await expect(current).toHaveCount(1)
+    await expect(current).toContainText('Artifacts')
+    // From the top of the page: skip link, lockup, search, project switcher, then the project nav, in order.
+    expect(await tabTo(page, sidebar.getByRole('navigation', { name: 'Project sections' }).getByRole('link').first())).toBe(true)
+    expect(await tabTo(page, current)).toBe(true)
+    await expect(current).toBeFocused()
+    // FR-54: the stepper comes after the sidebar in Tab order, and its links are focusable.
+    expect(await tabTo(page, page.getByRole('navigation', { name: 'Lifecycle stages' }))).toBe(true)
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('navigation', { name: 'Lifecycle stages' }).locator('[aria-current="page"]')).toHaveCount(1)
+    // Navigating moves aria-current in the sidebar too (no stale active item).
+    await expect(sidebar.locator('a[aria-current="page"]')).toHaveCount(1)
+    await expect(sidebar.locator('a[aria-current="page"]')).not.toContainText('Artifacts')
+  } finally {
+    await context.close()
+  }
+})
+
+test('FR-54: stepper ArrowLeft moves back, Home goes to the first stage and arrows stop at the ends', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: fixture().storageState, viewport: { width: 1440, height: 900 } })
+  try {
+    const page = await context.newPage()
+    await page.goto(`/projects/${fixture().projectId}/planning`)
+    const stepper = page.getByRole('navigation', { name: 'Lifecycle stages' })
+    await expect(stepper.locator('[aria-current="page"]')).toContainText('Planning', { timeout: 20_000 })
+    const links = stepper.getByRole('link')
+    await links.nth(2).focus()
+    await page.keyboard.press('ArrowLeft')
+    await expect(links.nth(1)).toBeFocused()
+    await page.keyboard.press('Home')
+    await expect(links.first()).toBeFocused()
+    await page.keyboard.press('ArrowLeft')
+    await expect(links.first()).toBeFocused()
+    await page.keyboard.press('End')
+    await page.keyboard.press('ArrowRight')
+    await expect(links.nth(5)).toBeFocused()
+  } finally {
+    await context.close()
+  }
+})
+
+/**
+ * NFR-A11Y2: Admin → Integrations needs an Admin (the first account on the cluster, seeded as admin@aide.local with a
+ * generated password). Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run it.
+ */
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`NFR-A11Y2: admin integrations has no WCAG 2.2 AA violations (${colorScheme} theme)`, async ({ browser }, testInfo) => {
+    const email = process.env.E2E_ADMIN_EMAIL
+    const adminPassword = process.env.E2E_ADMIN_PASSWORD
+    test.skip(!email || !adminPassword, 'needs E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD (an Admin account on the target)')
+    const context = await browser.newContext({ colorScheme })
+    try {
+      const login = await context.request.post('/api/auth/login', { data: { email, password: adminPassword } })
+      expect(login.status(), await login.text()).toBe(200)
+      const page = await context.newPage()
+      await page.goto('/admin/integrations')
+      await expect(page.getByRole('heading', { level: 2, name: 'Integrations', exact: true })).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByRole('status').filter({ hasText: /^Loading/ })).toHaveCount(0)
+      const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
+      const violations = results.violations.map((v) => ({
+        id: v.id,
+        impact: v.impact,
+        nodes: v.nodes.map((n) => ({ target: n.target.join(' '), summary: n.failureSummary })),
+      }))
+      await testInfo.attach('axe-violations.json', { body: JSON.stringify(violations, null, 2), contentType: 'application/json' })
+      expect(violations, JSON.stringify(violations, null, 2)).toEqual([])
+    } finally {
+      await context.close()
+    }
+  })
+}
 
 async function open(browser: Browser, target: Target, colorScheme: 'light' | 'dark', width?: number) {
   const context = await browser.newContext({

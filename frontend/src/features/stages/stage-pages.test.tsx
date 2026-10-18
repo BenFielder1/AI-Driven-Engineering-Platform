@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { errorMessages } from '../../lib/errors'
 import { authDb } from '../../mocks/handlers/auth'
@@ -12,6 +12,7 @@ import type { StoredProject } from '../../mocks/handlers/projects'
 import { seedProjectAs } from '../../test/artifacts'
 import { renderRoute } from '../../test/render'
 import { dependencyWaves } from './plan-waves'
+import { STAGE_EMPTY_POLL_MS } from './stage-artifact'
 
 async function openStage(project: StoredProject, stage: string, title: string) {
   const utils = renderRoute(`/projects/${project.id}/${stage}`)
@@ -104,6 +105,29 @@ describe('Stage pages (FR-55)', () => {
     expect(screen.getByText(/The Plan Generator writes the implementation plan/)).toHaveTextContent(
       'The specification has to be approved and the project advanced to Planning first.',
     )
+  })
+
+  it('FR46_current_stage_without_a_version_polls_so_a_missed_live_event_cannot_leave_it_empty', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const project = seedProjectAs('owner', (p) => {
+        p.currentPhase = 'planning'
+        seedGate(p, { type: 'plan_approval' })
+      })
+      await openStage(project, 'planning', 'Planning')
+      expect(screen.getByRole('heading', { name: 'No implementation plan yet' })).toBeInTheDocument()
+
+      // The Plan Generator's draft lands, but this page never hears about it live.
+      seedArtifact(project, { type: 'implementation_plan', content: '# Plan\n\nBuild it.' })
+      await vi.advanceTimersByTimeAsync(STAGE_EMPTY_POLL_MS)
+
+      await waitFor(() => {
+        expect(screen.queryByRole('heading', { name: 'No implementation plan yet' })).not.toBeInTheDocument()
+      })
+      expect(await within(stageArtifact()).findByText('Build it.')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('FR55_spec_outline_links_to_sections_and_the_changes_filter_lists_tagged_requirements', async () => {

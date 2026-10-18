@@ -224,6 +224,23 @@ describe('FR-53: app shell', () => {
     expect(trigger).toHaveFocus()
   })
 
+  it('NFR_A11Y_menus: an open user menu does not aria-hide the focusable page behind it (axe aria-hidden-focus)', async () => {
+    signInAs({ systemRole: 'user', name: 'Bob Builder', email: 'bob@example.com' })
+    renderRoute('/projects')
+    const user = userEvent.setup()
+    await screen.findByRole('heading', { level: 1, name: 'Projects' })
+
+    const menu = await openUserMenu(user)
+    expect(menu).toBeInTheDocument()
+    // Nothing outside the menu is hidden from assistive tech or made inert while it is open.
+    expect(document.querySelector('[aria-hidden="true"] a, [aria-hidden="true"] button, [aria-hidden="true"] input')).toBeNull()
+    expect(document.querySelector('[data-aria-hidden="true"]')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Skip to content' })).toBeInTheDocument()
+    expect(screen.getByRole('main')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
   it('FR53_theme: the theme menu applies and persists System / Light / Dark', async () => {
     signInAs()
     renderRoute('/projects')
