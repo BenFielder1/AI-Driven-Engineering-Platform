@@ -307,7 +307,11 @@ export const notificationEvents = [
   'review_completed',
   'release_completed',
   'release_failed',
+  'release_awaiting_merge',
   'rollback',
+  'deployment_failed',
+  'preview_ready',
+  'llm_binding_cleared',
 ] as const satisfies readonly Schemas['NotificationEvent'][]
 
 export const notificationEventLabels: Record<Schemas['NotificationEvent'], string> = {
@@ -320,10 +324,17 @@ export const notificationEventLabels: Record<Schemas['NotificationEvent'], strin
   review_completed: 'Review completed',
   release_completed: 'Release completed',
   release_failed: 'Release failed',
+  release_awaiting_merge: 'Release awaiting a merge on GitHub',
   rollback: 'Rollback',
+  deployment_failed: 'Deployment failed',
+  preview_ready: 'Preview ready',
+  llm_binding_cleared: 'LLM connection unbound',
 }
 
-/** In-app notification types (FR-47, FR-15): the channel events plus the 24-hour gate reminder. */
+/**
+ * In-app notification types (FR-47, FR-15, FR-92): the channel events plus the 24-hour gate reminder and the personal
+ * `connection_invalid` (never a channel event).
+ */
 export const notificationTypes = [
   'gate_required',
   'gate_reminder',
@@ -335,13 +346,22 @@ export const notificationTypes = [
   'review_completed',
   'release_completed',
   'release_failed',
+  'release_awaiting_merge',
   'rollback',
+  'deployment_failed',
+  'preview_ready',
+  'llm_binding_cleared',
+  'connection_invalid',
 ] as const satisfies readonly Schemas['NotificationType'][]
 
 export const notificationTypeLabels: Record<Schemas['NotificationType'], string> = {
   ...notificationEventLabels,
   gate_reminder: 'Gate reminder (after 24 hours)',
+  connection_invalid: 'Connection invalid',
 }
+
+/** FR-92: personal notification types — sent to one user (in-app and their account email), never to project channels. */
+export const personalNotificationTypes = ['connection_invalid'] as const satisfies readonly Schemas['NotificationType'][]
 
 /** FR-48: the decision a one-click approval link carries. */
 export const approvalDecisionLabels: Record<Schemas['ApprovalLinkDecision'], string> = {

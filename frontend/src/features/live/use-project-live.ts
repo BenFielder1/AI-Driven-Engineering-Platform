@@ -13,22 +13,28 @@ import { invalidateForEvent } from './live-invalidation'
 export type LiveStatus = 'connecting' | 'live' | 'reconnecting' | 'offline'
 
 /**
- * FR-47: the event types that raise a notification (mirrors `NotificationRules.ForEvent` in Aide.Domain). Other events
- * never change the bell, so they don't refresh it.
+ * FR-47, FR-92: the event types that raise a notification (mirrors `NotificationRules.ForEvent` in Aide.Domain). Other
+ * events never change the bell, so they don't refresh it. `CONNECTION_INVALID` raises the personal `connection_invalid`
+ * notification; a project-scoped one (an LLM or Vercel connection) arrives on the project hub, a GitHub one (no project)
+ * is picked up by the bell's poll.
  */
 export const NOTIFYING_EVENT_TYPES: ReadonlySet<string> = new Set([
   'GATE_CREATED',
   'GATE_OVERDUE',
   'ARTIFACT_CREATED',
+  'ARTIFACT_RESTORED',
   'STEP_BLOCKED',
   'RUN_FAILED',
   'BUDGET_EXCEEDED',
   'REVIEW_COMPLETED',
   'RELEASE_COMPLETED',
   'RELEASE_FAILED',
-  // FR-65, FR-92: Owners are told when a release waits for a merge on GitHub.
   'RELEASE_AWAITING_MERGE',
   'ROLLBACK_COMPLETED',
+  'DEPLOYMENT_FAILED',
+  'DEPLOYMENT_PREVIEW_READY',
+  'CONNECTION_INVALID',
+  'LLM_BINDING_CLEARED',
 ])
 
 /** Trailing debounce for the notification refresh, so a burst of events (a draft, an execution run) refetches once. */

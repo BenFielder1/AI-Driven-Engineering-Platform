@@ -185,13 +185,21 @@ internal static class ActivitySummary
             EventTypes.GateOverdue => $"{Get("type") ?? "Approval"} gate is overdue",
             EventTypes.RollbackCompleted => $"Rolled back from checkpoint {Get("fromCheckpoint") ?? Get("fromVersion") ?? "?"} to checkpoint {Get("targetCheckpoint") ?? Get("targetVersion") ?? "?"}",
             EventTypes.VersionStarted => $"Version {Get("version") ?? "?"} started",
+            EventTypes.PresetChanged => $"Preset of version {Get("version") ?? "?"} changed from {Get("fromPresetId") ?? "none"} to {Get("presetId") ?? "none"}",
+            EventTypes.ArtifactRestored => $"{Get("type") ?? "Artifact"} v{Get("restoredFromVersion") ?? "?"} restored as draft v{Get("version") ?? "?"}",
+            EventTypes.CodebaseSummaryCreated => $"Codebase summary v{Get("version") ?? "?"} created by the Repository Analyst",
+            EventTypes.ReleaseAwaitingMerge => $"Release {Get("tag") ?? Get("version") ?? "?"} awaits a merge on GitHub",
+            EventTypes.ReleaseMergedExternally => $"Release {Get("tag") ?? Get("version") ?? "?"} merged on GitHub",
             EventTypes.RunStarted => $"{Get("agent") ?? "Agent"} run started on {Get("model") ?? "?"}",
             EventTypes.RunCompleted => $"{Get("agent") ?? "Agent"} run completed ({Get("inputTokens") ?? "?"} in / {Get("outputTokens") ?? "?"} out tokens)",
             EventTypes.RunFailed => $"{Get("agent") ?? "Agent"} run failed: {Get("errorCode") ?? "error"}",
             EventTypes.BudgetExceeded => $"{Get("agent") ?? "Agent"} run refused: token budget used up",
-            EventTypes.ConnectionInvalid => Get("provider") == "vercel"
-                ? "Vercel rejected the connection's token; it is marked invalid"
-                : $"{Get("provider") ?? "LLM"} rejected the bound connection's key; it is marked invalid",
+            EventTypes.ConnectionInvalid => Get("provider") switch
+            {
+                "vercel" => "Vercel rejected the connection's token; it is marked invalid",
+                "github" => "GitHub rejected the user's connection; it is marked invalid",
+                var provider => $"{provider ?? "LLM"} rejected the bound connection's key; it is marked invalid",
+            },
             EventTypes.LlmBindingCleared => $"LLM binding cleared ({Get("reason") ?? "?"})",
             EventTypes.StepStarted => $"Step {Get("stepNumber") ?? "?"} started (attempt {Get("attempt") ?? "?"})",
             EventTypes.StepCompleted => $"Step {Get("stepNumber") ?? "?"} completed",

@@ -1,5 +1,3 @@
-using System.Data.Common;
-using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using Aide.Api.Features.Execution;
@@ -18,7 +16,6 @@ using Aide.Infrastructure.Persistence;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aide.IntegrationTests.Stages;
@@ -300,9 +297,9 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
     // ---------- §8 performance ----------
 
     [Fact]
-    public async Task FR57_FR56_Runs_and_cycles_take_a_fixed_number_of_queries_and_under_300ms_for_10_cycles_of_30_steps()
+    public async Task NFR_PERF2_FR57_FR56_Runs_and_cycles_take_a_fixed_number_of_queries_and_p95_under_300ms_for_10_cycles_of_30_steps()
     {
-        var counter = new CommandCounter();
+        var counter = new DbCommandCounter();
         var app = factory.WithWebHostBuilder(b => b.ConfigureTestServices(s => s.ConfigureDbContext<AideDbContext>(o => o.AddInterceptors(counter))));
         using var small = await ProjectApi.FixtureAsync(app);
         using var large = await ProjectApi.FixtureAsync(app);
@@ -321,16 +318,13 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         Assert.Equal(smallCycleQueries, largeCycleQueries);
         Assert.InRange(largeRunQueries, 1, 16);
 
-        var best = TimeSpan.MaxValue;
-        for (var i = 0; i < 5; i++)
+        // §8: p95 over 20 sequential requests of each endpoint (after the warm-up above).
+        foreach (var path in new[] { $"{large.Path}/execution/runs", $"{large.Path}/compliance/reports" })
         {
-            var watch = Stopwatch.StartNew();
-            Assert.Equal(HttpStatusCode.OK, (await GetAsync(large.Viewer.Client, $"{large.Path}/execution/runs")).StatusCode);
-            Assert.Equal(HttpStatusCode.OK, (await GetAsync(large.Viewer.Client, $"{large.Path}/compliance/reports")).StatusCode);
-            best = watch.Elapsed < best ? watch.Elapsed : best;
+            var samples = await Latency.SampleAsync(20, async () => Assert.Equal(HttpStatusCode.OK, (await GetAsync(large.Viewer.Client, path)).StatusCode));
+            var p95 = Latency.Percentile(samples, 95);
+            Assert.True(p95 < TimeSpan.FromMilliseconds(300), $"p95 of {path} took {p95.TotalMilliseconds} ms.");
         }
-
-        Assert.True(best < TimeSpan.FromMilliseconds(300), $"Best of 5 for both endpoints took {best.TotalMilliseconds} ms.");
     }
 
     // ---------- helpers ----------
@@ -481,7 +475,7 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
     private static int RunsStepCount(string json) =>
         JsonDocument.Parse(json).RootElement.EnumerateArray().Sum(r => r.GetProperty("steps").GetArrayLength());
 
-    private static async Task<(string Body, int Queries)> CountAsync(CommandCounter counter, HttpClient client, string path)
+    private static async Task<(string Body, int Queries)> CountAsync(DbCommandCounter counter, HttpClient client, string path)
     {
         // Warm up (first-call model and plan caches), then count one request.
         Assert.Equal(HttpStatusCode.OK, (await GetAsync(client, path)).StatusCode);
@@ -503,33 +497,4 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
 
     private static Task<HttpResponseMessage> GetAsync(HttpClient client, string path) =>
         client.GetAsync(new Uri(path, UriKind.Relative), Ct);
-
-    /// <summary>Counts the database commands the host executes.</summary>
-    private sealed class CommandCounter : DbCommandInterceptor
-    {
-        private int _count;
-
-        public int Count => Volatile.Read(ref _count);
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
-        {
-            Interlocked.Increment(ref _count);
-            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
-        }
-
-        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<object> result, CancellationToken cancellationToken = default)
-        {
-            Interlocked.Increment(ref _count);
-            return base.ScalarExecutingAsync(command, eventData, result, cancellationToken);
-        }
-
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
-        {
-            Interlocked.Increment(ref _count);
-            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
-        }
-    }
 }

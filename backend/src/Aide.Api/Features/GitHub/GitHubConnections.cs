@@ -2,6 +2,7 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHub;
+using Aide.Domain.Jobs;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
@@ -265,6 +266,12 @@ public sealed partial class GitHubConnections(
             // Changed since it was read (refreshed or reconnected): leave it as the other request saved it, without the event.
             Detach(connection.UserId);
             foreach (var entry in db.ChangeTracker.Entries<AuditEvent>().Where(e => e.State == EntityState.Added && e.Entity.Type == EventTypes.ConnectionInvalid).ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            // ...and the owner's connection_invalid notification job the outbox queued with it (FR-92).
+            foreach (var entry in db.ChangeTracker.Entries<Job>().Where(e => e.State == EntityState.Added && e.Entity.Type == JobTypes.Notification).ToList())
             {
                 entry.State = EntityState.Detached;
             }

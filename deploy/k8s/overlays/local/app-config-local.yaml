@@ -8,3 +8,6 @@ data:
   Seed__Enabled: "true"
   # FR-47/FR-48: browser-facing base URL for absolute links in notifications (web Service on localhost:8080).
   App__PublicBaseUrl: "http://localhost:8080"
+  # §9 / §4.15: deployments use Vercel by default (Deployments__Provider=Vercel, Deployments__AllowFake=false, from
+  # appsettings.json). Local import is off (Git__Local__ImportRoot unset). The E2E variant (overlays/local-e2e,
+  # `deploy-local.sh --e2e`) switches both to Fake / /data/import.

@@ -43,7 +43,10 @@ internal sealed record ProjectDto(
     string? ReleasedVersion,
     string? DevelopmentVersion,
     string ApprovalMode,
-    string? MyRole);
+    string? MyRole,
+    string? PresetId = null,
+    string? PresetName = null,
+    string? PresetVersion = null);
 
 internal enum ApprovalMode
 {
@@ -98,7 +101,8 @@ internal sealed record ProjectStateDto(
     long? TokenBudget,
     string ExecutionStatus,
     PullRequestSummaryDto? PullRequest,
-    ReleaseSummaryDto? LatestRelease);
+    ReleaseSummaryDto? LatestRelease,
+    DeploymentDto? LatestDeployment = null);
 
 internal sealed record ActorDto(Guid? Id, string Name, bool IsSystem);
 
@@ -159,3 +163,40 @@ internal sealed record RollbackDto(
 internal sealed record ActivityItemDto(Guid Id, string Type, string? Category, DateTimeOffset OccurredAt, ActorDto? Actor, string Summary, JsonObject? Payload);
 
 internal sealed record ActivityPageDto(IReadOnlyList<ActivityItemDto> Items, string? NextBefore);
+
+internal sealed record DeploymentUserDto(Guid Id, string Name);
+
+internal sealed record DeploymentDto(
+    Guid Id,
+    string Target,
+    string Provider,
+    string Status,
+    string? Url,
+    string GitRef,
+    string GitSha,
+    string ReleaseVersion,
+    string? ErrorCode,
+    string Trigger,
+    DeploymentUserDto? TriggeredBy,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ReadyAt);
+
+internal sealed record ReleaseVersionCheckpointsDto(int Current, int Max);
+
+internal sealed record ReleaseVersionDto(
+    Guid Id,
+    string Version,
+    string Status,
+    string? Tag,
+    string? BaseTag,
+    string? BranchName,
+    string? PullRequestUrl,
+    ReleaseVersionCheckpointsDto Checkpoints,
+    string? PresetId,
+    string? PresetVersion,
+    string? PresetName,
+    ActorDto? StartedBy,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ReleasedAt);
+
+internal sealed record StartReleaseVersionResultDto(ReleaseVersionDto ReleaseVersion, ProjectStateDto State);

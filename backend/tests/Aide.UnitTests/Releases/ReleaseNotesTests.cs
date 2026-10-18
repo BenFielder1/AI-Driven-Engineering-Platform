@@ -77,16 +77,15 @@ public class ReleaseNotesTests
     }
 }
 
-/// <summary>FR-65: the awaiting-merge notification (sent as release_failed until FR-92) names the PR and the reasons.</summary>
+/// <summary>FR-65: the awaiting-merge notification (release_awaiting_merge, FR-92) names the PR and the reasons.</summary>
 public class AwaitingMergeNotificationTests
 {
     [Fact]
     public void FR65_Owners_are_told_the_release_awaits_a_merge_with_the_PR_link_and_reasons()
     {
-        var text = Aide.Domain.Notifications.NotificationMessages.Compose(new Aide.Domain.Notifications.NotificationFacts(Aide.Domain.Notifications.NotificationType.ReleaseFailed, "Todo API")
+        var text = Aide.Domain.Notifications.NotificationMessages.Compose(new Aide.Domain.Notifications.NotificationFacts(Aide.Domain.Notifications.NotificationType.ReleaseAwaitingMerge, "Todo API")
         {
             Tag = "v1.2.0",
-            AwaitingMerge = true,
             PullRequestUrl = "https://github.com/acme/widgets/pull/7",
             MergeReasons = ["1 approving review is required."],
         });

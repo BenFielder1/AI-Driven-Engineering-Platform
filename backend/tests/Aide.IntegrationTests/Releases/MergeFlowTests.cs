@@ -76,13 +76,13 @@ public sealed class MergeFlowTests(AideApiFactory factory)
         var state = await ProjectApi.ReadAsync<ProjectStateDto>(await GetAsync(fixture.Viewer.Client, $"{fixture.Path}/state"));
         Assert.Equal((ReleaseStatus.AwaitingMerge, PrUrl), (state.LatestRelease!.Status, state.LatestRelease.PullRequestUrl));
 
-        // RELEASE_AWAITING_MERGE (the frontend contract) and the Owners' notification (as release_failed until FR-92).
+        // RELEASE_AWAITING_MERGE (the frontend contract) and the Owners' release_awaiting_merge notification (FR-92).
         var awaitingEvent = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.ReleaseAwaitingMerge)).Payload);
         Assert.Equal(
             (awaiting.Id, awaiting.ReleaseVersionId, "0.1.0", Tag, PrUrl, "review_required"),
             (awaitingEvent.GetProperty("releaseId").GetGuid(), awaitingEvent.GetProperty("releaseVersionId").GetGuid(), awaitingEvent.GetProperty("version").GetString(),
                 awaitingEvent.GetProperty("tag").GetString(), awaitingEvent.GetProperty("pullRequestUrl").GetString(), awaitingEvent.GetProperty("reasons")[0].GetProperty("code").GetString()));
-        Assert.Contains(await LifecycleSeed.NotificationJobsAsync(app, id), j => j.Payload.Contains("release_failed", StringComparison.Ordinal));
+        Assert.Contains(await LifecycleSeed.NotificationJobsAsync(app, id), j => j.Payload.Contains("release_awaiting_merge", StringComparison.Ordinal));
 
         // §4.10: no rollback while awaiting merge; no retry either (the poll completes it).
         var blocked = await Problems.AssertAsync(

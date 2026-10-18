@@ -105,9 +105,10 @@ public static class EventTypes
 
     /// <summary>
     /// FR-78: the provider rejected a bound connection's key during a run (HTTP 401), so the connection was marked
-    /// <c>invalid</c>: <c>{credentialId, userId, provider, runId}</c> (no secret). Its owner is notified through the run's
-    /// <see cref="RunFailed"/> notification until FR-92 adds the "connection invalid" notification type. Also written when
-    /// Vercel rejects a connection's token (FR-87): <c>{connectionId, userId, provider: "vercel"}</c>.
+    /// <c>invalid</c>: <c>{credentialId, userId, provider, runId}</c> (no secret). Also written when Vercel rejects a
+    /// connection's token (FR-87): <c>{connectionId, userId, provider: "vercel"}</c>, and when GitHub rejects a user connection
+    /// (§4.14, project_id null): <c>{userId, provider: "github", login, reason}</c>. FR-92: the connection's owner
+    /// (<c>userId</c>) gets the personal <c>connection_invalid</c> notification (in-app and email).
     /// </summary>
     public const string ConnectionInvalid = "CONNECTION_INVALID";
 
@@ -214,14 +215,13 @@ public static class EventTypes
     /// <summary>
     /// FR-91: a deployment failed in a way Owners act on — a production deployment (the release stands; "Redeploy"), or any
     /// deployment whose Vercel token was rejected: <c>{deploymentId, target, status, errorCode, releaseVersion, gitSha,
-    /// url}</c>. Owners are notified (as <c>release_failed</c> with its own wording until FR-92 adds the
-    /// <c>deployment_failed</c> type).
+    /// url}</c>. Owners get the <c>deployment_failed</c> notification (FR-92).
     /// </summary>
     public const string DeploymentFailed = "DEPLOYMENT_FAILED";
 
     /// <summary>
     /// FR-90: a preview deployment became ready: <c>{deploymentId, target, status, url, releaseVersion, gitSha}</c>. Every
-    /// member is notified (as <c>review_completed</c> with its own wording, linking to the Review page, until FR-92).
+    /// member gets the <c>preview_ready</c> notification, linking to the Review page (FR-92).
     /// </summary>
     public const string DeploymentPreviewReady = "DEPLOYMENT_PREVIEW_READY";
 
@@ -268,6 +268,7 @@ public static class EventTypes
         PullRequestFailed,
         ReviewFailed,
         ReleaseFailed,
+        DeploymentFailed,
         ArtifactCorrupted,
         IntegrityAlert,
     };

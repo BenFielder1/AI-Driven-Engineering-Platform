@@ -31,6 +31,11 @@ public sealed partial class NotificationDispatcher(
         return $"{channel.Type.ToWire()}:{channel.Id:D}";
     }
 
+    /// <summary>FR-92: the <c>channel</c> column value of a personal notification's email to the user's account address.</summary>
+    public const string AccountEmailPrefix = "account_email:";
+
+    public static string AccountEmailChannel(Guid userId) => $"{AccountEmailPrefix}{userId:D}";
+
     /// <summary>Attempts up to <paramref name="max"/> due deliveries (of <paramref name="key"/> only, if given); returns how many were attempted.</summary>
     public async Task<int> DeliverDueAsync(string? key, int max, CancellationToken cancellationToken)
     {
@@ -86,29 +91,46 @@ public sealed partial class NotificationDispatcher(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        if (!NotificationRules.TryParseKey(delivery.NotificationKey, out var type, out var sourceId) || delivery.ProjectId is not { } projectId)
+        if (!NotificationRules.TryParseKey(delivery.NotificationKey, out var type, out var sourceId))
         {
             return new ChannelSendResult(DeliveryAttemptResult.PermanentFailure, "Unreadable notification key.");
         }
 
-        if (!channels.TryGetValue(projectId, out var configured))
+        NotificationChannelConfig? channel;
+        if (delivery.Channel.StartsWith(AccountEmailPrefix, StringComparison.Ordinal))
         {
-            configured = await db.ProjectNotificationSettings.AsNoTracking()
-                .Where(s => s.ProjectId == projectId)
-                .Select(s => s.Channels)
-                .FirstOrDefaultAsync(cancellationToken) ?? [];
-            channels[projectId] = configured;
+            channel = await AccountEmailAsync(delivery.Channel, cancellationToken);
+            if (channel is null)
+            {
+                return new ChannelSendResult(DeliveryAttemptResult.Skipped, "The user has no email address.");
+            }
         }
-
-        var channel = configured.FirstOrDefault(c => ChannelName(c) == delivery.Channel);
-        if (channel is null)
+        else
         {
-            return new ChannelSendResult(DeliveryAttemptResult.Skipped, "The channel was removed from the project settings.");
+            if (delivery.ProjectId is not { } projectId)
+            {
+                return new ChannelSendResult(DeliveryAttemptResult.PermanentFailure, "Unreadable notification key.");
+            }
+
+            if (!channels.TryGetValue(projectId, out var configured))
+            {
+                configured = await db.ProjectNotificationSettings.AsNoTracking()
+                    .Where(s => s.ProjectId == projectId)
+                    .Select(s => s.Channels)
+                    .FirstOrDefaultAsync(cancellationToken) ?? [];
+                channels[projectId] = configured;
+            }
+
+            channel = configured.FirstOrDefault(c => ChannelName(c) == delivery.Channel);
+            if (channel is null)
+            {
+                return new ChannelSendResult(DeliveryAttemptResult.Skipped, "The channel was removed from the project settings.");
+            }
         }
 
         if (!messages.TryGetValue(delivery.NotificationKey, out var composed))
         {
-            composed = await composer.ComposeAsync(projectId, type, sourceId, cancellationToken);
+            composed = await composer.ComposeAsync(delivery.ProjectId, type, sourceId, cancellationToken);
             messages[delivery.NotificationKey] = composed;
         }
 
@@ -129,7 +151,7 @@ public sealed partial class NotificationDispatcher(
             delivery.Id,
             delivery.NotificationKey,
             type,
-            projectId,
+            composed.ProjectId,
             composed.ProjectName,
             composed.Text.Title,
             composed.Text.Body,
@@ -160,6 +182,20 @@ public sealed partial class NotificationDispatcher(
             // A delivery failure never escapes: it is recorded on the delivery and retried with backoff.
             return new ChannelSendResult(DeliveryAttemptResult.TransientFailure, $"Unexpected {ex.GetType().Name}.");
         }
+    }
+
+    /// <summary>The email channel of a personal delivery: the user's account address, or <c>null</c> without one.</summary>
+    private async Task<NotificationChannelConfig?> AccountEmailAsync(string channelName, CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParseExact(channelName[AccountEmailPrefix.Length..], "D", out var userId))
+        {
+            return null;
+        }
+
+        var email = await db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync(cancellationToken);
+        return string.IsNullOrWhiteSpace(email)
+            ? null
+            : new NotificationChannelConfig(userId, NotificationChannelType.Email, email, null, []);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Notification {NotificationKey} via {Channel}: attempt {Attempt} {Result} → {Status} {Error}")]

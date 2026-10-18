@@ -48,12 +48,28 @@ function PreferencesForm({ preferences }: { preferences: NotificationPreferences
         <div className="grid gap-2 sm:grid-cols-2">
           {notificationTypes.map((type) => {
             const id = `notification-pref-${type}`
+            const hintId = `${id}-hint`
+            const personal = type === 'connection_invalid'
             return (
-              <div key={type} className="flex items-center gap-2">
-                <input id={id} type="checkbox" value={type} className="size-4 accent-primary" {...register('shown')} />
-                <label htmlFor={id} className="text-sm">
-                  {notificationTypeLabels[type]}
-                </label>
+              <div key={type} className="flex items-start gap-2">
+                <input
+                  id={id}
+                  type="checkbox"
+                  value={type}
+                  className="mt-0.5 size-4 accent-primary"
+                  aria-describedby={personal ? hintId : undefined}
+                  {...register('shown')}
+                />
+                <div>
+                  <label htmlFor={id} className="text-sm">
+                    {notificationTypeLabels[type]}
+                  </label>
+                  {personal && (
+                    <p id={hintId} className="text-xs text-muted-foreground">
+                      About your own connections. Turning this off also stops its email to your account address.
+                    </p>
+                  )}
+                </div>
               </div>
             )
           })}
@@ -74,6 +90,7 @@ function PreferencesForm({ preferences }: { preferences: NotificationPreferences
 /**
  * Account → Notification preferences (§2, FR-47): which notification types appear in the user's in-app centre.
  * Unchecked types are muted (already created notifications are kept). Project channels are project settings.
+ * FR-92: muting the personal `connection_invalid` also stops its email (it has no project channel).
  */
 export function NotificationPreferencesSection() {
   const preferences = useNotificationPreferences()
@@ -83,8 +100,8 @@ export function NotificationPreferencesSection() {
         Notification preferences
       </h2>
       <p className="mb-4 mt-1 text-sm text-muted-foreground">
-        Choose what appears in your in-app notifications. Email, Slack, Teams and webhook channels are set per project by
-        its Owners in Settings → Notifications.
+        Choose what appears in your in-app notifications. Everything is on until you turn it off. Email, Slack, Teams and
+        webhook channels are set per project by its Owners in Settings → Notifications.
       </p>
       {preferences.isPending && <LoadingState label="Loading preferences…" />}
       {preferences.isError && <ErrorState error={preferences.error} onRetry={() => void preferences.refetch()} />}

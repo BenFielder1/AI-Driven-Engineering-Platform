@@ -557,7 +557,7 @@ public static class ProjectLimits
     public const int ModelMaxLength = 200;
     public const int EmailMaxLength = 256;
     public const int MaxNotificationChannels = 20;
-    public const int MaxNotificationEvents = 10;
+    public const int MaxNotificationEvents = 14;
     public const int MaxPageLimit = 100;
     public const int SearchMaxLength = 200;
 }

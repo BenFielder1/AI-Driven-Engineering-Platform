@@ -202,7 +202,7 @@ internal static class ProjectCommands
     public static Command BuildStatus(CommandFactory factory)
     {
         var id = ProjectIdArgument();
-        var command = new Command("status", "Show a project's lifecycle state: phase, status, version, artifacts, execution, review, gates.") { id };
+        var command = new Command("status", "Show a project's lifecycle state: phase, status, released and in-development versions, checkpoint, preset, artifacts, execution, review, gates and the latest deployment.") { id };
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
             var projectId = context.Get(id);
@@ -232,6 +232,8 @@ internal static class ProjectCommands
                 ("Status", s.Status),
                 ("Released", s.ReleasedVersion ?? "not released"),
                 ("In development", s.DevelopmentVersion is { } development ? $"{development} (checkpoint {Output.Num(s.Checkpoint)})" : "-"),
+                ("Checkpoint", Output.Num(s.Checkpoint)),
+                ("Preset", VersionCommands.PresetText(project.PresetName ?? project.PresetId, project.PresetVersion)),
                 ("Approval mode", project.ApprovalMode),
                 ("Execution", s.ExecutionPaused ? $"{s.ExecutionStatus} (paused)" : s.ExecutionStatus),
                 ("Steps", string.Create(CultureInfo.InvariantCulture,
@@ -241,6 +243,8 @@ internal static class ProjectCommands
                 ("Tokens", $"{Output.Num(s.TokensUsed)} used of {(s.TokenBudget is null ? "unlimited" : Output.Num(s.TokenBudget))}"),
                 ("Pull request", s.PullRequest is null ? "-" : $"{s.PullRequest.HeadBranch} -> {s.PullRequest.BaseBranch} {s.PullRequest.Url ?? string.Empty}".TrimEnd()),
                 ("Latest release", s.LatestRelease is null ? "-" : $"{s.LatestRelease.Tag} ({s.LatestRelease.Status})"),
+                ("Latest deployment", s.LatestDeployment is not { } d ? "-"
+                    : $"{d.Target} {d.ReleaseVersion} {VersionCommands.StatusText(d)} {d.Url ?? string.Empty}".TrimEnd() + $" ({Output.Time(d.CreatedAt)})"),
             ]),
             string.Empty,
             "Artifacts:",
@@ -276,7 +280,7 @@ internal static class ProjectCommands
         {
             return File.ReadAllText(path);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             throw new CliException($"Could not read {path}: {ex.Message}");
         }

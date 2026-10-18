@@ -421,6 +421,28 @@ function describeRelease(type: string, payload: Payload): string | null {
   }
 }
 
+/** FR-58: "Specification v1 restored as draft v3". */
+function describeRestored(payload: Payload): string | null {
+  const artifactType = oneOf(payload, "type", artifactTypes);
+  const v = version(payload, "version");
+  if (!artifactType || v === null) {
+    return null;
+  }
+  const from = version(payload, "restoredFromVersion");
+  const label = artifactTypeLabels[artifactType];
+  return from === null
+    ? `${label} restored as draft v${String(v)}`
+    : `${label} v${String(from)} restored as draft v${String(v)}`;
+}
+
+/** FR-70: the Repository Analyst's locked codebase summary. */
+function describeCodebaseSummary(payload: Payload): string {
+  const v = version(payload, "version");
+  return v === null
+    ? "Codebase summary created by the Repository Analyst"
+    : `Codebase summary v${String(v)} created by the Repository Analyst`;
+}
+
 /** Events whose payload names an artifact type and version (e.g. `ARTIFACT_APPROVED`). */
 function describeArtifact(type: string, payload: Payload): string | null {
   const artifactType = oneOf(payload, "type", artifactTypes);
@@ -450,6 +472,23 @@ const deploymentStatusWords = {
   canceled: "canceled",
 } as const;
 
+/** FR-91, FR-92: why a deployment failed, in a few words (the full copy is in lib/errors). */
+const deploymentFailureWords: Readonly<Record<string, string>> = {
+  VERCEL_ERROR: "Vercel reported the build as failed",
+  DEPLOYMENT_TIMEOUT: "it didn't finish within 30 minutes",
+  CREDENTIAL_INVALID: "Vercel rejected the connection's token",
+  CONNECTION_INVALID: "Vercel rejected the connection's token",
+  VERCEL_GIT_NOT_CONNECTED: "Vercel can't access the repository",
+  VERCEL_PLAN_LIMIT: "the Vercel plan doesn't allow it",
+};
+
+/** §4.14, FR-92: why GitHub stopped accepting a user's connection (`reason` of a GitHub `CONNECTION_INVALID`). */
+const githubInvalidReasons: Readonly<Record<string, string>> = {
+  rejected: "GitHub rejected its token",
+  refresh_expired: "its refresh token expired",
+  refresh_failed: "refreshing its token failed",
+};
+
 /** FR-90, FR-91, §4.15: "Preview deployment of 1.2.0 (3f2a9c1) ready at https://…". */
 function describeDeployment(type: string, payload: Payload): string | null {
   const target = oneOf(payload, "target", ["preview", "production"] as const);
@@ -461,7 +500,9 @@ function describeDeployment(type: string, payload: Payload): string | null {
   const subject = `${deploymentTargetWords[target]} deployment${version ? ` of ${version}` : ""}${sha ? ` (${sha.slice(0, 7)})` : ""}`;
   const url = str(payload, "url");
   if (type === "DEPLOYMENT_FAILED") {
-    return `${subject} failed`;
+    const code = str(payload, "errorCode");
+    const why = code ? deploymentFailureWords[code] : undefined;
+    return why ? `${subject} failed: ${why}` : `${subject} failed`;
   }
   if (type === "DEPLOYMENT_PREVIEW_READY") {
     return `${subject} ready${url ? ` at ${url}` : ""}`;
@@ -481,6 +522,14 @@ function describeDeployment(type: string, payload: Payload): string | null {
 function describeConnection(type: string, payload: Payload): string | null {
   if (type === "CONNECTION_INVALID" && payload.provider === "vercel") {
     return "Vercel connection marked invalid: Vercel rejected its token";
+  }
+  if (type === "CONNECTION_INVALID" && payload.provider === "github") {
+    // §4.14, FR-92: a user's GitHub connection (no project); its owner reconnects under Connections.
+    const login = str(payload, "login");
+    const reason = str(payload, "reason");
+    const why = reason ? githubInvalidReasons[reason] : undefined;
+    const subject = login ? `GitHub connection of @${login}` : "GitHub connection";
+    return `${subject} marked invalid${why ? `: ${why}` : ""}; reconnect it under Connections`;
   }
   const provider = oneOf(payload, "provider", llmProviders);
   const name = provider ? llmProviderLabels[provider] : "LLM";
@@ -517,6 +566,12 @@ export function describeActivity(
       break;
     case "PRESET_CHANGED":
       text = describePresetChanged(payload);
+      break;
+    case "ARTIFACT_RESTORED":
+      text = describeRestored(payload);
+      break;
+    case "CODEBASE_SUMMARY_CREATED":
+      text = describeCodebaseSummary(payload);
       break;
     case "GATE_CREATED":
     case "GATE_APPROVED":

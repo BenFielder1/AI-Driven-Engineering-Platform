@@ -6,7 +6,7 @@ using Aide.Cli.Api;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>`aide artifact list|show|history|approve|reject|edit`.</summary>
+/// <summary>`aide artifact list|show|history|approve|reject|edit|restore`.</summary>
 internal static class ArtifactCommands
 {
     private static readonly Dictionary<string, string> TypeAliases = new(StringComparer.OrdinalIgnoreCase)
@@ -25,13 +25,46 @@ internal static class ArtifactCommands
 
     public static Command Build(CommandFactory factory)
     {
-        var command = new Command("artifact", "Show, approve, reject or edit versioned artifacts.");
+        var command = new Command("artifact", "Show, approve, reject, edit or restore versioned artifacts.");
         command.Subcommands.Add(BuildList(factory));
         command.Subcommands.Add(BuildShow(factory));
         command.Subcommands.Add(BuildHistory(factory));
         command.Subcommands.Add(BuildDecision(factory, "approve", "Approve (lock) a draft artifact version. Owner only."));
         command.Subcommands.Add(BuildDecision(factory, "reject", "Reject a draft artifact version. Owner only."));
         command.Subcommands.Add(BuildEdit(factory));
+        command.Subcommands.Add(BuildRestore(factory));
+        return command;
+    }
+
+    /// <summary>FR-58, FR-93: restore an older version as a new draft (Contributor or Owner).</summary>
+    private static Command BuildRestore(CommandFactory factory)
+    {
+        var id = ProjectCommands.ProjectIdArgument();
+        var type = TypeArgument();
+        var version = new Argument<int>("version") { Description = "The version to restore (not the latest).", CustomParser = Parsers.IntInRange("version", 1, int.MaxValue) };
+        var command = new Command(
+            "restore",
+            "Restore an older version of an artifact as a new draft (Contributor or Owner). The draft then follows the normal approval rules. " +
+            "Exit 4 when restoring isn't allowed now (RESTORE_NOT_ALLOWED).")
+        {
+            id, type, version,
+        };
+        factory.SetHandler(command, async (context, cancellationToken) =>
+        {
+            var restored = await context.Api()
+                .PostAsync<ArtifactDto>($"api/projects/{context.Get(id)}/artifacts/{context.Get(type)}/versions/{context.Get(version)}/restore", body: null, cancellationToken)
+                .ConfigureAwait(false);
+            if (context.Json)
+            {
+                await context.WriteRawJsonAsync(restored.Raw).ConfigureAwait(false);
+                return ExitCodes.Success;
+            }
+
+            var a = restored.Value;
+            await context.Out.WriteLineAsync(
+                $"Restored {a.Type} v{Output.Num(context.Get(version))} as draft v{Output.Num(a.Version)} (parent v{Output.Num(a.ParentVersion)}, status {a.Status}).").ConfigureAwait(false);
+            return ExitCodes.Success;
+        });
         return command;
     }
 

@@ -5,7 +5,8 @@ namespace Aide.Domain.Notifications;
 
 /// <summary>
 /// What a notification is about, read from its gate or event. Every field but the type and project name is optional:
-/// older events may lack one, and the message then leaves it out.
+/// older events may lack one, and the message then leaves it out. The project name is empty for a personal notification
+/// raised outside any project (FR-92 <c>connection_invalid</c> of a GitHub connection).
 /// </summary>
 public sealed record NotificationFacts(NotificationType Type, string ProjectName)
 {
@@ -38,20 +39,11 @@ public sealed record NotificationFacts(NotificationType Type, string ProjectName
 
     public string? Reason { get; init; }
 
-    /// <summary>FR-65: a <c>release_failed</c> notification raised by <c>RELEASE_AWAITING_MERGE</c>: the release waits for a merge on GitHub.</summary>
-    public bool AwaitingMerge { get; init; }
-
     /// <summary>FR-65: the version's PR (awaiting merge).</summary>
     public string? PullRequestUrl { get; init; }
 
     /// <summary>FR-65, FR-84: the merge-readiness reasons (messages) why AIDE couldn't merge.</summary>
     public IReadOnlyList<string> MergeReasons { get; init; } = [];
-
-    /// <summary>FR-91: a <c>release_failed</c> notification raised by <c>DEPLOYMENT_FAILED</c>.</summary>
-    public bool DeploymentFailed { get; init; }
-
-    /// <summary>FR-90: a <c>review_completed</c> notification raised by <c>DEPLOYMENT_PREVIEW_READY</c>.</summary>
-    public bool PreviewReady { get; init; }
 
     /// <summary>FR-90, FR-91: the deployment's target (<c>preview</c>, <c>production</c>).</summary>
     public string? DeploymentTarget { get; init; }
@@ -61,6 +53,9 @@ public sealed record NotificationFacts(NotificationType Type, string ProjectName
 
     /// <summary>FR-90, FR-91: the release version deployed (e.g. <c>1.2.0</c>).</summary>
     public string? ReleaseVersion { get; init; }
+
+    /// <summary>FR-92: the provider of an invalid connection or a cleared binding (<c>anthropic</c>, <c>openai</c>, <c>github</c>, <c>vercel</c>).</summary>
+    public string? Provider { get; init; }
 }
 
 /// <summary>A composed notification: a short title and a one-paragraph body (plain text, no secrets, no tokens).</summary>
@@ -104,28 +99,36 @@ public static class NotificationMessages
             NotificationType.BudgetExceeded => (
                 $"{project}: token budget used up",
                 $"The {Agent(facts)} run on {project} was refused: the project's token budget is used up. Raise the budget in the project settings to continue."),
-            NotificationType.ReviewCompleted when facts.PreviewReady => (
-                $"{project}: preview{VersionText(facts)} is ready",
-                $"The Vercel preview of {project}{VersionText(facts)} is ready{(facts.DeploymentUrl is { } url ? $" at {OneLine(url, 300)}" : string.Empty)}."),
             NotificationType.ReviewCompleted => (
                 $"{project}: review cycle {Opt(facts.Cycle)} completed",
                 $"Review cycle {Opt(facts.Cycle)} on {project} completed with score {facts.Score ?? "?"}: {Humanize(facts.Decision ?? "unknown")}."),
             NotificationType.ReleaseCompleted => (
                 $"{project}: released {facts.Tag ?? string.Empty}".TrimEnd(),
                 $"{project} was released{(facts.Tag is { } tag ? $" as {OneLine(tag, 100)}" : string.Empty)}."),
-            NotificationType.ReleaseFailed when facts.AwaitingMerge => (
-                $"{project}: release {facts.Tag ?? string.Empty} awaits a merge on GitHub".Replace("  ", " ", StringComparison.Ordinal),
-                $"AIDE can't merge the pull request of {project}{(facts.PullRequestUrl is { } url ? $" ({OneLine(url, 300)})" : string.Empty)} itself. Merge it on GitHub; AIDE then tags the merge commit and completes the release.{MergeReasonsText(facts.MergeReasons)}"),
-            NotificationType.ReleaseFailed when facts.DeploymentFailed => (
-                $"{project}: {facts.DeploymentTarget ?? "production"} deployment failed",
-                $"The Vercel {facts.DeploymentTarget ?? "production"} deployment of {project}{VersionText(facts)} failed{(facts.ErrorCode is { } code ? $" ({OneLine(code, 60)})" : string.Empty)}. "
-                + (facts.DeploymentTarget == "preview" ? "Check the project's Vercel connection, then redeploy." : "The release stands; an Owner can redeploy from the Release page.")),
             NotificationType.ReleaseFailed => (
                 $"{project}: release failed",
                 $"Releasing {project} failed{(facts.ErrorCode is { } code ? $" ({OneLine(code, 60)})" : string.Empty)}. An Owner can retry the release from the project page."),
             NotificationType.Rollback => (
                 $"{project}: rolled back to checkpoint {Opt(facts.TargetVersion)}",
                 $"{project} was rolled back from checkpoint {Opt(facts.FromVersion)} to checkpoint {Opt(facts.TargetVersion)}.{reason}"),
+            NotificationType.ReleaseAwaitingMerge => (
+                $"{project}: release {facts.Tag ?? string.Empty} awaits a merge on GitHub".Replace("  ", " ", StringComparison.Ordinal),
+                $"AIDE can't merge the pull request of {project}{(facts.PullRequestUrl is { } url ? $" ({OneLine(url, 300)})" : string.Empty)} itself. Merge it on GitHub; AIDE then tags the merge commit and completes the release.{MergeReasonsText(facts.MergeReasons)}"),
+            NotificationType.DeploymentFailed => (
+                $"{project}: {Target(facts)} deployment{VersionText(facts)} failed",
+                $"The Vercel {Target(facts)} deployment of {project}{VersionText(facts)} failed{(facts.ErrorCode is { } code ? $" ({OneLine(code, 60)})" : string.Empty)}. "
+                + (facts.DeploymentTarget == "preview"
+                    ? "Check the project's Vercel connection, then redeploy from the Review page."
+                    : "The release stands; an Owner can redeploy from the Release page.")),
+            NotificationType.PreviewReady => (
+                $"{project}: preview{VersionText(facts)} is ready",
+                $"The Vercel preview of {project}{VersionText(facts)} is ready{(facts.DeploymentUrl is { } url ? $" at {OneLine(url, 300)}" : string.Empty)}."),
+            NotificationType.ConnectionInvalid => (
+                $"Your {ConnectionName(facts.Provider)} connection is invalid",
+                $"{ProviderName(facts.Provider)} rejected the credentials of your {ConnectionName(facts.Provider)} connection{(project.Length > 0 ? $" while it was used for {project}" : string.Empty)}, so it is marked invalid. Reconnect it or replace its key on the Connections page."),
+            NotificationType.LlmBindingCleared => (
+                $"{project}: LLM connection unbound",
+                $"The LLM connection bound to {project} was cleared: {BindingClearedReason(facts.Reason)}. Agent runs fail until an Owner binds a connection in the project's LLM settings."),
             _ => ($"{project}: update", $"There is an update on {project}."),
         };
 
@@ -139,6 +142,37 @@ public static class NotificationMessages
         GateType.PreRelease => "The pre-release approval",
         GateType.Escalation => "An escalation",
         _ => "An approval",
+    };
+
+    private static string Target(NotificationFacts facts) =>
+        facts.DeploymentTarget is { } target ? OneLine(target, 20) : "production";
+
+    /// <summary>"LLM (Anthropic)", "GitHub", "Vercel".</summary>
+    private static string ConnectionName(string? provider) => provider switch
+    {
+        "github" => "GitHub",
+        "vercel" => "Vercel",
+        null or "" => "LLM",
+        _ => $"LLM ({ProviderName(provider)})",
+    };
+
+    private static string ProviderName(string? provider) => provider switch
+    {
+        "anthropic" => "Anthropic",
+        "openai" => "OpenAI",
+        "github" => "GitHub",
+        "vercel" => "Vercel",
+        null or "" => "The provider",
+        _ => OneLine(provider, 40),
+    };
+
+    private static string BindingClearedReason(string? reason) => reason switch
+    {
+        "owner_role_lost" => "the Owner who bound it is no longer an Owner",
+        "member_removed" => "the Owner who bound it left the project",
+        "connection_deleted" => "the Owner who bound it deleted the connection",
+        null or "" => "the binding is no longer valid",
+        _ => Humanize(reason),
     };
 
     private static string VersionText(NotificationFacts facts) =>

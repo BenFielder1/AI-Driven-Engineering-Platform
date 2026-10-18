@@ -19,7 +19,7 @@ public sealed record ChannelMessage(
     Guid DeliveryId,
     string Key,
     NotificationType Type,
-    Guid ProjectId,
+    Guid? ProjectId,
     string ProjectName,
     string Title,
     string Body,

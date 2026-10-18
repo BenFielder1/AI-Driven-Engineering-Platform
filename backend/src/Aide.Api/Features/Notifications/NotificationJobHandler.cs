@@ -20,6 +20,8 @@ namespace Aide.Api.Features.Notifications;
 /// <item>each recipient (<see cref="NotificationRules.Recipients"/>) who hasn't muted the type (§2) gets one in-app
 /// notification — unique per (user, key), so a redelivered job adds nothing;</item>
 /// <item>each project channel subscribed to the type gets one delivery row — unique per (key, channel);</item>
+/// <item>a personal notification (FR-92 <c>connection_invalid</c>) goes to its one user instead: in-app, plus one email
+/// delivery to their account address — no project channel, and nothing when they muted the type.</item>
 /// </list>
 /// all in one transaction; then the new deliveries get their first attempt. Delivery failures are recorded on the
 /// deliveries and retried by the sweep (FR-49); they never fail the job.
@@ -61,7 +63,8 @@ public sealed partial class NotificationJobHandler(
             return;
         }
 
-        if (payload.Type == NotificationType.BudgetExceeded && !await IsFirstRefusalOfBudgetAsync(payload.ProjectId, payload.SourceId, cancellationToken))
+        if (payload.Type == NotificationType.BudgetExceeded && payload.ProjectId is { } budgetProject
+            && !await IsFirstRefusalOfBudgetAsync(budgetProject, payload.SourceId, cancellationToken))
         {
             LogSkipped(logger, key, "the used-up token budget was already reported and hasn't changed since");
             return;
@@ -139,23 +142,46 @@ public sealed partial class NotificationJobHandler(
         }
     }
 
-    private async Task<int> AddInAppAsync(ComposedNotification composed, DateTimeOffset now, CancellationToken cancellationToken)
+    /// <summary>Who gets the notification: the project's Owners or members, or the one user of a personal notification.</summary>
+    private async Task<List<Guid>> RecipientsAsync(ComposedNotification composed, CancellationToken cancellationToken)
     {
         var scope = NotificationRules.Recipients(composed.Type);
-        var recipients = await db.ProjectMembers.AsNoTracking()
+        if (scope == RecipientScope.ConnectionOwner)
+        {
+            return composed.RecipientUserId is { } userId && await db.Users.AsNoTracking().AnyAsync(u => u.Id == userId, cancellationToken)
+                ? [userId]
+                : [];
+        }
+
+        return await db.ProjectMembers.AsNoTracking()
             .Where(m => m.ProjectId == composed.ProjectId && (scope == RecipientScope.AllMembers || m.Role == ProjectRole.Owner))
             .Select(m => m.UserId)
             .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>The recipients who haven't muted the type (§2). Muted types are a text[] converted as a whole, so they're filtered in memory.</summary>
+    private async Task<List<Guid>> WantingAsync(NotificationType type, List<Guid> recipients, CancellationToken cancellationToken)
+    {
+        if (recipients.Count == 0)
+        {
+            return recipients;
+        }
+
+        var muted = (await db.UserNotificationPreferences.AsNoTracking()
+                .Where(p => recipients.Contains(p.UserId))
+                .ToListAsync(cancellationToken))
+            .ToDictionary(p => p.UserId, p => p.MutedTypes);
+        return [.. recipients.Where(userId => NotificationRules.Wants(type, muted.GetValueOrDefault(userId)))];
+    }
+
+    private async Task<int> AddInAppAsync(ComposedNotification composed, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var recipients = await WantingAsync(composed.Type, await RecipientsAsync(composed, cancellationToken), cancellationToken);
         if (recipients.Count == 0)
         {
             return 0;
         }
 
-        // Muted types are a text[] converted as a whole, so they're filtered in memory.
-        var muted = (await db.UserNotificationPreferences.AsNoTracking()
-                .Where(p => recipients.Contains(p.UserId))
-                .ToListAsync(cancellationToken))
-            .ToDictionary(p => p.UserId, p => p.MutedTypes);
         var key = composed.Key;
         var already = (await db.Notifications.AsNoTracking()
                 .Where(n => n.NotificationKey == key && recipients.Contains(n.UserId))
@@ -166,7 +192,7 @@ public sealed partial class NotificationJobHandler(
         var added = 0;
         foreach (var userId in recipients)
         {
-            if (already.Contains(userId) || !NotificationRules.Wants(composed.Type, muted.GetValueOrDefault(userId)))
+            if (already.Contains(userId))
             {
                 continue;
             }
@@ -190,16 +216,28 @@ public sealed partial class NotificationJobHandler(
 
     private async Task<int> AddDeliveriesAsync(ComposedNotification composed, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var configured = await db.ProjectNotificationSettings.AsNoTracking()
-            .Where(s => s.ProjectId == composed.ProjectId)
-            .Select(s => s.Channels)
-            .FirstOrDefaultAsync(cancellationToken) ?? [];
-        var channelEvent = NotificationRules.ChannelEvent(composed.Type);
-        var wanted = configured
-            .Where(c => c.Events.Contains(channelEvent, StringComparer.Ordinal))
-            .Select(NotificationDispatcher.ChannelName)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
+        List<string> wanted;
+        if (NotificationRules.ChannelEvent(composed.Type) is not { } channelEvent)
+        {
+            // Personal (FR-92): the user's account email, unless they muted the type.
+            var recipients = await WantingAsync(composed.Type, await RecipientsAsync(composed, cancellationToken), cancellationToken);
+            wanted = [.. recipients.Select(NotificationDispatcher.AccountEmailChannel)];
+        }
+        else
+        {
+            var configured = composed.ProjectId is { } projectId
+                ? await db.ProjectNotificationSettings.AsNoTracking()
+                    .Where(s => s.ProjectId == projectId)
+                    .Select(s => s.Channels)
+                    .FirstOrDefaultAsync(cancellationToken) ?? []
+                : [];
+            wanted = configured
+                .Where(c => c.Events.Contains(channelEvent, StringComparer.Ordinal))
+                .Select(NotificationDispatcher.ChannelName)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+
         if (wanted.Count == 0)
         {
             return 0;

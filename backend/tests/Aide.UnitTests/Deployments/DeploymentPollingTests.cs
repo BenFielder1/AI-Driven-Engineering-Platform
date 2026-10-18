@@ -328,15 +328,15 @@ public class DeploymentPollingTests
         Assert.False(FakeDeploymentRules.FailsBuild(null));
     }
 
-    // ------------------------------------------------------------------ notifications (FR-90, FR-91; dedicated types in FR-92)
+    // ------------------------------------------------------------------ notifications (FR-90, FR-91, FR-92)
 
     [Fact]
     public void FR91_A_failed_deployment_notifies_Owners_and_a_ready_preview_every_member()
     {
-        Assert.Equal(NotificationType.ReleaseFailed, NotificationRules.ForEvent(EventTypes.DeploymentFailed));
-        Assert.Equal(RecipientScope.Owners, NotificationRules.Recipients(NotificationType.ReleaseFailed));
-        Assert.Equal(NotificationType.ReviewCompleted, NotificationRules.ForEvent(EventTypes.DeploymentPreviewReady));
-        Assert.Equal(RecipientScope.AllMembers, NotificationRules.Recipients(NotificationType.ReviewCompleted));
+        Assert.Equal(NotificationType.DeploymentFailed, NotificationRules.ForEvent(EventTypes.DeploymentFailed));
+        Assert.Equal(RecipientScope.Owners, NotificationRules.Recipients(NotificationType.DeploymentFailed));
+        Assert.Equal(NotificationType.PreviewReady, NotificationRules.ForEvent(EventTypes.DeploymentPreviewReady));
+        Assert.Equal(RecipientScope.AllMembers, NotificationRules.Recipients(NotificationType.PreviewReady));
         Assert.Null(NotificationRules.ForEvent(EventTypes.DeploymentUpdated));
         Assert.Null(NotificationRules.ForEvent(EventTypes.DeploymentCreated));
     }
@@ -344,20 +344,18 @@ public class DeploymentPollingTests
     [Fact]
     public void FR91_FR90_Deployment_notification_wording()
     {
-        var failed = NotificationMessages.Compose(new NotificationFacts(NotificationType.ReleaseFailed, "Todo")
+        var failed = NotificationMessages.Compose(new NotificationFacts(NotificationType.DeploymentFailed, "Todo")
         {
-            DeploymentFailed = true,
             DeploymentTarget = "production",
             ReleaseVersion = "1.2.0",
             ErrorCode = "VERCEL_ERROR",
         });
-        Assert.Equal("Todo: production deployment failed", failed.Title);
+        Assert.Equal("Todo: production deployment 1.2.0 failed", failed.Title);
         Assert.Contains("1.2.0", failed.Body, StringComparison.Ordinal);
         Assert.Contains("The release stands", failed.Body, StringComparison.Ordinal);
 
-        var ready = NotificationMessages.Compose(new NotificationFacts(NotificationType.ReviewCompleted, "Todo")
+        var ready = NotificationMessages.Compose(new NotificationFacts(NotificationType.PreviewReady, "Todo")
         {
-            PreviewReady = true,
             ReleaseVersion = "1.2.0",
             DeploymentUrl = "https://todo-abc.vercel.app",
         });

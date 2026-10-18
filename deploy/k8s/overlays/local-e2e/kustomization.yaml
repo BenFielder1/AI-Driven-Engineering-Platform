@@ -1,0 +1,23 @@
+# E2E variant of the Docker Desktop overlay (SPEC §8 Testing, §9 DEP-V2). Opt-in:
+#   ./deploy/scripts/deploy-local.sh --e2e      (the only switch; no environment variable)
+# Everything from overlays/local (incl. its secrets.env Secret), plus app-config-e2e.yaml:
+#   Fake deployment provider (allowed outside Development via Deployments__AllowFake), Fake LLM as the default
+#   for new projects, and the Local import root /data/import (the script seeds /data/import/existing-app).
+# A normal deploy (no --e2e) renders overlays/local only: Vercel deployments, no Local import.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../local
+
+patches:
+  - path: app-config-e2e.yaml
+  # Mode marker on the api pod template: switching normal <-> E2E always rolls the pod (envFrom isn't re-read).
+  - target:
+      kind: Deployment
+      name: api
+    patch: |-
+      - op: add
+        path: /spec/template/metadata/annotations
+        value:
+          aide.deploy/mode: e2e
