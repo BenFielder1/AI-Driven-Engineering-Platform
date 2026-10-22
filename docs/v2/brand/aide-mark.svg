@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-labelledby="aide-mark-title">
+  <title id="aide-mark-title">AIDE</title>
+  <!--
+    AIDE mark. Six hexagon segments = the six lifecycle phases
+    (Refinement → Specification → Planning → Execution → Review → Release),
+    with small gaps between them for the approval gates. The "A" sits inside, and the dot marks the start of the cycle.
+    In the app, render it inline and swap the fixed colours below for the chart-1 / chart-2 theme tokens.
+  -->
+  <defs>
+    <linearGradient id="aide-mark-gradient" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.5" y="0.5" width="31" height="31" rx="9" fill="url(#aide-mark-gradient)" fill-opacity="0.16"/>
+  <g fill="none" stroke="url(#aide-mark-gradient)" stroke-width="2.2" stroke-linecap="round">
+    <path d="M17.43 5.83 L24.10 9.68"/>
+    <path d="M25.53 12.15 L25.53 19.85"/>
+    <path d="M24.10 22.33 L17.43 26.18"/>
+    <path d="M14.57 26.18 L7.90 22.33"/>
+    <path d="M6.47 19.85 L6.47 12.15"/>
+    <path d="M7.90 9.68 L14.57 5.83"/>
+  </g>
+  <g fill="none" stroke="url(#aide-mark-gradient)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11.5 21 L16 10.5 L20.5 21"/>
+    <path d="M13.3 17.3 L18.7 17.3"/>
+  </g>
+  <circle cx="16" cy="5" r="1.9" fill="#22d3ee"/>
+</svg>

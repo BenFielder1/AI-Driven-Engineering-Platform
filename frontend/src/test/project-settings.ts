@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import type { SettingsTab } from '../features/projects/settings/settings-tabs'
@@ -13,11 +13,16 @@ export function signInAsOwner() {
   return signInAs({ email: 'ada@example.com', name: 'Ada Lovelace', systemRole: 'user' })
 }
 
-/** Renders /projects/:id/settings at `tab` and waits for the tab list. */
+/** Renders /projects/:id/settings/{tab} and waits for the settings secondary nav. */
 export async function openSettings(tab: SettingsTab, project: StoredProject) {
-  const utils = renderRoute(`/projects/${project.id}/settings${tab === 'general' ? '' : `?tab=${tab}`}`)
-  await screen.findByRole('tablist', { name: 'Settings sections' })
+  const utils = renderRoute(`/projects/${project.id}/settings/${tab}`)
+  await screen.findByRole('navigation', { name: 'Settings sections' })
   return { ...utils, user: userEvent.setup(), project }
+}
+
+/** The settings section links (the secondary nav), in order. */
+export function settingsSectionLinks() {
+  return within(screen.getByRole('navigation', { name: 'Settings sections' })).getAllByRole('link')
 }
 
 /** Seeds a project owned by a freshly signed-in user and opens its settings at `tab`. */

@@ -11,15 +11,19 @@ public sealed class ProjectGitSettings
 
     public string DefaultBranch { get; set; } = "main";
 
+    /// <summary>The per-project PAT; only for <see cref="GitProvider.GithubPat"/> (FR-83).</summary>
     public string? TokenEncrypted { get; set; }
 
-    /// <summary>The project branch <c>aide/&lt;slug&gt;-&lt;short-id&gt;</c>, set when the working copy is prepared.</summary>
-    public string? BranchName { get; set; }
+    /// <summary>FR-82, <see cref="GitProvider.GithubApp"/>: the App installation that grants access to the repo.</summary>
+    public long? InstallationId { get; set; }
 
-    /// <summary>The project PR opened when execution completes (FR-36); merged by the release job (FR-42).</summary>
-    public string? PullRequestUrl { get; set; }
+    /// <summary>FR-82, <see cref="GitProvider.GithubApp"/>: GitHub's numeric repository id (stable across renames).</summary>
+    public long? RepoId { get; set; }
 
-    public int? PullRequestNumber { get; set; }
+    /// <summary>FR-82, <see cref="GitProvider.GithubApp"/>: <c>owner/name</c>.</summary>
+    public string? RepoFullName { get; set; }
+
+    // The working branch and pull request belong to the release version (ReleaseVersion.BranchName, PullRequestUrl/Number).
 }
 
 /// <summary>LLM settings of a project (FR-9, FR-22). Model ids per agent are keyed by the agent's wire name.</summary>
@@ -33,7 +37,12 @@ public sealed class ProjectLlmSettings
 
     public IReadOnlyDictionary<string, string> ModelsByAgent { get; set; } = new Dictionary<string, string>();
 
-    public string? ApiKeyEncrypted { get; set; }
+    /// <summary>FR-79: the bound user connection (<see cref="LlmCredential"/>) every run of the project uses; cleared
+    /// (ON DELETE SET NULL) when the connection is deleted. Replaces v1's per-project key.</summary>
+    public Guid? CredentialId { get; set; }
+
+    /// <summary>The Owner who bound <see cref="CredentialId"/> (the connection's owner).</summary>
+    public Guid? BoundByUserId { get; set; }
 }
 
 /// <summary>Notification channels of a project (FR-9, FR-47).</summary>

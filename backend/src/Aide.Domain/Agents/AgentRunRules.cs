@@ -34,6 +34,14 @@ public static class TokenBudget
                 ErrorCodes.BudgetExceeded,
                 $"The project's token budget of {budget!.Value:N0} tokens is used up ({tokensUsed:N0} used). An Owner can raise the budget."))
             : Result.Success();
+
+    /// <summary>
+    /// FR-26, FR-71: may a tool loop take another turn? Only while the project's tokens (as of the run's start) plus those
+    /// of the run's turns so far stay under the budget; at or over it the run stops with <c>BUDGET_EXCEEDED</c> and the
+    /// turns already made are counted.
+    /// </summary>
+    public static Result CheckCanContinue(long? budget, long tokensUsedBeforeRun, long runTokensSoFar) =>
+        CheckCanStart(budget, tokensUsedBeforeRun + runTokensSoFar);
 }
 
 /// <summary>FR-22–FR-25: model choice, cost estimates, failure classification and run identity.</summary>

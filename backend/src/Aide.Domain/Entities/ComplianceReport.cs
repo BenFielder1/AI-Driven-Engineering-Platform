@@ -9,10 +9,13 @@ public sealed class ComplianceReport
 
     public Guid ProjectId { get; set; }
 
+    /// <summary>The release version the report belongs to (§4.10).</summary>
+    public Guid ReleaseVersionId { get; set; }
+
     public int ReviewCycle { get; set; }
 
-    /// <summary>The project version the review ran at.</summary>
-    public int ProjectVersion { get; set; }
+    /// <summary>The checkpoint the review ran at.</summary>
+    public int Checkpoint { get; set; }
 
     public decimal Score { get; set; }
 
@@ -38,6 +41,12 @@ public sealed class ComplianceReport
 
     /// <summary>The optimisation plan artifact the review produced (FR-38), if any. Cleared if that artifact row is deleted.</summary>
     public Guid? OptimizationPlanArtifactId { get; set; }
+
+    /// <summary>Regressions on unchanged requirements (§4.13) as raw JSON (array); <c>[]</c> when none.</summary>
+    public string Regressions { get; set; } = "[]";
+
+    /// <summary>External checks (check runs, preview deployment) as raw JSON; null when none were collected.</summary>
+    public string? ExternalChecks { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 }

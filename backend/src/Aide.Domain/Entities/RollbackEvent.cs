@@ -9,9 +9,12 @@ public sealed class RollbackEvent
 
     public Guid ProjectId { get; set; }
 
-    public int FromVersion { get; set; }
+    /// <summary>The release version the rollback happened in (§4.10).</summary>
+    public Guid ReleaseVersionId { get; set; }
 
-    public int TargetVersion { get; set; }
+    public int FromCheckpoint { get; set; }
+
+    public int TargetCheckpoint { get; set; }
 
     /// <summary>The phase the project was restored to (the rollback transition's target phase).</summary>
     public Phase RestoredPhase { get; set; }

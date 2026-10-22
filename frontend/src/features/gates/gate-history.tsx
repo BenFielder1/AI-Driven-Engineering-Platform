@@ -17,8 +17,8 @@ function decisionText(gate: Gate): string | null {
     return null
   }
   const label = escalationDecisionLabels[gate.decision]
-  return gate.decision === 'rollback' && gate.targetVersion !== null
-    ? `${label} to version ${String(gate.targetVersion)}`
+  return gate.decision === 'rollback' && gate.targetCheckpoint !== null
+    ? `${label} to checkpoint ${String(gate.targetCheckpoint)}`
     : label
 }
 
@@ -37,7 +37,7 @@ export function GateHistory({ projectId }: { projectId: string }) {
     return <EmptyState title="No gates have been decided yet" />
   }
   return (
-    <ul aria-label="Gate history" className="divide-y divide-border">
+    <ul aria-label="Gate history" className="divide-y divide-border/60">
       {decided.map((gate) => {
         const decision = decisionText(gate)
         return (
@@ -47,7 +47,7 @@ export function GateHistory({ projectId }: { projectId: string }) {
               <Badge tone={statusTones[gate.status]}>{gateStatusLabels[gate.status]}</Badge>
               {decision && <span>Decision: {decision}</span>}
             </div>
-            <span className="text-muted">
+            <span className="text-muted-foreground">
               {gate.decidedBy ? `${gate.decidedBy.name}, ` : ''}
               {gate.decidedAt ? <RelativeTime iso={gate.decidedAt} /> : <>created <RelativeTime iso={gate.createdAt} /></>}
             </span>

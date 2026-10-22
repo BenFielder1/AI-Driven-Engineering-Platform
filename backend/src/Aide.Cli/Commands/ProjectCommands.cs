@@ -54,10 +54,10 @@ internal static class ProjectCommands
             }
 
             await context.Out.WriteLineAsync(Output.Table(
-                ["ID", "NAME", "PHASE", "STATUS", "VERSION", "ROLE", "UPDATED"],
+                ["ID", "NAME", "PHASE", "STATUS", "RELEASED", "IN DEVELOPMENT", "ROLE", "UPDATED"],
                 paged.Items.Select(p => (IReadOnlyList<string>)
                 [
-                    p.Id.ToString(), p.Name, p.CurrentPhase, p.Status, Output.Num(p.ProjectVersion), p.MyRole ?? "admin", Output.Time(p.UpdatedAt),
+                    p.Id.ToString(), p.Name, p.CurrentPhase, p.Status, p.ReleasedVersion ?? "-", p.DevelopmentVersion ?? "-", p.MyRole ?? "admin", Output.Time(p.UpdatedAt),
                 ]))).ConfigureAwait(false);
             var pages = Math.Max(1, (int)Math.Ceiling(paged.Total / (double)Math.Max(1, paged.Limit)));
             await context.Out.WriteLineAsync(string.Create(CultureInfo.InvariantCulture, $"Page {paged.Page} of {pages} ({paged.Total} projects)")).ConfigureAwait(false);
@@ -181,7 +181,7 @@ internal static class ProjectCommands
                 context.Get(maxFiles),
                 context.Get(maxCycles),
                 context.Get(tokenBudget),
-                new CreateProjectGitRequest(provider == "github" ? GitProvider.Github : GitProvider.Local, repo, context.Get(defaultBranch), gitToken));
+                new CreateProjectGitRequest(provider == "github" ? GitProvider.GithubPat : GitProvider.Local, repo, context.Get(defaultBranch), gitToken));
 
             var created = await context.Api().PostAsync<ProjectDto>("api/projects", request, cancellationToken).ConfigureAwait(false);
             if (context.Json)
@@ -202,7 +202,7 @@ internal static class ProjectCommands
     public static Command BuildStatus(CommandFactory factory)
     {
         var id = ProjectIdArgument();
-        var command = new Command("status", "Show a project's lifecycle state: phase, status, version, artifacts, execution, review, gates.") { id };
+        var command = new Command("status", "Show a project's lifecycle state: phase, status, released and in-development versions, checkpoint, preset, artifacts, execution, review, gates and the latest deployment.") { id };
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
             var projectId = context.Get(id);
@@ -230,7 +230,10 @@ internal static class ProjectCommands
             [
                 ("Phase", s.Phase),
                 ("Status", s.Status),
-                ("Version", Output.Num(s.ProjectVersion)),
+                ("Released", s.ReleasedVersion ?? "not released"),
+                ("In development", s.DevelopmentVersion is { } development ? $"{development} (checkpoint {Output.Num(s.Checkpoint)})" : "-"),
+                ("Checkpoint", Output.Num(s.Checkpoint)),
+                ("Preset", VersionCommands.PresetText(project.PresetName ?? project.PresetId, project.PresetVersion)),
                 ("Approval mode", project.ApprovalMode),
                 ("Execution", s.ExecutionPaused ? $"{s.ExecutionStatus} (paused)" : s.ExecutionStatus),
                 ("Steps", string.Create(CultureInfo.InvariantCulture,
@@ -240,6 +243,8 @@ internal static class ProjectCommands
                 ("Tokens", $"{Output.Num(s.TokensUsed)} used of {(s.TokenBudget is null ? "unlimited" : Output.Num(s.TokenBudget))}"),
                 ("Pull request", s.PullRequest is null ? "-" : $"{s.PullRequest.HeadBranch} -> {s.PullRequest.BaseBranch} {s.PullRequest.Url ?? string.Empty}".TrimEnd()),
                 ("Latest release", s.LatestRelease is null ? "-" : $"{s.LatestRelease.Tag} ({s.LatestRelease.Status})"),
+                ("Latest deployment", s.LatestDeployment is not { } d ? "-"
+                    : $"{d.Target} {d.ReleaseVersion} {VersionCommands.StatusText(d)} {d.Url ?? string.Empty}".TrimEnd() + $" ({Output.Time(d.CreatedAt)})"),
             ]),
             string.Empty,
             "Artifacts:",
@@ -275,7 +280,7 @@ internal static class ProjectCommands
         {
             return File.ReadAllText(path);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             throw new CliException($"Could not read {path}: {ex.Message}");
         }

@@ -47,3 +47,18 @@ public enum ExecutionRunStatus
     Completed = 3,
     Blocked = 4,
 }
+
+/// <summary>
+/// The state of one execution run (FR-57): the steps of one plan version. <c>pending</c> (no step started),
+/// <c>running</c>, <c>paused</c>, <c>completed</c> (every step completed), <c>blocked</c> (a step awaits an escalation
+/// decision) or <c>superseded</c> (the plan was invalidated; its run stays listed under "Superseded").
+/// </summary>
+public enum PlanRunStatus
+{
+    Pending = 0,
+    Running = 1,
+    Paused = 2,
+    Completed = 3,
+    Blocked = 4,
+    Superseded = 5,
+}

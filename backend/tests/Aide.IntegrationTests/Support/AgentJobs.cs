@@ -28,12 +28,15 @@ public static class AgentJobs
         ArgumentNullException.ThrowIfNull(app);
         // Notification jobs (FR-47 outbox) are left queued: notification tests run them explicitly.
         var types = app.Services.GetServices<JobHandlerRegistration>().Select(r => r.JobType).Where(t => t != JobTypes.Notification).ToArray();
+        // A job that deferred itself (FR-70: waiting for the codebase summary) stays queued and isn't run again here.
+        var deferred = new HashSet<Guid>();
         for (var round = 0; round < 25; round++)
         {
             var queued = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
                 .Where(j => j.ProjectId == projectId && j.Status == JobStatus.Queued && types.Contains(j.Type))
                 .OrderBy(j => j.CreatedAt)
                 .ToListAsync(Ct));
+            queued.RemoveAll(j => deferred.Contains(j.Id));
             if (queued.Count == 0)
             {
                 break;
@@ -41,7 +44,10 @@ public static class AgentJobs
 
             foreach (var job in queued)
             {
-                await RunAsync(app, job);
+                if (await RunCoreAsync(app, job))
+                {
+                    deferred.Add(job.Id);
+                }
             }
         }
 
@@ -49,7 +55,13 @@ public static class AgentJobs
     }
 
     /// <summary>Delivers <paramref name="job"/> to its handler (again, for a redelivery) and records the outcome.</summary>
-    public static async Task RunAsync(WebApplicationFactory<Program> app, Job job)
+    public static Task RunAsync(WebApplicationFactory<Program> app, Job job) => RunCoreAsync(app, job);
+
+    /// <summary>
+    /// As <see cref="RunAsync"/>; <c>true</c> when the handler deferred the job (<see cref="JobDeferredException"/>), which
+    /// is then queued again at its run-after time without counting the attempt, like the worker does.
+    /// </summary>
+    public static async Task<bool> RunCoreAsync(WebApplicationFactory<Program> app, Job job)
     {
         ArgumentNullException.ThrowIfNull(app);
         ArgumentNullException.ThrowIfNull(job);
@@ -67,6 +79,20 @@ public static class AgentJobs
                 await registration.Factory(scope.ServiceProvider)
                     .HandleAsync(new JobExecution(job.Id, job.Type, job.Payload, job.ProjectId, attempt), Ct);
             }
+            catch (JobDeferredException ex)
+            {
+                var payload = ex.Payload ?? job.Payload;
+                await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id)
+                    .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Queued).SetProperty(j => j.Attempts, attempt - 1).SetProperty(j => j.RunAfter, ex.RunAfter).SetProperty(j => j.Payload, payload).SetProperty(j => j.LastError, ex.Message), Ct));
+                return true;
+            }
+            catch (Aide.Infrastructure.GitHub.GitHubRateLimitedException ex)
+            {
+                // §4.14: like the worker, wait for the reset without counting the attempt.
+                await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id)
+                    .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Queued).SetProperty(j => j.Attempts, attempt - 1).SetProperty(j => j.RunAfter, JobPolicy.DeferUntil(DateTimeOffset.UtcNow, ex.ResetAt)).SetProperty(j => j.LastError, $"GITHUB_RATE_LIMITED: {ex.Message}"), Ct));
+                return true;
+            }
             catch (JobFailedException ex)
             {
                 status = ex.Transient ? JobStatus.Dead : JobStatus.Failed;
@@ -78,7 +104,7 @@ public static class AgentJobs
         {
             await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id)
                 .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, status).SetProperty(j => j.LastError, error).SetProperty(j => j.CompletedAt, DateTimeOffset.UtcNow), Ct));
-            return;
+            return false;
         }
 
         // Like the worker: mark it succeeded and run the succeeded hooks (e.g. the next execution job) in one transaction.
@@ -94,6 +120,7 @@ public static class AgentJobs
 
         await hookDb.SaveChangesAsync(Ct);
         await transaction.CommitAsync(Ct);
+        return false;
     }
 
     /// <summary>The factory with <paramref name="responders"/> replacing the built-in Fake replies of their agents.</summary>

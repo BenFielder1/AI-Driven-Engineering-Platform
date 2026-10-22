@@ -456,7 +456,7 @@ describe("Overview → Lifecycle → Pull request (FR-36)", () => {
   it("FR36_no_summary_until_a_pull_request_is_recorded", async () => {
     await openOverviewAs("owner", { currentPhase: "execution" });
 
-    await screen.findByRole("region", { name: "Lifecycle" });
+    await screen.findByRole("region", { name: "Next action" });
     expect(
       screen.queryByRole("region", { name: "Pull request" }),
     ).not.toBeInTheDocument();

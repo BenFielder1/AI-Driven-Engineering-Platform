@@ -11,6 +11,7 @@ import {
   formatNumber,
   gateTypeLabels,
   gateTypes,
+  llmProviderLabels,
   phaseLabels,
   phases,
   reviewDecisions,
@@ -18,6 +19,9 @@ import {
 import type { ActivityItem } from "./activity-api";
 
 type Payload = ActivityItem["payload"];
+
+/** Looks up a release version's semver by id (FR-63: "1.2.0 · checkpoint 4"); may return `undefined`. */
+export type VersionNameLookup = (releaseVersionId: string) => string | undefined;
 
 /** Narrows a free-form payload value to one of `allowed` (the contract's wire values), or `null`. */
 function oneOf<T extends string>(
@@ -39,6 +43,12 @@ function version(payload: Payload, key: string): number | null {
     : null;
 }
 
+/** A non-empty string, or `null`. */
+function str(payload: Payload, key: string): string | null {
+  const value = payload[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 /** `ARTIFACT_APPROVED` → "Artifact approved". */
 function humanizeType(type: string): string {
   const words = type.toLowerCase().replaceAll("_", " ");
@@ -47,18 +57,65 @@ function humanizeType(type: string): string {
     : words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function describePhaseChange(payload: Payload): string | null {
+/**
+ * A checkpoint from the payload as "1.2.0 · checkpoint 4" (FR-63), or "checkpoint 4" when the release version isn't
+ * known. v2 payloads use `key` (e.g. `checkpoint`); events stored before D-V2-11 still carry `legacyKey`
+ * (e.g. `projectVersion`), so that is read as a fallback.
+ */
+function checkpointAt(
+  payload: Payload,
+  key: string,
+  legacyKey: string,
+  names: VersionNameLookup | undefined,
+): string | null {
+  const n = version(payload, key) ?? version(payload, legacyKey);
+  if (n === null) {
+    return null;
+  }
+  const id = str(payload, "releaseVersionId");
+  const name = id && names ? names(id) : undefined;
+  return name ? `${name} · checkpoint ${String(n)}` : `checkpoint ${String(n)}`;
+}
+
+function describePhaseChange(payload: Payload, names: VersionNameLookup | undefined): string | null {
   const from = oneOf(payload, "from", phases);
   const to = oneOf(payload, "to", phases);
   if (!from || !to) {
     return null;
   }
-  const v = version(payload, "projectVersion");
+  const at = checkpointAt(payload, "checkpoint", "projectVersion", names);
   const text = `Phase changed from ${phaseLabels[from]} to ${phaseLabels[to]}`;
-  return v === null ? text : `${text} (version ${String(v)})`;
+  return at === null ? text : `${text} (${at})`;
 }
 
-function describeGate(type: string, payload: Payload): string | null {
+function describeVersionStarted(payload: Payload): string | null {
+  const v = str(payload, "version");
+  if (!v) {
+    return null;
+  }
+  const base = str(payload, "baseTag");
+  return base ? `Version ${v} started from ${base}` : `Version ${v} started`;
+}
+
+/** FR-74: "nextjs-frontend@1.0.0", or "no preset" when the id is null. */
+function presetAt(payload: Payload, idKey: string, versionKey: string): string {
+  const id = str(payload, idKey);
+  if (!id) {
+    return "no preset";
+  }
+  const v = str(payload, versionKey);
+  return v ? `${id}@${v}` : id;
+}
+
+/** FR-74, FR-92 PRESET_CHANGED: "Preset of 1.2.0 changed from no preset to nextjs-frontend@1.0.0". */
+function describePresetChanged(payload: Payload): string {
+  const v = str(payload, "version");
+  const from = presetAt(payload, "fromPresetId", "fromPresetVersion");
+  const to = presetAt(payload, "presetId", "presetVersion");
+  return `Preset${v ? ` of ${v}` : ""} changed from ${from} to ${to}`;
+}
+
+function describeGate(type: string, payload: Payload, names: VersionNameLookup | undefined): string | null {
   const gateType = oneOf(payload, "type", gateTypes);
   if (!gateType) {
     return null;
@@ -75,10 +132,10 @@ function describeGate(type: string, payload: Payload): string | null {
       if (!decision) {
         return null;
       }
-      const target = version(payload, "targetVersion");
+      const target = checkpointAt(payload, "targetCheckpoint", "targetVersion", names);
       const label = escalationDecisionLabels[decision];
       return decision === "rollback" && target !== null
-        ? `${gate} decided: ${label} to version ${String(target)}`
+        ? `${gate} decided: ${label} to ${target}`
         : `${gate} decided: ${label}`;
     }
     case "GATE_REJECTED":
@@ -92,12 +149,12 @@ function describeGate(type: string, payload: Payload): string | null {
   }
 }
 
-function describeRollback(payload: Payload): string | null {
-  const from = version(payload, "fromVersion");
-  const target = version(payload, "targetVersion");
+function describeRollback(payload: Payload, names: VersionNameLookup | undefined): string | null {
+  const from = checkpointAt(payload, "fromCheckpoint", "fromVersion", names);
+  const target = version(payload, "targetCheckpoint") ?? version(payload, "targetVersion");
   return from === null || target === null
     ? null
-    : `Rolled back from version ${String(from)} to version ${String(target)}`;
+    : `Rolled back from ${from} to checkpoint ${String(target)}`;
 }
 
 /** A whole, non-negative count (tokens, attempts, milliseconds), or `null`. */
@@ -220,12 +277,6 @@ function describeStep(type: string, payload: Payload): string | null {
   }
 }
 
-/** A non-empty string, or `null`. */
-function str(payload: Payload, key: string): string | null {
-  const value = payload[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
 /** Pull request events (FR-36); payloads from PullRequestJob. */
 function describePullRequest(type: string, payload: Payload): string | null {
   if (type === "PULL_REQUEST_FORGOTTEN") {
@@ -298,7 +349,9 @@ function describeReview(type: string, payload: Payload): string | null {
       ].filter((p): p is string => p !== null);
       const base =
         parts.length === 0 ? `${review} completed` : `${review} completed: ${parts.join(", ")}`;
-      return reason ? `${base} (${escalationReasonLabels[reason].toLowerCase()})` : base;
+      const withReason = reason ? `${base} (${escalationReasonLabels[reason].toLowerCase()})` : base;
+      // FR-85: review stopped waiting for pending checks.
+      return payload.checksTimedOut === true ? `${withReason}; stopped waiting for checks` : withReason;
     }
     default:
       return null;
@@ -319,9 +372,41 @@ function describeRelease(type: string, payload: Payload): string | null {
         ? `${release} started (attempt ${String(attempt)})`
         : `${release} started`;
     }
-    case "RELEASE_COMPLETED":
-      return tag ? `Released: merged and tagged ${tag}` : "Released: merged and tagged";
+    case "RELEASE_COMPLETED": {
+      const how = payload.mergedExternally === true ? "merged on GitHub and tagged" : "merged and tagged";
+      return tag ? `Released: ${how} ${tag}` : `Released: ${how}`;
+    }
+    case "RELEASE_AWAITING_MERGE": {
+      const reasons = Array.isArray(payload.reasons) ? payload.reasons : [];
+      const first: unknown = reasons[0];
+      const message =
+        typeof first === "object" && first !== null && "message" in first && typeof first.message === "string"
+          ? first.message
+          : null;
+      const base = `${release} is waiting for its pull request to be merged on GitHub`;
+      if (message === null) {
+        return base;
+      }
+      return reasons.length > 1 ? `${base}: ${message} (+${String(reasons.length - 1)} more)` : `${base}: ${message}`;
+    }
+    case "MERGE_READINESS_CHECKED": {
+      if (payload.willAutoMerge === true) {
+        return "Merge readiness checked: AIDE will merge automatically";
+      }
+      if (payload.willAutoMerge === false) {
+        return "Merge readiness checked: a merge on GitHub will be needed";
+      }
+      return "Merge readiness checked";
+    }
+    case "RELEASE_MERGED_EXTERNALLY":
+      return `${release}: the pull request was merged on GitHub`;
     case "RELEASE_FAILED": {
+      if (str(payload, "errorCode") === "PR_CLOSED") {
+        return `${release} failed: the pull request was closed without merging`;
+      }
+      if (str(payload, "errorCode") === "MERGE_TIMEOUT") {
+        return `${release} failed: the pull request wasn't merged within 14 days`;
+      }
       if (str(payload, "errorCode") === "MERGE_CONFLICT") {
         const files = payload.conflictingFiles;
         const n = Array.isArray(files) ? files.length : 0;
@@ -336,6 +421,28 @@ function describeRelease(type: string, payload: Payload): string | null {
   }
 }
 
+/** FR-58: "Specification v1 restored as draft v3". */
+function describeRestored(payload: Payload): string | null {
+  const artifactType = oneOf(payload, "type", artifactTypes);
+  const v = version(payload, "version");
+  if (!artifactType || v === null) {
+    return null;
+  }
+  const from = version(payload, "restoredFromVersion");
+  const label = artifactTypeLabels[artifactType];
+  return from === null
+    ? `${label} restored as draft v${String(v)}`
+    : `${label} v${String(from)} restored as draft v${String(v)}`;
+}
+
+/** FR-70: the Repository Analyst's locked codebase summary. */
+function describeCodebaseSummary(payload: Payload): string {
+  const v = version(payload, "version");
+  return v === null
+    ? "Codebase summary created by the Repository Analyst"
+    : `Codebase summary v${String(v)} created by the Repository Analyst`;
+}
+
 /** Events whose payload names an artifact type and version (e.g. `ARTIFACT_APPROVED`). */
 function describeArtifact(type: string, payload: Payload): string | null {
   const artifactType = oneOf(payload, "type", artifactTypes);
@@ -345,6 +452,100 @@ function describeArtifact(type: string, payload: Payload): string | null {
     : null;
 }
 
+const llmProviders = Object.keys(llmProviderLabels) as (keyof typeof llmProviderLabels)[];
+
+/** Why a project's LLM binding was cleared (FR-79; backend LlmBindingClearedReason). */
+export const llmBindingClearedReasonLabels = {
+  owner_role_lost: "the Owner who bound it is no longer an Owner",
+  member_removed: "the Owner who bound it left the project",
+  connection_deleted: "the connection was deleted",
+} as const;
+
+const bindingClearedReasons = Object.keys(llmBindingClearedReasonLabels) as (keyof typeof llmBindingClearedReasonLabels)[];
+
+const deploymentTargetWords = { preview: "Preview", production: "Production" } as const;
+const deploymentStatusWords = {
+  queued: "queued",
+  building: "building",
+  ready: "ready",
+  error: "failed",
+  canceled: "canceled",
+} as const;
+
+/** FR-91, FR-92: why a deployment failed, in a few words (the full copy is in lib/errors). */
+const deploymentFailureWords: Readonly<Record<string, string>> = {
+  VERCEL_ERROR: "Vercel reported the build as failed",
+  DEPLOYMENT_TIMEOUT: "it didn't finish within 30 minutes",
+  CREDENTIAL_INVALID: "Vercel rejected the connection's token",
+  CONNECTION_INVALID: "Vercel rejected the connection's token",
+  VERCEL_GIT_NOT_CONNECTED: "Vercel can't access the repository",
+  VERCEL_PLAN_LIMIT: "the Vercel plan doesn't allow it",
+};
+
+/** §4.14, FR-92: why GitHub stopped accepting a user's connection (`reason` of a GitHub `CONNECTION_INVALID`). */
+const githubInvalidReasons: Readonly<Record<string, string>> = {
+  rejected: "GitHub rejected its token",
+  refresh_expired: "its refresh token expired",
+  refresh_failed: "refreshing its token failed",
+};
+
+/** FR-90, FR-91, §4.15: "Preview deployment of 1.2.0 (3f2a9c1) ready at https://…". */
+function describeDeployment(type: string, payload: Payload): string | null {
+  const target = oneOf(payload, "target", ["preview", "production"] as const);
+  if (!target) {
+    return null;
+  }
+  const sha = str(payload, "gitSha");
+  const version = str(payload, "releaseVersion");
+  const subject = `${deploymentTargetWords[target]} deployment${version ? ` of ${version}` : ""}${sha ? ` (${sha.slice(0, 7)})` : ""}`;
+  const url = str(payload, "url");
+  if (type === "DEPLOYMENT_FAILED") {
+    const code = str(payload, "errorCode");
+    const why = code ? deploymentFailureWords[code] : undefined;
+    return why ? `${subject} failed: ${why}` : `${subject} failed`;
+  }
+  if (type === "DEPLOYMENT_PREVIEW_READY") {
+    return `${subject} ready${url ? ` at ${url}` : ""}`;
+  }
+  if (type === "DEPLOYMENT_CREATED") {
+    const trigger = oneOf(payload, "trigger", ["auto", "manual", "promote", "redeploy"] as const);
+    return trigger === "promote" ? `${subject} promoted` : trigger === "redeploy" ? `${subject} redeployed` : `${subject} created`;
+  }
+  const status = oneOf(payload, "status", ["queued", "building", "ready", "error", "canceled"] as const);
+  if (!status) {
+    return null;
+  }
+  return `${subject} ${deploymentStatusWords[status]}${status === "ready" && url ? ` at ${url}` : ""}`;
+}
+
+/** LLM and Vercel connection events (FR-78, FR-79, FR-87). */
+function describeConnection(type: string, payload: Payload): string | null {
+  if (type === "CONNECTION_INVALID" && payload.provider === "vercel") {
+    return "Vercel connection marked invalid: Vercel rejected its token";
+  }
+  if (type === "CONNECTION_INVALID" && payload.provider === "github") {
+    // §4.14, FR-92: a user's GitHub connection (no project); its owner reconnects under Connections.
+    const login = str(payload, "login");
+    const reason = str(payload, "reason");
+    const why = reason ? githubInvalidReasons[reason] : undefined;
+    const subject = login ? `GitHub connection of @${login}` : "GitHub connection";
+    return `${subject} marked invalid${why ? `: ${why}` : ""}; reconnect it under Connections`;
+  }
+  const provider = oneOf(payload, "provider", llmProviders);
+  const name = provider ? llmProviderLabels[provider] : "LLM";
+  switch (type) {
+    case "CONNECTION_INVALID":
+      return `${name} connection marked invalid: the provider rejected its key during a run`;
+    case "LLM_BINDING_CLEARED": {
+      const reason = oneOf(payload, "reason", bindingClearedReasons);
+      const text = `${name} connection unbound`;
+      return reason ? `${text}: ${llmBindingClearedReasonLabels[reason]}` : text;
+    }
+    default:
+      return null;
+  }
+}
+
 /**
  * FR-50: the one-line description shown in the activity feed, built from the event's type and payload with the same
  * labels the rest of the UI uses. Unknown types and payloads that don't match the expected shape fall back to the
@@ -352,26 +553,42 @@ function describeArtifact(type: string, payload: Payload): string | null {
  */
 export function describeActivity(
   item: Pick<ActivityItem, "type" | "payload" | "summary">,
+  names?: VersionNameLookup,
 ): string {
   const { type, payload } = item;
   let text: string | null;
   switch (type) {
     case "PHASE_CHANGED":
-      text = describePhaseChange(payload);
+      text = describePhaseChange(payload, names);
+      break;
+    case "VERSION_STARTED":
+      text = describeVersionStarted(payload);
+      break;
+    case "PRESET_CHANGED":
+      text = describePresetChanged(payload);
+      break;
+    case "ARTIFACT_RESTORED":
+      text = describeRestored(payload);
+      break;
+    case "CODEBASE_SUMMARY_CREATED":
+      text = describeCodebaseSummary(payload);
       break;
     case "GATE_CREATED":
     case "GATE_APPROVED":
     case "GATE_REJECTED":
     case "GATE_CANCELLED":
     case "GATE_OVERDUE":
-      text = describeGate(type, payload);
+      text = describeGate(type, payload, names);
       break;
     case "ROLLBACK_COMPLETED":
-      text = describeRollback(payload);
+      text = describeRollback(payload, names);
       break;
     case "RELEASE_STARTED":
     case "RELEASE_COMPLETED":
     case "RELEASE_FAILED":
+    case "RELEASE_AWAITING_MERGE":
+    case "RELEASE_MERGED_EXTERNALLY":
+    case "MERGE_READINESS_CHECKED":
       text = describeRelease(type, payload);
       break;
     case "RUN_STARTED":
@@ -397,6 +614,16 @@ export function describeActivity(
     case "REVIEW_FAILED":
     case "COMPLIANCE_REPORT_CREATED":
       text = describeReview(type, payload);
+      break;
+    case "CONNECTION_INVALID":
+    case "LLM_BINDING_CLEARED":
+      text = describeConnection(type, payload);
+      break;
+    case "DEPLOYMENT_CREATED":
+    case "DEPLOYMENT_UPDATED":
+    case "DEPLOYMENT_FAILED":
+    case "DEPLOYMENT_PREVIEW_READY":
+      text = describeDeployment(type, payload);
       break;
     case "PULL_REQUEST_OPENED":
     case "PULL_REQUEST_FAILED":

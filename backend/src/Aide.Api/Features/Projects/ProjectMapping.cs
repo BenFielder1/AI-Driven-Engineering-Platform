@@ -10,14 +10,21 @@ namespace Aide.Api.Features.Projects;
 /// <summary>Entity → DTO mapping for the projects feature. Secrets only ever become set / not set flags.</summary>
 internal static class ProjectMapping
 {
-    public static ProjectDto ToDto(Project p, ProjectRole? myRole) => new(
+    /// <param name="p">The project.</param>
+    /// <param name="myRole">The caller's project role.</param>
+    /// <param name="preset">The preset pinned on the current release version.</param>
+    /// <param name="deploymentsEnabled">FR-88: the project has deployment settings.</param>
+    public static ProjectDto ToDto(Project p, ProjectRole? myRole, Presets.ProjectPresetRef preset, bool deploymentsEnabled) => new(
         p.Id,
         p.Name,
         p.Slug,
         p.Idea,
         p.CurrentPhase,
         p.Status,
-        p.ProjectVersion,
+        p.Checkpoint,
+        p.CurrentReleaseVersionId,
+        p.ReleasedVersion,
+        p.DevelopmentVersion,
         p.ApprovalMode,
         p.ComplianceThreshold,
         p.MaxFilesPerStep,
@@ -27,21 +34,49 @@ internal static class ProjectMapping
         p.ExecutionPaused,
         myRole,
         p.CreatedAt,
-        p.UpdatedAt);
+        p.UpdatedAt,
+        preset.PresetId,
+        preset.PresetName,
+        preset.PresetVersion,
+        deploymentsEnabled);
 
-    public static GitSettingsDto ToDto(ProjectGitSettings s) =>
-        new(s.Provider, s.RepoUrl, s.DefaultBranch, s.BranchName, s.TokenEncrypted is not null);
+    /// <param name="s">The project's Git settings.</param>
+    /// <param name="branchName">The working branch of the project's current release version (§4.10), if recorded.</param>
+    /// <param name="appInstalledOnRepo">FR-83: whether the App can access a PAT project's repo (<c>null</c>: unknown).</param>
+    /// <param name="canSwitchToApp">FR-83: the App can access the repo and the caller is an Owner.</param>
+    /// <param name="mergeStrategy">FR-65: the project's merge strategy.</param>
+    /// <param name="tagPrefix">§4.10: the project's tag prefix.</param>
+    public static GitSettingsDto ToDto(
+        ProjectGitSettings s, string? branchName, MergeStrategy mergeStrategy, string tagPrefix, bool? appInstalledOnRepo = null, bool canSwitchToApp = false) =>
+        new(
+            s.Provider,
+            s.RepoUrl,
+            s.DefaultBranch,
+            branchName,
+            s.TokenEncrypted is not null,
+            s.Provider,
+            s.InstallationId,
+            s.RepoId,
+            s.RepoFullName,
+            appInstalledOnRepo,
+            canSwitchToApp,
+            mergeStrategy,
+            tagPrefix);
 
-    public static LlmSettingsDto ToDto(ProjectLlmSettings s, ILlmProviderCatalog catalog)
+    /// <param name="s">The project's LLM settings.</param>
+    /// <param name="catalog">The system LLM configuration.</param>
+    /// <param name="binding">The bound connection (FR-79), if any.</param>
+    /// <param name="canBind">Whether the caller is a project Owner.</param>
+    public static LlmSettingsDto ToDto(ProjectLlmSettings s, ILlmProviderCatalog catalog, LlmBindingDto? binding, bool canBind)
     {
-        var hasKey = s.ApiKeyEncrypted is not null;
+        var bound = binding is not null && binding.Provider == s.Provider ? binding : null;
         var providers = Enum.GetValues<LlmProvider>()
             .Select(p => new LlmProviderStatusDto(
                 p,
-                ProjectSettingsRules.IsConfigured(p, catalog.HasSystemKey(p), hasKey && s.Provider == p),
+                ProjectSettingsRules.IsConfigured(p, catalog.HasSystemKey(p), bound is not null && s.Provider == p),
                 catalog.DefaultModel(p)))
             .ToList();
-        return new LlmSettingsDto(s.Provider, s.DefaultModel, ToAgentModels(s.ModelsByAgent), hasKey, providers);
+        return new LlmSettingsDto(s.Provider, s.DefaultModel, ToAgentModels(s.ModelsByAgent), bound is not null, providers, bound, canBind);
     }
 
     public static NotificationSettingsDto ToDto(ProjectNotificationSettings s) =>

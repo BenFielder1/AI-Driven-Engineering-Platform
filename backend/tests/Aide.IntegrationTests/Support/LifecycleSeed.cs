@@ -38,7 +38,7 @@ public static class LifecycleSeed
         WebApplicationFactory<Program> factory, Guid projectId, Phase phase, int version, ApprovalMode mode, ProjectStatus? status = null, int reviewCycle = 0) =>
         ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == projectId).ExecuteUpdateAsync(
             s => s.SetProperty(p => p.CurrentPhase, phase)
-                .SetProperty(p => p.ProjectVersion, version)
+                .SetProperty(p => p.Checkpoint, version)
                 .SetProperty(p => p.ApprovalMode, mode)
                 .SetProperty(p => p.Status, status ?? PhaseOrder.StatusFor(phase))
                 .SetProperty(p => p.ReviewCycle, reviewCycle),
@@ -67,7 +67,7 @@ public static class LifecycleSeed
                 Content = content,
                 ContentHash = ContentHash.Compute(content),
                 Status = status,
-                ProjectVersionAtCreation = projectVersionAtCreation,
+                CheckpointAtCreation = projectVersionAtCreation,
                 CreatedAt = createdAt ?? DateTimeOffset.UtcNow,
             };
             db.Artifacts.Add(artifact);
@@ -95,8 +95,8 @@ public static class LifecycleSeed
         });
 
     public static Task PrepareWorkingCopyAsync(WebApplicationFactory<Program> factory, Guid projectId) =>
-        ProjectApi.WithDbAsync(factory, db => db.ProjectGitSettings.Where(g => g.ProjectId == projectId)
-            .ExecuteUpdateAsync(s => s.SetProperty(g => g.BranchName, $"aide/test-{projectId:N}"), Ct));
+        ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.Where(v => v.ProjectId == projectId)
+            .ExecuteUpdateAsync(s => s.SetProperty(v => v.BranchName, $"aide/test-{projectId:N}"), Ct));
 
     public static Task AddTransitionAsync(WebApplicationFactory<Program> factory, Guid projectId, Phase from, Phase to, int version, DateTimeOffset createdAt) =>
         ProjectApi.WithDbAsync(factory, async db =>
@@ -108,7 +108,7 @@ public static class LifecycleSeed
                 ToPhase = to,
                 Actor = "seed",
                 Reason = "seed",
-                ProjectVersion = version,
+                Checkpoint = version,
                 CreatedAt = createdAt,
             });
             await db.SaveChangesAsync(Ct);
@@ -140,7 +140,7 @@ public static class LifecycleSeed
             {
                 ProjectId = projectId,
                 ReviewCycle = 1,
-                ProjectVersion = projectVersion,
+                Checkpoint = projectVersion,
                 Score = decision == ReviewDecision.ReleaseEligible ? 0.950m : 0.700m,
                 DriftLevel = DriftLevel.Low,
                 Decision = decision,

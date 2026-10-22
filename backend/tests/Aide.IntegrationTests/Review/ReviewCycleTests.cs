@@ -80,9 +80,9 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var id = fixture.Project.Id;
 
         var project = await LifecycleSeed.ProjectAsync(app, id);
-        Assert.Equal((Phase.Review, 1, 5), (project.CurrentPhase, project.ReviewCycle, project.ProjectVersion));
+        Assert.Equal((Phase.Review, 1, 5), (project.CurrentPhase, project.ReviewCycle, project.Checkpoint));
         var report = Assert.Single(await ReportsAsync(app, id));
-        Assert.Equal((1, 5, 0.860m, ReviewDecision.ReviewRequired, (EscalationReason?)null, 0.90m), (report.ReviewCycle, report.ProjectVersion, report.Score, report.Decision, report.EscalationReason, report.Threshold));
+        Assert.Equal((1, 5, 0.860m, ReviewDecision.ReviewRequired, (EscalationReason?)null, 0.90m), (report.ReviewCycle, report.Checkpoint, report.Score, report.Decision, report.EscalationReason, report.Threshold));
         var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
         Assert.Equal((ArtifactStatus.Draft, (Guid?)draft.Id, (Guid?)report.AgentRunId), (draft.Status, report.OptimizationPlanArtifactId, draft.AgentRunId));
 
@@ -97,7 +97,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var trend = await GetAsync<ComplianceTrendDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/trend");
         Assert.Equal((0.90m, 1, 0.90m), (trend.Threshold, trend.Series.Count, trend.Series[0].Threshold));
         var drift = await GetAsync<ComplianceDriftDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/drift");
-        Assert.Equal((DriftLevel.None, 1, 5), (drift.DriftLevel, drift.Cycle, drift.ProjectVersion));
+        Assert.Equal((DriftLevel.None, 1, 5), (drift.DriftLevel, drift.Cycle, drift.Checkpoint));
 
         var started = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.ReviewStarted)).Payload);
         Assert.Equal((1, "phase_entered"), (started.GetProperty("cycle").GetInt32(), started.GetProperty("trigger").GetString()));
@@ -170,14 +170,14 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
 
         var project = await LifecycleSeed.ProjectAsync(app, id);
-        Assert.Equal((Phase.Execution, 5), (project.CurrentPhase, project.ProjectVersion)); // FR-39: re-entered, version kept
+        Assert.Equal((Phase.Execution, 5), (project.CurrentPhase, project.Checkpoint)); // FR-39: re-entered, version kept
         var current = await GetAsync<ExecutionStepsDto>(fixture.Viewer.Client, $"{fixture.Path}/execution/steps");
         Assert.Equal((ArtifactType.OptimizationPlan, 1, 3), (current.Plan!.Type, current.Plan.Version, current.Steps.Count));
 
         await AgentJobs.RunQueuedAsync(app, id);
 
         project = await LifecycleSeed.ProjectAsync(app, id);
-        Assert.Equal((Phase.Review, 2, 6), (project.CurrentPhase, project.ReviewCycle, project.ProjectVersion));
+        Assert.Equal((Phase.Review, 2, 6), (project.CurrentPhase, project.ReviewCycle, project.Checkpoint));
         var steps = await GetAsync<ExecutionStepsDto>(fixture.Viewer.Client, $"{fixture.Path}/execution/steps");
         Assert.All(steps.Steps, s => Assert.Equal(StepStatus.Completed, s.Status));
         var reports = await ReportsAsync(app, id);
@@ -388,8 +388,8 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var latest = await GetAsync<ComplianceReportDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/latest");
         var trend = await GetAsync<ComplianceTrendDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/trend");
 
-        Assert.Equal((5, ReviewDecision.ReviewRequired), (latest.ProjectVersion, latest.Decision));
-        Assert.Equal([5], trend.Series.Select(p => p.ProjectVersion));
+        Assert.Equal((5, ReviewDecision.ReviewRequired), (latest.Checkpoint, latest.Decision));
+        Assert.Equal([5], trend.Series.Select(p => p.Checkpoint));
     }
 
     // ---------- FR-14 continue at max cycles after an executed optimisation plan ----------
@@ -492,7 +492,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
 
         Assert.Equal(2, jobs.Count(j => j.Type == JobTypes.PullRequest && j.Status == JobStatus.Succeeded));
         var project = await LifecycleSeed.ProjectAsync(app, id);
-        Assert.Equal((Phase.Review, 6), (project.CurrentPhase, project.ProjectVersion));
+        Assert.Equal((Phase.Review, 6), (project.CurrentPhase, project.Checkpoint));
     }
 
     // ---------- review_required without an optimisation plan ----------
@@ -583,7 +583,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         using var fixture = await ReviewedAsync(app);
         var id = fixture.Project.Id;
         var awsKey = "AKIA" + "Z7Q3EXAMPLE4K2LM";
-        var branch = await ProjectApi.WithDbAsync(app, db => db.ProjectGitSettings.AsNoTracking().Where(g => g.ProjectId == id).Select(g => g.BranchName!).SingleAsync(Ct));
+        var branch = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().Where(v => v.ProjectId == id).Select(v => v.BranchName!).SingleAsync(Ct));
         var stepId = Guid.NewGuid();
         await app.Services.GetRequiredService<Aide.Infrastructure.Git.IWorkingCopies>().CommitStepAsync(
             id, branch, stepId, [new ProducedFile("src/config.js", $"const region = 'eu';\nconst key = '{awsKey}';\n")], CodeGeneration.CommitMessage(9, "Config", ["src/config.js"], stepId), Ct);
@@ -598,6 +598,85 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var latest = await GetAsync<ComplianceReportDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/latest");
         var secret = Assert.Single(latest.Violations, v => v.Source == FindingSource.Deterministic && v.Category == ReviewCategory.Security);
         Assert.Equal((Severity.Critical, "src/config.js"), (secret.Severity, secret.File));
+    }
+
+    // ---------- FR-89: vercel.json on the branch ----------
+
+    private const string GoodVercelJson = "{\n  \"git\": { \"deploymentEnabled\": { \"aide/**\": false } }\n}\n";
+
+    private static Task SeedDeploymentSettingsAsync(WebApplicationFactory<Program> app, Guid projectId, DeploymentProvider provider, string rootDirectory = ".") =>
+        ProjectApi.WithDbAsync(app, async db =>
+        {
+            db.ProjectDeploymentSettings.Add(new ProjectDeploymentSettings { ProjectId = projectId, Provider = provider, RootDirectory = rootDirectory, UpdatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync(Ct);
+        });
+
+    /// <summary>Commits <paramref name="files"/> (if any) to the project branch, runs another review cycle and returns its report.</summary>
+    private static async Task<ComplianceReportDto> ReviewAgainAsync(WebApplicationFactory<Program> app, ProjectFixture fixture, params ProducedFile[] files)
+    {
+        var id = fixture.Project.Id;
+        if (files.Length > 0)
+        {
+            var branch = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().Where(v => v.ProjectId == id).Select(v => v.BranchName!).SingleAsync(Ct));
+            var stepId = Guid.NewGuid();
+            var paths = files.Select(f => f.Path).ToList();
+            await app.Services.GetRequiredService<Aide.Infrastructure.Git.IWorkingCopies>().CommitStepAsync(
+                id, branch, stepId, files, CodeGeneration.CommitMessage(9, "Vercel config", paths, stepId), Ct);
+        }
+
+        await ProjectApi.ReadAsync<ReviewStartedDto>(await fixture.Contributor.Client.PostAsJsonAsync($"{fixture.Path}/review", new { }, Ct), HttpStatusCode.Accepted);
+        await AgentJobs.RunQueuedAsync(app, id);
+        var latest = await GetAsync<ComplianceReportDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/latest");
+        Assert.Equal(2, latest.Cycle);
+        return latest;
+    }
+
+    private static bool IsVercelConfigFinding(ViolationDto v) =>
+        v.Source == FindingSource.Deterministic && v.Message.Contains("(FR-89)", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task FR89_A_Vercel_settings_row_without_vercel_json_in_its_root_directory_is_a_major_architecture_finding()
+    {
+        var app = App(factory, new FakeCodeReviewScript { ScoresByCycle = [0.93m, 0.93m] });
+        using var fixture = await ReviewedAsync(app);
+        var id = fixture.Project.Id;
+        var first = await GetAsync<ComplianceReportDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/latest");
+        Assert.DoesNotContain(first.Violations, IsVercelConfigFinding); // no deployment settings: no finding
+
+        await SeedDeploymentSettingsAsync(app, id, DeploymentProvider.Vercel, rootDirectory: "web");
+        var report = await ReviewAgainAsync(app, fixture, new ProducedFile("vercel.json", GoodVercelJson)); // the wrong place
+
+        var finding = Assert.Single(report.Violations, IsVercelConfigFinding);
+        Assert.Equal((ReviewCategory.Architecture, Severity.Major, "web/vercel.json"), (finding.Category, finding.Severity, finding.File));
+        Assert.Contains("missing", finding.Message, StringComparison.Ordinal);
+        var architecture = report.CategoryScores.Single(c => c.Category == ReviewCategory.Architecture);
+        Assert.True(architecture.Penalty > 0m);
+    }
+
+    [Fact]
+    public async Task FR89_A_Fake_settings_row_gives_no_vercel_json_finding()
+    {
+        var app = App(factory, new FakeCodeReviewScript { ScoresByCycle = [0.93m, 0.93m] });
+        using var fixture = await ReviewedAsync(app);
+        await SeedDeploymentSettingsAsync(app, fixture.Project.Id, DeploymentProvider.Fake);
+
+        var report = await ReviewAgainAsync(app, fixture);
+
+        Assert.DoesNotContain(report.Violations, IsVercelConfigFinding);
+    }
+
+    [Fact]
+    public async Task FR89_vercel_json_is_read_even_when_the_review_selection_leaves_it_out()
+    {
+        var app = App(factory, new FakeCodeReviewScript { ScoresByCycle = [0.93m, 0.93m] });
+        using var fixture = await ReviewedAsync(app);
+        await SeedDeploymentSettingsAsync(app, fixture.Project.Id, DeploymentProvider.Vercel);
+
+        // Over the per-file review limit, so the file selection skips it; the FR-89 check reads it on its own.
+        var padded = GoodVercelJson + new string(' ', (int)ReviewLimits.Default.MaxFileBytes + 1);
+        var report = await ReviewAgainAsync(app, fixture, new ProducedFile("vercel.json", padded));
+
+        Assert.DoesNotContain(report.Violations, IsVercelConfigFinding);
     }
 
     /// <summary>Wraps a responder and records the user message of every request it answers.</summary>

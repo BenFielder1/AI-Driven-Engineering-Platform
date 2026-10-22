@@ -1,13 +1,19 @@
+import { Inbox, Loader2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
+import { EmptyState as SharedEmptyState } from '../shared/empty-state'
+import { PageHeader as SharedPageHeader } from '../shared/page-header'
 import { errorMessage, type ErrorContext } from '../../lib/errors'
 import { useDocumentTitle } from '../../lib/use-document-title'
+import { cn } from '../../lib/utils'
 import { Alert } from './alert'
 import { Button } from './button'
 
-export function LoadingState({ label = 'Loading…' }: { label?: string }) {
+/** An inline loading line (for sections; whole layouts use the Skeleton* placeholders). */
+export function LoadingState({ label = 'Loading…', className }: { label?: string; className?: string }) {
   return (
-    <p role="status" aria-live="polite" className="py-6 text-sm text-muted">
+    <p role="status" aria-live="polite" className={cn('flex items-center gap-2 py-6 text-sm text-muted-foreground', className)}>
+      <Loader2 aria-hidden className="size-4 animate-spin" />
       {label}
     </p>
   )
@@ -32,33 +38,34 @@ export function ErrorState({ error, onRetry, title = "Something went wrong", con
   )
 }
 
+/** A compact "nothing here yet" block for sections inside a panel (pages use the shared EmptyState). */
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="rounded-lg border border-dashed border-field-border p-6 text-center">
+    <div data-testid="empty-state-inline" className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border px-6 py-8 text-center">
+      <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Inbox className="size-5" aria-hidden />
+      </span>
       <p className="font-medium">{title}</p>
-      {children && <div className="mt-1 text-sm text-muted">{children}</div>}
+      {children && <div className="text-sm text-muted-foreground">{children}</div>}
     </div>
   )
 }
 
+/** A whole page the user can't see (403): the forbidden EmptyState with the page's h1. */
 export function ForbiddenState({ children }: { children?: ReactNode }) {
   useDocumentTitle('No access')
   return (
-    <section aria-labelledby="forbidden-title" className="py-6">
-      <h1 id="forbidden-title" className="text-2xl font-semibold tracking-tight">
-        You don&apos;t have access to this page
-      </h1>
-      <p className="mt-2 text-muted">{children ?? 'Ask an administrator if you think you should.'}</p>
-    </section>
+    <SharedEmptyState
+      variant="forbidden"
+      headingLevel={1}
+      title="You don't have access to this page"
+      description={children ?? 'Ask an administrator if you think you should.'}
+      className="my-6"
+    />
   )
 }
 
-export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
-  useDocumentTitle(title)
-  return (
-    <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
-      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-      {children}
-    </header>
-  )
+/** Page title (h1) with actions on the right: the shared PageHeader. */
+export function PageHeader({ title, description, children }: { title: string; description?: ReactNode; children?: ReactNode }) {
+  return <SharedPageHeader title={title} description={description} actions={children} className="mb-6" />
 }

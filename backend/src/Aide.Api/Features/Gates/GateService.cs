@@ -40,7 +40,7 @@ public sealed partial class GateService(
 
         var stepBlocked = gate.Type == GateType.Escalation
             && (await GateReader.BlockedStepsAsync(db, project.Id, [gate.Id], cancellationToken)).ContainsKey(gate.Id);
-        var resolved = GateRules.Approve(gate.Type, gate.Status, request.Decision, request.TargetVersion, stepBlocked);
+        var resolved = GateRules.Approve(gate.Type, gate.Status, request.Decision, request.TargetCheckpoint, stepBlocked);
         if (resolved.IsFailure)
         {
             return Result.Failure<ApprovalGate>(resolved.Error!);
@@ -49,7 +49,7 @@ public sealed partial class GateService(
         var resolution = resolved.Value;
         var now = time.GetUtcNow();
         var comment = Clean(request.Comment);
-        var state = new LifecycleState(project.CurrentPhase, project.Status, project.ProjectVersion);
+        var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
         Decide(gate, resolution.NewStatus, resolution.Decision, resolution.TargetVersion, reviewerId, comment, now);
         project.UpdatedAt = now;
 
@@ -124,7 +124,7 @@ public sealed partial class GateService(
                         // The escalated review proposed no optimisation plan to approve: the extra cycle is a new review.
                         await jobs.EnqueueAsync(
                             JobTypes.Review,
-                            new LifecycleJobPayload(project.Id, project.ProjectVersion, LifecycleJobPayload.UserRequested, "Escalation decision: continue with another review cycle."),
+                            new LifecycleJobPayload(project.Id, project.Checkpoint, LifecycleJobPayload.UserRequested, "Escalation decision: continue with another review cycle."),
                             project.Id,
                             cancellationToken,
                             now);
@@ -174,7 +174,7 @@ public sealed partial class GateService(
         db.AddEvent(
             EventTypes.GateApproved,
             project.Id,
-            new { gateId = gate.Id, type = gate.Type, decision = gate.Decision, targetVersion = gate.TargetVersion, comment },
+            new { gateId = gate.Id, type = gate.Type, decision = gate.Decision, targetCheckpoint = gate.TargetCheckpoint, comment },
             actor,
             now);
         var saved = await LifecyclePersistence.SaveAsync(db, cancellationToken);
@@ -243,7 +243,7 @@ public sealed partial class GateService(
             return Result.Failure<ApprovalGate>(resolved.Error!);
         }
 
-        if (request.Decision is not null || request.TargetVersion is not null)
+        if (request.Decision is not null || request.TargetCheckpoint is not null)
         {
             return Result.Failure<ApprovalGate>(new DomainError(
                 ErrorCodes.InvalidDecision,
@@ -262,7 +262,7 @@ public sealed partial class GateService(
         {
             var job = await jobs.EnqueueAsync(
                 JobTypes.ForAgent(agent),
-                new LifecycleJobPayload(project.Id, project.ProjectVersion, LifecycleJobPayload.GateRejected, comment, gate.Id),
+                new LifecycleJobPayload(project.Id, project.Checkpoint, LifecycleJobPayload.GateRejected, comment, gate.Id),
                 project.Id,
                 cancellationToken,
                 now);
@@ -334,7 +334,7 @@ public sealed partial class GateService(
     {
         gate.Status = status;
         gate.Decision = decision;
-        gate.TargetVersion = targetVersion;
+        gate.TargetCheckpoint = targetVersion;
         gate.ReviewerId = reviewerId;
         gate.Comment = comment;
         gate.DecidedAt = now;

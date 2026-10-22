@@ -82,9 +82,9 @@ export function LoginPage({ returnUrl, githubError }: LoginPageProps) {
         </Button>
       </form>
       <GitHubButton href={githubSignInHref(destination)} />
-      <p className="mt-6 text-sm text-muted">
+      <p className="mt-6 text-sm text-muted-foreground">
         New to AIDE?{' '}
-        <Link to="/register" search={returnUrl ? { returnUrl } : {}} className="font-medium text-link underline">
+        <Link to="/register" search={returnUrl ? { returnUrl } : {}} className="font-medium text-primary underline">
           Create an account
         </Link>
       </p>

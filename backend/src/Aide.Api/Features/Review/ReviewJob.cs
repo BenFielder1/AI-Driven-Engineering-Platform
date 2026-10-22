@@ -4,6 +4,7 @@ using Aide.Api.Agents;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
+using Aide.Api.Features.Presets;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
@@ -13,9 +14,13 @@ using Aide.Domain.Entities;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
+using Aide.Domain.Presets;
 using Aide.Domain.Review;
+using Aide.Domain.Specs;
+using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
+using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aide.Api.Features.Review;
@@ -27,7 +32,17 @@ internal sealed record ReviewMaterial(
     Artifact? CurrentOptimizationPlan,
     string Code,
     IReadOnlyList<ReviewFinding> Findings,
-    string FindingsText);
+    string FindingsText)
+{
+    /// <summary>§4.13: the specification's requirements (tagged in iterations), which scope the review.</summary>
+    public IReadOnlyList<SpecRequirement> Requirements { get; init; } = [];
+
+    /// <summary>FR-70: the version's codebase summary, an input of the review.</summary>
+    public Artifact? CodebaseSummary { get; init; }
+
+    /// <summary>FR-77: the version's preset (checklist, deterministic rules, optimisation plan agents).</summary>
+    public VersionPreset Preset { get; init; } = VersionPreset.None;
+}
 
 /// <summary>The succeeded run whose reply was accepted, and the reply as read.</summary>
 internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult Result);
@@ -52,6 +67,15 @@ internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult 
 /// </list>
 /// An Owner rejecting the optimisation plan draft (FR-17) or its corruption (FR-20) queues this job to revise the plan for
 /// the same cycle: the agent runs again with the feedback and only its plan is used (a new draft linked to the report).
+/// §4.13: in iterations (a spec with tagged requirements) the reply is scoped by <see cref="IterationReviewScope"/> before
+/// scoring: feature coverage is over <c>[new]</c>/<c>[changed]</c> requirements, and broken <c>[unchanged]</c> ones become
+/// regressions (stored in <c>compliance_report.regressions</c>). The agent has the repo tools on the project branch (FR-71).
+/// FR-77: with a preset the agent also scores against its review checklist (<see cref="PresetGuidance.Review"/>; failed items
+/// are agent violations mapped to the item's category and severity, without penalty, <see cref="PresetReviewChecklist"/>),
+/// the deterministic checks gain the preset's rules (<see cref="PresetReviewChecks"/>, penalised like v1's), and
+/// optimisation steps may name the preset's specialists (<see cref="Domain.Execution.PlanAgents.ForOptimization"/>).
+/// FR-90: the version's latest Vercel preview is waited for first (<see cref="PreviewCollector"/>); a failed build is a
+/// critical <c>architecture</c> finding and the preview is stored in <c>external_checks.preview</c>.
 /// Redelivery is idempotent: run ids derive from the job, a succeeded run is reused, the cycle is read back from the job's
 /// <c>REVIEW_STARTED</c>, and one report is recorded per job. A rollback (cycle reset) or another review in between makes
 /// the job record nothing.
@@ -60,10 +84,15 @@ public sealed partial class ReviewJobHandler(
     AideDbContext db,
     AgentRunner runner,
     AgentJobInputs inputs,
+    IterationContextReader iterations,
     AgentDraftWriter drafts,
     WorkingCopyPreparer preparer,
     IWorkingCopies workingCopies,
     LifecycleWriter writer,
+    ExternalChecksCollector externalChecks,
+    PreviewCollector previews,
+    VersionPresetReader presets,
+    IDeploymentProviderResolver deploymentProviders,
     TimeProvider time,
     ILogger<ReviewJobHandler> logger) : IJobHandler
 {
@@ -103,7 +132,16 @@ public sealed partial class ReviewJobHandler(
         }
 
         using var scope = logger.BeginScope(new Dictionary<string, object?> { ["ReviewCycle"] = cycle });
-        var material = await GatherAsync(project, cancellationToken);
+
+        // FR-90: the preview of the PR head is waited for (the job defers itself) and a failed build is a finding.
+        var preview = await previews.CollectAsync(project, payload, cancellationToken);
+
+        // FR-85: the PR head's checks are a deterministic input; pending ones are waited for (the job defers itself) first.
+        var checks = await externalChecks.CollectAsync(project, payload, cancellationToken);
+        var material = await GatherAsync(
+            project,
+            cancellationToken,
+            [.. checks is null ? [] : ExternalCheckRules.Findings(checks.Checks), .. preview?.Findings ?? []]);
 
         // §4.5 row 4: the previous score is the latest earlier cycle's report in the current review timeline (§4.8).
         var previous = await ReviewTimeline.Current(db, project)
@@ -118,23 +156,25 @@ public sealed partial class ReviewJobHandler(
         // with that reason, and a reply still without steps escalates (RecordAsync).
         DomainError? MissingPlan(CodeReviewResult result)
         {
-            var decision = Assess(result, material, project, cycle, previous?.Score).Decision.Decision;
+            var decision = Assess(result, material, project, cycle, previous?.Score).Assessment.Decision.Decision;
             return ReviewAssessment.LacksOptimizationPlan(decision, result.OptimizationPlan.Count) ? ReviewAssessment.MissingOptimizationPlanError() : null;
         }
 
         var outcome = await RunAgentAsync(job, project, cycle, material, previousText, payload.Feedback, MissingPlan, cancellationToken);
-        await RecordAsync(job, cycle, material, outcome, previous?.Score, cancellationToken);
+        await RecordAsync(job, cycle, material, outcome, previous?.Score, checks, preview, cancellationToken);
     }
 
-    private static ReviewAssessmentResult Assess(CodeReviewResult result, ReviewMaterial material, Project project, int cycle, decimal? previousScore) =>
-        ReviewAssessment.Assess(new ReviewAssessmentInput(
-            result,
-            material.Findings,
-            project.ComplianceThreshold,
-            cycle,
-            project.MaxReviewCycles,
-            project.ExtraReviewCycles,
-            previousScore));
+    private static IterationReviewResult Assess(CodeReviewResult result, ReviewMaterial material, Project project, int cycle, decimal? previousScore) =>
+        IterationReviewScope.Assess(
+            new ReviewAssessmentInput(
+                result,
+                material.Findings,
+                project.ComplianceThreshold,
+                cycle,
+                project.MaxReviewCycles,
+                project.ExtraReviewCycles,
+                previousScore),
+            material.Requirements);
 
     /// <summary>The cycle this job reviews: read back from its <c>REVIEW_STARTED</c>, or started now; <c>null</c> if the project left review.</summary>
     private async Task<int?> BeginCycleAsync(JobExecution job, LifecycleJobPayload payload, CancellationToken cancellationToken)
@@ -169,7 +209,7 @@ public sealed partial class ReviewJobHandler(
         db.AddEvent(
             EventTypes.ReviewStarted,
             project.Id,
-            new { jobId = job.Id, cycle = project.ReviewCycle, trigger = payload.Trigger, projectVersion = project.ProjectVersion },
+            new { jobId = job.Id, cycle = project.ReviewCycle, trigger = payload.Trigger, checkpoint = project.Checkpoint, releaseVersionId = project.CurrentReleaseVersionId },
             SystemActor.Name,
             now);
         await SaveAsync("starting the review cycle", cancellationToken);
@@ -177,7 +217,10 @@ public sealed partial class ReviewJobHandler(
         return project.ReviewCycle;
     }
 
-    private async Task<ReviewMaterial> GatherAsync(Project project, CancellationToken cancellationToken)
+    /// <param name="project">The project in review.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <param name="externalFindings">FR-85: findings from failed required checks, added to the deterministic ones.</param>
+    private async Task<ReviewMaterial> GatherAsync(Project project, CancellationToken cancellationToken, IReadOnlyList<ReviewFinding>? externalFindings = null)
     {
         var preparation = await preparer.TryPrepareAsync(project.Id, cancellationToken);
         if (preparation.Result.IsFailure)
@@ -215,11 +258,16 @@ public sealed partial class ReviewJobHandler(
         var specText = spec?.Content ?? string.Empty;
         var allowlist = SpecReading.AllowedDependencies(specText);
         var endpoints = SpecReading.EndpointPaths(specText);
+        var preset = await presets.CurrentAsync(project.Id, cancellationToken);
         var findings = DeterministicChecks.SecretScan(contents)
             .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents)))
             .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents))
+            .Concat(PresetReviewChecks.Run(preset.Preset, contents))
+            .Concat(await VercelConfigFindingsAsync(project.Id, working.Branch, contents, cancellationToken))
+            .Concat(externalFindings ?? [])
             .ToList();
         LogGathered(logger, tree.Count, contents.Count, findings.Count);
+        var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
         return new ReviewMaterial(
             spec,
             implementation,
@@ -227,7 +275,12 @@ public sealed partial class ReviewJobHandler(
             // NFR-SEC: secrets the scan flagged never reach the provider; the markers keep the line numbers.
             ReviewCode.RenderForPrompt(tree, changed, ReviewCode.RedactSecrets(contents), limits),
             findings,
-            ReviewCode.RenderFindings(findings, allowlist is not null, endpoints.Count));
+            ReviewCode.RenderFindings(findings, allowlist is not null, endpoints.Count))
+        {
+            Requirements = RequirementParser.Parse(specText).Requirements,
+            CodebaseSummary = iteration.CodebaseSummary,
+            Preset = preset,
+        };
     }
 
     /// <summary>
@@ -245,6 +298,8 @@ public sealed partial class ReviewJobHandler(
         CancellationToken cancellationToken)
     {
         var maxFiles = project.MaxFilesPerStep;
+        var preset = material.Preset.Preset;
+        var agents = material.Preset.PlanAgents(ArtifactType.OptimizationPlan);
         var plans = material.CurrentOptimizationPlan is { } optimization
             ? $"{material.ImplementationPlan?.Content}\n\n---\n\n# Optimization plan v{optimization.Version.ToString(CultureInfo.InvariantCulture)} (the latest cycle's steps)\n\n{optimization.Content}"
             : material.ImplementationPlan?.Content;
@@ -258,17 +313,27 @@ public sealed partial class ReviewJobHandler(
                 ["REVIEW_CYCLE"] = cycle.ToString(CultureInfo.InvariantCulture),
                 ["TECHNICAL_SPECIFICATION"] = material.Specification?.Content,
                 ["IMPLEMENTATION_PLAN"] = plans,
+                ["CODEBASE_SUMMARY"] = material.CodebaseSummary?.Content,
                 ["DETERMINISTIC_FINDINGS"] = material.FindingsText,
                 ["PREVIOUS_REVIEW"] = previousReview,
                 ["CODE"] = material.Code,
                 ["MAX_FILES_PER_STEP"] = maxFiles.ToString(CultureInfo.InvariantCulture),
+                ["PRESET_GUIDANCE"] = PresetGuidance.Review(preset),
             },
-            InputArtifacts = [.. new[] { material.Specification, material.ImplementationPlan, material.CurrentOptimizationPlan }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
+            InputArtifacts = [.. new[] { material.Specification, material.ImplementationPlan, material.CurrentOptimizationPlan, material.CodebaseSummary }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = runFeedback,
+            Repo = RepoScope.WorkingTree,
         };
 
+        // FR-77: checklist violations take their item's category and severity (still agent violations: no penalty).
+        Result<CodeReviewResult> Parse(string text)
+        {
+            var read = CodeReviewOutput.Parse(text, maxFiles, agents);
+            return read.IsSuccess ? Result.Success(read.Value with { Violations = PresetReviewChecklist.Apply(read.Value.Violations, preset) }) : read;
+        }
+
         var first = await runner.RunAsync(Request(feedback) with { RunKey = null, Check = null }, cancellationToken);
-        var parsed = CodeReviewOutput.Parse(first.Text, maxFiles);
+        var parsed = Parse(first.Text);
         var problem = parsed.IsSuccess ? requirement(parsed.Value) : parsed.Error!;
         if (problem is null)
         {
@@ -280,16 +345,24 @@ public sealed partial class ReviewJobHandler(
             Request(ArtifactAgentJob.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem))) with
             {
                 RunKey = AgentOutput.CorrectiveRunKey,
-                Check = text => CodeReviewOutput.Parse(text, maxFiles) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
+                Check = text => CodeReviewOutput.Parse(text, maxFiles, agents) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
             },
             cancellationToken);
-        var reparsed = CodeReviewOutput.Parse(second.Text, maxFiles);
+        var reparsed = Parse(second.Text);
         return reparsed.IsSuccess
             ? new ReviewAgentOutcome(second, reparsed.Value)
             : throw new JobFailedException(reparsed.Error!.Message, transient: false, reparsed.Error.Code);
     }
 
-    private async Task RecordAsync(JobExecution job, int cycle, ReviewMaterial material, ReviewAgentOutcome outcome, decimal? previousScore, CancellationToken cancellationToken)
+    private async Task RecordAsync(
+        JobExecution job,
+        int cycle,
+        ReviewMaterial material,
+        ReviewAgentOutcome outcome,
+        decimal? previousScore,
+        CollectedChecks? checks,
+        CollectedPreview? preview,
+        CancellationToken cancellationToken)
     {
         // The run's completion bumped the project row (tokens used): re-read it so its xmin is current.
         db.ChangeTracker.Clear();
@@ -311,8 +384,9 @@ public sealed partial class ReviewJobHandler(
 
         project.UpdatedAt = now;
         // Still no optimisation steps after the corrective re-run: a human decides (escalation no_optimization_plan).
-        var assessment = ReviewAssessment.RequireOptimizationPlan(
-            Assess(outcome.Result, material, project, cycle, previousScore), outcome.Result.OptimizationPlan.Count);
+        // §4.13: scored on the reply as scoped to the iteration; its regressions are stored with the report.
+        var scoped = Assess(outcome.Result, material, project, cycle, previousScore);
+        var assessment = ReviewAssessment.RequireOptimizationPlan(scoped.Assessment, outcome.Result.OptimizationPlan.Count);
         var decision = assessment.Decision;
 
         Artifact? draft = null;
@@ -324,19 +398,22 @@ public sealed partial class ReviewJobHandler(
         var report = new ComplianceReport
         {
             ProjectId = project.Id,
+            ReleaseVersionId = project.CurrentReleaseVersionId ?? Guid.Empty,
             ReviewCycle = cycle,
-            ProjectVersion = project.ProjectVersion,
+            Checkpoint = project.Checkpoint,
             Score = assessment.Overall,
             CategoryScores = assessment.Categories,
             Violations = assessment.Violations,
-            MissingFeatures = outcome.Result.MissingFeatures,
+            MissingFeatures = scoped.ScopedAgent.MissingFeatures,
             DriftLevel = assessment.Drift,
-            DriftAreas = outcome.Result.DriftAreas,
+            DriftAreas = scoped.ScopedAgent.DriftAreas,
+            Regressions = AideJson.Serialize(scoped.Regressions),
             Decision = decision.Decision,
             EscalationReason = decision.Reason,
             AgentRunId = outcome.Run.RunId,
             Threshold = project.ComplianceThreshold,
             OptimizationPlanArtifactId = draft?.Id,
+            ExternalChecks = CollectedChecks.Compose(checks, preview?.Check),
             CreatedAt = now,
         };
         db.ComplianceReports.Add(report);
@@ -371,7 +448,8 @@ public sealed partial class ReviewJobHandler(
                 jobId = job.Id,
                 reportId = report.Id,
                 cycle,
-                projectVersion = project.ProjectVersion,
+                checkpoint = project.Checkpoint,
+                releaseVersionId = project.CurrentReleaseVersionId,
                 overallScore = assessment.Overall,
                 threshold = project.ComplianceThreshold,
                 driftLevel = assessment.Drift,
@@ -379,6 +457,10 @@ public sealed partial class ReviewJobHandler(
                 decisionReason = decision.Reason,
                 optimizationPlanArtifactId = draft?.Id,
                 runId = outcome.Run.RunId,
+                regressionCount = scoped.Regressions.Count,
+                checksTimedOut = checks?.TimedOut ?? false,
+                previewDeploymentId = preview?.Check.DeploymentId,
+                previewStatus = preview?.Check.Status,
             },
             SystemActor.Name,
             now);
@@ -453,6 +535,42 @@ public sealed partial class ReviewJobHandler(
             // A rollback, settings change or concurrent writer changed the project: retry, which re-checks everything.
             throw new JobFailedException($"{char.ToUpperInvariant(what[0])}{what[1..]} collided with a concurrent change: {ex.GetType().Name}.", transient: true, ErrorCodes.Conflict);
         }
+    }
+
+    /// <summary>
+    /// FR-89: for a project deploying with Vercel, the branch's <c>vercel.json</c> (in the Vercel root directory) must stop
+    /// Vercel's automatic deploys of <c>aide/**</c> (<see cref="Domain.Deployments.VercelConfigRules.ReviewFindings"/>). The
+    /// file is read even when the review's file selection or listed tree left it out. No real Vercel deployment (no settings,
+    /// Fake settings, or the Fake provider in use): no finding.
+    /// </summary>
+    private async Task<IReadOnlyList<ReviewFinding>> VercelConfigFindingsAsync(
+        Guid projectId, string branch, IReadOnlyList<SourceFile> contents, CancellationToken cancellationToken)
+    {
+        // Only real Vercel deploys on its own: the Fake provider (Deployments:Provider=Fake) and Fake settings never do.
+        if (deploymentProviders.UsesFake)
+        {
+            return [];
+        }
+
+        var rootDirectory = await db.ProjectDeploymentSettings.AsNoTracking()
+            .Where(s => s.ProjectId == projectId && s.Provider == DeploymentProvider.Vercel)
+            .Select(s => s.RootDirectory)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (rootDirectory is null)
+        {
+            return [];
+        }
+
+        var path = Domain.Deployments.VercelConfigRules.ConfigPath(rootDirectory);
+        var file = contents.FirstOrDefault(f => Domain.Deployments.VercelConfigRules.IsConfigPath(f.Path, path));
+        if (file is null)
+        {
+            // Not read for review (too large, over the budget, or beyond the listed tree): read it on its own.
+            var read = await Git(() => workingCopies.ReadCommittedAsync(projectId, branch, [path], cancellationToken)) ?? [];
+            file = read.Count > 0 ? read[0] : null;
+        }
+
+        return Domain.Deployments.VercelConfigRules.ReviewFindings(path, file?.Content);
     }
 
     /// <summary>Git and working-copy failures retry the job; an unsafe working copy fails it.</summary>

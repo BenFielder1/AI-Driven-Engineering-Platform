@@ -24,14 +24,14 @@ public static class GateEndpoints
 
         group.MapGet("/", ListGates)
             .WithName("ListGates")
-            .WithSummary("The project's gates, newest first, optionally filtered by status (members).")
+            .WithSummary("The project's gates, newest first, optionally filtered by status and by releaseVersionId (FR-62: the gates of one release version; an id of another project's version gives an empty list) (members).")
             .Produces<IReadOnlyList<GateDto>>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapPost("/{gateId:guid}/approve", ApproveGate)
             .WithName("ApproveGate")
-            .WithSummary("Approve a pending gate (Owner). Applies the gated transition; escalation gates need a decision (continue, rollback with targetVersion, or accept). 409 GATE_NOT_PENDING, 400 INVALID_DECISION.")
+            .WithSummary("Approve a pending gate (Owner). Applies the gated transition; escalation gates need a decision (continue, rollback with targetCheckpoint, or accept). 409 GATE_NOT_PENDING, 400 INVALID_DECISION.")
             .Produces<GateDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -68,7 +68,8 @@ public static class GateEndpoints
         IProjectAccess access,
         GateReader gates,
         CancellationToken cancellationToken,
-        [WireEnum(typeof(GateStatus))] string? status = null)
+        [WireEnum(typeof(GateStatus))] string? status = null,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -77,7 +78,7 @@ public static class GateEndpoints
         }
 
         var wanted = status is null ? (GateStatus?)null : EnumStrings.Parse<GateStatus>(status);
-        return TypedResults.Ok(await gates.ListAsync(id, wanted, cancellationToken));
+        return TypedResults.Ok(await gates.ListAsync(id, wanted, cancellationToken, releaseVersionId));
     }
 
     private static Task<Results<Ok<GateDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> ApproveGate(

@@ -11,4 +11,7 @@ public sealed record DomainError(string Code, string Message)
 
     /// <summary>For <see cref="ErrorCodes.RateLimited"/>: how long until the action is allowed again.</summary>
     public TimeSpan? RetryAfter { get; init; }
+
+    /// <summary>A machine-readable sub-reason (e.g. <see cref="RestoreReasons"/> for <see cref="ErrorCodes.RestoreNotAllowed"/>), returned as the ProblemDetails <c>reason</c>.</summary>
+    public string? Reason { get; init; }
 }

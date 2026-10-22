@@ -65,13 +65,13 @@ function eventsQuery(s: AdminEventsSearch): AdminEventsQuery {
 
 function EventRow({ event }: { event: AdminEvent }) {
   return (
-    <tr className="border-b border-border last:border-b-0">
+    <tr className="border-b border-border/40 transition-colors last:border-b-0 hover:bg-muted/40">
       <th scope="row" className={`${bodyCell} text-left font-normal`}>
         <span className="font-medium">{event.summary}</span>
-        <code className="mt-0.5 block text-xs text-muted">{event.type}</code>
+        <code className="mt-0.5 block text-xs text-muted-foreground">{event.type}</code>
         <details className="mt-1">
-          <summary className="cursor-pointer text-xs text-link underline underline-offset-4">Payload</summary>
-          <pre className="mt-1 max-h-60 max-w-md overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-canvas p-2 text-xs">
+          <summary className="cursor-pointer text-xs text-primary underline underline-offset-4">Payload</summary>
+          <pre className="mt-1 max-h-60 max-w-md overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-background/60 p-2 font-mono text-xs">
             {JSON.stringify(event.payload, null, 2)}
           </pre>
         </details>
@@ -79,7 +79,7 @@ function EventRow({ event }: { event: AdminEvent }) {
       <td className={bodyCell}>
         <ProjectCell id={event.projectId} name={event.projectName} />
       </td>
-      <td className={bodyCell}>{event.category ? eventCategoryLabels[event.category] : <span className="text-muted">Operations</span>}</td>
+      <td className={bodyCell}>{event.category ? eventCategoryLabels[event.category] : <span className="text-muted-foreground">Operations</span>}</td>
       <td className={bodyCell}>
         <Badge tone={event.outcome === 'failure' ? 'danger' : 'neutral'}>{eventOutcomeLabels[event.outcome]}</Badge>
       </td>
@@ -129,7 +129,7 @@ export function AdminEventsPage({
 
   return (
     <section aria-labelledby="admin-events-title">
-      <h2 id="admin-events-title" className="mb-4 text-xl font-semibold">
+      <h2 id="admin-events-title" className="mb-4 text-xl">
         Events
       </h2>
       <FilterForm label="Filter events" onSubmit={(e) => void onSubmit(e)} onClear={clear}>

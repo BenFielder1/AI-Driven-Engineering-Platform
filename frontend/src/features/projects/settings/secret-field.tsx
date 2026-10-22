@@ -78,7 +78,7 @@ export function SecretField({
       <p id={statusId} className="text-sm">
         <span className="font-medium">{label}:</span>{' '}
         {action === 'clear' ? (
-          <span className="text-danger">will be removed when you save</span>
+          <span className="text-destructive">will be removed when you save</span>
         ) : isSet ? (
           <>
             Set

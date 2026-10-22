@@ -21,8 +21,8 @@ public class EnumStringsTests
         Assert.Equal(["refinement", "specification", "planning", "execution", "review", "release"], EnumStrings.Values<Phase>());
 
     [Fact]
-    public void S5_Project_status_values() =>
-        Assert.Equal(["active", "building", "reviewing", "releasing", "released", "rolled_back"], EnumStrings.Values<ProjectStatus>());
+    public void S5_FR65_Project_status_values() =>
+        Assert.Equal(["active", "building", "reviewing", "releasing", "released", "rolled_back", "awaiting_merge"], EnumStrings.Values<ProjectStatus>());
 
     [Fact]
     public void S5_Gate_values()
@@ -36,7 +36,8 @@ public class EnumStringsTests
     [Fact]
     public void S5_Artifact_values()
     {
-        Assert.Equal(["project_request", "technical_specification", "implementation_plan", "optimization_plan"], EnumStrings.Values<ArtifactType>());
+        // v2 SPEC §5 amends the type list: + codebase_summary (FR-70).
+        Assert.Equal(["project_request", "technical_specification", "implementation_plan", "optimization_plan", "codebase_summary"], EnumStrings.Values<ArtifactType>());
         Assert.Equal(["draft", "locked", "rejected", "superseded", "invalidated", "corrupted"], EnumStrings.Values<ArtifactStatus>());
     }
 
@@ -51,7 +52,7 @@ public class EnumStringsTests
         Assert.Equal(["feature_coverage", "api_contracts", "data_model", "architecture", "security", "testing"], EnumStrings.Values<ReviewCategory>());
         Assert.Equal(["viewer", "contributor", "owner"], EnumStrings.Values<ProjectRole>());
         Assert.Equal(["user", "admin"], EnumStrings.Values<SystemRole>());
-        Assert.Equal(["idea_refinement", "spec_generator", "plan_generator", "code_generator", "code_review"], EnumStrings.Values<AgentKind>());
+        Assert.Equal(["idea_refinement", "spec_generator", "plan_generator", "code_generator", "code_review", "repository_analyst"], EnumStrings.Values<AgentKind>());
         Assert.Equal(["create", "modify"], EnumStrings.Values<FileAction>());
     }
 
@@ -131,6 +132,16 @@ public class ErrorCodesTests
             ["MERGE_CONFLICT"] = 409,
             ["REFINEMENT_IN_PROGRESS"] = 409,
             ["INVALID_PLAN"] = 400,
+            ["CREDENTIAL_INVALID"] = 400,
+            ["CREDENTIAL_NOT_OWNER"] = 403,
+            ["GITHUB_NOT_CONNECTED"] = 409,
+            ["GITHUB_APP_NOT_INSTALLED"] = 409,
+            ["REPO_NAME_TAKEN"] = 409,
+            ["GITHUB_RATE_LIMITED"] = 429,
+            ["VERCEL_GIT_NOT_CONNECTED"] = 409,
+            ["VERCEL_PLAN_LIMIT"] = 409,
+            ["DEPLOYMENT_NOT_CONFIGURED"] = 409,
+            ["INVALID_DEPLOYMENT"] = 409,
         };
 
         foreach (var (code, status) in expected)
@@ -155,6 +166,14 @@ public class ErrorCodesTests
         Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.MissingSections));
         Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.InvalidOutput));
         Assert.All(ErrorCodes.Guardian.All, c => Assert.Null(ErrorCodes.StatusCodeFor(c)));
+    }
+
+    [Fact]
+    public void FR65_MERGE_TIMEOUT_and_PR_CLOSED_are_release_failure_codes_not_http_errors()
+    {
+        Assert.Equal(("MERGE_TIMEOUT", "PR_CLOSED"), (ErrorCodes.MergeTimeout, ErrorCodes.PrClosed));
+        Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.MergeTimeout));
+        Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.PrClosed));
     }
 }
 

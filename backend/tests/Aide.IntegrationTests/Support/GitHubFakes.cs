@@ -10,7 +10,11 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Aide.IntegrationTests.Support;
 
 /// <summary>A request the fake GitHub API received.</summary>
-public sealed record GitHubRequest(string Method, string Path, string Query, string? Authorization, string Body);
+public sealed record GitHubRequest(string Method, string Path, string Query, string? Authorization, string Body)
+{
+    /// <summary>The <c>If-None-Match</c> header (§4.14 conditional polls), if sent.</summary>
+    public string? IfNoneMatch { get; init; }
+}
 
 /// <summary>
 /// The GitHub REST API, answered in memory by (method, path) routes; unknown routes are 404. Every request is recorded. No
@@ -20,8 +24,13 @@ public sealed class FakeGitHubApi : HttpMessageHandler
 {
     private readonly ConcurrentDictionary<string, Func<GitHubRequest, (HttpStatusCode Status, string Body)>> _routes = new(StringComparer.Ordinal);
     private readonly ConcurrentQueue<GitHubRequest> _requests = new();
+    private readonly ConcurrentDictionary<string, IReadOnlyDictionary<string, string>> _headers = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Func<GitHubRequest, (HttpStatusCode Status, string Body, IReadOnlyDictionary<string, string>? Headers)>> _headerRoutes = new(StringComparer.Ordinal);
 
     public IReadOnlyList<GitHubRequest> Requests => [.. _requests];
+
+    /// <summary>Answers requests no exact route matches (e.g. paths with a commit SHA); <c>null</c> falls through to 404.</summary>
+    public Func<GitHubRequest, (HttpStatusCode Status, string Body)?>? Fallback { get; set; }
 
     public FakeGitHubApi On(HttpMethod method, string path, Func<GitHubRequest, (HttpStatusCode Status, string Body)> respond)
     {
@@ -31,6 +40,22 @@ public sealed class FakeGitHubApi : HttpMessageHandler
     }
 
     public FakeGitHubApi On(HttpMethod method, string path, HttpStatusCode status, string body) => On(method, path, _ => (status, body));
+
+    /// <summary>As <see cref="On(HttpMethod, string, HttpStatusCode, string)"/>, with response headers (e.g. rate limits).</summary>
+    public FakeGitHubApi On(HttpMethod method, string path, HttpStatusCode status, string body, IReadOnlyDictionary<string, string> headers)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        _headers[$"{method.Method} {path}"] = headers;
+        return On(method, path, _ => (status, body));
+    }
+
+    /// <summary>A route whose response headers depend on the request (e.g. an ETag, a 304, a rate limit).</summary>
+    public FakeGitHubApi OnWithHeaders(HttpMethod method, string path, Func<GitHubRequest, (HttpStatusCode Status, string Body, IReadOnlyDictionary<string, string>? Headers)> respond)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        _headerRoutes[$"{method.Method} {path}"] = respond;
+        return this;
+    }
 
     public int Count(HttpMethod method, string path) => _requests.Count(r => r.Method == method.Method && r.Path == path);
 
@@ -42,16 +67,44 @@ public sealed class FakeGitHubApi : HttpMessageHandler
             request.RequestUri!.AbsolutePath,
             Uri.UnescapeDataString(request.RequestUri.Query),
             request.Headers.Authorization?.ToString(),
-            body);
+            body)
+        {
+            IfNoneMatch = request.Headers.IfNoneMatch.Count > 0 ? request.Headers.IfNoneMatch.ToString() : null,
+        };
         _requests.Enqueue(received);
-        var (status, text) = _routes.TryGetValue($"{received.Method} {received.Path}", out var route)
-            ? route(received)
-            : (HttpStatusCode.NotFound, """{"message":"Not Found"}""");
-        return new HttpResponseMessage(status)
+        IReadOnlyDictionary<string, string>? dynamicHeaders = null;
+        HttpStatusCode status;
+        string text;
+        if (_headerRoutes.TryGetValue($"{received.Method} {received.Path}", out var headerRoute))
+        {
+            (status, text, dynamicHeaders) = headerRoute(received);
+        }
+        else
+        {
+            (status, text) = _routes.TryGetValue($"{received.Method} {received.Path}", out var route)
+                ? route(received)
+                : Fallback?.Invoke(received) ?? (HttpStatusCode.NotFound, """{"message":"Not Found"}""");
+        }
+
+        var response = new HttpResponseMessage(status)
         {
             RequestMessage = request,
             Content = new StringContent(text, Encoding.UTF8, "application/json"),
         };
+        if (_headers.TryGetValue($"{received.Method} {received.Path}", out var headers))
+        {
+            foreach (var (name, value) in headers)
+            {
+                response.Headers.TryAddWithoutValidation(name, value);
+            }
+        }
+
+        foreach (var (name, value) in dynamicHeaders ?? new Dictionary<string, string>())
+        {
+            response.Headers.TryAddWithoutValidation(name, value);
+        }
+
+        return response;
     }
 }
 

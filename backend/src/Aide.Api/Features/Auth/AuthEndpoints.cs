@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Domain.Common;
+using Aide.Domain.GitHub;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Identity;
 using Microsoft.AspNetCore.Authentication;
@@ -55,7 +56,7 @@ public static partial class AuthEndpoints
 
         group.MapGet("/providers", GetProviders)
             .WithName("GetAuthProviders")
-            .WithSummary("Which sign-in providers are configured.")
+            .WithSummary("Which sign-in providers are configured, and how GitHub sign-in works (githubMode: app, oauth or none; D-V2-7).")
             .AllowAnonymous();
 
         group.MapGet("/antiforgery", GetAntiforgeryToken)
@@ -65,7 +66,7 @@ public static partial class AuthEndpoints
 
         group.MapGet("/github", StartGitHubSignIn)
             .WithName("StartGitHubSignIn")
-            .WithSummary("Redirects to GitHub to sign in (FR-2). 404 when GitHub sign-in isn't configured.")
+            .WithSummary("Redirects to GitHub to sign in (FR-2). Once an AIDE GitHub App exists this uses its user authorization flow with PKCE, which also connects GitHub (FR-80, FR-81, D-V2-7). 404 when GitHub sign-in isn't configured.")
             .AllowAnonymous()
             .Produces(StatusCodes.Status302Found)
             .ProducesProblem(StatusCodes.Status404NotFound);
@@ -160,7 +161,11 @@ public static partial class AuthEndpoints
             : TypedResults.Ok(UserDto.From(user));
     }
 
-    private static Ok<AuthProvidersDto> GetProviders(GitHubAuthState github) => TypedResults.Ok(new AuthProvidersDto(github.Enabled));
+    private static async Task<Ok<AuthProvidersDto>> GetProviders(GitHubSignInResolver github, CancellationToken cancellationToken)
+    {
+        var mode = await github.ModeAsync(cancellationToken);
+        return TypedResults.Ok(new AuthProvidersDto(mode != GitHubSignInMode.None, mode));
+    }
 
     private static NoContent GetAntiforgeryToken(HttpContext httpContext)
     {
@@ -168,9 +173,10 @@ public static partial class AuthEndpoints
         return TypedResults.NoContent();
     }
 
-    private static Results<ChallengeHttpResult, ProblemHttpResult> StartGitHubSignIn(string? returnUrl, GitHubAuthState github)
+    private static async Task<Results<ChallengeHttpResult, ProblemHttpResult>> StartGitHubSignIn(
+        string? returnUrl, GitHubSignInResolver github, CancellationToken cancellationToken)
     {
-        if (!github.Enabled)
+        if (await github.ModeAsync(cancellationToken) == GitHubSignInMode.None)
         {
             return GitHubNotConfigured();
         }
@@ -180,10 +186,10 @@ public static partial class AuthEndpoints
             [AuthConstants.GitHubScheme]);
     }
 
-    private static Results<ChallengeHttpResult, ProblemHttpResult> StartGitHubLink(
-        string? returnUrl, GitHubAuthState github, ClaimsPrincipal principal)
+    private static async Task<Results<ChallengeHttpResult, ProblemHttpResult>> StartGitHubLink(
+        string? returnUrl, GitHubSignInResolver github, ClaimsPrincipal principal, CancellationToken cancellationToken)
     {
-        if (!github.Enabled)
+        if (await github.ModeAsync(cancellationToken) == GitHubSignInMode.None)
         {
             return GitHubNotConfigured();
         }

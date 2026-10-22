@@ -209,6 +209,7 @@ public sealed class AuthEndpointsTests(AideApiFactory factory)
         var providers = await session.Client.GetFromJsonAsync<AuthProvidersDto>("/api/auth/providers", ApiSession.Json, Ct);
 
         Assert.False(providers?.Github);
+        Assert.Equal(Aide.Domain.GitHub.GitHubSignInMode.None, providers?.GithubMode);
     }
 
     [Fact]

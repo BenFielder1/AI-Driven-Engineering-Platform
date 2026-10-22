@@ -40,7 +40,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         var draft = await ArtifactApi.ReadAsync(await ArtifactApi.CreateDraftAsync(fixture.Contributor.Client, id, Spec, content), HttpStatusCode.Created);
 
         Assert.Equal((4, (int?)3, ArtifactStatus.Draft, ArtifactIntegrity.Ok), (draft.Version, draft.ParentVersion, draft.Status, draft.Integrity));
-        Assert.Equal((content, ContentHash.Compute(content), 3), (draft.Content, draft.ContentHash, draft.ProjectVersionAtCreation));
+        Assert.Equal((content, ContentHash.Compute(content), 3), (draft.Content, draft.ContentHash, draft.CheckpointAtCreation));
         Assert.Equal(fixture.Contributor.User!.Id, draft.Author.User!.Id);
         Assert.Equal(fixture.Contributor.User.Name, draft.Author.User.Name);
         Assert.Null(draft.Author.AgentRunId);
@@ -354,9 +354,9 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         Assert.All(stepRows, s => Assert.Equal(StepStatus.Invalidated, s.Status));
 
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Planning, ProjectStatus.Active, 5), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Planning, ProjectStatus.Active, 5), (project.CurrentPhase, project.Status, project.Checkpoint));
         var transition = (await LifecycleSeed.TransitionsAsync(factory, id))[^1];
-        Assert.Equal((Phase.Review, Phase.Planning, 5), (transition.FromPhase, transition.ToPhase, transition.ProjectVersion));
+        Assert.Equal((Phase.Review, Phase.Planning, 5), (transition.FromPhase, transition.ToPhase, transition.Checkpoint));
         var changed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PhaseChanged)).Payload);
         Assert.Equal("invalidation_fallback", changed.GetProperty("kind").GetString());
 
@@ -451,7 +451,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, optimisation.Id, "approve"));
 
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Execution, ProjectStatus.Building, 5), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Execution, ProjectStatus.Building, 5), (project.CurrentPhase, project.Status, project.Checkpoint));
         var changed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PhaseChanged)).Payload);
         Assert.Equal("review_cycle", changed.GetProperty("kind").GetString());
     }

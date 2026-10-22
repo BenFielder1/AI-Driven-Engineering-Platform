@@ -72,6 +72,9 @@ test.afterAll(async () => {
 
 const gatesPanel = (page: Page) => page.getByRole('region', { name: 'Pending gates' })
 
+/** SPEC 7.2: the settings sections are links in a secondary nav (sub-routes), not tabs. */
+const settingsSections = (page: Page) => page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link')
+
 test('§2: the Owner sees gate decisions, artifact approval and every settings tab', async () => {
   const { page } = owner
   await page.goto(`/projects/${projectId}`)
@@ -84,7 +87,8 @@ test('§2: the Owner sees gate decisions, artifact approval and every settings t
   await expect(page.getByRole('button', { name: 'Edit as new draft' })).toBeVisible()
 
   await page.goto(`/projects/${projectId}/settings`)
-  await expect(page.getByRole('tab')).toHaveText(['General', 'Members', 'Git', 'LLM', 'Notifications', 'Danger zone'])
+  // FR-88 (amends v1 FR-9): Owners also get Settings → Deployment.
+  await expect(settingsSections(page)).toHaveText(['General', 'Members', 'Git', 'LLM', 'Deployment', 'Notifications', 'Danger zone'])
 })
 
 test('§2: a Contributor can edit drafts but gate, approval and settings controls are hidden — and the API says 403', async () => {
@@ -100,13 +104,16 @@ test('§2: a Contributor can edit drafts but gate, approval and settings control
   await expect(page.getByRole('button', { name: 'Reject', exact: true })).toHaveCount(0)
 
   await page.goto(`/projects/${projectId}/settings`)
-  await expect(page.getByRole('tab')).toHaveText(['General', 'Members'])
-  await page.goto(`/projects/${projectId}/settings?tab=danger`)
+  // FR-79, FR-88 (v2): every member also reads Settings → LLM and Deployment (read-only); owner-only sections stay hidden.
+  await expect(settingsSections(page)).toHaveText(['General', 'Members', 'LLM', 'Deployment'])
+  // Not an Owner: the Danger zone section sends them back to General.
+  await page.goto(`/projects/${projectId}/settings/danger`)
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/settings/general$`))
   await expect(page.getByRole('button', { name: 'Roll back…' })).toHaveCount(0)
 
   expect((await api(context, 'POST', `/api/projects/${projectId}/gates/${gateId}/approve`, {})).status()).toBe(403)
   expect((await api(context, 'POST', `/api/projects/${projectId}/artifacts/${draftId}/approve`, {})).status()).toBe(403)
-  expect((await api(context, 'POST', `/api/projects/${projectId}/rollback`, { targetVersion: 1, reason: 'no' })).status()).toBe(403)
+  expect((await api(context, 'POST', `/api/projects/${projectId}/rollback`, { targetCheckpoint: 1, reason: 'no' })).status()).toBe(403)
   expect((await api(context, 'PATCH', `/api/projects/${projectId}`, { name: 'Renamed' })).status()).toBe(403)
   expect((await api(context, 'GET', `/api/projects/${projectId}/settings`)).status()).toBe(403)
   const problem = (await (await api(context, 'POST', `/api/projects/${projectId}/gates/${gateId}/approve`, {})).json()) as {

@@ -22,6 +22,9 @@
   <ItemGroup>
     <!-- Versioned prompt templates (FR-24, D7), one per agent, loaded by EmbeddedPromptLibrary. -->
     <EmbeddedResource Include="Agents\Prompts\*.md" LogicalName="Aide.Infrastructure.Agents.Prompts.%(Filename)%(Extension)" />
+    <!-- Tech stack presets (FR-74, §4.11, D-V2-12): every file of Agents/Presets/<id>/, loaded and content-hashed by
+         PresetCatalog. Logical names keep the folder layout: Aide.Infrastructure.Agents.Presets/<id>/<path>. -->
+    <EmbeddedResource Include="Agents\Presets\**\*" LogicalName="Aide.Infrastructure.Agents.Presets/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

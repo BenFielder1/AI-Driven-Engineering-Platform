@@ -7,7 +7,11 @@ import { password, registerViaApi, registerViaUi } from './support/api.ts'
 // through support/api.ts's register lock and waits out a 429 (Retry-After). Only FR-1 registers through the form.
 
 async function openUserMenu(page: Page) {
+  // Choosing a menu item closes the menu at once, and the trigger always reopens it (dropdown-menu.tsx); waiting for
+  // any previous menu to be gone first just keeps the "menu visible" check below about the menu this click opened.
+  await expect(page.getByRole('menu')).toHaveCount(0)
   await page.getByRole('button', { name: /Account menu for/ }).click()
+  await expect(page.getByRole('menu')).toBeVisible()
 }
 
 test('FR-1: register, see yourself, sign out, sign back in', async ({ page }) => {
@@ -24,13 +28,13 @@ test('FR-1: register, see yourself, sign out, sign back in', async ({ page }) =>
 
   // Account page shows the profile.
   await openUserMenu(page)
-  await page.getByRole('link', { name: 'Account' }).click()
+  await page.getByRole('menuitem', { name: 'Account' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Account', exact: true })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Profile' }).getByText(email)).toBeVisible()
 
   // Sign out → /login; the session is gone.
   await openUserMenu(page)
-  await page.getByRole('button', { name: 'Sign out' }).click()
+  await page.getByRole('menuitem', { name: 'Sign out' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in to AIDE', exact: true })).toBeVisible()
   expect((await page.request.get('/api/auth/me')).status()).toBe(401)
 

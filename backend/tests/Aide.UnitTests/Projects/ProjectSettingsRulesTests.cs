@@ -78,9 +78,9 @@ public class ProjectSettingsRulesTests
     public void FR9_ValidateGit_github_needs_a_GitHub_URL_and_local_needs_none()
     {
         Assert.True(ProjectSettingsRules.ValidateGit(GitProvider.Local, null, "main").IsSuccess);
-        Assert.True(ProjectSettingsRules.ValidateGit(GitProvider.Github, "https://github.com/a/b", "main").IsSuccess);
-        AssertProblem(ProjectSettingsRules.ValidateGit(GitProvider.Github, null, "main"), "repoUrl");
-        AssertProblem(ProjectSettingsRules.ValidateGit(GitProvider.Github, "https://example.com/a/b", "main", prefix: "git."), "git.repoUrl");
+        Assert.True(ProjectSettingsRules.ValidateGit(GitProvider.GithubPat, "https://github.com/a/b", "main").IsSuccess);
+        AssertProblem(ProjectSettingsRules.ValidateGit(GitProvider.GithubPat, null, "main"), "repoUrl");
+        AssertProblem(ProjectSettingsRules.ValidateGit(GitProvider.GithubPat, "https://example.com/a/b", "main", prefix: "git."), "git.repoUrl");
     }
 
     [Fact]
@@ -95,17 +95,17 @@ public class ProjectSettingsRulesTests
     [Fact]
     public void FR9_NormalizeRepoUrl_trims_for_github_and_drops_it_for_local()
     {
-        Assert.Equal("https://github.com/a/b", ProjectSettingsRules.NormalizeRepoUrl(GitProvider.Github, "  https://github.com/a/b "));
+        Assert.Equal("https://github.com/a/b", ProjectSettingsRules.NormalizeRepoUrl(GitProvider.GithubPat, "  https://github.com/a/b "));
         Assert.Null(ProjectSettingsRules.NormalizeRepoUrl(GitProvider.Local, "https://github.com/a/b"));
-        Assert.Null(ProjectSettingsRules.NormalizeRepoUrl(GitProvider.Github, " "));
+        Assert.Null(ProjectSettingsRules.NormalizeRepoUrl(GitProvider.GithubPat, " "));
     }
 
     [Theory]
-    [InlineData(GitProvider.Github, GitProvider.Github, false, true)]
-    [InlineData(GitProvider.Local, GitProvider.Github, false, true)]
+    [InlineData(GitProvider.GithubPat, GitProvider.GithubPat, false, true)]
+    [InlineData(GitProvider.Local, GitProvider.GithubPat, false, true)]
     [InlineData(GitProvider.Local, GitProvider.Local, false, true)]
-    [InlineData(GitProvider.Github, GitProvider.Local, false, false)]
-    [InlineData(GitProvider.Github, GitProvider.Github, true, false)]
+    [InlineData(GitProvider.GithubPat, GitProvider.Local, false, false)]
+    [InlineData(GitProvider.GithubPat, GitProvider.GithubPat, true, false)]
     public void FR9_Saved_token_is_dropped_when_cleared_or_switching_to_local(GitProvider previous, GitProvider next, bool clear, bool keeps) =>
         Assert.Equal(keeps, ProjectSettingsRules.KeepsSavedToken(previous, next, clear));
 
@@ -148,36 +148,23 @@ public class ProjectSettingsRulesTests
     }
 
     [Fact]
-    public void FR9_ValidateLlm_api_key_rules()
+    public void FR79_ValidateLlm_choosing_a_keyed_provider_needs_a_binding_or_an_allowed_system_key()
     {
-        AssertProblem(Llm(LlmProvider.Anthropic, "m", apiKeySent: true, clearApiKey: true, hasProjectKeyAfter: true), "apiKey");
-        AssertProblem(Llm(LlmProvider.Anthropic, "m", apiKeySent: true, apiKeySentBlank: true), "apiKey");
-        AssertProblem(Llm(LlmProvider.Fake, "m", apiKeySent: true, hasProjectKeyAfter: true), "apiKey");
-        Assert.True(Llm(LlmProvider.Anthropic, "m", apiKeySent: true, hasProjectKeyAfter: true).IsSuccess);
-    }
-
-    [Theory]
-    [InlineData("sk-ant-abc\ndef")]
-    [InlineData("sk-ant-abcdef\n")]
-    [InlineData(" sk-ant-abcdef")]
-    [InlineData("sk-ant abcdef")]
-    [InlineData("sk-ant-abc\u0001def")]
-    [InlineData("sk-ant-abc\tdef")]
-    public void FR25_ValidateLlm_rejects_api_keys_with_whitespace_or_control_characters(string key)
-    {
-        AssertProblem(ProjectSettingsRules.ValidateLlm(LlmProvider.Anthropic, "m", null, true, false, false, false, true, key), "apiKey");
-        Assert.False(ProjectSettingsRules.IsWellFormedApiKey(key));
+        AssertProblem(Llm(LlmProvider.Anthropic, "m", providerChanged: true), "provider");
+        Assert.True(Llm(LlmProvider.Anthropic, "m", hasBindingAfter: true, providerChanged: true).IsSuccess);
+        Assert.True(Llm(LlmProvider.Anthropic, "m", hasSystemKey: true, providerChanged: true).IsSuccess);
+        Assert.True(Llm(LlmProvider.Ollama, "m", providerChanged: true).IsSuccess);
     }
 
     [Fact]
-    public void FR25_ValidateLlm_accepts_a_well_formed_api_key() =>
-        Assert.True(ProjectSettingsRules.ValidateLlm(LlmProvider.Anthropic, "m", null, true, false, false, false, true, "sk-ant-api03_AbC-123").IsSuccess);
+    public void FR79_ValidateLlm_allows_unbinding_or_editing_models_on_the_same_provider() =>
+        Assert.True(Llm(LlmProvider.Anthropic, "m", hasBindingAfter: false, providerChanged: false).IsSuccess);
 
     [Fact]
     public void FR9_ValidateLlm_unconfigured_provider_is_refused()
     {
-        AssertProblem(Llm(LlmProvider.Openai, "gpt-5"), "provider");
-        Assert.True(Llm(LlmProvider.Openai, "gpt-5", hasSystemKey: true).IsSuccess);
+        AssertProblem(Llm(LlmProvider.Openai, "gpt-5", providerChanged: true), "provider");
+        Assert.True(Llm(LlmProvider.Openai, "gpt-5", hasSystemKey: true, providerChanged: true).IsSuccess);
     }
 
     // ------------------------------------------------------------------ Notifications
@@ -296,10 +283,8 @@ public class ProjectSettingsRulesTests
         LlmProvider provider,
         string? defaultModel,
         IReadOnlyDictionary<string, string?>? models = null,
-        bool apiKeySent = false,
-        bool apiKeySentBlank = false,
-        bool clearApiKey = false,
         bool hasSystemKey = false,
-        bool hasProjectKeyAfter = false) =>
-        ProjectSettingsRules.ValidateLlm(provider, defaultModel, models, apiKeySent, apiKeySentBlank, clearApiKey, hasSystemKey, hasProjectKeyAfter);
+        bool hasBindingAfter = false,
+        bool providerChanged = false) =>
+        ProjectSettingsRules.ValidateLlm(provider, defaultModel, models, hasSystemKey, hasBindingAfter, providerChanged);
 }

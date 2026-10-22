@@ -86,7 +86,7 @@ public sealed class NotificationDeliveryTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR47_Outcomes_like_a_rollback_notify_every_member()
+    public async Task FR47_amended_by_S4_10_Outcomes_like_a_rollback_notify_every_member()
     {
         var app = Test.Factory;
         using var fixture = await ProjectApi.FixtureAsync(app);
@@ -104,7 +104,7 @@ public sealed class NotificationDeliveryTests(AideApiFactory factory)
             new[] { fixture.Owner.User!.Id, fixture.Contributor.User!.Id, fixture.Viewer.User!.Id }.Order(),
             inApp.Select(n => n.UserId).Order());
         Assert.All(inApp, n => Assert.Equal("rollback", n.Type));
-        Assert.Contains("version 3", inApp[0].Title, StringComparison.Ordinal);
+        Assert.Contains("checkpoint 3", inApp[0].Title, StringComparison.Ordinal);
     }
 
     [Fact]

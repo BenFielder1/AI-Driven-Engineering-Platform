@@ -11,14 +11,17 @@ public static class ProjectPermissions
             or ProjectAction.ControlExecution
             or ProjectAction.CreateDraft
             or ProjectAction.TriggerReview
-            or ProjectAction.AdvancePhase => ProjectRole.Contributor,
+            or ProjectAction.AdvancePhase
+            or ProjectAction.TriggerDeployment => ProjectRole.Contributor,
         ProjectAction.DecideGate
             or ProjectAction.DecideArtifact
             or ProjectAction.RequestRelease
             or ProjectAction.Rollback
             or ProjectAction.ChangeSettings
             or ProjectAction.ManageMembers
-            or ProjectAction.DeleteProject => ProjectRole.Owner,
+            or ProjectAction.DeleteProject
+            or ProjectAction.StartVersion
+            or ProjectAction.ManageDeployments => ProjectRole.Owner,
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
     };
 

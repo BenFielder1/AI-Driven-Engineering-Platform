@@ -15,13 +15,14 @@ import {
   type ActivityItem,
   type EventCategory,
 } from "./activity-api";
-import { describeActivity } from "./activity-summary";
+import { useReleaseVersionNames } from "../versions/version-label";
+import { describeActivity, type VersionNameLookup } from "./activity-summary";
 
-function ActivityRow({ item }: { item: ActivityItem }) {
+function ActivityRow({ item, names }: { item: ActivityItem; names: VersionNameLookup }) {
   return (
     <li className="flex flex-col gap-0.5 py-2 text-sm sm:flex-row sm:items-baseline sm:gap-3">
-      <span className="break-words sm:flex-1">{describeActivity(item)}</span>
-      <span className="text-muted">
+      <span className="break-words sm:flex-1">{describeActivity(item, names)}</span>
+      <span className="text-muted-foreground">
         {item.actor.isSystem ? "System" : item.actor.name} ·{" "}
         <RelativeTime iso={item.occurredAt} />
       </span>
@@ -30,9 +31,10 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 }
 
 /** Overview → Activity (FR-50): newest first, 50 per page with "Load more", filterable by category. */
-export function ActivityFeed({ projectId }: { projectId: string }) {
+export function ActivityFeed({ projectId, releaseVersionId }: { projectId: string; releaseVersionId?: string }) {
   const [category, setCategory] = useState<EventCategory | null>(null);
-  const activity = useActivity(projectId, category);
+  const activity = useActivity(projectId, category, releaseVersionId);
+  const names = useReleaseVersionNames(projectId);
   const items = activity.data?.pages.flatMap((page) => page.items) ?? [];
 
   let body;
@@ -59,13 +61,13 @@ export function ActivityFeed({ projectId }: { projectId: string }) {
   } else {
     body = (
       <>
-        <ul aria-label="Activity" className="divide-y divide-border">
+        <ul aria-label="Activity" className="divide-y divide-border/60">
           {items.map((item) => (
-            <ActivityRow key={item.id} item={item} />
+            <ActivityRow key={item.id} item={item} names={names} />
           ))}
         </ul>
         {activity.isError && (
-          <p role="alert" className="mt-2 text-sm text-danger">
+          <p role="alert" className="mt-2 text-sm text-destructive">
             {errorMessage(activity.error)}
           </p>
         )}

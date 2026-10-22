@@ -11,22 +11,33 @@ namespace Aide.Api.Features.Artifacts;
 public sealed record ArtifactAuthorDto(ActorDto? User, Guid? AgentRunId);
 
 /// <summary>
-/// One artifact version without its content (FR-16, FR-21): the artifacts page cards and the history list.
-/// <c>integrity</c> is the result of re-checking the content hash on this read (FR-20).
+/// One artifact version without its content (FR-16, FR-21, FR-59): the artifacts page cards and the history list.
+/// <c>integrity</c> is the result of re-checking the content hash on this read (FR-20); <c>releaseVersionId</c> is the
+/// release version it belongs to (§4.10) and <c>releaseVersion</c> its semver (FR-59). <c>restoredFromVersion</c> is the
+/// version whose content a restore copied (FR-58), else <c>null</c>.
 /// </summary>
 public sealed record ArtifactSummaryDto(
     Guid Id,
     ArtifactType Type,
     int Version,
     ArtifactStatus Status,
+    Guid ReleaseVersionId,
     ArtifactIntegrity Integrity,
     DateTimeOffset CreatedAt,
-    ArtifactAuthorDto Author);
+    ArtifactAuthorDto Author,
+    string ReleaseVersion,
+    int? RestoredFromVersion);
 
 /// <summary>
 /// One artifact version with its Markdown content (FR-16, §4.3). <c>contentHash</c> is the lowercase hex SHA-256 of the
 /// normalised content; <c>integrity</c> is <c>corrupted</c> when it no longer matches (FR-20). <c>approvedBy</c> and
 /// <c>approvedAt</c> are set once approved (status <c>locked</c>); <c>rejectionComment</c> once rejected (FR-17).
+/// <c>releaseVersionId</c> and <c>checkpointAtCreation</c> say where it was created (§4.10; D-V2-11: was
+/// <c>projectVersionAtCreation</c>); <c>releaseVersion</c> is that release version's semver (FR-59).
+/// <c>restoredFromVersion</c> is the version whose content a restore copied (FR-58), else <c>null</c>.
+/// <c>warnings</c> are non-blocking findings about the version (FR-76, §4.13): for an <c>implementation_plan</c>,
+/// <c>UNCOVERED_REQUIREMENTS</c> when its steps' <c>covers</c> miss a <c>[new]</c>/<c>[changed]</c> requirement of the
+/// release version's locked specification (<c>ids</c> lists them); empty otherwise.
 /// </summary>
 public sealed record ArtifactDto(
     Guid Id,
@@ -36,13 +47,20 @@ public sealed record ArtifactDto(
     string Content,
     string ContentHash,
     ArtifactStatus Status,
-    int ProjectVersionAtCreation,
+    Guid ReleaseVersionId,
+    int CheckpointAtCreation,
     ArtifactAuthorDto Author,
     ActorDto? ApprovedBy,
     DateTimeOffset? ApprovedAt,
     string? RejectionComment,
     DateTimeOffset CreatedAt,
-    ArtifactIntegrity Integrity);
+    ArtifactIntegrity Integrity,
+    string ReleaseVersion,
+    int? RestoredFromVersion,
+    IReadOnlyList<ArtifactWarningDto> Warnings);
+
+/// <summary>A non-blocking finding about an artifact version (FR-76, §4.13): its code, a message and the ids it is about.</summary>
+public sealed record ArtifactWarningDto(string Code, string Message, IReadOnlyList<string> Ids);
 
 /// <summary>
 /// One line of a diff between two versions (FR-21). <c>oldLine</c> is the 1-based line number in the <c>from</c> version

@@ -1,6 +1,8 @@
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
+import type { Schemas } from '../../api/client'
+
 import { Alert } from '../../components/ui/alert'
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import {
@@ -13,14 +15,19 @@ import {
   llmProviderLabels,
   phaseLabels,
 } from '../projects/labels'
+import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
+import { presetRef } from '../presets/presets-api'
 import { RunStatusBadge } from './run-badges'
-import { describeRunError, formatPromptVersion, isUnfinished } from './run-format'
+import { describeRunError, formatPromptVersion, isUnfinished, runWarningText } from './run-format'
 import { useRun, type AgentRun } from './runs-api'
+import { ToolCallsTable } from './tool-calls'
+
+type AgentRunDetail = Schemas['AgentRunDetailDto']
 
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="grid gap-1 py-1.5 text-sm sm:grid-cols-3">
-      <dt className="font-medium text-muted">{term}</dt>
+      <dt className="font-medium text-muted-foreground">{term}</dt>
       <dd className="break-words sm:col-span-2">{children}</dd>
     </div>
   )
@@ -38,6 +45,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 /** The fields every run has (shown from the list row at once, then from the detail response). */
 function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
   const unfinished = isUnfinished(run)
+  const versionName = useReleaseVersionNames(projectId)(run.releaseVersionId)
   return (
     <>
       <dl>
@@ -45,7 +53,16 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
           <RunStatusBadge status={run.status} />
         </Row>
         <Row term="Agent">{agentKindLabels[run.agent]}</Row>
+        {run.agentKey && <Row term="Specialist">{run.agentKey}</Row>}
         <Row term="Phase">{phaseLabels[run.phase]}</Row>
+        {run.checkpoint !== null ? (
+          <Row term="Release version">{checkpointLabel(versionName, run.checkpoint)}</Row>
+        ) : (
+          versionName && <Row term="Release version">{versionName}</Row>
+        )}
+        {run.presetId && (
+          <Row term="Preset">{presetRef(run.presetId, run.presetVersion)}</Row>
+        )}
         {run.stepId && (
           <Row term="Execution step">
             <code className="text-xs">{run.stepId}</code>
@@ -56,7 +73,9 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
           <code>{run.model}</code>
         </Row>
         <Row term="Prompt template">{`${agentKindLabels[run.agent]} ${formatPromptVersion(run.promptVersion)}`}</Row>
+        <Row term="Credential">{run.credentialLabel ?? 'Not recorded'}</Row>
         <Row term="Attempts">{run.attempts}</Row>
+        <Row term="Repository tool calls">{formatNumber(run.toolCallCount)}</Row>
         <Row term="Input tokens">{unfinished ? 'Not known yet' : formatNumber(run.inputTokens)}</Row>
         <Row term="Output tokens">{unfinished ? 'Not known yet' : formatNumber(run.outputTokens)}</Row>
         <Row term="Total tokens">{unfinished ? 'Not known yet' : formatNumber(run.inputTokens + run.outputTokens)}</Row>
@@ -72,7 +91,7 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
 
       <Section title="Input artifacts">
         {run.inputArtifacts.length === 0 ? (
-          <p className="text-sm text-muted">This run used no artifacts as input.</p>
+          <p className="text-sm text-muted-foreground">This run used no artifacts as input.</p>
         ) : (
           <ul className="flex flex-col gap-1 text-sm">
             {run.inputArtifacts.map((a) => (
@@ -81,7 +100,7 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
                   to="/projects/$projectId/artifacts/$type"
                   params={{ projectId, type: a.type }}
                   search={{ version: a.version }}
-                  className="text-link underline"
+                  className="text-primary underline"
                 >
                   {artifactTypeLabels[a.type]} v{a.version}
                 </Link>
@@ -93,7 +112,7 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
 
       {run.userFeedback && (
         <Section title="Feedback and answers given to the agent">
-          <p className="whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 text-sm">
+          <p className="whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-muted/60 p-3 text-sm">
             {run.userFeedback}
           </p>
         </Section>
@@ -116,7 +135,7 @@ function RunError({ error, attempts, retrying }: { error: string; attempts: numb
         <Alert tone="info" title="Last attempt failed — retrying">
           {title && <p>{title}</p>}
           <p className="whitespace-pre-wrap break-words">{message}</p>
-          <p className="mt-1 text-muted">
+          <p className="mt-1 text-muted-foreground">
             {attempts} attempt{attempts === 1 ? '' : 's'} so far.
           </p>
         </Alert>
@@ -127,11 +146,33 @@ function RunError({ error, attempts, retrying }: { error: string; attempts: numb
     <Section title="Error">
       <Alert tone="error" title={title ?? 'The run failed'}>
         <p className="whitespace-pre-wrap break-words">{message}</p>
-        <p className="mt-1 text-muted">
+        <p className="mt-1 text-muted-foreground">
           After {attempts} attempt{attempts === 1 ? '' : 's'}.
         </p>
       </Alert>
     </Section>
+  )
+}
+
+/** FR-70, FR-71: the run's recorded warnings and its repository tool log (from the detail response). */
+function RunToolLog({ run }: { run: AgentRunDetail }) {
+  return (
+    <>
+      {run.warnings.length > 0 && (
+        <Section title="Warnings">
+          <Alert tone="warning">
+            <ul className="list-disc pl-5">
+              {run.warnings.map((w) => (
+                <li key={w}>{runWarningText(w)}</li>
+              ))}
+            </ul>
+          </Alert>
+        </Section>
+      )}
+      <Section title={`Repository tool calls (${String(run.toolCalls.length)})`}>
+        <ToolCallsTable calls={run.toolCalls} caption="Repository tool calls of this run" />
+      </Section>
+    </>
   )
 }
 
@@ -147,7 +188,7 @@ function RunOutput({ projectId, runId, run }: { projectId: string; runId: string
   const status = run.status
   if (d.output === null) {
     return (
-      <p className="text-sm text-muted">
+      <p className="text-sm text-muted-foreground">
         {status === 'running' || status === 'queued'
           ? 'Running… The output appears here when the run finishes (agent output isn’t streamed).'
           : 'This run produced no output.'}
@@ -164,7 +205,7 @@ function RunOutput({ projectId, runId, run }: { projectId: string; runId: string
       <pre
         tabIndex={0}
         aria-label="Run output"
-        className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 text-xs"
+        className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-muted/60 p-3 text-xs"
       >
         {d.output}
       </pre>
@@ -188,6 +229,7 @@ export function RunDetails({ projectId, runId, summary }: { projectId: string; r
   return (
     <>
       <RunFields projectId={projectId} run={run} />
+      {detail.data && <RunToolLog run={detail.data} />}
       <Section title="Output">
         <RunOutput projectId={projectId} runId={runId} run={run} />
       </Section>

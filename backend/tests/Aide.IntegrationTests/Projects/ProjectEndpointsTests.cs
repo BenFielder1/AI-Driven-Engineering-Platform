@@ -41,7 +41,7 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
         Assert.Equal($"/api/projects/{project.Id}", response.Headers.Location?.OriginalString);
         Assert.Equal(Phase.Refinement, project.CurrentPhase);
         Assert.Equal(ProjectStatus.Active, project.Status);
-        Assert.Equal(1, project.ProjectVersion);
+        Assert.Equal(1, project.Checkpoint);
         Assert.Equal(ProjectRole.Owner, project.MyRole);
         Assert.Equal("A todo API for teams.", project.Idea);
         Assert.Matches("^my-project-[0-9a-f]{6}$", project.Slug);
@@ -55,7 +55,7 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
             var transition = await db.StateTransitions.SingleAsync(t => t.ProjectId == project.Id, Ct);
             Assert.Null(transition.FromPhase);
             Assert.Equal(Phase.Refinement, transition.ToPhase);
-            Assert.Equal(1, transition.ProjectVersion);
+            Assert.Equal(1, transition.Checkpoint);
             Assert.Equal(owner.User.Id.ToString(), transition.Actor);
             Assert.Equal("project created", transition.Reason);
 
@@ -105,7 +105,7 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
                 maxFilesPerStep = 5,
                 maxReviewCycles = 4,
                 tokenBudget = 50000,
-                git = new { provider = "github", repoUrl = "https://github.com/acme/todo.git", defaultBranch = "develop", token = "ghp_wizardtoken123" },
+                git = new { provider = "github_pat", repoUrl = "https://github.com/acme/todo.git", defaultBranch = "develop", token = "ghp_wizardtoken123" },
             },
             Ct);
         var project = await ProjectApi.ReadAsync<ProjectDto>(response, HttpStatusCode.Created);
@@ -115,7 +115,7 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
         await ProjectApi.WithDbAsync(factory, async db =>
         {
             var git = await db.ProjectGitSettings.SingleAsync(s => s.ProjectId == project.Id, Ct);
-            Assert.Equal((GitProvider.Github, "https://github.com/acme/todo.git", "develop"), (git.Provider, git.RepoUrl, git.DefaultBranch));
+            Assert.Equal((GitProvider.GithubPat, "https://github.com/acme/todo.git", "develop"), (git.Provider, git.RepoUrl, git.DefaultBranch));
             Assert.NotNull(git.TokenEncrypted);
             Assert.DoesNotContain("ghp_wizardtoken123", git.TokenEncrypted, StringComparison.Ordinal);
             await using var scope = factory.Services.CreateAsyncScope();
@@ -126,8 +126,8 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
     [Theory]
     [InlineData("""{"name":"   ","idea":"Idea","git":{"provider":"local"}}""", "name")]
     [InlineData("""{"name":"N","idea":"","git":{"provider":"local"}}""", "idea")]
-    [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"github"}}""", "git.repoUrl")]
-    [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"github","repoUrl":"https://gitlab.com/a/b"}}""", "git.repoUrl")]
+    [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"github_pat"}}""", "git.repoUrl")]
+    [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"github_pat","repoUrl":"https://gitlab.com/a/b"}}""", "git.repoUrl")]
     [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"local","defaultBranch":"bad..branch"}}""", "git.defaultBranch")]
     [InlineData("""{"name":"N","idea":"Idea","git":{"provider":"local","token":"  "}}""", "git.token")]
     [InlineData("""{"name":"N","idea":"Idea","complianceThreshold":0.905,"git":{"provider":"local"}}""", "complianceThreshold")]
@@ -180,7 +180,10 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
     [Fact]
     public async Task FR5_A_system_key_makes_the_configured_default_provider_the_new_project_default()
     {
-        await using var app = factory.WithWebHostBuilder(b => b.UseSetting("Llm:Providers:Anthropic:ApiKey", "sk-ant-system-test-key"));
+        // D-V2-5: a system key counts only when Llm:AllowSystemKeys is on (FR79_System_keys_are_used_only_when_allowed_and_nothing_is_bound).
+        await using var app = factory.WithWebHostBuilder(b => b
+            .UseSetting("Llm:Providers:Anthropic:ApiKey", "sk-ant-system-test-key")
+            .UseSetting("Llm:AllowSystemKeys", "true"));
         using var owner = await ApiSession.RegisterAsync(app);
 
         var project = await ProjectApi.CreateAsync(owner.Client);

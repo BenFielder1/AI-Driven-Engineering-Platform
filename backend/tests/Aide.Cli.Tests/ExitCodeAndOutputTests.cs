@@ -156,7 +156,7 @@ public sealed class ExitCodeAndOutputTests : IDisposable
         Assert.Contains("[RATE_LIMITED]", run.Error, StringComparison.Ordinal);
         Assert.Contains("Retry after 42s", run.Error, StringComparison.Ordinal);
         var request = Assert.Single(_cli.Requests);
-        Assert.True(JsonNode.DeepEquals(JsonNode.Parse("""{"targetVersion":2,"reason":"bad plan"}"""), JsonNode.Parse(request.Body!)), request.Body);
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse("""{"targetCheckpoint":2,"reason":"bad plan"}"""), JsonNode.Parse(request.Body!)), request.Body);
     }
 
     [Fact]

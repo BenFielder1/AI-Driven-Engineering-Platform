@@ -61,6 +61,21 @@ public static class JobPolicy
             : new JobFailureOutcome(JobStatus.Dead, null);
     }
 
+    /// <summary>The longest a job waits for an external rate limit to reset before it runs again (§4.14, NFR-REL).</summary>
+    public static readonly TimeSpan MaxDeferral = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// §4.14, NFR-REL: an attempt stopped by an external rate limit (e.g. GitHub's) is not a failure: the job is re-queued
+    /// without counting the attempt, to run when the limit resets — at least a second from now and at most
+    /// <see cref="MaxDeferral"/> (a reset further out is checked again then).
+    /// </summary>
+    public static DateTimeOffset DeferUntil(DateTimeOffset now, DateTimeOffset retryAt)
+    {
+        var earliest = now + TimeSpan.FromSeconds(1);
+        var latest = now + MaxDeferral;
+        return retryAt < earliest ? earliest : retryAt > latest ? latest : retryAt;
+    }
+
     public static bool IsLeaseExpired(JobStatus status, DateTimeOffset? lockedAt, DateTimeOffset now) =>
         status == JobStatus.Running && lockedAt is { } locked && now - locked >= LeaseDuration;
 

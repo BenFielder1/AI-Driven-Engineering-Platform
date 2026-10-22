@@ -1,20 +1,13 @@
 import { Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 
-import { Badge, type BadgeTone } from '../../components/ui/badge'
+import { Badge } from '../../components/ui/badge'
+import { stepTones } from './step-tones'
 import { guardianCheckLabels, stepStatusLabels } from '../projects/labels'
 import { RelativeTime } from '../projects/relative-time'
 import type { Gate } from '../gates/gates-api'
-import { MAX_STEP_ATTEMPTS, type ExecutionStep, type StepStatus, type StepViolation } from './execution-api'
+import { MAX_STEP_ATTEMPTS, type ExecutionStep, type StepViolation } from './execution-api'
 
-const stepTones: Record<StepStatus, BadgeTone> = {
-  pending: 'neutral',
-  in_progress: 'info',
-  completed: 'success',
-  rejected: 'danger',
-  blocked: 'warning',
-  invalidated: 'warning',
-}
 
 const plural = (n: number, one: string, many = `${one}s`) => `${String(n)} ${n === 1 ? one : many}`
 
@@ -24,7 +17,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     <>
       <button
         type="button"
-        className="text-xs text-link underline"
+        className="text-xs text-primary underline"
         aria-label={label}
         onClick={() => {
           navigator.clipboard.writeText(value).then(
@@ -39,7 +32,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       >
         Copy
       </button>
-      <span role="status" aria-live="polite" className="text-xs text-muted">
+      <span role="status" aria-live="polite" className="text-xs text-muted-foreground">
         {state === 'copied' && 'Copied.'}
         {state === 'failed' && "Couldn't copy: select the SHA and copy it manually."}
       </span>
@@ -48,10 +41,10 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 /** FR-34: the short SHA, linked to the commit when the API gives its URL (GitHub), else plain text with a copy button. */
-function Commit({ sha, url }: { sha: string; url: string | null }) {
+export function Commit({ sha, url }: { sha: string; url: string | null }) {
   const short = sha.slice(0, 7)
   return url ? (
-    <a href={url} target="_blank" rel="noreferrer" className="font-mono text-link underline" title={sha}>
+    <a href={url} target="_blank" rel="noreferrer" className="font-mono text-primary underline" title={sha}>
       {short}
       <span className="sr-only"> (full SHA {sha}, opens GitHub in a new tab)</span>
     </a>
@@ -65,7 +58,7 @@ function Commit({ sha, url }: { sha: string; url: string | null }) {
   )
 }
 
-function ViolationList({ title, violations }: { title: string; violations: StepViolation[] }) {
+export function ViolationList({ title, violations }: { title: string; violations: StepViolation[] }) {
   return (
     <div className="flex flex-col gap-1">
       <h5 className="text-sm font-semibold">{title}</h5>
@@ -73,10 +66,10 @@ function ViolationList({ title, violations }: { title: string; violations: StepV
         {violations.map((v) => (
           <li key={`${v.check}:${v.code}:${v.path ?? ''}:${v.message}`} className="rounded border border-border p-2 text-sm">
             <span className="font-medium">{guardianCheckLabels[v.check]}</span>{' '}
-            <code className="text-xs text-muted">{v.code}</code>
+            <code className="text-xs text-muted-foreground">{v.code}</code>
             <p className="break-words">{v.message}</p>
             {v.path && (
-              <p className="text-xs text-muted">
+              <p className="text-xs text-muted-foreground">
                 File: <code className="break-all">{v.path}</code>
               </p>
             )}
@@ -96,7 +89,7 @@ function Violations({ violations, open }: { violations: StepViolation[]; open: b
     ...(warnings.length > 0 ? [plural(warnings.length, 'warning')] : []),
   ]
   return (
-    <details open={open} className="rounded-md border border-border p-2">
+    <details open={open} className="rounded-lg border border-border/60 p-2">
       <summary className="cursor-pointer text-sm font-medium">Guardian violations: {parts.join(', ')}</summary>
       <div className="mt-2 flex flex-col gap-3">
         {errors.length > 0 && <ViolationList title={`Errors (${String(errors.length)}): these rejected the attempt`} violations={errors} />}
@@ -109,7 +102,7 @@ function Violations({ violations, open }: { violations: StepViolation[]; open: b
 /** FR-33: a blocked step waits for an Owner's escalation decision on its own gate, listed on the overview. */
 function BlockedNotice({ projectId, gate }: { projectId: string; gate: Gate | null }) {
   return (
-    <div className="rounded-md border-l-4 border-warning bg-warning-bg p-3 text-sm">
+    <div className="rounded-md border-l-4 border-warning bg-warning/10 p-3 text-sm">
       <p className="font-semibold">Blocked after {MAX_STEP_ATTEMPTS} rejected attempts</p>
       {gate ? (
         <p className="mt-1">
@@ -119,7 +112,7 @@ function BlockedNotice({ projectId, gate }: { projectId: string; gate: Gate | nu
             to="/projects/$projectId"
             params={{ projectId }}
             hash={`pending-gate-${gate.id}`}
-            className="text-link underline"
+            className="text-primary underline"
           >
             Go to this step&apos;s escalation gate
           </Link>
@@ -144,12 +137,15 @@ export function ExecutionStepItem({
   step,
   current,
   escalationGate,
+  extra,
 }: {
   projectId: string
   step: ExecutionStep
   current: boolean
   /** The pending escalation gate created for this step when it was blocked (FR-33), if listed. */
   escalationGate: Gate | null
+  /** FR-57: the run's view of the step (specialist, produced files, attempt history). */
+  extra?: ReactNode
 }) {
   const titleId = `step-${String(step.number)}-title`
   const violations = step.violations ?? []
@@ -157,7 +153,7 @@ export function ExecutionStepItem({
     <li
       aria-labelledby={titleId}
       aria-current={current ? 'step' : undefined}
-      className={`flex flex-col gap-2 rounded-lg border bg-surface-raised p-4 ${current ? 'border-primary' : 'border-border'}`}
+      className={`flex flex-col gap-2 rounded-lg border bg-card p-4 ${current ? 'border-primary' : 'border-border'}`}
     >
       <div className="flex flex-wrap items-center gap-2">
         <h4 id={titleId} className="text-base font-semibold break-words">
@@ -168,16 +164,16 @@ export function ExecutionStepItem({
       </div>
       <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
         <div className="flex gap-1">
-          <dt className="text-muted">Attempt</dt>
+          <dt className="text-muted-foreground">Attempt</dt>
           <dd>{attemptText(step)}</dd>
         </div>
         <div className="flex gap-1">
-          <dt className="text-muted">Depends on</dt>
+          <dt className="text-muted-foreground">Depends on</dt>
           <dd>{step.dependencies.length === 0 ? 'None' : step.dependencies.map((d) => `step ${String(d)}`).join(', ')}</dd>
         </div>
         {step.startedAt && (
           <div className="flex gap-1">
-            <dt className="text-muted">Started</dt>
+            <dt className="text-muted-foreground">Started</dt>
             <dd>
               <RelativeTime iso={step.startedAt} />
             </dd>
@@ -185,7 +181,7 @@ export function ExecutionStepItem({
         )}
         {step.completedAt && (
           <div className="flex gap-1">
-            <dt className="text-muted">Finished</dt>
+            <dt className="text-muted-foreground">Finished</dt>
             <dd>
               <RelativeTime iso={step.completedAt} />
             </dd>
@@ -193,7 +189,7 @@ export function ExecutionStepItem({
         )}
         {step.commitSha && (
           <div className="flex gap-1">
-            <dt className="text-muted">Commit</dt>
+            <dt className="text-muted-foreground">Commit</dt>
             <dd>
               <Commit sha={step.commitSha} url={step.commitUrl} />
             </dd>
@@ -201,7 +197,7 @@ export function ExecutionStepItem({
         )}
         {step.branchName && (
           <div className="flex gap-1">
-            <dt className="text-muted">Branch</dt>
+            <dt className="text-muted-foreground">Branch</dt>
             <dd>
               <code className="text-xs break-all">{step.branchName}</code>
             </dd>
@@ -224,7 +220,7 @@ export function ExecutionStepItem({
         <ul className="mt-2 flex flex-col gap-0.5">
           {step.declaredFiles.map((f) => (
             <li key={`${f.action}:${f.path}`} className="break-all">
-              <code className="text-xs">{f.path}</code> <span className="text-xs text-muted">({f.action})</span>
+              <code className="text-xs">{f.path}</code> <span className="text-xs text-muted-foreground">({f.action})</span>
               {f.protected && (
                 <>
                   {' '}
@@ -242,7 +238,7 @@ export function ExecutionStepItem({
           <table className="mt-2 w-full border-collapse text-sm">
             <caption className="sr-only">Files written by step {step.number}</caption>
             <thead>
-              <tr className="border-b border-border text-left text-xs text-muted">
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
                 <th scope="col" className="py-1 pr-3">
                   File
                 </th>
@@ -272,6 +268,7 @@ export function ExecutionStepItem({
           </table>
         </details>
       )}
+      {extra}
     </li>
   )
 }

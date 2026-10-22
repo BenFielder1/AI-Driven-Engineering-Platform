@@ -3,13 +3,13 @@ import { z } from 'zod'
 /** RollbackRequest.reason maxLength (FR-44). */
 export const ROLLBACK_REASON_MAX = 500
 
-/** FR-44: the rollback form. `targetVersion` is the picker's value ('' until a version is chosen). */
+/** FR-44, FR-63: the rollback form. `targetCheckpoint` is the picker's value ('' until a checkpoint is chosen). */
 export const rollbackSchema = z.object({
-  targetVersion: z
+  targetCheckpoint: z
     .string()
-    .regex(/^\d+$/, { error: 'Choose the version to roll back to.' })
+    .regex(/^\d+$/, { error: 'Choose the checkpoint to roll back to.' })
     .transform(Number)
-    .pipe(z.number().int().min(1, { error: 'Choose the version to roll back to.' })),
+    .pipe(z.number().int().min(1, { error: 'Choose the checkpoint to roll back to.' })),
   reason: z
     .string()
     .trim()

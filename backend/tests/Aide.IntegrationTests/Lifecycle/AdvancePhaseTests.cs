@@ -29,7 +29,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
         Assert.Contains("The project request is not approved.", body.GetProperty("details").EnumerateArray().Select(d => d.GetString()));
 
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Refinement, ProjectStatus.Active, 1), (project.CurrentPhase, project.Status, project.ProjectVersion));
+        Assert.Equal((Phase.Refinement, ProjectStatus.Active, 1), (project.CurrentPhase, project.Status, project.Checkpoint));
         Assert.Single(await LifecycleSeed.TransitionsAsync(factory, id)); // the creation record only
         Assert.Empty(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PhaseChanged));
         Assert.Empty(await LifecycleSeed.JobsAsync(factory, id));
@@ -46,16 +46,16 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
         var result = await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id, "Request looks good"));
 
         Assert.Null(result.Gate);
-        Assert.Equal((Phase.Specification, ProjectStatus.Active, 2), (result.State.Phase, result.State.Status, result.State.ProjectVersion));
+        Assert.Equal((Phase.Specification, ProjectStatus.Active, 2), (result.State.Phase, result.State.Status, result.State.Checkpoint));
 
         var transition = (await LifecycleSeed.TransitionsAsync(factory, id))[^1];
         Assert.Equal(
             ((Phase?)Phase.Refinement, Phase.Specification, fixture.Contributor.User!.Id.ToString(), "Request looks good", 2),
-            (transition.FromPhase, transition.ToPhase, transition.Actor, transition.Reason, transition.ProjectVersion));
+            (transition.FromPhase, transition.ToPhase, transition.Actor, transition.Reason, transition.Checkpoint));
 
         var changed = Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PhaseChanged));
         var payload = LifecycleSeed.Payload(changed.Payload);
-        Assert.Equal(("refinement", "specification", 2), (payload.GetProperty("from").GetString(), payload.GetProperty("to").GetString(), payload.GetProperty("projectVersion").GetInt32()));
+        Assert.Equal(("refinement", "specification", 2), (payload.GetProperty("from").GetString(), payload.GetProperty("to").GetString(), payload.GetProperty("checkpoint").GetInt32()));
         Assert.Equal(transition.CreatedAt, changed.CreatedAt);
 
         // FR-28: entering specification queues the spec generator in the same transaction (outbox).
@@ -95,7 +95,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
         }
 
         var project = await LifecycleSeed.ProjectAsync(factory, id);
-        Assert.Equal((Phase.Specification, 2), (project.CurrentPhase, project.ProjectVersion));
+        Assert.Equal((Phase.Specification, 2), (project.CurrentPhase, project.Checkpoint));
         Assert.Equal(2, (await LifecycleSeed.TransitionsAsync(factory, id)).Count);
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PhaseChanged));
         Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
@@ -115,7 +115,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
         var gate = Assert.IsType<Aide.Api.Features.Gates.GateDto>(result.Gate);
         Assert.Equal((GateType.SpecApproval, GateStatus.Pending, (Guid?)spec.Id, (ArtifactType?)ArtifactType.TechnicalSpecification, (int?)2),
             (gate.Type, gate.Status, gate.ArtifactId, gate.ArtifactType, gate.ArtifactVersion));
-        Assert.Equal((Phase.Specification, 2), (result.State.Phase, result.State.ProjectVersion));
+        Assert.Equal((Phase.Specification, 2), (result.State.Phase, result.State.Checkpoint));
         Assert.Equal([gate.Id], result.State.PendingGates.Select(g => g.Id));
 
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.GateCreated));
@@ -134,7 +134,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
         var result = await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Owner.Client, id));
 
         Assert.Null(result.Gate);
-        Assert.Equal((Phase.Planning, ProjectStatus.Active, 3), (result.State.Phase, result.State.Status, result.State.ProjectVersion));
+        Assert.Equal((Phase.Planning, ProjectStatus.Active, 3), (result.State.Phase, result.State.Status, result.State.Checkpoint));
         Assert.Empty(await LifecycleSeed.GatesAsync(factory, id));
         Assert.Equal([JobTypes.PlanGeneration], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
     }
@@ -169,7 +169,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
         await SeedReadyForExecutionAsync(other.Project.Id, ApprovalMode.Advisory);
         var advisory = await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(other.Contributor.Client, other.Project.Id));
         Assert.Null(advisory.Gate);
-        Assert.Equal((Phase.Execution, ProjectStatus.Building, 4), (advisory.State.Phase, advisory.State.Status, advisory.State.ProjectVersion));
+        Assert.Equal((Phase.Execution, ProjectStatus.Building, 4), (advisory.State.Phase, advisory.State.Status, advisory.State.Checkpoint));
         Assert.Empty(await LifecycleSeed.JobsAsync(factory, other.Project.Id)); // execution starts with POST /execution/start
     }
 

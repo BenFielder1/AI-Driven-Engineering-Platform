@@ -31,7 +31,7 @@ public static class ActivityEndpoints
 
         group.MapGet("/", ListActivity)
             .WithName("ListProjectActivity")
-            .WithSummary("The project's activity feed, newest first (members). Filter by category with type; load more with before = the previous page's nextBefore. limit defaults to 50 (max 100).")
+            .WithSummary("The project's activity feed, newest first (members). Filter by category with type; load more with before = the previous page's nextBefore. limit defaults to 50 (max 100). releaseVersionId limits it to the events while that release version was current (from its start to the start of the next); without it, the whole history.")
             .Produces<ActivityPageDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound);
@@ -46,7 +46,8 @@ public static class ActivityEndpoints
         CancellationToken cancellationToken,
         [WireEnum(typeof(EventCategory))] string? type = null,
         [MaxLength(ActivityLimits.CursorMaxLength)] string? before = null,
-        [Range(1, ActivityLimits.MaxLimit)] int limit = ActivityLimits.DefaultLimit)
+        [Range(1, ActivityLimits.MaxLimit)] int limit = ActivityLimits.DefaultLimit,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -72,6 +73,33 @@ public static class ActivityEndpoints
             ? db.Events.FromSql($"SELECT * FROM events WHERE (created_at, id) < ({c.OccurredAt}, {c.Id})")
             : db.Events;
         query = query.AsNoTracking().Where(e => e.ProjectId == id);
+        if (releaseVersionId is { } versionId)
+        {
+            // Events carry no release version: a version's activity is the time from its start to the next version's start.
+            var versions = await db.ReleaseVersions.AsNoTracking()
+                .Where(v => v.ProjectId == id)
+                .OrderBy(v => v.CreatedAt)
+                .ThenBy(v => v.Id)
+                .Select(v => new { v.Id, v.CreatedAt })
+                .ToListAsync(cancellationToken);
+            var index = versions.FindIndex(v => v.Id == versionId);
+            if (index < 0)
+            {
+                return ApiProblems.NotFound("The release version was not found in this project.");
+            }
+
+            if (index > 0)
+            {
+                var from = versions[index].CreatedAt;
+                query = query.Where(e => e.CreatedAt >= from);
+            }
+
+            if (index < versions.Count - 1)
+            {
+                var until = versions[index + 1].CreatedAt;
+                query = query.Where(e => e.CreatedAt < until);
+            }
+        }
         if (type is not null)
         {
             var types = EventTypes.InCategory(EnumStrings.Parse<EventCategory>(type)).ToList();
@@ -147,7 +175,7 @@ internal static class ActivitySummary
 
         return type switch
         {
-            EventTypes.PhaseChanged => $"Phase changed from {Get("from") ?? "?"} to {Get("to") ?? "?"} (version {Get("projectVersion") ?? "?"})",
+            EventTypes.PhaseChanged => $"Phase changed from {Get("from") ?? "?"} to {Get("to") ?? "?"} (checkpoint {Get("checkpoint") ?? Get("projectVersion") ?? "?"})",
             EventTypes.GateCreated => $"{Get("type") ?? "Approval"} gate created",
             EventTypes.GateApproved => Get("decision") is { } decision
                 ? $"{Get("type") ?? "Approval"} gate decided: {decision}"
@@ -155,11 +183,24 @@ internal static class ActivitySummary
             EventTypes.GateRejected => $"{Get("type") ?? "Approval"} gate rejected",
             EventTypes.GateCancelled => $"{Get("type") ?? "Approval"} gate cancelled",
             EventTypes.GateOverdue => $"{Get("type") ?? "Approval"} gate is overdue",
-            EventTypes.RollbackCompleted => $"Rolled back from version {Get("fromVersion") ?? "?"} to version {Get("targetVersion") ?? "?"}",
+            EventTypes.RollbackCompleted => $"Rolled back from checkpoint {Get("fromCheckpoint") ?? Get("fromVersion") ?? "?"} to checkpoint {Get("targetCheckpoint") ?? Get("targetVersion") ?? "?"}",
+            EventTypes.VersionStarted => $"Version {Get("version") ?? "?"} started",
+            EventTypes.PresetChanged => $"Preset of version {Get("version") ?? "?"} changed from {Get("fromPresetId") ?? "none"} to {Get("presetId") ?? "none"}",
+            EventTypes.ArtifactRestored => $"{Get("type") ?? "Artifact"} v{Get("restoredFromVersion") ?? "?"} restored as draft v{Get("version") ?? "?"}",
+            EventTypes.CodebaseSummaryCreated => $"Codebase summary v{Get("version") ?? "?"} created by the Repository Analyst",
+            EventTypes.ReleaseAwaitingMerge => $"Release {Get("tag") ?? Get("version") ?? "?"} awaits a merge on GitHub",
+            EventTypes.ReleaseMergedExternally => $"Release {Get("tag") ?? Get("version") ?? "?"} merged on GitHub",
             EventTypes.RunStarted => $"{Get("agent") ?? "Agent"} run started on {Get("model") ?? "?"}",
             EventTypes.RunCompleted => $"{Get("agent") ?? "Agent"} run completed ({Get("inputTokens") ?? "?"} in / {Get("outputTokens") ?? "?"} out tokens)",
             EventTypes.RunFailed => $"{Get("agent") ?? "Agent"} run failed: {Get("errorCode") ?? "error"}",
             EventTypes.BudgetExceeded => $"{Get("agent") ?? "Agent"} run refused: token budget used up",
+            EventTypes.ConnectionInvalid => Get("provider") switch
+            {
+                "vercel" => "Vercel rejected the connection's token; it is marked invalid",
+                "github" => "GitHub rejected the user's connection; it is marked invalid",
+                var provider => $"{provider ?? "LLM"} rejected the bound connection's key; it is marked invalid",
+            },
+            EventTypes.LlmBindingCleared => $"LLM binding cleared ({Get("reason") ?? "?"})",
             EventTypes.StepStarted => $"Step {Get("stepNumber") ?? "?"} started (attempt {Get("attempt") ?? "?"})",
             EventTypes.StepCompleted => $"Step {Get("stepNumber") ?? "?"} completed",
             EventTypes.StepRejected => $"Step {Get("stepNumber") ?? "?"} rejected by the Execution Guardian (attempt {Get("attempt") ?? "?"})",
@@ -186,6 +227,10 @@ internal static class ActivitySummary
             EventTypes.MemberRoleChanged => "Member role changed",
             EventTypes.MemberRemoved => "Member removed",
             EventTypes.SettingsUpdated => "Settings updated",
+            EventTypes.DeploymentCreated => $"{Get("target") ?? "Deployment"} deployment of {Get("gitRef") ?? "?"} recorded ({Get("trigger") ?? "auto"})",
+            EventTypes.DeploymentUpdated => $"{Get("target") ?? "Deployment"} deployment {Get("status") ?? "updated"}{(Get("errorCode") is { } code ? $" ({code})" : string.Empty)}",
+            EventTypes.DeploymentFailed => $"{Get("target") ?? "Production"} deployment failed: {Get("errorCode") ?? "error"}",
+            EventTypes.DeploymentPreviewReady => $"Preview ready{(Get("url") is { } url ? $" at {url}" : string.Empty)}",
             EventTypes.DeadLetterRetried => $"Dead-lettered {Get("jobType") ?? "?"} job retried by an Admin",
             _ when Get("type") is { } artifactType && Get("version") is { } version
                 => $"{Humanize(type)}: {artifactType} v{version}",

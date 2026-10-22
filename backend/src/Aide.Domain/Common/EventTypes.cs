@@ -53,9 +53,25 @@ public static class EventTypes
     /// <summary>Git, LLM or notification settings changed (FR-9). The payload never contains secret values.</summary>
     public const string SettingsUpdated = "SETTINGS_UPDATED";
 
+    /// <summary>
+    /// FR-79: the project's LLM binding was cleared because the binding Owner lost the Owner role, left or was removed, or
+    /// deleted the connection: <c>{projectId, credentialId, boundByUserId, provider, reason}</c>
+    /// (<see cref="Projects.LlmBindingClearedReason"/>). Runs then fail with <c>PROVIDER_NOT_CONFIGURED</c>.
+    /// </summary>
+    public const string LlmBindingCleared = "LLM_BINDING_CLEARED";
+
     /// <summary>DEP-2 seed marker: the dev seed created its demo project. Written with <c>project_id</c> null (so it
     /// survives deleting the project) and the project id in the payload; the seed never creates the demo again.</summary>
     public const string DemoProjectSeeded = "DEMO_PROJECT_SEEDED";
+
+    /// <summary>§9 seed marker: the dev seed created its preset demo project (<c>{projectId, presetId}</c>, project_id null).</summary>
+    public const string DemoPresetProjectSeeded = "DEMO_PRESET_PROJECT_SEEDED";
+
+    /// <summary>
+    /// DEP-V2 (§9) seed marker: the one-off upgrade of a v1-seeded demo project to released 0.1.0 ran
+    /// (<c>{projectId, outcome}</c>, project_id null; <c>outcome</c> <c>released</c>, or why it was skipped).
+    /// </summary>
+    public const string DemoProjectReleaseUpgraded = "DEMO_PROJECT_RELEASE_UPGRADED";
 
     // Lifecycle (FR-11)
     public const string PhaseChanged = "PHASE_CHANGED";
@@ -76,6 +92,12 @@ public static class EventTypes
     public const string ArtifactCorrupted = "ARTIFACT_CORRUPTED";
 
     /// <summary>
+    /// FR-58: a writer restored an older version as a new draft: <c>{artifactId, type, version, parentVersion,
+    /// restoredFromVersion, restoredFromArtifactId}</c>. Like <see cref="ArtifactCreated"/>, it tells Owners a draft awaits approval.
+    /// </summary>
+    public const string ArtifactRestored = "ARTIFACT_RESTORED";
+
+    /// <summary>
     /// FR-20 "integrity admin alert": raised with <see cref="ArtifactCorrupted"/> when a read finds a hash mismatch.
     /// There is no alerts table (§5), so the alert is this event (category <see cref="EventCategory.Integrity"/>),
     /// visible in the project feed and the admin event list.
@@ -86,6 +108,15 @@ public static class EventTypes
     public const string RunStarted = "RUN_STARTED";
     public const string RunCompleted = "RUN_COMPLETED";
     public const string RunFailed = "RUN_FAILED";
+
+    /// <summary>
+    /// FR-78: the provider rejected a bound connection's key during a run (HTTP 401), so the connection was marked
+    /// <c>invalid</c>: <c>{credentialId, userId, provider, runId}</c> (no secret). Also written when Vercel rejects a
+    /// connection's token (FR-87): <c>{connectionId, userId, provider: "vercel"}</c>, and when GitHub rejects a user connection
+    /// (§4.14, project_id null): <c>{userId, provider: "github", login, reason}</c>. FR-92: the connection's owner
+    /// (<c>userId</c>) gets the personal <c>connection_invalid</c> notification (in-app and email).
+    /// </summary>
+    public const string ConnectionInvalid = "CONNECTION_INVALID";
 
     /// <summary>FR-26: a run was refused because the project's token budget is used up (Owners are notified, phase 12).</summary>
     public const string BudgetExceeded = "BUDGET_EXCEEDED";
@@ -127,10 +158,10 @@ public static class EventTypes
 
     // Review (FR-38–FR-41)
 
-    /// <summary>A review cycle started: <c>{jobId, cycle, trigger, projectVersion}</c>.</summary>
+    /// <summary>A review cycle started: <c>{jobId, cycle, trigger, checkpoint, releaseVersionId}</c>.</summary>
     public const string ReviewStarted = "REVIEW_STARTED";
 
-    /// <summary>A review cycle recorded its report: <c>{jobId, reportId, cycle, projectVersion, overallScore, threshold, driftLevel, decision, decisionReason, optimizationPlanArtifactId}</c>.</summary>
+    /// <summary>A review cycle recorded its report: <c>{jobId, reportId, cycle, checkpoint, releaseVersionId, overallScore, threshold, driftLevel, decision, decisionReason, optimizationPlanArtifactId}</c>.</summary>
     public const string ReviewCompleted = "REVIEW_COMPLETED";
 
     /// <summary>A review job ended without a report (failed for good or dead-lettered): <c>{jobId, cycle, reason, deadLettered}</c>; the reason is redacted.</summary>
@@ -140,6 +171,65 @@ public static class EventTypes
     public const string ReleaseStarted = "RELEASE_STARTED";
     public const string ReleaseCompleted = "RELEASE_COMPLETED";
     public const string ReleaseFailed = "RELEASE_FAILED";
+
+    /// <summary>
+    /// FR-65: the release merge was refused (branch protection, required reviews or checks, missing permission) or the merge
+    /// strategy is <c>manual</c>: <c>{releaseId, releaseVersionId, version, checkpoint, tag, attempt, pullRequestUrl,
+    /// mergeStrategy, awaitingMerge: true, reasons[{code, message}]}</c>. Owners are notified with the PR link and the reasons; the merge poll waits (§4.14).
+    /// </summary>
+    public const string ReleaseAwaitingMerge = "RELEASE_AWAITING_MERGE";
+
+    /// <summary>
+    /// FR-65, §4.14: the merge poll saw the PR merged on GitHub (or the Local branch merged by someone else):
+    /// <c>{releaseId, releaseVersionId, version, checkpoint, tag, mergeCommitSha, githubReleaseUrl, pullRequestUrl}</c>. Followed by
+    /// <see cref="ReleaseCompleted"/> once tagged.
+    /// </summary>
+    public const string ReleaseMergedExternally = "RELEASE_MERGED_EXTERNALLY";
+
+    /// <summary>
+    /// FR-60: an Owner started a new release version: <c>{releaseVersionId, version, baseTag, baseCommitSha, branchName,
+    /// presetId, request}</c> (the request is truncated). The project is then in refinement at checkpoint 1.
+    /// </summary>
+    public const string VersionStarted = "VERSION_STARTED";
+
+    /// <summary>
+    /// FR-74, FR-92: an Owner changed the preset of the version in development: <c>{releaseVersionId, version,
+    /// fromPresetId, fromPresetVersion, presetId, presetVersion, presetHash}</c> (ids <c>null</c> = no preset).
+    /// </summary>
+    public const string PresetChanged = "PRESET_CHANGED";
+
+    /// <summary>
+    /// FR-70: the Repository Analyst stored a locked <c>codebase_summary</c>: <c>{artifactId, type, version,
+    /// releaseVersionId, agentRunId}</c>. No gate: the summary is auto-locked.
+    /// </summary>
+    public const string CodebaseSummaryCreated = "CODEBASE_SUMMARY_CREATED";
+
+    // Deployments (FR-90, FR-91, §4.15): category release.
+
+    /// <summary>
+    /// FR-90, FR-91: a deployment row was recorded: <c>{deploymentId, target, provider, trigger, gitRef, gitSha,
+    /// releaseVersionId, releaseId, promotedFromDeploymentId}</c>.
+    /// </summary>
+    public const string DeploymentCreated = "DEPLOYMENT_CREATED";
+
+    /// <summary>
+    /// §4.15: a deployment changed state: <c>{deploymentId, target, status, url, errorCode}</c> (never env values or the
+    /// build log).
+    /// </summary>
+    public const string DeploymentUpdated = "DEPLOYMENT_UPDATED";
+
+    /// <summary>
+    /// FR-91: a deployment failed in a way Owners act on — a production deployment (the release stands; "Redeploy"), or any
+    /// deployment whose Vercel token was rejected: <c>{deploymentId, target, status, errorCode, releaseVersion, gitSha,
+    /// url}</c>. Owners get the <c>deployment_failed</c> notification (FR-92).
+    /// </summary>
+    public const string DeploymentFailed = "DEPLOYMENT_FAILED";
+
+    /// <summary>
+    /// FR-90: a preview deployment became ready: <c>{deploymentId, target, status, url, releaseVersion, gitSha}</c>. Every
+    /// member gets the <c>preview_ready</c> notification, linking to the Review page (FR-92).
+    /// </summary>
+    public const string DeploymentPreviewReady = "DEPLOYMENT_PREVIEW_READY";
 
     // Rollback (FR-44, FR-45)
     public const string RollbackCompleted = "ROLLBACK_COMPLETED";
@@ -151,17 +241,24 @@ public static class EventTypes
     /// </summary>
     public const string DeadLetterRetried = "DEAD_LETTER_RETRIED";
 
+    /// <summary>
+    /// FR-84: merge readiness of the version's PR was checked (when the pre-release gate was created, or on demand):
+    /// <c>{releaseVersionId, readiness}</c> with the readiness as the API returns it. The latest one is what
+    /// <c>GET /git/merge-readiness</c> returns while it is fresh. Uncategorised: an operations record, not an activity entry.
+    /// </summary>
+    public const string MergeReadinessChecked = "MERGE_READINESS_CHECKED";
+
     private static readonly Dictionary<EventCategory, IReadOnlyList<string>> ByCategory = new()
     {
         [EventCategory.Transition] = [PhaseChanged],
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
-        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted],
-        [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded],
+        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored, CodebaseSummaryCreated],
+        [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
-        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed],
+        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady],
         [EventCategory.Rollback] = [RollbackCompleted],
-        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated],
+        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, PresetChanged],
         [EventCategory.Integrity] = [IntegrityAlert],
     };
 
@@ -169,12 +266,15 @@ public static class EventTypes
     {
         RunFailed,
         BudgetExceeded,
+        ConnectionInvalid,
+        LlmBindingCleared,
         StepRejected,
         StepBlocked,
         GitPushFailed,
         PullRequestFailed,
         ReviewFailed,
         ReleaseFailed,
+        DeploymentFailed,
         ArtifactCorrupted,
         IntegrityAlert,
     };
@@ -187,7 +287,7 @@ public static class EventTypes
     public static IReadOnlyList<string> InCategory(EventCategory category) =>
         ByCategory.TryGetValue(category, out var types) ? types : [];
 
-    /// <summary>The category of an event type; <c>null</c> for internal markers such as <see cref="DemoProjectSeeded"/>.</summary>
+    /// <summary>The category of an event type; <c>null</c> for internal markers such as <see cref="DemoProjectSeeded"/> and <see cref="DemoProjectReleaseUpgraded"/>.</summary>
     public static EventCategory? CategoryOf(string type) =>
         CategoryByType.TryGetValue(type, out var category) ? category : null;
 

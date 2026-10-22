@@ -9,7 +9,10 @@ public sealed class StateTransition
 
     public Guid ProjectId { get; set; }
 
-    /// <summary>Null for the creation record (→ refinement at version 1).</summary>
+    /// <summary>The release version the transition belongs to (§4.10).</summary>
+    public Guid ReleaseVersionId { get; set; }
+
+    /// <summary>Null for the creation record (→ refinement at checkpoint 1).</summary>
     public Phase? FromPhase { get; set; }
 
     public Phase ToPhase { get; set; }
@@ -18,8 +21,8 @@ public sealed class StateTransition
 
     public string Reason { get; set; } = string.Empty;
 
-    /// <summary>The project version after the transition.</summary>
-    public int ProjectVersion { get; set; }
+    /// <summary>The checkpoint after the transition.</summary>
+    public int Checkpoint { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 }

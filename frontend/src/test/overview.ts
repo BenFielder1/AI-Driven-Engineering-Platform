@@ -12,7 +12,7 @@ type SeedOverrides = Omit<NonNullable<Parameters<typeof seedProject>[0]>, 'membe
 export async function openOverview(project: StoredProject) {
   const utils = renderRoute(`/projects/${project.id}`)
   // findBy and waitFor use the suite-wide asyncUtilTimeout (src/test/setup.ts).
-  await screen.findByRole('heading', { name: 'Lifecycle' })
+  await screen.findByRole('heading', { name: 'Next action' })
   await waitFor(() => {
     if (screen.queryByText('Loading gates…')) {
       throw new Error('Gates still loading')
@@ -38,8 +38,8 @@ export async function openOverviewAs(role: ProjectRole, overrides: SeedOverrides
   return openOverview(project)
 }
 
-/** The `aria-current="step"` item of the overview's phase timeline. */
+/** The project's current stage in the header's stage stepper (FR-54). */
 export function currentTimelineStep() {
-  const timeline = screen.getByRole('list', { name: 'Phase timeline' })
-  return timeline.querySelector('[aria-current="step"]')
+  const stepper = screen.getByRole('navigation', { name: 'Lifecycle stages' })
+  return stepper.querySelector('[data-stage-state="current"]')
 }

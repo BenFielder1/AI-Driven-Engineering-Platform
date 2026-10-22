@@ -121,7 +121,7 @@ public static partial class ProjectSettingsRules
         string prefix = "")
     {
         var problems = new List<string>();
-        if (provider == GitProvider.Github && !TryParseGitHubRepo(repoUrl, out _))
+        if (provider == GitProvider.GithubPat && !TryParseGitHubRepo(repoUrl, out _))
         {
             problems.Add($"{prefix}repoUrl: Use a GitHub repository URL like https://github.com/owner/repo.");
         }
@@ -139,6 +139,10 @@ public static partial class ProjectSettingsRules
         {
             problems.Add($"{prefix}token: The token can't be blank. Send clearToken to remove it.");
         }
+        else if (tokenSent is not null && provider == GitProvider.GithubApp)
+        {
+            problems.Add($"{prefix}token: Not used with github_app: AIDE uses the App's installation tokens.");
+        }
 
         return ProjectRules.ToResult(problems, "The Git settings are invalid.");
     }
@@ -151,9 +155,109 @@ public static partial class ProjectSettingsRules
     public static bool KeepsSavedToken(GitProvider previous, GitProvider next, bool clearToken) =>
         !clearToken && !(next == GitProvider.Local && previous != GitProvider.Local);
 
+    /// <summary>FR-82, FR-83: whether the provider is a GitHub one (<c>github_app</c> or <c>github_pat</c>).</summary>
+    public static bool IsGitHub(GitProvider provider) => provider is GitProvider.GithubApp or GitProvider.GithubPat;
+
+    /// <summary>
+    /// The repository's web URL: the stored <c>repoUrl</c> for <c>github_pat</c>, <c>https://github.com/{repoFullName}</c>
+    /// for <c>github_app</c> (which stores the full name, not a URL), <c>null</c> for Local.
+    /// </summary>
+    public static string? RepoWebUrl(GitProvider provider, string? repoUrl, string? repoFullName) => provider switch
+    {
+        GitProvider.GithubPat => repoUrl,
+        GitProvider.GithubApp when TryParseRepoFullName(repoFullName, out var repo) => $"https://github.com/{repo.Owner}/{repo.Name}",
+        _ => null,
+    };
+
     /// <summary>The URL stored for a provider: trimmed for <c>github</c>; the Local provider has no remote URL.</summary>
     public static string? NormalizeRepoUrl(GitProvider provider, string? repoUrl) =>
-        provider == GitProvider.Github && !string.IsNullOrWhiteSpace(repoUrl) ? repoUrl.Trim() : null;
+        provider == GitProvider.GithubPat && !string.IsNullOrWhiteSpace(repoUrl) ? repoUrl.Trim() : null;
+
+    /// <summary>
+    /// FR-86: the wizard's Git mode. v2 clients send <c>mode</c>; v1 clients (and the v1 CLI) send <c>provider</c>, which
+    /// is kept as an alias. One of them is required; when both are sent they must agree.
+    /// </summary>
+    public static Result<GitProvider> ResolveGitMode(GitProvider? mode, GitProvider? provider, string prefix = "")
+    {
+        if (mode is { } m && provider is { } p && m != p)
+        {
+            return Result.Failure<GitProvider>(Invalid($"{prefix}mode: mode and provider disagree; send only mode."));
+        }
+
+        return (mode ?? provider) is { } resolved
+            ? Result.Success(resolved)
+            : Result.Failure<GitProvider>(Invalid($"{prefix}mode: Choose github_app, github_pat or local."));
+    }
+
+    /// <summary>
+    /// FR-82: a <c>github_app</c> repository needs the App installation id and the repository's <c>owner/name</c>; the PAT
+    /// fields (<c>repoUrl</c>, <c>token</c>) don't apply to it.
+    /// </summary>
+    public static Result ValidateAppRepo(long? installationId, string? repoFullName, string? repoUrl, string? token, string prefix = "")
+    {
+        var problems = new List<string>();
+        if (installationId is not > 0)
+        {
+            problems.Add($"{prefix}installationId: Pick a repository the AIDE GitHub App is installed on.");
+        }
+
+        if (!TryParseRepoFullName(repoFullName, out _))
+        {
+            problems.Add($"{prefix}repoFullName: Use owner/name, e.g. acme/todo-app.");
+        }
+
+        if (!string.IsNullOrEmpty(repoUrl))
+        {
+            problems.Add($"{prefix}repoUrl: Not used with github_app; send repoFullName.");
+        }
+
+        if (!string.IsNullOrEmpty(token))
+        {
+            problems.Add($"{prefix}token: Not used with github_app: AIDE uses the App's installation tokens.");
+        }
+
+        return ProjectRules.ToResult(problems, "The Git settings are invalid.");
+    }
+
+    /// <summary>Parses <c>owner/name</c> (the same owner and name rules as <see cref="TryParseGitHubRepo"/>).</summary>
+    public static bool TryParseRepoFullName(string? fullName, out GitHubRepo repo)
+    {
+        repo = new GitHubRepo(string.Empty, string.Empty);
+        return !string.IsNullOrWhiteSpace(fullName)
+            && fullName.Count(c => c == '/') == 1
+            && TryParseGitHubRepo($"https://github.com/{fullName}", out repo);
+    }
+
+    /// <summary>
+    /// FR-82, FR-83: <c>PATCH /settings/git</c> can't move a project onto <c>github_app</c>, which needs an installation and
+    /// repository id: that goes through "Switch to GitHub App" (or the wizard).
+    /// </summary>
+    public static Result ValidateProviderChange(GitProvider previous, GitProvider next) =>
+        next == GitProvider.GithubApp && previous != GitProvider.GithubApp
+            ? Result.Failure(Invalid("provider: Use Switch to GitHub App to move this project onto the AIDE GitHub App."))
+            : Result.Success();
+
+    /// <summary>§4.10, FR-64: a sent tag prefix must be <c>^[A-Za-z0-9._/-]{0,20}$</c> and a safe Git ref start (<c>null</c>: unchanged).</summary>
+    public static Result ValidateTagPrefix(string? tagPrefix) =>
+        tagPrefix is null || Releases.ReleaseVersionRules.IsValidTagPrefix(tagPrefix)
+            ? Result.Success()
+            : Result.Failure(Invalid(
+                $"tagPrefix: Use at most {Releases.ReleaseVersionRules.TagPrefixMaxLength} letters, digits or . _ / - (not starting with . / or -, without .. or //)."));
+
+    /// <summary>
+    /// FR-64, FR-65: the tag prefix can't change while the development version is <c>awaiting_merge</c> or a release attempt
+    /// is in progress, because the tag being created is already fixed (<c>CONFLICT</c>). Otherwise the new prefix also
+    /// applies to the version in development.
+    /// </summary>
+    public static Result CanChangeTagPrefix(ReleaseVersionStatus? developmentStatus, bool releaseInProgress) =>
+        developmentStatus == ReleaseVersionStatus.AwaitingMerge || releaseInProgress
+            ? Result.Failure(new DomainError(
+                ErrorCodes.Conflict,
+                "The tag prefix can't change while a release is in progress or waiting for its pull request to be merged."))
+            : Result.Success();
+
+    private static DomainError Invalid(string detail) =>
+        new(ErrorCodes.Validation, "The Git settings are invalid.") { Details = [detail] };
 
     // ---------------------------------------------------------------- LLM
 
@@ -162,7 +266,7 @@ public static partial class ProjectSettingsRules
 
     /// <summary>
     /// "Missing credentials never block": Fake and Ollama are always usable; Anthropic and OpenAI are usable when a
-    /// system key is configured or the project has its own key for that provider.
+    /// (allowed) system key is configured or the project has a bound connection for that provider (FR-79).
     /// </summary>
     public static bool IsConfigured(LlmProvider provider, bool hasSystemKey, bool hasProjectKey) =>
         !RequiresApiKey(provider) || hasSystemKey || hasProjectKey;
@@ -182,18 +286,19 @@ public static partial class ProjectSettingsRules
         return !Agents.SecretRedaction.HasWhitespaceOrControl(apiKey);
     }
 
-    /// <summary>Validates LLM settings as they will be stored (after a partial update). <paramref name="apiKey"/> is
-    /// the key sent, when one was.</summary>
+    /// <summary>
+    /// Validates LLM settings as they will be stored (after a partial update). FR-79: keys come from a bound connection
+    /// (or an allowed system key), so a provider that needs a key can only be <em>chosen</em> (<paramref name="providerChanged"/>)
+    /// when one is usable after the update. Unbinding on the same provider is allowed: runs then fail with
+    /// <c>PROVIDER_NOT_CONFIGURED</c>, as after a cleared binding.
+    /// </summary>
     public static Result ValidateLlm(
         LlmProvider provider,
         string? defaultModel,
         IReadOnlyDictionary<string, string?>? modelsByAgent,
-        bool apiKeySent,
-        bool apiKeySentBlank,
-        bool clearApiKey,
         bool hasSystemKey,
-        bool hasProjectKeyAfter,
-        string? apiKey = null)
+        bool hasBindingAfter,
+        bool providerChanged)
     {
         var problems = new List<string>();
         if (string.IsNullOrWhiteSpace(defaultModel))
@@ -209,26 +314,9 @@ public static partial class ProjectSettingsRules
             }
         }
 
-        if (apiKeySent && clearApiKey)
+        if (problems.Count == 0 && providerChanged && !IsConfigured(provider, hasSystemKey, hasBindingAfter))
         {
-            problems.Add("apiKey: Send either apiKey or clearApiKey, not both.");
-        }
-        else if (apiKeySentBlank)
-        {
-            problems.Add("apiKey: The API key can't be blank. Send clearApiKey to remove it.");
-        }
-        else if (apiKeySent && !RequiresApiKey(provider))
-        {
-            problems.Add($"apiKey: {provider.ToWire()} doesn't use an API key.");
-        }
-        else if (apiKey is not null && !IsWellFormedApiKey(apiKey))
-        {
-            problems.Add("apiKey: The API key can't contain spaces, line breaks or other control characters.");
-        }
-
-        if (problems.Count == 0 && !IsConfigured(provider, hasSystemKey, hasProjectKeyAfter))
-        {
-            problems.Add($"provider: {provider.ToWire()} is not configured. Add a project API key, or ask an admin to set the system key.");
+            problems.Add($"provider: {provider.ToWire()} is not configured. Bind one of your {provider.ToWire()} connections (credentialId).");
         }
 
         return ProjectRules.ToResult(problems, "The LLM settings are invalid.");

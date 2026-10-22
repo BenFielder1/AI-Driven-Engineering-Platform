@@ -1,21 +1,19 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { projectsDb } from '../../../mocks/handlers/projects'
-import { openOwnerSettings, requestsTo } from '../../../test/project-settings'
+import { authDb } from '../../../mocks/handlers/auth'
+import { configureGitHubApp, connectGitHub, githubDb, INSTALL_URL } from '../../../mocks/handlers/github'
+import { gitSettings, projectsDb, seedProject } from '../../../mocks/handlers/projects'
+import { contextualErrorMessages } from '../../../lib/errors'
+import { seedAwaitingMerge, seedRelease } from '../../../mocks/handlers/release'
+import { openOwnerSettings, openSettings, requestsTo, signInAsOwner } from '../../../test/project-settings'
 
 const TOKEN = 'ghp_newsecrettoken456'
 
-const savedGit = {
-  provider: 'github',
-  repoUrl: 'https://github.com/acme/inventory',
-  defaultBranch: 'main',
-  branchName: null,
-  hasToken: true,
-} as const
-
-async function openGit(hasToken = true) {
-  const utils = await openOwnerSettings('git', { git: { ...savedGit, hasToken } })
+async function openGit(hasToken = true, overrides: Parameters<typeof gitSettings>[0] = {}) {
+  const utils = await openOwnerSettings('git', {
+    git: gitSettings({ provider: 'github_pat', repoUrl: 'https://github.com/acme/inventory', hasToken, ...overrides }),
+  })
   await screen.findByRole('heading', { name: 'Git repository' })
   return utils
 }
@@ -140,5 +138,181 @@ describe('Settings → Git: access token (FR-9)', () => {
     expect(repo).toHaveAttribute('aria-invalid', 'true')
     expect(repo).toHaveAccessibleDescription(expect.stringContaining('Enter a URL like') as string)
     expect(requestsTo('PATCH', '/settings/git')).toHaveLength(0)
+  })
+})
+
+describe('Settings → Git: mode and GitHub App (FR-83)', () => {
+  it('FR83_pat_settings_show_mode_and_hasToken_without_a_value', async () => {
+    await openGit(true)
+
+    const summary = screen.getByRole('region', { name: 'Connection' })
+    expect(within(summary).getByTestId('git-mode')).toHaveTextContent('Personal access token')
+    expect(within(summary).getByTestId('git-has-token')).toHaveTextContent('Set')
+    expect(within(summary).getByText('https://github.com/acme/inventory')).toBeInTheDocument()
+    // No token value anywhere: the API only says hasToken, and no input holds a value.
+    for (const input of screen.queryAllByLabelText(/token/i, { selector: 'input' })) {
+      expect(input).toHaveValue('')
+    }
+    expect(screen.queryByRole('button', { name: 'Switch to GitHub App' })).not.toBeInTheDocument()
+  })
+
+  it('FR83_switch_to_app: an Owner of a PAT project the App can access switches it, and the PAT is dropped', async () => {
+    const { user, project } = await openGit(true, { appInstalledOnRepo: true })
+    connectGitHub(authDb.currentUserId ?? '')
+    expect(within(screen.getByRole('region', { name: 'Connection' })).getByText('Can access this repository')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Switch to GitHub App' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Switch to the GitHub App?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Switch to GitHub App' }))
+
+    expect(await screen.findByText('The project now uses the GitHub App.')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByTestId('git-mode')).toHaveTextContent('GitHub App')
+    })
+    expect(requestsTo('POST', '/settings/git/switch-to-app')).toHaveLength(1)
+    expect(project.git).toMatchObject({ mode: 'github_app', repoFullName: 'acme/inventory', hasToken: false })
+    expect(screen.queryByRole('button', { name: 'Switch to GitHub App' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Access token:')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Connection' })).getByText('acme/inventory')).toBeInTheDocument()
+  })
+
+  it('FR83_switch_to_app: GITHUB_APP_NOT_INSTALLED shows the copy and the install link', async () => {
+    configureGitHubApp()
+    const { user, project } = await openGit(true, { appInstalledOnRepo: true })
+    connectGitHub(authDb.currentUserId ?? '')
+    // The App lost access between loading and switching.
+    project.git.appInstalledOnRepo = false
+
+    await user.click(screen.getByRole('button', { name: 'Switch to GitHub App' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Switch to GitHub App' }))
+
+    expect(
+      await screen.findByText("The AIDE GitHub App can't access this repository. Install it on the repository, then try again."),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Install AIDE on acme/ })).toHaveAttribute('href', INSTALL_URL)
+  })
+
+  it('FR83_app_project: shows the repository and App status; the mode select offers no way onto the App', async () => {
+    await openGit(false, { provider: 'github_app', repoFullName: 'acme/todo-app' })
+
+    const summary = screen.getByRole('region', { name: 'Connection' })
+    expect(within(summary).getByTestId('git-mode')).toHaveTextContent('GitHub App')
+    expect(within(summary).getByText('acme/todo-app')).toBeInTheDocument()
+    expect(within(summary).getByText('Installed on the repository')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Repository URL')).not.toBeInTheDocument()
+    expect(screen.queryByText('Access token:')).not.toBeInTheDocument()
+  })
+
+  it('FR83_pat_project: the mode select has no GitHub App option', async () => {
+    await openGit()
+    const select = screen.getByLabelText('Mode')
+    expect(within(select).queryByRole('option', { name: 'GitHub App' })).not.toBeInTheDocument()
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Personal access token', 'Local repository'])
+  })
+
+  it('FR83_switch_requires_a_connection: GITHUB_NOT_CONNECTED links to Connections', async () => {
+    configureGitHubApp()
+    const { user } = await openGit(true, { appInstalledOnRepo: true })
+
+    await user.click(screen.getByRole('button', { name: 'Switch to GitHub App' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Switch to GitHub App' }))
+
+    expect(await screen.findByText(/Connect your GitHub account first \(under Connections\)/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Go to Connections' })).toHaveAttribute('href', '/connections')
+  })
+
+  it('FR83_switch_requires_push: FORBIDDEN explains that write access to the repository is needed', async () => {
+    const { user } = await openGit(true, { appInstalledOnRepo: true })
+    connectGitHub(authDb.currentUserId ?? '')
+    githubDb.noPushRepos.add('acme/inventory')
+
+    await user.click(screen.getByRole('button', { name: 'Switch to GitHub App' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Switch to GitHub App' }))
+
+    expect(
+      await screen.findByText('Only project Owners with write access to the repository on GitHub can switch it to the GitHub App.'),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('Settings → Git: release settings (FR-64, FR-65, §4.10)', () => {
+  const releaseForm = () => screen.getByRole('form', { name: 'Release' })
+
+  it('FR65_manual_strategy_is_saved_and_shown', async () => {
+    const { user, project } = await openGit()
+    const form = releaseForm()
+    expect(within(form).getByLabelText('AIDE merges the pull request')).toBeChecked()
+
+    await user.click(within(form).getByLabelText('Merge manually on GitHub — AIDE waits and tags the merge'))
+    await user.click(within(form).getByRole('button', { name: 'Save release settings' }))
+
+    expect(await screen.findByText('Release settings saved.')).toBeInTheDocument()
+    const [patch] = requestsTo('PATCH', '/settings/git')
+    expect(patch?.body).toEqual({ mergeStrategy: 'manual' })
+    expect(project.git.mergeStrategy).toBe('manual')
+    await waitFor(() => {
+      expect(screen.getByTestId('git-merge-strategy')).toHaveTextContent('Merge manually on GitHub')
+    })
+  })
+
+  it('FR64_tag_prefix_validates_live_previews_the_tag_and_saves', async () => {
+    const { user, project } = await openGit()
+    const form = releaseForm()
+    const prefix = within(form).getByLabelText('Tag prefix')
+    expect(within(form).getByTestId('tag-preview')).toHaveTextContent('Tags will look like v0.1.0')
+
+    await user.clear(prefix)
+    await user.type(prefix, '-rel')
+    expect(await within(form).findByText('The prefix can’t start with ".", "/" or "-".')).toBeInTheDocument()
+    expect(prefix).toHaveAttribute('aria-invalid', 'true')
+
+    await user.clear(prefix)
+    await user.type(prefix, 'rel v')
+    expect(await within(form).findByText('Use only letters, digits, ".", "_", "/" or "-".')).toBeInTheDocument()
+
+    await user.clear(prefix)
+    await user.type(prefix, 'release/')
+    await waitFor(() => {
+      expect(within(form).getByTestId('tag-preview')).toHaveTextContent('Tags will look like release/0.1.0')
+    })
+    await user.click(within(form).getByRole('button', { name: 'Save release settings' }))
+
+    expect(await screen.findByText('Release settings saved.')).toBeInTheDocument()
+    expect(requestsTo('PATCH', '/settings/git').at(-1)?.body).toEqual({ mergeStrategy: 'aide_merges', tagPrefix: 'release/' })
+    expect(project.git.tagPrefix).toBe('release/')
+  })
+
+  it('FR64_an_empty_prefix_is_allowed_for_bare_tags', async () => {
+    const { user } = await openGit()
+    const form = releaseForm()
+    await user.clear(within(form).getByLabelText('Tag prefix'))
+    await waitFor(() => {
+      expect(within(form).getByTestId('tag-preview')).toHaveTextContent('Tags will look like 0.1.0')
+    })
+  })
+
+  it('FR65_tag_prefix_is_locked_with_the_reason_while_awaiting_merge', async () => {
+    signInAsOwner()
+    const project = seedProject({ git: gitSettings({ provider: 'github_pat', hasToken: true }) })
+    seedAwaitingMerge(project)
+    await openSettings('git', project)
+    const form = await screen.findByRole('form', { name: 'Release' })
+    await waitFor(() => {
+      expect(within(form).getByLabelText('Tag prefix')).toBeDisabled()
+    })
+    expect(within(form).getByText('The tag prefix can’t change while the release is awaiting its merge on GitHub.')).toBeInTheDocument()
+  })
+
+  it('FR64_a_409_conflict_on_the_tag_prefix_shows_the_release_copy', async () => {
+    const { user, project } = await openGit()
+    const form = releaseForm()
+    // A release starts after the page loaded.
+    seedRelease(project, { status: 'in_progress', completedAt: null })
+    const prefix = within(form).getByLabelText('Tag prefix')
+    await user.clear(prefix)
+    await user.type(prefix, 'rel-')
+    await user.click(within(form).getByRole('button', { name: 'Save release settings' }))
+
+    expect(await within(form).findByText(contextualErrorMessages.releaseSettings.CONFLICT)).toBeInTheDocument()
   })
 })

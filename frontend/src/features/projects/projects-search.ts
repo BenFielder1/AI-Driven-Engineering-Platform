@@ -6,10 +6,17 @@ export interface ProjectsSearch {
   search?: string
   phase?: Phase
   status?: ProjectStatus
+  /** FR-62: only projects with (true) or without (false) a version in development. */
+  hasDevelopmentVersion?: boolean
+  /** FR-74: only projects whose current version uses this preset id. */
+  preset?: string
   sortBy?: ProjectSortBy
   sortOrder?: SortOrder
   page?: number
 }
+
+/** A preset id as the API accepts it (§4.11 folder names: lowercase letters, digits and dashes). */
+const PRESET_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export const oneOf = <T extends string>(values: readonly T[], v: unknown): T | undefined =>
   typeof v === 'string' && (values as readonly string[]).includes(v) ? (v as T) : undefined
@@ -22,6 +29,13 @@ export function parseProjectsSearch(search: Record<string, unknown>): ProjectsSe
     search: text || undefined,
     phase: oneOf(phases, search.phase),
     status: oneOf(statuses, search.status),
+    hasDevelopmentVersion:
+      search.hasDevelopmentVersion === true || search.hasDevelopmentVersion === 'true'
+        ? true
+        : search.hasDevelopmentVersion === false || search.hasDevelopmentVersion === 'false'
+          ? false
+          : undefined,
+    preset: typeof search.preset === 'string' && PRESET_ID.test(search.preset) ? search.preset : undefined,
     sortBy: oneOf(['created', 'updated', 'name'] as const, search.sortBy),
     sortOrder: oneOf(['asc', 'desc'] as const, search.sortOrder),
     page: Number.isInteger(page) && page > 1 ? page : undefined,

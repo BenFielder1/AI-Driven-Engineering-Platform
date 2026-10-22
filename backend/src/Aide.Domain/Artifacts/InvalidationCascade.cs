@@ -47,6 +47,9 @@ public static class InvalidationCascade
                 new[] { ArtifactType.OptimizationPlan },
                 StepReset.StepsOfOtherPlans),
             ArtifactType.OptimizationPlan => (Array.Empty<ArtifactType>(), StepReset.None),
+
+            // FR-70: an input to every stage, auto-locked without approval; a new summary invalidates nothing.
+            ArtifactType.CodebaseSummary => (Array.Empty<ArtifactType>(), StepReset.None),
             _ => throw new ArgumentOutOfRangeException(nameof(approved), approved, null),
         };
 

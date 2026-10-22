@@ -150,7 +150,8 @@ describe('Notifications (FR-47)', () => {
     await user.click(within(section).getByLabelText('Rollback'))
     await user.click(within(section).getByRole('button', { name: 'Save preferences' }))
 
-    expect(await within(section).findByText('Notification preferences saved.')).toBeInTheDocument()
+    // SPEC 7.1: the result is a toast.
+    expect(await screen.findByText('Notification preferences saved.')).toBeInTheDocument()
     expect(requestsTo('PUT', '/api/me/notification-preferences')[0]?.body).toEqual({ mutedTypes: ['rollback'] })
     expect(within(section).getByLabelText('Rollback')).not.toBeChecked()
     expect(within(section).getByLabelText('Agent run failed')).toBeChecked()

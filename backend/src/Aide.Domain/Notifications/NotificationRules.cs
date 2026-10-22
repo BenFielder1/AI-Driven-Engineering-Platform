@@ -11,13 +11,21 @@ public enum RecipientScope
 
     /// <summary>Every member (Owner, Contributor, Viewer): outcomes everyone on the project wants to know about.</summary>
     AllMembers = 1,
+
+    /// <summary>
+    /// FR-92: one user — the owner of the connection the event names (<c>userId</c> in its payload). Personal: in-app and
+    /// email to the user's account address only, never a project channel.
+    /// </summary>
+    ConnectionOwner = 2,
 }
 
 /// <summary>
 /// Payload of a <c>notification</c> job (FR-47, FR-15): the logical notification <c>&lt;type&gt;:&lt;sourceId&gt;</c> of a
 /// project. The source is the gate for gate notifications (required, reminder, overdue) and the audit event otherwise.
 /// </summary>
-public sealed record NotificationJobPayload(Guid ProjectId, NotificationType Type, Guid SourceId);
+/// <remarks><see cref="ProjectId"/> is <c>null</c> only for personal notifications of events outside any project (a GitHub
+/// connection marked invalid, FR-92).</remarks>
+public sealed record NotificationJobPayload(Guid? ProjectId, NotificationType Type, Guid SourceId);
 
 /// <summary>FR-47, FR-15, §2: which events notify, whom, through which channel subscription, and under which key.</summary>
 public static class NotificationRules
@@ -27,14 +35,19 @@ public static class NotificationRules
     {
         EventTypes.GateCreated => NotificationType.GateRequired,
         EventTypes.GateOverdue => NotificationType.GateOverdue,
-        EventTypes.ArtifactCreated => NotificationType.ArtifactReady,
+        EventTypes.ArtifactCreated or EventTypes.ArtifactRestored => NotificationType.ArtifactReady,
         EventTypes.StepBlocked => NotificationType.StepBlocked,
         EventTypes.RunFailed => NotificationType.RunFailed,
         EventTypes.BudgetExceeded => NotificationType.BudgetExceeded,
         EventTypes.ReviewCompleted => NotificationType.ReviewCompleted,
         EventTypes.ReleaseCompleted => NotificationType.ReleaseCompleted,
         EventTypes.ReleaseFailed => NotificationType.ReleaseFailed,
+        EventTypes.ReleaseAwaitingMerge => NotificationType.ReleaseAwaitingMerge,
         EventTypes.RollbackCompleted => NotificationType.Rollback,
+        EventTypes.DeploymentFailed => NotificationType.DeploymentFailed,
+        EventTypes.DeploymentPreviewReady => NotificationType.PreviewReady,
+        EventTypes.ConnectionInvalid => NotificationType.ConnectionInvalid,
+        EventTypes.LlmBindingCleared => NotificationType.LlmBindingCleared,
         _ => null,
     };
 
@@ -44,20 +57,33 @@ public static class NotificationRules
 
     /// <summary>
     /// Recipients: Owners for what needs an Owner's action (gates, drafts to approve, blocked steps, failed runs, budget,
-    /// failed releases); every member for outcomes (review completed, release completed, rollback).
+    /// failed releases, releases awaiting a merge, failed deployments, cleared LLM bindings); every member for outcomes
+    /// (review completed, release completed, rollback, preview ready); the connection's owner alone for an invalid connection.
     /// </summary>
     public static RecipientScope Recipients(NotificationType type) => type switch
     {
-        NotificationType.ReviewCompleted or NotificationType.ReleaseCompleted or NotificationType.Rollback => RecipientScope.AllMembers,
+        NotificationType.ReviewCompleted or NotificationType.ReleaseCompleted or NotificationType.Rollback
+            or NotificationType.PreviewReady => RecipientScope.AllMembers,
+        NotificationType.ConnectionInvalid => RecipientScope.ConnectionOwner,
         _ => RecipientScope.Owners,
     };
 
+    /// <summary>FR-92: personal notifications go to one user (in-app and their account email), never to project channels.</summary>
+    public static bool IsPersonal(NotificationType type) => Recipients(type) == RecipientScope.ConnectionOwner;
+
     /// <summary>
-    /// The channel event (a project channel's <c>events</c> entry) that subscribes to <paramref name="type"/>. Channels have no
-    /// separate reminder event: a gate reminder goes to the channels subscribed to <c>gate_required</c>.
+    /// The channel event (a project channel's <c>events</c> entry) that subscribes to <paramref name="type"/>, or <c>null</c>
+    /// for personal types, which no project channel receives. Channels have no separate reminder event: a gate reminder
+    /// goes to the channels subscribed to <c>gate_required</c>.
     /// </summary>
-    public static string ChannelEvent(NotificationType type) =>
-        type == NotificationType.GateReminder ? NotificationType.GateRequired.ToWire() : type.ToWire();
+    public static string? ChannelEvent(NotificationType type) =>
+        IsPersonal(type) ? null
+        : type == NotificationType.GateReminder ? NotificationType.GateRequired.ToWire()
+        : type.ToWire();
+
+    /// <summary>The event types a project channel can subscribe to: every type but the reminder (it follows <c>gate_required</c>) and personal ones.</summary>
+    public static IReadOnlyList<NotificationType> ChannelTypes { get; } =
+        [.. Enum.GetValues<NotificationType>().Where(t => t != NotificationType.GateReminder && !IsPersonal(t))];
 
     /// <summary>The idempotency key of a logical notification: <c>&lt;type&gt;:&lt;source id&gt;</c>.</summary>
     public static string Key(NotificationType type, Guid sourceId) => $"{type.ToWire()}:{sourceId:D}";
@@ -83,15 +109,36 @@ public static class NotificationRules
     public static bool OffersApprovalLinks(GateType type) =>
         type is GateType.SpecApproval or GateType.PlanApproval or GateType.PreRelease;
 
-    /// <summary>The app page a notification opens (a relative path; never an approval token).</summary>
-    public static string LinkPath(NotificationType type, Guid projectId, string? artifactType = null) => type switch
+    /// <summary>
+    /// The app page a notification opens (a relative path; never an approval token). <paramref name="artifactType"/> picks
+    /// the artifact page of <c>artifact_ready</c>; <paramref name="deploymentTarget"/> picks the page that redeploys a failed
+    /// deployment (production: Release; preview: Review). Personal and project-less notifications open <c>/connections</c>
+    /// or the projects list.
+    /// </summary>
+    public static string LinkPath(NotificationType type, Guid? projectId, string? artifactType = null, string? deploymentTarget = null)
     {
-        NotificationType.ArtifactReady when !string.IsNullOrEmpty(artifactType) => $"/projects/{projectId:D}/artifacts/{Uri.EscapeDataString(artifactType)}",
-        NotificationType.StepBlocked => $"/projects/{projectId:D}/execution",
-        NotificationType.RunFailed or NotificationType.BudgetExceeded => $"/projects/{projectId:D}/runs",
-        NotificationType.ReviewCompleted => $"/projects/{projectId:D}/review",
-        _ => $"/projects/{projectId:D}",
-    };
+        if (type == NotificationType.ConnectionInvalid)
+        {
+            return "/connections";
+        }
+
+        if (projectId is not { } id)
+        {
+            return "/projects";
+        }
+
+        return type switch
+        {
+            NotificationType.ArtifactReady when !string.IsNullOrEmpty(artifactType) => $"/projects/{id:D}/artifacts/{Uri.EscapeDataString(artifactType)}",
+            NotificationType.StepBlocked => $"/projects/{id:D}/execution",
+            NotificationType.RunFailed or NotificationType.BudgetExceeded => $"/projects/{id:D}/runs",
+            NotificationType.ReviewCompleted or NotificationType.PreviewReady => $"/projects/{id:D}/review",
+            NotificationType.DeploymentFailed when deploymentTarget == "preview" => $"/projects/{id:D}/review",
+            NotificationType.ReleaseAwaitingMerge or NotificationType.DeploymentFailed => $"/projects/{id:D}/release",
+            NotificationType.LlmBindingCleared => $"/projects/{id:D}/settings/llm",
+            _ => $"/projects/{id:D}",
+        };
+    }
 
     /// <summary>
     /// Budget notifications are deduplicated per budget state: every refused start writes a <c>BUDGET_EXCEEDED</c> event

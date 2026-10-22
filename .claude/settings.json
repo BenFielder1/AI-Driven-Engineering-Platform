@@ -4,10 +4,12 @@
   },
   "permissions": {
     "additionalDirectories": [
-      "../AIDE-Platform-old-stack"
+      "../AIDE-Platform-old-stack",
+      "../../Space Worm Analytics"
     ],
     "deny": [
-      "Edit(//**/AIDE-Platform-old-stack/**)"
+      "Edit(//**/AIDE-Platform-old-stack/**)",
+      "Edit(//**/Space Worm Analytics/**)"
     ]
   }
 }

@@ -34,6 +34,12 @@ public static class ErrorCodes
     public const string GateNotPending = "GATE_NOT_PENDING";
     public const string InvalidDecision = "INVALID_DECISION";
 
+    /// <summary>
+    /// FR-58: an artifact version can't be restored now; the ProblemDetails <c>reason</c> says why
+    /// (<see cref="RestoreReasons"/>).
+    /// </summary>
+    public const string RestoreNotAllowed = "RESTORE_NOT_ALLOWED";
+
     /// <summary>FR-27: a refinement round is already queued or running for the project.</summary>
     public const string RefinementInProgress = "REFINEMENT_IN_PROGRESS";
 
@@ -47,16 +53,117 @@ public static class ErrorCodes
     public const string RateLimited = "RATE_LIMITED";
 
     /// <summary>
-    /// FR-42 (recorded on a failed release, not returned by an endpoint): the release tag <c>v&lt;version&gt;-aide</c> already
-    /// exists but points at a commit that doesn't contain the project branch; tags are never moved.
+    /// FR-61 (409 on <c>POST /versions</c>) and FR-64 (recorded on a failed release): the tag <c>&lt;tagPrefix&gt;&lt;version&gt;</c>
+    /// already exists in the repository on a commit that doesn't hold the release; tags are never moved (replaces v1's
+    /// <c>TAG_CONFLICT</c> and the <c>v&lt;N&gt;-aide.&lt;k&gt;</c> suffixes).
     /// </summary>
-    public const string TagConflict = "TAG_CONFLICT";
+    public const string TagExists = "TAG_EXISTS";
+
+    // Release versions (§4.10, FR-60–FR-66)
+
+    /// <summary>FR-61: not <c>MAJOR.MINOR.PATCH[-prerelease]</c>.</summary>
+    public const string VersionInvalid = "VERSION_INVALID";
+
+    /// <summary>FR-61: not strictly greater than the released version (or the version already exists).</summary>
+    public const string VersionNotGreater = "VERSION_NOT_GREATER";
+
+    /// <summary>FR-61: a version is already in development.</summary>
+    public const string VersionInProgress = "VERSION_IN_PROGRESS";
+
+    /// <summary>FR-60: the latest release is waiting for its pull request to be merged (FR-65).</summary>
+    public const string ReleaseNotMerged = "RELEASE_NOT_MERGED";
+
+    /// <summary>FR-60: a new version needs the project to be released.</summary>
+    public const string NotReleased = "NOT_RELEASED";
+
+    /// <summary>An external service (the Git host) failed or couldn't be reached while serving the request (§6).</summary>
+    public const string UpstreamError = "UPSTREAM_ERROR";
+
+    /// <summary>
+    /// FR-78: the LLM provider rejected the key (HTTP 401/403): returned (400) when a connection is saved, and recorded on a
+    /// run that failed because the bound key was rejected (the connection is then marked <c>invalid</c>).
+    /// </summary>
+    public const string CredentialInvalid = "CREDENTIAL_INVALID";
+
+    /// <summary>FR-79: an Owner tried to bind a connection that belongs to another user.</summary>
+    public const string CredentialNotOwner = "CREDENTIAL_NOT_OWNER";
+
+    // GitHub App and connections (FR-80–FR-86, §4.14)
+
+    /// <summary>FR-81: the caller has no (valid) GitHub connection; connect under Account → Connections → GitHub.</summary>
+    public const string GitHubNotConnected = "GITHUB_NOT_CONNECTED";
+
+    /// <summary>
+    /// FR-81, FR-82, FR-83: the AIDE GitHub App isn't installed on the target owner or repository. The ProblemDetails
+    /// carries an <c>installUrl</c> extension (the App's install link) when an App is registered.
+    /// </summary>
+    public const string GitHubAppNotInstalled = "GITHUB_APP_NOT_INSTALLED";
+
+    /// <summary>FR-81: a repository with that name already exists for the owner.</summary>
+    public const string RepoNameTaken = "REPO_NAME_TAKEN";
+
+    /// <summary>
+    /// §4.14: GitHub's rate limit for the token in use is exhausted. Returned as 429 with <c>Retry-After</c> (seconds until
+    /// GitHub's reset); also recorded on a background job that gave up waiting.
+    /// </summary>
+    public const string GitHubRateLimited = "GITHUB_RATE_LIMITED";
+
+    /// <summary>
+    /// FR-73 (400 on <c>POST /api/projects</c> with <c>source: import</c>): the "currently released version" tag the wizard
+    /// sent doesn't exist in the repository (checked against its tags, case-sensitively).
+    /// </summary>
+    public const string TagNotFound = "TAG_NOT_FOUND";
+
+    /// <summary>FR-74: the preset doesn't exist (until presets land, every preset id).</summary>
+    public const string PresetNotFound = "PRESET_NOT_FOUND";
+
+    /// <summary>
+    /// FR-74 (409 on <c>PATCH /api/projects/:id/preset</c>): the version's first implementation plan is locked (or nothing
+    /// is in development), so its preset can't change; a new version can pick another one.
+    /// </summary>
+    public const string PresetLocked = "PRESET_LOCKED";
+
+    // Vercel deployments (FR-87–FR-91, §4.15)
+
+    /// <summary>
+    /// FR-88 (409 on <c>PATCH /settings/deployment</c> and <c>POST /api/projects</c>): Vercel's GitHub App can't access the
+    /// project's repository. The ProblemDetails carries an <c>installUrl</c> extension (Vercel's install link) when known.
+    /// </summary>
+    public const string VercelGitNotConnected = "VERCEL_GIT_NOT_CONNECTED";
+
+    /// <summary>FR-88: the Vercel plan doesn't allow it (a Hobby account linking an organisation-owned repository).</summary>
+    public const string VercelPlanLimit = "VERCEL_PLAN_LIMIT";
+
+    /// <summary>FR-90 (409 on <c>POST /deployments/preview</c>): the project has no deployment settings (no provider bound).</summary>
+    public const string DeploymentNotConfigured = "DEPLOYMENT_NOT_CONFIGURED";
+
+    /// <summary>FR-91 (409 on promote): only a <c>ready</c> production deployment can be promoted.</summary>
+    public const string InvalidDeployment = "INVALID_DEPLOYMENT";
+
+    /// <summary>§4.15 (recorded on a deployment, not returned by an endpoint): still not finished after the 30-minute poll ceiling.</summary>
+    public const string DeploymentTimeout = "DEPLOYMENT_TIMEOUT";
+
+    /// <summary>FR-90, FR-91 (recorded on a deployment, not returned by an endpoint): Vercel reported the build or deployment
+    /// as failed, or refused to create it; the message and build-log tail say why.</summary>
+    public const string VercelError = "VERCEL_ERROR";
 
     /// <summary>FR-42, FR-43 (recorded on a failed release): Git or GitHub refused the merge, tag or push for good.</summary>
     public const string GitError = "GIT_ERROR";
 
     /// <summary>FR-44 (recorded on a release): a rollback cancelled the release before it ran.</summary>
     public const string ReleaseCancelled = "RELEASE_CANCELLED";
+
+    /// <summary>
+    /// FR-65, §4.14 (recorded on a release attempt, not returned by an endpoint): the PR stayed unmerged for the whole merge
+    /// poll (14 days). The project stays in <c>release</c>; an Owner can retry with <c>POST /release</c>.
+    /// </summary>
+    public const string MergeTimeout = "MERGE_TIMEOUT";
+
+    /// <summary>
+    /// FR-65 (recorded on a release attempt, not returned by an endpoint): the PR was closed without being merged while the
+    /// release was awaiting its merge. The project stays in <c>release</c>; an Owner can reopen it on GitHub and retry.
+    /// </summary>
+    public const string PrClosed = "PR_CLOSED";
 
     // Approval links
     public const string LinkExpired = "LINK_EXPIRED";
@@ -73,6 +180,50 @@ public static class ErrorCodes
 
     /// <summary>FR-28: the spec generator's output still misses required sections after its corrective re-run.</summary>
     public const string MissingSections = "MISSING_SECTIONS";
+
+    /// <summary>
+    /// FR-75, D-V2-13: the spec generator's output has a functional requirement without an <c>FR-n</c> ID or without a
+    /// Given/When/Then acceptance criterion (every offender in the details), still after its corrective re-run. Recorded
+    /// on the run, like <see cref="MissingSections"/>.
+    /// </summary>
+    public const string MissingRequirementIds = "MISSING_REQUIREMENT_IDS";
+
+    /// <summary>
+    /// §4.13: an iteration spec's requirement tags are invalid (an <c>FR-n</c> without exactly one of <c>[new]</c>,
+    /// <c>[changed]</c>, <c>[unchanged]</c>, <c>[removed]</c>; no <c>[new]</c>/<c>[changed]</c> at all; or a
+    /// <c>[changed]</c>/<c>[removed]</c> ID that isn't in the baseline spec), still after the corrective re-run. Recorded on the run.
+    /// </summary>
+    public const string InvalidRequirementTags = "INVALID_REQUIREMENT_TAGS";
+
+    /// <summary>
+    /// FR-76, §4.13 (a <b>warning</b>, never blocking): an iteration plan's steps don't cover (<c>covers</c>) every
+    /// <c>[new]</c>/<c>[changed]</c> requirement; the missing IDs are in the details.
+    /// </summary>
+    public const string UncoveredRequirements = "UNCOVERED_REQUIREMENTS";
+
+    /// <summary>
+    /// FR-76, §4.11 (a <b>warning</b>, never blocking): a plan step declares files outside its specialist agent's owned
+    /// paths; each offending step and file is in the details.
+    /// </summary>
+    public const string AgentScope = "AGENT_SCOPE";
+
+    /// <summary>
+    /// §4.11, §4.12 (a <b>warning</b>, never blocking): a <i>soft</i> preset ordering rule is broken (e.g. a
+    /// <c>lib/&lt;domain&gt;</c> step after an <c>app/**</c> step); hard ordering rules are <see cref="InvalidPlan"/>.
+    /// </summary>
+    public const string PlanOrder = "PLAN_ORDER";
+
+    /// <summary>
+    /// FR-89 (a <b>warning</b>, never blocking): the version's preset deploys to Vercel, the base commit has no
+    /// <c>vercel.json</c> and no plan step declares one, so nothing would stop Vercel's automatic deploys of <c>aide/**</c>.
+    /// </summary>
+    public const string MissingVercelConfig = "MISSING_VERCEL_CONFIG";
+
+    /// <summary>
+    /// FR-71: a repo tool call beyond the run's limits (25 calls, 400 KB read); returned to the agent as the tool result,
+    /// which must then answer with what it has. Unsafe tool paths reuse <see cref="Guardian.UnsafePath"/> (<c>UNSAFE_PATH</c>).
+    /// </summary>
+    public const string ToolLimit = "TOOL_LIMIT";
 
     /// <summary>FR-27: an agent's structured (JSON) output could not be read, even after its corrective re-run.</summary>
     public const string InvalidOutput = "INVALID_OUTPUT";
@@ -121,6 +272,7 @@ public static class ErrorCodes
         [ArtifactLocked] = 409,
         [GateNotPending] = 409,
         [InvalidDecision] = 400,
+        [RestoreNotAllowed] = 409,
         [RefinementInProgress] = 409,
         [InvalidPlan] = 400,
         [ReviewInProgress] = 409,
@@ -130,6 +282,26 @@ public static class ErrorCodes
         [InvalidTargetVersion] = 400,
         [RollbackBlocked] = 409,
         [RateLimited] = 429,
+        [TagExists] = 409,
+        [VersionInvalid] = 400,
+        [VersionNotGreater] = 409,
+        [VersionInProgress] = 409,
+        [ReleaseNotMerged] = 409,
+        [NotReleased] = 409,
+        [TagNotFound] = 400,
+        [PresetNotFound] = 400,
+        [PresetLocked] = 409,
+        [CredentialInvalid] = 400,
+        [CredentialNotOwner] = 403,
+        [UpstreamError] = 502,
+        [GitHubNotConnected] = 409,
+        [GitHubAppNotInstalled] = 409,
+        [RepoNameTaken] = 409,
+        [GitHubRateLimited] = 429,
+        [VercelGitNotConnected] = 409,
+        [VercelPlanLimit] = 409,
+        [DeploymentNotConfigured] = 409,
+        [InvalidDeployment] = 409,
         [LinkExpired] = 410,
         [LinkUsed] = 409,
     };

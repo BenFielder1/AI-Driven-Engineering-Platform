@@ -5,7 +5,7 @@ import type { z } from 'zod'
 
 import { ErrorSummary } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
-import { Dialog } from '../../components/ui/dialog'
+import { ModalDialog } from '../../components/ui/modal-dialog'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { applyFieldErrors, errorMessage, errorReasons } from '../../lib/errors'
@@ -22,6 +22,7 @@ const approveEffect: Record<ArtifactType, string> = {
   technical_specification: 'Any existing implementation and optimisation plans and all execution steps are invalidated.',
   implementation_plan: 'Any optimisation plan and the steps of older plan versions are invalidated.',
   optimization_plan: 'Nothing else is invalidated.',
+  codebase_summary: 'Nothing else is invalidated.',
 }
 
 export type ArtifactDecision = 'approve' | 'reject'
@@ -88,7 +89,7 @@ export function ArtifactDecisionDialog({
 
   const commentId = `artifact-${artifact.id}-comment`
   return (
-    <Dialog
+    <ModalDialog
       open
       role={action === 'reject' ? 'alertdialog' : 'dialog'}
       title={`${action === 'approve' ? 'Approve' : 'Reject'} ${label} ${version}?`}
@@ -127,6 +128,6 @@ export function ArtifactDecisionDialog({
           </Button>
         </div>
       </form>
-    </Dialog>
+    </ModalDialog>
   )
 }

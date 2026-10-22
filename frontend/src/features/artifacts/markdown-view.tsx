@@ -2,6 +2,8 @@ import { isValidElement, type ComponentPropsWithoutRef } from 'react'
 import Markdown, { defaultUrlTransform, type Components, type UrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
+import { remarkHeadingIds } from './markdown-outline'
+
 /**
  * react-markdown's default drops every URL scheme but http(s), mailto and a few others (so `javascript:` never
  * reaches the DOM). Inline `data:image/` is let through for image sources only — an `<img>` never runs script —
@@ -102,10 +104,24 @@ function SafeImage(props: ImageProps) {
  * raw HTML in the content is never rendered (no rehype-raw) and unsafe URLs (e.g. `javascript:`) are removed.
  * GitHub-flavoured Markdown (tables, task lists, strikethrough) via remark-gfm.
  */
-export function MarkdownView({ content, label }: { content: string; label: string }) {
+export function MarkdownView({
+  content,
+  label,
+  headingIds = false,
+}: {
+  content: string
+  label: string
+  /** Give headings the anchor ids of `markdownOutline` (one document per page, so ids stay unique). */
+  headingIds?: boolean
+}) {
   return (
     <article aria-label={label} className="markdown-body">
-      <Markdown remarkPlugins={[remarkGfm]} components={components} urlTransform={urlTransform} skipHtml>
+      <Markdown
+        remarkPlugins={headingIds ? [remarkGfm, remarkHeadingIds] : [remarkGfm]}
+        components={components}
+        urlTransform={urlTransform}
+        skipHtml
+      >
         {content}
       </Markdown>
     </article>

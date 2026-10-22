@@ -5,6 +5,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Aide.Infrastructure.Git;
 
+/// <summary>
+/// Who commits and tags in a working copy (author and committer). The default is AIDE (<see cref="GitCli.AuthorName"/>);
+/// FR-82: GitHub App projects commit as the App bot (<c>&lt;slug&gt;[bot]</c> with its noreply email).
+/// </summary>
+public sealed record GitCommitIdentity(string Name, string Email);
+
 /// <summary>A file as committed: its repository path and content.</summary>
 public sealed record CommittedFile(string Path, string Content);
 
@@ -74,7 +80,13 @@ public sealed record MergeResult(bool Merged, string? Sha, IReadOnlyList<string>
 /// <summary>A release tag (FR-42) and the commit it points at (peeled).</summary>
 public sealed record ReleaseTagRef(string Tag, string Commit);
 
-/// <summary>The release tags of one version on a remote (FR-42), or the failed command.</summary>
+/// <summary>
+/// FR-73 (Local import): the repository copied into a project's working copy: its checked-out default branch, that branch's
+/// head commit and every tag with its (peeled) commit.
+/// </summary>
+public sealed record ImportedRepository(string DefaultBranch, string HeadSha, IReadOnlyList<ReleaseTagRef> Tags);
+
+/// <summary>A release tag looked up on a remote (FR-64), or the failed command.</summary>
 public sealed record RemoteReleaseTags(bool Ok, IReadOnlyList<ReleaseTagRef> Tags, GitCommandResult? Failure);
 
 /// <summary>A working copy can't be used safely (e.g. a path resolves outside it or through a link).</summary>
@@ -122,6 +134,15 @@ public interface IWorkingCopies
     Task SyncFromRemoteAsync(Guid projectId, GitRemote remote, CancellationToken cancellationToken);
 
     /// <summary>
+    /// FR-73, §8 Testing (Local import): copies the Git repository at <paramref name="sourcePath"/> (a directory on the
+    /// server, already checked to be under the import root) into the project's working copy with its history and tags
+    /// (<c>git clone --no-hardlinks</c>), then removes the clone's remote so the working copy stands alone like any Local
+    /// repository. The working copy must not exist yet. Throws <see cref="WorkingCopyException"/> when the source isn't a
+    /// repository with a commit, <see cref="GitCommandException"/> when git fails.
+    /// </summary>
+    Task<ImportedRepository> ImportLocalAsync(Guid projectId, string sourcePath, CancellationToken cancellationToken);
+
+    /// <summary>
     /// FR-35 (GitHub): checks out <paramref name="branch"/>; if it doesn't exist locally it is created from the remote project
     /// branch if one exists (an earlier push), else from the remote default branch. Never resets an existing local branch.
     /// </summary>
@@ -142,6 +163,12 @@ public interface IWorkingCopies
     /// <paramref name="maxEntries"/>; unsafe paths skipped), or <c>null</c> when there is no repository or no such branch.
     /// </summary>
     Task<IReadOnlyList<Domain.Review.RepositoryFile>?> ListFilesAsync(Guid projectId, string branch, int maxEntries, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// §4.11: the paths of the files in commit <paramref name="commit"/> (path order, at most <paramref name="maxEntries"/>,
+    /// unsafe paths skipped), or <c>null</c> when there is no repository or the commit isn't in it.
+    /// </summary>
+    Task<IReadOnlyList<string>?> ListPathsAtCommitAsync(Guid projectId, string commit, int maxEntries, CancellationToken cancellationToken);
 
     /// <summary>
     /// FR-38: the committed content of <paramref name="paths"/> on <paramref name="branch"/> (not the working tree, so
@@ -184,8 +211,15 @@ public interface IWorkingCopies
     /// <summary>Whether commit <paramref name="ancestor"/> is <paramref name="descendant"/> or one of its ancestors (false if either is unknown).</summary>
     Task<bool> IsAncestorAsync(Guid projectId, string ancestor, string descendant, CancellationToken cancellationToken);
 
-    /// <summary>The local release tags of <paramref name="projectVersion"/> (base and suffixed) with their commits; empty without a repository.</summary>
-    Task<IReadOnlyList<ReleaseTagRef>> ReleaseTagsAsync(Guid projectId, int projectVersion, CancellationToken cancellationToken);
+    /// <summary>
+    /// FR-65 (Local merged by someone else): the commit on <paramref name="defaultRef"/>'s first-parent history that brought
+    /// <paramref name="head"/> in — the oldest first-parent commit that contains it (the merge commit; <paramref name="head"/>
+    /// itself after a fast-forward); <c>null</c> when <paramref name="defaultRef"/> doesn't contain it.
+    /// </summary>
+    Task<string?> FindMergeCommitAsync(Guid projectId, string defaultRef, string head, CancellationToken cancellationToken);
+
+    /// <summary>The local tag <paramref name="tag"/> with its (peeled) commit; <c>null</c> when it or the repository doesn't exist.</summary>
+    Task<ReleaseTagRef?> TagAsync(Guid projectId, string tag, CancellationToken cancellationToken);
 
     /// <summary>
     /// FR-42: creates the annotated release tag <paramref name="tag"/> on <paramref name="commit"/>. A local tag of that
@@ -194,13 +228,20 @@ public interface IWorkingCopies
     Task CreateTagAsync(Guid projectId, string tag, string commit, string message, CancellationToken cancellationToken);
 
     /// <summary>
-    /// FR-42 (GitHub): the release tags of <paramref name="projectVersion"/> on <paramref name="remote"/> (base and suffixed,
-    /// peeled commits), or a failure (redacted git output). Tags found there are fetched, so their commits can be inspected locally.
+    /// FR-64 (GitHub): the tag <paramref name="tag"/> on <paramref name="remote"/> (zero or one entry, peeled commit), or a
+    /// failure (redacted git output). A tag found there is fetched, so its commit can be inspected locally.
     /// </summary>
-    Task<RemoteReleaseTags> RemoteReleaseTagsAsync(Guid projectId, int projectVersion, GitRemote remote, CancellationToken cancellationToken);
+    Task<RemoteReleaseTags> RemoteTagAsync(Guid projectId, string tag, GitRemote remote, CancellationToken cancellationToken);
 
     /// <summary>FR-42 (GitHub): pushes the release tag to <paramref name="remote"/>. The result is returned (redacted), not thrown.</summary>
     Task<GitCommandResult> PushTagAsync(Guid projectId, string tag, GitRemote remote, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-82: commits, merges and tags in the project's working copy are made as <paramref name="identity"/> from now on
+    /// (<c>null</c>: AIDE). Set by the provider each time it prepares the working copy (in memory; prepared again after a
+    /// restart before any commit).
+    /// </summary>
+    void UseCommitIdentity(Guid projectId, GitCommitIdentity? identity);
 }
 
 internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli git, ILogger<WorkingCopies> logger) : IWorkingCopies
@@ -209,6 +250,22 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
     public const string InitialCommitMessage = "Initial commit";
 
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> Locks = new();
+
+    /// <summary>FR-82: the commit identity per working-copy root (absent: AIDE).</summary>
+    private readonly ConcurrentDictionary<string, GitCommitIdentity> _identities = new(StringComparer.Ordinal);
+
+    public void UseCommitIdentity(Guid projectId, GitCommitIdentity? identity)
+    {
+        var root = PathFor(projectId);
+        if (identity is null)
+        {
+            _identities.TryRemove(root, out _);
+        }
+        else
+        {
+            _identities[root] = identity;
+        }
+    }
 
     public string PathFor(Guid projectId) => workspaces.PathFor(projectId);
 
@@ -306,6 +363,55 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
             await RunRemoteAsync(path, ["fetch", "-q", "--no-tags", "--prune", GitRemote.Name], remote, cancellationToken);
             return 0;
+        });
+    }
+
+    public async Task<ImportedRepository> ImportLocalAsync(Guid projectId, string sourcePath, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(sourcePath);
+        return await WithLockAsync(projectId, async () =>
+        {
+            var source = Path.GetFullPath(sourcePath);
+            var isWorkTree = Directory.Exists(Path.Combine(source, ".git"));
+            var isBare = !isWorkTree && File.Exists(Path.Combine(source, "HEAD")) && Directory.Exists(Path.Combine(source, "objects"));
+            if (!isWorkTree && !isBare)
+            {
+                throw new WorkingCopyException("The directory to import is not a Git repository.");
+            }
+
+            var path = PathFor(projectId);
+            if (Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
+            {
+                throw new WorkingCopyException("The project's working copy already exists.");
+            }
+
+            Directory.CreateDirectory(workspaces.Root);
+            var safeSource = source.Replace('\\', '/');
+            await RunAsync(
+                workspaces.Root,
+                ["-c", "safe.directory=" + safeSource, "clone", "-q", "--no-hardlinks", "--origin", GitRemote.Name, "--", source, projectId.ToString("D")],
+                cancellationToken);
+            await RunAsync(path, ["remote", "remove", GitRemote.Name], cancellationToken);
+            var branch = (await RunAsync(path, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken, allowFailure: true)).StandardOutput.Trim();
+            var head = (await RunAsync(path, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], cancellationToken, allowFailure: true)).StandardOutput.Trim();
+            if (branch.Length == 0 || head.Length == 0)
+            {
+                throw new WorkingCopyException("The repository to import has no commit on its default branch.");
+            }
+
+            var listed = await RunAsync(path, ["for-each-ref", "refs/tags", "--format=%(refname:strip=2)%09%(*objectname)%09%(objectname)"], cancellationToken);
+            var tags = new List<ReleaseTagRef>();
+            foreach (var line in listed.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = line.TrimEnd('\r').Split('\t');
+                if (parts.Length == 3 && parts[0].Length > 0)
+                {
+                    tags.Add(new ReleaseTagRef(parts[0], parts[1].Length > 0 ? parts[1] : parts[2]));
+                }
+            }
+
+            LogImported(logger, projectId, tags.Count);
+            return new ImportedRepository(branch, head, tags);
         });
     }
 
@@ -478,6 +584,32 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
             }
 
             return files;
+        });
+    }
+
+    public Task<IReadOnlyList<string>?> ListPathsAtCommitAsync(Guid projectId, string commit, int maxEntries, CancellationToken cancellationToken)
+    {
+        RequireRevision(commit);
+        if (!IsRepository(projectId))
+        {
+            return Task.FromResult<IReadOnlyList<string>?>(null);
+        }
+
+        return WithLockAsync<IReadOnlyList<string>?>(projectId, async () =>
+        {
+            var root = PathFor(projectId);
+            if (await ResolveCoreAsync(root, commit, cancellationToken) is not { } resolved)
+            {
+                return null;
+            }
+
+            var listing = await RunAsync(root, ["ls-tree", "-r", "-z", "--name-only", "--full-tree", resolved], cancellationToken);
+            return
+            [
+                .. listing.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+                    .Where(p => !PathRules.IsUnsafe(PathRules.Normalize(p)))
+                    .Take(maxEntries),
+            ];
         });
     }
 
@@ -677,30 +809,75 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
             (await RunAsync(PathFor(projectId), ["merge-base", "--is-ancestor", ancestor, descendant], cancellationToken, allowFailure: true)).Succeeded);
     }
 
-    public Task<IReadOnlyList<ReleaseTagRef>> ReleaseTagsAsync(Guid projectId, int projectVersion, CancellationToken cancellationToken)
+    /// <summary>The longest first-parent history searched for the merge commit.</summary>
+    public const int MaxFirstParentCommits = 20_000;
+
+    public Task<string?> FindMergeCommitAsync(Guid projectId, string defaultRef, string head, CancellationToken cancellationToken)
     {
+        RequireRevision(defaultRef);
+        RequireRevision(head);
         if (!IsRepository(projectId))
         {
-            return Task.FromResult<IReadOnlyList<ReleaseTagRef>>([]);
+            return Task.FromResult<string?>(null);
         }
 
-        var pattern = $"refs/tags/{Domain.Releases.ReleaseRules.Tag(projectVersion)}*";
-        return WithLockAsync<IReadOnlyList<ReleaseTagRef>>(projectId, async () =>
+        return WithLockAsync(projectId, async () =>
         {
             var root = PathFor(projectId);
-            var listed = await RunAsync(root, ["for-each-ref", "--format=%(refname:strip=2)", pattern], cancellationToken);
-            var tags = new List<ReleaseTagRef>();
-            foreach (var name in listed.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            if (await ResolveCoreAsync(root, head, cancellationToken) is not { } headSha
+                || !(await RunAsync(root, ["merge-base", "--is-ancestor", headSha, defaultRef], cancellationToken, allowFailure: true)).Succeeded)
             {
-                if (Domain.Releases.ReleaseRules.IsReleaseTagOf(name, projectVersion)
-                    && await ResolveCoreAsync(root, $"refs/tags/{name}", cancellationToken) is { } commit)
+                return null;
+            }
+
+            // The first-parent chain of the default branch down to (not into) the head's history, newest first. Containing the
+            // head is monotonic along it, so a binary search finds the oldest commit that contains it: the merge.
+            var listed = await RunAsync(
+                root,
+                ["rev-list", "--first-parent", $"--max-count={MaxFirstParentCommits.ToString(System.Globalization.CultureInfo.InvariantCulture)}", defaultRef, $"^{headSha}"],
+                cancellationToken);
+            var chain = listed.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (chain.Length == 0)
+            {
+                return headSha; // the default branch is at the head (fast-forward)
+            }
+
+            int low = 0, high = chain.Length - 1, oldest = -1;
+            while (low <= high)
+            {
+                var middle = low + ((high - low) / 2);
+                if ((await RunAsync(root, ["merge-base", "--is-ancestor", headSha, chain[middle]], cancellationToken, allowFailure: true)).Succeeded)
                 {
-                    tags.Add(new ReleaseTagRef(name, commit));
+                    oldest = middle;
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle - 1;
                 }
             }
 
-            return tags;
+            if (oldest < 0)
+            {
+                return headSha;
+            }
+
+            // A fast-forward put the head itself on the chain: its first child there contains it through its first parent.
+            var firstParent = await ResolveCoreAsync(root, $"{chain[oldest]}^1", cancellationToken);
+            return firstParent == headSha ? headSha : chain[oldest];
         });
+    }
+
+    public Task<ReleaseTagRef?> TagAsync(Guid projectId, string tag, CancellationToken cancellationToken)
+    {
+        RequireTagName(tag);
+        if (!IsRepository(projectId))
+        {
+            return Task.FromResult<ReleaseTagRef?>(null);
+        }
+
+        return WithLockAsync<ReleaseTagRef?>(projectId, async () =>
+            await ResolveCoreAsync(PathFor(projectId), $"refs/tags/{tag}", cancellationToken) is { } commit ? new ReleaseTagRef(tag, commit) : null);
     }
 
     public Task CreateTagAsync(Guid projectId, string tag, string commit, string message, CancellationToken cancellationToken)
@@ -728,53 +905,50 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
         });
     }
 
-    public Task<RemoteReleaseTags> RemoteReleaseTagsAsync(Guid projectId, int projectVersion, GitRemote remote, CancellationToken cancellationToken)
+    public Task<RemoteReleaseTags> RemoteTagAsync(Guid projectId, string tag, GitRemote remote, CancellationToken cancellationToken)
     {
+        RequireTagName(tag);
         ArgumentNullException.ThrowIfNull(remote);
         return WithLockAsync(projectId, async () =>
         {
             var root = RequireRepository(projectId);
-            var listed = await git.RunAsync(root, ["ls-remote", "--tags", GitRemote.Name], remote.ConfigEnvironment, cancellationToken);
+            var listed = await git.RunAsync(root, ["ls-remote", "--tags", GitRemote.Name, $"refs/tags/{tag}"], remote.ConfigEnvironment, cancellationToken);
             if (!listed.Succeeded)
             {
                 return new RemoteReleaseTags(false, [], Redacted(listed, remote));
             }
 
             // "<sha>\trefs/tags/<tag>" and, for an annotated tag, "<commit>\trefs/tags/<tag>^{}" (the peeled commit).
-            var peeled = new Dictionary<string, string>(StringComparer.Ordinal);
-            var direct = new Dictionary<string, string>(StringComparer.Ordinal);
+            string? direct = null;
+            string? peeled = null;
             foreach (var line in listed.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 var parts = line.Split('\t', 2);
-                if (parts.Length != 2 || !parts[1].StartsWith("refs/tags/", StringComparison.Ordinal))
+                if (parts.Length != 2)
                 {
                     continue;
                 }
 
-                var name = parts[1]["refs/tags/".Length..];
-                var target = name.EndsWith("^{}", StringComparison.Ordinal) ? peeled : direct;
-                name = name.EndsWith("^{}", StringComparison.Ordinal) ? name[..^3] : name;
-                if (Domain.Releases.ReleaseRules.IsReleaseTagOf(name, projectVersion))
+                if (parts[1] == $"refs/tags/{tag}")
                 {
-                    target[name] = parts[0];
+                    direct = parts[0];
+                }
+                else if (parts[1] == $"refs/tags/{tag}^{{}}")
+                {
+                    peeled = parts[0];
                 }
             }
 
-            var tags = direct.Keys
-                .Select(name => new ReleaseTagRef(name, peeled.TryGetValue(name, out var commit) ? commit : direct[name]))
-                .OrderBy(t => t.Tag, StringComparer.Ordinal)
-                .ToList();
-            if (tags.Count == 0)
+            if (direct is null)
             {
                 return new RemoteReleaseTags(true, [], null);
             }
 
             var fetched = await git.RunAsync(
-                root,
-                ["fetch", "-q", "--no-tags", GitRemote.Name, .. tags.Select(t => $"+refs/tags/{t.Tag}:refs/tags/{t.Tag}")],
-                remote.ConfigEnvironment,
-                cancellationToken);
-            return fetched.Succeeded ? new RemoteReleaseTags(true, tags, null) : new RemoteReleaseTags(false, [], Redacted(fetched, remote));
+                root, ["fetch", "-q", "--no-tags", GitRemote.Name, $"+refs/tags/{tag}:refs/tags/{tag}"], remote.ConfigEnvironment, cancellationToken);
+            return fetched.Succeeded
+                ? new RemoteReleaseTags(true, [new ReleaseTagRef(tag, peeled ?? direct)], null)
+                : new RemoteReleaseTags(false, [], Redacted(fetched, remote));
         });
     }
 
@@ -1003,7 +1177,9 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
     private async Task<GitCommandResult> RunAsync(string root, IReadOnlyList<string> arguments, CancellationToken cancellationToken, bool allowFailure = false)
     {
-        var result = await git.RunAsync(root, arguments, cancellationToken);
+        var result = _identities.TryGetValue(root, out var identity)
+            ? await git.RunAsync(root, arguments, IdentityEnvironment(identity), cancellationToken)
+            : await git.RunAsync(root, arguments, cancellationToken);
         if (!result.Succeeded && !allowFailure)
         {
             var error = result.StandardError.Trim();
@@ -1012,6 +1188,15 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
         return result;
     }
+
+    /// <summary>The author and committer of commits, merges and tags (git's identity variables win over <c>user.name</c>).</summary>
+    private static Dictionary<string, string> IdentityEnvironment(GitCommitIdentity identity) => new(StringComparer.Ordinal)
+    {
+        ["GIT_AUTHOR_NAME"] = identity.Name,
+        ["GIT_AUTHOR_EMAIL"] = identity.Email,
+        ["GIT_COMMITTER_NAME"] = identity.Name,
+        ["GIT_COMMITTER_EMAIL"] = identity.Email,
+    };
 
     private static async Task<T> WithLockAsync<T>(Guid projectId, Func<Task<T>> action)
     {
@@ -1029,6 +1214,9 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Initialised the local repository of project {ProjectId} on {DefaultBranch}")]
     private static partial void LogInitialised(ILogger logger, Guid projectId, string defaultBranch);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Imported a local repository with {TagCount} tags into the working copy of project {ProjectId}")]
+    private static partial void LogImported(ILogger logger, Guid projectId, int tagCount);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cloned the repository of project {ProjectId} into its working copy")]
     private static partial void LogCloned(ILogger logger, Guid projectId);

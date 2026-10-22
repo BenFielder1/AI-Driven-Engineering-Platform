@@ -134,19 +134,19 @@ describe("Overview → Activity (FR-50)", () => {
         type: "PHASE_CHANGED",
         category: "transition",
         summary: "Phase changed from specification to planning (version 3)",
-        payload: { from: "specification", to: "planning", projectVersion: 3 },
+        payload: { from: "specification", to: "planning", checkpoint: 3 },
       });
       addEvent(p, {
         type: "GATE_CREATED",
         category: "gate",
         summary: "spec_approval gate created",
-        payload: { type: "spec_approval", projectVersion: 3 },
+        payload: { type: "spec_approval", checkpoint: 3 },
       });
       addEvent(p, {
         type: "GATE_APPROVED",
         category: "gate",
         summary: "escalation gate decided: rollback",
-        payload: { type: "escalation", decision: "rollback", targetVersion: 2 },
+        payload: { type: "escalation", decision: "rollback", targetCheckpoint: 2 },
       });
       addEvent(p, {
         type: "GATE_APPROVED",
@@ -155,7 +155,7 @@ describe("Overview → Activity (FR-50)", () => {
         payload: {
           type: "escalation",
           decision: "accept",
-          targetVersion: null,
+          targetCheckpoint: null,
         },
       });
       addEvent(p, {
@@ -168,7 +168,7 @@ describe("Overview → Activity (FR-50)", () => {
         type: "ROLLBACK_COMPLETED",
         category: "rollback",
         summary: "Rolled back from version 4 to version 2",
-        payload: { fromVersion: 4, targetVersion: 2 },
+        payload: { fromCheckpoint: 4, targetCheckpoint: 2 },
       });
       addEvent(p, {
         type: "ARTIFACT_APPROVED",
@@ -184,17 +184,59 @@ describe("Overview → Activity (FR-50)", () => {
     );
     expect(texts).toEqual([
       "Artifact approved: Technical specification v2",
-      "Rolled back from version 4 to version 2",
+      "Rolled back from checkpoint 4 to checkpoint 2",
       "Release approval gate approved",
       "Escalation gate decided: Accept",
-      "Escalation gate decided: Roll back to version 2",
+      "Escalation gate decided: Roll back to checkpoint 2",
       "Specification approval gate created",
-      "Phase changed from Specification to Planning (version 3)",
+      "Phase changed from Specification to Planning (checkpoint 3)",
     ]);
     const list = screen.getByRole("list", { name: "Activity" });
     expect(list).not.toHaveTextContent(
       /spec_approval|pre_release|technical_specification|from specification/,
     );
+  });
+
+  it("FR63_activity_shows_version_and_checkpoint_and_reads_legacy_keys", async () => {
+    await openOverviewAs("owner", {}, (p) => {
+      const versionId = p.releaseVersions[0]?.id ?? "";
+      // Stored before D-V2-11: the v1 keys.
+      addEvent(p, {
+        type: "PHASE_CHANGED",
+        category: "transition",
+        summary: "old",
+        payload: { from: "refinement", to: "specification", projectVersion: 2 },
+      });
+      addEvent(p, {
+        type: "ROLLBACK_COMPLETED",
+        category: "rollback",
+        summary: "old",
+        payload: { fromVersion: 5, targetVersion: 3 },
+      });
+      // v2 keys with the release version.
+      addEvent(p, {
+        type: "PHASE_CHANGED",
+        category: "transition",
+        summary: "new",
+        payload: { from: "specification", to: "planning", checkpoint: 4, releaseVersionId: versionId },
+      });
+      addEvent(p, {
+        type: "VERSION_STARTED",
+        category: "release",
+        summary: "new",
+        payload: { releaseVersionId: versionId, version: "1.2.0", baseTag: "v1.1.0" },
+      });
+    });
+
+    await screen.findByRole("list", { name: "Activity" });
+    await waitFor(() => {
+      expect(feedItems().map((li) => li.querySelector("span")?.textContent)).toEqual([
+        "Version 1.2.0 started from v1.1.0",
+        "Phase changed from Specification to Planning (0.1.0 · checkpoint 4)",
+        "Rolled back from checkpoint 5 to checkpoint 3",
+        "Phase changed from Refinement to Specification (checkpoint 2)",
+      ]);
+    });
   });
 
   it("FR-50: unknown event types and malformed payloads fall back to the server summary", async () => {

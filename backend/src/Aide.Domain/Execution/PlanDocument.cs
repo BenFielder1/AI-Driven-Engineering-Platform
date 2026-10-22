@@ -38,20 +38,20 @@ public static partial class PlanDocument
     /// Unreadable JSON and rule violations are both <c>INVALID_PLAN</c> with every reason. A generated plan may not
     /// declare protected paths (§4.6); only an Owner's edit (<see cref="ParseMarkdown"/>) may.
     /// </summary>
-    public static Result<IReadOnlyList<PlanStep>> ParseAgentOutput(string text, int? maxFilesPerStep)
+    public static Result<IReadOnlyList<PlanStep>> ParseAgentOutput(string text, int? maxFilesPerStep, PlanAgents? agents = null)
     {
         ArgumentNullException.ThrowIfNull(text);
         var json = AgentOutput.ExtractJsonObject(text);
         return json is null
             ? Invalid("The reply is not a JSON object with a \"steps\" array.")
-            : ParseAndValidate(json, maxFilesPerStep, allowProtectedPaths: false);
+            : ParseAndValidate(json, maxFilesPerStep, allowProtectedPaths: false, agents);
     }
 
     /// <summary>
     /// A stored or edited plan document (FR-18, FR-30): the JSON of its single <c>```aide-plan</c> block, validated.
     /// No block, more than one, or an invalid plan is <c>INVALID_PLAN</c>.
     /// </summary>
-    public static Result<IReadOnlyList<PlanStep>> ParseMarkdown(string markdown, int? maxFilesPerStep)
+    public static Result<IReadOnlyList<PlanStep>> ParseMarkdown(string markdown, int? maxFilesPerStep, PlanAgents? agents = null)
     {
         ArgumentNullException.ThrowIfNull(markdown);
         var blocks = BlockPattern().Matches(markdown.ReplaceLineEndings("\n"));
@@ -59,7 +59,7 @@ public static partial class PlanDocument
         {
             0 => Invalid($"The plan has no ```{BlockLanguage} block with the structured steps."),
             > 1 => Invalid($"The plan has {blocks.Count} ```{BlockLanguage} blocks; keep exactly one."),
-            _ => ParseAndValidate(blocks[0].Groups["json"].Value, maxFilesPerStep, allowProtectedPaths: true),
+            _ => ParseAndValidate(blocks[0].Groups["json"].Value, maxFilesPerStep, allowProtectedPaths: true, agents),
         };
     }
 
@@ -68,17 +68,19 @@ public static partial class PlanDocument
     /// steps. A plan whose text could forge or break the <c>```aide-plan</c> block is refused here with
     /// <c>INVALID_PLAN</c> instead of becoming a draft that can never be approved.
     /// </summary>
-    public static Result<string> RenderChecked(ArtifactType type, IReadOnlyList<PlanStep> steps, int? maxFilesPerStep)
+    public static Result<string> RenderChecked(ArtifactType type, IReadOnlyList<PlanStep> steps, int? maxFilesPerStep, PlanAgents? agents = null)
     {
         ArgumentNullException.ThrowIfNull(steps);
         var markdown = Render(type, steps);
-        var reread = ParseMarkdown(markdown, maxFilesPerStep);
+        var reread = ParseMarkdown(markdown, maxFilesPerStep, agents);
         if (reread.IsFailure)
         {
             return Result.Failure<string>(reread.Error!);
         }
 
-        if (!string.Equals(ToJson(reread.Value), ToJson(steps), StringComparison.Ordinal))
+        // Compared in validated form (the default agent, normalised covers and paths), as the reread steps are.
+        var expected = PlanValidator.Validate(steps, maxFilesPerStep: null, allowProtectedPaths: true, agents);
+        if (!string.Equals(ToJson(reread.Value), ToJson(expected.IsSuccess ? expected.Value : steps), StringComparison.Ordinal))
         {
             const string reason = "The rendered plan does not read back to the same steps; remove code fences from the step text.";
             return Result.Failure<string>(new DomainError(ErrorCodes.InvalidPlan, $"The plan is invalid: {reason}") { Details = [reason] });
@@ -117,6 +119,16 @@ public static partial class PlanDocument
                     ? "none"
                     : string.Join(", ", step.Dependencies.Select(d => "step " + d.ToString(CultureInfo.InvariantCulture))))
                 .Append('\n');
+            if (step.Covers.Count > 0)
+            {
+                sb.Append("\n**Covers:** ").Append(string.Join(", ", step.Covers.Select(c => Neutralise(OneLine(c))))).Append('\n');
+            }
+
+            if (!string.IsNullOrWhiteSpace(step.Agent) && step.Agent != PlanAgents.Generalist)
+            {
+                sb.Append("\n**Agent:** ").Append(Neutralise(OneLine(step.Agent))).Append('\n');
+            }
+
             if (!string.IsNullOrWhiteSpace(step.UserInstructions))
             {
                 sb.Append("\n**User instructions:** ").Append(Neutralise(step.UserInstructions.Trim())).Append('\n');
@@ -142,11 +154,30 @@ public static partial class PlanDocument
                 ["files"] = s.Files.Select(f => new Dictionary<string, object?> { ["path"] = f.Path, ["action"] = f.Action.ToWire() }).ToList(),
                 ["dependencies"] = s.Dependencies,
                 ["userInstructions"] = string.IsNullOrWhiteSpace(s.UserInstructions) ? null : s.UserInstructions.Trim(),
-            }).ToList(),
+            }.WithAgentAndCovers(s)).ToList(),
         };
 
         // Backticks only occur inside JSON strings, where ` means the same character.
         return JsonSerializer.Serialize(document, WriteOptions).ReplaceLineEndings("\n").Replace("`", "\\u0060", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// FR-76: <c>agent</c> is written only when it isn't the default <c>generalist</c> and <c>covers</c> only when not empty,
+    /// so v1 plan documents render byte-identically (reading them back defaults the agent again).
+    /// </summary>
+    private static Dictionary<string, object?> WithAgentAndCovers(this Dictionary<string, object?> step, PlanStep source)
+    {
+        if (!string.IsNullOrWhiteSpace(source.Agent) && source.Agent != PlanAgents.Generalist)
+        {
+            step["agent"] = source.Agent;
+        }
+
+        if (source.Covers.Count > 0)
+        {
+            step["covers"] = source.Covers;
+        }
+
+        return step;
     }
 
     /// <summary>The feedback for the corrective re-run (FR-29): every reason the plan was rejected.</summary>
@@ -159,10 +190,10 @@ public static partial class PlanDocument
             + "\nReturn the complete corrected plan as one JSON object.";
     }
 
-    private static Result<IReadOnlyList<PlanStep>> ParseAndValidate(string json, int? maxFilesPerStep, bool allowProtectedPaths)
+    private static Result<IReadOnlyList<PlanStep>> ParseAndValidate(string json, int? maxFilesPerStep, bool allowProtectedPaths, PlanAgents? agents)
     {
         var parsed = ParseJson(json);
-        return parsed.IsFailure ? parsed : PlanValidator.Validate(parsed.Value, maxFilesPerStep, allowProtectedPaths);
+        return parsed.IsFailure ? parsed : PlanValidator.Validate(parsed.Value, maxFilesPerStep, allowProtectedPaths, agents);
     }
 
     /// <summary>Reads the JSON plan shape into steps (not yet validated). Malformed JSON is <c>INVALID_PLAN</c>.</summary>
@@ -275,7 +306,41 @@ public static partial class PlanDocument
             reasons.Add($"{name}: \"dependencies\" must be an array of step numbers.");
         }
 
-        return new PlanStep(number, title, task, files, dependencies, string.IsNullOrWhiteSpace(userInstructions) ? null : userInstructions.Trim());
+        var agent = StringOf(item, "agent");
+        if (item.TryGetProperty("agent", out var agentElement) && agentElement.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+        {
+            reasons.Add($"{name}: \"agent\" must be a string.");
+        }
+
+        var covers = new List<string>();
+        if (item.TryGetProperty("covers", out var coversElement) && coversElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var id in coversElement.EnumerateArray())
+            {
+                if (id.ValueKind == JsonValueKind.String && id.GetString() is { } text)
+                {
+                    covers.Add(text.Trim());
+                }
+                else
+                {
+                    reasons.Add($"{name} has a \"covers\" entry that is not a requirement ID string.");
+                }
+            }
+        }
+        else if (item.TryGetProperty("covers", out var otherCovers) && otherCovers.ValueKind != JsonValueKind.Null)
+        {
+            reasons.Add($"{name}: \"covers\" must be an array of requirement IDs (FR-n).");
+        }
+
+        return new PlanStep(
+            number,
+            title,
+            task,
+            files,
+            dependencies,
+            string.IsNullOrWhiteSpace(userInstructions) ? null : userInstructions.Trim(),
+            string.IsNullOrWhiteSpace(agent) ? null : agent.Trim(),
+            covers);
     }
 
     private static string? StringOf(JsonElement obj, string name) =>

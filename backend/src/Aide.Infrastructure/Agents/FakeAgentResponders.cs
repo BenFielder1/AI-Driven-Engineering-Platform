@@ -199,7 +199,10 @@ public sealed partial class FakeIdeaRefinementResponder : IFakeAgentResponder
 
 /// <summary>
 /// Fake Spec Generator (FR-28, D13): a technical specification of the project request with all eleven required sections,
-/// a <c>### Dependencies</c> list and REST endpoints for the project's main resource.
+/// a <c>### Dependencies</c> list and REST endpoints for the project's main resource. Every requirement has an <c>FR-n</c>
+/// id and a Given/When/Then criterion (FR-75). In iterations (<c>&lt;spec_mode&gt;</c> <c>new_version</c> or
+/// <c>import_first_version</c>, §4.13) the spec is cumulative: FR-1–FR-4 are <c>[unchanged]</c>, one <c>[new]</c>
+/// requirement (numbered after every baseline id) carries the version's request, and "Changes in this version" lists it.
 /// </summary>
 public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
 {
@@ -214,23 +217,58 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
         var r = FakePrompt.Resource(name);
         var rs = FakePrompt.Plural(r);
         var entity = FakePrompt.Capitalise(r);
+        var mode = FakePrompt.Tag(request, "spec_mode");
+        var iteration = mode is Domain.Specs.SpecValidationContext.NewVersionMode or Domain.Specs.SpecValidationContext.ImportFirstVersionMode;
+        var tag = iteration ? " [unchanged]" : string.Empty;
+        var newId = 5;
+        foreach (var id in Domain.Specs.RequirementParser.Parse(FakePrompt.Tag(request, "baseline_specification")).Ids)
+        {
+            if (int.TryParse(id.AsSpan(3), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number) && number >= newId)
+            {
+                newId = number + 1;
+            }
+        }
+
+        var newRequirement = iteration
+            ? $"\n- **FR-{newId}** [new] {summary} Given the existing {rs}, when a user uses this version's new capability, then it works as requested and existing behaviour is unchanged."
+            : string.Empty;
+        var changes = iteration
+            ? $"\n\n## Changes in this version\n- [new] FR-{newId}: {summary}\n- Every other requirement is unchanged."
+            : string.Empty;
+
+        // FR-75: with a preset, the stack, dependencies and endpoints are the Fake specialists' (FakePresetScripts), so the
+        // review's deterministic checks match what they generate.
+        var preset = FakePrompt.PresetId(request) is not null;
+        var architecture = preset
+            ? "A Next.js (App Router) app in TypeScript strict with Tailwind; thin Zod-validated route handlers under app/api."
+            : "A Node.js 22 HTTP service using Express 5, with an in-process data layer behind a repository module.";
+        var dependencies = preset
+            ? string.Join("\n", FakePresetScripts.Dependencies.Concat(FakePresetScripts.DevDependencies).Select(d => $"- {d.Name}"))
+            : "- express\n- jest\n- supertest";
+        var endpoints = preset
+            ? string.Join("\n", FakePresetScripts.Endpoints(rs).Select(e => $"| {e.Method} | {e.Path} | {(e.Method == "POST" ? $"201 {r}" : e.Method == "DELETE" ? "204" : "200")} | 400, 404 |"))
+            : $"| GET | /api/{rs} | 200 list | — |\n| POST | /api/{rs} | 201 {r} | 400 |\n| GET | /api/{rs}/{{id}} | 200 {r} | 404 |\n| PUT | /api/{rs}/{{id}} | 200 {r} | 400, 404 |\n| DELETE | /api/{rs}/{{id}} | 204 | 404 |";
+        var testing = preset ? "Vitest and Testing Library for units and route handlers, Playwright end to end." : "Jest and Supertest";
+
+        // FR-75: a preset's extra sections, after the eleven (and before "Changes in this version").
+        var presetSections = string.Concat(FakePrompt.PresetSpecSections(request).Select(title =>
+            $"\n\n## {title}\n{title} for {name}, following the preset's guidance and the requirements above."));
+        changes = presetSections + changes;
         return $"""
             ## 1. Overview
             {name}: {summary} Users manage {rs} through a JSON REST API. Non-goals: third-party integrations.
 
             ## 2. Functional Requirements
-            - **FR-1** Create a {r}. Given a valid title, when it is posted, then it is stored and returned with 201.
-            - **FR-2** List {rs}, newest first, with optional filtering.
-            - **FR-3** View, update and delete a {r} by id; an unknown id returns 404.
-            - **FR-4** Invalid input returns 400 with the field errors.
+            - **FR-1**{tag} Create a {r}. Given a valid title, when it is posted, then it is stored and returned with 201.
+            - **FR-2**{tag} List {rs}, newest first, with optional filtering. Given saved {rs}, when the list is requested, then they are returned newest first.
+            - **FR-3**{tag} View, update and delete a {r} by id. Given an unknown id, when it is requested, then 404 is returned.
+            - **FR-4**{tag} Invalid input returns 400 with the field errors. Given a blank title, when it is posted, then 400 lists the field errors.{newRequirement}
 
             ## 3. Technical Architecture
-            A Node.js 22 HTTP service using Express 5, with an in-process data layer behind a repository module.
+            {architecture}
 
             ### Dependencies
-            - express
-            - jest
-            - supertest
+            {dependencies}
 
             ## 4. Data Models
             **{entity}**: `id` (string, required, unique), `title` (string, required, 1–200 chars), `details` (string, optional), `createdAt`, `updatedAt` (timestamps, required).
@@ -238,11 +276,7 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
             ## 5. API Contracts
             | Method | Path | Success | Errors |
             | --- | --- | --- | --- |
-            | GET | /api/{rs} | 200 list | — |
-            | POST | /api/{rs} | 201 {r} | 400 |
-            | GET | /api/{rs}/{"{id}"} | 200 {r} | 404 |
-            | PUT | /api/{rs}/{"{id}"} | 200 {r} | 400, 404 |
-            | DELETE | /api/{rs}/{"{id}"} | 204 | 404 |
+            {endpoints}
 
             ## 6. Feature Specifications
             Titles are trimmed; empty titles are rejected. Updates replace title and details and refresh `updatedAt`.
@@ -254,13 +288,13 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
             No authentication in the first release (single user, local deployment). All input is validated; errors never echo internals.
 
             ## 9. Testing Strategy
-            Unit tests for the {r} model and integration tests for every endpoint with Jest and Supertest.
+            Unit tests for the {r} model and integration tests for every endpoint with {testing}.
 
             ## 10. Deployment & Infrastructure
             `npm start` runs the server on `PORT` (default 3000). Configuration comes from environment variables; no secrets are committed.
 
             ## 11. Open Questions
-            - Persistence beyond memory: default to a file-backed store if needed.
+            - Persistence beyond memory: default to a file-backed store if needed.{changes}
             """;
     }
 }
@@ -268,6 +302,7 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
 /// <summary>
 /// Fake Plan Generator (FR-29, D13): a valid four-step plan for the project's main resource, as the JSON the prompt asks
 /// for. Its files are ordinary repository files (no protected paths), so the Local Git provider can commit them later.
+/// FR-76: with a shipped preset in the prompt, the preset's scripted plan instead (<see cref="FakePresetScripts.Plan"/>).
 /// </summary>
 public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
 {
@@ -279,23 +314,35 @@ public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
         var name = FakePrompt.Title(FakePrompt.Tag(request, "project_request"), "the project");
         var r = FakePrompt.Resource(name);
         var rs = FakePrompt.Plural(r);
+        // FR-76, §4.13: steps list the requirements they cover; an iteration's new or changed ones are covered by the API step.
+        var scope = Domain.Specs.RequirementParser.Parse(FakePrompt.Tag(request, "technical_specification")).NewOrChangedIds;
+        string[] apiCovers = scope.Count > 0 ? [.. scope] : ["FR-1", "FR-2", "FR-3", "FR-4"];
+        string[] modelCovers = scope.Count > 0 ? [] : ["FR-1", "FR-4"];
+        if (FakePrompt.PresetId(request) is { } presetId
+            && FakePresetScripts.Plan(presetId, r, rs, [.. scope], FakePrompt.RepoHasCode(request)) is { } presetSteps)
+        {
+            return JsonSerializer.Serialize(new { steps = presetSteps });
+        }
+
         var steps = new object[]
         {
-            Step(1, "Project skeleton and configuration", $"Create the Node.js project for {name}: package.json with start and test scripts, a README and an Express server entry point listening on PORT.", [], ("package.json", "create"), ("README.md", "create"), ("src/server.js", "create")),
-            Step(2, $"{FakePrompt.Capitalise(r)} model and validation", $"Implement the {r} model with validation of title and details, and an in-memory repository (FR-1, FR-4), with unit tests.", [1], ($"src/models/{r}.js", "create"), ($"test/{r}.test.js", "create")),
-            Step(3, $"{FakePrompt.Capitalise(rs)} REST API", $"Add the /api/{rs} routes for create, list, view, update and delete (FR-1–FR-4) and mount them in the server, with integration tests.", [1, 2], ($"src/routes/{rs}.js", "create"), ("src/server.js", "modify"), ($"test/{rs}.api.test.js", "create")),
-            Step(4, "API documentation", $"Document every /api/{rs} endpoint with examples in docs/api.md and link it from the README.", [1, 3], ("docs/api.md", "create"), ("README.md", "modify")),
+            Step(1, "Project skeleton and configuration", $"Create the Node.js project for {name}: package.json with start and test scripts, a README and an Express server entry point listening on PORT.", [], [], ("package.json", "create"), ("README.md", "create"), ("src/server.js", "create")),
+            Step(2, $"{FakePrompt.Capitalise(r)} model and validation", $"Implement the {r} model with validation of title and details, and an in-memory repository (FR-1, FR-4), with unit tests.", [1], modelCovers, ($"src/models/{r}.js", "create"), ($"test/{r}.test.js", "create")),
+            Step(3, $"{FakePrompt.Capitalise(rs)} REST API", $"Add the /api/{rs} routes for create, list, view, update and delete (FR-1–FR-4) and mount them in the server, with integration tests.", [1, 2], apiCovers, ($"src/routes/{rs}.js", "create"), ("src/server.js", "modify"), ($"test/{rs}.api.test.js", "create")),
+            Step(4, "API documentation", $"Document every /api/{rs} endpoint with examples in docs/api.md and link it from the README.", [1, 3], [], ("docs/api.md", "create"), ("README.md", "modify")),
         };
         return JsonSerializer.Serialize(new { steps });
     }
 
-    private static object Step(int number, string title, string task, int[] dependencies, params (string Path, string Action)[] files) => new
+    private static object Step(int number, string title, string task, int[] dependencies, string[] covers, params (string Path, string Action)[] files) => new
     {
         number,
         title,
         task,
         files = files.Select(f => new { path = f.Path, action = f.Action }),
         dependencies,
+        covers,
+        agent = "generalist",
         userInstructions = (string?)null,
     };
 }
@@ -303,7 +350,8 @@ public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
 /// <summary>
 /// Fake Code Generator (FR-31, D13): implements the requested step by writing exactly its declared files (read from the
 /// prompt's <c>&lt;declared_files&gt;</c> list), with deterministic content per file type, so execution runs end to end with
-/// the Fake and Local providers. The content never matches a secret pattern, so the Guardian accepts it.
+/// the Fake and Local providers. The content never matches a secret pattern, so the Guardian accepts it. FR-76: a specialist
+/// step (a preset role in the prompt) writes the preset's scripted files where it has them (<see cref="FakePresetScripts.Content"/>).
 /// </summary>
 public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
 {
@@ -320,9 +368,14 @@ public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
             : 1;
         var title = FakePrompt.Tag(request, "step_title") is { Length: > 0 } t ? t : $"Step {number}";
         var name = FakePrompt.Title(FakePrompt.Tag(request, "project_request"), "project");
+        var specialist = FakePrompt.SpecialistKey(request);
         var files = FilePattern().Matches(FakePrompt.Tag(request, "declared_files"))
             .Select(f => (Path: f.Groups["path"].Value.Trim(), Action: f.Groups["action"].Value))
-            .Select(f => new { path = f.Path, content = Content(f.Path, f.Action, name, number, title) })
+            .Select(f => new
+            {
+                path = f.Path,
+                content = (specialist is null ? null : FakePresetScripts.Content(specialist, f.Path, name, number, title)) ?? Content(f.Path, f.Action, name, number, title),
+            })
             .ToList();
         return JsonSerializer.Serialize(new
         {
@@ -386,6 +439,9 @@ public sealed record FakeCodeReviewScript
 
     /// <summary>When set, the reply for every cycle (e.g. invalid output to exercise the corrective re-run).</summary>
     public string? RawReply { get; init; }
+
+    /// <summary>§4.13: regressions reported in every cycle, as (requirement id, description); none by default.</summary>
+    public IReadOnlyList<(string RequirementId, string Description)> Regressions { get; init; } = [];
 }
 
 /// <summary>
@@ -431,6 +487,7 @@ public sealed partial class FakeCodeReviewResponder(FakeCodeReviewScript script)
                 : [],
             missingFeatures = Array.Empty<object>(),
             driftAreas = drift.Select((severity, i) => new { area = $"Area {i + 1}", severity, description = $"Fake drift area {i + 1} in cycle {cycle}." }),
+            regressions = script.Regressions.Select(r => new { requirementId = r.RequirementId, category = "feature_coverage", description = r.Description, evidence = file }),
             optimizationPlan = new
             {
                 steps = Enumerable.Range(1, stepCount).Select(k => new
@@ -452,4 +509,46 @@ public sealed partial class FakeCodeReviewResponder(FakeCodeReviewScript script)
 
     [GeneratedRegex(@"^- (?<path>[^\s(]+)", RegexOptions.CultureInvariant | RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex FilePattern();
+}
+
+/// <summary>
+/// Fake Repository Analyst (FR-70, D13): a codebase summary with the eight required sections, naming the project, the
+/// base it analysed and the version request. The Fake provider's tool script explores the snapshot first (FR-71).
+/// </summary>
+public sealed class FakeRepositoryAnalystResponder : IFakeAgentResponder
+{
+    public AgentKind Agent => AgentKind.RepositoryAnalyst;
+
+    public string Respond(LlmRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var name = FakePrompt.Tag(request, "project_name") is { Length: > 0 } n ? n : "the project";
+        var baseText = FakePrompt.Tag(request, "base") is { Length: > 0 } b ? b : "the default branch";
+        var versionRequest = FakePrompt.Tag(request, "version_request") is { Length: > 0 } v ? FakePrompt.FirstSentence(v) : "No request given.";
+        return $"""
+            ## Overview
+            {name} is an existing codebase analysed at {baseText}. This version's request: {versionRequest}
+
+            ## Stack & Dependencies
+            Determined from the repository manifests; see the README at the repository root.
+
+            ## Structure
+            Source code, tests and documentation live in top-level folders of the repository.
+
+            ## Key Modules
+            The modules under the source folder implement the existing features.
+
+            ## Data & APIs
+            Data shapes and endpoints are defined in the source modules.
+
+            ## Conventions
+            Follow the existing file layout, naming and error handling.
+
+            ## Tests & CI
+            Tests live next to or under the test folder; keep them passing.
+
+            ## Notable Risks
+            Changes in this version must keep the existing behaviour working.
+            """;
+    }
 }

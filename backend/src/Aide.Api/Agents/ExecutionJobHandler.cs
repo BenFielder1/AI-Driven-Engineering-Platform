@@ -1,6 +1,7 @@
 using System.Globalization;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
+using Aide.Api.Features.Presets;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
@@ -48,6 +49,9 @@ public interface IExecutionCompletionHook
 /// <c>EXECUTION_COMPLETED</c> and calls <see cref="IExecutionCompletionHook"/>. Rejected: <c>STEP_REJECTED</c> with every
 /// violation; the fourth rejection blocks the step (<c>STEP_BLOCKED</c>) and raises an escalation gate (FR-33).</item>
 /// </list>
+/// FR-76: with a preset each step runs as its specialist (<see cref="AgentRunRequest.SpecialistAgentKey"/>: the run is
+/// <c>code_generator</c> with <c>agent_key</c> = the step's agent and the specialist prompt), and the Guardian adds the
+/// preset's protected paths (existing-on-base ones checked against the version's base commit).
 /// </summary>
 public sealed partial class ExecutionJobHandler(
     AideDbContext db,
@@ -57,6 +61,7 @@ public sealed partial class ExecutionJobHandler(
     IWorkingCopies workingCopies,
     LifecycleWriter writer,
     IExecutionCompletionHook completion,
+    VersionPresetReader presets,
     TimeProvider time,
     ILogger<ExecutionJobHandler> logger) : IJobHandler
 {
@@ -98,6 +103,7 @@ public sealed partial class ExecutionJobHandler(
         }
 
         var working = prepared.Value;
+        var preset = await presets.CurrentAsync(project.Id, cancellationToken);
         var existing = await Git(() => workingCopies.FindStepCommitAsync(project.Id, working.Branch, step.Id, cancellationToken));
         if (!resuming && !await BeginAttemptAsync(project, step, cancellationToken))
         {
@@ -109,26 +115,27 @@ public sealed partial class ExecutionJobHandler(
             // D17 redelivery: the warnings are those of the committed files, not of an earlier rejected attempt.
             LogAlreadyCommitted(logger, existing.Sha);
             var committed = existing.Files.Select(f => new ProducedFile(f.Path, f.Content)).ToList();
-            var check = ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, step.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], committed, project.MaxFilesPerStep));
-            await CompleteAsync(project.Id, planId, step, steps, existing, [.. check.Warnings], working, cancellationToken);
+            var check = ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, step.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], committed, project.MaxFilesPerStep, preset.Preset, preset.ExistsOnBase));
+            var runId = await StepAttemptRecorder.AttemptRunIdAsync(db, job.Id, step, cancellationToken);
+            await CompleteAsync(project.Id, planId, step, steps, existing, [.. check.Warnings], working, runId, cancellationToken);
             return;
         }
 
         var outcome = await runner.RunAsync(await RequestAsync(job, project, planId, step, steps, cancellationToken), cancellationToken);
         var reply = CodeGeneration.Parse(outcome.Text);
         var result = reply.IsSuccess
-            ? ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, reply.Value.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], reply.Value.Files, project.MaxFilesPerStep))
+            ? ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, reply.Value.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], reply.Value.Files, project.MaxFilesPerStep, preset.Preset, preset.ExistsOnBase))
             : new GuardianResult([CodeGeneration.UnreadableViolation(reply.Error!)]);
         if (!result.Accepted)
         {
-            await RejectAsync(project.Id, step, result, cancellationToken);
+            await RejectAsync(project.Id, step, result, outcome.RunId, cancellationToken);
             return;
         }
 
         var message = CodeGeneration.CommitMessage(step.StepNumber, step.Title, reply.Value.Files.Select(f => f.Path), step.Id);
         var normalised = reply.Value.Files.Select(f => new ProducedFile(PathRules.Normalize(f.Path), f.Content)).ToList();
         var commit = await Git(() => workingCopies.CommitStepAsync(project.Id, working.Branch, step.Id, normalised, message, cancellationToken));
-        await CompleteAsync(project.Id, planId, step, steps, commit!, [.. result.Warnings], working, cancellationToken);
+        await CompleteAsync(project.Id, planId, step, steps, commit!, [.. result.Warnings], working, outcome.RunId, cancellationToken);
     }
 
     /// <summary>The next step to start, or <c>null</c> when paused, blocked, out of budget or nothing is runnable.</summary>
@@ -218,6 +225,7 @@ public sealed partial class ExecutionJobHandler(
     {
         var projectRequest = await inputs.CurrentAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
         var spec = await inputs.CurrentAsync(project.Id, ArtifactType.TechnicalSpecification, cancellationToken);
+        var summary = await inputs.CurrentAsync(project.Id, ArtifactType.CodebaseSummary, cancellationToken);
         var plan = await db.Artifacts.AsNoTracking().FirstAsync(a => a.Id == planId, cancellationToken);
         var files = await Git(() => workingCopies.ReadAsync(project.Id, step.DeclaredFiles.Select(f => f.Path), cancellationToken));
         var rules = await Git(() => workingCopies.ReadRulesAsync(project.Id, cancellationToken));
@@ -228,12 +236,16 @@ public sealed partial class ExecutionJobHandler(
             Agent = AgentKind.CodeGenerator,
             Job = job,
             StepId = step.Id,
-            RunKey = $"step-{step.Id:N}-attempt-{step.Attempt.ToString(CultureInfo.InvariantCulture)}",
+            RunKey = StepAttemptRecorder.RunKey(step.Id, step.Attempt),
+
+            // FR-76: the step runs as its specialist (with a preset whose catalogue has the step's agent).
+            SpecialistAgentKey = step.AgentKey,
             Inputs = new Dictionary<string, string?>
             {
                 ["PROJECT_REQUEST"] = projectRequest?.Content,
                 ["TECHNICAL_SPECIFICATION"] = spec?.Content,
                 ["IMPLEMENTATION_PLAN"] = planView,
+                ["CODEBASE_SUMMARY"] = summary?.Content,
                 ["PROJECT_RULES"] = CodeGeneration.ProjectRules(project.MaxFilesPerStep, rules),
                 ["MAX_FILES_PER_STEP"] = project.MaxFilesPerStep.ToString(CultureInfo.InvariantCulture),
                 ["STEP_NUMBER"] = step.StepNumber.ToString(CultureInfo.InvariantCulture),
@@ -243,8 +255,11 @@ public sealed partial class ExecutionJobHandler(
                 ["STEP_USER_INSTRUCTIONS"] = step.UserInstructions,
                 ["EXISTING_CODE"] = CodeGeneration.ExistingCode(files!),
             },
-            InputArtifacts = [.. new[] { projectRequest, spec, plan }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
+            InputArtifacts = [.. new[] { projectRequest, spec, plan, summary }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = CodeGeneration.RetryFeedback(step.Violations),
+
+            // FR-71: the code generator reads the project branch's working tree through the repo tools.
+            Repo = RepoScope.WorkingTree,
         };
     }
 
@@ -256,6 +271,7 @@ public sealed partial class ExecutionJobHandler(
         StepCommitResult commit,
         List<GuardianViolation> warnings,
         PreparedWorkingCopy working,
+        Guid? agentRunId,
         CancellationToken cancellationToken)
     {
         // FR-34: push after the commit (GitHub). A failed push doesn't undo the step: the commit is on the project branch,
@@ -285,6 +301,7 @@ public sealed partial class ExecutionJobHandler(
         step.FileManifest = CodeGeneration.Manifest(commit.Files.Select(f => new ProducedFile(f.Path, f.Content)), step.DeclaredFiles);
         step.Violations = warnings.Count == 0 ? null : warnings;
         step.CompletedAt = now;
+        await StepAttemptRecorder.RecordAsync(db, step, StepAttemptOutcome.Accepted, agentRunId, [], warnings, step.FileManifest, now, cancellationToken);
         db.AddEvent(
             EventTypes.StepCompleted,
             projectId,
@@ -319,12 +336,13 @@ public sealed partial class ExecutionJobHandler(
         LogStepCompleted(logger, step.StepNumber, commit.Sha, warnings.Count);
     }
 
-    private async Task RejectAsync(Guid projectId, ExecutionStep step, GuardianResult result, CancellationToken cancellationToken)
+    private async Task RejectAsync(Guid projectId, ExecutionStep step, GuardianResult result, Guid agentRunId, CancellationToken cancellationToken)
     {
         var now = time.GetUtcNow();
         var outcome = StepRules.OnRejected(step.Attempt);
         step.Status = outcome.NewStatus;
         step.Violations = result.Violations;
+        await StepAttemptRecorder.RecordAsync(db, step, StepAttemptOutcome.Rejected, agentRunId, result.Errors, result.Warnings, [], now, cancellationToken);
         db.AddEvent(
             EventTypes.StepRejected,
             projectId,
@@ -511,6 +529,10 @@ public sealed partial class ExecutionJobEndedHook(TimeProvider time, ILogger<Exe
             }
 
             step.Status = change.NewStatus;
+
+            // D-V2-14: the interrupted attempt is recorded as an error (with its run, when the provider was called).
+            var runId = await StepAttemptRecorder.AttemptRunIdAsync(db, job.JobId, step, cancellationToken);
+            await StepAttemptRecorder.RecordAsync(db, step, StepAttemptOutcome.Error, runId, [], [], [], now, cancellationToken, keepExisting: true);
             db.AddEvent(
                 EventTypes.StepRejected,
                 projectId,
@@ -543,6 +565,7 @@ public static class ExecutionJobServiceCollectionExtensions
     {
         services.AddScoped<WorkingCopyPreparer>();
         services.AddScoped<ExecutionService>();
+        services.AddScoped<ExecutionRunReader>();
         services.AddScoped<IJobSucceededHook, ExecutionContinuationHook>();
         services.AddScoped<IJobEndedHook, ExecutionJobEndedHook>();
         services.AddJobHandler<ExecutionJobHandler>(JobTypes.Execution);

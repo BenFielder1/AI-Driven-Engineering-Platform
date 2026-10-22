@@ -9,11 +9,11 @@ namespace Aide.Api.Features.Gates;
 /// <summary>
 /// An approval gate (§4.2, FR-12–FR-15). <c>artifactId</c>, <c>artifactType</c> and <c>artifactVersion</c> identify
 /// the gated artifact (spec and plan gates). Escalation gates carry <c>escalationReason</c> and, once decided,
-/// <c>decision</c> (and <c>targetVersion</c> for a rollback). <c>reason</c> is a human-readable context line.
+/// <c>decision</c> (and <c>targetCheckpoint</c> for a rollback; D-V2-11: was <c>targetVersion</c>). <c>reason</c> is a human-readable context line.
 /// <c>decidedBy</c>, <c>decidedAt</c> and <c>comment</c> are set once the gate is decided. <c>overdue</c> is true
 /// 72 hours after creation while pending (FR-15); <c>remindedAt</c> is when its 24-hour reminder was sent. An escalation raised by a blocked execution step (FR-33) has
 /// <c>escalationReason</c> <c>step_blocked</c> and names the step in <c>executionStepId</c> and <c>stepNumber</c>
-/// (both <c>null</c> otherwise).
+/// (both <c>null</c> otherwise). <c>releaseVersionId</c> is the release version the gate belongs to (§4.10).
 /// </summary>
 public sealed record GateDto(
     Guid Id,
@@ -29,16 +29,17 @@ public sealed record GateDto(
     ActorDto? DecidedBy,
     string? Comment,
     EscalationDecision? Decision,
-    int? TargetVersion,
+    int? TargetCheckpoint,
     bool Overdue,
     DateTimeOffset? RemindedAt,
     Guid? ExecutionStepId,
-    int? StepNumber);
+    int? StepNumber,
+    Guid ReleaseVersionId);
 
 /// <summary>
 /// Approve or reject a pending gate (FR-13, FR-14). <c>comment</c> is optional (on reject it is the feedback for the
 /// re-run agent). Escalation gates are approved with a <c>decision</c>; <c>rollback</c> also needs a
-/// <c>targetVersion</c>. Other gates take neither (400 <c>INVALID_DECISION</c>), and escalation gates can't be rejected.
+/// <c>targetCheckpoint</c> (a checkpoint of the release version in development). Other gates take neither (400 <c>INVALID_DECISION</c>), and escalation gates can't be rejected.
 /// </summary>
 public sealed record DecideGateRequest
 {
@@ -48,7 +49,7 @@ public sealed record DecideGateRequest
     public EscalationDecision? Decision { get; init; }
 
     [Range(1, int.MaxValue)]
-    public int? TargetVersion { get; init; }
+    public int? TargetCheckpoint { get; init; }
 }
 
 /// <summary>Request limits of the gates feature.</summary>

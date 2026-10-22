@@ -113,7 +113,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Which sign-in providers are configured. */
+        /** Which sign-in providers are configured, and how GitHub sign-in works (githubMode: app, oauth or none; D-V2-7). */
         get: operations["GetAuthProviders"];
         put?: never;
         post?: never;
@@ -147,7 +147,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Redirects to GitHub to sign in (FR-2). 404 when GitHub sign-in isn't configured. */
+        /** Redirects to GitHub to sign in (FR-2). Once an AIDE GitHub App exists this uses its user authorization flow with PKCE, which also connects GitHub (FR-80, FR-81, D-V2-7). 404 when GitHub sign-in isn't configured. */
         get: operations["StartGitHubSignIn"];
         put?: never;
         post?: never;
@@ -221,6 +221,199 @@ export interface paths {
         post?: never;
         /** Revoke one of the caller's tokens (idempotent). Browser session only. */
         delete: operations["RevokeApiToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/llm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's LLM connections (no keys: provider, label, last 4, status, bound projects) and the providers that need no key. */
+        get: operations["ListLlmConnections"];
+        put?: never;
+        /** Add an Anthropic or OpenAI key. It is checked with the provider first: 400 CREDENTIAL_INVALID if rejected (nothing saved), 502 UPSTREAM_ERROR if the provider can't be reached. Browser session only. */
+        post: operations["CreateLlmConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/llm/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete one of the caller's LLM connections. Projects it was bound to lose their binding (LLM_BINDING_CLEARED); their runs then fail with PROVIDER_NOT_CONFIGURED. Browser session only. */
+        delete: operations["DeleteLlmConnection"];
+        options?: never;
+        head?: never;
+        /** Rename one of the caller's LLM connections. Browser session only. */
+        patch: operations["RenameLlmConnection"];
+        trace?: never;
+    };
+    "/api/me/connections/llm/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check the key with the provider again and record the result (status valid or invalid, lastValidatedAt). 502 UPSTREAM_ERROR if the provider can't be reached (status unchanged). Browser session only. */
+        post: operations["TestLlmConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/vercel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's Vercel connections, newest first (no tokens: label, last 4, account, team, scope, expiry, status, bound projects). */
+        get: operations["ListVercelConnections"];
+        put?: never;
+        /** Add a Vercel access token. It is checked with Vercel first (GET /v2/user, and the team for a team-scoped token): 400 CREDENTIAL_INVALID if rejected (nothing saved), 502 UPSTREAM_ERROR if Vercel can't be reached. Browser session only. */
+        post: operations["CreateVercelConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/vercel/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete one of the caller's Vercel connections. Projects it was bound to lose their binding (their deployment settings and history stay); new deployments then fail with DEPLOYMENT_NOT_CONFIGURED until an Owner binds another. Browser session only. */
+        delete: operations["DeleteVercelConnection"];
+        options?: never;
+        head?: never;
+        /** Rename one of the caller's Vercel connections. Browser session only. */
+        patch: operations["RenameVercelConnection"];
+        trace?: never;
+    };
+    "/api/me/connections/vercel/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check the token with Vercel again and record the result (status valid or invalid, lastValidatedAt; account and team refreshed). 502 UPSTREAM_ERROR if Vercel can't be reached (status unchanged). Browser session only. */
+        post: operations["TestVercelConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-81: the caller's GitHub connection (login, GitHub user id, status, token expiry; never a token), the App installations they can access and the App's install URL. */
+        get: operations["GetGitHubConnection"];
+        put?: never;
+        post?: never;
+        /** FR-81: remove the caller's GitHub connection (the stored tokens). Sign-in with GitHub keeps working and reconnects. Browser session only. */
+        delete: operations["DisconnectGitHub"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/github/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-81: redirects to the AIDE GitHub App's user authorization (PKCE) to connect GitHub to the signed-in account without signing in again, then back to returnUrl (a same-origin path). 404 when no App is registered. Browser session only. */
+        get: operations["ConnectGitHub"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/github/repos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-81: the repositories the AIDE GitHub App is installed on that the caller can access, searchable by name, 30 per page. */
+        get: operations["ListGitHubRepos"];
+        put?: never;
+        /** FR-81: create a repository for the caller or an organisation where the App is installed, initialised with a README (auto_init) so the default branch exists, and check the App can access it. Needs the App's Administration permission (403 FORBIDDEN otherwise). */
+        post: operations["CreateGitHubRepo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/github/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-81: where the caller can create a repository: themselves and their organisations, with whether the App is installed there and whether creating is possible. */
+        get: operations["ListGitHubOwners"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/github/repos/{owner}/{repo}/refs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-73, FR-86: a picked repository's default branch, whether it is empty, its releases and its tags (with their semantic versions). */
+        get: operations["GetGitHubRepoRefs"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -328,6 +521,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/integrations/llm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether system LLM keys may be used (Llm:AllowSystemKeys, read-only configuration) and which providers have one configured. Admins only. */
+        get: operations["GetAdminLlmPolicy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-80: the AIDE GitHub App's status (not_configured or configured, from the database or GitHub__App__* configuration), slug, owner, install URL, granted permissions and whether repositories can be created. Admins only; secrets are never returned. */
+        get: operations["GetAdminGitHubApp"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/github/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-80: start the manifest flow: returns the App manifest (§4.14) and the GitHub URL to post it to, with a single-use state. 409 CONFLICT when an App is already configured. Admins with a browser session only. */
+        post: operations["CreateGitHubAppManifest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/github/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-80: GitHub's redirect after the Admin creates the App: checks state, exchanges the code (POST /app-manifests/{code}/conversions) and stores the App with its secrets encrypted, then redirects to /admin/integrations?github=configured, or to /admin/integrations?error=GITHUB_AUTH_FAILED on failure. Admins with a browser session only. */
+        get: operations["CompleteGitHubAppManifest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects": {
         parameters: {
             query?: never;
@@ -335,11 +596,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The caller's projects (every project for Admins), paged, with search by name, phase and status filters and sorting. */
+        /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and preset (FR-74: the current version's preset id, or none for projects without a preset) filters and sorting. Rows carry the released and in-development version badges (FR-62) and the preset chip. */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. */
         post: operations["CreateProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/kpis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** §7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion and preset filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released). */
+        get: operations["GetProjectKpis"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -448,8 +726,25 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. */
+        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). */
         patch: operations["UpdateGitSettings"];
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/git/switch-to-app": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-83: move a github_pat project onto the AIDE GitHub App (Owner): stores the installation and repository ids and drops the PAT. The caller's own GitHub connection must be able to push to the repo (403 FORBIDDEN otherwise; 409 GITHUB_NOT_CONNECTED without a connection). 409 GITHUB_APP_NOT_INSTALLED (extension installUrl) when the App can't access the repo. */
+        post: operations["SwitchGitToApp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/projects/{id}/settings/llm": {
@@ -459,13 +754,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** The LLM settings and binding ("connected by <name>", no secret) for any member, with canBind for the caller (FR-79). */
+        get: operations["GetLlmSettings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the LLM provider, models and optional project API key (Owner). */
+        /** Update the LLM provider and models, and bind one of the caller's own connections (credentialId; null unbinds) (Owner). 403 CREDENTIAL_NOT_OWNER for another user's connection, 404 NOT_FOUND for an unknown one. */
         patch: operations["UpdateLlmSettings"];
         trace?: never;
     };
@@ -503,6 +799,127 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/settings/deployment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Settings → Deployment for any member (FR-88): provider, supported, the binding ("connected by <name>", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the preset's required env vars with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not). */
+        get: operations["GetDeploymentSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set the deployment provider (vercel, or null to turn deployment off), bind one of the caller's own Vercel connections (connectionId), and link an existing Vercel project (vercelProjectId) or create one linked to the GitHub repo (create {name, rootDirectory}) (Owner, FR-88). A Local Git project can't deploy (400 VALIDATION). */
+        patch: operations["UpdateDeploymentSettings"];
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/env": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's environment variables (Owner, FR-88): key, targets, sensitive, hasValue (always true), updatedAt and the Vercel sync state. Values are never returned. */
+        get: operations["ListDeploymentEnv"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/env/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Create or replace an environment variable (Owner, FR-88): key ^[A-Za-z_][A-Za-z0-9_]*$ (up to 256), value up to 64 KB, targets preview and/or production, sensitive. The value is encrypted and pushed to Vercel (upsert by key and target). If the push fails the value is still saved, with syncError set, and the response is 502 UPSTREAM_ERROR; the next save or deployment pushes it again. */
+        put: operations["PutDeploymentEnv"];
+        post?: never;
+        /** Delete an environment variable in AIDE and in Vercel (Owner, FR-88). If Vercel can't delete it, nothing is deleted (502 UPSTREAM_ERROR) so it can be retried. */
+        delete: operations["DeleteDeploymentEnv"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's deployments, newest first (members, FR-91): target, version, SHA, state, URL, time and who triggered it. Filter by target (preview, production) and releaseVersionId. */
+        get: operations["ListDeployments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/deployments/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deploy the head of the version branch as a preview now (writer, FR-90); AIDE polls it (§4.15). 409 DEPLOYMENT_NOT_CONFIGURED without deployment settings. */
+        post: operations["CreatePreviewDeployment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/deployments/{deploymentId}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Promote an earlier ready production deployment (Owner, FR-91): a production rollback that leaves Git alone. Records a new promote row. 409 INVALID_DEPLOYMENT when the deployment isn't a ready production deployment. */
+        post: operations["PromoteDeployment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/deployments/{deploymentId}/redeploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deploy the same commit again as a new row (FR-90, FR-91): a preview needs a writer, production an Owner. AIDE polls it (§4.15). */
+        post: operations["RedeployDeployment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/phase/advance": {
         parameters: {
             query?: never;
@@ -527,7 +944,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's gates, newest first, optionally filtered by status (members). */
+        /** The project's gates, newest first, optionally filtered by status and by releaseVersionId (FR-62: the gates of one release version; an id of another project's version gives an empty list) (members). */
         get: operations["ListGates"];
         put?: never;
         post?: never;
@@ -546,7 +963,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve a pending gate (Owner). Applies the gated transition; escalation gates need a decision (continue, rollback with targetVersion, or accept). 409 GATE_NOT_PENDING, 400 INVALID_DECISION. */
+        /** Approve a pending gate (Owner). Applies the gated transition; escalation gates need a decision (continue, rollback with targetCheckpoint, or accept). 409 GATE_NOT_PENDING, 400 INVALID_DECISION. */
         post: operations["ApproveGate"];
         delete?: never;
         options?: never;
@@ -578,7 +995,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's activity feed, newest first (members). Filter by category with type; load more with before = the previous page's nextBefore. limit defaults to 50 (max 100). */
+        /** The project's activity feed, newest first (members). Filter by category with type; load more with before = the previous page's nextBefore. limit defaults to 50 (max 100). releaseVersionId limits it to the events while that release version was current (from its start to the start of the next); without it, the whole history. */
         get: operations["ListProjectActivity"];
         put?: never;
         post?: never;
@@ -595,7 +1012,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The latest version of each artifact type that exists, without content (members). */
+        /** The latest version of each artifact type that exists in a release version (default: the version in development, else the latest released), without content (members, FR-59). */
         get: operations["ListLatestArtifacts"];
         put?: never;
         post?: never;
@@ -612,7 +1029,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The highest version of an artifact type, with content and integrity (members). */
+        /** The highest version of an artifact type in a release version (default: the version in development, else the latest released), with content and integrity (members). */
         get: operations["GetLatestArtifact"];
         put?: never;
         post?: never;
@@ -629,7 +1046,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Every version of an artifact type, newest first, without content (members). */
+        /** Every version of an artifact type in a release version (default: the version in development, else the latest released), newest first, without content (members). With allReleaseVersions=true, every version of the type across all release versions (each with its releaseVersion), for diffs across release versions (FR-59). */
         get: operations["GetArtifactHistory"];
         put?: never;
         post?: never;
@@ -684,6 +1101,23 @@ export interface paths {
         put?: never;
         /** Save edited Markdown as a new draft version (Contributor or Owner): version = latest + 1, parent = latest; an open draft of the type becomes superseded. With baseVersion, 409 CONFLICT unless it is still the latest version. 409 WRONG_PHASE. */
         post: operations["CreateArtifactDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/artifacts/{type}/versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore an older version (Contributor or Owner, FR-58): creates a new draft with that version's content and hash (version = latest + 1, parent = latest, restoredFromVersion = the chosen version), which then follows the normal approval rules. Only in the phase that produces the type, in the release version in development, while not releasing, for a non-corrupted version of that release version. */
+        post: operations["RestoreArtifactVersion"];
         delete?: never;
         options?: never;
         head?: never;
@@ -765,7 +1199,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The refinement state (members): the latest project request version, the latest round with its status, and the clarifying questions of the latest completed round with any answers already given. */
+        /** The refinement state of a release version (default: the version in development, else the latest released), members: its latest project request version, its latest round with its status, and the clarifying questions of its latest completed round with any answers already given, and (FR-55) every round of the version, newest first, with the questions each asked and the answers given to them. */
         get: operations["GetRefinement"];
         put?: never;
         post?: never;
@@ -801,6 +1235,40 @@ export interface paths {
         };
         /** The execution steps of a plan version, in step order (members). Without planType and planVersion this is the current plan: the most recently locked plan that owns steps (the implementation plan, or the optimisation plan of a review cycle); `plan` names its type and version. With planType only, that type's highest locked version; with planVersion, that version of planType (default implementation_plan). With no locked plan the result has no plan and no steps. */
         get: operations["ListExecutionSteps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/execution/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every execution run of a release version (default: the version in development, else the latest released), members (FR-57): the development run (the implementation plan's steps) first, then one review-fix run per review cycle (that cycle's optimisation plan's steps) by cycle; runs of invalidated plans are flagged superseded. */
+        get: operations["ListExecutionRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/execution/steps/{stepId}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The attempt history of an execution step, oldest first (members, FR-57): outcome, Guardian violations and warnings, produced files, the agent run (model, tokens, duration) and its repo tool calls. */
+        get: operations["ListStepAttempts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -878,6 +1346,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/git/merge-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: "AIDE will merge automatically", else "A merge on GitHub will be needed" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. The merge itself stays authoritative (FR-65). */
+        get: operations["GetMergeReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/review": {
         parameters: {
             query?: never;
@@ -946,6 +1431,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/compliance/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every review cycle of a release version (default: the version in development, else the latest released), newest first (members, FR-56): cycle, score, threshold, drift, decision and date. Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version. */
+        get: operations["ListComplianceReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/compliance/reports/{cycle}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The full compliance report of one review cycle of a release version (default: the version in development, else the latest released), members (FR-56): category breakdown, violations with evidence, deterministic findings, missing features, drift areas, decision and escalation reason, regressions, external checks, its optimisation plan and the execution run that plan produced. Cycle numbers restart after a rollback: reportId selects one exact report (it must be of that cycle), otherwise the newest report of the cycle is returned. Only reports of the current review timeline count: at or below the current project version and created after the last rollback (§4.8), so a rollback hides every earlier report, even once the project is back at that version. */
+        get: operations["GetComplianceReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/release": {
         parameters: {
             query?: never;
@@ -955,7 +1474,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Retry a failed release (Owner, FR-43): queues the release job again for the current project version (merge the project PR or branch into the default branch, tag v<version>-aide, or the first free v<version>-aide.<k> when a version number reused after a rollback is already tagged elsewhere; an existing tag of the version holding the branch is a no-op). Only in the release phase with status releasing, after the latest attempt failed (e.g. MERGE_CONFLICT resolved on the branch). Returns 202 with the new in_progress release; the outcome arrives on the live channel. */
+        /** Retry a failed release (Owner, FR-43 amended by FR-64, FR-65): queues the release job again for the version in development at its current checkpoint (merge the version's PR, or the branch for Local, under the project's merge strategy; tag <tagPrefix><version> on the merge commit, reusing a tag that already points at it; create the GitHub Release). Only in the release phase with status releasing, after the latest attempt failed, e.g. MERGE_CONFLICT resolved on the branch, or PR_CLOSED (PR reopened on GitHub) / MERGE_TIMEOUT, after which the project stays in release. Not while awaiting_merge: the merge poll completes that attempt. Returns 202 with the new in_progress release; the outcome (succeeded, awaiting_merge or failed) arrives on the live channel. */
         post: operations["RetryRelease"];
         delete?: never;
         options?: never;
@@ -970,7 +1489,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Every release attempt of the project, newest first (members, FR-42, FR-43). Empty before the first release. */
+        /** The release attempts of a release version (default: the version in development, else the latest released), newest first (members, FR-42, FR-43, FR-64). Empty before the first release. */
         get: operations["ListReleases"];
         put?: never;
         post?: never;
@@ -1006,7 +1525,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Roll the project back to an earlier version (Owner, FR-44, FR-45, §4.8). In one transaction: restores the phase recorded at that version (status rolled_back), invalidates artifacts created after it, resets their plans' steps, cancels pending gates and queued jobs, clears the review state and records the rollback. The Git branch is not rewritten. Checks run in order: INVALID_TARGET_VERSION, ROLLBACK_BLOCKED, RATE_LIMITED (one rollback per project per minute). */
+        /** Roll the project back to an earlier checkpoint of the release version in development (Owner, FR-44, FR-45, FR-63, §4.8, §4.10). In one transaction: restores the phase recorded at that checkpoint (status rolled_back), invalidates that version's artifacts created after it, resets their plans' steps, cancels pending gates and queued jobs, clears the review state and records the rollback. The Git branch is not rewritten. A released version is closed (ROLLBACK_BLOCKED version_released). Checks run in order: ROLLBACK_BLOCKED (version_released, release_partially_applied while awaiting merge), INVALID_TARGET_VERSION, ROLLBACK_BLOCKED (running work), RATE_LIMITED (one rollback per project per minute). */
         post: operations["RollbackProject"];
         delete?: never;
         options?: never;
@@ -1038,14 +1557,83 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's versions from its state transitions, newest first (members, FR-44): the phase recorded at each version (the latest transition at that version; version 1 without one is refinement), when it was entered, and whether it is a valid rollback target now. */
-        get: operations["ListProjectVersions"];
+        /** The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, preset and dates. */
+        get: operations["ListReleaseVersions"];
+        put?: never;
+        /** Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. */
+        post: operations["StartReleaseVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/checkpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The lifecycle checkpoints of a release version (default: the version in development, else the latest released), newest first (members, FR-44, FR-63): the phase recorded at each, when it was entered, and whether it is a rollback target now. Replaces v1's GET /versions (D-V2-11). */
+        get: operations["ListCheckpoints"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The tech stack presets (FR-74), ordered by id: name, version, description, stack chips, deployment targets and content hash. For the wizard's Stack step and the admin presets list. No preset (general) is the absence of one. */
+        get: operations["ListPresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/presets/{presetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A preset in full (FR-74): specialist agents (owned paths, skills), extra spec sections with guidance, required environment variables, review checklist and deterministic rules, protected paths. */
+        get: operations["GetPreset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/preset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change the preset of the version in development (Owner, FR-74): pins the preset id, version and content hash on it and records PRESET_CHANGED. presetId null means no preset. Allowed until the version's first implementation plan is locked; a new version can pick another preset. */
+        patch: operations["UpdateProjectPreset"];
         trace?: never;
     };
     "/api/me/notifications": {
@@ -1246,6 +1834,39 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /**
+         * @description The AIDE GitHub App's status for Admin → Integrations → GitHub (FR-80). Secrets (client secret, private key) are never
+         *     returned. `source` is `configuration` when `GitHub__App__*` is set (it takes precedence), `database`
+         *     for an App registered through the manifest flow, and `null` when `status` is `not_configured` (then every
+         *     App field is `null` and `permissions` is empty). `installUrl` is
+         *     `https://github.com/apps/{slug}/installations/new`; `permissions` are the App's granted permissions
+         *     (e.g. `contents: write`); `canCreateRepositories` is true when `administration: write` is granted (§4.14).
+         */
+        AdminGitHubAppDto: {
+            status: components["schemas"]["GitHubAppStatus"];
+            source: null | components["schemas"]["GitHubAppSource"];
+            /** Format: int64 */
+            appId: null | number;
+            slug: null | string;
+            ownerLogin: null | string;
+            ownerType: null | components["schemas"]["GitHubOwnerType"];
+            installUrl: null | string;
+            htmlUrl: null | string;
+            permissions: {
+                [key: string]: string;
+            };
+            canCreateRepositories: boolean;
+        };
+        /**
+         * @description §2 Admin: the system LLM key policy (D-V2-5). `allowSystemKeys` is `Llm:AllowSystemKeys` (configuration,
+         *     read-only here: set `Llm__AllowSystemKeys` in `secrets.env` / user-secrets and restart). When it is on,
+         *     projects with no bound connection use the system key of their provider; `systemKeyProviders` lists the
+         *     providers that have one configured (allowed or not). Keys are never returned.
+         */
+        AdminLlmPolicyDto: {
+            allowSystemKeys: boolean;
+            systemKeyProviders: components["schemas"]["LlmProvider"][];
+        };
         /** @description A user as shown on the admin users page. */
         AdminUserDto: {
             /** Format: uuid */
@@ -1274,10 +1895,10 @@ export interface components {
         /** @enum {unknown} */
         AgentJobTrigger: "user_requested" | "phase_entered" | "gate_rejected" | "artifact_rejected" | "artifact_corrupted" | null;
         /**
-         * @description The five cognitive agents (§1, FR-23).
+         * @description The cognitive agents (§1, FR-23), plus the Repository Analyst (FR-70).
          * @enum {unknown}
          */
-        AgentKind: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review";
+        AgentKind: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
         /** @description Model id per agent; an omitted or `null` agent uses the default model. */
         AgentModelsDto: {
             ideaRefinement?: null | string;
@@ -1288,11 +1909,16 @@ export interface components {
         };
         /**
          * @description An agent run with the provider's output text (FR-23). `output` is `null` until the run succeeds and is cut
-         *     to the first 200,000 characters (`outputTruncated`).
+         *     to the first 200,000 characters (`outputTruncated`). The v2 fields are as on AgentRunDto.
+         *     `toolCalls` is the run's repo tool log (FR-71: tool, arguments, bytes, truncated, error code) and `warnings`
+         *     what was recorded on it (FR-70, FR-71): `tools_unsupported`, `snapshot_unavailable`,
+         *     `summary_wait_timeout`, `summary_unavailable`.
          */
         AgentRunDetailDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: null | string;
             agent: components["schemas"]["AgentKind"];
             phase: components["schemas"]["Phase"];
             /** Format: uuid */
@@ -1320,15 +1946,31 @@ export interface components {
             completedAt: null | string;
             output: null | string;
             outputTruncated: boolean;
+            /** Format: int32 */
+            checkpoint: null | number;
+            agentKey: null | string;
+            presetId: null | string;
+            presetVersion: null | string;
+            /** Format: int32 */
+            toolCallCount: number;
+            credentialLabel: null | string;
+            toolCalls: components["schemas"]["ToolCallDto"][];
+            warnings: string[];
         };
         /**
          * @description An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt
          *     template version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in
-         *     USD, duration and error. `userFeedback` is the feedback or answers given to the agent.
+         *     USD, duration and error. `userFeedback` is the feedback or answers given to the agent. `releaseVersionId` is the
+         *     release version it ran for (§4.10). `checkpoint` is the checkpoint it ran at (null until recorded). `agentKey`,
+         *     `presetId` and `presetVersion` name the preset specialist (FR-76; null for base agents). `toolCallCount` is
+         *     the number of repo tool calls (FR-71). `credentialLabel` names the LLM connection that paid for the run,
+         *     `Label (••••a1b2)` (FR-79, D-V2-5; null for a system key, a provider without a key, or a deleted connection).
          */
         AgentRunDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: null | string;
             agent: components["schemas"]["AgentKind"];
             phase: components["schemas"]["Phase"];
             /** Format: uuid */
@@ -1354,6 +1996,14 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             completedAt: null | string;
+            /** Format: int32 */
+            checkpoint: null | number;
+            agentKey: null | string;
+            presetId: null | string;
+            presetVersion: null | string;
+            /** Format: int32 */
+            toolCallCount: number;
+            credentialLabel: null | string;
         };
         /**
          * @description Status of an agent run (FR-23, FR-25).
@@ -1443,6 +2093,12 @@ export interface components {
          * @description One artifact version with its Markdown content (FR-16, §4.3). `contentHash` is the lowercase hex SHA-256 of the
          *     normalised content; `integrity` is `corrupted` when it no longer matches (FR-20). `approvedBy` and
          *     `approvedAt` are set once approved (status `locked`); `rejectionComment` once rejected (FR-17).
+         *     `releaseVersionId` and `checkpointAtCreation` say where it was created (§4.10; D-V2-11: was
+         *     `projectVersionAtCreation`); `releaseVersion` is that release version's semver (FR-59).
+         *     `restoredFromVersion` is the version whose content a restore copied (FR-58), else `null`.
+         *     `warnings` are non-blocking findings about the version (FR-76, §4.13): for an `implementation_plan`,
+         *     `UNCOVERED_REQUIREMENTS` when its steps' `covers` miss a `[new]`/`[changed]` requirement of the
+         *     release version's locked specification (`ids` lists them); empty otherwise.
          */
         ArtifactDto: {
             /** Format: uuid */
@@ -1455,8 +2111,10 @@ export interface components {
             content: string;
             contentHash: string;
             status: components["schemas"]["ArtifactStatus"];
+            /** Format: uuid */
+            releaseVersionId: string;
             /** Format: int32 */
-            projectVersionAtCreation: number;
+            checkpointAtCreation: number;
             author: components["schemas"]["ArtifactAuthorDto"];
             approvedBy: null | components["schemas"]["ActorDto"];
             /** Format: date-time */
@@ -1465,6 +2123,10 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             integrity: components["schemas"]["ArtifactIntegrity"];
+            releaseVersion: string;
+            /** Format: int32 */
+            restoredFromVersion: null | number;
+            warnings: components["schemas"]["ArtifactWarningDto"][];
         };
         /**
          * @description Result of re-checking an artifact's content hash on read (FR-20). `corrupted` means the stored content no
@@ -1484,8 +2146,10 @@ export interface components {
         /** @enum {unknown} */
         ArtifactStatus: "draft" | "locked" | "rejected" | "superseded" | "invalidated" | "corrupted" | null;
         /**
-         * @description One artifact version without its content (FR-16, FR-21): the artifacts page cards and the history list.
-         *     `integrity` is the result of re-checking the content hash on this read (FR-20).
+         * @description One artifact version without its content (FR-16, FR-21, FR-59): the artifacts page cards and the history list.
+         *     `integrity` is the result of re-checking the content hash on this read (FR-20); `releaseVersionId` is the
+         *     release version it belongs to (§4.10) and `releaseVersion` its semver (FR-59). `restoredFromVersion` is the
+         *     version whose content a restore copied (FR-58), else `null`.
          */
         ArtifactSummaryDto: {
             /** Format: uuid */
@@ -1494,16 +2158,33 @@ export interface components {
             /** Format: int32 */
             version: number;
             status: components["schemas"]["ArtifactStatus"];
+            /** Format: uuid */
+            releaseVersionId: string;
             integrity: components["schemas"]["ArtifactIntegrity"];
             /** Format: date-time */
             createdAt: string;
             author: components["schemas"]["ArtifactAuthorDto"];
+            releaseVersion: string;
+            /** Format: int32 */
+            restoredFromVersion: null | number;
         };
         /** @enum {unknown} */
-        ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
-        /** @description Which sign-in providers are available (the frontend hides GitHub when it isn't configured). */
+        ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+        /** @description A non-blocking finding about an artifact version (FR-76, §4.13): its code, a message and the ids it is about. */
+        ArtifactWarningDto: {
+            code: string;
+            message: string;
+            ids: string[];
+        };
+        /**
+         * @description Which sign-in providers are available (the frontend hides "Continue with GitHub" when `github` is false).
+         *     `githubMode` (D-V2-7) says how GitHub sign-in works: `app` (the AIDE GitHub App's user authorization flow
+         *     with PKCE), `oauth` (the v1 OAuth App, only while no App is registered) or `none`; `github` is
+         *     `githubMode != none`.
+         */
         AuthProvidersDto: {
             github: boolean;
+            githubMode: components["schemas"]["GitHubSignInMode"];
         };
         /**
          * @description One compliance category (§4.7): its weight, the agent's score (0–1), the deterministic penalty (sum of the fixed
@@ -1525,14 +2206,111 @@ export interface components {
         ChangeSystemRoleRequest: {
             systemRole: components["schemas"]["SystemRole"];
         };
+        /** @enum {unknown} */
+        CheckRunConclusion: "success" | "failure" | "neutral" | "cancelled" | "skipped" | "timed_out" | "action_required" | null;
+        /**
+         * @description FR-84, FR-85: a check run or commit status on the PR head. `conclusion` is set once `status` is
+         *     `completed` (else `null`). `required` is true when the default branch's rules require it.
+         *     `detailsUrl` links the check on GitHub (or the CI provider), when known.
+         */
+        CheckRunDto: {
+            name: string;
+            status: components["schemas"]["CheckRunStatus"];
+            conclusion: null | components["schemas"]["CheckRunConclusion"];
+            required: boolean;
+            detailsUrl: null | string;
+        };
+        /**
+         * @description FR-84, FR-85: a GitHub check run's (or commit status's) state. Wire values `queued`, `in_progress`, `completed`.
+         * @enum {unknown}
+         */
+        CheckRunStatus: "queued" | "in_progress" | "completed";
+        /** @enum {unknown} */
+        CheckpointBlock: "current_checkpoint" | "release_phase" | "version_released" | null;
+        /**
+         * @description A lifecycle checkpoint of a release version (FR-44, FR-63), for the rollback target picker: the phase entered at that
+         *     checkpoint and when. `rollbackAllowed` says whether it is a valid rollback target now; when it isn't,
+         *     `rollbackBlockedReason` says why (`current_checkpoint`, `release_phase`, or `version_released` for
+         *     every checkpoint of a released version). Rate limits and running work (RATE_LIMITED, ROLLBACK_BLOCKED) are checked when
+         *     the rollback is requested.
+         */
+        CheckpointDto: {
+            /** Format: int32 */
+            checkpoint: number;
+            phase: components["schemas"]["Phase"];
+            /** Format: date-time */
+            enteredAt: string;
+            rollbackAllowed: boolean;
+            rollbackBlockedReason: null | components["schemas"]["CheckpointBlock"];
+        };
+        /**
+         * @description The Repository Analyst's progress for a release version as shown on the Refinement page (FR-70): `not_needed` (no
+         *     existing code), `queued`, `running`, `completed` (the summary exists), `failed` (the analyst ended
+         *     without a summary) or `timed_out` (still unfinished 10 minutes after the version started; refinement no longer
+         *     waits for it).
+         * @enum {unknown}
+         */
+        CodebaseSummaryState: "not_needed" | "queued" | "running" | "completed" | "failed" | "timed_out";
+        /**
+         * @description FR-70: the Repository Analyst for the release version. `status`: `not_needed` (no existing code),
+         *     `queued`, `running`, `completed` (the locked summary exists: `artifactId`/`artifactVersion`),
+         *     `failed` (the analyst ended without one) or `timed_out` (unfinished 10 minutes after the version started;
+         *     refinement no longer waits). `runId` is the analyst's agent run once it has started (the run that wrote the
+         *     summary when completed), else `null`.
+         */
+        CodebaseSummaryStatusDto: {
+            status: components["schemas"]["CodebaseSummaryState"];
+            /** Format: uuid */
+            runId: null | string;
+            /** Format: uuid */
+            artifactId: null | string;
+            /** Format: int32 */
+            artifactVersion: null | number;
+        };
         /** @description The drift level and areas of the latest compliance report (FR-41, §4.7). */
         ComplianceDriftDto: {
             driftLevel: components["schemas"]["DriftLevel"];
             areas: components["schemas"]["DriftAreaDto"][];
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
             /** Format: int32 */
             cycle: number;
+        };
+        /**
+         * @description The full compliance report of one review cycle (FR-56): the category breakdown, every violation with its evidence,
+         *     the deterministic findings alone (`deterministicFindings`, the violations whose source is `deterministic`),
+         *     missing features, drift areas, the decision and its `escalationReason`, regressions (§4.13), the external checks
+         *     collected (FR-85 check runs, preview deployment; `null` when none), the optimisation plan it produced and
+         *     `executionRunId`, the review-fix run that plan produced (the plan artifact id, see `ListExecutionRuns`).
+         */
+        ComplianceReportDetailDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
+            /** Format: int32 */
+            checkpoint: number;
+            /** Format: int32 */
+            cycle: number;
+            /** Format: double */
+            overallScore: number;
+            /** Format: double */
+            threshold: number;
+            categoryScores: components["schemas"]["CategoryScoreDto"][];
+            violations: components["schemas"]["ViolationDto"][];
+            deterministicFindings: components["schemas"]["ViolationDto"][];
+            missingFeatures: string[];
+            driftLevel: components["schemas"]["DriftLevel"];
+            driftAreas: components["schemas"]["DriftAreaDto"][];
+            decision: components["schemas"]["ReviewDecision"];
+            escalationReason: null | components["schemas"]["EscalationReason"];
+            regressions: components["schemas"]["RegressionDto"][];
+            externalChecks: null | components["schemas"]["ExternalChecksDto"];
+            optimizationPlan: null | components["schemas"]["ReportPlanDto"];
+            /** Format: uuid */
+            executionRunId: null | string;
+            /** Format: date-time */
+            createdAt: string;
         };
         /**
          * @description The compliance report of one review cycle (FR-38, FR-41). `overallScore` is Σ category score × weight (3 dp);
@@ -1545,8 +2323,10 @@ export interface components {
         ComplianceReportDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
             /** Format: int32 */
             cycle: number;
             /** Format: double */
@@ -1565,6 +2345,29 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /**
+         * @description One review cycle in the Review page's cycle list (FR-56): cycle number, overall score against the threshold it was
+         *     decided on, drift level, decision, date, the checkpoint it ran at and its release version. `id` is the report id:
+         *     cycle numbers restart after a rollback, so one release version can list two reports of the same cycle.
+         */
+        ComplianceReportSummaryDto: {
+            /** Format: int32 */
+            cycle: number;
+            /** Format: double */
+            score: number;
+            /** Format: double */
+            threshold: number;
+            drift: components["schemas"]["DriftLevel"];
+            decision: components["schemas"]["ReviewDecision"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: int32 */
+            checkpoint: number;
+            /** Format: uuid */
+            releaseVersionId: string;
+            /** Format: uuid */
+            id: string;
+        };
         /** @description The compliance score across review cycles, oldest first (FR-41), with the project's threshold. Empty before the first review. */
         ComplianceTrendDto: {
             /** Format: double */
@@ -1579,7 +2382,7 @@ export interface components {
             /** Format: int32 */
             cycle: number;
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
             /** Format: double */
             overallScore: number;
             driftLevel: components["schemas"]["DriftLevel"];
@@ -1612,14 +2415,88 @@ export interface components {
              */
             baseVersion?: null | number;
         };
-        /** @description Git step of the new-project wizard (FR-5, FR-35). */
+        /**
+         * @description Start the GitHub App manifest flow (FR-80): the App is owned by the Admin's personal account (`user`) or by the
+         *     organisation `org` (required for `organization`, ignored for `user`).
+         */
+        CreateGitHubAppManifestRequest: {
+            ownerType: components["schemas"]["GitHubOwnerType"];
+            /** @description The organisation login, for `ownerType: organization`. */
+            org?: null | string;
+        };
+        /**
+         * @description Create a repository (FR-81, §4.14) for `owner` (the caller's login or an organisation where the App is installed),
+         *     initialised with a README so the default branch exists.
+         */
+        CreateGitHubRepoRequest: {
+            owner: string;
+            name: string;
+            description?: null | string;
+            private: boolean;
+        };
+        /**
+         * @description Add an LLM connection (FR-78): `anthropic` or `openai`, a label and the key. The key is checked with
+         *         the provider before anything is saved.
+         */
+        CreateLlmCredentialRequest: {
+            provider: components["schemas"]["LlmProvider"];
+            label: string;
+            apiKey: string;
+        };
+        /**
+         * @description Deployment step of the new-project wizard (FR-88): `provider` `vercel`, one of the caller's own Vercel
+         *     connections, and an existing Vercel project (`vercelProjectId`) or a new one (`create`), not both. Needs a
+         *     GitHub-backed project (`git.mode` `local`: 400 `VALIDATION`).
+         */
+        CreateProjectDeploymentRequest: {
+            provider: components["schemas"]["DeploymentProvider"];
+            /** Format: uuid */
+            connectionId: string;
+            vercelProjectId?: null | string;
+            create?: null | components["schemas"]["CreateVercelProjectRequest"];
+        };
+        /**
+         * @description Repository step of the new-project wizard (FR-5, FR-35, FR-82, FR-86). `mode` picks the Git provider.
+         *     `github_app`: a repo picked or created through the AIDE GitHub App; send `installationId` and
+         *     `repoFullName` (`owner/name`), no `repoUrl` or `token` (409 `GITHUB_APP_NOT_INSTALLED` when the
+         *     App can't access the repo). `github_pat`: `repoUrl` plus an optional `token` (FR-83, the v1 behaviour).
+         *     `local`: no remote. `provider` is the v1 name of `mode`, kept so v1 clients work: send one of the two;
+         *     when both are sent they must be equal (else 400 `VALIDATION` on `git.mode`).
+         */
         CreateProjectGitRequest: {
-            provider: components["schemas"]["GitProvider"];
-            /** @description Required for `github`: `https://github.com/OWNER/REPO`, optionally ending in `.git`. */
+            /** @description The Git provider (FR-82): `github_app`, `github_pat` or `local`. */
+            mode?: components["schemas"]["GitProvider"];
+            /** @description v1 alias of `mode` (deprecated; send `mode`). */
+            provider?: components["schemas"]["GitProvider"];
+            /**
+             * Format: int64
+             * @description `github_app`: the App installation that grants access to the repo (from the repo picker).
+             */
+            installationId?: null | number;
+            /** @description `github_app`: the repository as `owner/name`. */
+            repoFullName?: null | string;
+            /** @description Required for `github_pat`: `https://github.com/OWNER/REPO`, optionally ending in `.git`. */
             repoUrl?: null | string;
             defaultBranch?: string;
-            /** @description GitHub access token (`github` only). Stored encrypted and never returned. */
+            /** @description GitHub access token (`github_pat` only). Stored encrypted and never returned. */
             token?: null | string;
+            /**
+             * @description FR-73, §8 Testing: `local` + `source: import` only, and only where the server sets `Git:Local:ImportRoot`
+             *     (Development and E2E): the existing Git repository directory to import, absolute or relative to that root, which it
+             *     must resolve under (else 400 `VALIDATION` on `git.localSourcePath`). Omit it otherwise.
+             */
+            localSourcePath?: null | string;
+        };
+        /**
+         * @description FR-73: the versions of an imported repository. `releasedTag` is the tag of the currently released version, picked
+         *     from the repository's GitHub Releases and semver tags (`null` or omitted: "Never released"); it must exist in the
+         *     repository (400 `TAG_NOT_FOUND`) and name a semver version (400 `VERSION_INVALID`). `developmentVersion`
+         *     is the version to develop (semver, a leading `v` is stripped; 400 `VERSION_INVALID`), greater than the
+         *     released one (409 `VERSION_NOT_GREATER`).
+         */
+        CreateProjectImportRequest: {
+            releasedTag?: null | string;
+            developmentVersion: string;
         };
         /** @description The new-project wizard (FR-5). Omitted settings take the FR-5 defaults. */
         CreateProjectRequest: {
@@ -1638,6 +2515,38 @@ export interface components {
              */
             tokenBudget?: null | number;
             git: components["schemas"]["CreateProjectGitRequest"];
+            /**
+             * @description FR-66 (`source: scratch` only): the first release version (semver, a leading `v` is stripped; default
+             *     `0.1.0`). The first release tags it.
+             */
+            initialVersion?: null | string;
+            /**
+             * @description FR-73: `scratch` (default) starts from scratch with `initialVersion`; `import` imports the existing
+             *     repository named by `git` with `import` (required) and `idea` as the request for the version to develop.
+             */
+            source?: components["schemas"]["ProjectSource"];
+            import?: null | components["schemas"]["CreateProjectImportRequest"];
+            /**
+             * @description FR-74 (wizard Stack step): a preset id from `GET /api/presets`, pinned (with its version and content hash) on
+             *     the version to develop; omitted or `null` = no preset (general). Unknown: 400 `PRESET_NOT_FOUND`.
+             */
+            presetId?: null | string;
+            deployment?: null | components["schemas"]["CreateProjectDeploymentRequest"];
+        };
+        /**
+         * @description Add a Vercel connection (FR-87): a label and an access token (team- or account-scoped, ideally with an expiry).
+         *         The token is checked with Vercel before anything is saved.
+         */
+        CreateVercelConnectionRequest: {
+            label: string;
+            token: string;
+        };
+        /** @description FR-88: create a new Vercel project linked to the GitHub repo (framework `nextjs`). */
+        CreateVercelProjectRequest: {
+            /** @description Lowercase letters, digits, `.`, `_`, `-`, up to 100, without `---`. */
+            name: string;
+            /** @description The app's directory in the repository (default `.`). */
+            rootDirectory?: null | string;
         };
         /** @description A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again. */
         CreatedApiTokenDto: {
@@ -1676,13 +2585,13 @@ export interface components {
         /**
          * @description Approve or reject a pending gate (FR-13, FR-14). `comment` is optional (on reject it is the feedback for the
          *     re-run agent). Escalation gates are approved with a `decision`; `rollback` also needs a
-         *     `targetVersion`. Other gates take neither (400 `INVALID_DECISION`), and escalation gates can't be rejected.
+         *     `targetCheckpoint` (a checkpoint of the release version in development). Other gates take neither (400 `INVALID_DECISION`), and escalation gates can't be rejected.
          */
         DecideGateRequest: {
             comment?: null | string;
             decision?: null | components["schemas"]["EscalationDecision"];
             /** Format: int32 */
-            targetVersion?: null | number;
+            targetCheckpoint?: null | number;
         };
         /**
          * @description A file a step declares it creates or modifies (FR-29). `protected` marks a protected path (§4.6: .git/, .aide/, CI
@@ -1692,6 +2601,120 @@ export interface components {
             path: string;
             action: components["schemas"]["FileAction"];
             protected: boolean;
+        };
+        /**
+         * @description The project's Vercel binding (FR-88): which connection, "connected by &lt;name&gt;", and the connection's status.
+         *         Never the token.
+         */
+        DeploymentBindingDto: {
+            /** Format: uuid */
+            connectionId: string;
+            label: string;
+            last4: string;
+            teamSlug: null | string;
+            boundBy: components["schemas"]["DeploymentUserDto"];
+            status: components["schemas"]["VercelConnectionStatus"];
+        };
+        /**
+         * @description A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |
+         *     canceled`. `url` is the deployment URL once known, `inspectorUrl` Vercel's inspector page. `gitRef`
+         *     and `gitSha` are what was deployed; `releaseVersion` is the version (e.g. `1.2.0`) of
+         *     `releaseVersionId`; `releaseId` is the release attempt of a production deployment (`null` for previews).
+         *     A failed deployment carries `errorCode` (`VERCEL_ERROR`, `DEPLOYMENT_TIMEOUT`), `errorMessage` and
+         *     `buildLogTail` (the end of the build log). `trigger` is `auto` (AIDE, after execution or the release
+         *     merge), `manual`, `promote` or `redeploy`; `triggeredBy` is `null` for `auto` (or a
+         *     deleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` row promoted.
+         */
+        DeploymentDto: {
+            /** Format: uuid */
+            id: string;
+            target: components["schemas"]["DeploymentTarget"];
+            provider: components["schemas"]["DeploymentProvider"];
+            status: components["schemas"]["DeploymentStatus"];
+            url: null | string;
+            inspectorUrl: null | string;
+            gitRef: string;
+            gitSha: string;
+            /** Format: uuid */
+            releaseVersionId: string;
+            releaseVersion: string;
+            /** Format: uuid */
+            releaseId: null | string;
+            errorCode: null | string;
+            errorMessage: null | string;
+            buildLogTail: null | string;
+            trigger: components["schemas"]["DeploymentTrigger"];
+            triggeredBy: null | components["schemas"]["DeploymentUserDto"];
+            /** Format: uuid */
+            promotedFromDeploymentId: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            readyAt: null | string;
+        };
+        /**
+         * @description A project environment variable (FR-88, Owner only). The value is never returned: `hasValue` is always `true`.
+         *     `syncedAt` is when the current value was pushed to Vercel (`null`: not yet); `syncError` is the last push
+         *     failure (`null` after a successful push).
+         */
+        DeploymentEnvVarDto: {
+            key: string;
+            targets: components["schemas"]["DeploymentTarget"][];
+            sensitive: boolean;
+            hasValue: boolean;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            syncedAt: null | string;
+            syncError: null | string;
+        };
+        /**
+         * @description Deployment provider (§4.15). Wire values: `vercel`, `fake` (deterministic, tests and E2E).
+         * @enum {unknown}
+         */
+        DeploymentProvider: "vercel" | "fake";
+        /**
+         * @description Settings → Deployment (FR-88), for any member. `provider` is `vercel` (or `fake` in test environments)
+         *     once deployment is set, else `null`. `supported`: the preset supports Vercel, or an Owner opted in by setting
+         *     a provider. `binding` is the bound connection ("connected by &lt;name&gt;"; `null`: none) and `canBind`
+         *     whether the caller may bind one of their own (Owners). `vercelProject` is the linked Vercel project (`null`:
+         *     none yet). `rootDirectory` and `framework` are what the Vercel project builds. `requiredEnv` lists the
+         *     preset's required env vars with `present`. `gitConnected` is whether Vercel's GitHub App can access the repo
+         *     (`null`: not checked), with Vercel's `installUrl` when it can't.
+         */
+        DeploymentSettingsDto: {
+            provider: null | components["schemas"]["DeploymentProvider"];
+            supported: boolean;
+            binding: null | components["schemas"]["DeploymentBindingDto"];
+            canBind: boolean;
+            vercelProject: null | components["schemas"]["VercelProjectDto"];
+            rootDirectory: string;
+            framework: string;
+            requiredEnv: components["schemas"]["RequiredEnvVarDto"][];
+            gitConnected: null | boolean;
+            installUrl: null | string;
+        };
+        /**
+         * @description §4.15 deployment states: `queued → building → ready | error | canceled`.
+         * @enum {unknown}
+         */
+        DeploymentStatus: "queued" | "building" | "ready" | "error" | "canceled";
+        /**
+         * @description Deployment target, also a Vercel env target (FR-88). Wire values: `preview`, `production`.
+         * @enum {unknown}
+         */
+        DeploymentTarget: "preview" | "production";
+        /**
+         * @description Why a deployment row exists (FR-90, FR-91). Wire values: `auto` (AIDE after execution or release),
+         *                 `manual`, `promote`, `redeploy`.
+         * @enum {unknown}
+         */
+        DeploymentTrigger: "auto" | "manual" | "promote" | "redeploy";
+        /** @description A user named on a deployment or binding: "connected by &lt;name&gt;", "triggered by &lt;name&gt;". */
+        DeploymentUserDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
         };
         /**
          * @description One line of a diff between two versions (FR-21). `oldLine` is the 1-based line number in the `from` version
@@ -1766,6 +2789,42 @@ export interface components {
             status: components["schemas"]["ArtifactStatus"];
         };
         /**
+         * @description One execution run (FR-57): the steps of one plan version. `id` is the plan artifact's id. The development run is
+         *     the implementation plan's; a review-fix run is the optimisation plan of review `cycle`. A run of an invalidated
+         *     plan is `superseded` (status `superseded`, with `supersededReason`). `tokens` is input + output
+         *     tokens of the steps' agent runs; `commitCount` the steps committed. `complianceReportId` is the report whose
+         *     optimisation plan this is (null for the development run): cycle numbers restart after a rollback, report ids don't.
+         */
+        ExecutionRunDto: {
+            /** Format: uuid */
+            id: string;
+            planType: components["schemas"]["ArtifactType"];
+            /** Format: int32 */
+            planVersion: number;
+            /** Format: uuid */
+            releaseVersionId: string;
+            /** Format: int32 */
+            cycle: null | number;
+            status: components["schemas"]["PlanRunStatus"];
+            superseded: boolean;
+            supersededReason: null | string;
+            /** Format: int32 */
+            stepCount: number;
+            /** Format: int32 */
+            completedCount: number;
+            /** Format: date-time */
+            startedAt: null | string;
+            /** Format: date-time */
+            completedAt: null | string;
+            /** Format: int32 */
+            commitCount: number;
+            /** Format: int64 */
+            tokens: number;
+            steps: components["schemas"]["ExecutionStepSummaryDto"][];
+            /** Format: uuid */
+            complianceReportId: null | string;
+        };
+        /**
          * @description The execution runner's overall state for a project (FR-31, FR-33, FR-37): `idle` (not started, or nothing to run),
          *     `running`, `paused` (no new step starts; a running step may still finish), `completed` (every step of the
          *     current plan completed) or `blocked` (a step is blocked awaiting an escalation decision).
@@ -1812,10 +2871,53 @@ export interface components {
             fileManifest: null | components["schemas"]["FileManifestEntryDto"][];
             commitUrl: null | string;
         };
+        /**
+         * @description One step of an execution run (FR-57): number, title, the preset specialist that runs it (`agentKey`, null for the
+         *     base Code Generator), status, attempt count, declared vs produced files, and the commit once accepted
+         *     (`commitUrl` is null for the Local provider).
+         */
+        ExecutionStepSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            number: number;
+            title: string;
+            agentKey: null | string;
+            status: components["schemas"]["StepStatus"];
+            /** Format: int32 */
+            attempt: number;
+            declaredFiles: components["schemas"]["DeclaredFileDto"][];
+            producedFiles: components["schemas"]["FileManifestEntryDto"][];
+            commitSha: null | string;
+            commitUrl: null | string;
+        };
         /** @description A plan version's execution steps in step order (FR-30); `plan` is `null` (and no steps) before any plan is approved. */
         ExecutionStepsDto: {
             plan: null | components["schemas"]["ExecutionPlanDto"];
             steps: components["schemas"]["ExecutionStepDto"][];
+        };
+        /**
+         * @description FR-85: a GitHub check run or commit status on the PR head as review saw it. `conclusion` is `null` for a check
+         *     still pending when review stopped waiting. A failed `required` check is a major `testing` finding.
+         */
+        ExternalCheckDto: {
+            name: string;
+            conclusion: null | components["schemas"]["CheckRunConclusion"];
+            required: boolean;
+            detailsUrl: null | string;
+        };
+        /**
+         * @description The external inputs a review cycle collected (FR-85, FR-89): the PR head's `checks`, how long review waited for
+         *     pending checks (`checksWaitedSeconds`, up to 15 minutes; `null` when it didn't wait) and whether it gave up
+         *     waiting (`checksTimedOut`, recorded as a warning). `preview` is the preview deployment review waited for
+         *     (FR-90; `null` when none, e.g. Vercel not configured).
+         */
+        ExternalChecksDto: {
+            checks: components["schemas"]["ExternalCheckDto"][];
+            /** Format: int32 */
+            checksWaitedSeconds: null | number;
+            checksTimedOut: boolean;
+            preview: null | components["schemas"]["PreviewCheckDto"];
         };
         /**
          * @description Declared action for a file in a plan step (FR-29).
@@ -1836,11 +2938,11 @@ export interface components {
         /**
          * @description An approval gate (§4.2, FR-12–FR-15). `artifactId`, `artifactType` and `artifactVersion` identify
          *     the gated artifact (spec and plan gates). Escalation gates carry `escalationReason` and, once decided,
-         *     `decision` (and `targetVersion` for a rollback). `reason` is a human-readable context line.
+         *     `decision` (and `targetCheckpoint` for a rollback; D-V2-11: was `targetVersion`). `reason` is a human-readable context line.
          *     `decidedBy`, `decidedAt` and `comment` are set once the gate is decided. `overdue` is true
          *     72 hours after creation while pending (FR-15); `remindedAt` is when its 24-hour reminder was sent. An escalation raised by a blocked execution step (FR-33) has
          *     `escalationReason` `step_blocked` and names the step in `executionStepId` and `stepNumber`
-         *     (both `null` otherwise).
+         *     (both `null` otherwise). `releaseVersionId` is the release version the gate belongs to (§4.10).
          */
         GateDto: {
             /** Format: uuid */
@@ -1862,7 +2964,7 @@ export interface components {
             comment: null | string;
             decision: null | components["schemas"]["EscalationDecision"];
             /** Format: int32 */
-            targetVersion: null | number;
+            targetCheckpoint: null | number;
             overdue: boolean;
             /** Format: date-time */
             remindedAt: null | string;
@@ -1870,6 +2972,8 @@ export interface components {
             executionStepId: null | string;
             /** Format: int32 */
             stepNumber: null | number;
+            /** Format: uuid */
+            releaseVersionId: string;
         };
         /** @enum {unknown} */
         GateStatus: "pending" | "approved" | "rejected" | "cancelled";
@@ -1884,18 +2988,197 @@ export interface components {
         };
         /** @enum {unknown} */
         GateType: "spec_approval" | "plan_approval" | "pre_release" | "escalation";
+        /** @description A GitHub user or organisation (FR-81). */
+        GitHubAccountDto: {
+            login: string;
+            type: components["schemas"]["GitHubOwnerType"];
+        };
         /**
-         * @description Git provider of a project (FR-35). Wire values: `github`, `local`.
+         * @description A GitHub App manifest (FR-80, §4.14), in GitHub's own field names so the page can post it unchanged (as the
+         *     `manifest` form field, JSON-encoded): name `AIDE ({host})` (the host of `App:PublicBaseUrl`); `url` and `setup_url` under
+         *     `App:PublicBaseUrl`; `redirect_url` the manifest callback (`/api/admin/integrations/github/callback`);
+         *     `callback_urls` the sign-in callback (`/api/auth/github/callback`); no `hook_attributes` (GitHub rejects a
+         *     localhost webhook URL even when inactive, and needs a URL whenever the object is present), so the App has no webhook; private; and
+         *     `default_permissions` contents, pull_requests, workflows and administration `write`, metadata, checks and
+         *     statuses `read` (the Admin may drop `administration`, which disables "Create repository"); no events.
+         */
+        GitHubAppManifestDto: {
+            name: string;
+            url: string;
+            redirect_url: string;
+            callback_urls: string[];
+            setup_url: string;
+            public: boolean;
+            default_permissions: {
+                [key: string]: string;
+            };
+            default_events: string[];
+            request_oauth_on_install: boolean;
+        };
+        /**
+         * @description What the page posts to GitHub (FR-80): an HTML form `POST` to `postUrl`
+         *     (`https://github.com/settings/apps/new?state=…`, or
+         *     `https://github.com/organizations/{org}/settings/apps/new?state=…`) with the field `manifest` set to the
+         *     JSON of `manifest`. `state` (also in `postUrl`) is single-use, bound to the Admin's session and checked
+         *     by the callback.
+         */
+        GitHubAppManifestResponseDto: {
+            postUrl: string;
+            manifest: components["schemas"]["GitHubAppManifestDto"];
+            state: string;
+        };
+        /** @enum {unknown} */
+        GitHubAppSource: "database" | "configuration" | null;
+        /**
+         * @description Whether the AIDE GitHub App is registered (FR-80). Wire values: `not_configured`, `configured`.
          * @enum {unknown}
          */
-        GitProvider: "github" | "local";
-        /** @description Git settings (FR-9, FR-35). The token is never returned, only `hasToken`. `branchName` is the project branch, once the working copy has been prepared. */
+        GitHubAppStatus: "not_configured" | "configured";
+        /**
+         * @description The caller's GitHub connection (FR-81). Tokens are never returned. When `connected` is false, `login`,
+         *     `githubUserId`, `status` and `accessExpiresAt` are `null` and `installations` is empty.
+         *     `status` is `invalid` after a failed token refresh (§4.14); `accessExpiresAt` is `null` when the
+         *     App's tokens don't expire. `installUrl` is the App's "Install AIDE on more repositories" link (`null` when no
+         *     App is registered).
+         */
+        GitHubConnectionDto: {
+            connected: boolean;
+            login: null | string;
+            /** Format: int64 */
+            githubUserId: null | number;
+            status: null | components["schemas"]["GitHubConnectionStatus"];
+            /** Format: date-time */
+            accessExpiresAt: null | string;
+            installations: components["schemas"]["GitHubInstallationDto"][];
+            installUrl: null | string;
+        };
+        /** @enum {unknown} */
+        GitHubConnectionStatus: "valid" | "invalid" | null;
+        /**
+         * @description An installation of the AIDE GitHub App that the caller can access (FR-81, `GET /user/installations`):
+         *     `repositorySelection` is `all` or `selected`; `manageUrl` is where the user adds repositories to it.
+         */
+        GitHubInstallationDto: {
+            /** Format: int64 */
+            id: number;
+            account: components["schemas"]["GitHubAccountDto"];
+            repositorySelection: components["schemas"]["GitHubRepositorySelection"];
+            manageUrl: string;
+        };
+        /**
+         * @description A possible owner for "Create repository" (FR-81): the caller (`user`) or an organisation they belong to.
+         *     `appInstalled` / `installationId`: whether (and where) the AIDE GitHub App is installed on it;
+         *     `canCreate`: the App is installed, has Administration write, and (for an organisation) the caller may create
+         *     repositories there.
+         */
+        GitHubOwnerDto: {
+            login: string;
+            type: components["schemas"]["GitHubOwnerType"];
+            /** Format: int64 */
+            installationId: null | number;
+            appInstalled: boolean;
+            canCreate: boolean;
+        };
+        /**
+         * @description Owner kind of a GitHub App (FR-80). Wire values: `user`, `organization`.
+         * @enum {unknown}
+         */
+        GitHubOwnerType: "user" | "organization";
+        /** @description A GitHub release (FR-73 import, FR-86): `isLatest` marks GitHub's latest release. */
+        GitHubReleaseDto: {
+            tagName: string;
+            name: null | string;
+            /** Format: date-time */
+            publishedAt: null | string;
+            isLatest: boolean;
+        };
+        /**
+         * @description A repository the AIDE GitHub App can access for the caller (FR-81, FR-86). `installationId` is the installation
+         *     that grants it (send it with `repoFullName` in `POST /api/projects`). `empty` is whether the repo has
+         *     no commits (`null`: not checked in the list; `GET …/refs` always says). `canPush`: the caller may push to it
+         *     (push, maintain or admin); only such repositories can back a project (FR-82, FR-83).
+         */
+        GitHubRepoDto: {
+            /** Format: int64 */
+            id: number;
+            fullName: string;
+            owner: string;
+            name: string;
+            private: boolean;
+            defaultBranch: string;
+            /** Format: int64 */
+            installationId: number;
+            empty: null | boolean;
+            htmlUrl: string;
+            canPush: boolean;
+        };
+        /** @description A page of the repo picker (FR-81): `hasMore` is true when `page + 1` has more repositories. */
+        GitHubRepoPageDto: {
+            items: components["schemas"]["GitHubRepoDto"][];
+            /** Format: int32 */
+            page: number;
+            hasMore: boolean;
+        };
+        /**
+         * @description What the wizard needs to know about a picked repository (FR-73, FR-86): its default branch, whether it is
+         *     `empty` (no commits: "start from scratch"; otherwise it is treated as an import), its releases and tags.
+         */
+        GitHubRepoRefsDto: {
+            defaultBranch: string;
+            empty: boolean;
+            releases: components["schemas"]["GitHubReleaseDto"][];
+            tags: components["schemas"]["GitHubTagDto"][];
+        };
+        /**
+         * @description Which repositories an App installation covers (FR-81). Wire values: `all`, `selected`.
+         * @enum {unknown}
+         */
+        GitHubRepositorySelection: "all" | "selected";
+        /**
+         * @description How "Continue with GitHub" signs in (D-V2-7). Wire values: `app` (the App's user authorization flow with
+         *                 PKCE), `oauth` (the v1 OAuth App, only while no App is registered), `none` (GitHub sign-in unavailable).
+         * @enum {unknown}
+         */
+        GitHubSignInMode: "none" | "oauth" | "app";
+        /**
+         * @description A tag; `semver` is its version (a leading `v` or the tag prefix stripped), or `null` when the
+         *         tag isn't a semantic version.
+         */
+        GitHubTagDto: {
+            name: string;
+            sha: string;
+            semver: null | string;
+        };
+        /**
+         * @description Git provider of a project (FR-35, FR-82). Wire values: `github_pat` (v1 `github`), `local`, `github_app`.
+         * @enum {unknown}
+         */
+        GitProvider: "github_pat" | "local" | "github_app";
+        /**
+         * @description Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the
+         *     project branch, once the working copy has been prepared. `mode` is the v2 name of `provider` (always equal).
+         *     For `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else
+         *     `null`). `appInstalledOnRepo` says whether the AIDE GitHub App can access a `github_pat` project's repo
+         *     (`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an
+         *     Owner ("Switch to GitHub App"). `mergeStrategy` (FR-65: `aide_merges`, the default, or `manual`) and
+         *     `tagPrefix` (§4.10, FR-64: default `v`, so tags read `v1.2.0`) are the project's release settings.
+         */
         GitSettingsDto: {
             provider: components["schemas"]["GitProvider"];
             repoUrl: null | string;
             defaultBranch: string;
             branchName: null | string;
             hasToken: boolean;
+            mode: components["schemas"]["GitProvider"];
+            /** Format: int64 */
+            installationId: null | number;
+            /** Format: int64 */
+            repoId: null | number;
+            repoFullName: null | string;
+            appInstalledOnRepo: null | boolean;
+            canSwitchToApp: boolean;
+            mergeStrategy: components["schemas"]["MergeStrategy"];
+            tagPrefix: string;
         };
         /** @description Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false. */
         GitTestResultDto: {
@@ -1937,6 +3220,10 @@ export interface components {
             traceId?: string;
             /** @description Individual reasons, when there are several. */
             details?: string[];
+            /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
+            reason?: string;
+            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88). */
+            installUrl?: string;
         };
         /** @description A background job (§4.9): the job queued by a dead-letter retry (FR-51). */
         JobDto: {
@@ -1955,27 +3242,92 @@ export interface components {
         };
         /** @enum {unknown} */
         JobStatus: "queued" | "running" | "succeeded" | "failed" | "dead" | "cancelled" | "retried";
+        JsonElement: unknown;
         JsonObject: {
             [key: string]: unknown;
         };
+        /**
+         * @description The connection bound to a project (FR-79), shown to every member as e.g. "Anthropic · connected by Ana (••••a1b2)".
+         *     Never contains the key. `credentialId` only lets the binding Owner recognise their own connection; nobody else can
+         *     bind it (`CREDENTIAL_NOT_OWNER`).
+         */
+        LlmBindingDto: {
+            /** Format: uuid */
+            credentialId: string;
+            provider: components["schemas"]["LlmProvider"];
+            label: string;
+            last4: string;
+            status: components["schemas"]["LlmCredentialStatus"];
+            boundBy: components["schemas"]["LlmBindingUserDto"];
+        };
+        /** @description The Owner who bound a project's LLM connection (FR-79). */
+        LlmBindingUserDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /** @description A project that has an LLM connection bound (FR-79). */
+        LlmBoundProjectDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /**
+         * @description The caller's LLM connections, newest first (FR-78), and `keylessProviders`: the providers that need no key and
+         *     are always available (Ollama at the system base URL, and Fake).
+         */
+        LlmConnectionsDto: {
+            credentials: components["schemas"]["LlmCredentialDto"][];
+            keylessProviders: components["schemas"]["LlmProvider"][];
+        };
+        /**
+         * @description One of the caller's LLM connections (FR-78). The key is never returned: only the provider, label, its last 4
+         *     characters, the validation status (`valid`, `invalid`, `unchecked`) and when it was last checked, plus
+         *     the projects it is bound to. `last4` is `????` for a key migrated from v1 until the start-up backfill reads it.
+         */
+        LlmCredentialDto: {
+            /** Format: uuid */
+            id: string;
+            provider: components["schemas"]["LlmProvider"];
+            label: string;
+            last4: string;
+            status: components["schemas"]["LlmCredentialStatus"];
+            /** Format: date-time */
+            lastValidatedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            boundProjects: components["schemas"]["LlmBoundProjectDto"][];
+        };
+        /**
+         * @description Validation state of an LLM credential (FR-78). Wire values: `valid`, `invalid`, `unchecked`.
+         * @enum {unknown}
+         */
+        LlmCredentialStatus: "valid" | "invalid" | "unchecked";
         /**
          * @description LLM provider (FR-22). Wire values: `anthropic`, `openai`, `ollama`, `fake`.
          * @enum {unknown}
          */
         LlmProvider: "anthropic" | "openai" | "ollama" | "fake";
-        /** @description Whether a provider can be used: a system key is configured or the project has its own key (Ollama and Fake are always configured). */
+        /** @description Whether a provider can be used: an allowed system key is configured or the project has a bound connection for it (Ollama and Fake are always configured). */
         LlmProviderStatusDto: {
             provider: components["schemas"]["LlmProvider"];
             configured: boolean;
             defaultModel: string;
         };
-        /** @description LLM settings (FR-9, FR-22). The API key is never returned, only `hasApiKey`. `providers` lists every provider with whether it's usable and its system default model. */
+        /**
+         * @description LLM settings (FR-9, FR-22, FR-79). Keys are never returned. `hasApiKey` is true while a connection is bound
+         *     (kept from v1); `binding` describes it (`null` when nothing is bound). `canBind` is true when the caller
+         *     is a project Owner and so may bind one of their own connections or unbind. `providers` lists every provider with
+         *     whether it's usable and its system default model.
+         */
         LlmSettingsDto: {
             provider: components["schemas"]["LlmProvider"];
             defaultModel: string;
             modelsByAgent: components["schemas"]["AgentModelsDto"];
             hasApiKey: boolean;
             providers: components["schemas"]["LlmProviderStatusDto"][];
+            binding: null | components["schemas"]["LlmBindingDto"];
+            canBind: boolean;
         };
         /** @description FR-1 sign-in. */
         LoginRequest: {
@@ -1993,6 +3345,45 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /**
+         * @description FR-84 merge readiness of the version's PR, as of `checkedAt`. `canMerge` is whether AIDE's token may merge it
+         *     now (repository permission and allowed merge methods, branch rules, the PR's `mergeStateStatus` and
+         *     `reviewDecision`, required checks). `willAutoMerge` is `canMerge` under the `aide_merges` strategy
+         *     ("AIDE will merge automatically"); otherwise "A merge on GitHub will be needed" with `reasons` (empty when
+         *     `canMerge`, except `manual_strategy`). `checks` are the PR head's check runs and commit statuses.
+         *     `mergeStateStatus` and `reviewDecision` are GitHub's GraphQL values verbatim (e.g. `CLEAN`,
+         *     `BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a Local project
+         *     `canMerge` is true with no checks. The merge itself stays authoritative (FR-65).
+         */
+        MergeReadinessDto: {
+            canMerge: boolean;
+            willAutoMerge: boolean;
+            mergeStrategy: components["schemas"]["MergeStrategy"];
+            reasons: components["schemas"]["MergeReadinessReasonDto"][];
+            checks: components["schemas"]["CheckRunDto"][];
+            mergeStateStatus: null | string;
+            reviewDecision: null | string;
+            /** Format: date-time */
+            checkedAt: string;
+        };
+        /**
+         * @description FR-84: why AIDE can't merge the version's PR itself (wire values `review_required`, `changes_requested`,
+         *     `checks_failing`, `checks_pending`, `branch_protected`, `merge_conflict`, `no_permission`,
+         *     `merge_method_not_allowed`, `pr_not_open`, `manual_strategy`). Also recorded on an `awaiting_merge`
+         *     release attempt (FR-65).
+         * @enum {unknown}
+         */
+        MergeReadinessReasonCode: "review_required" | "changes_requested" | "checks_failing" | "checks_pending" | "branch_protected" | "merge_conflict" | "no_permission" | "merge_method_not_allowed" | "pr_not_open" | "manual_strategy";
+        /** @description FR-84: one reason AIDE can't merge the version's PR itself, with copy for the Release page and the gate. */
+        MergeReadinessReasonDto: {
+            code: components["schemas"]["MergeReadinessReasonCode"];
+            message: string;
+        };
+        /**
+         * @description FR-65 merge strategy. Wire values: `aide_merges`, `manual`.
+         * @enum {unknown}
+         */
+        MergeStrategy: "aide_merges" | "manual";
         /**
          * @description A notification channel (FR-47). Secrets are never returned, only `hasSecret`. For `email` and
          *     `webhook`, `target` is the saved address or URL and the secret is a webhook's HMAC signing key. For
@@ -2059,10 +3450,11 @@ export interface components {
             createdAt: string;
         };
         /**
-         * @description Events a notification channel can subscribe to (FR-47). Wire values are snake_case.
+         * @description Events a notification channel can subscribe to (FR-47, FR-92). Wire values are snake_case and equal the notification
+         *     types (`NotificationRules.ChannelTypes`); the personal `connection_invalid` never goes to project channels.
          * @enum {unknown}
          */
-        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback";
+        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "llm_binding_cleared";
         /**
          * @description A page of the caller's notifications, newest first. `unreadCount` counts all the caller's unread notifications
          *     (not just this page). Load more with `before` = `nextBefore`; `null` on the last page.
@@ -2085,10 +3477,11 @@ export interface components {
         };
         /**
          * @description The kind of an in-app notification (FR-47, FR-15). The project channel events (`NotificationEvent`) plus
-         *     `gate_reminder`, the 24-hour reminder of a pending gate. Wire values are snake_case.
+         *     `gate_reminder`, the 24-hour reminder of a pending gate, and the personal `connection_invalid` (FR-92).
+         *     Wire values are snake_case.
          * @enum {unknown}
          */
-        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback";
+        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared";
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfAdminAgentRunDto: {
             items: components["schemas"]["AdminAgentRunDto"][];
@@ -2154,6 +3547,98 @@ export interface components {
          * @enum {unknown}
          */
         Phase: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+        /**
+         * @description The state of one execution run (FR-57): the steps of one plan version. `pending` (no step started),
+         *     `running`, `paused`, `completed` (every step completed), `blocked` (a step awaits an escalation
+         *     decision) or `superseded` (the plan was invalidated; its run stays listed under "Superseded").
+         * @enum {unknown}
+         */
+        PlanRunStatus: "pending" | "running" | "paused" | "completed" | "blocked" | "superseded";
+        /** @description A specialist agent of a preset (FR-76): the paths it owns (globs; `!` excludes) and its skills. */
+        PresetAgentDto: {
+            key: string;
+            name: string;
+            description: string;
+            owns: string[];
+            skills: string[];
+        };
+        /** @description A review checklist item (FR-77), mapped to a v1 compliance category. */
+        PresetChecklistItemDto: {
+            category: components["schemas"]["ReviewCategory"];
+            item: string;
+            severity: components["schemas"]["Severity"];
+        };
+        /** @description A preset in full (FR-74): the summary plus agents, spec sections, environment, review and protected paths. No prompt bodies. */
+        PresetDetailDto: {
+            id: string;
+            name: string;
+            version: string;
+            description: string;
+            stack: string[];
+            deployTargets: string[];
+            contentHash: string;
+            agents: components["schemas"]["PresetAgentDto"][];
+            specSections: components["schemas"]["PresetSpecSectionDto"][];
+            requiredEnv: components["schemas"]["PresetEnvVarDto"][];
+            review: components["schemas"]["PresetReviewDto"];
+            protectedPaths: components["schemas"]["PresetProtectedPathDto"][];
+        };
+        /** @description A required environment variable (FR-88): `targets` ⊆ production/preview/development. */
+        PresetEnvVarDto: {
+            key: string;
+            targets: string[];
+            sensitive: boolean;
+            description: string;
+        };
+        /**
+         * @description A protected path (§4.11): `existingOnBase` protects only files already on the version's base commit;
+         *     `except` globs stay writable.
+         */
+        PresetProtectedPathDto: {
+            glob: string;
+            existingOnBase: boolean;
+            except: string[];
+            reason: null | string;
+        };
+        /** @description The preset's review additions (FR-77): its checklist and deterministic rule ids. */
+        PresetReviewDto: {
+            checklist: components["schemas"]["PresetChecklistItemDto"][];
+            deterministic: string[];
+        };
+        /** @description An extra spec section the preset requires (FR-75) with its guidance. */
+        PresetSpecSectionDto: {
+            title: string;
+            guidance: string;
+        };
+        /**
+         * @description A tech stack preset card (FR-74, §7.2 wizard Stack step and admin presets list): `stack` are the chips,
+         *     `deployTargets` the supported deployment targets (`vercel`). `contentHash` is the SHA-256 of the
+         *     preset's files (D-V2-12).
+         */
+        PresetSummaryDto: {
+            id: string;
+            name: string;
+            version: string;
+            description: string;
+            stack: string[];
+            deployTargets: string[];
+            contentHash: string;
+        };
+        /**
+         * @description FR-90: the preview deployment a review cycle waited for (`compliance_report.external_checks.preview`): its id, final
+         *     (or last seen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 20
+         *     minutes; `null` when it didn't wait) and whether it gave up waiting (`timedOut`).
+         */
+        PreviewCheckDto: {
+            /** Format: uuid */
+            deploymentId: string;
+            status: components["schemas"]["DeploymentStatus"];
+            url: null | string;
+            buildLogTail: null | string;
+            /** Format: int32 */
+            waitedSeconds: null | number;
+            timedOut: boolean;
+        };
         ProblemDetails: {
             type?: null | string;
             title?: null | string;
@@ -2167,8 +3652,21 @@ export interface components {
             traceId?: string;
             /** @description Individual reasons, when there are several. */
             details?: string[];
+            /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
+            reason?: string;
+            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88). */
+            installUrl?: string;
         };
-        /** @description A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null` for an Admin who isn't a member); a `null` `tokenBudget` means unlimited. */
+        /**
+         * @description A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null`
+         *     for an Admin who isn't a member); a `null` `tokenBudget` means unlimited. `checkpoint` is the lifecycle
+         *     checkpoint within the current release version `releaseVersionId` (§4.10, D-V2-11: was `projectVersion`);
+         *     `releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the
+         *     version in development (`null`: none) (FR-62). `idea` is the request of the version in development.
+         *     `presetId`, `presetName` and `presetVersion` are the tech stack preset pinned on the current release
+         *     version (FR-74; all `null`: no preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so
+         *     the Deployments page is in its navigation (§7.2).
+         */
         ProjectDto: {
             /** Format: uuid */
             id: string;
@@ -2178,7 +3676,11 @@ export interface components {
             currentPhase: components["schemas"]["Phase"];
             status: components["schemas"]["ProjectStatus"];
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
+            /** Format: uuid */
+            releaseVersionId: null | string;
+            releasedVersion: null | string;
+            developmentVersion: null | string;
             approvalMode: components["schemas"]["ApprovalMode"];
             /** Format: double */
             complianceThreshold: number;
@@ -2196,6 +3698,10 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            presetId: null | string;
+            presetName: null | string;
+            presetVersion: null | string;
+            deploymentsEnabled: boolean;
         };
         /**
          * @description A project event pushed live to everyone viewing the project (FR-46): the SignalR `projectEvent` message.
@@ -2220,6 +3726,23 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /**
+         * @description §7.2: the projects-list KPI row, over the projects matching the list's filters. `active`: not `released` (any
+         *     phase, including rolled back); `inReview`: status `reviewing`; `awaitingGates`: pending gates across
+         *     those projects; `released`: status `released`; `total`: the projects counted.
+         */
+        ProjectKpisDto: {
+            /** Format: int32 */
+            total: number;
+            /** Format: int32 */
+            active: number;
+            /** Format: int32 */
+            inReview: number;
+            /** Format: int32 */
+            awaitingGates: number;
+            /** Format: int32 */
+            released: number;
+        };
         /** @enum {unknown} */
         ProjectRole: "viewer" | "contributor" | "owner" | null;
         /** @description All project settings with secrets as set / not set flags (FR-9). */
@@ -2228,14 +3751,34 @@ export interface components {
             llm: components["schemas"]["LlmSettingsDto"];
             notifications: components["schemas"]["NotificationSettingsDto"];
         };
-        /** @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed` counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened it (FR-36), else `null`. `latestRelease` is the latest release attempt (FR-42, FR-43), else `null`. */
+        /**
+         * @description FR-73: where a new project's code comes from (wizard step "Source").
+         * @enum {unknown}
+         */
+        ProjectSource: "scratch" | "import";
+        /**
+         * @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`
+         *     counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the
+         *     execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened
+         *     it (FR-36), else `null`. `latestRelease` is the latest release attempt of the current release version (FR-42,
+         *     FR-43), else `null`. Artifacts, steps, review and gates are those of the current release version
+         *     `releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was
+         *     `projectVersion` (D-V2-11). `suggestedNextVersion` prefills "Start new version" (FR-60: the next minor of the
+         *     released version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:
+         *     none), for the overview and `aide status`.
+         */
         ProjectStateDto: {
             /** Format: uuid */
             projectId: string;
             phase: components["schemas"]["Phase"];
             status: components["schemas"]["ProjectStatus"];
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
+            /** Format: uuid */
+            releaseVersionId: null | string;
+            releasedVersion: null | string;
+            developmentVersion: null | string;
+            suggestedNextVersion: string;
             executionPaused: boolean;
             artifacts: components["schemas"]["ArtifactStateDto"][];
             execution: components["schemas"]["ExecutionCountsDto"];
@@ -2248,13 +3791,19 @@ export interface components {
             executionStatus: components["schemas"]["ExecutionRunStatus"];
             pullRequest: null | components["schemas"]["PullRequestSummaryDto"];
             latestRelease: null | components["schemas"]["ReleaseSummaryDto"];
+            latestDeployment: null | components["schemas"]["DeploymentDto"];
         };
         /**
-         * @description Project status (§4.1: status follows phase; `released` and `rolled_back` are special).
+         * @description Project status (§4.1: status follows phase; `released`, `rolled_back` and `awaiting_merge` are special).
          * @enum {unknown}
          */
-        ProjectStatus: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back";
-        /** @description A row of the projects list (FR-6). `myRole` is `null` for an Admin who isn't a member. */
+        ProjectStatus: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
+        /**
+         * @description A row of the projects list (FR-6, FR-62). `myRole` is `null` for an Admin who isn't a member;
+         *     `releasedVersion` / `developmentVersion` are the two version badges (`null` when not released / nothing in
+         *     development); `checkpoint` was `projectVersion` (D-V2-11); `presetId`/`presetName`/`presetVersion`
+         *     are the preset chip (FR-74, §7.2; `null`: no preset).
+         */
         ProjectSummaryDto: {
             /** Format: uuid */
             id: string;
@@ -2263,28 +3812,18 @@ export interface components {
             currentPhase: components["schemas"]["Phase"];
             status: components["schemas"]["ProjectStatus"];
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
+            releasedVersion: null | string;
+            developmentVersion: null | string;
             approvalMode: components["schemas"]["ApprovalMode"];
             myRole: null | components["schemas"]["ProjectRole"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
-        };
-        /**
-         * @description A project version from the state transitions (FR-44), for the rollback target picker: the phase entered at that version
-         *     and when. `rollbackAllowed` says whether it is a valid rollback target now; when it isn't,
-         *     `rollbackBlockedReason` says why (`current_version`, `release_phase`). Rate limits and running work
-         *     (RATE_LIMITED, ROLLBACK_BLOCKED) are not reflected here: they are checked when the rollback is requested.
-         */
-        ProjectVersionDto: {
-            /** Format: int32 */
-            version: number;
-            phase: components["schemas"]["Phase"];
-            /** Format: date-time */
-            enteredAt: string;
-            rollbackAllowed: boolean;
-            rollbackBlockedReason: null | components["schemas"]["RollbackTargetBlock"];
+            presetId: null | string;
+            presetName: null | string;
+            presetVersion: null | string;
         };
         /** @description A commit on the project branch that isn't on the default branch; `url` links it on GitHub (`null` for Local). */
         PullRequestCommitDto: {
@@ -2338,6 +3877,15 @@ export interface components {
             /** Format: date-time */
             openedAt: string;
         };
+        /**
+         * @description Create or replace an environment variable (FR-88): the value (up to 64 KB; encrypted in AIDE and never returned), its
+         *     targets (`preview`, `production`, at least one) and whether Vercel stores it as sensitive.
+         */
+        PutDeploymentEnvRequest: {
+            value: string;
+            targets: components["schemas"]["DeploymentTarget"][];
+            sensitive?: boolean;
+        };
         /** @description An answer given to the agent: `questionId` when it answered a question of a round, and the question text. */
         RefinementAnswerDto: {
             questionId: null | string;
@@ -2356,7 +3904,9 @@ export interface components {
         /**
          * @description The refinement page (FR-27): the latest project request version (`latestDraft`, without content — read it from
          *     the artifacts API), the latest round and its status, and the clarifying questions of the latest completed round
-         *     (`questionsRunId`) with any answers already given.
+         *     (`questionsRunId`) with any answers already given. `codebaseSummary` is the Repository Analyst's state for
+         *     the version (FR-70). `rounds` (FR-55) is every round of the selected release version, newest first (at most
+         *     `50`, the latest), with the questions each asked and the answers they were given.
          */
         RefinementDto: {
             latestDraft: null | components["schemas"]["ArtifactSummaryDto"];
@@ -2364,6 +3914,8 @@ export interface components {
             /** Format: uuid */
             questionsRunId: null | string;
             questions: components["schemas"]["RefinementQuestionDto"][];
+            codebaseSummary: components["schemas"]["CodebaseSummaryStatusDto"];
+            rounds: components["schemas"]["RefinementRoundHistoryDto"][];
         };
         /**
          * @description A clarifying question of the latest completed round (FR-27). `answer` is the answer already given for the next
@@ -2402,6 +3954,36 @@ export interface components {
             /** Format: date-time */
             completedAt: null | string;
         };
+        /**
+         * @description One round of the refinement history (FR-55, FR-27). `round` is its 1-based number within the release version
+         *     (oldest = 1). `startedAt` is when it was queued, `completedAt` when its run (or job) ended. `questions` are
+         *     the clarifying questions this round asked (empty unless it `succeeded`), each with the `answer` a later round
+         *     gave it (the latest round started before the next succeeded round, as on the page), else `null`. `answers` and
+         *     `feedback` are what this round's agent was given; `draftArtifactId`/`draftArtifactVersion` the project
+         *     request version it created.
+         */
+        RefinementRoundHistoryDto: {
+            /** Format: int32 */
+            round: number;
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            jobId: string;
+            trigger: null | components["schemas"]["AgentJobTrigger"];
+            status: components["schemas"]["AgentRunStatus"];
+            error: null | string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+            questions: components["schemas"]["RefinementQuestionDto"][];
+            answers: components["schemas"]["RefinementAnswerDto"][];
+            feedback: null | string;
+            /** Format: uuid */
+            draftArtifactId: null | string;
+            /** Format: int32 */
+            draftArtifactVersion: null | number;
+        };
         /** @description FR-1 registration. */
         RegisterRequest: {
             email: string;
@@ -2410,21 +3992,43 @@ export interface components {
             password: string;
         };
         /**
-         * @description A release attempt (FR-42, FR-43). `status` is `in_progress` while the release job is queued or running, then
-         *     `succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`.
+         * @description An `[unchanged]` requirement the review found broken in an iteration (§4.13): the requirement id, the category it
+         *     was reported under, what is broken and the evidence. Regressions carry no deterministic penalty.
+         */
+        RegressionDto: {
+            requirementId: string;
+            category: components["schemas"]["ReviewCategory"];
+            description: string;
+            evidence: null | string;
+        };
+        /**
+         * @description A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint
+         *     `checkpoint`. `status` is `in_progress` while the release job is queued or running, then
+         *     `succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`, or
+         *     `awaiting_merge` (FR-65) when the merge was refused or the strategy is `manual`: `awaitingMergeSince` is
+         *     when it started waiting and `mergeReasons` are the merge-readiness reasons (FR-84) recorded then (`null`
+         *     otherwise); the merge poll then completes it once the PR is merged on GitHub (§4.14).
          *     A failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict
          *     `conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`
-         *     for Local). `attempt` counts the release attempts for this project version (1 for the first, +1 per retry).
-         *     `completedAt` is `null` while in progress. `tag` is `v&lt;version&gt;-aide` until the release succeeds,
-         *     then the tag it was recorded with: `v&lt;version&gt;-aide.&lt;k&gt;` when the version number was reused after a rollback
-         *     and the base tag holds an earlier release; several attempts of one version may succeed (re-releases after rollbacks).
-         *     `mergeCommitSha` is set as soon as the merge exists, before tagging.
+         *     for Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).
+         *     `completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`
+         *     (e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails
+         *     the release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.
+         *     Failure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,
+         *     `GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and
+         *     `MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can
+         *     retry with `POST /release`. `githubReleaseUrl` is the GitHub Release created for the tag (FR-64; `null`
+         *     for Local or before it exists). `mergeStrategy` is the project's current merge strategy (FR-65).
+         *     `productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including
+         *     redeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release.
          */
         ReleaseDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
             status: components["schemas"]["ReleaseStatus"];
             tag: string;
             mergeCommitSha: null | string;
@@ -2438,22 +4042,106 @@ export interface components {
             startedAt: string;
             /** Format: date-time */
             completedAt: null | string;
+            githubReleaseUrl: null | string;
+            /** Format: date-time */
+            awaitingMergeSince: null | string;
+            mergeReasons: null | components["schemas"]["MergeReadinessReasonDto"][];
+            mergeStrategy: components["schemas"]["MergeStrategy"];
+            productionDeployment: null | components["schemas"]["DeploymentDto"];
         };
         /**
          * @description Outcome of a release attempt (FR-42, FR-43).
          * @enum {unknown}
          */
-        ReleaseStatus: "succeeded" | "failed" | "in_progress";
-        /** @description The latest release attempt in the project state (FR-42, FR-43): enough for the overview's release banner. */
+        ReleaseStatus: "succeeded" | "failed" | "in_progress" | "awaiting_merge";
+        /**
+         * @description The latest release attempt in the project state (FR-42, FR-43, FR-64, FR-65): enough for the overview's release banner,
+         *     including "Awaiting merge" with the PR link and reasons, and the GitHub Release link. Fields as in `ReleaseDto`.
+         */
         ReleaseSummaryDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
             /** Format: int32 */
-            projectVersion: number;
+            checkpoint: number;
             status: components["schemas"]["ReleaseStatus"];
             tag: string;
             /** Format: date-time */
             startedAt: string;
+            pullRequestUrl: null | string;
+            githubReleaseUrl: null | string;
+            /** Format: date-time */
+            awaitingMergeSince: null | string;
+            mergeReasons: null | components["schemas"]["MergeReadinessReasonDto"][];
+            mergeStrategy: components["schemas"]["MergeStrategy"];
+        };
+        /**
+         * @description The lifecycle checkpoints of a release version (§4.10): `current` is the project's checkpoint for the version in
+         *     development (or the latest checkpoint recorded for any other version); `max` the highest checkpoint recorded in it
+         *     (above `current` after a rollback).
+         */
+        ReleaseVersionCheckpointsDto: {
+            /** Format: int32 */
+            current: number;
+            /** Format: int32 */
+            max: number;
+        };
+        /**
+         * @description A release version of a project (§4.10, FR-60–FR-62). `version` is the normalised semver (no leading `v`);
+         *     `tag` is the release tag once released (or the imported/migrated tag, e.g. v1's `v7-aide`); `baseTag` and
+         *     `baseCommitSha` are the released tag and merge commit the version started from (null for a first version);
+         *     `branchName` and `pullRequestUrl` are the version's working branch and PR once they exist; `request` is
+         *     what the version was started with (the project idea for a first version); `startedBy` is null for versions created
+         *     by migration or import. `presetId`/`presetVersion` are the pinned preset (FR-74) and `presetName` its
+         *     name (the id when the preset is no longer shipped); all `null` without a preset.
+         */
+        ReleaseVersionDto: {
+            /** Format: uuid */
+            id: string;
+            version: string;
+            status: components["schemas"]["ReleaseVersionStatus"];
+            tag: null | string;
+            tagPrefix: string;
+            baseTag: null | string;
+            baseCommitSha: null | string;
+            mergeCommitSha: null | string;
+            branchName: null | string;
+            pullRequestUrl: null | string;
+            checkpoints: components["schemas"]["ReleaseVersionCheckpointsDto"];
+            presetId: null | string;
+            presetVersion: null | string;
+            presetName: null | string;
+            request: string;
+            startedBy: null | components["schemas"]["ActorDto"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            releasedAt: null | string;
+        };
+        /**
+         * @description Status of a release version (§4.10). Wire values: `in_development`, `awaiting_merge`, `released`, `imported`.
+         * @enum {unknown}
+         */
+        ReleaseVersionStatus: "in_development" | "awaiting_merge" | "released" | "imported";
+        /** @description The optimisation plan a review cycle produced (FR-40): its artifact id, version and status. */
+        ReportPlanDto: {
+            /** Format: uuid */
+            artifactId: string;
+            /** Format: int32 */
+            version: number;
+            status: components["schemas"]["ArtifactStatus"];
+        };
+        /**
+         * @description An environment variable the project's preset requires (FR-88, §4.11 preset env): its key, targets, whether it is
+         *     sensitive, what it is for, and whether the project has it (`present`; missing ones are flagged).
+         */
+        RequiredEnvVarDto: {
+            key: string;
+            targets: components["schemas"]["DeploymentTarget"][];
+            sensitive: boolean;
+            description: string;
+            present: boolean;
         };
         /**
          * @description Compliance categories (§4.7).
@@ -2487,8 +4175,8 @@ export interface components {
             status: components["schemas"]["ReviewRunStatus"];
         };
         /**
-         * @description A recorded rollback (FR-44, §4.8): from `fromVersion` to `toVersion`, restoring `restoredPhase`.
-         *     `invalidatedArtifactIds` are the artifacts created after the target version; `resetStepIds` the steps of
+         * @description A recorded rollback (FR-44, §4.8): from checkpoint `fromCheckpoint` to `toCheckpoint` of release version
+         *     `releaseVersionId`, restoring `restoredPhase`. `invalidatedArtifactIds` are the artifacts created after the target checkpoint; `resetStepIds` the steps of
          *     invalidated plans (now `invalidated`); `requeuedStepIds` the blocked or rejected steps of surviving plans
          *     (back to `pending`); `cancelledGateIds` and `cancelledJobIds` the pending gates and queued jobs it
          *     cancelled. `createdBy` is the Owner (or the system, for an escalation decision recorded by a worker).
@@ -2496,10 +4184,12 @@ export interface components {
         RollbackDto: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
             /** Format: int32 */
-            fromVersion: number;
+            fromCheckpoint: number;
             /** Format: int32 */
-            toVersion: number;
+            toCheckpoint: number;
             restoredPhase: components["schemas"]["Phase"];
             reason: string;
             invalidatedArtifactIds: string[];
@@ -2512,16 +4202,15 @@ export interface components {
             createdBy: components["schemas"]["ActorDto"];
         };
         /**
-         * @description Roll the project back to an earlier project version (FR-44, §4.8). `targetVersion` must be below the current
-         *     version, recorded, and not a release-phase version; `reason` is recorded on the rollback and its state transition.
+         * @description Roll the project back to an earlier checkpoint (FR-44, FR-63, §4.8, §4.10). `targetCheckpoint` must be below the
+         *     current checkpoint, recorded in the release version in development, and not a release-phase checkpoint; `reason` is
+         *     recorded on the rollback and its state transition.
          */
         RollbackRequest: {
             /** Format: int32 */
-            targetVersion: number;
+            targetCheckpoint: number;
             reason: string;
         };
-        /** @enum {unknown} */
-        RollbackTargetBlock: "current_version" | "release_phase" | null;
         /** @description An artifact version a run used as input (FR-23). */
         RunInputArtifactDto: {
             type: components["schemas"]["ArtifactType"];
@@ -2537,6 +4226,58 @@ export interface components {
         StartRefinementRequest: {
             answers?: null | components["schemas"]["RefinementAnswerRequest"][];
         };
+        /**
+         * @description FR-60: start a new release version. `version` is semver (a leading `v` is stripped, e.g. `v1.2.0` →
+         *     `1.2.0`); `request` describes the new features, improvements or fixes and becomes the project idea for this
+         *     version; `presetId` picks the tech stack preset of the new version (FR-74): omit it to keep the preset of the
+         *     version it builds on, send `null` for no preset; an unknown id is `PRESET_NOT_FOUND`.
+         */
+        StartReleaseVersionRequest: {
+            version: string;
+            request: string;
+            presetId?: null | string;
+        };
+        /** @description FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1). */
+        StartReleaseVersionResultDto: {
+            releaseVersion: components["schemas"]["ReleaseVersionDto"];
+            state: components["schemas"]["ProjectStateDto"];
+        };
+        /**
+         * @description One attempt of an execution step (FR-57): its outcome, the Guardian errors (`violations`) and `warnings`, the
+         *     files an accepted attempt committed, its agent run (null when the run row is gone) and that run's tool calls.
+         */
+        StepAttemptDto: {
+            /** Format: int32 */
+            attempt: number;
+            outcome: components["schemas"]["StepAttemptOutcome"];
+            /** Format: date-time */
+            createdAt: string;
+            violations: components["schemas"]["StepViolationDto"][];
+            warnings: components["schemas"]["StepViolationDto"][];
+            producedFiles: components["schemas"]["FileManifestEntryDto"][];
+            run: null | components["schemas"]["StepAttemptRunDto"];
+            toolCalls: components["schemas"]["ToolCallDto"][];
+        };
+        /**
+         * @description Outcome of an execution step attempt (FR-57). Wire values: `accepted`, `rejected`, `error`.
+         * @enum {unknown}
+         */
+        StepAttemptOutcome: "accepted" | "rejected" | "error";
+        /** @description The agent run of a step attempt (FR-57): agent, specialist key, model, tokens, duration and status. */
+        StepAttemptRunDto: {
+            /** Format: uuid */
+            id: string;
+            agent: components["schemas"]["AgentKind"];
+            agentKey: null | string;
+            model: string;
+            /** Format: int32 */
+            inputTokens: number;
+            /** Format: int32 */
+            outputTokens: number;
+            /** Format: int64 */
+            durationMs: number;
+            status: components["schemas"]["AgentRunStatus"];
+        };
         /** @enum {unknown} */
         StepStatus: "pending" | "in_progress" | "completed" | "rejected" | "blocked" | "invalidated";
         /** @description A Guardian violation recorded on a step's last rejected attempt (§4.6, FR-32). Never contains secret values. */
@@ -2549,29 +4290,73 @@ export interface components {
         };
         /** @enum {unknown} */
         SystemRole: "user" | "admin";
+        /**
+         * @description A repository tool call made during an agent run (FR-71): the tool name, its arguments as given by the model, the bytes
+         *     returned and whether the result was cut to the tool's limit. `error` is the code of a refused call
+         *     (`UNSAFE_PATH`, `TOOL_LIMIT`, `NOT_FOUND`, …), else `null`.
+         */
+        ToolCallDto: {
+            tool: string;
+            arguments: components["schemas"]["JsonElement"];
+            /** Format: int32 */
+            bytes: number;
+            truncated: boolean;
+            error: null | string;
+        };
         /** @description The number of the caller's unread notifications (the bell badge). */
         UnreadNotificationCountDto: {
             /** Format: int32 */
             unreadCount: number;
         };
+        /**
+         * @description Settings → Deployment (FR-88, Owner). `provider` (required) is `vercel`, or `null` to turn deployment
+         *     off (other fields not allowed then; history is kept). `connectionId` binds one of the caller's own Vercel
+         *     connections (omitted: keep the bound one). Send `vercelProjectId` to link an existing Vercel project or
+         *     `create` to create one, not both (omitted: keep the linked one).
+         */
+        UpdateDeploymentSettingsRequest: {
+            provider: null | components["schemas"]["DeploymentProvider"];
+            /** Format: uuid */
+            connectionId?: null | string;
+            vercelProjectId?: null | string;
+            create?: null | components["schemas"]["CreateVercelProjectRequest"];
+        };
         /** @description Partial update of the Git settings. Omitted fields are unchanged. */
         UpdateGitSettingsRequest: {
             provider?: null | components["schemas"]["GitProvider"];
-            /** @description Required when the provider is (or becomes) `github`. */
+            /** @description Required when the provider is (or becomes) `github_pat`. */
             repoUrl?: null | string;
             defaultBranch?: null | string;
             /** @description Sets the access token. To remove it, send `clearToken: true`. */
             token?: null | string;
             clearToken?: boolean;
+            mergeStrategy?: null | components["schemas"]["MergeStrategy"];
+            /**
+             * @description §4.10, FR-64: the tag prefix (`^[A-Za-z0-9._/-]{0,20}$`, not starting with `.`, `/` or
+             *         `-`; empty for bare `1.2.0` tags; else 400 `VALIDATION`). It also applies to the version in
+             *         development. 409 `CONFLICT` while that version is `awaiting_merge` or a release attempt is in progress.
+             */
+            tagPrefix?: null | string;
         };
-        /** @description Partial update of the LLM settings. Omitted fields are unchanged; `modelsByAgent`, when sent, replaces the map. */
+        /** @description Rename an LLM connection (FR-78). */
+        UpdateLlmCredentialRequest: {
+            label: string;
+        };
+        /**
+         * @description Partial update of the LLM settings (Owner). Omitted fields are unchanged; `modelsByAgent`, when sent, replaces the
+         *     map. FR-79: `credentialId` binds one of the caller's own connections for the (new) provider; `null` unbinds.
+         *     Changing the provider without sending `credentialId` drops a binding of the old provider. v1's per-project
+         *     `apiKey`/`clearApiKey` are gone: keys are added under Account → Connections (FR-78).
+         */
         UpdateLlmSettingsRequest: {
             provider?: null | components["schemas"]["LlmProvider"];
             defaultModel?: null | string;
             modelsByAgent?: null | components["schemas"]["AgentModelsDto"];
-            /** @description Sets the project's own API key. To remove it, send `clearApiKey: true`. */
-            apiKey?: null | string;
-            clearApiKey?: boolean;
+            /**
+             * Format: uuid
+             * @description The caller's connection to bind, or `null` to unbind. Omit it to keep the binding.
+             */
+            credentialId?: null | string;
         };
         UpdateMemberRoleRequest: {
             role: components["schemas"]["ProjectRole"];
@@ -2583,6 +4368,13 @@ export interface components {
         /** @description Replaces the project's notification channels (FR-47). */
         UpdateNotificationSettingsRequest: {
             channels: components["schemas"]["NotificationChannelInput"][];
+        };
+        /**
+         * @description FR-74: change the preset of the version in development (Owner), until its first implementation plan is locked.
+         *     `presetId` is a preset id from `GET /api/presets`, or `null` for no preset (general).
+         */
+        UpdateProjectPresetRequest: {
+            presetId?: null | string;
         };
         /** @description Partial update of a project (FR-7). Omitted fields are unchanged. */
         UpdateProjectRequest: {
@@ -2602,6 +4394,10 @@ export interface components {
             /** @description `true` removes the token budget (unlimited). Can't be combined with `tokenBudget`. */
             clearTokenBudget?: boolean;
         };
+        /** @description Rename a Vercel connection (FR-87). */
+        UpdateVercelConnectionRequest: {
+            label: string;
+        };
         /** @description The signed-in user (or a user, for admins). */
         UserDto: {
             /** Format: uuid */
@@ -2612,6 +4408,55 @@ export interface components {
             avatarUrl: null | string;
             githubLinked: boolean;
         };
+        /** @description A project that has a Vercel connection bound for deployment (FR-88). */
+        VercelBoundProjectDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /**
+         * @description One of the caller's Vercel connections (FR-87). The token is never returned: only the label, its last 4 characters,
+         *     the Vercel account (`accountName`, the Vercel username; `null` when unknown) and, for a team-scoped token,
+         *     `teamId`/`teamSlug`, the `scope` (`account` or `team`), the token's expiry (`null`: none),
+         *     the validation status (`valid`, `invalid`, `unchecked`) and when it was last checked, plus the projects
+         *     it is bound to.
+         */
+        VercelConnectionDto: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+            last4: string;
+            accountName: null | string;
+            teamId: null | string;
+            teamSlug: null | string;
+            scope: components["schemas"]["VercelTokenScope"];
+            /** Format: date-time */
+            expiresAt: null | string;
+            status: components["schemas"]["VercelConnectionStatus"];
+            /** Format: date-time */
+            lastValidatedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            boundProjects: components["schemas"]["VercelBoundProjectDto"][];
+        };
+        /**
+         * @description Validation state of a Vercel connection (FR-87: a token Vercel rejects marks it invalid). Wire values:
+         *                 `valid`, `invalid`, `unchecked`.
+         * @enum {unknown}
+         */
+        VercelConnectionStatus: "valid" | "invalid" | "unchecked";
+        /** @description The linked Vercel project (FR-88): id (`prj_…`), name, its Vercel URL and the production URL once known. */
+        VercelProjectDto: {
+            id: string;
+            name: string;
+            url: null | string;
+            productionUrl: null | string;
+        };
+        /**
+         * @description Scope of a Vercel token (FR-87). Wire values: `account`, `team`.
+         * @enum {unknown}
+         */
+        VercelTokenScope: "account" | "team";
         /** @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known. */
         ViolationDto: {
             category: components["schemas"]["ReviewCategory"];
@@ -3105,6 +4950,917 @@ export interface operations {
             };
         };
     };
+    ListLlmConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmConnectionsDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateLlmConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLlmCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmCredentialDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteLlmConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RenameLlmConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLlmCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmCredentialDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestLlmConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmCredentialDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListVercelConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VercelConnectionDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateVercelConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVercelConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VercelConnectionDto"];
+                };
+            };
+            /** @description VALIDATION, or CREDENTIAL_INVALID (Vercel rejected the token; nothing is saved) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached; nothing is saved) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteVercelConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RenameVercelConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateVercelConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VercelConnectionDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestVercelConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VercelConnectionDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetGitHubConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubConnectionDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DisconnectGitHub: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ConnectGitHub: {
+        parameters: {
+            query?: {
+                returnUrl?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListGitHubRepos: {
+        parameters: {
+            query?: {
+                search?: string;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubRepoPageDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_NOT_CONNECTED or GITHUB_APP_NOT_INSTALLED (extension installUrl) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateGitHubRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGitHubRepoRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubRepoDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (GitHub refused: no Administration permission, or the caller can't create repositories for that owner) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description REPO_NAME_TAKEN, GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListGitHubOwners: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubOwnerDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_NOT_CONNECTED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetGitHubRepoRefs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner: string;
+                repo: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubRepoRefsDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (no such repository, or the caller can't access it) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_NOT_CONNECTED or GITHUB_APP_NOT_INSTALLED (extension installUrl) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListUsers: {
         parameters: {
             query?: {
@@ -3287,7 +6043,7 @@ export interface operations {
         parameters: {
             query?: {
                 projectId?: string;
-                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review";
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
                 status?: "queued" | "running" | "succeeded" | "failed" | "cancelled";
                 provider?: "anthropic" | "openai" | "ollama" | "fake";
                 model?: string;
@@ -3449,6 +6205,190 @@ export interface operations {
             };
         };
     };
+    GetAdminLlmPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminLlmPolicyDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAdminGitHubApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitHubAppDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateGitHubAppManifest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGitHubAppManifestRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubAppManifestResponseDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (an App is already configured) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CompleteGitHubAppManifest: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListProjects: {
         parameters: {
             query?: {
@@ -3456,7 +6396,9 @@ export interface operations {
                 limit?: number;
                 search?: string;
                 phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
-                status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back";
+                status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
+                hasDevelopmentVersion?: boolean;
+                preset?: string;
                 sortBy?: "created" | "updated" | "name";
                 sortOrder?: "asc" | "desc";
             };
@@ -3517,13 +6459,13 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectDto"];
                 };
             };
-            /** @description Bad Request */
+            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository) or PRESET_NOT_FOUND */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Unauthorized */
@@ -3535,8 +6477,90 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Forbidden */
+            /** @description FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) or CREDENTIAL_NOT_OWNER (deployment: another user's Vercel connection) */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it; deployment: unknown Vercel connection or project) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists); deployment: VERCEL_GIT_NOT_CONNECTED (extension installUrl) or VERCEL_PLAN_LIMIT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetProjectKpis: {
+        parameters: {
+            query?: {
+                search?: string;
+                phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+                status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
+                hasDevelopmentVersion?: boolean;
+                preset?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectKpisDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4057,13 +7081,149 @@ export interface operations {
                     "application/json": components["schemas"]["GitSettingsDto"];
                 };
             };
-            /** @description Bad Request */
+            /** @description VALIDATION: invalid Git settings or tag prefix. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT: the tag prefix can't change while a release is in progress or awaiting its merge, or a concurrent change. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    SwitchGitToApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitSettingsDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (not an Owner, or the caller's GitHub account can't push to the repository) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl), GITHUB_NOT_CONNECTED, or CONFLICT when the project isn't on a GitHub PAT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetLlmSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmSettingsDto"];
                 };
             };
             /** @description Unauthorized */
@@ -4268,6 +7428,577 @@ export interface operations {
             };
         };
     };
+    GetDeploymentSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentSettingsDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateDeploymentSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDeploymentSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentSettingsDto"];
+                };
+            };
+            /** @description VALIDATION (including a Local Git project, or both vercelProjectId and create) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection, or changing the deployment with another Owner's bound connection without sending your own connectionId) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project, connection or Vercel project) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description VERCEL_GIT_NOT_CONNECTED (extension installUrl: Vercel's GitHub App install link), VERCEL_PLAN_LIMIT (Hobby plan with an organisation-owned repo) or CONFLICT (concurrent change) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListDeploymentEnv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentEnvVarDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PutDeploymentEnv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutDeploymentEnvRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentEnvVarDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (saved in AIDE with syncError; Vercel failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteDeploymentEnv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListDeployments: {
+        parameters: {
+            query?: {
+                target?: "preview" | "production";
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDto"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreatePreviewDeployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description DEPLOYMENT_NOT_CONFIGURED (no deployment settings or no bound connection) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PromoteDeployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                deploymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description INVALID_DEPLOYMENT (not a ready production deployment) or DEPLOYMENT_NOT_CONFIGURED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RedeployDeployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                deploymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (a Viewer, or a Contributor redeploying production) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description DEPLOYMENT_NOT_CONFIGURED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     AdvancePhase: {
         parameters: {
             query?: never;
@@ -4343,6 +8074,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "pending" | "approved" | "rejected" | "cancelled";
+                releaseVersionId?: string;
             };
             header?: never;
             path: {
@@ -4551,6 +8283,7 @@ export interface operations {
                 type?: "transition" | "gate" | "artifact" | "run" | "step" | "review" | "release" | "rollback" | "project" | "integrity";
                 before?: string;
                 limit?: number;
+                releaseVersionId?: string;
             };
             header?: never;
             path: {
@@ -4600,7 +8333,9 @@ export interface operations {
     };
     ListLatestArtifacts: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -4649,11 +8384,13 @@ export interface operations {
     };
     GetLatestArtifact: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
             };
             cookie?: never;
         };
@@ -4699,11 +8436,14 @@ export interface operations {
     };
     GetArtifactHistory: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+                allReleaseVersions?: boolean;
+            };
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
             };
             cookie?: never;
         };
@@ -4753,7 +8493,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
                 version: number;
             };
             cookie?: never;
@@ -4807,7 +8547,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
             };
             cookie?: never;
         };
@@ -4857,7 +8597,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
             };
             cookie?: never;
         };
@@ -4913,6 +8653,75 @@ export interface operations {
                 };
             };
             /** @description WRONG_PHASE: the type can't be edited in the current phase; CONFLICT: baseVersion is no longer the latest version (details: latestVersion), or a concurrent save. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RestoreArtifactVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactDto"];
+                };
+            };
+            /** @description VALIDATION: unknown artifact type, version below 1, or the version is already the latest of its type. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't restore versions. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project or version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description RESTORE_NOT_ALLOWED (reason: stage_completed, stage_not_reached, other_release_version, corrupted or releasing) or CONFLICT (a concurrent save). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5070,9 +8879,10 @@ export interface operations {
     ListRuns: {
         parameters: {
             query?: {
-                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review";
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
                 page?: number;
                 limit?: number;
+                releaseVersionId?: string;
             };
             header?: never;
             path: {
@@ -5163,7 +8973,9 @@ export interface operations {
     };
     GetRefinement: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5199,7 +9011,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description NOT_FOUND: the project. */
+            /** @description NOT_FOUND: the project, or the release version in this project. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5285,7 +9097,8 @@ export interface operations {
         parameters: {
             query?: {
                 planVersion?: number;
-                planType?: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan";
+                planType?: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+                releaseVersionId?: string;
             };
             header?: never;
             path: {
@@ -5323,6 +9136,89 @@ export interface operations {
                 };
             };
             /** @description NOT_FOUND: the project, or the requested plan version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListExecutionRuns: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionRunDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or the release version in this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListStepAttempts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                stepId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepAttemptDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or the step in this project. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5603,6 +9499,77 @@ export interface operations {
             };
         };
     };
+    GetMergeReadiness: {
+        parameters: {
+            query?: {
+                refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MergeReadinessDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description WRONG_PHASE: not in the review or release phase. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset). */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR: GitHub failed or couldn't be reached. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     StartReview: {
         parameters: {
             query?: never;
@@ -5663,7 +9630,9 @@ export interface operations {
     };
     GetLatestCompliance: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5703,7 +9672,9 @@ export interface operations {
     };
     GetComplianceTrend: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5743,7 +9714,9 @@ export interface operations {
     };
     GetComplianceDrift: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5771,6 +9744,101 @@ export interface operations {
                 };
             };
             /** @description NOT_FOUND: the project, or no review has completed yet. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListComplianceReports: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceReportSummaryDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or the release version in this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetComplianceReport: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+                reportId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                cycle: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceReportDetailDto"];
+                };
+            };
+            /** @description VALIDATION: cycle below 1. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, the release version, or no report for that cycle (or reportId is not a report of that cycle). */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5828,7 +9896,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description NOT_RELEASING (not in the release phase with status releasing, e.g. already released), RELEASE_IN_PROGRESS (a release job is queued or running) or CONFLICT (a concurrent change). */
+            /** @description NOT_RELEASING (not in the release phase with status releasing, e.g. already released or awaiting_merge), RELEASE_IN_PROGRESS (a release job is queued or running) or CONFLICT (a concurrent change). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5841,7 +9909,9 @@ export interface operations {
     };
     ListReleases: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5943,7 +10013,7 @@ export interface operations {
                     "application/json": components["schemas"]["RollbackDto"];
                 };
             };
-            /** @description VALIDATION (targetVersion < 1, reason empty or over 500 characters) or INVALID_TARGET_VERSION (not below the current version, not recorded, or a release-phase version). */
+            /** @description VALIDATION (targetCheckpoint < 1, reason empty or over 500 characters) or INVALID_TARGET_VERSION (not below the current checkpoint, not recorded in the version in development, or a release-phase checkpoint). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5979,7 +10049,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description ROLLBACK_BLOCKED with details ["reason: <step_in_progress|agent_run_in_progress|release_running|release_partially_applied>"] (a step, agent run or release job is running, or a queued release retry already merged), or CONFLICT (a concurrent change). */
+            /** @description ROLLBACK_BLOCKED with details ["reason: <version_released|release_partially_applied|step_in_progress|agent_run_in_progress|release_running>"] (the project is released with nothing in development, the release is awaiting merge or partly applied, or a step, agent run or release job is running), or CONFLICT (a concurrent change). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6041,7 +10111,7 @@ export interface operations {
             };
         };
     };
-    ListProjectVersions: {
+    ListReleaseVersions: {
         parameters: {
             query?: never;
             header?: never;
@@ -6058,7 +10128,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectVersionDto"][];
+                    "application/json": components["schemas"]["ReleaseVersionDto"][];
                 };
             };
             /** @description Unauthorized */
@@ -6072,6 +10142,268 @@ export interface operations {
             };
             /** @description NOT_FOUND: the project. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StartReleaseVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartReleaseVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description The release version (in_development) and the project state. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartReleaseVersionResultDto"];
+                };
+            };
+            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]) or PRESET_NOT_FOUND. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners start versions. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description VERSION_IN_PROGRESS, RELEASE_NOT_MERGED (the latest release is awaiting merge), NOT_RELEASED, VERSION_NOT_GREATER (not above the released version), TAG_EXISTS (the tag is already in the repository) or CONFLICT. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR: the repository's tags could not be checked. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListCheckpoints: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckpointDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or a releaseVersionId of another project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetSummaryDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetDetailDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: no preset with that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateProjectPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectPresetRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDto"];
+                };
+            };
+            /** @description PRESET_NOT_FOUND: no preset with that id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners change the preset. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PRESET_LOCKED (the version's implementation plan is locked, or no version is in development) or CONFLICT (a concurrent edit). */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

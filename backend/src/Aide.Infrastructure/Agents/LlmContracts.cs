@@ -91,11 +91,47 @@ public interface ILlmProvider
     Task<LlmCompletion> CompleteAsync(LlmRequest request, CancellationToken cancellationToken);
 }
 
-/// <summary>The provider, model and credential an agent run uses (FR-22).</summary>
-public sealed record ResolvedLlm(LlmProvider Provider, string Model, string? ApiKey)
+/// <summary>The provider, model and credential an agent run uses (FR-22). <see cref="CredentialId"/> is the bound
+/// connection the key came from (FR-79), <c>null</c> for a system key or a provider without one.</summary>
+public sealed record ResolvedLlm(LlmProvider Provider, string Model, string? ApiKey, Guid? CredentialId = null)
 {
     /// <summary>Anthropic and OpenAI need a key; without one the run fails as <c>PROVIDER_NOT_CONFIGURED</c>.</summary>
     public bool IsConfigured => !Aide.Domain.Projects.ProjectSettingsRules.RequiresApiKey(Provider) || !string.IsNullOrWhiteSpace(ApiKey);
 
-    public override string ToString() => $"ResolvedLlm {{ Provider = {Provider.ToWire()}, Model = {Model}, HasApiKey = {ApiKey is not null} }}";
+    public override string ToString() => $"ResolvedLlm {{ Provider = {Provider.ToWire()}, Model = {Model}, HasApiKey = {ApiKey is not null}, CredentialId = {CredentialId} }}";
+}
+
+/// <summary>The key a run of a project uses (FR-79, D-V2-5) and the connection it came from (<c>null</c> for a system key).
+/// <see cref="ToString"/> never shows the key.</summary>
+public sealed record LlmKey(string? ApiKey, Guid? CredentialId)
+{
+    public static LlmKey None { get; } = new(null, null);
+
+    public override string ToString() => $"LlmKey {{ HasApiKey = {ApiKey is not null}, CredentialId = {CredentialId} }}";
+}
+
+/// <summary>The result of checking a key with the provider (FR-78).</summary>
+public enum LlmKeyCheckOutcome
+{
+    /// <summary>The provider accepted the key.</summary>
+    Valid = 0,
+
+    /// <summary>The provider rejected the key (HTTP 401/403): <c>CREDENTIAL_INVALID</c>.</summary>
+    Rejected = 1,
+
+    /// <summary>The provider could not be reached or failed (network, timeout, 429, 5xx, other statuses): <c>UPSTREAM_ERROR</c>.</summary>
+    Unavailable = 2,
+}
+
+/// <summary>A key check's outcome, the provider's HTTP status (when it answered) and a message that never holds the key.</summary>
+public sealed record LlmKeyCheck(LlmKeyCheckOutcome Outcome, int? StatusCode, string Message);
+
+/// <summary>
+/// FR-78: validates an Anthropic or OpenAI key with a minimal authenticated call (the provider's list-models endpoint)
+/// through the provider's typed HttpClient, at the configured fixed host (never a user-supplied URL). No completion is
+/// requested, so no tokens are spent.
+/// </summary>
+public interface ILlmKeyValidator
+{
+    Task<LlmKeyCheck> CheckAsync(LlmProvider provider, string apiKey, CancellationToken cancellationToken);
 }

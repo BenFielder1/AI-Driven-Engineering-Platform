@@ -40,7 +40,7 @@ public sealed class ActivityFeedTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR50_The_feed_filters_by_category_and_resolves_actors()
+    public async Task FR50_amended_by_S4_10_The_feed_filters_by_category_and_resolves_actors()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         await SeedEventsAsync(fixture, 30);
@@ -50,7 +50,7 @@ public sealed class ActivityFeedTests(AideApiFactory factory)
         Assert.Equal(10, transitions.Items.Count);
         Assert.Null(transitions.NextBefore);
         Assert.All(transitions.Items, i => Assert.Equal((EventTypes.PhaseChanged, (EventCategory?)EventCategory.Transition), (i.Type, i.Category)));
-        Assert.Equal("Phase changed from refinement to specification (version 2)", transitions.Items[0].Summary);
+        Assert.Equal("Phase changed from refinement to specification (checkpoint 2)", transitions.Items[0].Summary);
         Assert.Equal("refinement", transitions.Items[0].Payload["from"]!.GetValue<string>());
 
         var gates = await GetAsync(fixture.Viewer.Client, fixture.Path + "/activity?type=gate");

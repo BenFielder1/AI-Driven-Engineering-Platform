@@ -4,7 +4,7 @@ import { useRef } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 
-import { Drawer } from '../../components/ui/drawer'
+import { DetailSheet } from '../../components/ui/modal-dialog'
 import { SelectField } from '../../components/ui/select-field'
 import { TextField } from '../../components/ui/text-field'
 import { useDocumentTitle } from '../../lib/use-document-title'
@@ -62,13 +62,13 @@ function runsQuery(s: AdminRunsSearch): AdminRunsQuery {
 function RunRow({ run, onOpen }: { run: AdminRun; onOpen: () => void }) {
   const unfinished = isUnfinished(run)
   return (
-    <tr className="border-b border-border last:border-b-0">
+    <tr className="border-b border-border/40 transition-colors last:border-b-0 hover:bg-muted/40">
       <th scope="row" className={`${bodyCell} text-left font-medium`}>
         <button
           type="button"
           onClick={onOpen}
           aria-label={`${agentKindLabels[run.agent]} run in ${run.projectName}, started ${formatDateTime(run.createdAt)}`}
-          className="min-h-8 text-left text-link underline underline-offset-4"
+          className="min-h-8 text-left text-primary underline underline-offset-4"
         >
           {agentKindLabels[run.agent]}
         </button>
@@ -78,7 +78,7 @@ function RunRow({ run, onOpen }: { run: AdminRun; onOpen: () => void }) {
       </td>
       <td className={bodyCell}>
         <code className="text-xs">{run.model}</code>
-        <span className="block text-xs text-muted">{llmProviderLabels[run.provider]}</span>
+        <span className="block text-xs text-muted-foreground">{llmProviderLabels[run.provider]}</span>
       </td>
       <td className={`${bodyCell} text-right tabular-nums`}>
         {unfinished ? '—' : `${formatNumber(run.inputTokens)} / ${formatNumber(run.outputTokens)}`}
@@ -137,7 +137,7 @@ export function AdminRunsPage({
 
   return (
     <section aria-labelledby="admin-runs-title">
-      <h2 id="admin-runs-title" ref={headingRef} tabIndex={-1} className="mb-4 text-xl font-semibold">
+      <h2 id="admin-runs-title" ref={headingRef} tabIndex={-1} className="mb-4 text-xl">
         Agent runs
       </h2>
       <FilterForm label="Filter agent runs" onSubmit={(e) => void onSubmit(e)} onClear={clear}>
@@ -211,7 +211,7 @@ export function AdminRunsPage({
           </AdminTable>
         )}
       </PagedList>
-      <Drawer
+      <DetailSheet
         open={openRun !== undefined}
         title={openRun ? `${agentKindLabels[openRun.agent]} run · ${openRun.projectName}` : 'Agent run'}
         fallbackFocusRef={headingRef}
@@ -224,7 +224,7 @@ export function AdminRunsPage({
                 to="/projects/$projectId/runs"
                 params={{ projectId: openRun.projectId }}
                 search={{ run: openRun.id }}
-                className="text-link underline underline-offset-4"
+                className="text-primary underline underline-offset-4"
               >
                 Open in the project’s runs
               </Link>
@@ -232,7 +232,7 @@ export function AdminRunsPage({
             <RunDetails projectId={openRun.projectId} runId={openRun.id} summary={undefined} />
           </>
         )}
-      </Drawer>
+      </DetailSheet>
     </section>
   )
 }

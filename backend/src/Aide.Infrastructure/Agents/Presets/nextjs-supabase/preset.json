@@ -1,0 +1,406 @@
+{
+  "id": "nextjs-supabase",
+  "name": "Next.js + Supabase",
+  "version": "1.0.1",
+  "description": "Full-stack web app on Next.js (App Router) with Supabase for Postgres, Auth, Row Level Security and Realtime, thin Zod-validated route handlers, tested with Vitest and Playwright, delivered through GitHub Actions and Vercel.",
+  "stack": [
+    "Next.js (App Router)",
+    "TypeScript strict",
+    "Tailwind",
+    "Supabase (Postgres, Auth, RLS, Realtime)",
+    "@supabase/ssr",
+    "Zod",
+    "Vitest",
+    "Testing Library",
+    "Playwright",
+    "GitHub Actions",
+    "Vercel"
+  ],
+  "deployTargets": [
+    "vercel"
+  ],
+  "requiredEnv": [
+    {
+      "key": "NEXT_PUBLIC_SUPABASE_URL",
+      "targets": [
+        "preview",
+        "production"
+      ],
+      "sensitive": false,
+      "description": "Supabase project URL (Project Settings > API). Public: shipped to the browser."
+    },
+    {
+      "key": "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "targets": [
+        "preview",
+        "production"
+      ],
+      "sensitive": false,
+      "description": "Supabase anon (publishable) key. Public: every request is still limited by RLS."
+    },
+    {
+      "key": "SUPABASE_SERVICE_ROLE_KEY",
+      "targets": [
+        "preview",
+        "production"
+      ],
+      "sensitive": true,
+      "description": "Supabase service-role key. Server-only: bypasses RLS, used only by webhook or cron handlers the spec requires. Never prefixed NEXT_PUBLIC_ and never referenced in a \"use client\" file."
+    }
+  ],
+  "specSections": [
+    {
+      "title": "Roles & Permissions Matrix",
+      "guidance": "List every role (e.g. owner, member, non-member, anonymous guest, signed-out visitor) and give a table of action x role (allowed / denied / own rows only) covering every feature. Name the error code returned when an action is denied (e.g. NOT_OWNER -> 403). State which states make a resource read-only (archived, ended, locked) and who can still act on it. This table is implemented three times (RLS, RPC checks, UI can* helpers), so it must be complete and unambiguous."
+    },
+    {
+      "title": "Data Model & RLS Policies",
+      "guidance": "For each table: columns with Postgres types, nullability and defaults; primary key (uuid default gen_random_uuid()); foreign keys with an explicit on delete (cascade for owned children, restrict otherwise); check constraints, unique and partial unique indexes; derived (generated) columns; and Postgres enums for small status sets. Then, per table and per role, the select / insert / update / delete policy in words, including which columns an update may change. List the security definer RPCs (name, arguments, permission re-checks, error codes raised) used for multi-row or privileged writes, the membership helper functions (is_member-style) and the seed data needed: one user per role and rows in each important state."
+    },
+    {
+      "title": "Auth Flows",
+      "guidance": "Which sign-in methods are enabled (email + password, magic link, OAuth providers, anonymous sign-in) and how a guest upgrades to an account. Sign-up and confirmation behaviour, the profile row created per auth user, session refresh, sign-out, and which pages require sign-in (redirect to sign-in with ?next=<path>). List the redirect URLs for local, Vercel preview (https://*-<team>.vercel.app/**) and production."
+    },
+    {
+      "title": "Realtime & Background Work",
+      "guidance": "Which tables the UI subscribes to (they join the supabase_realtime publication), the filter per subscription, and what the UI does on an event (debounced refetch). Child tables without the filter column bump a parent updated_at. List any scheduled or background work (Vercel cron routes protected by CRON_SECRET, webhooks with signature checks, database triggers), whether it must be idempotent, and the only places a server-only secret may be used. Write 'None' if there is none."
+    },
+    {
+      "title": "Environment Variables",
+      "guidance": "A table: name, public (NEXT_PUBLIC_) or server-only, environments (development, preview, production), source (where the value comes from) and which code uses it. Always includes NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY; include SUPABASE_SERVICE_ROLE_KEY only if a webhook or cron handler needs it. No server secret may carry the NEXT_PUBLIC_ prefix."
+    }
+  ],
+  "specConventions": "conventions.md",
+  "planRules": {
+    "scaffoldFirstWhenEmpty": true,
+    "order": [
+      {
+        "before": [
+          "supabase/migrations/**"
+        ],
+        "after": [
+          "app/api/**"
+        ],
+        "soft": false,
+        "reason": "Migrations come before the API routes that use their tables and RPCs."
+      },
+      {
+        "before": [
+          "supabase/migrations/**"
+        ],
+        "after": [
+          "app/**"
+        ],
+        "soft": false,
+        "reason": "Migrations come before the pages that read their tables."
+      },
+      {
+        "before": [
+          "lib/*/**"
+        ],
+        "after": [
+          "app/**"
+        ],
+        "soft": true,
+        "reason": "Domain logic and helpers in lib/ come before the app/ steps that import them."
+      }
+    ],
+    "exclusive": [
+      {
+        "agent": "db-engineer",
+        "notWithGlobs": [
+          "app/**",
+          "components/**"
+        ],
+        "reason": "The database engineer writes only SQL, seed and generated types; pages and components are separate steps."
+      }
+    ],
+    "oneMigrationPerStep": {
+      "glob": "supabase/migrations/**"
+    }
+  },
+  "agents": [
+    {
+      "key": "project-scaffolder",
+      "name": "Project scaffolder",
+      "description": "Bootstraps the Next.js + TypeScript + Tailwind + Supabase skeleton: package.json, tooling config, root layout, Supabase clients, session-refresh proxy, Node pin and vercel.json. Owns tooling and configuration, not features.",
+      "owns": [
+        "package.json",
+        "tsconfig.json",
+        "next.config.ts",
+        "next.config.mjs",
+        "next-env.d.ts",
+        "eslint.config.mjs",
+        "postcss.config.mjs",
+        "tailwind.config.ts",
+        "vitest.config.ts",
+        "vitest.setup.ts",
+        ".gitignore",
+        ".nvmrc",
+        ".env.example",
+        "vercel.json",
+        "README.md",
+        "app/layout.tsx",
+        "app/page.tsx",
+        "app/globals.css",
+        "middleware.ts",
+        "proxy.ts",
+        "lib/supabase/**",
+        "supabase/config.toml"
+      ],
+      "skills": [
+        "nextjs-api-route",
+        "github-vercel-delivery"
+      ],
+      "prompt": "agents/project-scaffolder.md"
+    },
+    {
+      "key": "db-engineer",
+      "name": "Database engineer",
+      "description": "Owns the Supabase database: one migration per step for tables, views, SQL functions and RPCs, RLS policies and triggers, plus seed data and generated types. The database is the real enforcement layer for permissions and invariants.",
+      "owns": [
+        "supabase/migrations/**",
+        "supabase/seed.sql",
+        "supabase/config.toml",
+        "lib/database.types.ts"
+      ],
+      "skills": [
+        "supabase-migration"
+      ],
+      "prompt": "agents/db-engineer.md"
+    },
+    {
+      "key": "domain-logic-engineer",
+      "name": "Domain logic engineer",
+      "description": "Implements the product's business rules and algorithms (pricing, scoring, ranking, scheduling, eligibility, state machines) as pure, deterministic, test-first TypeScript in lib/<domain>.",
+      "owns": [
+        "lib/*/**",
+        "!lib/api/**",
+        "!lib/supabase/**",
+        "!lib/ui/**",
+        "lib/types.ts"
+      ],
+      "skills": [
+        "domain-logic"
+      ],
+      "prompt": "agents/domain-logic-engineer.md"
+    },
+    {
+      "key": "api-engineer",
+      "name": "API engineer",
+      "description": "Builds thin, Zod-validated Next.js route handlers under app/api and the lib/api helpers (auth, error mapping) on top of Supabase RLS, RPCs and pure domain logic.",
+      "owns": [
+        "app/api/**",
+        "app/auth/**",
+        "lib/api/**"
+      ],
+      "skills": [
+        "nextjs-api-route"
+      ],
+      "prompt": "agents/api-engineer.md"
+    },
+    {
+      "key": "ui-engineer",
+      "name": "UI engineer",
+      "description": "Builds App Router pages and Tailwind components: Server Components first, forms, permission-aware controls, loading/empty/error/forbidden/read-only states, accessibility and Supabase Realtime.",
+      "owns": [
+        "app/**",
+        "!app/api/**",
+        "!app/auth/**",
+        "components/**",
+        "lib/ui/**",
+        "styles/**"
+      ],
+      "skills": [
+        "nextjs-ui"
+      ],
+      "prompt": "agents/ui-engineer.md"
+    },
+    {
+      "key": "test-engineer",
+      "name": "Test engineer",
+      "description": "Writes Playwright end-to-end tests (several users, permission boundaries, validation limits, mobile viewport) and fills unit and integration test gaps next to existing source.",
+      "owns": [
+        "e2e/**",
+        "playwright.config.ts",
+        "**/*.test.{ts,tsx}"
+      ],
+      "skills": [
+        "nextjs-ui",
+        "nextjs-api-route"
+      ],
+      "prompt": "agents/test-engineer.md"
+    },
+    {
+      "key": "devops-engineer",
+      "name": "DevOps engineer",
+      "description": "Sets up GitHub Actions CI (checks + e2e), Dependabot and the PR template, vercel.json, and the environment variable inventory in .env.example. Makes the project safe to ship; never commits secrets.",
+      "owns": [
+        ".github/**",
+        "vercel.json",
+        ".env.example",
+        ".gitignore"
+      ],
+      "skills": [
+        "github-vercel-delivery"
+      ],
+      "prompt": "agents/devops-engineer.md"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "category": "security",
+        "item": "Every table created in supabase/migrations enables row level security and has deliberate policies; tables written only through RPCs have no direct insert/update/delete policies.",
+        "severity": "critical"
+      },
+      {
+        "category": "security",
+        "item": "The Supabase service-role key (SUPABASE_SERVICE_ROLE_KEY) is used only server-side, in webhook or cron handlers the spec requires; never in a \"use client\" file, a component or a NEXT_PUBLIC_ variable.",
+        "severity": "critical"
+      },
+      {
+        "category": "security",
+        "item": "Authorisation uses supabase.auth.getUser() (verified JWT), never getSession(), in route handlers, Server Components and the proxy/middleware.",
+        "severity": "critical"
+      },
+      {
+        "category": "security",
+        "item": "Every security definer function sets search_path, rejects anonymous callers where appropriate and re-checks every permission inside; execute is revoked from public and granted to authenticated.",
+        "severity": "critical"
+      },
+      {
+        "category": "security",
+        "item": "No secret is committed and no server-only secret carries the NEXT_PUBLIC_ prefix.",
+        "severity": "critical"
+      },
+      {
+        "category": "security",
+        "item": "RLS update policies (or column grants / RPCs) restrict which columns each role can change; non-members cannot read or write other groups' rows.",
+        "severity": "major"
+      },
+      {
+        "category": "security",
+        "item": "Read-only states from the spec (archived, ended, locked) are enforced in the database, not just hidden in the UI.",
+        "severity": "major"
+      },
+      {
+        "category": "data_model",
+        "item": "Tables, columns, constraints, enums and foreign keys (with explicit on delete) match the spec's Data Model & RLS Policies section; invariants are check constraints or unique indexes.",
+        "severity": "major"
+      },
+      {
+        "category": "data_model",
+        "item": "Committed migrations are never edited; each change is a new migration, and lib/database.types.ts matches the migrations.",
+        "severity": "major"
+      },
+      {
+        "category": "data_model",
+        "item": "Every foreign key and every column used in an RLS predicate is indexed.",
+        "severity": "minor"
+      },
+      {
+        "category": "data_model",
+        "item": "The seed covers a user for every role and data in every important state.",
+        "severity": "minor"
+      },
+      {
+        "category": "api_contracts",
+        "item": "Route handlers validate params, query and body with Zod before touching the database.",
+        "severity": "major"
+      },
+      {
+        "category": "api_contracts",
+        "item": "Every error path returns a known error code through one error-code -> status map (lib/api/errors.ts); database errors are interpreted only in fromPostgresError.",
+        "severity": "major"
+      },
+      {
+        "category": "api_contracts",
+        "item": "Method, path, request body, response shape and status codes of every route match the spec; responses are camelCase domain objects, never raw rows.",
+        "severity": "major"
+      },
+      {
+        "category": "api_contracts",
+        "item": "Privileged or multi-row writes go through RPCs; handlers use the user-scoped client and add no looser path.",
+        "severity": "major"
+      },
+      {
+        "category": "architecture",
+        "item": "Business rules live in pure, deterministic functions in lib/<domain> (no I/O, clock or randomness); handlers and components call them instead of re-implementing them.",
+        "severity": "major"
+      },
+      {
+        "category": "architecture",
+        "item": "Route handlers stay thin (around 60 lines) and constants have one source of truth (mirrored SQL constants have a sync test).",
+        "severity": "minor"
+      },
+      {
+        "category": "architecture",
+        "item": "Server Components are used for first render; client components are leaf-level and used only for interactivity, forms and Realtime, and Realtime subscriptions are removed on unmount.",
+        "severity": "minor"
+      },
+      {
+        "category": "feature_coverage",
+        "item": "Every page has loading and error states (loading.tsx / error.tsx for data routes) plus empty, forbidden and read-only states where they apply.",
+        "severity": "minor"
+      },
+      {
+        "category": "feature_coverage",
+        "item": "Controls are shown or enabled according to pure can* permission helpers built from the spec's Roles & Permissions Matrix, and 401/403/409 responses are still handled.",
+        "severity": "major"
+      },
+      {
+        "category": "feature_coverage",
+        "item": "Error codes map to user copy in one place (lib/ui/error-messages.ts); forms keep input on failure and show field-level errors.",
+        "severity": "minor"
+      },
+      {
+        "category": "feature_coverage",
+        "item": "Pages work at 360px wide without horizontal scroll, tap targets are at least 44px, every control has a label and colour contrast meets WCAG AA.",
+        "severity": "minor"
+      },
+      {
+        "category": "testing",
+        "item": "CI runs typecheck, lint, test and build on every pull request, plus an e2e job.",
+        "severity": "major"
+      },
+      {
+        "category": "testing",
+        "item": "Domain logic has tests citing spec IDs, covering every rule and worked example plus edge cases and a determinism test.",
+        "severity": "major"
+      },
+      {
+        "category": "testing",
+        "item": "Each route handler has tests for success, invalid input, unauthenticated and a mapped database error.",
+        "severity": "minor"
+      },
+      {
+        "category": "testing",
+        "item": "E2E covers the primary happy path with several users, a permission boundary (hidden control and API 403) and one validation limit per form.",
+        "severity": "minor"
+      }
+    ],
+    "deterministic": [
+      "rls_on_every_table",
+      "no_secret_env_in_client"
+    ]
+  },
+  "protectedPaths": [
+    {
+      "glob": "supabase/migrations/**",
+      "existingOnBase": true,
+      "reason": "Committed migrations are immutable; a schema change is a new migration file."
+    },
+    {
+      "glob": "lib/database.types.ts",
+      "reason": "Generated from the migrations by supabase gen types (npm run db:types)."
+    },
+    {
+      "glob": "**/.env*",
+      "except": [
+        "**/.env.example"
+      ],
+      "reason": "Environment files hold secrets; only .env.example is committed."
+    }
+  ]
+}

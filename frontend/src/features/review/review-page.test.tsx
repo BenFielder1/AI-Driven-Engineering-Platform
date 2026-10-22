@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { ProjectRole } from '../../lib/permissions'
 import { contextualErrorMessages } from '../../lib/errors'
-import { nextId } from '../../mocks/handlers/auth'
+import { seedArtifact } from '../../mocks/handlers/artifacts'
 import type { StoredProject } from '../../mocks/handlers/projects'
 import { categoryScores, seedComplianceReport, seedReviewPhase } from '../../mocks/handlers/review'
 import { seedProjectAs } from '../../test/artifacts'
@@ -46,12 +46,21 @@ describe('Review page (FR-38–FR-41)', () => {
     const trend = region('Compliance trend')
     const chart = within(trend).getByRole('img', { name: /Compliance score by review cycle/ })
     expect(chart).toHaveAccessibleName(
-      'Compliance score by review cycle Cycle 1: 82%, Cycle 2: 86%, Cycle 3: 93%. Threshold 90%.',
+      // FR-56: the latest cycle is selected by default.
+      'Compliance score by review cycle Cycle 1: 82%, Cycle 2: 86%, Cycle 3: 93%. Threshold 90%. Cycle 3 is selected.',
     )
-    expect([...chart.querySelectorAll('circle')].map((c) => c.getAttribute('data-cycle'))).toEqual(['1', '2', '3'])
-    // The threshold is a dashed line labelled with its value.
-    expect(chart.querySelector('line[stroke-dasharray]')).not.toBeNull()
+    expect([...chart.querySelectorAll('circle[data-cycle]')].map((c) => c.getAttribute('data-cycle'))).toEqual(['1', '2', '3'])
+    // SPEC 7.1: points are coloured by decision.
+    expect([...chart.querySelectorAll('circle[data-cycle]')].map((c) => c.getAttribute('data-decision'))).toEqual([
+      'review_required',
+      'review_required',
+      'release_eligible',
+    ])
+    // The threshold is a dashed reference line labelled with its value.
+    expect(chart.querySelector('.recharts-reference-line line[stroke-dasharray]')).not.toBeNull()
 
+    // FR53_trend_chart: the data table is one toggle away ("View as table").
+    await userEvent.setup().click(within(trend).getByRole('button', { name: 'View as table' }))
     const table = within(trend).getByRole('table', { name: 'Compliance score by review cycle, oldest first' })
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(3)
@@ -77,12 +86,14 @@ describe('Review page (FR-38–FR-41)', () => {
     const trend = region('Compliance trend')
     const chart = within(trend).getByRole('img', { name: /Compliance score by review cycle/ })
     expect(chart).toHaveAccessibleName(
-      'Compliance score by review cycle Cycle 1: 86% against a 85% threshold, Cycle 2: 88% against a 90% threshold.',
+      'Compliance score by review cycle Cycle 1: 86% against a 85% threshold, Cycle 2: 88% against a 90% threshold. Cycle 2 is selected.',
     )
     // A changing threshold is drawn as a dashed step line, and each point is judged against its own report's threshold.
-    expect(chart.querySelector('path[data-testid="threshold-steps"][stroke-dasharray]')).not.toBeNull()
-    expect([...chart.querySelectorAll('circle')].map((c) => c.getAttribute('data-meets'))).toEqual(['true', 'false'])
+    expect(chart.querySelector('.recharts-line-curve[stroke-dasharray]')).not.toBeNull()
+    expect(chart.querySelector('.recharts-reference-line')).toBeNull()
+    expect([...chart.querySelectorAll('circle[data-cycle]')].map((c) => c.getAttribute('data-meets'))).toEqual(['true', 'false'])
 
+    await userEvent.setup().click(within(trend).getByRole('button', { name: 'View as table' }))
     const rows = within(within(trend).getByRole('table')).getAllByRole('row').slice(1)
     expect(rows.map((r) => within(r).getAllByRole('cell')[1]?.textContent)).toEqual(['86% (meets threshold)', '88% (below threshold)'])
     expect(rows.map((r) => within(r).getAllByRole('cell')[2]?.textContent)).toEqual(['85%', '90%'])
@@ -193,7 +204,7 @@ describe('Review page (FR-38–FR-41)', () => {
     seedComplianceReport(project, { categoryScores: categoryScores(0.93) })
     live.latest.emit(projectEvent(project.id, 'review', { type: 'REVIEW_COMPLETED' }))
     expect(await within(statusRegion()).findByText('Completed')).toBeInTheDocument()
-    expect(await screen.findByRole('region', { name: 'Latest report: cycle 1, version 1' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Latest report: cycle 1, 0.1.0 · checkpoint 1' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Run review' })).toBeEnabled()
 
     // Failed.
@@ -252,14 +263,30 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
     expect(within(latest).queryByText(/Why it escalated/)).not.toBeInTheDocument()
   })
 
+  it('FR89_a_missing_vercel_json_is_a_deterministic_finding_with_its_file', async () => {
+    const message =
+      `vercel.json is missing: add it with git.deploymentEnabled { "aide/**": false } so Vercel doesn't deploy AIDE branches on its own (FR-89).`
+    const project = seedReview('owner', (p) => {
+      seedComplianceReport(p, {
+        categoryScores: categoryScores(0.85),
+        decision: 'review_required',
+        violations: [{ category: 'architecture', severity: 'major', source: 'deterministic', message, file: 'vercel.json', evidence: null }],
+      })
+    })
+    await openReview(project)
+
+    const findings = region(/^Deterministic findings/)
+    expect(within(findings).getByText(message)).toBeInTheDocument()
+    expect(within(findings).getByText(/· vercel\.json$/)).toBeInTheDocument()
+  })
+
   it('FR39_decision_copy_review_required_links_the_optimisation_plan_that_needs_approval', async () => {
     const project = seedReview('contributor', (p) => {
       seedComplianceReport(p, {
         categoryScores: categoryScores(0.82),
         decision: 'review_required',
-        optimizationPlanArtifactId: nextId(),
+        optimizationPlanArtifactId: seedArtifact(p, { type: 'optimization_plan', content: '# Optimisation plan' }).id,
       })
-      p.state.artifacts.push({ type: 'optimization_plan', latestVersion: 1, latestStatus: 'draft', currentLockedVersion: null })
     })
     await openReview(project)
 
@@ -269,7 +296,7 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
     expect(within(latest).getByText(/An Owner must approve it before execution re-enters/)).toBeInTheDocument()
     expect(within(latest).getByRole('link', { name: 'Open the optimisation plan' })).toHaveAttribute(
       'href',
-      `/projects/${project.id}/artifacts/optimization_plan`,
+      `/projects/${project.id}/artifacts/optimization_plan?version=1`,
     )
   })
 
@@ -296,9 +323,8 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
         categoryScores: categoryScores(0.7),
         decision: 'escalation_required',
         decisionReason: 'low_score',
-        optimizationPlanArtifactId: nextId(),
+        optimizationPlanArtifactId: seedArtifact(p, { type: 'optimization_plan', content: '# Optimisation plan' }).id,
       })
-      p.state.artifacts.push({ type: 'optimization_plan', latestVersion: 1, latestStatus: 'draft', currentLockedVersion: null })
     })
     await openReview(project)
 
@@ -343,7 +369,7 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
 
     for (const name of [
       'Review status',
-      'Latest report: cycle 1, version 1',
+      'Latest report: cycle 1, 0.1.0 · checkpoint 1',
       'Category breakdown',
       'Compliance trend',
       'Drift from the specification',

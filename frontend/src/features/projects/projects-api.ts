@@ -19,6 +19,8 @@ export type ProjectStatus = Schemas['ProjectStatus']
 export type ApprovalMode = Schemas['ApprovalMode']
 
 export type ProjectListParams = NonNullable<paths['/api/projects']['get']['parameters']['query']>
+export type ProjectKpiFilters = NonNullable<paths['/api/projects/kpis']['get']['parameters']['query']>
+export type ProjectKpis = Schemas['ProjectKpisDto']
 export type ProjectSortBy = NonNullable<ProjectListParams['sortBy']>
 export type SortOrder = NonNullable<ProjectListParams['sortOrder']>
 
@@ -29,10 +31,14 @@ export const projectKeys = {
   all: ['projects'] as const,
   lists: () => [...projectKeys.all, 'list'] as const,
   list: (params: ProjectListParams) => [...projectKeys.lists(), params] as const,
+  /** Under `lists()`: whatever refreshes the projects list (create, delete, live events) refreshes the KPI row too. */
+  kpis: (filters: ProjectKpiFilters) => [...projectKeys.lists(), 'kpis', filters] as const,
   detail: (id: string) => [...projectKeys.all, 'detail', id] as const,
   state: (id: string) => [...projectKeys.detail(id), 'state'] as const,
   members: (id: string) => [...projectKeys.detail(id), 'members'] as const,
   settings: (id: string) => [...projectKeys.detail(id), 'settings'] as const,
+  /** GET /settings/llm: the LLM settings and binding, for any member (FR-79). */
+  llmSettings: (id: string) => [...projectKeys.detail(id), 'llm-settings'] as const,
   /** GET /gates (all statuses; the overview splits pending from decided). */
   gates: (id: string) => [...projectKeys.detail(id), 'gates'] as const,
   /** GET /activity, per category filter (`all` when unfiltered). */
@@ -47,14 +53,18 @@ export const projectKeys = {
   execution: (id: string) => [...projectKeys.detail(id), 'execution'] as const,
   /** GET /git/pull-request: the recorded PR and its branch comparison (FR-36; see features/git/pull-request-api.ts). */
   pullRequest: (id: string) => [...projectKeys.detail(id), 'git', 'pull-request'] as const,
+  /** GET /git/merge-readiness: whether AIDE can merge the version's PR, with its checks (FR-84; see features/release/merge-readiness-api.ts). */
+  mergeReadiness: (id: string) => [...projectKeys.detail(id), 'git', 'merge-readiness'] as const,
   /** Every compliance query of the project: latest report, trend and drift (FR-38–FR-41; see features/review/review-api.ts). */
   review: (id: string) => [...projectKeys.detail(id), 'review'] as const,
   /** GET /releases: every release attempt, newest first (FR-42, FR-43; see features/release/release-api.ts). */
   releases: (id: string) => [...projectKeys.detail(id), 'releases'] as const,
   /** GET /rollbacks: recorded rollbacks (FR-44). */
   rollbacks: (id: string) => [...projectKeys.detail(id), 'rollbacks'] as const,
-  /** GET /versions: project versions with their rollback eligibility (FR-44). */
-  versions: (id: string) => [...projectKeys.detail(id), 'versions'] as const,
+  /** GET /versions: the project's release versions, highest first (FR-62; see features/versions/versions-api.ts). */
+  releaseVersions: (id: string) => [...projectKeys.detail(id), 'release-versions'] as const,
+  /** GET /checkpoints: a release version's checkpoints with their rollback eligibility (FR-44, FR-63). */
+  checkpoints: (id: string) => [...projectKeys.detail(id), 'checkpoints'] as const,
 }
 
 /** Unwraps an openapi-fetch result: the body on success, an ApiError otherwise. */
@@ -86,6 +96,15 @@ export function useProjects(params: ProjectListParams) {
   return useQuery(projectsQueryOptions(params))
 }
 
+/** §7.2: the /projects KPI row over the projects matching the list's filters. */
+export function useProjectKpis(filters: ProjectKpiFilters) {
+  return useQuery({
+    queryKey: projectKeys.kpis(filters),
+    queryFn: async ({ signal }) => unwrap(await api.GET('/api/projects/kpis', { params: { query: filters }, signal })),
+    placeholderData: keepPreviousData,
+  })
+}
+
 export const projectQueryOptions = (id: string) =>
   queryOptions({
     queryKey: projectKeys.detail(id),
@@ -96,12 +115,15 @@ export function useProject(id: string) {
   return useQuery(projectQueryOptions(id))
 }
 
-export function useProjectState(id: string) {
-  return useQuery({
+export const projectStateQueryOptions = (id: string) =>
+  queryOptions({
     queryKey: projectKeys.state(id),
     queryFn: async ({ signal }) =>
       unwrap(await api.GET('/api/projects/{id}/state', { params: { path: { id } }, signal })),
   })
+
+export function useProjectState(id: string) {
+  return useQuery(projectStateQueryOptions(id))
 }
 
 /** FR-8: members are visible to every member. */
@@ -120,6 +142,15 @@ export function useProjectSettings(id: string, enabled: boolean) {
     queryFn: async ({ signal }) =>
       unwrap(await api.GET('/api/projects/{id}/settings', { params: { path: { id } }, signal })),
     enabled,
+  })
+}
+
+/** FR-79: the LLM settings and binding ("connected by <name>"), readable by any member; `canBind` for the caller. */
+export function useLlmSettings(id: string) {
+  return useQuery({
+    queryKey: projectKeys.llmSettings(id),
+    queryFn: async ({ signal }) =>
+      unwrap(await api.GET('/api/projects/{id}/settings/llm', { params: { path: { id } }, signal })),
   })
 }
 
@@ -234,12 +265,18 @@ export function useUpdateGitSettings(id: string) {
   })
 }
 
+/** FR-9, FR-79: provider, models and the bound connection. The caller's connections list its bound projects, so it refreshes. */
 export function useUpdateLlmSettings(id: string) {
+  const queryClient = useQueryClient()
   const setSection = useSetSettingsSection(id, 'llm')
   return useMutation({
     mutationFn: async (body: Schemas['UpdateLlmSettingsRequest']) =>
       unwrap(await api.PATCH('/api/projects/{id}/settings/llm', { params: { path: { id } }, body })),
-    onSuccess: setSection,
+    onSuccess: async (llm) => {
+      setSection(llm)
+      queryClient.setQueryData<LlmSettings>(projectKeys.llmSettings(id), llm)
+      await queryClient.invalidateQueries({ queryKey: ['me', 'connections'] })
+    },
   })
 }
 

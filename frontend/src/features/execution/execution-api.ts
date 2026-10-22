@@ -12,6 +12,11 @@ export type ExecutionState = Schemas['ExecutionStateDto']
 export type ExecutionRunStatus = Schemas['ExecutionRunStatus']
 export type ExecutionCounts = Schemas['ExecutionCountsDto']
 export type ExecutionAction = 'start' | 'pause' | 'resume'
+export type ExecutionRun = Schemas['ExecutionRunDto']
+export type ExecutionStepSummary = Schemas['ExecutionStepSummaryDto']
+export type PlanRunStatus = Schemas['PlanRunStatus']
+export type StepAttempt = Schemas['StepAttemptDto']
+export type ToolCall = Schemas['ToolCallDto']
 
 /** FR-33: the first attempt plus up to 3 retries; the 4th rejection blocks the step. */
 export const MAX_STEP_ATTEMPTS = 4
@@ -22,8 +27,10 @@ const RUNNING_REFETCH_MS = 15_000
 /** Query keys, all under `projectKeys.execution(id)` so live `step`/`artifact` events refresh every steps view. */
 export const executionKeys = {
   all: (id: string) => projectKeys.execution(id),
-  steps: (id: string, planType: ArtifactType, planVersion: number | null) =>
-    [...projectKeys.execution(id), 'steps', planType, planVersion ?? 'current'] as const,
+  steps: (id: string, planType: ArtifactType, planVersion: number | null, releaseVersionId?: string) =>
+    [...projectKeys.execution(id), 'steps', planType, planVersion ?? 'current', releaseVersionId ?? 'current'] as const,
+  runs: (id: string, releaseVersionId?: string) => [...projectKeys.execution(id), 'runs', releaseVersionId ?? 'current'] as const,
+  attempts: (id: string, stepId: string) => [...projectKeys.execution(id), 'attempts', stepId] as const,
 }
 
 const isActive = (data: ExecutionSteps | undefined) =>
@@ -34,18 +41,62 @@ const isActive = (data: ExecutionSteps | undefined) =>
  * (highest locked) version; with no locked plan the result has `plan: null` and no steps. Steps exist only for plan
  * versions that were approved.
  */
-export function useExecutionSteps(id: string, planType: ArtifactType, planVersion: number | null, enabled = true) {
+export function useExecutionSteps(
+  id: string,
+  planType: ArtifactType,
+  planVersion: number | null,
+  enabled = true,
+  releaseVersionId?: string,
+) {
   return useQuery({
-    queryKey: executionKeys.steps(id, planType, planVersion),
+    queryKey: executionKeys.steps(id, planType, planVersion, releaseVersionId),
     queryFn: async ({ signal }) =>
       unwrap(
         await api.GET('/api/projects/{id}/execution/steps', {
-          params: { path: { id }, query: { planType, ...(planVersion === null ? {} : { planVersion }) } },
+          params: {
+            path: { id },
+            query: {
+              planType,
+              ...(planVersion === null ? {} : { planVersion }),
+              ...(releaseVersionId ? { releaseVersionId } : {}),
+            },
+          },
           signal,
         }),
       ),
     enabled,
     refetchInterval: (query) => (isActive(query.state.data) ? RUNNING_REFETCH_MS : false),
+  })
+}
+
+const runActive = (runs: ExecutionRun[] | undefined) =>
+  runs?.some((r) => r.status === 'running' || r.steps.some((s) => s.status === 'in_progress')) ?? false
+
+/**
+ * FR-57: every execution run of a release version (default: the current one): the development run first, then one
+ * review-fix run per review cycle. Live `step` events refresh it (it sits under `projectKeys.execution`).
+ */
+export function useExecutionRuns(id: string, releaseVersionId?: string) {
+  return useQuery({
+    queryKey: executionKeys.runs(id, releaseVersionId),
+    queryFn: async ({ signal }) =>
+      unwrap(
+        await api.GET('/api/projects/{id}/execution/runs', {
+          params: { path: { id }, query: releaseVersionId ? { releaseVersionId } : {} },
+          signal,
+        }),
+      ),
+    refetchInterval: (query) => (runActive(query.state.data) ? RUNNING_REFETCH_MS : false),
+  })
+}
+
+/** FR-57: a step's attempt history, oldest first; loaded only once the user opens it (`enabled`). */
+export function useStepAttempts(id: string, stepId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: executionKeys.attempts(id, stepId),
+    queryFn: async ({ signal }) =>
+      unwrap(await api.GET('/api/projects/{id}/execution/steps/{stepId}/attempts', { params: { path: { id, stepId } }, signal })),
+    enabled,
   })
 }
 

@@ -5,16 +5,19 @@ import { expect, test as setup } from '@playwright/test'
 
 import { A11Y_FIXTURE, type A11yFixture } from './support/a11y-fixture.ts'
 import { api, apiJson, createProjectViaApi, driveProject, registerViaApi, waitForDraft } from './support/api.ts'
+import { createLocalProject, createVercelConnection } from './support/v2.ts'
 
 /**
- * NFR-A11Y fixture: one user with a released strict-mode project (Fake + Local) and a second project whose project
+ * NFR-A11Y fixture: one user with a Fake Vercel connection and a released strict-mode project (Fake + Local + Fake
+ * deployments, so the deployment pages have preview and production rows: NFR-A11Y2), and a second project whose project
  * request has two versions (for the diff view). Runs once per test run, before the a11y project.
  */
 setup('a11y fixture: a released project and a two-version project request', async ({ browser }) => {
   setup.setTimeout(5 * 60_000)
   const context = await browser.newContext()
   await registerViaApi(context, 'a11y', 'Accessibility Tester')
-  const project = await createProjectViaApi(context, `E2E Accessibility ${String(Date.now())}`)
+  const vercelConnectionId = await createVercelConnection(context, 'A11y Fake Vercel')
+  const project = await createLocalProject(context, { name: `E2E Accessibility ${String(Date.now())}`, vercelConnectionId })
   await driveProject(context, project.id, 'released')
 
   const diffProject = await createProjectViaApi(context, `E2E Accessibility diff ${String(Date.now())}`)

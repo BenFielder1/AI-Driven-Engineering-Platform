@@ -16,6 +16,8 @@ namespace Aide.Api.Features.Projects;
 /// FR-8: project members (§6 <c>/api/projects/:id/members</c>). Members list; Owners add, change roles and remove.
 /// Any member may remove themselves (leave the project). The last Owner can't be demoted or removed (409 LAST_OWNER).
 /// Role changes and removals lock the project row, so two Owners demoting each other can't leave it ownerless.
+/// FR-79: when the member who bound the project's LLM connection stops being an Owner or leaves, the binding is cleared
+/// in the same transaction.
 /// </summary>
 public static partial class ProjectMemberEndpoints
 {
@@ -147,7 +149,7 @@ public static partial class ProjectMemberEndpoints
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await LockProjectAsync(db, id, cancellationToken);
+        await ProjectLocks.LockProjectAsync(db, id, cancellationToken);
 
         var current = await CurrentMembersAsync(db, id, cancellationToken);
         var changed = MembershipRules.ChangeRole(current, userId, request.Role);
@@ -160,13 +162,18 @@ public static partial class ProjectMemberEndpoints
         var previous = membership.Role;
         if (previous != request.Role)
         {
+            var now = time.GetUtcNow();
             membership.Role = request.Role;
             db.AddEvent(
                 EventTypes.MemberRoleChanged,
                 id,
                 new { projectId = id, userId, from = previous, to = request.Role },
                 currentUser.Actor,
-                time.GetUtcNow());
+                now);
+
+            // FR-79: a binding Owner who is no longer an Owner takes their connection with them.
+            await LlmBindings.ClearForMemberAsync(db, id, userId, request.Role, currentUser.Actor, now, cancellationToken);
+            await Deployments.DeploymentBindings.ClearForMemberAsync(db, id, userId, request.Role, currentUser.Actor, now, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             var logger = loggers.CreateLogger(typeof(ProjectMemberEndpoints));
             LogRoleChanged(logger, id, userId, previous, request.Role);
@@ -196,7 +203,7 @@ public static partial class ProjectMemberEndpoints
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await LockProjectAsync(db, id, cancellationToken);
+        await ProjectLocks.LockProjectAsync(db, id, cancellationToken);
 
         var current = await CurrentMembersAsync(db, id, cancellationToken);
         var removed = MembershipRules.Remove(current, userId);
@@ -208,7 +215,12 @@ public static partial class ProjectMemberEndpoints
         var deleted = await db.ProjectMembers.Where(m => m.ProjectId == id && m.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         if (deleted > 0)
         {
-            db.AddEvent(EventTypes.MemberRemoved, id, new { projectId = id, userId, self }, currentUser.Actor, time.GetUtcNow());
+            var now = time.GetUtcNow();
+            db.AddEvent(EventTypes.MemberRemoved, id, new { projectId = id, userId, self }, currentUser.Actor, now);
+
+            // FR-79: so does a binding Owner who leaves or is removed.
+            await LlmBindings.ClearForMemberAsync(db, id, userId, newRole: null, currentUser.Actor, now, cancellationToken);
+            await Deployments.DeploymentBindings.ClearForMemberAsync(db, id, userId, newRole: null, currentUser.Actor, now, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
         }
 
@@ -231,10 +243,6 @@ public static partial class ProjectMemberEndpoints
             .Where(m => m.ProjectId == projectId)
             .Select(m => new ProjectMember(m.UserId, m.Role))
             .ToListAsync(cancellationToken);
-
-    /// <summary>Row lock on the project for the current transaction: serialises membership changes per project.</summary>
-    private static Task<int> LockProjectAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken) =>
-        db.Database.ExecuteSqlAsync($"SELECT 1 FROM projects WHERE id = {projectId} FOR UPDATE", cancellationToken);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "User {MemberUserId} added to project {ProjectId} as {Role}")]
     private static partial void LogMemberAdded(ILogger logger, Guid projectId, Guid memberUserId, ProjectRole role);

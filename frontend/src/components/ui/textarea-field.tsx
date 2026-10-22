@@ -1,5 +1,7 @@
 import { useId, type Ref, type TextareaHTMLAttributes } from 'react'
 
+import { fieldClass } from './field-classes'
+
 export interface TextAreaFieldProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'id'> {
   label: string
   hint?: string
@@ -22,7 +24,7 @@ export function TextAreaField({ label, hint, error, id, className = '', ref, row
         {label}
       </label>
       {hint && (
-        <p id={hintId} className="text-sm text-muted">
+        <p id={hintId} className="text-sm text-muted-foreground">
           {hint}
         </p>
       )}
@@ -32,13 +34,11 @@ export function TextAreaField({ label, hint, error, id, className = '', ref, row
         rows={rows}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={
-          'rounded-md border bg-canvas px-3 py-2 text-base text-fg ' + (error ? 'border-danger' : 'border-field-border')
-        }
+        className={fieldClass(Boolean(error))}
         {...props}
       />
       {error && (
-        <p id={errorId} className="text-sm text-danger">
+        <p id={errorId} className="text-sm text-destructive">
           {error}
         </p>
       )}

@@ -28,6 +28,13 @@ public sealed record CategoryScoreEntry(
 /// <summary>One piece of evidence for a category score (FR-38): the file it refers to, if any, and why.</summary>
 public sealed record ScoreEvidence(string? File, string Reason);
 
+/// <summary>
+/// §4.13: a regression — an <c>[unchanged]</c> requirement the review found broken — as stored in
+/// <c>compliance_report.regressions</c> (same shape as the API's <c>RegressionDto</c>): the requirement ID, the category it
+/// was reported under, what is broken and the evidence. No deterministic penalty applies.
+/// </summary>
+public sealed record RegressionEntry(string RequirementId, ReviewCategory Category, string Description, string? Evidence);
+
 /// <summary>A drift area reported by the review agent (§4.7).</summary>
 public sealed record DriftAreaEntry(string Area, Severity Severity, string Description);
 

@@ -1,18 +1,86 @@
 using Aide.Domain.Common;
+using Aide.Domain.Presets;
+using Aide.Domain.Specs;
 
 namespace Aide.Domain.Execution;
 
 /// <summary>A file a plan step declares it will create or modify.</summary>
 public sealed record DeclaredFile(string Path, FileAction Action);
 
-/// <summary>One step of a structured plan (FR-29, D6).</summary>
+/// <summary>
+/// One step of a structured plan (FR-29, D6). <see cref="Agent"/> (FR-76) is the agent that runs the step: a preset
+/// catalogue key, or <see cref="PlanAgents.Generalist"/> without a preset (validation fills it in when omitted).
+/// <see cref="Covers"/> (FR-76, §4.13) lists the requirement IDs (<c>FR-n</c>) the step implements.
+/// </summary>
 public sealed record PlanStep(
     int Number,
     string Title,
     string Task,
     IReadOnlyList<DeclaredFile> Files,
     IReadOnlyList<int> Dependencies,
-    string? UserInstructions = null);
+    string? UserInstructions = null,
+    string? Agent = null,
+    IReadOnlyList<string>? Covers = null)
+{
+    public IReadOnlyList<string> Covers { get; init; } = Covers ?? [];
+}
+
+/// <summary>
+/// FR-76: the agents a plan step may name. Without a preset only <see cref="Generalist"/> (the default when a step names
+/// none, so v1 plans stay valid). With a preset (<see cref="For"/>) the catalogue keys, the preset id and the preset
+/// itself, whose plan rules <see cref="PlanValidator.Validate"/> then checks too (<see cref="PresetPlanValidator"/>);
+/// <see cref="RepoEmpty"/> feeds the scaffold-first rule.
+/// </summary>
+public sealed record PlanAgents(IReadOnlyCollection<string> Keys, string? PresetId = null)
+{
+    /// <summary>The agent of every step without a preset.</summary>
+    public const string Generalist = "generalist";
+
+    /// <summary>No preset: every step is <see cref="Generalist"/>.</summary>
+    public static PlanAgents None { get; } = new([Generalist]);
+
+    /// <summary>The preset whose plan rules apply (§4.11), or <c>null</c>.</summary>
+    public Preset? Preset { get; init; }
+
+    /// <summary>Whether the repository has no files yet (an empty base): <c>planRules.scaffoldFirstWhenEmpty</c> applies.</summary>
+    public bool RepoEmpty { get; init; }
+
+    /// <summary>
+    /// The files on the version's base commit, when known (compared ignoring case): a preset's <c>existingOnBase</c>
+    /// protected paths (immutable migrations) are checked against it. <c>null</c> (unknown): a generated plan may not
+    /// declare any path under such an entry (it can't be proven new); an Owner-edited plan is checked when it is known.
+    /// </summary>
+    public IReadOnlySet<string>? BaseFiles { get; init; }
+
+    /// <summary>Whether the preset's plan rules (<see cref="PresetPlanValidator.Errors"/>) apply; off for optimisation plans.</summary>
+    public bool ApplyPlanRules { get; init; } = true;
+
+    /// <summary>Whether <see cref="Generalist"/> is allowed (and the default) next to a preset's catalogue (optimisation plans).</summary>
+    public bool GeneralistAllowed { get; init; }
+
+    /// <summary>FR-76: the agents of <paramref name="preset"/> (or <see cref="None"/> without one).</summary>
+    public static PlanAgents For(Preset? preset, bool repoEmpty = false, IReadOnlySet<string>? baseFiles = null) =>
+        preset is null ? None : new PlanAgents(preset.AgentKeys, preset.Id) { Preset = preset, RepoEmpty = repoEmpty, BaseFiles = IgnoringCase(baseFiles) };
+
+    /// <summary>
+    /// FR-38, FR-76: the agents of a review's optimisation plan. With a preset: its catalogue keys or <see cref="Generalist"/>
+    /// (the default when a step names none). The preset's plan rules don't apply (fix steps follow the review, not the
+    /// build order); its protected paths and the ownership exception do.
+    /// </summary>
+    public static PlanAgents ForOptimization(Preset? preset, IReadOnlySet<string>? baseFiles = null) =>
+        preset is null
+            ? None
+            : new PlanAgents([.. preset.AgentKeys, Generalist], preset.Id) { Preset = preset, BaseFiles = IgnoringCase(baseFiles), ApplyPlanRules = false, GeneralistAllowed = true };
+
+    private static HashSet<string>? IgnoringCase(IReadOnlySet<string>? files) =>
+        files is null ? null : new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Whether <paramref name="key"/> is allowed (ordinal; keys are lowercase kebab-case).</summary>
+    public bool Allows(string key) => Keys.Contains(key, StringComparer.Ordinal);
+
+    /// <summary>The agent of a step that names none: <see cref="Generalist"/> without a preset (or when allowed); with one, none (an error).</summary>
+    public string? DefaultAgent => PresetId is null || GeneralistAllowed ? Generalist : null;
+}
 
 /// <summary>
 /// FR-29: structural validation of a plan (generated, or edited by a human, FR-18). Failures are <c>INVALID_PLAN</c>
@@ -27,6 +95,13 @@ public sealed record PlanStep(
 /// prompt-injected agent can't plan its way into CI workflows, lockfiles or env files. No plan may declare a path under
 /// <c>.aide/</c> (<see cref="PathRules.IsAgentForbidden"/>): the Guardian rejects agent output there even when declared.
 /// </para>
+/// <para>
+/// FR-76, §4.11: a step's <c>agent</c> must be allowed by <see cref="PlanAgents"/> (without a preset: omitted, which
+/// becomes <c>generalist</c>, or <c>generalist</c>); its <c>covers</c> must be requirement IDs (<c>FR-n</c>, normalised
+/// and de-duplicated). §4.13: steps may modify files that already exist in the repository, and "a file is created by one
+/// step only" applies within the plan. With a preset, its plan rules follow the v1 rules (<see cref="PresetPlanValidator.Errors"/>);
+/// its warnings (<c>AGENT_SCOPE</c>, <c>PLAN_ORDER</c>) come from <see cref="PresetPlanValidator.Warnings"/>.
+/// </para>
 /// </summary>
 public static class PlanValidator
 {
@@ -37,9 +112,11 @@ public static class PlanValidator
     public const int MaxTitleLength = 200;
 
     /// <summary>Validates and returns the plan with declared paths normalised.</summary>
-    public static Result<IReadOnlyList<PlanStep>> Validate(IReadOnlyList<PlanStep> steps, int? maxFilesPerStep = null, bool allowProtectedPaths = true)
+    public static Result<IReadOnlyList<PlanStep>> Validate(
+        IReadOnlyList<PlanStep> steps, int? maxFilesPerStep = null, bool allowProtectedPaths = true, PlanAgents? agents = null)
     {
         ArgumentNullException.ThrowIfNull(steps);
+        agents ??= PlanAgents.None;
         var reasons = new List<string>();
 
         if (steps.Count == 0)
@@ -100,6 +177,7 @@ public static class PlanValidator
                 reasons.Add($"Step {step.Number} declares {step.Files.Count} files; at most {max} are allowed per step.");
             }
 
+            var agent = string.IsNullOrWhiteSpace(step.Agent) ? agents.DefaultAgent : step.Agent.Trim();
             var files = new List<DeclaredFile>(step.Files.Count);
             var seenInStep = new HashSet<string>(StringComparer.Ordinal);
             foreach (var file in step.Files)
@@ -117,9 +195,14 @@ public static class PlanValidator
                     continue;
                 }
 
-                if (!allowProtectedPaths && PathRules.IsProtected(path))
+                // §4.6, §4.11: a generated plan declares no protected path, except a preset specialist's own (PresetPathRules);
+                // an Owner-edited one may declare v1-protected paths, but never an immutable file that exists on the base commit.
+                var refusal = allowProtectedPaths
+                    ? PresetPathRules.ImmutableRefusal(agents.Preset, path, agents.BaseFiles?.Contains(path) ?? false)
+                    : PresetPathRules.GeneratedPlanRefusal(agents.Preset, agent, path, agents.BaseFiles?.Contains(path));
+                if (refusal is not null)
                 {
-                    reasons.Add($"Step {step.Number} declares the protected path '{path}'; a generated plan may not create or modify protected paths (.git/, .aide/, CI workflows, lockfiles, .env files).");
+                    reasons.Add($"Step {step.Number} {refusal}");
                     continue;
                 }
 
@@ -150,10 +233,38 @@ public static class PlanValidator
                 files.Add(file with { Path = path });
             }
 
-            normalised.Add(step with { Title = step.Title.Trim(), Task = step.Task.Trim(), Files = files });
+            if (agent is null)
+            {
+                reasons.Add($"Step {step.Number} has no \"agent\"; use one of {string.Join(", ", agents.Keys)}.");
+            }
+            else if (!agents.Allows(agent))
+            {
+                reasons.Add(agents.PresetId is null
+                    ? $"Step {step.Number} names the agent '{agent}'; without a preset every step is \"{PlanAgents.Generalist}\"."
+                    : $"Step {step.Number} names the unknown agent '{agent}'; the {agents.PresetId} preset has {string.Join(", ", agents.Keys)}.");
+            }
+
+            var covers = new List<string>(step.Covers.Count);
+            foreach (var id in step.Covers)
+            {
+                if (RequirementParser.NormaliseId(id) is not { } normalisedId)
+                {
+                    reasons.Add($"Step {step.Number} covers '{id}', which is not a requirement ID (FR-n).");
+                }
+                else if (!covers.Contains(normalisedId, StringComparer.Ordinal))
+                {
+                    covers.Add(normalisedId);
+                }
+            }
+
+            normalised.Add(step with { Title = step.Title.Trim(), Task = step.Task.Trim(), Files = files, Agent = agent, Covers = covers });
         }
 
         reasons.AddRange(ModifyOrderReasons(normalised, created));
+        if (agents.Preset is { } preset && agents.ApplyPlanRules)
+        {
+            reasons.AddRange(PresetPlanValidator.Errors(normalised, preset, agents.RepoEmpty));
+        }
 
         return reasons.Count == 0
             ? Result.Success<IReadOnlyList<PlanStep>>(normalised)

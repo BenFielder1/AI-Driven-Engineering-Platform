@@ -4,13 +4,18 @@ import type { MouseEvent } from 'react'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { safeAppPath } from '../../lib/return-url'
-import { notificationTypeLabels } from '../projects/labels'
+import { notificationTypeLabels, personalNotificationTypes } from '../projects/labels'
 import { RelativeTime } from '../projects/relative-time'
+import { notificationTypeIcons } from './notification-icons'
 import { useMarkNotificationRead, type Notification } from './notifications-api'
+
+const isPersonal = (type: Notification['type']) => (personalNotificationTypes as readonly string[]).includes(type)
 
 /**
  * One notification (FR-47). Unread items carry an "Unread" text badge and a bold title (never colour alone).
  * Opening it marks it read and navigates to its link; unread items also offer "Mark as read" without leaving.
+ * FR-92: the link comes from the server (`NotificationRules.LinkPath`); personal notifications (`connection_invalid`) may
+ * have no project, so they show "Personal" instead of a project name and open /connections.
  */
 export function NotificationItem({
   notification: n,
@@ -29,6 +34,7 @@ export function NotificationItem({
   const unread = n.readAt === null
   const href = safeAppPath(n.link)
   const titleId = `notification-${n.id}`
+  const Icon = notificationTypeIcons[n.type]
 
   function markAsRead() {
     if (unread) {
@@ -47,11 +53,12 @@ export function NotificationItem({
   }
 
   return (
-    <li aria-labelledby={titleId} className={`flex gap-3 px-3 py-3 ${unread ? 'bg-surface' : ''}`}>
+    <li aria-labelledby={titleId} className={`flex gap-3 px-3 py-3 ${unread ? 'bg-muted' : ''}`}>
       <span
         aria-hidden="true"
         className={`mt-1.5 size-2 shrink-0 rounded-full ${unread ? 'bg-primary' : 'bg-transparent'}`}
       />
+      <Icon aria-hidden="true" data-testid={`notification-icon-${n.type}`} className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           {href ? (
@@ -59,7 +66,7 @@ export function NotificationItem({
               id={titleId}
               href={href}
               onClick={open}
-              className={`break-words text-link underline ${unread ? 'font-semibold' : ''}`}
+              className={`break-words text-primary underline ${unread ? 'font-semibold' : ''}`}
             >
               {n.title}
             </a>
@@ -71,9 +78,10 @@ export function NotificationItem({
           {unread && <Badge tone="info">Unread</Badge>}
         </div>
         {n.body && <p className="break-words">{n.body}</p>}
-        <p className="text-xs text-muted">
+        <p className="text-xs text-muted-foreground">
           {notificationTypeLabels[n.type]}
-          {n.projectName && <> · {n.projectName}</>} · <RelativeTime iso={n.createdAt} />
+          {n.projectName ? <> · {n.projectName}</> : isPersonal(n.type) && <> · Personal</>} ·{' '}
+          <RelativeTime iso={n.createdAt} />
         </p>
       </div>
       {showMarkRead && unread && (

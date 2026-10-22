@@ -1,0 +1,17 @@
+# E2E-only settings merged into app-config (on top of overlays/local/app-config-local.yaml). Not secrets.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  # §9 / §4.15: every connection check, project link and deployment uses the deterministic Fake provider, and Local
+  # Git projects may use deployments. Outside Development the API refuses to start with Fake unless AllowFake=true
+  # (it then logs "Fake deployment provider enabled in Production" at Warning on every boot).
+  Deployments__Provider: Fake
+  Deployments__AllowFake: "true"
+  # FR-73 / §8: Local import ("existing" repo) resolves git.localSourcePath under this root. Seeded by
+  # deploy/scripts/seed-e2e-repo.sh with existing-app (tags v0.1.0, v0.2.0). On the aide-data volume.
+  Git__Local__ImportRoot: /data/import
+  # FR-22: new projects default to the Fake LLM (deterministic agent outputs incl. Fake specialist scripts),
+  # whatever system keys secrets.env holds.
+  Llm__DefaultProvider: fake

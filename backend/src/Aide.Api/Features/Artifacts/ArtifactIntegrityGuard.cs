@@ -75,7 +75,7 @@ public sealed partial class ArtifactIntegrityGuard(IServiceScopeFactory scopes, 
         var change = ArtifactRules.OnIntegrityCheck(artifact.Type, artifact.Status, artifact.Content, artifact.ContentHash, authoredByAgent, isCurrent);
         var projectVersion = await db.Projects.AsNoTracking()
             .Where(p => p.Id == artifact.ProjectId)
-            .Select(p => p.ProjectVersion)
+            .Select(p => p.Checkpoint)
             .FirstAsync(token);
 
         Guid? jobId = null;

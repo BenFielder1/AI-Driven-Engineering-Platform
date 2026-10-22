@@ -11,7 +11,7 @@ public enum Phase
     Release = 5,
 }
 
-/// <summary>Project status (§4.1: status follows phase; <c>released</c> and <c>rolled_back</c> are special).</summary>
+/// <summary>Project status (§4.1: status follows phase; <c>released</c>, <c>rolled_back</c> and <c>awaiting_merge</c> are special).</summary>
 public enum ProjectStatus
 {
     Active = 0,
@@ -20,6 +20,12 @@ public enum ProjectStatus
     Releasing = 3,
     Released = 4,
     RolledBack = 5,
+
+    /// <summary>
+    /// FR-65: in the release phase, the release attempt's merge was refused (branch protection, required reviews or checks,
+    /// missing permission, or the <c>manual</c> merge strategy) and the merge poll waits for the PR to be merged on GitHub.
+    /// </summary>
+    AwaitingMerge = 6,
 }
 
 /// <summary>The kinds of lifecycle move the state machine accepts.</summary>
@@ -31,7 +37,7 @@ public enum TransitionKind
     /// <summary><c>review → execution</c> for another review cycle.</summary>
     ReviewCycle = 1,
 
-    /// <summary>To an earlier (or the same) phase at an earlier project version (§4.8).</summary>
+    /// <summary>To an earlier (or the same) phase at an earlier checkpoint of the version in development (§4.8, §4.10).</summary>
     Rollback = 2,
 
     /// <summary>Back to the phase producing the first invalidated artifact after a cascade (§4.4).</summary>
@@ -40,6 +46,24 @@ public enum TransitionKind
     /// <summary><c>release → release</c>, no change.</summary>
     ReleaseNoop = 4,
 
-    /// <summary>The release job finished: status <c>released</c>, version + 1.</summary>
+    /// <summary>The release job finished: status <c>released</c>. Since v2 the checkpoint is not incremented (§4.10, D-V2-2).</summary>
     ReleaseCompleted = 5,
+
+    /// <summary>
+    /// §4.10, FR-60: <c>release → refinement</c> to start a new release version, at checkpoint 1. Only from status
+    /// <c>released</c> with no version in development; the one exception to "forward goes to the next phase only".
+    /// </summary>
+    NewVersion = 6,
+
+    /// <summary>
+    /// FR-65: the release job's merge was refused, or the strategy is <c>manual</c>: <c>release/releasing →
+    /// release/awaiting_merge</c>, checkpoint unchanged. The merge poll then waits for the merge on GitHub.
+    /// </summary>
+    ReleaseAwaitingMerge = 7,
+
+    /// <summary>
+    /// FR-65, §4.14: the awaited merge won't happen (<c>PR_CLOSED</c>, <c>MERGE_TIMEOUT</c>): <c>release/awaiting_merge →
+    /// release/releasing</c>, checkpoint unchanged, so an Owner can retry the release.
+    /// </summary>
+    ReleaseMergeAbandoned = 8,
 }

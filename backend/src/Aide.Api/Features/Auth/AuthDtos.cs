@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Aide.Domain.Access;
+using Aide.Domain.GitHub;
 using Aide.Infrastructure.Persistence.Identity;
 
 namespace Aide.Api.Features.Auth;
@@ -51,5 +52,10 @@ public sealed record UserDto(
     }
 }
 
-/// <summary>Which sign-in providers are available (the frontend hides GitHub when it isn't configured).</summary>
-public sealed record AuthProvidersDto(bool Github);
+/// <summary>
+/// Which sign-in providers are available (the frontend hides "Continue with GitHub" when <c>github</c> is false).
+/// <c>githubMode</c> (D-V2-7) says how GitHub sign-in works: <c>app</c> (the AIDE GitHub App's user authorization flow
+/// with PKCE), <c>oauth</c> (the v1 OAuth App, only while no App is registered) or <c>none</c>; <c>github</c> is
+/// <c>githubMode != none</c>.
+/// </summary>
+public sealed record AuthProvidersDto(bool Github, GitHubSignInMode GithubMode);

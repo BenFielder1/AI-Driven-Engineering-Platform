@@ -130,3 +130,46 @@ public static class JobScopeKeys
     public const string JobType = "JobType";
     public const string Attempt = "Attempt";
 }
+
+/// <summary>
+/// A handler isn't ready to run yet (e.g. FR-70: refinement waiting for the codebase summary): the worker re-queues the
+/// job to run at <see cref="RunAfter"/> without counting the attempt — a wait, never a blocking sleep and never a failure.
+/// </summary>
+public sealed class JobDeferredException : Exception
+{
+    public JobDeferredException()
+    {
+    }
+
+    public JobDeferredException(string message)
+        : base(message)
+    {
+    }
+
+    public JobDeferredException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    public JobDeferredException(string message, DateTimeOffset runAfter)
+        : base(message)
+    {
+        RunAfter = runAfter;
+    }
+
+    /// <summary>
+    /// As <see cref="JobDeferredException(string, DateTimeOffset)"/>, replacing the job's payload with
+    /// <paramref name="payload"/> (raw JSON) for the next run, e.g. the merge poll's ETag or when review started waiting for
+    /// checks (§4.14) — so the state survives a restart.
+    /// </summary>
+    public JobDeferredException(string message, DateTimeOffset runAfter, string? payload)
+        : this(message, runAfter)
+    {
+        Payload = payload;
+    }
+
+    public DateTimeOffset RunAfter { get; }
+
+    /// <summary>The payload for the next run (raw JSON), or <c>null</c> to keep the current one.</summary>
+    public string? Payload { get; }
+}

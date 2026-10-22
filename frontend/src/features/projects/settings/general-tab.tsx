@@ -1,9 +1,10 @@
-import { zodResolver } from '@hookform/resolvers/zod'
 import { useState, type ReactNode } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, useWatch } from 'react-hook-form'
+import { toast } from 'sonner'
 
 import type { Schemas } from '../../../api/client'
-import { Alert, ErrorSummary } from '../../../components/ui/alert'
+import { ErrorSummary } from '../../../components/ui/alert'
 import { Button } from '../../../components/ui/button'
 import { fieldErrorSummary } from '../../../components/ui/form-errors'
 import { RadioGroup } from '../../../components/ui/radio-group'
@@ -63,7 +64,7 @@ function toPatch(p: Project, v: GeneralValues): Schemas['UpdateProjectRequest'] 
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="grid gap-1 py-2 sm:grid-cols-3">
-      <dt className="text-sm font-medium text-muted">{term}</dt>
+      <dt className="text-sm font-medium text-muted-foreground">{term}</dt>
       <dd className="break-words sm:col-span-2">{children}</dd>
     </div>
   )
@@ -78,15 +79,15 @@ function budgetText(p: Project) {
 export function GeneralReadOnly({ project }: { project: Project }) {
   return (
     <section aria-labelledby="general-title">
-      <h2 id="general-title" className="text-xl font-semibold">
+      <h2 id="general-title" className="text-xl">
         General
       </h2>
-      <p className="mb-3 mt-1 text-sm text-muted">Only project Owners can change these settings.</p>
-      <dl className="divide-y divide-border">
+      <p className="mb-3 mt-1 text-sm text-muted-foreground">Only project Owners can change these settings.</p>
+      <dl className="divide-y divide-border/60">
         <Row term="Name">{project.name}</Row>
         <Row term="Approval mode">
           {approvalModeLabels[project.approvalMode]}
-          <span className="block text-sm text-muted">{approvalModeDescriptions[project.approvalMode]}</span>
+          <span className="block text-sm text-muted-foreground">{approvalModeDescriptions[project.approvalMode]}</span>
         </Row>
         <Row term="Compliance threshold">{project.complianceThreshold.toFixed(2)}</Row>
         <Row term="Max files per step">{project.maxFilesPerStep}</Row>
@@ -101,7 +102,6 @@ export function GeneralReadOnly({ project }: { project: Project }) {
 export function GeneralForm({ project }: { project: Project }) {
   const update = useUpdateProject(project.id)
   const [serverErrors, setServerErrors] = useState<string[]>([])
-  const [saved, setSaved] = useState(false)
   const {
     register,
     handleSubmit,
@@ -109,7 +109,7 @@ export function GeneralForm({ project }: { project: Project }) {
     setValue,
     reset,
     control,
-    formState: { errors, isSubmitted, isDirty },
+    formState: { errors, isSubmitted },
   } = useForm<GeneralValues>({
     resolver: zodResolver(generalSchema),
     values: toValues(project),
@@ -118,16 +118,15 @@ export function GeneralForm({ project }: { project: Project }) {
 
   const onSubmit = handleSubmit((values) => {
     setServerErrors([])
-    setSaved(false)
     const patch = toPatch(project, values)
     if (Object.keys(patch).length === 0) {
-      setSaved(true)
+      toast.success('Settings saved.')
       return
     }
     update.mutate(patch, {
       onSuccess: (updated) => {
         reset(toValues(updated))
-        setSaved(true)
+        toast.success('Settings saved.')
       },
       onError: (error) => {
         const unmatched = applyFieldErrors(error, setError, Object.keys(fieldIds) as (keyof GeneralValues)[])
@@ -140,20 +139,13 @@ export function GeneralForm({ project }: { project: Project }) {
 
   return (
     <form noValidate onSubmit={(e) => void onSubmit(e)} aria-labelledby="general-title" className="max-w-2xl">
-      <h2 id="general-title" className="mb-4 text-xl font-semibold">
+      <h2 id="general-title" className="mb-4 text-xl">
         General
       </h2>
       <ErrorSummary
         title="We couldn't save the settings"
         errors={[...serverErrors.map((message) => ({ message })), ...(isSubmitted ? fieldErrorSummary(errors, fieldIds) : [])]}
       />
-      <div role="status" aria-live="polite">
-        {saved && !isDirty && (
-          <Alert tone="success" className="mb-4">
-            Settings saved.
-          </Alert>
-        )}
-      </div>
       <div className="mt-2 flex flex-col gap-5">
         <TextField id={fieldIds.name} label="Project name" maxLength={limits.nameMax} error={errors.name?.message} {...register('name')} />
         <RadioGroup

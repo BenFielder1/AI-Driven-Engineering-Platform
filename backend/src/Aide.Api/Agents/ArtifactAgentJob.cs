@@ -130,8 +130,9 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
     /// <summary>The current (highest locked) version of a type whose content still matches its hash, or <c>null</c>.</summary>
     public async Task<Artifact?> CurrentAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
     {
+        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
         var artifact = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Type == type && a.Status == ArtifactStatus.Locked)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == type && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .FirstOrDefaultAsync(cancellationToken);
         return await IntactAsync(artifact, cancellationToken);
@@ -140,8 +141,9 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
     /// <summary>The highest version of a type that is intact (not corrupted), whatever its status, or <c>null</c>.</summary>
     public async Task<Artifact?> LatestIntactAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
     {
+        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
         var candidates = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Type == type && a.Status != ArtifactStatus.Corrupted)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == type && a.Status != ArtifactStatus.Corrupted)
             .OrderByDescending(a => a.Version)
             .Take(5)
             .ToListAsync(cancellationToken);
@@ -204,7 +206,8 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
         return new InputArtifactRef(artifact.Id, artifact.Type, artifact.Version);
     }
 
-    private async Task<Artifact?> IntactAsync(Artifact? artifact, CancellationToken cancellationToken)
+    /// <summary><paramref name="artifact"/> when its content still matches its hash (FR-20), else <c>null</c>.</summary>
+    public async Task<Artifact?> IntactAsync(Artifact? artifact, CancellationToken cancellationToken)
     {
         if (artifact is null)
         {

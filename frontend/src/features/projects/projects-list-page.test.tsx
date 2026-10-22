@@ -4,8 +4,10 @@ import { http } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { seedUser, signInAs } from '../../mocks/handlers/auth'
+import { seedGate } from '../../mocks/handlers/lifecycle'
 import { problem } from '../../mocks/handlers/problem'
-import { seedProject } from '../../mocks/handlers/projects'
+import { projectsDb, seedProject } from '../../mocks/handlers/projects'
+import { seedReleaseVersions } from '../../mocks/handlers/versions'
 import { server } from '../../mocks/server'
 import { currentHref, renderRoute } from '../../test/render'
 
@@ -15,10 +17,10 @@ function signInAsUser() {
 }
 
 describe('Projects list (FR-6)', () => {
-  it('FR-6: shows only the projects the user is a member of, with phase, status, version and role', async () => {
+  it('FR-6: shows only the projects the user is a member of, with phase, status, versions and role', async () => {
     const other = seedUser({ email: 'grace@example.com', name: 'Grace' })
     signInAsUser()
-    seedProject({ name: 'Mine', currentPhase: 'planning', status: 'active', projectVersion: 3 })
+    seedProject({ name: 'Mine', currentPhase: 'planning', status: 'active', checkpoint: 3 })
     seedProject({ name: 'Not mine', members: [{ userId: other.id, role: 'owner' }] })
     renderRoute('/projects')
 
@@ -27,10 +29,59 @@ describe('Projects list (FR-6)', () => {
     expect(within(card).getByRole('link', { name: 'Mine' })).toBeInTheDocument()
     expect(within(card).getByText('Planning')).toBeInTheDocument()
     expect(within(card).getByText('Active')).toBeInTheDocument()
-    expect(within(card).getByText('3')).toBeInTheDocument()
+    expect(within(card).getByText('Not released')).toBeInTheDocument()
+    expect(within(card).getByText(/In development/)).toHaveTextContent('In development 0.1.0')
     expect(within(card).getByText('Owner')).toBeInTheDocument()
     expect(screen.queryByText('Not mine')).not.toBeInTheDocument()
     expect(screen.getByText('Showing 1–1 of 1 project')).toBeInTheDocument()
+  })
+
+  it('FR62_list_row_shows_released_and_in_development_badges', async () => {
+    signInAsUser()
+    const p = seedProject({ name: 'Shop', currentPhase: 'refinement', status: 'active' })
+    seedReleaseVersions(p, { released: '1.1.0', development: '1.2.0' })
+    const done = seedProject({ name: 'Done', currentPhase: 'release', status: 'released' })
+    seedReleaseVersions(done, { released: '2.0.0' })
+    renderRoute('/projects')
+
+    const list = await screen.findByRole('list', { name: 'Projects' })
+    const row = (name: string) => within(list).getByRole('link', { name }).closest('li') as HTMLElement
+    const shop = row('Shop')
+    expect(within(shop).getByText('Refinement')).toBeInTheDocument()
+    expect(within(shop).getByText('Active')).toBeInTheDocument()
+    const shopBadges = within(shop).getByTestId('version-badges')
+    expect(shopBadges).toHaveTextContent('Released 1.1.0')
+    expect(shopBadges).toHaveTextContent('In development 1.2.0')
+    const doneBadges = within(row('Done')).getByTestId('version-badges')
+    expect(doneBadges).toHaveTextContent('Released 2.0.0')
+    expect(doneBadges).not.toHaveTextContent('In development')
+  })
+
+  it('FR62_filter_has_a_version_in_development', async () => {
+    signInAsUser()
+    const dev = seedProject({ name: 'Developing' })
+    seedReleaseVersions(dev, { released: '1.1.0', development: '1.2.0' })
+    const done = seedProject({ name: 'Finished', status: 'released' })
+    seedReleaseVersions(done, { released: '1.0.0' })
+    const { router } = renderRoute('/projects')
+    const user = userEvent.setup()
+    await screen.findByRole('link', { name: 'Finished' })
+
+    await user.selectOptions(screen.getByLabelText('Has a version in development'), 'true')
+    await waitFor(() => {
+      expect(currentHref(router)).toBe('/projects?hasDevelopmentVersion=true')
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: 'Finished' })).not.toBeInTheDocument()
+    })
+    expect(screen.getByRole('link', { name: 'Developing' })).toBeInTheDocument()
+    expect(projectsDb.projects).toHaveLength(2)
+
+    await user.selectOptions(screen.getByLabelText('Has a version in development'), 'false')
+    expect(await screen.findByRole('link', { name: 'Finished' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: 'Developing' })).not.toBeInTheDocument()
+    })
   })
 
   it('FR-6: shows an empty state with a "New project" call to action', async () => {
@@ -128,5 +179,64 @@ describe('Projects list (FR-6)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+
+  it('FR53_projects_list: the KPI row comes from GET /projects/kpis, awaiting gates included, and follows the filters', async () => {
+    signInAsUser()
+    seedProject({ name: 'Alpha', status: 'active' })
+    const beta = seedProject({ name: 'Beta', currentPhase: 'review', status: 'reviewing' })
+    seedGate(beta, { type: 'escalation' })
+    seedGate(beta, { type: 'pre_release' })
+    seedProject({ name: 'Gamma', currentPhase: 'release', status: 'released' })
+    renderRoute('/projects')
+
+    const totals = await screen.findByRole('region', { name: 'Project totals' })
+    const tile = (label: string) => within(totals).getByText(label).nextElementSibling
+    await waitFor(() => {
+      expect(tile('Active')).toHaveTextContent('2')
+    })
+    expect(tile('In review')).toHaveTextContent('1')
+    expect(tile('Released')).toHaveTextContent('1')
+    expect(tile('Awaiting gates')).toHaveTextContent('2')
+  })
+
+  it('FR53_projects_list: the KPI row counts only the projects matching the filters', async () => {
+    signInAsUser()
+    seedProject({ name: 'Alpha', status: 'active' })
+    seedProject({ name: 'Gamma', currentPhase: 'release', status: 'released' })
+    renderRoute('/projects?status=released')
+    const filteredTotals = await screen.findByRole('region', { name: 'Project totals' })
+    await waitFor(() => {
+      expect(within(filteredTotals).getByText('Active').nextElementSibling).toHaveTextContent('0')
+    })
+    expect(within(filteredTotals).getByText('Released').nextElementSibling).toHaveTextContent('1')
+    expect(within(filteredTotals).getAllByText('Of 1 matching project')).toHaveLength(4)
+  })
+
+  it('FR53_projects_list: from md up the projects are a sortable table; the header sort is kept in the URL', async () => {
+    const original = globalThis.matchMedia
+    globalThis.matchMedia = (query: string) => {
+      const list = original(query)
+      Object.defineProperty(list, 'matches', { value: query.includes('48rem') })
+      return list
+    }
+    try {
+      signInAsUser()
+      seedProject({ name: 'Alpha' })
+      const { router } = renderRoute('/projects')
+      const user = userEvent.setup()
+
+      const table = await screen.findByRole('table', { name: 'Projects' })
+      expect(within(table).getByRole('link', { name: 'Alpha' })).toBeInTheDocument()
+      expect(screen.queryByRole('list', { name: 'Projects' })).not.toBeInTheDocument()
+      expect(within(table).getByRole('columnheader', { name: /Updated/ })).toHaveAttribute('aria-sort', 'descending')
+
+      await user.click(within(table).getByRole('button', { name: 'Project' }))
+      await waitFor(() => {
+        expect(router.state.location.search).toEqual({ sortBy: 'name', sortOrder: 'asc' })
+      })
+    } finally {
+      globalThis.matchMedia = original
+    }
   })
 })

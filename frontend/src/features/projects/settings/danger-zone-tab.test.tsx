@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { seedUser, signInAs } from '../../../mocks/handlers/auth'
 import { projectsDb, seedProject } from '../../../mocks/handlers/projects'
-import { openOwnerSettings, openSettings, requestsTo } from '../../../test/project-settings'
+import { openOwnerSettings, openSettings, requestsTo, settingsSectionLinks } from '../../../test/project-settings'
 import { currentHref } from '../../../test/render'
 
 describe('Settings → Danger zone (FR-7)', () => {
@@ -45,7 +45,7 @@ describe('Settings → Danger zone (FR-7)', () => {
     expect(projectsDb.projects).toEqual([project])
   })
 
-  it('FR-7: the danger zone is Owner-only (no tab, and ?tab=danger falls back to General)', async () => {
+  it('FR-7, FR53_settings_nav: the danger zone is Owner-only (no section link, and /settings/danger falls back to General)', async () => {
     const owner = seedUser({ email: 'grace@example.com', name: 'Grace Hopper', systemRole: 'user' })
     const me = signInAs({ email: 'ada@example.com', systemRole: 'user' })
     const project = seedProject({
@@ -54,10 +54,13 @@ describe('Settings → Danger zone (FR-7)', () => {
         { userId: me.id, role: 'contributor' },
       ],
     })
-    await openSettings('danger', project)
+    const { router } = await openSettings('danger', project)
 
-    expect(screen.queryByRole('tab', { name: 'Danger zone' })).not.toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'General', selected: true })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(`/projects/${project.id}/settings/general`)
+    })
+    expect(settingsSectionLinks().map((l) => l.textContent)).toEqual(['General', 'Members', 'LLM', 'Deployment'])
+    expect(screen.getByRole('link', { name: 'General', current: 'page' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete project' })).not.toBeInTheDocument()
     expect(await screen.findByText('Only project Owners can change these settings.')).toBeInTheDocument()
   })

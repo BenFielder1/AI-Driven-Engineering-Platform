@@ -17,29 +17,39 @@ using ReleaseEntity = Aide.Domain.Entities.Release;
 namespace Aide.Api.Features.Release;
 
 /// <summary>
-/// FR-42, FR-43: the release job, queued with the transition into release (or by <c>POST /release</c>). Idempotent (§4.9).
+/// FR-42 amended by FR-64, FR-43: the release job, queued with the transition into release (or by <c>POST /release</c>).
+/// Idempotent (§4.9).
 /// <list type="number">
-/// <item>Skip unless the project is in release/releasing at the version the job was queued for and that version's latest
-/// attempt is in progress (an attempt is created for a job queued without one).</item>
+/// <item>Skip unless the project is in release/releasing at the checkpoint the job was queued for and that checkpoint's
+/// latest attempt is in progress (an attempt is created for a job queued without one).</item>
 /// <item>Prepare the working copy (GitHub: fetch), re-check (touching the project row) that the project is still releasing,
-/// then release through the project's Git provider: an existing release tag of the version that holds the release is a
-/// no-op; otherwise merge the PR (GitHub) or the branch (Local) — the merge commit is recorded on the attempt at once — and
-/// create the first free annotated tag <c>v&lt;N&gt;-aide[.k]</c>.</item>
-/// <item>Released: the attempt succeeds (merge commit, completed_at), the project becomes <c>released</c> through the
-/// state machine (version + 1) and <c>RELEASE_COMPLETED</c> is written, in one transaction guarded by the project's xmin.</item>
+/// then release through the project's Git provider: the version's tag <c>&lt;tagPrefix&gt;&lt;version&gt;</c> already holding the
+/// release is a no-op, on another commit it fails the release (<c>TAG_EXISTS</c>, nothing merged); otherwise merge the PR
+/// (GitHub) or the branch (Local) — the merge commit is recorded on the attempt at once — and create the annotated tag.</item>
+/// <item>Released: the attempt succeeds (merge commit, completed_at), the release version becomes <c>released</c> (tag,
+/// merge commit, released_at), the project becomes <c>released</c> through the state machine (checkpoint unchanged), its
+/// released version is this version and nothing is in development, and <c>RELEASE_COMPLETED</c> is written, in one
+/// transaction guarded by the project's xmin.</item>
 /// <item>Merge conflict or another permanent failure: the attempt fails with its code (and the conflicting files), the
 /// project stays release/releasing, <c>RELEASE_FAILED</c> is written; the job itself ends (nothing to retry).</item>
+/// <item>FR-65: under the <c>manual</c> strategy nothing is merged (GitHub: the PR is marked ready for review); a merge
+/// GitHub refuses (branch protection, required reviews or checks, missing permission) is not a failure either: the attempt,
+/// the version and the project become <c>awaiting_merge</c> with the merge-readiness reasons (FR-84), Owners are notified
+/// and the merge poll (§4.14) waits for the merge on GitHub.</item>
+/// <item>FR-64: once tagged, a GitHub project gets its GitHub Release (<see cref="GitHubReleasePublisher"/>).</item>
 /// </list>
 /// Transient failures retry the job; when its retries run out, <see cref="ReleaseJobEndedHook"/> fails the attempt.
 /// </summary>
 public sealed partial class ReleaseJobHandler(
     AideDbContext db,
     WorkingCopyPreparer preparer,
-    LifecycleWriter writer,
+    ReleaseCompletion completion,
+    GitHubReleasePublisher publisher,
+    Git.MergeReadinessService readiness,
     TimeProvider time,
     ILogger<ReleaseJobHandler> logger) : IJobHandler
 {
-    public const string CompletedReason = "Release completed: merged and tagged";
+    public const string CompletedReason = ReleaseCompletion.CompletedReason;
 
     public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
     {
@@ -73,9 +83,9 @@ public sealed partial class ReleaseJobHandler(
         }
 
         var working = preparation.Result.Value;
-        var pullRequestNumber = await db.ProjectGitSettings.AsNoTracking()
-            .Where(s => s.ProjectId == project.Id)
-            .Select(s => s.PullRequestNumber)
+        var version = await db.ReleaseVersions.AsNoTracking()
+            .Where(v => v.Id == release.ReleaseVersionId)
+            .Select(v => new { v.Version, v.PullRequestNumber })
             .FirstOrDefaultAsync(cancellationToken);
 
         // Preparing can take a while: immediately before the merge, confirm (and claim, by touching the project row) that the
@@ -87,17 +97,27 @@ public sealed partial class ReleaseJobHandler(
             return;
         }
 
+        // FR-65: the manual strategy never merges; the release then waits for the merge on GitHub (or in the Local repository).
+        var merge = project.MergeStrategy == MergeStrategy.AideMerges;
         var request = new ReleaseRequest(
             working.Branch,
-            release.ProjectVersion,
+            release.Tag,
+            version?.Version ?? string.Empty,
             project.Name,
-            pullRequestNumber,
-            (sha, ct) => RecordMergeAsync(release.Id, sha, ct));
+            version?.PullRequestNumber,
+            (sha, ct) => RecordMergeAsync(release.Id, sha, ct))
+        {
+            Merge = merge,
+        };
         var outcome = await working.Provider.ReleaseAsync(working.Connection, request, working.Token, cancellationToken);
         switch (outcome.Kind)
         {
             case ReleaseOutcomeKind.Released:
-                await SucceedAsync(release.Id, outcome, cancellationToken);
+                var url = await publisher.PublishAsync(release, outcome.Tag ?? release.Tag, cancellationToken);
+                await completion.SucceedAsync(release.Id, outcome, url, mergedExternally: outcome.MergedExternally, cancellationToken);
+                return;
+            case ReleaseOutcomeKind.AwaitingMerge:
+                await completion.AwaitMergeAsync(release.Id, project.MergeStrategy, await AwaitingReasonsAsync(project, outcome, cancellationToken), cancellationToken);
                 return;
             case ReleaseOutcomeKind.Conflict:
                 await FailAsync(release.Id, ErrorCodes.MergeConflict, outcome.Reason!, outcome.ConflictingFiles, cancellationToken);
@@ -113,7 +133,7 @@ public sealed partial class ReleaseJobHandler(
     /// <summary>The in-progress attempt at the project's version; a job queued without one (e.g. before this phase) gets one.</summary>
     private async Task<ReleaseEntity?> AttemptAsync(Project project, CancellationToken cancellationToken)
     {
-        var latest = await ReleaseRecords.LatestAtAsync(db, project.Id, project.ProjectVersion, track: false, cancellationToken);
+        var latest = await ReleaseRecords.LatestAtAsync(db, project.Id, project.Checkpoint, track: false, cancellationToken);
         if (latest is not null)
         {
             return latest.Status == ReleaseStatus.InProgress ? latest : null;
@@ -170,59 +190,38 @@ public sealed partial class ReleaseJobHandler(
     }
 
     /// <summary>
-    /// Records the release. Released → the attempt succeeds and the project becomes <c>released</c> (state machine); if the
-    /// project moved on meanwhile, the Git facts are still recorded on the attempt but the project isn't touched.
+    /// FR-65, FR-84: why the release waits for a merge on GitHub: the merge-readiness reasons (<c>manual_strategy</c> first
+    /// for the manual strategy). When readiness can't be read, or finds nothing although GitHub refused, GitHub's own answer
+    /// is the reason (<c>branch_protected</c>): the merge endpoint is authoritative.
     /// </summary>
-    private async Task SucceedAsync(Guid releaseId, ReleaseOutcome outcome, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<Git.MergeReadinessReasonDto>> AwaitingReasonsAsync(Project project, ReleaseOutcome outcome, CancellationToken cancellationToken)
     {
-        var now = time.GetUtcNow();
-        var release = await db.Releases.FirstAsync(r => r.Id == releaseId, cancellationToken);
-        if (release.Status != ReleaseStatus.InProgress)
+        List<Git.MergeReadinessReasonDto> reasons = [];
+        try
         {
-            LogSkipped(logger, "the release attempt was already recorded");
-            return;
-        }
-
-        // Version numbers repeat after a released project is rolled back (§4.8): the provider chose the tag — an existing one
-        // holding this release (alreadyTagged), or the first free v<N>-aide[.k] — so several succeeded attempts of one version
-        // may exist, each with its own tag (or the same tag, when re-released without new commits).
-        release.Status = ReleaseStatus.Succeeded;
-        release.Tag = outcome.Tag ?? release.Tag;
-        release.MergeCommitSha = outcome.MergeCommitSha;
-        release.CompletedAt = now;
-        var project = await db.Projects.FirstAsync(p => p.Id == release.ProjectId, cancellationToken);
-        if (ReleaseRules.ShouldRun(State(project), release.ProjectVersion))
-        {
-            var completed = LifecycleStateMachine.Apply(State(project), TransitionRequest.ReleaseCompleted(CompletedReason), LifecycleSnapshot.Empty);
-            if (completed.IsFailure)
+            var computed = await readiness.ComputeAsync(project.Id, cancellationToken);
+            if (computed.IsSuccess)
             {
-                throw new JobFailedException(completed.Error!.Message, transient: true, completed.Error.Code);
+                reasons.AddRange(computed.Value.Reasons);
             }
-
-            await writer.ApplyAsync(project, completed.Value, SystemActor.Name, now, cancellationToken);
         }
-        else
+        catch (Infrastructure.GitHub.GitHubRateLimitedException)
         {
-            LogProjectMoved(logger, project.Id, release.ProjectVersion);
+            LogReadinessRateLimited(logger, project.Id);
         }
 
-        db.AddEvent(
-            EventTypes.ReleaseCompleted,
-            release.ProjectId,
-            new
-            {
-                releaseId = release.Id,
-                projectVersion = release.ProjectVersion,
-                tag = release.Tag,
-                attempt = release.Attempt,
-                mergeCommitSha = release.MergeCommitSha,
-                pullRequestUrl = release.PrUrl,
-                alreadyTagged = outcome.AlreadyTagged,
-            },
-            SystemActor.Name,
-            now);
-        await SaveAsync(cancellationToken);
-        LogReleased(logger, release.ProjectId, release.Tag, outcome.AlreadyTagged);
+        if (outcome.MergeRefused && reasons.All(r => r.Code == MergeReadinessReasonCode.ManualStrategy))
+        {
+            reasons.Add(new Git.MergeReadinessReasonDto(MergeReadinessReasonCode.BranchProtected, outcome.Reason ?? "GitHub refused the merge."));
+        }
+
+        if (project.MergeStrategy == MergeStrategy.Manual && reasons.All(r => r.Code != MergeReadinessReasonCode.ManualStrategy))
+        {
+            reasons.Insert(0, new Git.MergeReadinessReasonDto(
+                MergeReadinessReasonCode.ManualStrategy, "The project's merge strategy is manual: AIDE never merges; merge the pull request on GitHub."));
+        }
+
+        return reasons;
     }
 
     private async Task FailAsync(Guid releaseId, string errorCode, string message, IReadOnlyList<string> conflictingFiles, CancellationToken cancellationToken)
@@ -249,7 +248,7 @@ public sealed partial class ReleaseJobHandler(
         }
     }
 
-    private static LifecycleState State(Project project) => new(project.CurrentPhase, project.Status, project.ProjectVersion);
+    private static LifecycleState State(Project project) => new(project.CurrentPhase, project.Status, project.Checkpoint);
 
     private static LifecycleJobPayload Payload(JobExecution job)
     {
@@ -266,14 +265,11 @@ public sealed partial class ReleaseJobHandler(
     [LoggerMessage(Level = LogLevel.Information, Message = "Release job did nothing: {Reason}")]
     private static partial void LogSkipped(ILogger logger, string reason);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} released as {Tag} (tag already existed: {AlreadyTagged})")]
-    private static partial void LogReleased(ILogger logger, Guid projectId, string tag, bool alreadyTagged);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Merge readiness of project {ProjectId} was rate limited; the awaiting release records GitHub's answer only")]
+    private static partial void LogReadinessRateLimited(ILogger logger, Guid projectId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Release {Tag} of project {ProjectId} failed ({ErrorCode}, {ConflictCount} conflicting files)")]
     private static partial void LogFailed(ILogger logger, Guid projectId, string tag, string errorCode, int conflictCount);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId} left release version {ProjectVersion} while it was being released; the release is recorded, the project is unchanged")]
-    private static partial void LogProjectMoved(ILogger logger, Guid projectId, int projectVersion);
 }
 
 /// <summary>A release job that ended without succeeding (retries used up) fails the project's in-progress attempts with its last (token-free) error.</summary>
@@ -312,6 +308,10 @@ public static class ReleaseServiceCollectionExtensions
     public static IServiceCollection AddReleases(this IServiceCollection services)
     {
         services.AddScoped<ReleaseService>();
+        services.AddScoped<ReleaseCompletion>();
+        services.AddScoped<GitHubReleasePublisher>();
+        services.AddScoped<IJobEndedHook, MergePollJobEndedHook>();
+        services.AddJobHandler<MergePollJobHandler>(JobTypes.MergePoll);
         services.AddScoped<IJobEndedHook, ReleaseJobEndedHook>();
         services.AddJobHandler<ReleaseJobHandler>(JobTypes.Release);
         return services;

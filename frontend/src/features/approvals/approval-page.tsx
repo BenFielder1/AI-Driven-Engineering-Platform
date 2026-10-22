@@ -96,26 +96,26 @@ function Summary({ view }: { view: ApprovalLinkView }) {
   const a = view.artifactSummary
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-      <dt className="text-muted">Project</dt>
+      <dt className="text-muted-foreground">Project</dt>
       <dd className="break-words">
-        <Link to="/projects/$projectId" params={{ projectId: view.projectId }} className="font-medium text-link underline">
+        <Link to="/projects/$projectId" params={{ projectId: view.projectId }} className="font-medium text-primary underline">
           {view.projectName}
         </Link>
       </dd>
-      <dt className="text-muted">Gate</dt>
+      <dt className="text-muted-foreground">Gate</dt>
       <dd>{gateTypeLabels[view.gateType]}</dd>
-      <dt className="text-muted">Decision</dt>
+      <dt className="text-muted-foreground">Decision</dt>
       <dd className="font-semibold">{approvalDecisionLabels[view.decision]}</dd>
       {a && (
         <>
-          <dt className="text-muted">Artifact</dt>
+          <dt className="text-muted-foreground">Artifact</dt>
           <dd className="break-words">
             {artifactTypeLabels[a.type]} v{a.version}
             {a.title && <> — {a.title}</>}
           </dd>
         </>
       )}
-      <dt className="text-muted">Link expires</dt>
+      <dt className="text-muted-foreground">Link expires</dt>
       <dd>
         {formatDateTime(view.expiresAt)} (<RelativeTime iso={view.expiresAt} />)
       </dd>
@@ -172,7 +172,7 @@ function ConfirmForm({
   const effect = effectOf(view)
   return (
     <form noValidate onSubmit={(e) => void onSubmit(e)} aria-labelledby="confirm-title" className="mt-6 flex flex-col gap-4">
-      <h2 id="confirm-title" className="text-lg font-semibold">
+      <h2 id="confirm-title" className="text-lg">
         {reject ? 'Confirm the rejection' : 'Confirm the approval'}
       </h2>
       {effect && <p className="text-sm">{effect}</p>}
@@ -276,7 +276,7 @@ export function ApprovalPage({ token }: { token: string }) {
     content = (
       <>
         <PageHeader title={`${approvalDecisionLabels[view.decision]} ${gateTypeLabels[view.gateType].toLowerCase()}?`} />
-        <section aria-label="Approval summary" className="rounded-lg border border-border bg-surface-raised p-5">
+        <section aria-label="Approval summary" className="rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-5">
           <Summary view={view} />
         </section>
         <ConfirmForm token={token} view={view} onDone={setResult} />

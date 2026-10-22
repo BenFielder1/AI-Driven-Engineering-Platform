@@ -21,8 +21,11 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
         ArgumentNullException.ThrowIfNull(project);
         var id = project.Id;
 
+        // §4.10: "current" artifacts are those of the release version in development; the previous version's locked
+        // artifacts are baseline inputs and never satisfy an entry condition.
+        var currentVersionId = project.CurrentReleaseVersionId ?? await db.CurrentReleaseVersionIdAsync(id, cancellationToken);
         var locked = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == id && a.Status == ArtifactStatus.Locked)
+            .Where(a => a.ProjectId == id && a.ReleaseVersionId == currentVersionId && a.Status == ArtifactStatus.Locked)
             .Select(a => new { a.Id, a.Type, a.CreatedAt })
             .ToListAsync(cancellationToken);
         bool IsLocked(ArtifactType type) => locked.Any(a => a.Type == type);
@@ -67,8 +70,8 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
 
         // A project branch was recorded by an earlier preparation. Entering execution from planning prepares the working
         // copy first and replaces this with that outcome (LifecycleService, GateService); the review cycle relies on it.
-        var workingCopyPrepared = await db.ProjectGitSettings.AsNoTracking()
-            .AnyAsync(g => g.ProjectId == id && g.BranchName != null, cancellationToken);
+        var workingCopyPrepared = await db.ReleaseVersions.AsNoTracking()
+            .AnyAsync(v => v.Id == currentVersionId && v.BranchName != null, cancellationToken);
 
         // The escalation outcome counts only for the escalation raised for that report (created after it).
         EscalationDecision? escalation = null;
@@ -86,6 +89,8 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
             .Where(g => g.ProjectId == id && g.Status == GateStatus.Pending)
             .Select(g => g.Type)
             .ToListAsync(cancellationToken);
+        var developmentVersionExists = await db.ReleaseVersions.AsNoTracking()
+            .AnyAsync(v => v.ProjectId == id && (v.Status == ReleaseVersionStatus.InDevelopment || v.Status == ReleaseVersionStatus.AwaitingMerge), cancellationToken);
 
         return new LifecycleSnapshot
         {
@@ -103,6 +108,7 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
             OptimizationPlanStepCount = optimization?.Remaining ?? 0,
             EntryGateApproved = false,
             PendingGates = pending,
+            DevelopmentVersionExists = developmentVersionExists,
         };
     }
 
@@ -128,7 +134,7 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
         }
 
         return await db.Artifacts.AsNoTracking().AnyAsync(
-            a => a.ProjectId == project.Id && a.Type == ArtifactType.OptimizationPlan && a.Status == ArtifactStatus.Draft
+            a => a.ProjectId == project.Id && a.ReleaseVersionId == report.ReleaseVersionId && a.Type == ArtifactType.OptimizationPlan && a.Status == ArtifactStatus.Draft
                 && (a.Id == report.OptimizationPlanArtifactId || a.CreatedAt >= report.CreatedAt),
             cancellationToken);
     }
@@ -136,11 +142,11 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
     private Task<LatestReport?> LatestReportAsync(Project project, CancellationToken cancellationToken) =>
         ReviewTimeline.Current(db, project)
             .NewestFirst()
-            .Select(r => new LatestReport(r.Decision, r.ProjectVersion, r.CreatedAt, r.OptimizationPlanArtifactId))
+            .Select(r => new LatestReport(r.Decision, r.Checkpoint, r.CreatedAt, r.OptimizationPlanArtifactId, r.ReleaseVersionId))
             .FirstOrDefaultAsync(cancellationToken);
 
     private static bool IsOfReport(LatestReport report, Guid artifactId, DateTimeOffset createdAt) =>
         artifactId == report.OptimizationPlanArtifactId || createdAt >= report.CreatedAt;
 
-    private sealed record LatestReport(ReviewDecision Decision, int ProjectVersion, DateTimeOffset CreatedAt, Guid? OptimizationPlanArtifactId);
+    private sealed record LatestReport(ReviewDecision Decision, int ProjectVersion, DateTimeOffset CreatedAt, Guid? OptimizationPlanArtifactId, Guid ReleaseVersionId);
 }

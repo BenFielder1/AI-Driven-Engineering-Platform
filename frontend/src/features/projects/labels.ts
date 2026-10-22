@@ -15,7 +15,7 @@ export const phaseLabels: Record<Schemas['Phase'], string> = {
   release: 'Release',
 }
 
-export const statuses = ['active', 'building', 'reviewing', 'releasing', 'released', 'rolled_back'] as const satisfies
+export const statuses = ['active', 'building', 'reviewing', 'releasing', 'awaiting_merge', 'released', 'rolled_back'] as const satisfies
   readonly Schemas['ProjectStatus'][]
 
 export const statusLabels: Record<Schemas['ProjectStatus'], string> = {
@@ -23,6 +23,7 @@ export const statusLabels: Record<Schemas['ProjectStatus'], string> = {
   building: 'Building',
   reviewing: 'Reviewing',
   releasing: 'Releasing',
+  awaiting_merge: 'Awaiting merge',
   released: 'Released',
   rolled_back: 'Rolled back',
 }
@@ -91,7 +92,7 @@ export const escalationDecisionLabels: Record<NonNullable<Schemas['EscalationDec
 export const escalationDecisionDescriptions: Record<NonNullable<Schemas['EscalationDecision']>, string> = {
   continue:
     'Allow one more review cycle: execution re-enters to run the optimisation plan (once it is approved), then review runs again.',
-  rollback: 'Return the project to an earlier version. Later artifacts are invalidated; history is kept.',
+  rollback: 'Return the project to an earlier checkpoint. Later artifacts are invalidated; history is kept.',
   accept:
     'Accept the risks and mark the project release-eligible as it is; the release still goes through the pre-release gate. Any comment is recorded with the decision.',
 }
@@ -112,7 +113,7 @@ export function escalationOptionsFor(reason: Schemas['EscalationReason'] | undef
       {
         value: 'rollback' as const,
         label: escalationDecisionLabels.rollback,
-        description: 'Return the project to an earlier version instead. Later artifacts and steps are invalidated; history is kept.',
+        description: 'Return the project to an earlier checkpoint instead. Later artifacts and steps are invalidated; history is kept.',
       },
     ]
   }
@@ -171,6 +172,7 @@ export const artifactTypes = [
   'technical_specification',
   'implementation_plan',
   'optimization_plan',
+  'codebase_summary',
 ] as const satisfies readonly Schemas['ArtifactType'][]
 
 export const artifactTypeLabels: Record<Schemas['ArtifactType'], string> = {
@@ -178,6 +180,7 @@ export const artifactTypeLabels: Record<Schemas['ArtifactType'], string> = {
   technical_specification: 'Technical specification',
   implementation_plan: 'Implementation plan',
   optimization_plan: 'Optimisation plan',
+  codebase_summary: 'Codebase summary',
 }
 
 /** SPEC §4.3: artifact statuses. `locked` is what an approved version is stored as. */
@@ -219,22 +222,41 @@ export const guardianCheckLabels: Record<Schemas['GuardianCheck'], string> = {
   secret_scan: 'Secret scan',
 }
 
+/** FR-82: a project's Git mode, as Settings → Git and the wizard summary name it. */
 export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {
-  github: 'GitHub',
+  github_app: 'GitHub App',
+  github_pat: 'Personal access token',
+  local: 'Local repository',
+}
+
+/** Where a project's repository (and its pull requests) lives, whatever the GitHub credential (FR-36, FR-82). */
+export const gitHostLabels: Record<Schemas['GitProvider'], string> = {
+  github_app: 'GitHub',
+  github_pat: 'GitHub',
   local: 'Local repository',
 }
 
 /** FR-42, FR-43: a release attempt's outcome. */
 export const releaseStatusLabels: Record<Schemas['ReleaseStatus'], string> = {
   in_progress: 'Releasing',
+  awaiting_merge: 'Awaiting merge',
   succeeded: 'Released',
   failed: 'Failed',
 }
 
-/** FR-44: why a project version can't be a rollback target. */
-export const rollbackBlockLabels: Record<NonNullable<Schemas['RollbackTargetBlock']>, string> = {
-  current_version: 'current version',
-  release_phase: 'release versions can’t be restored',
+/** FR-62, §4.10: a release version's status. */
+export const releaseVersionStatusLabels: Record<Schemas['ReleaseVersionStatus'], string> = {
+  in_development: 'In development',
+  awaiting_merge: 'Awaiting merge',
+  released: 'Released',
+  imported: 'Imported baseline',
+}
+
+/** FR-44, FR-63: why a checkpoint can't be a rollback target. */
+export const rollbackBlockLabels: Record<NonNullable<Schemas['CheckpointBlock']>, string> = {
+  current_checkpoint: 'current checkpoint',
+  release_phase: 'release checkpoints can’t be restored',
+  version_released: 'this version is released and closed',
 }
 
 /** FR-36: how a file differs between the default branch and the project branch. */
@@ -285,7 +307,11 @@ export const notificationEvents = [
   'review_completed',
   'release_completed',
   'release_failed',
+  'release_awaiting_merge',
   'rollback',
+  'deployment_failed',
+  'preview_ready',
+  'llm_binding_cleared',
 ] as const satisfies readonly Schemas['NotificationEvent'][]
 
 export const notificationEventLabels: Record<Schemas['NotificationEvent'], string> = {
@@ -298,10 +324,17 @@ export const notificationEventLabels: Record<Schemas['NotificationEvent'], strin
   review_completed: 'Review completed',
   release_completed: 'Release completed',
   release_failed: 'Release failed',
+  release_awaiting_merge: 'Release awaiting a merge on GitHub',
   rollback: 'Rollback',
+  deployment_failed: 'Deployment failed',
+  preview_ready: 'Preview ready',
+  llm_binding_cleared: 'LLM connection unbound',
 }
 
-/** In-app notification types (FR-47, FR-15): the channel events plus the 24-hour gate reminder. */
+/**
+ * In-app notification types (FR-47, FR-15, FR-92): the channel events plus the 24-hour gate reminder and the personal
+ * `connection_invalid` (never a channel event).
+ */
 export const notificationTypes = [
   'gate_required',
   'gate_reminder',
@@ -313,13 +346,22 @@ export const notificationTypes = [
   'review_completed',
   'release_completed',
   'release_failed',
+  'release_awaiting_merge',
   'rollback',
+  'deployment_failed',
+  'preview_ready',
+  'llm_binding_cleared',
+  'connection_invalid',
 ] as const satisfies readonly Schemas['NotificationType'][]
 
 export const notificationTypeLabels: Record<Schemas['NotificationType'], string> = {
   ...notificationEventLabels,
   gate_reminder: 'Gate reminder (after 24 hours)',
+  connection_invalid: 'Connection invalid',
 }
+
+/** FR-92: personal notification types — sent to one user (in-app and their account email), never to project channels. */
+export const personalNotificationTypes = ['connection_invalid'] as const satisfies readonly Schemas['NotificationType'][]
 
 /** FR-48: the decision a one-click approval link carries. */
 export const approvalDecisionLabels: Record<Schemas['ApprovalLinkDecision'], string> = {
@@ -361,6 +403,7 @@ export const agentKinds = [
   'plan_generator',
   'code_generator',
   'code_review',
+  'repository_analyst',
 ] as const satisfies readonly Schemas['AgentKind'][]
 
 export const agentKindLabels: Record<Schemas['AgentKind'], string> = {
@@ -369,6 +412,7 @@ export const agentKindLabels: Record<Schemas['AgentKind'], string> = {
   plan_generator: 'Plan generator',
   code_generator: 'Code generator',
   code_review: 'Code review',
+  repository_analyst: 'Repository Analyst',
 }
 
 /** FR-23, FR-25: agent run statuses. Running runs stream nothing in v1 (SPEC §8, §11 Q3). */
@@ -486,3 +530,67 @@ export const reviewRunStatusLabels: Record<Schemas['ReviewRunStatus'], string> =
 const percentFormat = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 })
 /** A 0–1 score as a percentage ("82.5%"). */
 export const formatPercent = (score: number) => percentFormat.format(score)
+
+/** FR-57: the state of one execution run (a plan version's steps). */
+export const planRunStatusLabels: Record<Schemas['PlanRunStatus'], string> = {
+  pending: 'Pending',
+  running: 'Running',
+  paused: 'Paused',
+  completed: 'Completed',
+  blocked: 'Blocked',
+  superseded: 'Superseded',
+}
+
+/** FR-57: the outcome of one step attempt. */
+export const stepAttemptOutcomeLabels: Record<Schemas['StepAttemptOutcome'], string> = {
+  accepted: 'Accepted',
+  rejected: 'Rejected by the Guardian',
+  error: 'Failed with an error',
+}
+
+// ---- Merge readiness and checks (FR-64, FR-65, FR-84, FR-85) -----------------------------------------------------
+
+/** FR-65: the project's merge strategy, as Settings → Git and the Release page name it. */
+export const mergeStrategyLabels: Record<Schemas['MergeStrategy'], string> = {
+  aide_merges: 'AIDE merges the pull request',
+  manual: 'Merge manually on GitHub — AIDE waits and tags the merge',
+}
+
+export const mergeStrategyDescriptions: Record<Schemas['MergeStrategy'], string> = {
+  aide_merges:
+    'When the release is approved, AIDE merges the pull request. If GitHub refuses (required reviews or checks, branch protection), the release waits for a merge on GitHub.',
+  manual:
+    'AIDE never merges. It marks the pull request ready for review and waits; once someone merges it on GitHub, AIDE tags the merge commit and creates the GitHub Release.',
+}
+
+/** FR-84: why AIDE can't merge the version's PR itself (fallback when a reason has no message). */
+export const mergeReasonLabels: Record<Schemas['MergeReadinessReasonCode'], string> = {
+  review_required: 'An approving review is required',
+  changes_requested: 'A reviewer requested changes',
+  checks_failing: 'Required checks are failing',
+  checks_pending: 'Required checks are still running',
+  branch_protected: 'Branch protection blocks the merge',
+  merge_conflict: 'The pull request has merge conflicts',
+  no_permission: "AIDE's access can't merge into the default branch",
+  merge_method_not_allowed: "The repository doesn't allow AIDE's merge method",
+  pr_not_open: "The pull request isn't open",
+  manual_strategy: 'The project merges manually',
+}
+
+/** FR-84, FR-85: a check run's state while it hasn't completed. */
+export const checkRunStatusLabels: Record<Schemas['CheckRunStatus'], string> = {
+  queued: 'Queued',
+  in_progress: 'Running',
+  completed: 'Completed',
+}
+
+/** FR-84, FR-85: a completed check run's conclusion. */
+export const checkRunConclusionLabels: Record<NonNullable<Schemas['CheckRunConclusion']>, string> = {
+  success: 'Passed',
+  failure: 'Failed',
+  neutral: 'Neutral',
+  cancelled: 'Cancelled',
+  skipped: 'Skipped',
+  timed_out: 'Timed out',
+  action_required: 'Action required',
+}

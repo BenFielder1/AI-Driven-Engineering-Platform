@@ -14,7 +14,6 @@ namespace Aide.IntegrationTests.Projects;
 public sealed class ProjectSettingsTests(AideApiFactory factory)
 {
     private const string GitToken = "ghp_settingsSecretToken0123456789";
-    private const string LlmKey = "sk-ant-projectSecretKey0123456789";
     private const string HmacSecret = "whsec_signingSecret0123456789";
     private const string SlackUrl = "https://hooks.slack.com/services/T0000/B0000/slackSecretPath0123";
     private const string SlackUrl2 = "https://hooks.slack.com/services/T0000/B0000/slackSecretPath4567";
@@ -31,7 +30,7 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
 
         var patch = await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new
         {
-            provider = "github",
+            provider = "github_pat",
             repoUrl = "https://github.com/acme/widgets",
             defaultBranch = "trunk",
             token = GitToken,
@@ -42,7 +41,7 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
         var settings = await ProjectApi.ReadAsync<ProjectSettingsDto>(get);
 
         Assert.Equal(HttpStatusCode.OK, patch.StatusCode);
-        Assert.Equal(new GitSettingsDto(GitProvider.Github, "https://github.com/acme/widgets", "trunk", null, true), settings.Git);
+        Assert.Equal(new GitSettingsDto(GitProvider.GithubPat, "https://github.com/acme/widgets", "trunk", null, true, GitProvider.GithubPat, null, null, null, null, false, MergeStrategy.AideMerges, "v"), settings.Git);
         Assert.DoesNotContain(GitToken, patchText, StringComparison.Ordinal);
         Assert.DoesNotContain(GitToken, getText, StringComparison.Ordinal);
         await AssertStoredEncryptedAsync(fixture.Project.Id, GitToken, db => db.ProjectGitSettings.Where(s => s.ProjectId == fixture.Project.Id).Select(s => s.TokenEncrypted));
@@ -53,7 +52,7 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
     public async Task FR9_Git_partial_update_keeps_the_token_and_clearToken_removes_it()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { provider = "github", repoUrl = "https://github.com/acme/widgets.git", token = GitToken });
+        await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { provider = "github_pat", repoUrl = "https://github.com/acme/widgets.git", token = GitToken });
 
         var renamed = await ProjectApi.ReadAsync<GitSettingsDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { defaultBranch = "release" }));
         var cleared = await ProjectApi.ReadAsync<GitSettingsDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { clearToken = true }));
@@ -71,7 +70,7 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
     public async Task FR9_Switching_the_git_provider_to_local_drops_the_token_unless_a_new_one_is_sent()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { provider = "github", repoUrl = "https://github.com/acme/widgets", token = GitToken });
+        await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { provider = "github_pat", repoUrl = "https://github.com/acme/widgets", token = GitToken });
 
         var local = await ProjectApi.ReadAsync<GitSettingsDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { provider = "local" }));
         var settings = await ProjectApi.ReadAsync<ProjectSettingsDto>(await fixture.Owner.Client.GetAsync(new Uri($"{fixture.Path}/settings", UriKind.Relative), Ct));
@@ -83,10 +82,10 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
     }
 
     [Theory]
-    [InlineData("""{"provider":"github"}""", "repoUrl")]
-    [InlineData("""{"provider":"github","repoUrl":"http://github.com/a/b"}""", "repoUrl")]
-    [InlineData("""{"provider":"github","repoUrl":"https://github.com/a/b/tree/main"}""", "repoUrl")]
-    [InlineData("""{"provider":"github","repoUrl":"https://user:pw@github.com/a/b"}""", "repoUrl")]
+    [InlineData("""{"provider":"github_pat"}""", "repoUrl")]
+    [InlineData("""{"provider":"github_pat","repoUrl":"http://github.com/a/b"}""", "repoUrl")]
+    [InlineData("""{"provider":"github_pat","repoUrl":"https://github.com/a/b/tree/main"}""", "repoUrl")]
+    [InlineData("""{"provider":"github_pat","repoUrl":"https://user:pw@github.com/a/b"}""", "repoUrl")]
     [InlineData("""{"defaultBranch":"-rf"}""", "defaultBranch")]
     [InlineData("""{"defaultBranch":"a b"}""", "defaultBranch")]
     [InlineData("""{"token":"x","clearToken":true}""", "token")]
@@ -118,74 +117,33 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
         await Problems.AssertAsync(await fixture.Outsider.Client.GetAsync(new Uri($"{fixture.Path}/settings", UriKind.Relative), Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
     }
 
-    // ------------------------------------------------------------------ LLM
+    // ------------------------------------------------------------------ LLM (keys and bindings: Connections/LlmBindingTests)
 
     [Fact]
-    public async Task FR9_LLM_provider_needing_a_key_is_refused_until_the_project_has_one()
+    public async Task FR9_LLM_models_are_replaced_and_switching_provider_resets_the_models()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-
-        var refused = await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/llm", new { provider = "anthropic" });
-        var withKey = await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/llm", new { provider = "anthropic", apiKey = LlmKey });
-        var withKeyText = await withKey.Content.ReadAsStringAsync(Ct);
-        var llm = await ProjectApi.ReadAsync<LlmSettingsDto>(withKey);
-
-        await Problems.AssertAsync(refused, HttpStatusCode.BadRequest, ErrorCodes.Validation);
-        Assert.Equal((LlmProvider.Anthropic, "claude-opus-5-5", true), (llm.Provider, llm.DefaultModel, llm.HasApiKey));
-        Assert.Equal("claude-sonnet-5-5", llm.ModelsByAgent.IdeaRefinement);
-        Assert.True(llm.Providers.Single(p => p.Provider == LlmProvider.Anthropic).Configured);
-        Assert.False(llm.Providers.Single(p => p.Provider == LlmProvider.Openai).Configured);
-        Assert.DoesNotContain(LlmKey, withKeyText, StringComparison.Ordinal);
-        await AssertStoredEncryptedAsync(fixture.Project.Id, LlmKey, db => db.ProjectLlmSettings.Where(s => s.ProjectId == fixture.Project.Id).Select(s => s.ApiKeyEncrypted));
-        await AssertSecretNowhereAsync(fixture.Project.Id, LlmKey);
-
-        // Clearing the only key of a provider that needs one is refused too.
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/llm", new { clearApiKey = true }), HttpStatusCode.BadRequest, ErrorCodes.Validation);
-    }
-
-    [Theory]
-    [InlineData("sk-ant-first-half\nsecond-half")]
-    [InlineData("sk-ant-trailing-newline\n")]
-    [InlineData("sk-ant with-space")]
-    [InlineData("sk-ant-bell\u0007")]
-    public async Task FR25_An_LLM_key_with_whitespace_or_control_characters_is_VALIDATION_and_not_saved(string key)
-    {
-        using var fixture = await ProjectApi.FixtureAsync(factory);
-
-        var response = await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/llm", new { provider = "anthropic", apiKey = key });
-
-        var body = await Problems.AssertAsync(response, HttpStatusCode.BadRequest, ErrorCodes.Validation);
-        Assert.True(body.GetProperty("errors").TryGetProperty("apiKey", out _), body.ToString());
-        Assert.Null(await ProjectApi.WithDbAsync(factory, db => db.ProjectLlmSettings.Where(s => s.ProjectId == fixture.Project.Id).Select(s => s.ApiKeyEncrypted).SingleAsync(Ct)));
-    }
-
-    [Fact]
-    public async Task FR9_LLM_models_are_replaced_and_switching_provider_drops_the_old_key_and_models()
-    {
-        using var fixture = await ProjectApi.FixtureAsync(factory);
-        await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/llm", new { provider = "openai", apiKey = LlmKey });
 
         var models = await ProjectApi.ReadAsync<LlmSettingsDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/llm", new
         {
-            defaultModel = "gpt-5-mini",
-            modelsByAgent = new { codeGenerator = "gpt-5", codeReview = "gpt-5" },
+            defaultModel = "fake-2",
+            modelsByAgent = new { codeGenerator = "fake-3", codeReview = "fake-3" },
         }));
         var ollama = await ProjectApi.ReadAsync<LlmSettingsDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/llm", new { provider = "ollama" }));
 
-        Assert.Equal(("gpt-5-mini", "gpt-5", "gpt-5", (string?)null, true), (models.DefaultModel, models.ModelsByAgent.CodeGenerator, models.ModelsByAgent.CodeReview, models.ModelsByAgent.IdeaRefinement, models.HasApiKey));
-        Assert.Equal((LlmProvider.Ollama, "qwen2.5-coder", false), (ollama.Provider, ollama.DefaultModel, ollama.HasApiKey));
+        Assert.Equal(("fake-2", "fake-3", "fake-3", (string?)null, false), (models.DefaultModel, models.ModelsByAgent.CodeGenerator, models.ModelsByAgent.CodeReview, models.ModelsByAgent.IdeaRefinement, models.HasApiKey));
+        Assert.Equal((LlmProvider.Ollama, "qwen2.5-coder", false, (LlmBindingDto?)null), (ollama.Provider, ollama.DefaultModel, ollama.HasApiKey, ollama.Binding));
         Assert.Null(ollama.ModelsByAgent.CodeGenerator);
         Assert.False(ollama.Providers.Single(p => p.Provider == LlmProvider.Openai).Configured);
     }
 
     [Theory]
-    [InlineData("""{"apiKey":"sk-x"}""", "apiKey")]
-    [InlineData("""{"provider":"fake","apiKey":"sk-x"}""", "apiKey")]
-    [InlineData("""{"apiKey":"   "}""", "apiKey")]
-    [InlineData("""{"apiKey":"sk-x","clearApiKey":true}""", "apiKey")]
+    [InlineData("""{"provider":"anthropic"}""", "provider")]
+    [InlineData("""{"provider":"openai"}""", "provider")]
     [InlineData("""{"modelsByAgent":{"codeReview":"  "}}""", "modelsByAgent.codeReview")]
     [InlineData("""{"defaultModel":""}""", null)]
     [InlineData("""{"provider":"copilot"}""", null)]
+    [InlineData("""{"credentialId":"not-a-guid"}""", null)]
     public async Task FR9_Invalid_LLM_settings_are_VALIDATION(string json, string? field)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);

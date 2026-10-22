@@ -39,6 +39,27 @@ public sealed class JobEnqueuer(AideDbContext db, TimeProvider time)
             }
         }
 
+        return Add(type, payload, projectId, now, runAfter);
+    }
+
+    /// <summary>
+    /// As <see cref="EnqueueAsync"/> for job types other than <see cref="JobTypes.Execution"/> (no uniqueness check, so no
+    /// query): adds the queued job to the unit of work.
+    /// </summary>
+    public Job Enqueue(string type, object payload, Guid? projectId, DateTimeOffset? now = null, DateTimeOffset? runAfter = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(type);
+        ArgumentNullException.ThrowIfNull(payload);
+        if (type == JobTypes.Execution)
+        {
+            throw new InvalidOperationException("Execution jobs are unique per project: use EnqueueAsync.");
+        }
+
+        return Add(type, payload, projectId, now, runAfter);
+    }
+
+    private Job Add(string type, object payload, Guid? projectId, DateTimeOffset? now, DateTimeOffset? runAfter)
+    {
         var createdAt = now ?? time.GetUtcNow();
         var job = new Job
         {
@@ -68,7 +89,9 @@ public sealed record LifecycleJobPayload(
     string? Feedback = null,
     Guid? GateId = null,
     Guid? ArtifactId = null,
-    IReadOnlyList<RefinementAnswer>? Answers = null)
+    IReadOnlyList<RefinementAnswer>? Answers = null,
+    DateTimeOffset? ChecksWaitSince = null,
+    DateTimeOffset? PreviewWaitSince = null)
 {
     /// <summary>FR-27: a writer started a refinement round (<see cref="Answers"/> are the answers given).</summary>
     public const string UserRequested = "user_requested";

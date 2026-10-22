@@ -16,12 +16,12 @@ public static class ProjectApi
     /// <summary>A unique name prefix, so list assertions only see this test's projects.</summary>
     public static string UniqueName(string label = "proj") => $"{label}-{Guid.NewGuid():N}"[..Math.Min(label.Length + 13, 60)];
 
-    public static async Task<ProjectDto> CreateAsync(HttpClient client, string? name = null, object? git = null, string idea = "Build a todo API.")
+    public static async Task<ProjectDto> CreateAsync(HttpClient client, string? name = null, object? git = null, string idea = "Build a todo API.", string? initialVersion = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         var response = await client.PostAsJsonAsync(
             "/api/projects",
-            new { name = name ?? UniqueName(), idea, git = git ?? new { provider = "local" } },
+            new { name = name ?? UniqueName(), idea, git = git ?? new { provider = "local" }, initialVersion },
             Ct);
         return await ReadAsync<ProjectDto>(response, HttpStatusCode.Created);
     }
@@ -68,10 +68,10 @@ public static class ProjectApi
         });
 
     /// <summary>A project created by a fresh Owner, plus sessions for a Contributor, a Viewer and an outsider.</summary>
-    public static async Task<ProjectFixture> FixtureAsync(WebApplicationFactory<Program> factory, object? git = null)
+    public static async Task<ProjectFixture> FixtureAsync(WebApplicationFactory<Program> factory, object? git = null, string? initialVersion = null)
     {
         var owner = await ApiSession.RegisterAsync(factory);
-        var project = await CreateAsync(owner.Client, git: git);
+        var project = await CreateAsync(owner.Client, git: git, initialVersion: initialVersion);
         var contributor = await ApiSession.RegisterAsync(factory);
         var viewer = await ApiSession.RegisterAsync(factory);
         var outsider = await ApiSession.RegisterAsync(factory);

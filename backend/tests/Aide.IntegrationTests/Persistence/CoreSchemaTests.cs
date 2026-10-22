@@ -82,7 +82,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
             ArtifactId = plan.Id,
             Status = GateStatus.Approved,
             Decision = EscalationDecision.Rollback,
-            TargetVersion = 2,
+            TargetCheckpoint = 2,
             ReviewerId = user.Id,
             CreatedAt = Now,
         };
@@ -93,7 +93,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
             db.Users.Add(user);
             db.Projects.Add(project);
             db.ProjectMembers.Add(new ProjectMembership { ProjectId = project.Id, UserId = user.Id, Role = ProjectRole.Owner, CreatedAt = Now });
-            db.ProjectGitSettings.Add(new ProjectGitSettings { ProjectId = project.Id, Provider = GitProvider.Github, RepoUrl = "https://github.com/x/y" });
+            db.ProjectGitSettings.Add(new ProjectGitSettings { ProjectId = project.Id, Provider = GitProvider.GithubPat, RepoUrl = "https://github.com/x/y" });
             db.ProjectLlmSettings.Add(new ProjectLlmSettings
             {
                 ProjectId = project.Id,
@@ -112,12 +112,12 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
             db.ExecutionSteps.Add(step);
             db.ApprovalGates.Add(gate);
             db.ApprovalLinks.Add(new ApprovalLink { GateId = gate.Id, Decision = ApprovalLinkDecision.Approve, NonceHash = Hash(), ExpiresAt = Now.AddHours(72), CreatedAt = Now });
-            db.StateTransitions.Add(new StateTransition { ProjectId = project.Id, FromPhase = null, ToPhase = Phase.Refinement, Actor = "aide-system", Reason = "created", ProjectVersion = 1, CreatedAt = Now });
+            db.StateTransitions.Add(new StateTransition { ProjectId = project.Id, FromPhase = null, ToPhase = Phase.Refinement, Actor = "aide-system", Reason = "created", Checkpoint = 1, CreatedAt = Now });
             db.ComplianceReports.Add(new ComplianceReport
             {
                 ProjectId = project.Id,
                 ReviewCycle = 1,
-                ProjectVersion = 5,
+                Checkpoint = 5,
                 Score = 0.825m,
                 CategoryScores = [new CategoryScoreEntry(ReviewCategory.ApiContracts, 0.8m, 0.9m, 0.1m, [new ScoreEvidence("src/api.cs", "missing route")])],
                 Violations =
@@ -137,8 +137,8 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
             db.RollbackEvents.Add(new RollbackEvent
             {
                 ProjectId = project.Id,
-                FromVersion = 3,
-                TargetVersion = 2,
+                FromCheckpoint = 3,
+                TargetCheckpoint = 2,
                 Reason = "bad plan",
                 InvalidatedArtifactIds = [plan.Id],
                 ResetStepIds = [step.Id],
@@ -147,7 +147,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
                 TriggeredBy = user.Id.ToString(),
                 CreatedAt = Now,
             });
-            db.Releases.Add(new Release { ProjectId = project.Id, ProjectVersion = 7, Tag = "v7-aide", Status = ReleaseStatus.Failed, ConflictingFiles = ["a.txt"], ErrorCode = "MERGE_CONFLICT", ErrorMessage = "conflict", Attempt = 2, CreatedAt = Now, CompletedAt = Now });
+            db.Releases.Add(new Release { ProjectId = project.Id, Checkpoint = 7, Tag = "v7-aide", Status = ReleaseStatus.Failed, ConflictingFiles = ["a.txt"], ErrorCode = "MERGE_CONFLICT", ErrorMessage = "conflict", Attempt = 2, CreatedAt = Now, CompletedAt = Now });
             db.Events.Add(new AuditEvent { ProjectId = project.Id, Type = "PHASE_CHANGED", Payload = """{"to":"planning"}""", Actor = "aide-system", CreatedAt = Now });
             db.Jobs.Add(new Job { ProjectId = project.Id, Type = "agent_run", Payload = """{"runId":"x"}""", RunAfter = Now, CreatedAt = Now });
             db.Notifications.Add(new Notification { UserId = user.Id, ProjectId = project.Id, Type = "gate_required", Title = "Gate", Body = "Approve", Link = "/projects/x", CreatedAt = Now });
@@ -183,11 +183,11 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
 
             var savedGate = await db.ApprovalGates.AsNoTracking().SingleAsync(g => g.Id == gate.Id, Ct);
             Assert.Equal(EscalationDecision.Rollback, savedGate.Decision);
-            Assert.Equal(2, savedGate.TargetVersion);
+            Assert.Equal(2, savedGate.TargetCheckpoint);
 
             var report = await db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == project.Id, Ct);
             Assert.Equal(0.825m, report.Score);
-            Assert.Equal(5, report.ProjectVersion);
+            Assert.Equal(5, report.Checkpoint);
             var category = Assert.Single(report.CategoryScores);
             Assert.Equal(ReviewCategory.ApiContracts, category.Category);
             Assert.Equal((0.9m, 0.1m), (category.AgentScore, category.Penalty));
@@ -311,11 +311,11 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
         var b = await dbB.Projects.SingleAsync(p => p.Id == project.Id, Ct);
 
         a.CurrentPhase = Phase.Specification;
-        a.ProjectVersion = 2;
+        a.Checkpoint = 2;
         await dbA.SaveChangesAsync(Ct);
 
         b.CurrentPhase = Phase.Specification;
-        b.ProjectVersion = 2;
+        b.Checkpoint = 2;
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => dbB.SaveChangesAsync(Ct));
     }
 
@@ -346,11 +346,11 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
             db.ApprovalGates.Add(gate);
             db.ApprovalLinks.Add(new ApprovalLink { GateId = gate.Id, NonceHash = Hash(), ExpiresAt = Now, CreatedAt = Now });
             db.ComplianceReports.Add(new ComplianceReport { ProjectId = project.Id, ReviewCycle = 1, AgentRunId = run.Id, CreatedAt = Now });
-            db.StateTransitions.Add(new StateTransition { ProjectId = project.Id, ToPhase = Phase.Refinement, Actor = "a", Reason = "r", ProjectVersion = 1, CreatedAt = Now });
+            db.StateTransitions.Add(new StateTransition { ProjectId = project.Id, ToPhase = Phase.Refinement, Actor = "a", Reason = "r", Checkpoint = 1, CreatedAt = Now });
             db.Events.Add(new AuditEvent { ProjectId = project.Id, Type = "PROJECT_CREATED", Actor = "a", CreatedAt = Now });
             db.Jobs.Add(new Job { ProjectId = project.Id, Type = "x", RunAfter = Now, CreatedAt = Now });
             db.Notifications.Add(new Notification { UserId = user.Id, ProjectId = project.Id, Type = "x", Title = "x", Body = "x", Link = "/", CreatedAt = Now });
-            db.Releases.Add(new Release { ProjectId = project.Id, ProjectVersion = 1, Tag = "v1-aide", Status = ReleaseStatus.Succeeded, CreatedAt = Now });
+            db.Releases.Add(new Release { ProjectId = project.Id, Checkpoint = 1, Tag = "v1-aide", Status = ReleaseStatus.Succeeded, CreatedAt = Now });
             await db.SaveChangesAsync(Ct);
         }
 
@@ -409,7 +409,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
         Content = "# Plan",
         ContentHash = Hash(),
         Status = ArtifactStatus.Locked,
-        ProjectVersionAtCreation = 1,
+        CheckpointAtCreation = 1,
         CreatedByUserId = userId,
         AgentRunId = runId,
         CreatedAt = Now,

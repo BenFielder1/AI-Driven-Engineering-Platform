@@ -3,7 +3,10 @@ using Aide.Domain.Review;
 
 namespace Aide.Domain.Lifecycle;
 
-/// <summary>The project's lifecycle position.</summary>
+/// <summary>
+/// The project's lifecycle position. <see cref="Version"/> is the lifecycle <b>checkpoint</b> within the current release
+/// version (§4.10; v1's "project version"), not the semver release version.
+/// </summary>
 public sealed record LifecycleState(Phase Phase, ProjectStatus Status, int Version)
 {
     public static LifecycleState Initial { get; } = new(Phase.Refinement, ProjectStatus.Active, 1);
@@ -27,6 +30,15 @@ public sealed record TransitionRequest(TransitionKind Kind, Phase? TargetPhase =
     public static TransitionRequest ReleaseNoop(string? reason = null) => new(TransitionKind.ReleaseNoop, Phase.Release, Reason: reason);
 
     public static TransitionRequest ReleaseCompleted(string? reason = null) => new(TransitionKind.ReleaseCompleted, Phase.Release, Reason: reason);
+
+    /// <summary>FR-65: the release merge was refused or the strategy is manual (<c>releasing → awaiting_merge</c>).</summary>
+    public static TransitionRequest ReleaseAwaitingMerge(string? reason = null) => new(TransitionKind.ReleaseAwaitingMerge, Phase.Release, Reason: reason);
+
+    /// <summary>FR-65: <c>PR_CLOSED</c> or <c>MERGE_TIMEOUT</c> (<c>awaiting_merge → releasing</c>).</summary>
+    public static TransitionRequest ReleaseMergeAbandoned(string? reason = null) => new(TransitionKind.ReleaseMergeAbandoned, Phase.Release, Reason: reason);
+
+    /// <summary>§4.10, FR-60: start a new release version (<c>release → refinement</c>, checkpoint 1).</summary>
+    public static TransitionRequest NewVersion(string? reason = null) => new(TransitionKind.NewVersion, Phase.Refinement, Reason: reason);
 }
 
 /// <summary>
@@ -81,6 +93,9 @@ public sealed record LifecycleSnapshot
     public bool EntryGateApproved { get; init; }
 
     public IReadOnlyCollection<GateType> PendingGates { get; init; } = [];
+
+    /// <summary>§4.10: a release version is <c>in_development</c> or <c>awaiting_merge</c> (blocks <see cref="TransitionKind.NewVersion"/>).</summary>
+    public bool DevelopmentVersionExists { get; init; }
 }
 
 /// <summary>An applied lifecycle move: what to write as the state transition and the new project state.</summary>
@@ -96,9 +111,13 @@ public sealed record PhaseTransition(
 
     /// <summary>
     /// §4.8: a rollback clears the review state (review cycle and the extra cycles granted by escalation <c>continue</c>);
-    /// so does a cascade fallback (§4.4), whose new upstream artifacts make the earlier review cycles moot.
+    /// so does a cascade fallback (§4.4), whose new upstream artifacts make the earlier review cycles moot, and starting a
+    /// new release version (§4.10).
     /// </summary>
-    public bool ClearsReviewState => Kind is TransitionKind.Rollback or TransitionKind.InvalidationFallback;
+    public bool ClearsReviewState => Kind is TransitionKind.Rollback or TransitionKind.InvalidationFallback or TransitionKind.NewVersion;
+
+    /// <summary>§4.10: starting a new release version also clears <c>execution_paused</c>.</summary>
+    public bool ClearsExecutionPause => Kind == TransitionKind.NewVersion;
 }
 
 /// <summary>Result of "advance to next phase": either the move was applied, or a gate must be created first.</summary>

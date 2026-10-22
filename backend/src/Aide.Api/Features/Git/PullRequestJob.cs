@@ -115,6 +115,8 @@ public sealed partial class PullRequestJobHandler(
     IWorkingCopies workingCopies,
     AgentJobInputs inputs,
     LifecycleService lifecycle,
+    Deployments.DeploymentScheduler deployments,
+    Microsoft.Extensions.Options.IOptions<Notifications.AppOptions> appOptions,
     TimeProvider time,
     ILogger<PullRequestJobHandler> logger) : IJobHandler
 {
@@ -158,7 +160,14 @@ public sealed partial class PullRequestJobHandler(
         }
 
         var input = await DescriptionInputAsync(project, payload.PlanArtifactId, steps, cancellationToken);
-        var request = new PullRequestRequest(working.Branch, PullRequestDescription.Title(project.Name, steps.Count), PullRequestDescription.Body(input));
+        var body = PullRequestDescription.Body(input);
+        if (working.Provider.Kind == GitProvider.GithubApp)
+        {
+            // FR-82: the App's PR links back to the AIDE project.
+            body += $"\n\n---\nOpened by [AIDE]({appOptions.Value.Absolute($"/projects/{project.Id}")}) for {project.Name}.";
+        }
+
+        var request = new PullRequestRequest(working.Branch, PullRequestDescription.Title(project.Name, steps.Count), body);
         var opened = await working.Provider.OpenPullRequestAsync(working.Connection, request, working.Token, cancellationToken);
         if (!opened.Ok)
         {
@@ -190,15 +199,27 @@ public sealed partial class PullRequestJobHandler(
         project.UpdatedAt = now;
         var settings = await db.ProjectGitSettings.FirstAsync(s => s.ProjectId == project.Id, cancellationToken);
         if (settings.Provider != working.Provider.Kind
-            || settings.RepoUrl != working.Connection.RepoUrl
+            || GitConnectionSettings.From(settings).RepoUrl != working.Connection.RepoUrl
             || settings.DefaultBranch != working.Connection.DefaultBranch)
         {
             throw new JobFailedException(
                 "The Git settings changed while the pull request was being opened; retrying against the new repository.", transient: true, ErrorCodes.Conflict);
         }
 
-        settings.PullRequestNumber = opened.Number;
-        settings.PullRequestUrl = opened.Url;
+        if (await db.CurrentReleaseVersionAsync(project.Id, cancellationToken) is { } version)
+        {
+            version.PullRequestNumber = opened.Number;
+            version.PullRequestUrl = opened.Url;
+
+            // FR-90: the PR opened or updated, so its head is deployed as a preview (when Vercel is set up); the review that
+            // follows waits for it. Recorded in this transaction, built by the deployment job.
+            var head = comparison?.HeadSha ?? await HeadAsync(project.Id, working.Branch, cancellationToken);
+            if (head is not null)
+            {
+                await deployments.AutoPreviewAsync(project.Id, version.Id, working.Branch, head, now, cancellationToken);
+            }
+        }
+
         if (!after.Recorded)
         {
             db.AddEvent(
@@ -254,6 +275,19 @@ public sealed partial class PullRequestJobHandler(
         }
     }
 
+    /// <summary>The branch head in the working copy, or <c>null</c> when it can't be read.</summary>
+    private async Task<string?> HeadAsync(Guid projectId, string branch, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await workingCopies.ResolveCommitAsync(projectId, $"refs/heads/{branch}", cancellationToken);
+        }
+        catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Whether the payload's plan is still the one to open the PR for: why not (<c>Skip</c>), or the facts.</summary>
     private async Task<Check> CheckAsync(PullRequestJobPayload payload, bool track, CancellationToken cancellationToken)
     {
@@ -290,7 +324,7 @@ public sealed partial class PullRequestJobHandler(
         return new PullRequestInput(
             project.Id,
             project.Name,
-            project.ProjectVersion,
+            project.Checkpoint,
             spec?.Content,
             spec?.Version,
             plan.Type,

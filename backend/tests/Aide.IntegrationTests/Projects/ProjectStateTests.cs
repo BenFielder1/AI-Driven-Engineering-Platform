@@ -28,7 +28,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
 
         var state = await GetStateAsync(owner.Client, project.Id);
 
-        Assert.Equal((project.Id, Phase.Refinement, ProjectStatus.Active, 1, false), (state.ProjectId, state.Phase, state.Status, state.ProjectVersion, state.ExecutionPaused));
+        Assert.Equal((project.Id, Phase.Refinement, ProjectStatus.Active, 1, false), (state.ProjectId, state.Phase, state.Status, state.Checkpoint, state.ExecutionPaused));
         Assert.Equal(ArtifactRules.All, state.Artifacts.Select(a => a.Type));
         Assert.All(state.Artifacts, a => Assert.Equal((null, null, null), (a.LatestVersion, a.LatestStatus, a.CurrentLockedVersion)));
         Assert.Equal(new ExecutionCountsDto(0, 0, 0, 0, 0, 0), state.Execution);
@@ -44,7 +44,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
 
         var state = await GetStateAsync(fixture.Viewer.Client, fixture.Project.Id);
 
-        Assert.Equal(4, state.ProjectVersion);
+        Assert.Equal(4, state.Checkpoint);
         Assert.Equal(
             [
                 new ArtifactStateDto(ArtifactType.ProjectRequest, 2, ArtifactStatus.Draft, 1),
@@ -89,7 +89,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
         {
             var now = DateTimeOffset.UtcNow;
             await db.Projects.Where(p => p.Id == projectId).ExecuteUpdateAsync(
-                s => s.SetProperty(p => p.ProjectVersion, 4).SetProperty(p => p.ReviewCycle, 1).SetProperty(p => p.ExtraReviewCycles, 1),
+                s => s.SetProperty(p => p.Checkpoint, 4).SetProperty(p => p.ReviewCycle, 1).SetProperty(p => p.ExtraReviewCycles, 1),
                 Ct);
 
             Artifact NewArtifact(ArtifactType type, int version, ArtifactStatus status, TimeSpan age, Guid? runId = null) => new()
@@ -100,7 +100,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
                 Content = $"# {type} v{version}",
                 ContentHash = new string('a', 64),
                 Status = status,
-                ProjectVersionAtCreation = 1,
+                CheckpointAtCreation = 1,
                 AgentRunId = runId,
                 CreatedAt = now - age,
             };
@@ -152,7 +152,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
                 {
                     ProjectId = projectId,
                     ReviewCycle = 1,
-                    ProjectVersion = 3,
+                    Checkpoint = 3,
                     Score = 0.820m,
                     DriftLevel = DriftLevel.Low,
                     Decision = ReviewDecision.ReviewRequired,
@@ -163,7 +163,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
                 {
                     ProjectId = projectId,
                     ReviewCycle = 2,
-                    ProjectVersion = 5,
+                    Checkpoint = 5,
                     Score = 0.990m,
                     DriftLevel = DriftLevel.None,
                     Decision = ReviewDecision.ReleaseEligible,

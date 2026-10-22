@@ -48,10 +48,10 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
 
         Assert.Equal((ExecutionRunStatus.Running, false, 2, 2), (state.Status, state.Paused, state.Counts.Total, state.Counts.Pending));
         Assert.Equal(ExecutionRunStatus.Running, again.Status);
-        var branch = ExecutionRules.BranchName(fixture.Project.Slug, id);
+        var branch = Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!));
         Assert.Equal(branch, await GitAsync(id, "symbolic-ref", "--short", "HEAD"));
         Assert.Equal(InitialCommit, await GitAsync(id, "log", "-1", "--format=%s", "main"));
-        Assert.Equal(branch, await ProjectApi.WithDbAsync(factory, db => db.ProjectGitSettings.Where(g => g.ProjectId == id).Select(g => g.BranchName).SingleAsync(Ct)));
+        Assert.Equal(branch, await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.Where(v => v.ProjectId == id).Select(v => v.BranchName).SingleAsync(Ct)));
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
         Assert.Equal((JobTypes.Execution, JobStatus.Queued), (job.Type, job.Status));
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.ExecutionStarted));
@@ -98,7 +98,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase);
-        Assert.Equal(ExecutionRules.BranchName(fixture.Project.Slug, id), await GitAsync(id, "symbolic-ref", "--short", "HEAD"));
+        Assert.Equal(Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!)), await GitAsync(id, "symbolic-ref", "--short", "HEAD"));
     }
 
     // ---------- FR-31 / FR-34: running steps ----------
@@ -114,7 +114,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(factory, id);
 
         var listed = await StepsAsync(fixture.Viewer.Client, id);
-        var branch = ExecutionRules.BranchName(fixture.Project.Slug, id);
+        var branch = Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!));
         Assert.All(listed.Steps, s =>
         {
             Assert.Equal((StepStatus.Completed, 1, branch), (s.Status, s.Attempt, s.BranchName));
@@ -268,7 +268,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
         var gate = Assert.Single(await LifecycleSeed.GatesAsync(factory, id), g => g.Status == GateStatus.Pending);
 
-        var decided = await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve", new { decision = "rollback", targetVersion = 3 });
+        var decided = await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve", new { decision = "rollback", targetCheckpoint = 3 });
 
         Assert.Equal(HttpStatusCode.OK, decided.StatusCode);
         Assert.Equal(Phase.Planning, (await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase);
@@ -419,7 +419,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         Assert.Equal((StepStatus.Completed, 1, committed.CommitSha), (again.Status, again.Attempt, again.CommitSha));
         Assert.Equal(committed.FileManifest, again.FileManifest);
         Assert.Equal(1, counting.Calls);
-        var stepCommits = (await GitAsync(id, "log", "--format=%s", ExecutionRules.BranchName(fixture.Project.Slug, id)))
+        var stepCommits = (await GitAsync(id, "log", "--format=%s", Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!))))
             .Split('\n').Count(s => s.Contains("[Step:1]", StringComparison.Ordinal));
         Assert.Equal(1, stepCommits);
         Assert.Equal(2, (await LifecycleSeed.EventsAsync(factory, id, EventTypes.StepCompleted)).Count);

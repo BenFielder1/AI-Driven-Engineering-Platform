@@ -99,6 +99,26 @@ public sealed class JobWorkerTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task S4_14_NFR_REL_A_GitHub_rate_limit_defers_the_job_until_the_reset_without_counting_the_attempt()
+    {
+        var clock = new TestClock(T0);
+        var job = await AddJobAsync(_type);
+        var worker = NewWorker(clock, new RecordingHandler(fail: () => new Aide.Infrastructure.GitHub.GitHubRateLimitedException(clock.Now.AddMinutes(7))));
+
+        // Far more attempts than the retry policy allows: none counts, so the job never dead-letters.
+        for (var i = 0; i < 5; i++)
+        {
+            var reset = clock.Now.AddMinutes(7);
+            Assert.Equal(1, await worker.RunOnceAsync(Ct));
+            var saved = await LoadAsync(job.Id);
+            Assert.Equal((JobStatus.Queued, 0, reset), (saved.Status, saved.Attempts, saved.RunAfter));
+            Assert.StartsWith("GITHUB_RATE_LIMITED", saved.LastError, StringComparison.Ordinal);
+            Assert.Equal(0, await worker.RunOnceAsync(Ct)); // waits for the reset
+            clock.Now = reset;
+        }
+    }
+
+    [Fact]
     public async Task NFR_REL_Transient_failures_retry_after_2_8_and_32_seconds_then_dead_letter()
     {
         var clock = new TestClock(T0);

@@ -28,7 +28,8 @@ function seedProjectAs(role: ProjectRole, setup?: (p: StoredProject) => void): S
 /** /projects/:id/runs, waiting until the first page has loaded. */
 async function openRuns(project: StoredProject, query = '') {
   const utils = renderRoute(`/projects/${project.id}/runs${query}`)
-  await screen.findByRole('heading', { name: 'Agent runs' })
+  // hidden: a deep-linked run opens the modal sheet, which hides the page behind it from assistive tech.
+  await screen.findByRole('heading', { name: 'Agent runs', hidden: true })
   await waitFor(() => {
     expect(screen.queryByText('Loading runs…')).not.toBeInTheDocument()
   })
@@ -63,7 +64,21 @@ describe('Agent runs page (FR-23)', () => {
 
     expect(screen.getByText('Showing 1–3 of 3 runs')).toBeInTheDocument()
     const headers = within(table()).getAllByRole('columnheader').map((h) => h.textContent)
-    expect(headers).toEqual(['Agent', 'Model', 'Provider', 'Tokens in / out', 'Est. cost', 'Duration', 'Status', 'Started'])
+    expect(headers).toEqual([
+      'Agent',
+      'Specialist',
+      'Preset',
+      'Model',
+      'Provider',
+      'Credential',
+      'Version',
+      'Tokens in / out',
+      'Tool calls',
+      'Est. cost',
+      'Duration',
+      'Status',
+      'Started',
+    ])
     expect(rows().map((r) => within(r).getByRole('button').textContent)).toEqual([
       expect.stringMatching(/^Plan generator/),
       expect.stringMatching(/^Spec generator/),
@@ -84,7 +99,8 @@ describe('Agent runs page (FR-23)', () => {
     const running = rowFor('Plan generator')
     expect(within(running).getAllByText('Running…')).toHaveLength(2)
     expect(within(running).getByText('Fake (testing)')).toBeInTheDocument()
-    expect(within(running).getAllByText('—')).toHaveLength(2)
+    // Tokens and cost, plus the empty specialist, preset and credential cells of a base-agent run with no recorded key.
+    expect(within(running).getAllByText('—')).toHaveLength(5)
   })
 
   it('FR23_ filter: the agent filter shows only that agent and is kept in the URL', async () => {
@@ -352,5 +368,72 @@ describe('Agent runs page (FR-23)', () => {
     await waitFor(() => {
       expect(within(rowFor('Spec generator')).getByText('Succeeded')).toBeInTheDocument()
     })
+  })
+})
+
+describe('Agent runs page (SPEC §7.2, v2 columns)', () => {
+  it('FR74_runs_table_shows_the_preset_as_id_at_version', async () => {
+    const project = seedProjectAs('viewer', (p) => {
+      seedRun(p, { agent: 'code_generator', agentKey: 'ui-engineer', presetId: 'nextjs-frontend', presetVersion: '1.0.0' })
+      seedRun(p, { agent: 'plan_generator' })
+    })
+    await openRuns(project)
+
+    expect(within(rowFor('Code generator')).getByTestId('run-preset')).toHaveTextContent('nextjs-frontend@1.0.0')
+    expect(within(rowFor('Plan generator')).getByTestId('run-preset')).toHaveTextContent('—')
+  })
+
+  it('FR63_FR71_runs_table_shows_specialist_credential_tool_calls_and_version_checkpoint', async () => {
+    const project = seedProjectAs('viewer', (p) => {
+      p.checkpoint = 4
+      seedRun(p, {
+        agent: 'code_generator',
+        agentKey: 'frontend-engineer',
+        toolCallCount: 12,
+        credentialLabel: 'Team key (••••a1b2)',
+        checkpoint: 4,
+      })
+    })
+    const { user } = await openRuns(project)
+
+    const head = within(table()).getAllByRole('columnheader').map((h) => h.textContent)
+    expect(head).toEqual(expect.arrayContaining(['Specialist', 'Credential', 'Version', 'Tool calls']))
+    const row = rowFor('Code generator')
+    expect(row).toHaveTextContent('frontend-engineer')
+    expect(row).toHaveTextContent('Team key (••••a1b2)')
+    expect(within(row).getByTestId('run-version')).toHaveTextContent('0.1.0 · checkpoint 4')
+    expect(row).toHaveTextContent('12')
+
+    await user.click(within(row).getByRole('button', { name: /^Code generator run/ }))
+    const sheet = await screen.findByRole('dialog', { name: 'Code generator run' })
+    expect(within(sheet).getByText('Specialist').nextElementSibling).toHaveTextContent('frontend-engineer')
+    expect(within(sheet).getByText('Credential').nextElementSibling).toHaveTextContent('Team key (••••a1b2)')
+    expect(within(sheet).getByText('Repository tool calls').nextElementSibling).toHaveTextContent('12')
+  })
+
+  it('FR70_FR71_run_details_list_tool_calls_with_refusals_and_warnings', async () => {
+    const project = seedProjectAs('viewer', (p) => {
+      seedRun(p, {
+        agent: 'repository_analyst',
+        toolCallCount: 2,
+        toolCalls: [
+          { tool: 'read_file', arguments: { path: 'src/index.ts' }, bytes: 2048, truncated: false, error: null },
+          { tool: 'read_file', arguments: { path: '../../etc/passwd' }, bytes: 0, truncated: false, error: 'UNSAFE_PATH' },
+        ],
+        warnings: ['tools_unsupported'],
+      })
+    })
+    const { user } = await openRuns(project)
+
+    const row = rowFor('Repository Analyst')
+    await user.click(within(row).getByRole('button', { name: /^Repository Analyst run/ }))
+    const sheet = await screen.findByRole('dialog', { name: 'Repository Analyst run' })
+    const tools = await within(sheet).findByRole('table', { name: 'Repository tool calls of this run' })
+    const rows = within(tools).getAllByRole('row').slice(1)
+    expect(rows[0]).toHaveTextContent('{"path":"src/index.ts"}')
+    expect(rows[0]).toHaveTextContent('Complete')
+    expect(rows[1]).toHaveTextContent('Refused: the path is outside the repository or hidden (UNSAFE_PATH)')
+    expect(within(sheet).getByRole('heading', { name: 'Repository tool calls (2)' })).toBeInTheDocument()
+    expect(within(sheet).getByText(/doesn't support tool use/)).toBeInTheDocument()
   })
 })

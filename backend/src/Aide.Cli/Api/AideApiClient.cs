@@ -41,7 +41,7 @@ internal sealed record ApiResult<T>(T Value, string Raw);
 
 /// <summary>A non-success API response, carrying the ProblemDetails body when there is one.</summary>
 internal sealed class ApiException(HttpStatusCode statusCode, string? reasonPhrase, ProblemDetailsDto? problem, TimeSpan? retryAfter)
-    : CliException(Describe(statusCode, reasonPhrase, problem), ExitCodes.ForStatus(statusCode))
+    : CliException(Describe(statusCode, reasonPhrase, problem), ExitCodes.ForProblem(statusCode, problem?.ErrorCode))
 {
     public HttpStatusCode StatusCode { get; } = statusCode;
 

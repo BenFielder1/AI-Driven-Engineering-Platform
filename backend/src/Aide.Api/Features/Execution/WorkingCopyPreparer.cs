@@ -1,6 +1,7 @@
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
+using Aide.Domain.Releases;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
@@ -39,7 +40,7 @@ public sealed partial class WorkingCopyPreparer(
     {
         var project = await db.Projects.AsNoTracking()
             .Where(p => p.Id == projectId)
-            .Select(p => new { p.Id, p.Slug })
+            .Select(p => new { p.Id, p.Slug, p.DevelopmentVersion })
             .FirstOrDefaultAsync(cancellationToken);
         if (project is null)
         {
@@ -58,8 +59,17 @@ public sealed partial class WorkingCopyPreparer(
             return Failure("The saved Git token can't be decrypted. An Owner needs to save it again.", transient: false);
         }
 
-        var branch = settings.BranchName ?? ExecutionRules.BranchName(project.Slug, project.Id);
-        var connection = new GitConnectionSettings(project.Id, settings.RepoUrl, settings.DefaultBranch);
+        // The working branch belongs to the current release version (§4.10).
+        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
+        var recordedBranch = versionId is { } id
+            ? await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == id).Select(v => v.BranchName).FirstOrDefaultAsync(cancellationToken)
+            : null;
+        // FR-82, §4.10: the branch is the one stored on the release version (migrated v1 versions keep their
+        // aide/<slug>-<short-id> name); a version without one gets aide/<slug>/v<version>, stored below. The stored name
+        // is also the "working copy prepared" fact (LifecycleSnapshotLoader), so it is only written here.
+        var branch = BranchFor(recordedBranch, project.Slug, project.Id, project.DevelopmentVersion);
+        // FR-82: a github_app connection carries the installation and repository; its provider mints installation tokens.
+        var connection = GitConnectionSettings.From(settings);
         var provider = providers.Resolve(settings.Provider);
         var outcome = await provider.PrepareWorkingCopyAsync(connection, branch, token, cancellationToken);
         if (!outcome.Ok)
@@ -68,17 +78,23 @@ public sealed partial class WorkingCopyPreparer(
             return Failure($"The Git working copy could not be prepared: {outcome.Reason}", outcome.Transient);
         }
 
-        if (settings.BranchName is null)
+        if (recordedBranch is null && versionId is { } current)
         {
-            await db.ProjectGitSettings
-                .Where(s => s.ProjectId == projectId && s.BranchName == null)
-                .ExecuteUpdateAsync(s => s.SetProperty(g => g.BranchName, branch), cancellationToken);
-            branch = await db.ProjectGitSettings.AsNoTracking().Where(s => s.ProjectId == projectId).Select(s => s.BranchName).FirstAsync(cancellationToken) ?? branch;
+            await db.ReleaseVersions
+                .Where(v => v.Id == current && v.BranchName == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(v => v.BranchName, branch), cancellationToken);
+            branch = await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == current).Select(v => v.BranchName).FirstAsync(cancellationToken) ?? branch;
             LogPrepared(logger, projectId, branch);
         }
 
         return new WorkingCopyPreparation(Result.Success(new PreparedWorkingCopy(provider, connection, branch, token)), Transient: false);
     }
+
+    /// <summary>The version's branch: the recorded one, else <c>aide/&lt;slug&gt;/v&lt;version&gt;</c> (v1 name without a version).</summary>
+    public static string BranchFor(string? recordedBranch, string slug, Guid projectId, string? developmentVersion) =>
+        recordedBranch ?? (SemVer.TryParse(developmentVersion, out var version)
+            ? ReleaseVersionRules.BranchName(slug, projectId, version)
+            : ExecutionRules.BranchName(slug, projectId));
 
     private static WorkingCopyPreparation Failure(string message, bool transient, string code = ErrorCodes.PhasePreconditionFailed) =>
         new(Result.Failure<PreparedWorkingCopy>(new DomainError(code, message) { Details = [message] }), transient);

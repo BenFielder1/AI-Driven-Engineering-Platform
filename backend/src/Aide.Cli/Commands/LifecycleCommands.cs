@@ -104,7 +104,7 @@ internal static class LifecycleCommands
             var r = release.Value;
             await context.Out.WriteLineAsync(string.Create(
                 CultureInfo.InvariantCulture,
-                $"Release retry queued: tag {r.Tag}, project version {r.ProjectVersion}, attempt {r.Attempt}, status {r.Status}.")).ConfigureAwait(false);
+                $"Release retry queued: tag {r.Tag}, checkpoint {r.Checkpoint}, attempt {r.Attempt}, status {r.Status}.")).ConfigureAwait(false);
             return ExitCodes.Success;
         });
         return command;
@@ -113,11 +113,11 @@ internal static class LifecycleCommands
     public static Command BuildRollback(CommandFactory factory)
     {
         var id = ProjectCommands.ProjectIdArgument();
-        var version = new Argument<int>("version") { Description = "The project version to roll back to.", CustomParser = Parsers.IntInRange("version", 1, int.MaxValue) };
+        var version = new Argument<int>("checkpoint") { Description = "The checkpoint of the version in development to roll back to.", CustomParser = Parsers.IntInRange("checkpoint", 1, int.MaxValue) };
         var reason = new Option<string>("--reason", "-r") { Description = "Why (1-500 characters; recorded in the audit trail).", Required = true };
         var command = new Command(
             "rollback",
-            "Roll a project back to an earlier version. Owner only. Later artifacts are invalidated, never deleted; limited to one per minute (429).")
+            "Roll a project back to an earlier checkpoint of the version in development. Owner only. Later artifacts are invalidated, never deleted; limited to one per minute (429).")
         {
             id, version, reason,
         };
@@ -142,7 +142,7 @@ internal static class LifecycleCommands
             var r = result.Value;
             await context.Out.WriteLineAsync(string.Create(
                 CultureInfo.InvariantCulture,
-                $"Rolled back from v{r.FromVersion} to v{r.ToVersion}; phase is now {r.RestoredPhase}. " +
+                $"Rolled back from checkpoint {r.FromCheckpoint} to checkpoint {r.ToCheckpoint}; phase is now {r.RestoredPhase}. " +
                 $"Invalidated {r.InvalidatedArtifactIds?.Count ?? 0} artifact(s), reset {r.ResetStepIds?.Count ?? 0} step(s), cancelled {r.CancelledGateIds?.Count ?? 0} gate(s).")).ConfigureAwait(false);
             return ExitCodes.Success;
         });

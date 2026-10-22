@@ -1,7 +1,11 @@
 using Aide.Infrastructure.Agents;
+using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Git;
+using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
+using Aide.Infrastructure.Presets;
+using Aide.Infrastructure.RepoTools;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -49,11 +53,18 @@ public static class DependencyInjection
 
             // FR-47 outbox: notification-worthy events queue their notification job in the same transaction.
             options.AddInterceptors(sp.GetRequiredService<NotificationOutboxInterceptor>());
+
+            // §4.10: new projects get their first release version; version-scoped rows left unstamped get the current one.
+            options.AddInterceptors(sp.GetRequiredService<ReleaseVersionStampingInterceptor>());
         });
         services.TryAddSingleton<IProjectEventPublisher, NullProjectEventPublisher>();
         services.TryAddSingleton<ProjectEventPublishingInterceptor>();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<NotificationOutboxInterceptor>();
+        services.TryAddSingleton<ReleaseVersionStampingInterceptor>();
+
+        // FR-79: fills last4 of LLM keys migrated from v1 projects (needs ISecretProtector from AddAideDataProtection).
+        services.AddHostedService<LlmCredentialLast4Backfill>();
 
         // LLM provider configuration (FR-22): defaults and which providers have a system key.
         services.AddOptions<LlmOptions>()
@@ -76,16 +87,33 @@ public static class DependencyInjection
         services.AddSingleton<IFakeAgentResponder, FakeSpecGeneratorResponder>();
         services.AddSingleton<IFakeAgentResponder, FakePlanGeneratorResponder>();
         services.AddSingleton<IFakeAgentResponder, FakeCodeGeneratorResponder>();
+        services.AddSingleton<IFakeAgentResponder, FakeRepositoryAnalystResponder>();
         services.AddSingleton<IFakeAgentResponder>(_ => new FakeCodeReviewResponder(FakeCodeReviewScript.Default));
+        // FR-71: the Fake provider's scripted repo tool calls (last registered per agent wins; tests override them).
+        foreach (var script in FakeToolScripts.Defaults())
+        {
+            services.AddSingleton<IFakeToolScript>(script);
+        }
+
         services.AddSingleton<FakeLlmProvider>();
         services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<FakeLlmProvider>());
         services.AddSingleton<IPromptLibrary, EmbeddedPromptLibrary>();
+
+        // Tech stack presets (FR-74, §4.11): the shipped presets (embedded), loaded once at startup; tests add sources.
+        services.AddSingleton<IPresetSource>(EmbeddedPresetSource.Shipped);
+        services.TryAddSingleton<IPresetCatalog, PresetCatalog>();
+        services.AddHostedService<PresetCatalogStartup>();
         services.AddScoped<ILlmResolver, LlmResolver>();
+        services.AddScoped<ILlmKeyValidator, LlmKeyValidator>();
 
         // Git providers (FR-10, FR-35) and working copies.
         services.AddSingleton<IWorkspaceStore, WorkspaceStore>();
         services.AddSingleton<IGitCli, GitCli>();
         services.AddSingleton<IWorkingCopies, WorkingCopies>();
+
+        // FR-71, D-V2-9: credential-free, read-only snapshots of the working copy for the agents' repo tools.
+        services.AddSingleton<IRepoSnapshotProvider, RepoSnapshotProvider>();
+        services.AddOptions<LocalGitOptions>().BindConfiguration(LocalGitOptions.SectionName);
         services.AddOptions<GitHubGitOptions>()
             .BindConfiguration(GitHubGitOptions.SectionName)
             .ValidateOnStart();
@@ -100,9 +128,44 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
             client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", GitHubGitProvider.ApiVersion);
         });
-        services.AddScoped<IGitProvider, GitHubGitProvider>();
+        services.AddScoped<GitHubGitProvider>();
+        services.AddScoped<IGitProvider>(sp => sp.GetRequiredService<GitHubGitProvider>());
         services.AddScoped<IGitProvider, LocalGitProvider>();
+
+        // The AIDE GitHub App (FR-80–FR-83, §4.14): configuration (GitHub:App:*) or the manifest-registered row, the REST
+        // API on the fixed GitHub hosts, installation tokens (in-memory cache ≤ 55 min) and the github_app provider.
+        services.AddOptions<GitHubAppOptions>()
+            .BindConfiguration(GitHubAppOptions.SectionName)
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<GitHubAppOptions>, GitHubAppOptionsValidator>();
+        services.AddHttpClient(GitHubApi.WebHttpClientName, client =>
+        {
+            client.BaseAddress = new Uri(GitHubApi.WebBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+        });
+        services.AddTransient<GitHubApi>();
+        services.AddScoped<IGitHubAppStore, GitHubAppStore>();
+        services.AddSingleton<GitHubInstallationTokenCache>();
+        services.AddScoped<IGitHubInstallationTokens, GitHubInstallationTokens>();
+        services.AddSingleton<GitHubBotIdentities>();
+        services.AddSingleton<GitHubAppInfoCache>();
+        services.AddScoped<IGitProvider, GitHubAppGitProvider>();
         services.AddScoped<IGitProviderResolver, GitProviderResolver>();
+
+        // Deployments (FR-87–FR-91, §4.15, D-V2-10): Vercel's REST API on the fixed host api.vercel.com (§8: never
+        // configurable, so no SSRF), the deterministic Fake (Deployments:Provider=Fake) and the env write limiter.
+        services.AddOptions<DeploymentOptions>().BindConfiguration(DeploymentOptions.SectionName);
+        services.AddHttpClient(VercelDeploymentProvider.HttpClientName, client =>
+        {
+            client.BaseAddress = new Uri(VercelDeploymentProvider.ApiBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(20);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+        });
+        services.AddSingleton<VercelEnvWriteLimiter>();
+        services.AddSingleton<VercelDeploymentProvider>();
+        services.AddSingleton<FakeDeploymentProvider>();
+        services.AddSingleton<IDeploymentProviderResolver, DeploymentProviderResolver>();
 
         return services;
     }

@@ -26,7 +26,9 @@ internal sealed record ProjectSummaryDto(
     string Slug,
     string CurrentPhase,
     string Status,
-    int ProjectVersion,
+    int Checkpoint,
+    string? ReleasedVersion,
+    string? DevelopmentVersion,
     string ApprovalMode,
     string? MyRole,
     DateTimeOffset UpdatedAt);
@@ -37,9 +39,14 @@ internal sealed record ProjectDto(
     string Slug,
     string CurrentPhase,
     string Status,
-    int ProjectVersion,
+    int Checkpoint,
+    string? ReleasedVersion,
+    string? DevelopmentVersion,
     string ApprovalMode,
-    string? MyRole);
+    string? MyRole,
+    string? PresetId = null,
+    string? PresetName = null,
+    string? PresetVersion = null);
 
 internal enum ApprovalMode
 {
@@ -50,7 +57,7 @@ internal enum ApprovalMode
 
 internal enum GitProvider
 {
-    Github,
+    GithubPat,
     Local,
 }
 
@@ -76,13 +83,15 @@ internal sealed record GateSummaryDto(Guid Id, string Type, DateTimeOffset Creat
 
 internal sealed record PullRequestSummaryDto(string Provider, string BaseBranch, string HeadBranch, int? Number, string? Url);
 
-internal sealed record ReleaseSummaryDto(Guid Id, int ProjectVersion, string Status, string Tag, DateTimeOffset StartedAt);
+internal sealed record ReleaseSummaryDto(Guid Id, int Checkpoint, string Status, string Tag, DateTimeOffset StartedAt);
 
 internal sealed record ProjectStateDto(
     Guid ProjectId,
     string Phase,
     string Status,
-    int ProjectVersion,
+    int Checkpoint,
+    string? ReleasedVersion,
+    string? DevelopmentVersion,
     bool ExecutionPaused,
     IReadOnlyList<ArtifactStateDto> Artifacts,
     ExecutionCountsDto Execution,
@@ -92,7 +101,8 @@ internal sealed record ProjectStateDto(
     long? TokenBudget,
     string ExecutionStatus,
     PullRequestSummaryDto? PullRequest,
-    ReleaseSummaryDto? LatestRelease);
+    ReleaseSummaryDto? LatestRelease,
+    DeploymentDto? LatestDeployment = null);
 
 internal sealed record ActorDto(Guid? Id, string Name, bool IsSystem);
 
@@ -106,7 +116,7 @@ internal sealed record ArtifactDto(
     string Content,
     string ContentHash,
     string Status,
-    int ProjectVersionAtCreation,
+    int CheckpointAtCreation,
     ArtifactAuthorDto? Author,
     ActorDto? ApprovedBy,
     DateTimeOffset? ApprovedAt,
@@ -128,7 +138,7 @@ internal sealed record ReviewStartedDto(Guid JobId, int Cycle);
 
 internal sealed record ReleaseDto(
     Guid Id,
-    int ProjectVersion,
+    int Checkpoint,
     string Status,
     string Tag,
     string? MergeCommitSha,
@@ -138,12 +148,12 @@ internal sealed record ReleaseDto(
     string? ErrorMessage,
     int Attempt);
 
-internal sealed record RollbackRequest(int TargetVersion, string Reason);
+internal sealed record RollbackRequest(int TargetCheckpoint, string Reason);
 
 internal sealed record RollbackDto(
     Guid Id,
-    int FromVersion,
-    int ToVersion,
+    int FromCheckpoint,
+    int ToCheckpoint,
     string RestoredPhase,
     string Reason,
     IReadOnlyList<Guid>? InvalidatedArtifactIds,
@@ -153,3 +163,40 @@ internal sealed record RollbackDto(
 internal sealed record ActivityItemDto(Guid Id, string Type, string? Category, DateTimeOffset OccurredAt, ActorDto? Actor, string Summary, JsonObject? Payload);
 
 internal sealed record ActivityPageDto(IReadOnlyList<ActivityItemDto> Items, string? NextBefore);
+
+internal sealed record DeploymentUserDto(Guid Id, string Name);
+
+internal sealed record DeploymentDto(
+    Guid Id,
+    string Target,
+    string Provider,
+    string Status,
+    string? Url,
+    string GitRef,
+    string GitSha,
+    string ReleaseVersion,
+    string? ErrorCode,
+    string Trigger,
+    DeploymentUserDto? TriggeredBy,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ReadyAt);
+
+internal sealed record ReleaseVersionCheckpointsDto(int Current, int Max);
+
+internal sealed record ReleaseVersionDto(
+    Guid Id,
+    string Version,
+    string Status,
+    string? Tag,
+    string? BaseTag,
+    string? BranchName,
+    string? PullRequestUrl,
+    ReleaseVersionCheckpointsDto Checkpoints,
+    string? PresetId,
+    string? PresetVersion,
+    string? PresetName,
+    ActorDto? StartedBy,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ReleasedAt);
+
+internal sealed record StartReleaseVersionResultDto(ReleaseVersionDto ReleaseVersion, ProjectStateDto State);

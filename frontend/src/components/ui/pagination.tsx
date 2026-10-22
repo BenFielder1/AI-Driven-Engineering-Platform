@@ -16,7 +16,7 @@ export function Pagination({ page, pageCount, onPage }: { page: number; pageCoun
       >
         Previous page
       </Button>
-      <span className="text-sm text-muted">
+      <span className="text-sm text-muted-foreground">
         Page {page} of {pageCount}
       </span>
       <Button

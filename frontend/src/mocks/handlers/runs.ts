@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw'
 import type { Schemas } from '../../api/client'
 import { nextId } from './auth'
 import { problem } from './problem'
-import { access, type StoredProject } from './projects'
+import { access, currentVersionId, type StoredProject } from './projects'
 
 type Run = Schemas['AgentRunDetailDto']
 type AgentKind = Schemas['AgentKind']
@@ -23,6 +23,7 @@ const promptVersions: Record<AgentKind, string> = {
   plan_generator: '1',
   code_generator: '1',
   code_review: '1',
+  repository_analyst: '1',
 }
 
 /** Which phase each agent runs in (SPEC §4.1). */
@@ -32,6 +33,7 @@ const phaseOf: Record<AgentKind, Schemas['Phase']> = {
   plan_generator: 'planning',
   code_generator: 'execution',
   code_review: 'review',
+  repository_analyst: 'refinement',
 }
 
 let runClock = Date.parse('2026-09-01T10:00:00Z')
@@ -48,6 +50,7 @@ export function seedRun(project: StoredProject, overrides: Partial<Run> = {}): R
   const finished = status === 'succeeded' || status === 'failed' || status === 'cancelled'
   const run: Run = {
     id: nextId(),
+    releaseVersionId: currentVersionId(project),
     agent,
     phase: phaseOf[agent],
     stepId: null,
@@ -67,6 +70,14 @@ export function seedRun(project: StoredProject, overrides: Partial<Run> = {}): R
     completedAt: finished ? new Date(runClock + 48_250).toISOString() : null,
     output: status === 'succeeded' ? '# Inventory tracker: technical specification\n\n## 1. Overview\nTrack stock levels.' : null,
     outputTruncated: false,
+    checkpoint: project.checkpoint,
+    agentKey: null,
+    presetId: null,
+    presetVersion: null,
+    toolCallCount: 0,
+    credentialLabel: null,
+    toolCalls: [],
+    warnings: [],
     ...overrides,
   }
   project.runs.push(run)
@@ -76,7 +87,7 @@ export function seedRun(project: StoredProject, overrides: Partial<Run> = {}): R
 /** The list item omits the output (RunEndpoints.ListRuns doesn't load it). */
 function toListDto(run: Run): Schemas['AgentRunDto'] {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { output, outputTruncated, ...dto } = run
+  const { output, outputTruncated, toolCalls, warnings, ...dto } = run
   return dto
 }
 
@@ -112,8 +123,10 @@ export const runHandlers = [
     if (page === null || limit === null || Object.keys(errors).length > 0) {
       return problem(400, 'VALIDATION', 'One or more validation errors occurred.', { errors })
     }
+    const scope = q.get('releaseVersionId') ?? currentVersionId(a.project)
     const items = a.project.runs
       .filter((r) => agent === null || r.agent === agent)
+      .filter((r) => (r.releaseVersionId ?? currentVersionId(a.project)) === scope)
       .sort((x, y) => y.createdAt.localeCompare(x.createdAt) || y.id.localeCompare(x.id))
     return HttpResponse.json<Schemas['PagedResultOfAgentRunDto']>({
       items: items.slice((page - 1) * limit, page * limit).map(toListDto),

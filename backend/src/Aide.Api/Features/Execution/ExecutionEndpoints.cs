@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Projects;
+using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
@@ -85,6 +86,20 @@ public static class ExecutionEndpoints
                 (StatusCodes.Status400BadRequest, "VALIDATION: unknown planType, or planVersion below 1."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project, or the requested plan version."));
 
+        group.MapGet("/runs", ListExecutionRuns)
+            .WithName("ListExecutionRuns")
+            .WithSummary("Every execution run of a release version (default: the version in development, else the latest released), members (FR-57): the development run (the implementation plan's steps) first, then one review-fix run per review cycle (that cycle's optimisation plan's steps) by cycle; runs of invalidated plans are flagged superseded.")
+            .Produces<IReadOnlyList<ExecutionRunDto>>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or the release version in this project."));
+
+        group.MapGet("/steps/{stepId:guid}/attempts", ListStepAttempts)
+            .WithName("ListStepAttempts")
+            .WithSummary("The attempt history of an execution step, oldest first (members, FR-57): outcome, Guardian violations and warnings, produced files, the agent run (model, tokens, duration) and its repo tool calls.")
+            .Produces<IReadOnlyList<StepAttemptDto>>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or the step in this project."));
+
         group.MapPost("/start", StartExecution)
             .WithName("StartExecution")
             .WithSummary("Start execution (Contributor or Owner): prepares the working copy and project branch if needed, clears the pause flag and queues the next runnable step of the current plan (FR-31, FR-35). Returns 202 with the execution state; progress arrives over the live channel. 409 PHASE_PRECONDITION_FAILED, BUDGET_EXCEEDED, CONFLICT.")
@@ -109,7 +124,8 @@ public static class ExecutionEndpoints
         AideDbContext db,
         CancellationToken cancellationToken,
         [Range(1, int.MaxValue)] int? planVersion = null,
-        [WireEnum(typeof(ArtifactType))] string? planType = null)
+        [WireEnum(typeof(ArtifactType))] string? planType = null,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -117,7 +133,13 @@ public static class ExecutionEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        if (planType is null && planVersion is null)
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        if (scope.IsFailure)
+        {
+            return ApiProblems.FromError(scope.Error!);
+        }
+
+        if (planType is null && planVersion is null && releaseVersionId is null)
         {
             // The current plan (FR-30, FR-40): the newest locked plan of either type, as the execution runner sees it.
             var currentId = await ExecutionQueries.CurrentPlanIdAsync(db, id, cancellationToken);
@@ -133,7 +155,10 @@ public static class ExecutionEndpoints
             return ApiProblems.Validation(new Dictionary<string, string[]> { ["planType"] = ["Steps belong to implementation_plan or optimization_plan versions."] });
         }
 
-        var plans = db.Artifacts.AsNoTracking().Where(a => a.ProjectId == id && a.Type == type);
+        // A plan version number names one plan (numbers are per project); without one, the latest locked plan of the release
+        // version (§6 Notes: default the version in development, else the latest released).
+        var versionId = scope.Value;
+        var plans = db.Artifacts.AsNoTracking().Where(a => a.ProjectId == id && a.Type == type && (planVersion != null || a.ReleaseVersionId == versionId));
         var plan = planVersion is { } version
             ? await plans.FirstOrDefaultAsync(a => a.Version == version, cancellationToken)
             : await plans.Where(a => a.Status == ArtifactStatus.Locked).OrderByDescending(a => a.Version).FirstOrDefaultAsync(cancellationToken);
@@ -147,6 +172,45 @@ public static class ExecutionEndpoints
         return TypedResults.Ok(await StepsAsync(db, id, plan, cancellationToken));
     }
 
+    /// <summary>FR-57: members; <see cref="ExecutionRunReader"/> reads and derives the runs.</summary>
+    private static async Task<Results<Ok<IReadOnlyList<ExecutionRunDto>>, ProblemHttpResult, StatusCodeHttpResult>> ListExecutionRuns(
+        Guid id,
+        IProjectAccess access,
+        AideDbContext db,
+        ExecutionRunReader runs,
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        var scope = await ReleaseVersionScope.ResolveAsync(db, id, releaseVersionId, cancellationToken);
+        return scope.IsFailure ? ApiProblems.FromError(scope.Error!) : TypedResults.Ok(await runs.ListAsync(id, scope.Value, cancellationToken));
+    }
+
+    /// <summary>FR-57, D-V2-14: members; the step must belong to the project.</summary>
+    private static async Task<Results<Ok<IReadOnlyList<StepAttemptDto>>, ProblemHttpResult, StatusCodeHttpResult>> ListStepAttempts(
+        Guid id,
+        Guid stepId,
+        IProjectAccess access,
+        AideDbContext db,
+        ExecutionRunReader runs,
+        CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        return await db.ExecutionSteps.AsNoTracking().AnyAsync(s => s.Id == stepId && s.ProjectId == id, cancellationToken)
+            ? TypedResults.Ok(await runs.AttemptsAsync(stepId, cancellationToken))
+            : ApiProblems.NotFound("The execution step was not found.");
+    }
+
     private static async Task<ExecutionStepsDto> StepsAsync(AideDbContext db, Guid id, Artifact plan, CancellationToken cancellationToken)
     {
         var steps = await db.ExecutionSteps.AsNoTracking()
@@ -155,7 +219,7 @@ public static class ExecutionEndpoints
             .ToListAsync(cancellationToken);
         var git = await db.ProjectGitSettings.AsNoTracking()
             .Where(g => g.ProjectId == id)
-            .Select(g => new { g.Provider, g.RepoUrl })
+            .Select(g => new { g.Provider, RepoUrl = g.Provider == GitProvider.GithubApp ? "https://github.com/" + g.RepoFullName : g.RepoUrl })
             .FirstOrDefaultAsync(cancellationToken);
         return new ExecutionStepsDto(
             new ExecutionPlanDto(plan.Id, plan.Type, plan.Version, plan.Status),

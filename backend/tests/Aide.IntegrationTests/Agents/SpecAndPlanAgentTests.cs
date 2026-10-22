@@ -39,7 +39,7 @@ public sealed class SpecAndPlanAgentTests(AideApiFactory factory)
 
         Assert.Equal((JobTypes.SpecGeneration, JobStatus.Succeeded), (job.Type, job.Status));
         var spec = Assert.Single(await AgentJobs.ArtifactsAsync(factory, id, ArtifactType.TechnicalSpecification));
-        Assert.Equal((1, ArtifactStatus.Draft, (Guid?)job.Id, (Guid?)null, 2), (spec.Version, spec.Status, spec.AgentRunId, spec.CreatedByUserId, spec.ProjectVersionAtCreation));
+        Assert.Equal((1, ArtifactStatus.Draft, (Guid?)job.Id, (Guid?)null, 2), (spec.Version, spec.Status, spec.AgentRunId, spec.CreatedByUserId, spec.CheckpointAtCreation));
         Assert.Empty(SpecSections.Missing(spec.Content));
         Assert.Contains("/api/todos", spec.Content, StringComparison.Ordinal);
         var run = Assert.Single(await AgentJobs.RunsAsync(factory, id));
@@ -357,9 +357,12 @@ public sealed class SpecAndPlanAgentTests(AideApiFactory factory)
         return (request, spec);
     }
 
+    /// <summary>A spec with the required sections except <paramref name="missing"/>; its requirements have ids and criteria (FR-75).</summary>
     private static string SpecWithout(params string[] missing) =>
         string.Join("\n\n", SpecSections.Required
             .Select((name, i) => (name, i))
             .Where(s => !missing.Contains(s.name))
-            .Select(s => $"## {s.i + 1}. {s.name}\nDetails about {s.name}."));
+            .Select(s => s.name == "Functional Requirements"
+                ? $"## {s.i + 1}. {s.name}\n- **FR-1** Create a todo. Given a title, when it is posted, then it is stored."
+                : $"## {s.i + 1}. {s.name}\nDetails about {s.name}."));
 }

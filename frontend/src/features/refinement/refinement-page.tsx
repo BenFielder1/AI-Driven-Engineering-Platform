@@ -3,29 +3,33 @@ import { Link } from '@tanstack/react-router'
 import { useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 
+import type { Schemas } from '../../api/client'
 import { Alert, ErrorSummary, type SummaryError } from '../../components/ui/alert'
+import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
-import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
+import { ErrorState, LoadingState } from '../../components/ui/states'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { applyFieldErrors, errorMessage } from '../../lib/errors'
-import { canInProject } from '../../lib/permissions'
 import { useDocumentTitle } from '../../lib/use-document-title'
-import { ArtifactStatusBadge, IntegrityBadge } from '../artifacts/artifact-badges'
-import { useArtifactVersion } from '../artifacts/artifacts-api'
+import { useLatestArtifact } from '../artifacts/artifacts-api'
 import { MarkdownView } from '../artifacts/markdown-view'
-import { phaseLabels } from '../projects/labels'
+import { artifactStatusLabels, phaseLabels } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
 import { RelativeTime } from '../projects/relative-time'
 import { RunStatusBadge } from '../runs/run-badges'
+import { StageArtifact } from '../stages/stage-artifact'
+import { StageHeader } from '../stages/stage-header'
+import { StageRuns } from '../stages/stage-runs'
+import { StageSection } from '../stages/stage-section'
 import { describeRunError } from '../runs/run-format'
 import {
   isRoundPending,
   useRefinement,
   useStartRefinement,
-  type Refinement,
   type RefinementAnswerRequest,
   type RefinementQuestion,
   type RefinementRound,
+  type RefinementRoundHistory,
 } from './refinement-api'
 import { answersSchema, type AnswersValues } from './refinement-schemas'
 
@@ -41,9 +45,9 @@ const triggerLabels: Record<Trigger, string> = {
 
 function Card({ id, title, children, actions }: { id: string; title: string; children: ReactNode; actions?: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-lg border border-border bg-surface-raised p-4">
+    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id={id} className="text-lg font-semibold">
+        <h3 id={id} className="text-lg">
           {title}
         </h3>
         {actions}
@@ -58,7 +62,7 @@ function AnswerList({ answers }: { answers: { question: string; answer: string }
   return (
     <dl className="flex flex-col gap-2">
       {answers.map((a) => (
-        <div key={`${a.question}:${a.answer}`} className="rounded-md border border-border p-2">
+        <div key={`${a.question}:${a.answer}`} className="rounded-lg border border-border/60 p-2">
           <dt className="text-sm font-medium break-words">{a.question}</dt>
           <dd className="mt-1 text-sm whitespace-pre-wrap break-words">{a.answer}</dd>
         </div>
@@ -78,7 +82,7 @@ function RoundStatus({ projectId, round }: { projectId: string; round: Refinemen
       title="Latest round"
       actions={
         round.status !== 'queued' && (
-          <Link to="/projects/$projectId/runs" params={{ projectId }} search={{ run: round.runId }} className="text-sm text-link underline">
+          <Link to="/projects/$projectId/runs" params={{ projectId }} search={{ run: round.runId }} className="text-sm text-primary underline">
             View the agent run
           </Link>
         )
@@ -86,33 +90,33 @@ function RoundStatus({ projectId, round }: { projectId: string; round: Refinemen
     >
       <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
         <div className="flex items-center gap-2">
-          <dt className="text-muted">Status</dt>
+          <dt className="text-muted-foreground">Status</dt>
           <dd>
             <RunStatusBadge status={round.status} />
           </dd>
         </div>
         <div className="flex items-center gap-2">
-          <dt className="text-muted">Started</dt>
+          <dt className="text-muted-foreground">Started</dt>
           <dd>
             <RelativeTime iso={round.createdAt} />
           </dd>
         </div>
         {round.trigger && (
           <div className="flex items-center gap-2">
-            <dt className="text-muted">Trigger</dt>
+            <dt className="text-muted-foreground">Trigger</dt>
             <dd>{triggerLabels[round.trigger]}</dd>
           </div>
         )}
         {round.draftVersion !== null && (
           <div className="flex items-center gap-2">
-            <dt className="text-muted">Draft</dt>
+            <dt className="text-muted-foreground">Draft</dt>
             <dd>v{round.draftVersion}</dd>
           </div>
         )}
       </dl>
 
       {isRoundPending(round) && (
-        <p role="status" aria-busy="true" className="rounded-md border border-border bg-surface p-3 text-sm">
+        <p role="status" aria-busy="true" className="rounded-lg border border-border/60 bg-muted/60 p-3 text-sm">
           <span aria-hidden="true" className="mr-2 inline-block size-3 animate-pulse rounded-full bg-primary align-middle" />
           The Idea Refinement agent is {round.status === 'queued' ? 'about to start' : 'working'} on this round. The new draft and
           any clarifying questions appear here when it&apos;s done.
@@ -147,47 +151,14 @@ function RoundStatus({ projectId, round }: { projectId: string; round: Refinemen
   )
 }
 
-/** FR-27: the latest project request version, rendered, with a link to its artifact page. */
-function CurrentDraft({ projectId, draft }: { projectId: string; draft: NonNullable<Refinement['latestDraft']> }) {
-  const version = useArtifactVersion(projectId, 'project_request', draft.version)
-  return (
-    <Card
-      id="refinement-draft"
-      title={`Current draft: v${String(draft.version)}`}
-      actions={
-        <Link
-          to="/projects/$projectId/artifacts/$type"
-          params={{ projectId, type: 'project_request' }}
-          search={{ version: draft.version }}
-          className="text-sm text-link underline"
-        >
-          Open in Artifacts
-        </Link>
-      }
-    >
-      <div className="flex flex-wrap gap-2">
-        <ArtifactStatusBadge status={draft.status} />
-        {draft.integrity === 'corrupted' && <IntegrityBadge integrity={draft.integrity} />}
-      </div>
-      {version.isPending ? (
-        <LoadingState label="Loading the draft…" />
-      ) : version.isError ? (
-        <ErrorState error={version.error} title="The draft couldn't load" onRetry={() => void version.refetch()} />
-      ) : (
-        <MarkdownView content={version.data.content} label={`Project request v${String(draft.version)}`} />
-      )}
-    </Card>
-  )
-}
-
 /** Questions without answer fields (viewers, outside the refinement phase, or while a round is running). */
 function QuestionList({ questions }: { questions: RefinementQuestion[] }) {
   return (
     <ol className="flex flex-col gap-3">
       {questions.map((q) => (
-        <li key={q.id} className="rounded-md border border-border p-3">
+        <li key={q.id} className="rounded-lg border border-border/60 p-3">
           <p className="font-medium break-words">{q.question}</p>
-          {q.reason && <p className="mt-1 text-sm text-muted break-words">{q.reason}</p>}
+          {q.reason && <p className="mt-1 text-sm text-muted-foreground break-words">{q.reason}</p>}
           {q.answer !== null && (
             <p className="mt-2 text-sm whitespace-pre-wrap break-words">
               <span className="font-medium">Your answer: </span>
@@ -197,6 +168,70 @@ function QuestionList({ questions }: { questions: RefinementQuestion[] }) {
         </li>
       ))}
     </ol>
+  )
+}
+
+/**
+ * FR-55, FR-27: every round of the release version, newest first, each collapsible (the latest open): its status, run,
+ * trigger and draft, the clarifying questions it asked with the answers given to them, and what its agent was given.
+ * Always read-only; the current questions are answered in the card above.
+ */
+function RoundHistory({ projectId, rounds }: { projectId: string; rounds: RefinementRoundHistory[] }) {
+  return (
+    <StageSection id="refinement-rounds" title="Rounds">
+      <ol aria-label="Refinement rounds, newest first" className="flex flex-col gap-2">
+        {rounds.map((r, i) => (
+          <li key={r.jobId} data-testid="refinement-round">
+            <details open={i === 0} className="group rounded-lg border border-border/60 p-3">
+              <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium">Round {r.round}</span>
+                <RunStatusBadge status={r.status} />
+                <span className="text-muted-foreground">
+                  {r.questions.length === 1 ? '1 question' : `${String(r.questions.length)} questions`}
+                  {r.draftArtifactVersion !== null && ` · draft v${String(r.draftArtifactVersion)}`}
+                </span>
+                <span className="text-muted-foreground">
+                  · <RelativeTime iso={r.startedAt} />
+                </span>
+              </summary>
+              <div className="mt-3 flex flex-col gap-3">
+                <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                  {r.trigger && <span>{triggerLabels[r.trigger]}</span>}
+                  {r.status !== 'queued' && (
+                    <Link to="/projects/$projectId/runs" params={{ projectId }} search={{ run: r.runId }} className="text-primary underline">
+                      View the agent run<span className="sr-only"> for round {r.round}</span>
+                    </Link>
+                  )}
+                </p>
+                {r.status === 'failed' && r.error && (
+                  <p className="text-sm break-words text-destructive">{describeRunError(r.error).message}</p>
+                )}
+                {r.feedback && (
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-sm font-semibold">Feedback given to the agent</h4>
+                    <p className="text-sm whitespace-pre-wrap break-words">{r.feedback}</p>
+                  </div>
+                )}
+                {r.answers.length > 0 && (
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-sm font-semibold">Answers sent with this round</h4>
+                    <AnswerList answers={r.answers} />
+                  </div>
+                )}
+                {r.questions.length > 0 ? (
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-sm font-semibold">Clarifying questions it asked</h4>
+                    <QuestionList questions={r.questions} />
+                  </div>
+                ) : (
+                  r.status === 'succeeded' && <p className="text-sm text-muted-foreground">This round asked no clarifying questions.</p>
+                )}
+              </div>
+            </details>
+          </li>
+        ))}
+      </ol>
+    </StageSection>
   )
 }
 
@@ -249,7 +284,7 @@ function RoundForm({
       <ErrorSummary title="We couldn't start the round" errors={summary} />
       {questions.length > 0 ? (
         <>
-          <p className="text-sm text-muted">
+          <p className="text-sm text-muted-foreground">
             Answer as many as you like; questions left blank stay unanswered. Your answers go to the agent with the current
             draft, and the next round creates a new draft version.
           </p>
@@ -269,7 +304,7 @@ function RoundForm({
           </ol>
         </>
       ) : (
-        <p className="text-sm text-muted">
+        <p className="text-sm text-muted-foreground">
           {hasDraft
             ? 'The agent asked no clarifying questions. You can still run another round to refine the draft.'
             : 'The Idea Refinement agent turns the idea into a first project request draft and may ask clarifying questions.'}
@@ -284,47 +319,115 @@ function RoundForm({
   )
 }
 
+type CodebaseSummaryStatus = Schemas['CodebaseSummaryStatusDto']
+
+/** The completed summary: the locked artifact, rendered (FR-70). */
+function SummaryArtifact({ projectId, releaseVersionId }: { projectId: string; releaseVersionId: string | undefined }) {
+  const summary = useLatestArtifact(projectId, 'codebase_summary', true, releaseVersionId)
+  if (summary.isPending) {
+    return <LoadingState label="Loading the codebase summary…" />
+  }
+  if (summary.isError) {
+    return <ErrorState error={summary.error} title="The codebase summary couldn't load" onRetry={() => void summary.refetch()} />
+  }
+  const artifact = summary.data
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Badge tone={artifact.status === 'locked' ? 'success' : 'neutral'}>
+          {/* Auto-locked without an approver (FR-70), so "Locked" rather than "Approved". */}
+          {artifact.status === 'locked' ? 'Locked' : artifact.status ? artifactStatusLabels[artifact.status] : 'Unknown'}
+        </Badge>
+        <span className="text-muted-foreground">
+          v{artifact.version} · Generated by the Repository Analyst from the code at this version&apos;s start. The other
+          agents read it as context; it needs no approval.
+        </span>
+      </div>
+      <MarkdownView content={artifact.content} label={`Codebase summary v${String(artifact.version)}`} />
+    </>
+  )
+}
+
 /**
- * /projects/:id/refinement (FR-27, SPEC §7): the current project request draft, the clarifying questions with answer
- * fields, "Run another round" (writers, refinement phase only) and the latest round's status — pending until its live
- * `run`/`artifact` event (or a refetch) brings the result.
+ * FR-55, FR-70: the Repository Analyst's codebase summary, driven by GET /refinement `codebaseSummary`: being
+ * generated (queued/running), the locked summary (completed), why refinement went on without it (failed/timed out,
+ * with the run), or why there is none (not_needed: no existing code).
+ */
+function CodebaseSummary({ state }: { state: CodebaseSummaryStatus | undefined }) {
+  const { project, releaseVersionId } = useProjectAccess()
+  if (state === undefined || state.status === 'not_needed') {
+    return state === undefined ? null : (
+      <StageSection id="codebase-summary" title="Codebase summary">
+        <p className="text-sm text-muted-foreground">
+          No codebase summary: this version starts without existing code, so there is nothing for the Repository Analyst
+          to summarise. It runs when a later version starts, or when a project imports a repository.
+        </p>
+      </StageSection>
+    )
+  }
+  const runLink = state.runId ? (
+    <Link
+      to="/projects/$projectId/runs"
+      params={{ projectId: project.id }}
+      search={{ run: state.runId }}
+      className="text-sm text-primary underline"
+    >
+      View the Repository Analyst run
+    </Link>
+  ) : undefined
+  let body: ReactNode
+  switch (state.status) {
+    case 'queued':
+    case 'running':
+      body = (
+        <p role="status" className="rounded-lg border border-border/60 bg-muted/60 p-3 text-sm">
+          <span aria-hidden="true" className="mr-2 inline-block size-3 animate-pulse rounded-full bg-primary align-middle" />
+          <span className="font-medium">Summary being generated…</span> The Repository Analyst{' '}
+          {state.status === 'queued' ? 'is about to read' : 'is reading'} the repository at this version&apos;s base
+          commit. Refinement can start before it&apos;s done: the refinement run waits up to 10 minutes for the summary.
+        </p>
+      )
+      break
+    case 'failed':
+    case 'timed_out':
+      body = (
+        <Alert tone="warning" title={state.status === 'failed' ? 'The Repository Analyst failed' : 'The codebase summary took too long'}>
+          <p>
+            {state.status === 'failed'
+              ? 'It ended without a codebase summary, so refinement continued without it.'
+              : 'It wasn’t ready 10 minutes after the version started, so refinement no longer waits for it and continued without it.'}{' '}
+            The agents still read the repository through their tools.
+          </p>
+        </Alert>
+      )
+      break
+    case 'completed':
+      body = <SummaryArtifact projectId={project.id} releaseVersionId={releaseVersionId} />
+      break
+  }
+  return (
+    <StageSection id="codebase-summary" title="Codebase summary" actions={runLink}>
+      {body}
+    </StageSection>
+  )
+}
+
+/**
+ * /projects/:id/refinement (FR-27, FR-55): the version's request text, the project request in full (approve or reject
+ * a draft in place), the latest round and its clarifying questions with answer fields and "Run another round"
+ * (writers, refinement phase only), the Repository Analyst summary for iterations and the Idea Refinement runs. A past
+ * release version (FR-62) shows its request and rounds read-only.
  */
 export function RefinementPage() {
-  const { project, user, role } = useProjectAccess()
+  const { project, can, readOnly, releaseVersionId, view } = useProjectAccess()
   useDocumentTitle(`Refinement · ${project.name}`)
-  const refinement = useRefinement(project.id)
+  const refinement = useRefinement(project.id, releaseVersionId)
   const start = useStartRefinement(project.id)
   /** Shown outside the form: REFINEMENT_IN_PROGRESS and CONFLICT refetch the page, which replaces the form. */
   const [startErrors, setStartErrors] = useState<string[]>([])
-  const writer = canInProject(user, role, 'startAgents')
-  const inPhase = project.currentPhase === 'refinement'
-
-  const header = (
-    <h2 className="mb-4 text-xl font-semibold" id="refinement-title">
-      Refinement
-    </h2>
-  )
-
-  if (refinement.isPending) {
-    return (
-      <>
-        {header}
-        <LoadingState label="Loading refinement…" />
-      </>
-    )
-  }
-  if (refinement.isError) {
-    return (
-      <>
-        {header}
-        <ErrorState error={refinement.error} title="Refinement couldn't load" onRetry={() => void refinement.refetch()} />
-      </>
-    )
-  }
-
-  const { latestDraft, latestRound, questions, questionsRunId } = refinement.data
-  const pending = isRoundPending(latestRound)
-  const canRun = writer && inPhase && !pending
+  const writer = can('startAgents')
+  const inPhase = project.currentPhase === 'refinement' && !readOnly
+  const request = view.version?.request ?? project.idea
 
   const onRun = (answers: RefinementAnswerRequest[]) => {
     setStartErrors([])
@@ -336,30 +439,26 @@ export function RefinementPage() {
     })
   }
 
-  return (
-    <section aria-labelledby="refinement-title">
-      {header}
-      <div className="flex flex-col gap-5">
-        {!inPhase && (
-          <Alert tone="info">
-            The project is in {phaseLabels[project.currentPhase]}. Refinement rounds run only in the Refinement phase, so this
-            page is read-only.
-          </Alert>
-        )}
-        {inPhase && !writer && (
-          <Alert tone="info">You can follow refinement here. Only Contributors and Owners can answer questions and run rounds.</Alert>
-        )}
-
+  let rounds: ReactNode
+  if (refinement.isPending) {
+    rounds = <LoadingState label="Loading refinement…" />
+  } else if (refinement.isError) {
+    rounds = <ErrorState error={refinement.error} title="Refinement couldn't load" onRetry={() => void refinement.refetch()} />
+  } else {
+    const { latestDraft, latestRound, questions, questionsRunId, rounds: history } = refinement.data
+    const pending = isRoundPending(latestRound)
+    const canRun = writer && inPhase && !pending
+    rounds = (
+      <>
         <div aria-live="polite">{latestRound && <RoundStatus projectId={project.id} round={latestRound} />}</div>
 
-        {latestDraft ? (
-          <CurrentDraft projectId={project.id} draft={latestDraft} />
-        ) : (
-          <EmptyState title="No draft yet">
-            <p>Refinement turns the project idea into a project request.</p>
-            <blockquote className="mt-2 text-fg whitespace-pre-wrap break-words">{project.idea}</blockquote>
-          </EmptyState>
-        )}
+        <StageArtifact
+          stage="refinement"
+          type="project_request"
+          expectedLatest={latestDraft?.version ?? null}
+          awaitingDraft={pending}
+          notStarted="The Idea Refinement agent turns the project idea (the request above) into a project request. Start the first round below; the agent may ask clarifying questions."
+        />
 
         <ErrorSummary title="We couldn't start the round" errors={startErrors.map((message) => ({ message }))} />
 
@@ -378,14 +477,40 @@ export function RefinementPage() {
               />
             ) : questions.length > 0 ? (
               <>
-                {pending && <p className="text-sm text-muted">These answers were sent with the round in progress.</p>}
+                {pending && <p className="text-sm text-muted-foreground">These answers were sent with the round in progress.</p>}
                 <QuestionList questions={questions} />
               </>
             ) : (
-              <p className="text-sm text-muted">{pending ? 'The round in progress may bring new questions.' : 'No questions to answer.'}</p>
+              <p className="text-sm text-muted-foreground">{pending ? 'The round in progress may bring new questions.' : 'No questions to answer.'}</p>
             )}
           </Card>
         )}
+
+        {history.length > 0 && <RoundHistory projectId={project.id} rounds={history} />}
+      </>
+    )
+  }
+
+  const awaiting = refinement.data?.latestDraft?.status === 'draft'
+  return (
+    <section aria-labelledby="refinement-title">
+      <StageHeader stage="refinement" awaitingApproval={awaiting} />
+      <div className="flex flex-col gap-5">
+        {!inPhase && !readOnly && (
+          <Alert tone="info">
+            The project is in {phaseLabels[project.currentPhase]}. Refinement rounds run only in the Refinement phase, so this
+            page is read-only.
+          </Alert>
+        )}
+        {inPhase && !writer && (
+          <Alert tone="info">You can follow refinement here. Only Contributors and Owners can answer questions and run rounds.</Alert>
+        )}
+        <StageSection id="refinement-request" title="Request">
+          <blockquote className="whitespace-pre-wrap break-words">{request}</blockquote>
+        </StageSection>
+        {rounds}
+        <CodebaseSummary state={refinement.data?.codebaseSummary} />
+        <StageRuns agent="idea_refinement" />
       </div>
     </section>
   )

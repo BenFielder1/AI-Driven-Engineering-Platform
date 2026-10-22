@@ -15,32 +15,77 @@ export type ArtifactAuthor = Schemas['ArtifactAuthorDto']
 /** Query keys, all under `projectKeys.artifacts(id)` so one invalidation refreshes every artifact view. */
 export const artifactKeys = {
   all: (id: string) => projectKeys.artifacts(id),
-  list: (id: string) => [...projectKeys.artifacts(id), 'list'] as const,
+  list: (id: string, releaseVersionId?: string) => [...projectKeys.artifacts(id), 'list', releaseVersionId ?? 'current'] as const,
   type: (id: string, type: ArtifactType) => [...projectKeys.artifacts(id), 'type', type] as const,
-  latest: (id: string, type: ArtifactType) => [...artifactKeys.type(id, type), 'latest'] as const,
-  history: (id: string, type: ArtifactType) => [...artifactKeys.type(id, type), 'history'] as const,
+  latest: (id: string, type: ArtifactType, releaseVersionId?: string) =>
+    [...artifactKeys.type(id, type), 'latest', releaseVersionId ?? 'current'] as const,
+  history: (id: string, type: ArtifactType, releaseVersionId?: string) =>
+    [...artifactKeys.type(id, type), 'history', releaseVersionId ?? 'current'] as const,
+  allHistory: (id: string, type: ArtifactType) => [...artifactKeys.type(id, type), 'all-history'] as const,
   version: (id: string, type: ArtifactType, version: number) =>
     [...artifactKeys.type(id, type), 'version', version] as const,
   diff: (id: string, type: ArtifactType, from: number, to: number) =>
     [...artifactKeys.type(id, type), 'diff', from, to] as const,
 }
 
-/** FR-21: the latest version of each type that has one (types with no versions are absent). */
-export function useArtifacts(id: string) {
+const versionQuery = (releaseVersionId: string | undefined) => (releaseVersionId ? { releaseVersionId } : {})
+
+/**
+ * FR-21, FR-59: the latest version of each type that has one (types with no versions are absent), in a release
+ * version (default: the current one; FR-62 passes a past one).
+ */
+export function useArtifacts(id: string, releaseVersionId?: string) {
   return useQuery({
-    queryKey: artifactKeys.list(id),
+    queryKey: artifactKeys.list(id, releaseVersionId),
     queryFn: async ({ signal }) =>
-      unwrap(await api.GET('/api/projects/{id}/artifacts', { params: { path: { id } }, signal })),
+      unwrap(
+        await api.GET('/api/projects/{id}/artifacts', {
+          params: { path: { id }, query: versionQuery(releaseVersionId) },
+          signal,
+        }),
+      ),
   })
 }
 
 /** FR-21: every version of a type (summaries, no content), newest first. */
-export function useArtifactHistory(id: string, type: ArtifactType) {
-  return useQuery({
-    queryKey: artifactKeys.history(id, type),
+export function useArtifactHistory(
+  id: string,
+  type: ArtifactType,
+  releaseVersionId?: string,
+  /** Poll every this many ms while the history is still empty (a stage page waiting for its producing run). */
+  pollWhileEmptyMs?: number,
+) {
+  return useQuery<ArtifactSummary[]>({
+    queryKey: artifactKeys.history(id, type, releaseVersionId),
+    refetchInterval: (query) =>
+      pollWhileEmptyMs !== undefined && query.state.status === 'success' && query.state.data?.length === 0
+        ? pollWhileEmptyMs
+        : false,
     queryFn: async ({ signal }) => {
       const versions = unwrap(
-        await api.GET('/api/projects/{id}/artifacts/{type}/history', { params: { path: { id, type } }, signal }),
+        await api.GET('/api/projects/{id}/artifacts/{type}/history', {
+          params: { path: { id, type }, query: versionQuery(releaseVersionId) },
+          signal,
+        }),
+      )
+      return [...versions].sort((a, b) => b.version - a.version)
+    },
+  })
+}
+
+/**
+ * FR-59: every version of a type across all release versions, newest first, each with its `releaseVersion` (for the
+ * cross-version diff picker).
+ */
+export function useAllArtifactHistory(id: string, type: ArtifactType) {
+  return useQuery({
+    queryKey: artifactKeys.allHistory(id, type),
+    queryFn: async ({ signal }) => {
+      const versions = unwrap(
+        await api.GET('/api/projects/{id}/artifacts/{type}/history', {
+          params: { path: { id, type }, query: { allReleaseVersions: true } },
+          signal,
+        }),
       )
       return [...versions].sort((a, b) => b.version - a.version)
     },
@@ -48,11 +93,16 @@ export function useArtifactHistory(id: string, type: ArtifactType) {
 }
 
 /** FR-16/FR-20: the latest version with its content (integrity re-checked by the server on read). */
-export function useLatestArtifact(id: string, type: ArtifactType, enabled = true) {
+export function useLatestArtifact(id: string, type: ArtifactType, enabled = true, releaseVersionId?: string) {
   return useQuery({
-    queryKey: artifactKeys.latest(id, type),
+    queryKey: artifactKeys.latest(id, type, releaseVersionId),
     queryFn: async ({ signal }) =>
-      unwrap(await api.GET('/api/projects/{id}/artifacts/{type}/latest', { params: { path: { id, type } }, signal })),
+      unwrap(
+        await api.GET('/api/projects/{id}/artifacts/{type}/latest', {
+          params: { path: { id, type }, query: versionQuery(releaseVersionId) },
+          signal,
+        }),
+      ),
     enabled,
   })
 }
@@ -101,6 +151,23 @@ export function useCreateArtifactDraft(id: string, type: ArtifactType) {
         await api.POST('/api/projects/{id}/artifacts/{type}', {
           params: { path: { id, type } },
           body: { content, baseVersion },
+        }),
+      ),
+    onSettled: () => invalidateProject(queryClient, id),
+  })
+}
+
+/**
+ * FR-58: restore an older version as a new draft (writers): same content and hash, parent = the latest version,
+ * `restoredFromVersion` = the chosen one. Refreshes the whole project either way (a 409 means our view is stale).
+ */
+export function useRestoreArtifact(id: string, type: ArtifactType) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (version: number) =>
+      unwrap(
+        await api.POST('/api/projects/{id}/artifacts/{type}/versions/{version}/restore', {
+          params: { path: { id, type, version } },
         }),
       ),
     onSettled: () => invalidateProject(queryClient, id),

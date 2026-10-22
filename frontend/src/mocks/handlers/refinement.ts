@@ -5,7 +5,7 @@ import { writerMutation, seedArtifact } from './artifacts'
 import { nextId } from './auth'
 import { addEvent } from './lifecycle'
 import { problem } from './problem'
-import { access, record, type StoredProject, type StoredRefinementRound } from './projects'
+import { access, currentVersionId, record, type StoredProject, type StoredRefinementRound } from './projects'
 
 type Round = Schemas['RefinementRoundDto']
 type Question = NonNullable<StoredRefinementRound['questions']>[number]
@@ -110,11 +110,45 @@ export function failRefinementRound(project: StoredProject, error: string) {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const toDto = ({ questions, ...dto }: StoredRefinementRound): Round => dto
 
+/**
+ * FR-55: every round, newest first, numbered oldest = 1. A round's questions carry the answer given to them by the
+ * latest round started up to (and including) the next succeeded round.
+ */
+function roundHistory(rounds: StoredRefinementRound[]): Schemas['RefinementRoundHistoryDto'][] {
+  return rounds
+    .map((r, i) => {
+      const later = rounds.slice(i + 1)
+      const nextSucceeded = later.findIndex((x) => x.status === 'succeeded')
+      const answering = nextSucceeded === -1 ? later.at(-1) : later[nextSucceeded]
+      const given = new Map((answering?.answers ?? []).flatMap((a) => (a.questionId ? [[a.questionId, a.answer] as const] : [])))
+      return {
+        round: i + 1,
+        runId: r.runId,
+        jobId: r.jobId,
+        trigger: r.trigger,
+        status: r.status,
+        error: r.error,
+        startedAt: r.createdAt,
+        completedAt: r.completedAt,
+        questions: (r.questions ?? []).map((q) => ({ ...q, answer: given.get(q.id) ?? null })),
+        answers: r.answers,
+        feedback: r.feedback,
+        draftArtifactId: r.draftArtifactId,
+        draftArtifactVersion: r.draftVersion,
+      }
+    })
+    .reverse()
+}
+
 /** Mirrors RefinementService.GetAsync. */
-function refinementDto(project: StoredProject): Schemas['RefinementDto'] {
-  const drafts = project.artifacts.filter((a) => a.type === 'project_request').sort((a, b) => b.version - a.version)
+function refinementDto(project: StoredProject, releaseVersionId: string): Schemas['RefinementDto'] {
+  const drafts = project.artifacts
+    .filter((a) => a.type === 'project_request' && a.releaseVersionId === releaseVersionId)
+    .sort((a, b) => b.version - a.version)
+  // Rounds are only kept for the current release version in this mock.
+  const roundsOf = releaseVersionId === currentVersionId(project) ? project.refinementRounds : []
   const latestDraft = drafts[0]
-  const rounds = [...project.refinementRounds].reverse()
+  const rounds = [...roundsOf].reverse()
   const latest = rounds[0]
   const completed = rounds.find((r) => r.status === 'succeeded' && r.questions !== null)
   const later = latest && completed && latest.jobId !== completed.jobId ? latest : undefined
@@ -125,6 +159,9 @@ function refinementDto(project: StoredProject): Schemas['RefinementDto'] {
           id: latestDraft.id,
           type: latestDraft.type,
           version: latestDraft.version,
+          releaseVersionId: latestDraft.releaseVersionId,
+          releaseVersion: latestDraft.releaseVersion,
+          restoredFromVersion: latestDraft.restoredFromVersion,
           status: latestDraft.status,
           integrity: latestDraft.integrity,
           createdAt: latestDraft.createdAt,
@@ -134,19 +171,34 @@ function refinementDto(project: StoredProject): Schemas['RefinementDto'] {
     latestRound: latest ? toDto(latest) : null,
     questionsRunId: completed?.runId ?? null,
     questions: (completed?.questions ?? []).map((q) => ({ ...q, answer: given.get(q.id) ?? null })),
+    codebaseSummary: codebaseSummaryOf(project, releaseVersionId),
+    rounds: roundHistory(roundsOf),
   }
+}
+
+/** FR-70: `completed` once the version has a summary, else the seeded analyst state, else `not_needed`. */
+function codebaseSummaryOf(project: StoredProject, releaseVersionId: string): Schemas['CodebaseSummaryStatusDto'] {
+  const summary = project.artifacts
+    .filter((a) => a.type === 'codebase_summary' && a.releaseVersionId === releaseVersionId)
+    .sort((a, b) => b.version - a.version)[0]
+  const seeded = project.analyst?.[releaseVersionId]
+  if (summary) {
+    return { status: 'completed', runId: seeded?.runId ?? null, artifactId: summary.id, artifactVersion: summary.version }
+  }
+  return seeded ?? { status: 'not_needed', runId: null, artifactId: null, artifactVersion: null }
 }
 
 const validation = (errors: Record<string, string[]>) =>
   problem(400, 'VALIDATION', 'One or more validation errors occurred.', { errors })
 
 export const refinementHandlers = [
-  http.get('*/api/projects/:id/refinement', ({ params }) => {
+  http.get('*/api/projects/:id/refinement', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
-    return HttpResponse.json<Schemas['RefinementDto']>(refinementDto(a.project))
+    const scope = new URL(request.url).searchParams.get('releaseVersionId') ?? currentVersionId(a.project)
+    return HttpResponse.json<Schemas['RefinementDto']>(refinementDto(a.project, scope))
   }),
 
   // FR-27: queue a round (writers): WRONG_PHASE, BUDGET_EXCEEDED, REFINEMENT_IN_PROGRESS, VALIDATION.

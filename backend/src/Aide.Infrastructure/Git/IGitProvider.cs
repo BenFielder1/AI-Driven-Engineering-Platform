@@ -2,8 +2,31 @@ using Aide.Domain.Entities;
 
 namespace Aide.Infrastructure.Git;
 
-/// <summary>The saved Git settings of a project, as a provider needs them (never includes the token).</summary>
-public sealed record GitConnectionSettings(Guid ProjectId, string? RepoUrl, string DefaultBranch);
+/// <summary>
+/// The saved Git settings of a project, as a provider needs them (never includes the token). For <c>github_app</c>
+/// (FR-82), <see cref="InstallationId"/> and <see cref="RepoId"/> identify the repository and <see cref="RepoUrl"/> is its
+/// <c>https://github.com/{owner}/{name}</c> URL (derived from the stored full name).
+/// </summary>
+public sealed record GitConnectionSettings(Guid ProjectId, string? RepoUrl, string DefaultBranch)
+{
+    public long? InstallationId { get; init; }
+
+    public long? RepoId { get; init; }
+
+    /// <summary>The connection for a project's stored Git settings (<paramref name="defaultBranch"/> overrides the stored one).</summary>
+    public static GitConnectionSettings From(ProjectGitSettings settings, string? defaultBranch = null)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return new GitConnectionSettings(
+            settings.ProjectId,
+            Domain.Projects.ProjectSettingsRules.RepoWebUrl(settings.Provider, settings.RepoUrl, settings.RepoFullName),
+            defaultBranch ?? settings.DefaultBranch)
+        {
+            InstallationId = settings.Provider == GitProvider.GithubApp ? settings.InstallationId : null,
+            RepoId = settings.Provider == GitProvider.GithubApp ? settings.RepoId : null,
+        };
+    }
+}
 
 /// <summary>Outcome of a connection test (FR-10). <see cref="Reason"/> explains a failure in the provider's words.</summary>
 public sealed record GitTestResult(bool Ok, bool Reachable, bool Writable, bool DefaultBranchExists, string? Reason)
@@ -48,27 +71,53 @@ public interface IGitProvider
     string ComparisonBaseRef(GitConnectionSettings settings);
 
     /// <summary>
-    /// FR-42, FR-43: releases the project branch: merges it into the default branch (GitHub: merges the project PR through the
-    /// API; Local: <c>git merge --no-ff</c> in the working copy) and creates the annotated tag (GitHub: pushed). Idempotent: a
-    /// release tag of the version that already contains the branch is a no-op success; tags elsewhere are never moved, the
-    /// release uses the first free <c>v&lt;N&gt;-aide.&lt;k&gt;</c> instead (<see cref="Domain.Releases.ReleaseRules.ChooseTag"/>). A
-    /// merge conflict is returned with the conflicting files, never thrown. The working copy must be prepared first.
+    /// FR-42 amended by FR-64, FR-43: releases the version branch: merges it into the default branch (GitHub: merges the PR
+    /// through the API; Local: <c>git merge --no-ff</c> in the working copy) and creates the annotated tag
+    /// <see cref="ReleaseRequest.Tag"/> on the merge commit (GitHub: pushed). Idempotent: the tag already holding the branch is
+    /// a no-op success; the tag on another commit fails with <c>TAG_EXISTS</c> before anything is merged
+    /// (<see cref="Domain.Releases.ReleaseRules.DecideTag"/>). A merge conflict is returned with the conflicting files, never
+    /// thrown. The working copy must be prepared first.
     /// </summary>
     Task<ReleaseOutcome> ReleaseAsync(GitConnectionSettings settings, ReleaseRequest request, string? token, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-61: whether the tag <paramref name="tag"/> exists in the repository (GitHub: through the API; Local: in the
+    /// repository on the data volume, which may not exist yet). Changes nothing.
+    /// </summary>
+    Task<TagLookup> FindTagAsync(GitConnectionSettings settings, string tag, string? token, CancellationToken cancellationToken);
+}
+
+/// <summary>The outcome of <see cref="IGitProvider.FindTagAsync"/>: whether the tag exists, or a token-free failure reason.</summary>
+public sealed record TagLookup(bool Ok, bool Exists, string? Reason, bool Transient)
+{
+    public static TagLookup Found { get; } = new(true, true, null, false);
+
+    public static TagLookup Missing { get; } = new(true, false, null, false);
+
+    public static TagLookup Failed(string reason, bool transient) => new(false, false, reason, transient);
 }
 
 /// <summary>
-/// A release to perform (FR-42): the project branch, the project version and name (the tag, its message and the merge title
-/// come from <see cref="Domain.Releases.ReleaseRules"/> once the provider has chosen the tag), the project PR (GitHub), and
-/// <see cref="OnMerged"/>, called with the merge commit as soon as the merge exists (before tagging), so the merge is on
-/// record even if tagging fails. An exception from it ends the release (nothing is tagged).
+/// A release to perform (FR-42, FR-64): the version branch, the release tag (<c>&lt;tagPrefix&gt;&lt;version&gt;</c>) and version,
+/// the project name (the tag message and the merge title come from <see cref="Domain.Releases.ReleaseRules"/>), the version's
+/// PR (GitHub), and <see cref="OnMerged"/>, called with the merge commit as soon as the merge exists (before tagging), so the
+/// merge is on record even if tagging fails. An exception from it ends the release (nothing is tagged).
 /// </summary>
 public sealed record ReleaseRequest(
     string Branch,
-    int ProjectVersion,
+    string Tag,
+    string Version,
     string ProjectName,
     int? PullRequestNumber,
-    Func<string, CancellationToken, Task>? OnMerged = null);
+    Func<string, CancellationToken, Task>? OnMerged = null)
+{
+    /// <summary>
+    /// FR-65: whether AIDE may merge (<c>aide_merges</c>). <c>false</c> (<c>manual</c>, and the merge poll): never merge —
+    /// a PR (or Local branch) already merged by someone else is tagged on its merge commit and released; one not merged yet
+    /// is <see cref="ReleaseOutcomeKind.AwaitingMerge"/> (GitHub: a draft PR is marked ready for review first).
+    /// </summary>
+    public bool Merge { get; init; } = true;
+}
 
 /// <summary>How a release attempt ended at the provider.</summary>
 public enum ReleaseOutcomeKind
@@ -81,6 +130,13 @@ public enum ReleaseOutcomeKind
 
     /// <summary>Another failure; <see cref="ReleaseOutcome.Transient"/> says whether a retry could help.</summary>
     Failed = 2,
+
+    /// <summary>
+    /// FR-65: not merged yet, and AIDE won't (or can't) merge it: the strategy is <c>manual</c>, or GitHub refused the merge
+    /// (branch protection, required reviews or checks, missing permission). <see cref="ReleaseOutcome.Reason"/> says why.
+    /// Nothing was merged or tagged.
+    /// </summary>
+    AwaitingMerge = 3,
 }
 
 /// <summary>
@@ -96,7 +152,7 @@ public sealed record ReleaseOutcome(
     string? Reason,
     bool Transient)
 {
-    /// <summary>The release tag (base or suffixed) the release was recorded with; set when released.</summary>
+    /// <summary>The release tag the release was recorded with; set when released.</summary>
     public string? Tag { get; init; }
 
     public static ReleaseOutcome Released(string mergeCommitSha, string tag, bool alreadyTagged) =>
@@ -107,6 +163,16 @@ public sealed record ReleaseOutcome(
 
     public static ReleaseOutcome Failed(string errorCode, string reason, bool transient) =>
         new(ReleaseOutcomeKind.Failed, null, false, [], errorCode, reason, transient);
+
+    /// <summary>FR-65: waiting for a merge by someone else; <see cref="MergeRefused"/> when GitHub refused AIDE's merge.</summary>
+    public static ReleaseOutcome Awaiting(string reason, bool refused) =>
+        new(ReleaseOutcomeKind.AwaitingMerge, null, false, [], null, reason, false) { MergeRefused = refused };
+
+    /// <summary>FR-65: GitHub refused AIDE's merge (as opposed to the <c>manual</c> strategy not trying).</summary>
+    public bool MergeRefused { get; init; }
+
+    /// <summary>FR-65: released on a merge someone else made (the PR was already merged on GitHub, or the Local branch by hand).</summary>
+    public bool MergedExternally { get; init; }
 }
 
 /// <summary>The project PR to open (FR-36).</summary>

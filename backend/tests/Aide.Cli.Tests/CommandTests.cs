@@ -74,7 +74,7 @@ public sealed class CommandTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, run.ExitCode);
         AssertJson(
-            """{"name":"N","idea":"I","git":{"provider":"github","repoUrl":"https://github.com/o/r","token":"ghp_secret"}}""",
+            """{"name":"N","idea":"I","git":{"provider":"github_pat","repoUrl":"https://github.com/o/r","token":"ghp_secret"}}""",
             Assert.Single(_cli.Requests).Body);
     }
 
@@ -342,12 +342,12 @@ public sealed class CommandTests : IDisposable
     }
 
     [Fact]
-    public async Task FR52_rollback_posts_target_version_and_reason()
+    public async Task FR52_amended_by_FR63_rollback_posts_target_checkpoint_and_reason()
     {
         _cli.Respond(_ => FakeHttpHandler.Json(
             HttpStatusCode.OK,
             """
-            {"id":"0199f2a0-7777-7000-8000-000000000001","fromVersion":5,"toVersion":2,"restoredPhase":"planning","reason":"wrong plan",
+            {"id":"0199f2a0-7777-7000-8000-000000000001","fromCheckpoint":5,"toCheckpoint":2,"restoredPhase":"planning","reason":"wrong plan",
              "invalidatedArtifactIds":["0199f2a0-7777-7000-8000-000000000002"],"resetStepIds":[],"requeuedStepIds":[],"cancelledGateIds":[],"cancelledJobIds":[],
              "createdAt":"2026-10-10T10:00:00Z","createdBy":{"id":null,"name":"Ada","isSystem":false}}
             """));
@@ -356,7 +356,7 @@ public sealed class CommandTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, run.ExitCode);
         Assert.Equal($"/api/projects/{Samples.ProjectId}/rollback", Assert.Single(_cli.Requests).Uri.AbsolutePath);
-        Assert.Contains("Rolled back from v5 to v2; phase is now planning", run.Out, StringComparison.Ordinal);
+        Assert.Contains("Rolled back from checkpoint 5 to checkpoint 2; phase is now planning", run.Out, StringComparison.Ordinal);
     }
 
     [Fact]

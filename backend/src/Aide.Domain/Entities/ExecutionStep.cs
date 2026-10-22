@@ -9,6 +9,9 @@ public sealed class ExecutionStep
 
     public Guid ProjectId { get; set; }
 
+    /// <summary>The release version the step belongs to (§4.10); that of its plan.</summary>
+    public Guid ReleaseVersionId { get; set; }
+
     public Guid PlanArtifactId { get; set; }
 
     public int StepNumber { get; set; }
@@ -23,6 +26,12 @@ public sealed class ExecutionStep
     public IReadOnlyList<int> Dependencies { get; set; } = [];
 
     public string? UserInstructions { get; set; }
+
+    /// <summary>The preset specialist assigned to the step (FR-76); null for v1 plans.</summary>
+    public string? AgentKey { get; set; }
+
+    /// <summary>Requirement IDs the step covers (FR-76).</summary>
+    public IReadOnlyList<string> Covers { get; set; } = [];
 
     public StepStatus Status { get; set; } = StepStatus.Pending;
 

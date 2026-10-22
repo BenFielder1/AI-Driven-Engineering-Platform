@@ -1,25 +1,31 @@
 import { useState, type ReactNode } from 'react'
+import { toast } from 'sonner'
 
 import { Alert } from '../../components/ui/alert'
 import { Badge, type BadgeTone } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
 import { errorMessage, errorReasons } from '../../lib/errors'
-import { canInProject } from '../../lib/permissions'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { PullRequestSection } from '../git/pull-request-section'
+import { StageGates } from '../stages/stage-gates'
+import { StageHeader } from '../stages/stage-header'
+import { stageGates } from '../stages/stage-model'
+import { StageRuns } from '../stages/stage-runs'
 import { useGates } from '../gates/gates-api'
 import type { ArtifactType } from '../artifacts/artifacts-api'
-import { artifactTypeLabels, executionRunStatusLabels, phaseLabels } from '../projects/labels'
+import { executionRunStatusLabels, phaseLabels } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
 import { useProjectState, type ProjectState } from '../projects/projects-api'
 import {
   useExecutionControl,
+  useExecutionRuns,
   useExecutionSteps,
   type ExecutionAction,
   type ExecutionRunStatus,
   type ExecutionStep,
 } from './execution-api'
+import { ExecutionRuns, RunsState, StepRunExtras } from './execution-runs'
 import { ExecutionStepItem } from './execution-steps'
 
 const runTones: Record<ExecutionRunStatus, BadgeTone> = {
@@ -34,6 +40,13 @@ const actionLabels: Record<ExecutionAction, { label: string; pending: string }> 
   start: { label: 'Start execution', pending: 'Starting…' },
   pause: { label: 'Pause execution', pending: 'Pausing…' },
   resume: { label: 'Resume execution', pending: 'Resuming…' },
+}
+
+/** SPEC 7.1: the async result of a control call, as a toast. */
+const controlToasts: Record<ExecutionAction, string> = {
+  start: 'Execution started.',
+  pause: 'Execution will pause after the current step.',
+  resume: 'Execution resumed.',
 }
 
 interface Control {
@@ -95,8 +108,8 @@ function controlFor(status: ExecutionRunStatus, state: ProjectState, hasPlan: bo
 function Stat({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="flex flex-col">
-      <dt className="text-xs text-muted">{term}</dt>
-      <dd className="text-lg font-semibold">{children}</dd>
+      <dt className="text-xs text-muted-foreground">{term}</dt>
+      <dd className="font-mono text-lg font-medium tabular-nums">{children}</dd>
     </div>
   )
 }
@@ -113,9 +126,9 @@ function ProgressSummary({
 }) {
   const c = state.execution
   return (
-    <section aria-labelledby="execution-progress" className="flex flex-col gap-3 rounded-lg border border-border bg-surface-raised p-4">
+    <section aria-labelledby="execution-progress" className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 id="execution-progress" className="text-lg font-semibold">
+        <h3 id="execution-progress" className="text-lg">
           Progress
         </h3>
         <Badge tone={runTones[status]}>{executionRunStatusLabels[status]}</Badge>
@@ -166,34 +179,37 @@ function ProgressSummary({
  * completed the pull request or branch comparison (FR-36). Live `step` events refresh the steps, /state and the PR (FR-46).
  */
 export function ExecutionPage() {
-  const { project, user, role } = useProjectAccess()
+  const { project, can, readOnly, releaseVersionId } = useProjectAccess()
   useDocumentTitle(`Execution · ${project.name}`)
   const state = useProjectState(project.id)
-  // The counts and runner status in /state cover the current plan, so the list shows that plan's steps too.
-  const planType = state.data ? currentPlanType(state.data) : 'implementation_plan'
-  const steps = useExecutionSteps(project.id, planType, null, state.data !== undefined)
+  // The counts and runner status in /state cover the current plan, so the list shows that plan's steps too. A past
+  // release version (FR-62) shows its implementation plan's steps, read-only.
+  const planType = readOnly ? 'implementation_plan' : state.data ? currentPlanType(state.data) : 'implementation_plan'
+  const steps = useExecutionSteps(project.id, planType, null, state.data !== undefined, releaseVersionId)
+  const runs = useExecutionRuns(project.id, releaseVersionId)
   const gates = useGates(project.id)
-  const writer = canInProject(user, role, 'startExecution')
+  const writer = can('startExecution')
   const control = useExecutionControl(project.id)
   const [controlError, setControlError] = useState<unknown>(null)
 
   const header = (
-    <h2 id="execution-title" className="mb-4 text-xl font-semibold">
-      Execution
-    </h2>
+    <StageHeader
+      stage="execution"
+      awaitingApproval={state.data?.pendingGates.some((g) => g.type === 'escalation') ?? false}
+    />
   )
 
   if (state.isPending || steps.isPending) {
     return (
-      <>
+      <section aria-labelledby="execution-title">
         {header}
         <LoadingState label="Loading execution…" />
-      </>
+      </section>
     )
   }
   if (state.isError || steps.isError) {
     return (
-      <>
+      <section aria-labelledby="execution-title">
         {header}
         <ErrorState
           error={state.error ?? steps.error}
@@ -203,7 +219,7 @@ export function ExecutionPage() {
             void steps.refetch()
           }}
         />
-      </>
+      </section>
     )
   }
 
@@ -221,6 +237,9 @@ export function ExecutionPage() {
   const run = (action: ExecutionAction) => {
     setControlError(null)
     control.mutate(action, {
+      onSuccess: () => {
+        toast.success(controlToasts[action])
+      },
       onError: (error) => {
         setControlError(error)
       },
@@ -228,6 +247,28 @@ export function ExecutionPage() {
   }
 
   const reasons = controlError ? errorReasons(controlError) : []
+  const summaries = new Map((runs.data ?? []).flatMap((r) => r.steps).map((x) => [x.id, x] as const))
+  const activeSteps =
+    plan !== null && list.length > 0 ? (
+      <ol aria-label="Execution steps" className="flex flex-col gap-3">
+        {list.map((step) => {
+          const summary = summaries.get(step.id)
+          return (
+            <ExecutionStepItem
+              key={step.id}
+              projectId={project.id}
+              step={step}
+              current={step.id === current?.id}
+              escalationGate={step.status === 'blocked' ? escalationGateFor(step) : null}
+              extra={summary ? <StepRunExtras step={summary} /> : undefined}
+            />
+          )
+        })}
+      </ol>
+    ) : null
+
+  const activeRunId = readOnly ? null : (plan?.artifactId ?? null)
+  const activeInRuns = activeRunId !== null && (runs.data ?? []).some((r) => r.id === activeRunId && !r.superseded)
 
   return (
     <section aria-labelledby="execution-title">
@@ -250,13 +291,13 @@ export function ExecutionPage() {
               </Button>
             </div>
             {ctl.disabledReason && (
-              <p id="execution-control-reason" className="text-sm text-muted">
+              <p id="execution-control-reason" className="text-sm text-muted-foreground">
                 {ctl.disabledReason}
               </p>
             )}
           </div>
         )}
-        {!writer && (
+        {!writer && !readOnly && (
           <Alert tone="info">You can follow execution here. Only Contributors and Owners can start, pause or resume it.</Alert>
         )}
         <div role="alert" aria-live="assertive">
@@ -273,32 +314,37 @@ export function ExecutionPage() {
           )}
         </div>
 
-        <ProgressSummary status={status} state={s} current={current} />
+        {!readOnly && <ProgressSummary status={status} state={s} current={current} />}
 
-        <PullRequestSection projectId={project.id} state={s} writer={writer} />
+        {!readOnly && <PullRequestSection projectId={project.id} state={s} writer={writer} />}
 
-        {plan === null || list.length === 0 ? (
-          <EmptyState title="No execution steps yet">
-            <p>Steps are created from the implementation plan when it&apos;s approved.</p>
-          </EmptyState>
-        ) : (
-          <section aria-labelledby="execution-steps-title" className="flex flex-col gap-3">
-            <h3 id="execution-steps-title" className="text-lg font-semibold">
-              Steps of {artifactTypeLabels[plan.type].toLowerCase()} v{plan.version}
+        {/* The live steps of the current plan always show, even before the runs list has caught up with it. */}
+        {!readOnly && activeSteps && !activeInRuns && (
+          <section aria-labelledby="execution-active-steps" className="flex flex-col gap-3">
+            <h3 id="execution-active-steps" className="text-lg">
+              Current run
             </h3>
-            <ol aria-label="Execution steps" className="flex flex-col gap-3">
-              {list.map((step) => (
-                <ExecutionStepItem
-                  key={step.id}
-                  projectId={project.id}
-                  step={step}
-                  current={step.id === current?.id}
-                  escalationGate={step.status === 'blocked' ? escalationGateFor(step) : null}
-                />
-              ))}
-            </ol>
+            {activeSteps}
           </section>
         )}
+        {runs.isPending || runs.isError ? (
+          <RunsState isPending={runs.isPending} error={runs.error} onRetry={() => void runs.refetch()} />
+        ) : runs.data.length === 0 ? (
+          !readOnly && activeSteps ? null : (
+            <EmptyState title="No execution steps yet">
+              <p>Steps are created from the implementation plan when it&apos;s approved.</p>
+            </EmptyState>
+          )
+        ) : (
+          <ExecutionRuns
+            runs={runs.data}
+            activeRunId={activeInRuns ? activeRunId : null}
+            activeSteps={activeInRuns ? activeSteps : null}
+          />
+        )}
+
+        <StageGates types={stageGates.execution} filter={(g) => g.stepNumber !== null} />
+        <StageRuns agent="code_generator" />
       </div>
     </section>
   )

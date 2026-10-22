@@ -14,20 +14,20 @@ const stepTones: Record<StepStatus, BadgeTone> = {
   invalidated: 'warning',
 }
 
-interface Row extends Omit<PlanPreviewStep, 'files'> {
+interface Row extends Omit<PlanPreviewStep, 'files' | 'agent' | 'covers'> {
   /** `protected` comes from the server (FR-30, §4.6); a draft preview can't tell, so it leaves it unset. */
   files: { path: string; action: string; protected?: boolean }[]
   status?: StepStatus
 }
 
 function StepsTable({ caption, rows, withStatus }: { caption: string; rows: Row[]; withStatus: boolean }) {
-  const th = 'py-2 pr-3'
+  const th = 'px-3 py-2'
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md">
       <table className="w-full border-collapse text-sm">
-        <caption className="mb-2 text-left text-sm text-muted">{caption}</caption>
+        <caption className="mb-2 text-left text-sm text-muted-foreground">{caption}</caption>
         <thead>
-          <tr className="border-b border-border text-left text-xs text-muted">
+          <tr className="border-b border-border/60 text-left text-xs text-muted-foreground">
             <th scope="col" className={th}>
               Step
             </th>
@@ -50,15 +50,15 @@ function StepsTable({ caption, rows, withStatus }: { caption: string; rows: Row[
         <tbody>
           {rows.map((step) => (
             <tr key={step.number} className="border-b border-border align-top last:border-b-0">
-              <th scope="row" className="py-2 pr-3 text-left font-medium">
+              <th scope="row" className="px-3 py-2 text-left font-medium">
                 {step.number}
               </th>
-              <td className="py-2 pr-3 break-words">{step.title}</td>
-              <td className="py-2 pr-3">
+              <td className="px-3 py-2 break-words">{step.title}</td>
+              <td className="px-3 py-2">
                 <ul className="flex flex-col gap-0.5">
                   {step.files.map((f) => (
                     <li key={`${f.action}:${f.path}`} className="break-all">
-                      <code className="text-xs">{f.path}</code> <span className="text-xs text-muted">({f.action})</span>
+                      <code className="text-xs">{f.path}</code> <span className="text-xs text-muted-foreground">({f.action})</span>
                       {f.protected === true && (
                         <>
                           {' '}
@@ -69,7 +69,7 @@ function StepsTable({ caption, rows, withStatus }: { caption: string; rows: Row[
                   ))}
                 </ul>
               </td>
-              <td className="py-2 pr-3">{step.dependencies.length === 0 ? 'None' : step.dependencies.join(', ')}</td>
+              <td className="px-3 py-2">{step.dependencies.length === 0 ? 'None' : step.dependencies.join(', ')}</td>
               {withStatus && (
                 <td className="py-2">{step.status && <Badge tone={stepTones[step.status]}>{stepStatusLabels[step.status]}</Badge>}</td>
               )}
@@ -78,7 +78,7 @@ function StepsTable({ caption, rows, withStatus }: { caption: string; rows: Row[
         </tbody>
       </table>
       {rows.some((r) => r.files.some((f) => f.protected === true)) && (
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 text-xs text-muted-foreground">
           Protected paths (.git, .aide, CI workflows, lockfiles and env files) may be changed only by the step that declares
           them; a change to one from any other step is a scope-creep violation.
         </p>
@@ -92,7 +92,7 @@ function DraftPreview({ artifact }: { artifact: Artifact }) {
   const steps = readPlanBlock(artifact.content)
   if (!steps) {
     return (
-      <p className="text-sm text-muted">
+      <p className="text-sm text-muted-foreground">
         The ```{PLAN_BLOCK_LANGUAGE} block of this draft can&apos;t be read, so there is no step preview. Approving it will
         report what&apos;s wrong.
       </p>
@@ -118,7 +118,7 @@ function VersionSteps({ projectId, artifact }: { projectId: string; artifact: Ar
   }
   const { steps } = query.data
   if (steps.length === 0) {
-    return <p className="text-sm text-muted">v{artifact.version} has no execution steps: steps are created only when a plan version is approved.</p>
+    return <p className="text-sm text-muted-foreground">v{artifact.version} has no execution steps: steps are created only when a plan version is approved.</p>
   }
   return (
     <StepsTable

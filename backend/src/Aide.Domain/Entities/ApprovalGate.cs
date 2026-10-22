@@ -9,6 +9,9 @@ public sealed class ApprovalGate
 
     public Guid ProjectId { get; set; }
 
+    /// <summary>The release version the gate belongs to (§4.10).</summary>
+    public Guid ReleaseVersionId { get; set; }
+
     public GateType Type { get; set; }
 
     public Guid? ArtifactId { get; set; }
@@ -18,8 +21,8 @@ public sealed class ApprovalGate
     /// <summary>Escalation gates only (FR-14, D3).</summary>
     public EscalationDecision? Decision { get; set; }
 
-    /// <summary>Escalation <c>rollback</c> decision: the project version to roll back to.</summary>
-    public int? TargetVersion { get; set; }
+    /// <summary>Escalation <c>rollback</c> decision: the checkpoint to roll back to.</summary>
+    public int? TargetCheckpoint { get; set; }
 
     public Guid? ReviewerId { get; set; }
 

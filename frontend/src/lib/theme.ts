@@ -1,10 +1,14 @@
 import { useSyncExternalStore } from 'react'
 
-/** SPEC §7: dark and light theme, system default; the user's override is kept in localStorage. */
+/**
+ * SPEC §7.1: system / light / dark, system by default; the user's override is kept in localStorage.
+ * public/theme-init.js applies the same rule before first paint (keep the two in step).
+ */
 export type ThemePreference = 'system' | 'light' | 'dark'
 
 export const THEME_STORAGE_KEY = 'aide.theme'
 const DARK_QUERY = '(prefers-color-scheme: dark)'
+const LIGHT_QUERY = '(prefers-color-scheme: light)'
 
 const listeners = new Set<() => void>()
 
@@ -21,15 +25,17 @@ export function readThemePreference(): ThemePreference {
   }
 }
 
+/** Dark first: only an explicit system preference for light gives light. */
 function systemPrefersDark(): boolean {
-  return typeof globalThis.matchMedia === 'function' && globalThis.matchMedia(DARK_QUERY).matches
+  return !(typeof globalThis.matchMedia === 'function' && globalThis.matchMedia(LIGHT_QUERY).matches)
 }
 
-/** Applies the effective theme to <html> (`.dark` drives Tailwind's dark variant and the colour tokens). */
+/** Applies the effective theme to <html>: `.dark` or `.light` selects the token set (dark is also the unclassed default). */
 export function applyTheme(preference: ThemePreference = readThemePreference()): void {
   const dark = preference === 'dark' || (preference === 'system' && systemPrefersDark())
   const root = document.documentElement
   root.classList.toggle('dark', dark)
+  root.classList.toggle('light', !dark)
   root.style.colorScheme = dark ? 'dark' : 'light'
 }
 

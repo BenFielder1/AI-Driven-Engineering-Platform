@@ -5,7 +5,7 @@ import { antiforgeryFailure, authDb, nextId } from './auth'
 import { createExecutionSteps, invalidPlan, validatePlan } from './execution'
 import { addEvent } from './lifecycle'
 import { problem } from './problem'
-import { access, ownerMutation, record, type Access, type StoredProject } from './projects'
+import { access, currentVersionId, developmentVersionOf, ownerMutation, record, releaseVersionName, type Access, type StoredProject } from './projects'
 
 type Artifact = Schemas['ArtifactDto']
 type Summary = Schemas['ArtifactSummaryDto']
@@ -13,7 +13,13 @@ type ArtifactType = Schemas['ArtifactType']
 type DiffLine = Schemas['DiffLineDto']
 type Actor = Schemas['ActorDto']
 
-const types: readonly ArtifactType[] = ['project_request', 'technical_specification', 'implementation_plan', 'optimization_plan']
+const types: readonly ArtifactType[] = [
+  'project_request',
+  'technical_specification',
+  'implementation_plan',
+  'optimization_plan',
+  'codebase_summary',
+]
 
 /** SPEC §4.4: what approving a new version of each type invalidates. */
 const cascade: Record<ArtifactType, readonly ArtifactType[]> = {
@@ -21,6 +27,16 @@ const cascade: Record<ArtifactType, readonly ArtifactType[]> = {
   technical_specification: ['implementation_plan', 'optimization_plan'],
   implementation_plan: ['optimization_plan'],
   optimization_plan: [],
+  codebase_summary: [],
+}
+
+/** §4.12: the phase that produces each type (restore is allowed only there, FR-58). */
+const producingPhase: Record<ArtifactType, Schemas['Phase']> = {
+  codebase_summary: 'refinement',
+  project_request: 'refinement',
+  technical_specification: 'specification',
+  implementation_plan: 'planning',
+  optimization_plan: 'review',
 }
 
 /** A deterministic 64-hex-digit stand-in for the SHA-256 content hash (the mock never verifies it). */
@@ -60,6 +76,12 @@ export function seedArtifact(
     authorUserId?: string
     approvedByUserId?: string
     rejectionComment?: string
+    /** Default: the project's current release version. */
+    releaseVersionId?: string
+    /** FR-58: the version a restore copied. */
+    restoredFromVersion?: number
+    /** FR-76, §4.13: the plan's computed warnings (e.g. UNCOVERED_REQUIREMENTS). */
+    warnings?: Artifact['warnings']
   },
 ): Artifact {
   artifactClock += 3_600_000
@@ -74,7 +96,10 @@ export function seedArtifact(
     content: init.content,
     contentHash: fakeHash(init.content),
     status,
-    projectVersionAtCreation: project.projectVersion,
+    releaseVersionId: init.releaseVersionId ?? currentVersionId(project),
+    releaseVersion: releaseVersionName(project, init.releaseVersionId ?? currentVersionId(project)),
+    restoredFromVersion: init.restoredFromVersion ?? null,
+    checkpointAtCreation: project.checkpoint,
     author: init.authorUserId
       ? { user: userActor(init.authorUserId), agentRunId: null }
       : { user: null, agentRunId: nextId() },
@@ -83,6 +108,7 @@ export function seedArtifact(
     rejectionComment: init.rejectionComment ?? null,
     createdAt,
     integrity: init.integrity ?? 'ok',
+    warnings: init.warnings ?? [],
   }
   project.artifacts.push(artifact)
   syncState(project, init.type)
@@ -130,8 +156,18 @@ function syncState(p: StoredProject, type: ArtifactType) {
 }
 
 function toSummary(a: Artifact): Summary {
-  const { id, type, version, status, integrity, createdAt, author } = a
-  return { id, type, version, status, integrity, createdAt, author }
+  const { id, type, version, status, integrity, createdAt, author, releaseVersionId, releaseVersion, restoredFromVersion } = a
+  return { id, type, version, status, integrity, createdAt, author, releaseVersionId, releaseVersion, restoredFromVersion }
+}
+
+/** FR-59, FR-62: the `releaseVersionId` query (default: the current release version). */
+function versionScope(request: Request, p: StoredProject): string {
+  return new URL(request.url).searchParams.get('releaseVersionId') ?? currentVersionId(p)
+}
+
+/** The versions of `type` in one release version, newest first. */
+function scopedVersionsOf(p: StoredProject, type: ArtifactType, releaseVersionId: string): Artifact[] {
+  return versionsOf(p, type).filter((a) => a.releaseVersionId === releaseVersionId)
 }
 
 function parseType(value: unknown): ArtifactType | Response {
@@ -141,6 +177,8 @@ function parseType(value: unknown): ArtifactType | Response {
 
 /** FR-20: every read re-checks the hash; a corrupted read raises the integrity alert once. */
 function read(p: StoredProject, a: Artifact): Artifact {
+  // The semver follows the release version rows (tests may re-seed them after the artifact).
+  a.releaseVersion = releaseVersionName(p, a.releaseVersionId) || a.releaseVersion
   if (a.integrity === 'corrupted' && a.status !== 'corrupted') {
     a.status = 'corrupted'
     addEvent(p, {
@@ -246,19 +284,20 @@ function findById(p: StoredProject, artifactId: unknown): Artifact | Response {
 
 export const artifactHandlers = [
   // FR-21: latest version of each type that has one.
-  http.get('*/api/projects/:id/artifacts', ({ params }) => {
+  http.get('*/api/projects/:id/artifacts', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
+    const scope = versionScope(request, a.project)
     const latest = types.flatMap((t) => {
-      const v = latestOf(a.project, t)
+      const v = scopedVersionsOf(a.project, t, scope)[0]
       return v ? [toSummary(read(a.project, v))] : []
     })
     return HttpResponse.json<Summary[]>(latest)
   }),
 
-  http.get('*/api/projects/:id/artifacts/:type/latest', ({ params }) => {
+  http.get('*/api/projects/:id/artifacts/:type/latest', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
@@ -267,11 +306,11 @@ export const artifactHandlers = [
     if (type instanceof Response) {
       return type
     }
-    const latest = latestOf(a.project, type)
+    const latest = scopedVersionsOf(a.project, type, versionScope(request, a.project))[0]
     return latest ? HttpResponse.json<Artifact>(read(a.project, latest)) : notFound()
   }),
 
-  http.get('*/api/projects/:id/artifacts/:type/history', ({ params }) => {
+  http.get('*/api/projects/:id/artifacts/:type/history', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
@@ -280,7 +319,10 @@ export const artifactHandlers = [
     if (type instanceof Response) {
       return type
     }
-    return HttpResponse.json<Summary[]>(versionsOf(a.project, type).map((v) => toSummary(read(a.project, v))))
+    // FR-59: `allReleaseVersions=true` lists the versions of every release version (each with its `releaseVersion`).
+    const all = new URL(request.url).searchParams.get('allReleaseVersions') === 'true'
+    const versions = all ? versionsOf(a.project, type) : scopedVersionsOf(a.project, type, versionScope(request, a.project))
+    return HttpResponse.json<Summary[]>(versions.map((v) => toSummary(read(a.project, v))))
   }),
 
   http.get('*/api/projects/:id/artifacts/:type/versions/:version', ({ params }) => {
@@ -372,6 +414,64 @@ export const artifactHandlers = [
       category: 'artifact',
       summary: `${type} v${String(created.version)} created`,
       payload: { artifactId: created.id, type, version: created.version },
+      actor: userActor(a.userId),
+    })
+    return HttpResponse.json<Artifact>(created, { status: 201 })
+  }),
+
+  // FR-58: restore an older version as a new draft (writers).
+  http.post('*/api/projects/:id/artifacts/:type/versions/:version/restore', async ({ request, params }) => {
+    const a = writerMutation(request, params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    const type = parseType(params.type)
+    if (type instanceof Response) {
+      return type
+    }
+    await record(request)
+    const p = a.project
+    const chosen = versionsOf(p, type).find((v) => v.version === Number(params.version))
+    if (!chosen) {
+      return notFound()
+    }
+    const latest = latestOf(p, type)
+    if (latest?.version === chosen.version) {
+      return problem(400, 'VALIDATION', 'One or more validation errors occurred.', {
+        errors: { version: ['This version is already the latest.'] },
+      })
+    }
+    const notAllowed = (reason: string) =>
+      problem(409, 'RESTORE_NOT_ALLOWED', 'This version cannot be restored.', { reason })
+    const development = developmentVersionOf(p)
+    if (chosen.releaseVersionId !== development?.id) {
+      return notAllowed('other_release_version')
+    }
+    if (p.status === 'releasing') {
+      return notAllowed('releasing')
+    }
+    const order = ['refinement', 'specification', 'planning', 'execution', 'review', 'release']
+    const at = order.indexOf(p.currentPhase)
+    const producing = order.indexOf(producingPhase[type])
+    if (at < producing) {
+      return notAllowed('stage_not_reached')
+    }
+    if (at > producing) {
+      return notAllowed('stage_completed')
+    }
+    if (chosen.integrity === 'corrupted') {
+      return notAllowed('corrupted')
+    }
+    for (const draft of p.artifacts.filter((v) => v.type === type && v.status === 'draft')) {
+      draft.status = 'superseded'
+    }
+    const created = seedArtifact(p, { type, content: chosen.content, authorUserId: a.userId, restoredFromVersion: chosen.version })
+    created.contentHash = chosen.contentHash
+    addEvent(p, {
+      type: 'ARTIFACT_RESTORED',
+      category: 'artifact',
+      summary: `${type} v${String(chosen.version)} restored as v${String(created.version)}`,
+      payload: { artifactId: created.id, type, version: created.version, restoredFromVersion: chosen.version },
       actor: userActor(a.userId),
     })
     return HttpResponse.json<Artifact>(created, { status: 201 })

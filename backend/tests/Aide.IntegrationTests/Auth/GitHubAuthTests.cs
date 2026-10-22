@@ -47,6 +47,7 @@ public sealed class GitHubAuthTests(AideApiFactory factory)
         var providers = await session.Client.GetFromJsonAsync<AuthProvidersDto>("/api/auth/providers", ApiSession.Json, Ct);
 
         Assert.True(providers?.Github);
+        Assert.Equal(Aide.Domain.GitHub.GitHubSignInMode.Oauth, providers?.GithubMode); // D-V2-7: no App registered
     }
 
     [Fact]

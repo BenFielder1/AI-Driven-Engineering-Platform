@@ -33,6 +33,18 @@ public sealed record RollbackRequest(
     /// the release to finish (<c>ROLLBACK_BLOCKED</c>, reason <see cref="RollbackRules.ReleasePartiallyApplied"/>).
     /// </summary>
     public bool ReleasePartiallyApplied { get; init; }
+
+    /// <summary>
+    /// §4.10, D-V2-3: the project is released with nothing in development: its version is closed, so no checkpoint of it can
+    /// be restored (<c>ROLLBACK_BLOCKED</c>, reason <see cref="RollbackRules.VersionReleased"/>); the way forward is a new version.
+    /// </summary>
+    public bool VersionReleased { get; init; }
+
+    /// <summary>
+    /// §4.10, FR-65: the version in development is <c>awaiting_merge</c> (its release is partly applied on GitHub), so it can't
+    /// be rolled back (<c>ROLLBACK_BLOCKED</c>, reason <see cref="RollbackRules.ReleasePartiallyApplied"/>).
+    /// </summary>
+    public bool AwaitingMerge { get; init; }
 }
 
 /// <summary>
@@ -59,7 +71,11 @@ public sealed record RollbackPlan(
     public int ReviewCycle { get; init; } = ReviewCycleRules.CycleAfterRollback;
 }
 
-/// <summary>§4.8, FR-44, FR-45, D5: deterministic rollback from state transitions and <c>project_version_at_creation</c>.</summary>
+/// <summary>
+/// §4.8, §4.10, FR-44, FR-45, FR-63, D5: deterministic rollback from the state transitions and <c>checkpoint_at_creation</c>
+/// of the release version in development. The caller passes only that version's transitions, artifacts and steps, so the
+/// previous released version's work (baseline inputs) is never touched.
+/// </summary>
 public static class RollbackRules
 {
     /// <summary><c>ROLLBACK_BLOCKED</c> reason: a step is in progress.</summary>
@@ -74,6 +90,9 @@ public static class RollbackRules
     /// <summary><c>ROLLBACK_BLOCKED</c> reason: a queued release job's attempt already merged but isn't tagged.</summary>
     public const string ReleasePartiallyApplied = "release_partially_applied";
 
+    /// <summary><c>ROLLBACK_BLOCKED</c> reason (§4.10, D-V2-3): the project is released with nothing in development.</summary>
+    public const string VersionReleased = "version_released";
+
     /// <summary>The ProblemDetails <c>details</c> entry naming why a rollback is blocked: <c>reason: &lt;reason&gt;</c>.</summary>
     public static string BlockedDetail(string reason) => $"reason: {reason}";
 
@@ -84,6 +103,20 @@ public static class RollbackRules
         ArgumentNullException.ThrowIfNull(request);
         var current = request.Current;
         var target = request.TargetVersion;
+
+        // §4.10: a released (closed) or partly merged version can't be rolled back at all, whatever the target; these come
+        // before the target checks so the reason is the useful one ("start a new version"), not "invalid target".
+        if (request.AwaitingMerge)
+        {
+            return Blocked(
+                ReleasePartiallyApplied,
+                "The release is waiting for its pull request to be merged. Finish the merge (or close the pull request) first.");
+        }
+
+        if (request.VersionReleased)
+        {
+            return Blocked(VersionReleased, "This version is released and closed. Start a new version to make changes.");
+        }
 
         if (target < 1 || target >= current.Version)
         {
@@ -190,7 +223,7 @@ public static class RollbackRules
     /// version is always listed, with <paramref name="currentPhase"/> if nothing was recorded at it).
     /// </summary>
     public static IReadOnlyList<ProjectVersionInfo> Versions(
-        IReadOnlyList<RecordedTransition> transitions, int currentVersion, Phase currentPhase, DateTimeOffset createdAt)
+        IReadOnlyList<RecordedTransition> transitions, int currentVersion, Phase currentPhase, DateTimeOffset createdAt, bool versionReleased = false)
     {
         ArgumentNullException.ThrowIfNull(transitions);
         var versions = new List<ProjectVersionInfo>();
@@ -205,7 +238,8 @@ public static class RollbackRules
 
             VersionBlock? block = version == currentVersion
                 ? VersionBlock.CurrentVersion
-                : restored == Phase.Release ? VersionBlock.ReleasePhase : null;
+                : restored == Phase.Release ? VersionBlock.ReleasePhase
+                : versionReleased ? VersionBlock.VersionReleased : null;
             versions.Add(new ProjectVersionInfo(version, restored, latest?.CreatedAt ?? createdAt, block));
         }
 
@@ -228,6 +262,9 @@ public enum VersionBlock
 
     /// <summary>The version is in the release phase; restoring it would leave an unrecoverable release/rolled_back state.</summary>
     ReleasePhase = 1,
+
+    /// <summary>§4.10, D-V2-3: the release version is released and closed; none of its checkpoints can be restored.</summary>
+    VersionReleased = 2,
 }
 
 /// <summary>A project version for the rollback picker (FR-44): its restored phase, when it was entered, and any block.</summary>

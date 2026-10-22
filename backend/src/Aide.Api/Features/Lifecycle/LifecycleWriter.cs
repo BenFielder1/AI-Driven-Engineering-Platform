@@ -27,7 +27,7 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
 
         project.CurrentPhase = transition.To;
         project.Status = transition.Status;
-        project.ProjectVersion = transition.Version;
+        project.Checkpoint = transition.Version;
         project.UpdatedAt = now;
         if (transition.ClearsReviewState)
         {
@@ -35,14 +35,23 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
             project.ExtraReviewCycles = 0;
         }
 
+        if (transition.ClearsExecutionPause)
+        {
+            project.ExecutionPaused = false;
+        }
+
+        // §4.10: the transition belongs to the project's current release version (a new version's row is set on the project
+        // by the caller before this runs). The stamping interceptor only fills it if a caller left it unset.
+        var releaseVersionId = project.CurrentReleaseVersionId ?? Guid.Empty;
         db.StateTransitions.Add(new StateTransition
         {
             ProjectId = project.Id,
+            ReleaseVersionId = releaseVersionId,
             FromPhase = transition.From,
             ToPhase = transition.To,
             Actor = actor,
             Reason = transition.Reason,
-            ProjectVersion = transition.Version,
+            Checkpoint = transition.Version,
             CreatedAt = now,
         });
         db.AddEvent(
@@ -53,7 +62,8 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
                 from = transition.From,
                 to = transition.To,
                 status = transition.Status,
-                projectVersion = transition.Version,
+                checkpoint = transition.Version,
+                releaseVersionId = project.CurrentReleaseVersionId,
                 kind = transition.Kind,
                 reason = transition.Reason,
             },
@@ -105,6 +115,7 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
         var gate = new ApprovalGate
         {
             ProjectId = project.Id,
+            ReleaseVersionId = project.CurrentReleaseVersionId ?? Guid.Empty,
             Type = type,
             ArtifactId = artifactId,
             Status = GateStatus.Pending,
@@ -114,20 +125,26 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
         project.UpdatedAt = now;
         object payload = blockedStep is null
             ? escalationReason is { } review
-                ? new { gateId = gate.Id, type, artifactId, projectVersion = project.ProjectVersion, reason, escalationReason = review }
-                : new { gateId = gate.Id, type, artifactId, projectVersion = project.ProjectVersion, reason }
+                ? new { gateId = gate.Id, type, artifactId, checkpoint = project.Checkpoint, reason, escalationReason = review }
+                : new { gateId = gate.Id, type, artifactId, checkpoint = project.Checkpoint, reason }
             : new
             {
                 gateId = gate.Id,
                 type,
                 artifactId,
-                projectVersion = project.ProjectVersion,
+                checkpoint = project.Checkpoint,
                 reason,
                 escalationReason = EscalationReason.StepBlocked,
                 stepId = blockedStep.Id,
                 stepNumber = blockedStep.StepNumber,
             };
         db.AddEvent(EventTypes.GateCreated, project.Id, payload, actor, now);
+        if (type == GateType.PreRelease)
+        {
+            // FR-84: merge readiness is checked when the pre-release gate is created (stored for the gate and Release page).
+            jobs.Enqueue(JobTypes.MergeReadiness, new Features.Git.MergeReadinessJobPayload(project.Id, gate.Id), project.Id, now);
+        }
+
         return gate;
     }
 }

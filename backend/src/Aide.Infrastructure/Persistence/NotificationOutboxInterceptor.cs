@@ -39,7 +39,7 @@ public sealed class NotificationOutboxInterceptor(TimeProvider time) : SaveChang
         }
 
         var added = context.ChangeTracker.Entries<AuditEvent>()
-            .Where(e => e.State == EntityState.Added && e.Entity.ProjectId is not null)
+            .Where(e => e.State == EntityState.Added)
             .Select(e => e.Entity)
             .ToList();
         if (added.Count == 0)
@@ -54,7 +54,9 @@ public sealed class NotificationOutboxInterceptor(TimeProvider time) : SaveChang
         var now = time.GetUtcNow();
         foreach (var entry in added)
         {
-            if (NotificationRules.ForEvent(entry.Type) is not { } type)
+            // Project events notify their project; an event outside any project only notifies personally (FR-92: a GitHub
+            // connection marked invalid tells its owner).
+            if (NotificationRules.ForEvent(entry.Type) is not { } type || (entry.ProjectId is null && !NotificationRules.IsPersonal(type)))
             {
                 continue;
             }
@@ -65,7 +67,7 @@ public sealed class NotificationOutboxInterceptor(TimeProvider time) : SaveChang
                 continue;
             }
 
-            var payload = AideJson.Serialize(new NotificationJobPayload(entry.ProjectId!.Value, type, source));
+            var payload = AideJson.Serialize(new NotificationJobPayload(entry.ProjectId, type, source));
             if (queued.Contains(payload, StringComparer.Ordinal))
             {
                 continue;

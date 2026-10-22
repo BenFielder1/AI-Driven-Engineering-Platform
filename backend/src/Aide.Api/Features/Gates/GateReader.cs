@@ -12,9 +12,14 @@ namespace Aide.Api.Features.Gates;
 /// <summary>Reads gates as <see cref="GateDto"/>s: gated artifact, escalation reason, reviewer name and the overdue flag (FR-15).</summary>
 public sealed class GateReader(AideDbContext db, TimeProvider time)
 {
-    public async Task<IReadOnlyList<GateDto>> ListAsync(Guid projectId, GateStatus? status, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<GateDto>> ListAsync(Guid projectId, GateStatus? status, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
         var query = db.ApprovalGates.AsNoTracking().Where(g => g.ProjectId == projectId);
+        if (releaseVersionId is { } versionId)
+        {
+            query = query.Where(g => g.ReleaseVersionId == versionId);
+        }
+
         if (status is { } wanted)
         {
             query = query.Where(g => g.Status == wanted);
@@ -84,11 +89,12 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
                     : null,
                 g.Comment,
                 g.Decision,
-                g.TargetVersion,
+                g.TargetCheckpoint,
                 g.Status == GateStatus.Pending && (g.Overdue || now - g.CreatedAt >= GateTimers.OverdueAfter),
                 g.RemindedAt,
                 blocked?.StepId,
-                blocked?.StepNumber);
+                blocked?.StepNumber,
+                g.ReleaseVersionId);
         })];
     }
 

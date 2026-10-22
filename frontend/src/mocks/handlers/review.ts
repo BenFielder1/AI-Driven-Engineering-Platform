@@ -3,9 +3,9 @@ import { http, HttpResponse } from 'msw'
 import type { Schemas } from '../../api/client'
 import { antiforgeryFailure, nextId } from './auth'
 import { problem } from './problem'
-import { access, record, type Access, type StoredProject } from './projects'
+import { access, currentVersionId, record, type Access, type StoredComplianceReport, type StoredProject } from './projects'
 
-type Report = Schemas['ComplianceReportDto']
+type Report = StoredComplianceReport
 type CategoryScore = Schemas['CategoryScoreDto']
 
 /** §4.7: categories and weights. */
@@ -35,9 +35,14 @@ export function overallScore(scores: readonly CategoryScore[]): number {
   return Math.round(scores.reduce((sum, c) => sum + c.score * c.weight, 0) * 1000) / 1000
 }
 
-/** Reports the API would show: at or below the current project version (§4.8), oldest first. */
-function visibleReports(p: StoredProject): Report[] {
-  return (p.complianceReports ?? []).filter((r) => r.projectVersion <= p.projectVersion)
+/**
+ * Reports the API would show, oldest first: those of the current release version at or below its checkpoint (§4.8),
+ * or every report of a past one (`releaseVersionId`, FR-62).
+ */
+function visibleReports(p: StoredProject, request?: Request): Report[] {
+  const scope = (request && new URL(request.url).searchParams.get('releaseVersionId')) ?? currentVersionId(p)
+  const current = scope === currentVersionId(p)
+  return (p.complianceReports ?? []).filter((r) => r.releaseVersionId === scope && (!current || r.checkpoint <= p.checkpoint))
 }
 
 /** Puts the project in the review phase (status `reviewing`), as after execution completes (FR-36). */
@@ -55,7 +60,8 @@ export function seedComplianceReport(p: StoredProject, overrides: Partial<Report
   const scores = overrides.categoryScores ?? categoryScores(0.93)
   const report: Report = {
     id: nextId(),
-    projectVersion: p.projectVersion,
+    releaseVersionId: currentVersionId(p),
+    checkpoint: p.checkpoint,
     cycle: reports.length + 1,
     overallScore: overallScore(scores),
     threshold: p.complianceThreshold,
@@ -97,6 +103,32 @@ function writer(request: Request, id: unknown): Access {
 
 const noReport = () => problem(404, 'NOT_FOUND', 'No compliance report exists for this project yet.')
 
+/** FR-56: the full report DTO of a stored report. */
+function detailDto(p: StoredProject, r: Report): Schemas['ComplianceReportDetailDto'] {
+  const plan = r.optimizationPlanArtifactId ? p.artifacts.find((x) => x.id === r.optimizationPlanArtifactId) : undefined
+  return {
+    id: r.id,
+    releaseVersionId: r.releaseVersionId,
+    checkpoint: r.checkpoint,
+    cycle: r.cycle,
+    overallScore: r.overallScore,
+    threshold: r.threshold,
+    categoryScores: r.categoryScores,
+    violations: r.violations,
+    deterministicFindings: r.violations.filter((v) => v.source === 'deterministic'),
+    missingFeatures: r.missingFeatures,
+    driftLevel: r.driftLevel,
+    driftAreas: r.driftAreas,
+    decision: r.decision,
+    escalationReason: r.decisionReason,
+    regressions: r.regressions ?? [],
+    externalChecks: r.externalChecks ?? null,
+    optimizationPlan: plan ? { artifactId: plan.id, version: plan.version, status: plan.status } : null,
+    executionRunId: plan && p.executionSteps.some((s) => s.planArtifactId === plan.id) ? plan.id : null,
+    createdAt: r.createdAt,
+  }
+}
+
 export const reviewHandlers = [
   // FR-38: queue a review cycle (writers, review phase only); 202 with the job id and the cycle it will record.
   http.post('*/api/projects/:id/review', async ({ request, params }) => {
@@ -119,23 +151,23 @@ export const reviewHandlers = [
     )
   }),
   // FR-41: the latest report; 404 before the first review.
-  http.get('*/api/projects/:id/compliance/latest', ({ params }) => {
+  http.get('*/api/projects/:id/compliance/latest', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
-    const latest = visibleReports(a.project).at(-1)
+    const latest = visibleReports(a.project, request).at(-1)
     return latest ? HttpResponse.json<Report>(latest) : noReport()
   }),
   // FR-41: the score per cycle, oldest first, each with its report's threshold, plus the project's current one.
-  http.get('*/api/projects/:id/compliance/trend', ({ params }) => {
+  http.get('*/api/projects/:id/compliance/trend', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
-    const series = visibleReports(a.project).map(({ cycle, projectVersion, overallScore, driftLevel, decision, createdAt, threshold }) => ({
+    const series = visibleReports(a.project, request).map(({ cycle, checkpoint, overallScore, driftLevel, decision, createdAt, threshold }) => ({
       cycle,
-      projectVersion,
+      checkpoint,
       overallScore,
       driftLevel,
       decision,
@@ -144,18 +176,54 @@ export const reviewHandlers = [
     }))
     return HttpResponse.json<Schemas['ComplianceTrendDto']>({ threshold: a.project.complianceThreshold, series })
   }),
-  // FR-41: the latest report's drift; 404 before the first review.
-  http.get('*/api/projects/:id/compliance/drift', ({ params }) => {
+  // FR-56: every review cycle, newest first.
+  http.get('*/api/projects/:id/compliance/reports', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
-    const latest = visibleReports(a.project).at(-1)
+    return HttpResponse.json<Schemas['ComplianceReportSummaryDto'][]>(
+      [...visibleReports(a.project, request)].reverse().map((r) => ({
+        id: r.id,
+        cycle: r.cycle,
+        score: r.overallScore,
+        threshold: r.threshold,
+        drift: r.driftLevel,
+        decision: r.decision,
+        createdAt: r.createdAt,
+        checkpoint: r.checkpoint,
+        releaseVersionId: r.releaseVersionId,
+      })),
+    )
+  }),
+  // FR-56: one cycle's full report; 404 when there is no report for it.
+  http.get('*/api/projects/:id/compliance/reports/:cycle', ({ request, params }) => {
+    const a = access(params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    const cycle = Number(params.cycle)
+    if (!Number.isInteger(cycle) || cycle < 1) {
+      return problem(400, 'VALIDATION', 'One or more validation errors occurred.', { errors: { cycle: ['Use a cycle from 1.'] } })
+    }
+    // Cycle numbers restart after a rollback: `reportId` picks one exact report of the cycle, else the newest one.
+    const reportId = new URL(request.url).searchParams.get('reportId')
+    const ofCycle = visibleReports(a.project, request).filter((r) => r.cycle === cycle)
+    const report = reportId ? ofCycle.find((r) => r.id === reportId) : ofCycle.at(-1)
+    return report ? HttpResponse.json(detailDto(a.project, report)) : noReport()
+  }),
+  // FR-41: the latest report's drift; 404 before the first review.
+  http.get('*/api/projects/:id/compliance/drift', ({ request, params }) => {
+    const a = access(params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    const latest = visibleReports(a.project, request).at(-1)
     return latest
       ? HttpResponse.json<Schemas['ComplianceDriftDto']>({
           driftLevel: latest.driftLevel,
           areas: latest.driftAreas,
-          projectVersion: latest.projectVersion,
+          checkpoint: latest.checkpoint,
           cycle: latest.cycle,
         })
       : noReport()

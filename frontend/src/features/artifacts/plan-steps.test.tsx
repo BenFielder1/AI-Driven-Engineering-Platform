@@ -41,7 +41,8 @@ function stepRows(name: RegExp) {
 describe('Plan steps (FR-29, FR-30)', () => {
   it('FR29_reads_the_structured_steps_from_the_aide_plan_block', () => {
     expect(readPlanBlock(planMarkdown(steps))).toEqual([
-      { number: 1, title: 'Set up the schema', files: [{ path: 'db/schema.sql', action: 'create' }], dependencies: [] },
+      // FR-76: `agent` and `covers` are absent from this v1-style block.
+      { number: 1, title: 'Set up the schema', files: [{ path: 'db/schema.sql', action: 'create' }], dependencies: [], agent: null, covers: [] },
       {
         number: 2,
         title: 'Items API',
@@ -50,6 +51,8 @@ describe('Plan steps (FR-29, FR-30)', () => {
           { path: 'src/app.ts', action: 'modify' },
         ],
         dependencies: [1],
+        agent: null,
+        covers: [],
       },
     ])
     expect(readPlanBlock('# Plan\n\nNo block here.')).toBeNull()

@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Diagnostics;
 using Aide.Api.Logging;
+using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
@@ -252,6 +253,8 @@ public sealed partial class JobWorker : BackgroundService
 
         var succeeded = false;
         var released = false;
+        DateTimeOffset? deferredUntil = null;
+        string? deferredPayload = null;
         var transient = true;
         string? error = null;
         string? spanError = null; // an error code or exception type name, never a message (NFR-SEC)
@@ -270,6 +273,22 @@ public sealed partial class JobWorker : BackgroundService
         catch (OperationCanceledException) when (leaseLost.IsCancellationRequested)
         {
             // The lease was lost (reaped or claimed elsewhere): the outcome is no longer ours to record.
+        }
+        catch (Infrastructure.GitHub.GitHubRateLimitedException ex)
+        {
+            // §4.14, NFR-REL: a rate limit isn't a failure: wait for the reset without counting the attempt.
+            deferredUntil = JobPolicy.DeferUntil(_time.GetUtcNow(), ex.ResetAt);
+            error = $"{ErrorCodes.GitHubRateLimited}: GitHub's rate limit is exhausted; the job waits until {deferredUntil:u}.";
+            spanError = ErrorCodes.GitHubRateLimited;
+            LogRateLimited(_logger, deferredUntil.Value);
+        }
+        catch (JobDeferredException ex)
+        {
+            // FR-70: the handler waits for something (e.g. the codebase summary): run again later, attempt not counted.
+            deferredUntil = JobPolicy.DeferUntil(_time.GetUtcNow(), ex.RunAfter);
+            deferredPayload = ex.Payload;
+            error = ex.Message;
+            LogDeferred(_logger, deferredUntil.Value);
         }
         catch (JobFailedException ex)
         {
@@ -302,7 +321,9 @@ public sealed partial class JobWorker : BackgroundService
 
         try
         {
-            var outcome = await CompleteAsync(job, succeeded, released, transient, error);
+            var outcome = deferredUntil is { } until
+                ? await DeferAsync(job, until, error, deferredPayload)
+                : await CompleteAsync(job, succeeded, released, transient, error);
             TagOutcome(activity, outcome, spanError);
         }
         catch (Exception ex) when (ex is DbException or DbUpdateException or InvalidOperationException or TimeoutException)
@@ -380,6 +401,37 @@ public sealed partial class JobWorker : BackgroundService
         {
             // The handler finished.
         }
+    }
+
+    /// <summary>
+    /// §4.14, NFR-REL: re-queues a job stopped by a rate limit to run at <paramref name="runAfter"/>, without counting the
+    /// attempt (its error is kept as the last error). Returns <see cref="JobOutcomes.Retry"/>, or <c>null</c> when the lease
+    /// was lost.
+    /// </summary>
+    private async Task<string?> DeferAsync(Job job, DateTimeOffset runAfter, string? error, string? payload)
+    {
+        await using var scope = _scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
+        var lastError = Truncate(error);
+        var nextPayload = payload ?? job.Payload;
+        var updated = await db.Jobs
+            .Where(j => j.Id == job.Id && j.Status == JobStatus.Running && j.LockedBy == WorkerId)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(j => j.Status, JobStatus.Queued)
+                    .SetProperty(j => j.Attempts, Math.Max(0, job.Attempts - 1))
+                    .SetProperty(j => j.RunAfter, runAfter)
+                    .SetProperty(j => j.Payload, nextPayload)
+                    .SetProperty(j => j.LastError, lastError)
+                    .SetProperty(j => j.LockedBy, (string?)null)
+                    .SetProperty(j => j.LockedAt, (DateTimeOffset?)null),
+                CancellationToken.None);
+        if (updated == 0)
+        {
+            LogLeaseLost(_logger);
+            return null;
+        }
+
+        return JobOutcomes.Retry;
     }
 
     /// <summary>Records the attempt's outcome and returns it (one of <see cref="JobOutcomes"/>), or <c>null</c> when the
@@ -561,6 +613,12 @@ public sealed partial class JobWorker : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Job succeeded")]
     private static partial void LogSucceeded(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Job stopped by GitHub's rate limit; deferred until {RunAfter} without counting the attempt")]
+    private static partial void LogRateLimited(ILogger logger, DateTimeOffset runAfter);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Job is waiting; deferred until {RunAfter} without counting the attempt")]
+    private static partial void LogDeferred(ILogger logger, DateTimeOffset runAfter);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Job handler failed (transient: {Transient})")]
     private static partial void LogHandlerFailed(ILogger logger, Exception exception, bool transient);

@@ -1,8 +1,13 @@
 import { http, HttpResponse } from 'msw'
 
 import type { Schemas } from '../../api/client'
+import { checkTagPrefix } from '../../features/projects/settings/release-settings-rules'
+import { compareSemVer, normalizeVersion, parseSemVer } from '../../features/versions/semver'
 import type { ProjectRole } from '../../lib/permissions'
 import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from './auth'
+import { applyVercelSetup } from './deployments'
+import { githubDb } from './github'
+import { findPreset, presetNameOf } from './preset-catalog'
 import { problem } from './problem'
 
 type Project = Schemas['ProjectDto']
@@ -13,6 +18,7 @@ type GitSettings = Schemas['GitSettingsDto']
 type LlmSettings = Schemas['LlmSettingsDto']
 type ProviderStatus = Schemas['LlmProviderStatusDto']
 type Channel = Schemas['NotificationChannelDto']
+type ReleaseVersion = Schemas['ReleaseVersionDto']
 
 /**
  * A stored channel. `secret` is the webhook HMAC key, or for Slack/Teams the incoming-webhook URL (the API never
@@ -33,10 +39,33 @@ interface StoredMember {
   createdAt: string
 }
 
-export interface StoredProject extends Omit<Project, 'myRole'> {
+export interface StoredProject extends Omit<
+    Project,
+    | 'myRole'
+    | 'releaseVersionId'
+    | 'releasedVersion'
+    | 'developmentVersion'
+    | 'presetId'
+    | 'presetName'
+    | 'presetVersion'
+    | 'deploymentsEnabled'
+  > {
   members: StoredMember[]
+  /**
+   * Release versions in any order (FR-62); the project's released, development and current versions are derived from
+   * them (§4.10). Seeded with one version (0.1.0: in development, or released for a released project).
+   */
+  releaseVersions: ReleaseVersion[]
+  /**
+   * FR-70: the Repository Analyst's state per release version id (GET /refinement `codebaseSummary`); a version with a
+   * `codebase_summary` artifact reads `completed`, one without an entry `not_needed`.
+   */
+  analyst?: Record<string, Schemas['CodebaseSummaryStatusDto']>
+  /** Tags that already exist in the repository: starting a version whose tag is here answers TAG_EXISTS (FR-61). */
+  repoTags?: string[]
   git: GitSettings
-  llm: Omit<LlmSettings, 'providers'>
+  /** `canBind` is per caller (derived from the role); `binding` is set by mocks/handlers/connections.ts. */
+  llm: Omit<LlmSettings, 'providers' | 'canBind'>
   channels: StoredChannel[]
   /** `pendingGates` on /state is derived from `gates`. */
   state: Pick<State, 'artifacts' | 'execution' | 'review'>
@@ -52,6 +81,12 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
   refinementRounds: StoredRefinementRound[]
   /** Execution steps of approved plan versions (FR-30); see mocks/handlers/execution.ts. */
   executionSteps: StoredExecutionStep[]
+  /** FR-57: attempt history per execution step id, oldest first; see mocks/handlers/execution.ts. */
+  stepAttempts?: Record<string, Schemas['StepAttemptDto'][]>
+  /** FR-57: the review cycle whose optimisation plan an artifact id is (review-fix runs). */
+  planCycles?: Record<string, number>
+  /** FR-57: why a plan's run is superseded, by plan artifact id (default copy when unset). */
+  supersededReasons?: Record<string, string>
   /**
    * Set once execution was started or resumed (the mock's stand-in for the runner's queued work; FR-31). Left unset,
    * an in_progress or rejected step implies queued work; `false` means no job is queued (an interrupted runner).
@@ -62,8 +97,8 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
   /** A pull request job is queued or running (FR-36): POST /git/pull-request sets it and refuses with 409 CONFLICT while set. */
   pullRequestJobQueued?: boolean
   /** Compliance reports, oldest first (FR-38, FR-41); see mocks/handlers/review.ts. */
-  complianceReports?: Schemas['ComplianceReportDto'][]
-  /** Phase recorded at each project version (rollback restores it, §4.8). */
+  complianceReports?: StoredComplianceReport[]
+  /** Phase recorded at each checkpoint of the current release version (rollback restores it, §4.8, §4.10). */
   phaseAtVersion: Record<number, Project['currentPhase']>
   /** Release attempts, oldest first (FR-42, FR-43); see mocks/handlers/release.ts. */
   releases?: Schemas['ReleaseDto'][]
@@ -73,16 +108,50 @@ export interface StoredProject extends Omit<Project, 'myRole'> {
   lastRollbackAt?: number
   /** A step or agent run is in progress: POST /rollback answers 409 ROLLBACK_BLOCKED (FR-45). */
   rollbackBlocked?: boolean
+  /** FR-84: the last merge-readiness result (GET /git/merge-readiness); unset derives a mergeable one. */
+  mergeReadiness?: Schemas['MergeReadinessDto']
+  /** FR-84: what the next `refresh=true` check returns (then becomes `mergeReadiness`). */
+  mergeReadinessOnRefresh?: Schemas['MergeReadinessDto']
+  /** FR-88: Settings → Deployment as stored (unset: never configured); see mocks/handlers/deployments.ts. */
+  deployment?: StoredDeploymentSettings
+  /** FR-88: environment variables with their values (never returned); see mocks/handlers/deployments.ts. */
+  deploymentEnv?: StoredEnvVar[]
+  /** FR-90, FR-91: deployments, any order (the API lists newest first); see mocks/handlers/deployments.ts. */
+  deployments?: Schemas['DeploymentDto'][]
 }
+
+/** FR-88: the stored deployment settings; `present` on required env and `canBind` are derived per request. */
+export interface StoredDeploymentSettings {
+  provider: Schemas['DeploymentProvider'] | null
+  /** The preset supports Vercel (an Owner can opt in otherwise by setting a provider). */
+  supported: boolean
+  binding: Schemas['DeploymentBindingDto'] | null
+  vercelProject: Schemas['VercelProjectDto'] | null
+  rootDirectory: string
+  framework: string
+  requiredEnv: Omit<Schemas['RequiredEnvVarDto'], 'present'>[]
+  gitConnected: boolean | null
+  installUrl: string | null
+}
+
+/** An env var with its plaintext value (the mock's stand-in for the encrypted column). */
+export type StoredEnvVar = Schemas['DeploymentEnvVarDto'] & { value: string }
 
 /** A refinement round as stored: the round DTO plus the questions its run asked (null until it succeeds). */
 export type StoredRefinementRound = Schemas['RefinementRoundDto'] & {
   questions: Omit<Schemas['RefinementQuestionDto'], 'answer'>[] | null
 }
 
-/** An execution step and the plan version it belongs to. */
+/** An execution step and the plan version it belongs to (and its preset specialist, FR-57/FR-76). */
 export type StoredExecutionStep = Schemas['ExecutionStepDto'] & {
   planArtifactId: string
+  agentKey?: string | null
+}
+
+/** A compliance report plus the v2 detail fields (FR-56) that the v1 DTO lacks. */
+export type StoredComplianceReport = Schemas['ComplianceReportDto'] & {
+  regressions?: Schemas['RegressionDto'][]
+  externalChecks?: Schemas['ExternalChecksDto'] | null
 }
 
 /** A request the mock API received (for assertions such as "the token was sent but never shown"). */
@@ -92,12 +161,45 @@ export interface RecordedRequest {
   body: unknown
 }
 
+/** v2 default (FR-79): system keys aren't allowed, so keyed providers are configured only by a bound connection. */
 const defaultProviders = (): ProviderStatus[] => [
-  { provider: 'anthropic', configured: true, defaultModel: 'claude-opus-5-5' },
+  { provider: 'anthropic', configured: false, defaultModel: 'claude-opus-5-5' },
   { provider: 'openai', configured: false, defaultModel: 'gpt-6-astra' },
   { provider: 'ollama', configured: true, defaultModel: 'qwen2.5-coder' },
   { provider: 'fake', configured: true, defaultModel: 'fake-1' },
 ]
+
+/**
+ * Git settings as stored (FR-82, FR-83): defaults to a PAT project on acme/inventory without a token. `mode` follows
+ * `provider`; `canSwitchToApp` is derived per caller by `gitDto`.
+ */
+export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
+  const provider = overrides.mode ?? overrides.provider ?? 'github_pat'
+  const app = provider === 'github_app'
+  const repoFullName = overrides.repoFullName ?? (app ? 'acme/inventory' : null)
+  return {
+    repoUrl: provider === 'local' ? null : `https://github.com/${repoFullName ?? 'acme/inventory'}`,
+    defaultBranch: 'main',
+    branchName: null,
+    hasToken: false,
+    installationId: app ? 9001 : null,
+    repoId: app ? 4242 : null,
+    appInstalledOnRepo: null,
+    canSwitchToApp: false,
+    mergeStrategy: 'aide_merges',
+    tagPrefix: 'v',
+    ...overrides,
+    repoFullName,
+    provider,
+    mode: provider,
+  }
+}
+
+/** GET/PATCH /settings/git body: "Switch to GitHub App" is offered to Owners of a PAT project the App can access. */
+export function gitDto(project: StoredProject, isOwner: boolean): GitSettings {
+  const g = project.git
+  return { ...g, canSwitchToApp: isOwner && g.mode === 'github_pat' && g.appInstalledOnRepo === true }
+}
 
 /** In-memory projects backend for tests (reset after each test by src/test/setup.ts). */
 export const projectsDb = {
@@ -125,8 +227,75 @@ const emptyState = (): StoredProject['state'] => ({
   review: { cycle: 0, maxCycles: 3, latestScore: null, latestDecision: null, driftLevel: null, status: 'idle' },
 })
 
+/** A release version row for seeds (FR-62). */
+export function makeReleaseVersion(overrides: Partial<ReleaseVersion> & Pick<ReleaseVersion, 'version'>): ReleaseVersion {
+  const status = overrides.status ?? 'in_development'
+  const released = status === 'released' || status === 'imported'
+  return {
+    id: nextId(),
+    status,
+    tag: released ? `v${overrides.version}` : null,
+    tagPrefix: 'v',
+    baseTag: null,
+    baseCommitSha: null,
+    mergeCommitSha: released ? 'abc1234def5678' : null,
+    branchName: `aide/project/v${overrides.version}`,
+    pullRequestUrl: null,
+    checkpoints: { current: 1, max: 1 },
+    presetId: null,
+    presetVersion: null,
+    presetName: presetNameOf(overrides.presetId),
+    request: 'Track stock levels across warehouses.',
+    startedBy: { id: null, name: 'Ada Owner', isSystem: false },
+    createdAt: '2026-09-01T10:00:00Z',
+    releasedAt: released ? '2026-09-10T10:00:00Z' : null,
+    ...overrides,
+  }
+}
+
+const byVersionDesc = (a: ReleaseVersion, b: ReleaseVersion) => {
+  const pa = parseSemVer(a.version)
+  const pb = parseSemVer(b.version)
+  return pa && pb ? compareSemVer(pb, pa) : b.version.localeCompare(a.version)
+}
+
+/** §4.10: the version in development or awaiting merge, if any. */
+export function developmentVersionOf(p: StoredProject): ReleaseVersion | undefined {
+  return p.releaseVersions.find((v) => v.status === 'in_development' || v.status === 'awaiting_merge')
+}
+
+/** §4.10: the highest released or imported version, if any. */
+export function releasedVersionOf(p: StoredProject): ReleaseVersion | undefined {
+  return [...p.releaseVersions].filter((v) => v.status === 'released' || v.status === 'imported').sort(byVersionDesc)[0]
+}
+
+/** The release version the lifecycle state belongs to: the one in development, else the latest released. */
+export function currentVersionOf(p: StoredProject): ReleaseVersion | undefined {
+  return developmentVersionOf(p) ?? releasedVersionOf(p)
+}
+
+/** Every release version, highest first (GET /versions). */
+export function releaseVersionsOf(p: StoredProject): ReleaseVersion[] {
+  return [...p.releaseVersions].sort(byVersionDesc).map((v) => (v === currentVersionOf(p) ? { ...v, checkpoints: { ...v.checkpoints, current: p.checkpoint } } : v))
+}
+
+/** The current release version's id ('' when the project has none). */
+export const currentVersionId = (p: StoredProject) => currentVersionOf(p)?.id ?? ''
+
+/** The semver of one of the project's release versions ('' when unknown), e.g. ArtifactDto.releaseVersion (FR-59). */
+export const releaseVersionName = (p: StoredProject, releaseVersionId: string | null) =>
+  p.releaseVersions.find((v) => v.id === releaseVersionId)?.version ?? ''
+
+/** FR-60: the next minor of the released version, else 0.1.0. */
+export function suggestedNextVersion(p: StoredProject): string {
+  const released = releasedVersionOf(p)
+  const parsed = released ? parseSemVer(released.version) : null
+  return parsed ? `${String(parsed.major)}.${String(parsed.minor + 1n)}.0` : '0.1.0'
+}
+
 /**
  * Seeds a project. `members` defaults to the signed-in user as Owner; pass `[]` for a project the user can't see.
+ * Without `releaseVersions`, the project gets version 0.1.0: released when `status` is `released`, else in development.
  */
 export function seedProject(
   overrides: Partial<Omit<StoredProject, 'members'>> & { members?: { userId: string; role: ProjectRole }[] } = {},
@@ -141,7 +310,7 @@ export function seedProject(
     idea: 'Track stock levels across warehouses.',
     currentPhase: 'refinement',
     status: 'active',
-    projectVersion: 1,
+    checkpoint: 1,
     approvalMode: 'advisory',
     complianceThreshold: 0.9,
     maxFilesPerStep: 20,
@@ -151,8 +320,8 @@ export function seedProject(
     executionPaused: false,
     createdAt: now,
     updatedAt: now,
-    git: { provider: 'github', repoUrl: 'https://github.com/acme/inventory', defaultBranch: 'main', branchName: null, hasToken: false },
-    llm: { provider: 'anthropic', defaultModel: 'claude-opus-5-5', modelsByAgent: {}, hasApiKey: false },
+    git: gitSettings(),
+    llm: { provider: 'anthropic', defaultModel: 'claude-opus-5-5', modelsByAgent: {}, hasApiKey: false, binding: null },
     channels: [],
     state: emptyState(),
     gates: [],
@@ -162,11 +331,22 @@ export function seedProject(
     refinementRounds: [],
     executionSteps: [],
     phaseAtVersion: {},
+    releaseVersions: [],
     ...rest,
     members: (members ?? (owner ? [{ userId: owner, role: 'owner' as const }] : [])).map((m) => ({
       ...m,
       createdAt: now,
     })),
+  }
+  if (!rest.releaseVersions) {
+    project.releaseVersions = [
+      makeReleaseVersion({
+        version: '0.1.0',
+        status: project.status === 'released' ? 'released' : 'in_development',
+        checkpoints: { current: project.checkpoint, max: project.checkpoint },
+        request: project.idea,
+      }),
+    ]
   }
   projectsDb.projects.push(project)
   return project
@@ -183,16 +363,26 @@ export function roleOf(project: StoredProject, userId: string): ProjectRole | nu
   return project.members.find((m) => m.userId === userId)?.role ?? null
 }
 
-function toDto(project: StoredProject, userId: string): Project {
+/** FR-74: the preset chip of a project: the current release version's pinned preset (all null: none). */
+function presetFields(p: StoredProject): Pick<Project, 'presetId' | 'presetName' | 'presetVersion'> {
+  const v = currentVersionOf(p)
+  return { presetId: v?.presetId ?? null, presetName: presetNameOf(v?.presetId), presetVersion: v?.presetVersion ?? null }
+}
+
+export function projectDto(project: StoredProject, userId: string): Project {
   const p = project
   return {
+    ...presetFields(p),
     id: p.id,
     name: p.name,
     slug: p.slug,
     idea: p.idea,
     currentPhase: p.currentPhase,
     status: p.status,
-    projectVersion: p.projectVersion,
+    checkpoint: p.checkpoint,
+    releaseVersionId: currentVersionOf(p)?.id ?? null,
+    releasedVersion: releasedVersionOf(p)?.version ?? null,
+    developmentVersion: developmentVersionOf(p)?.version ?? null,
     approvalMode: p.approvalMode,
     complianceThreshold: p.complianceThreshold,
     maxFilesPerStep: p.maxFilesPerStep,
@@ -203,12 +393,27 @@ function toDto(project: StoredProject, userId: string): Project {
     myRole: roleOf(p, userId),
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
+    deploymentsEnabled: p.deployment?.provider != null,
   }
 }
 
 function toSummary(project: StoredProject, userId: string): Summary {
-  const { id, name, slug, currentPhase, status, projectVersion, approvalMode, createdAt, updatedAt } = project
-  return { id, name, slug, currentPhase, status, projectVersion, approvalMode, createdAt, updatedAt, myRole: roleOf(project, userId) }
+  const { id, name, slug, currentPhase, status, checkpoint, approvalMode, createdAt, updatedAt } = project
+  return {
+    id,
+    name,
+    slug,
+    currentPhase,
+    status,
+    checkpoint,
+    releasedVersion: releasedVersionOf(project)?.version ?? null,
+    developmentVersion: developmentVersionOf(project)?.version ?? null,
+    approvalMode,
+    createdAt,
+    updatedAt,
+    myRole: roleOf(project, userId),
+    ...presetFields(project),
+  }
 }
 
 function toMember(m: StoredMember): Member {
@@ -223,10 +428,14 @@ function toMember(m: StoredMember): Member {
   }
 }
 
-function llmDto(project: StoredProject): LlmSettings {
+/** FR-79: a provider is configured for a project by an allowed system key or a bound connection of that provider. */
+export function llmDto(project: StoredProject, canBind: boolean): LlmSettings {
+  const binding = project.llm.binding
   return {
     ...project.llm,
-    providers: projectsDb.providers.map((p) => ({ ...p, configured: p.configured || project.llm.hasApiKey })),
+    hasApiKey: binding !== null,
+    canBind,
+    providers: projectsDb.providers.map((p) => ({ ...p, configured: p.configured || binding?.provider === p.provider })),
   }
 }
 
@@ -344,7 +553,11 @@ export function stateDto(p: StoredProject): State {
     projectId: p.id,
     phase: p.currentPhase,
     status: p.status,
-    projectVersion: p.projectVersion,
+    checkpoint: p.checkpoint,
+    releaseVersionId: currentVersionOf(p)?.id ?? null,
+    releasedVersion: releasedVersionOf(p)?.version ?? null,
+    developmentVersion: developmentVersionOf(p)?.version ?? null,
+    suggestedNextVersion: suggestedNextVersion(p),
     executionPaused: p.executionPaused,
     executionStatus: executionRunStatus(p),
     ...p.state,
@@ -355,6 +568,7 @@ export function stateDto(p: StoredProject): State {
     tokenBudget: p.tokenBudget,
     pullRequest: pullRequestSummary(p.pullRequest),
     latestRelease: latestReleaseSummary(p.releases),
+    latestDeployment: [...(p.deployments ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null,
   }
 }
 
@@ -364,8 +578,21 @@ function latestReleaseSummary(releases: Schemas['ReleaseDto'][] | undefined): Sc
   if (!latest) {
     return null
   }
-  const { id, projectVersion, status, tag, startedAt } = latest
-  return { id, projectVersion, status, tag, startedAt }
+  const { id, releaseVersionId, checkpoint, status, tag, startedAt } = latest
+  const { pullRequestUrl, githubReleaseUrl, awaitingMergeSince, mergeReasons, mergeStrategy } = latest
+  return {
+    id,
+    releaseVersionId,
+    checkpoint,
+    status,
+    tag,
+    startedAt,
+    pullRequestUrl,
+    githubReleaseUrl,
+    awaitingMergeSince,
+    mergeReasons,
+    mergeStrategy,
+  }
 }
 
 export type Access = { project: StoredProject; userId: string; level: 'owner' | 'contributor' | 'viewer' | 'admin' } | Response
@@ -415,8 +642,86 @@ function validation(errors: Record<string, string[]>) {
   return problem(400, 'VALIDATION', 'One or more validation errors occurred.', { errors })
 }
 
+/** FR-66: the initial version (default 0.1.0) is the first release version, in development. */
+function scratchVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[] | Response {
+  const initialVersion = body.initialVersion ? normalizeVersion(body.initialVersion) : '0.1.0'
+  if (!initialVersion) {
+    return problem(400, 'VERSION_INVALID', `'${body.initialVersion ?? ''}' is not a valid version.`)
+  }
+  return [makeReleaseVersion({ version: initialVersion, request: body.idea })]
+}
+
+/**
+ * FR-73 import (the API answers 501 until it is built; this follows the contract): the released tag must be in the
+ * GitHub App repo's refs (TAG_NOT_FOUND) and a version (VERSION_INVALID); the version to develop must be valid and
+ * greater (VERSION_NOT_GREATER). Creates an `imported` row for the released tag plus the version `in_development`.
+ */
+function importVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[] | Response {
+  const releasedTag = body.import?.releasedTag ?? null
+  let released: string | null = null
+  if (releasedTag !== null) {
+    const refs = body.git.repoFullName ? githubDb.refs[body.git.repoFullName] : undefined
+    const tag = refs?.tags.find((t) => t.name === releasedTag)
+    if (refs && !tag && !refs.releases.some((r) => r.tagName === releasedTag)) {
+      return problem(400, 'TAG_NOT_FOUND', `The tag '${releasedTag}' was not found in the repository.`)
+    }
+    released = normalizeVersion(tag ? tag.semver : releasedTag)
+    if (!released) {
+      return problem(400, 'VERSION_INVALID', `The tag '${releasedTag}' is not a semantic version.`)
+    }
+  }
+  const text = body.import?.developmentVersion ?? ''
+  const development = normalizeVersion(text)
+  if (!development) {
+    return problem(400, 'VERSION_INVALID', `'${text}' is not a valid version.`)
+  }
+  const [dev, base] = [parseSemVer(development), released ? parseSemVer(released) : null]
+  if (dev && base && compareSemVer(dev, base) <= 0) {
+    return problem(409, 'VERSION_NOT_GREATER', `${development} is not greater than the released version ${released ?? ''}.`)
+  }
+  const baseCommitSha = 'c0ffee1234567890c0ffee1234567890c0ffee12'
+  return [
+    ...(released
+      ? [makeReleaseVersion({ version: released, status: 'imported', tag: releasedTag, mergeCommitSha: baseCommitSha, request: '' })]
+      : []),
+    makeReleaseVersion({ version: development, request: body.idea, baseTag: releasedTag, baseCommitSha }),
+  ]
+}
+
+/** GET /projects and /projects/kpis: the caller's projects (all for Admins) matching search, phase, status, preset and dev version. */
+function listFiltered(user: { id: string; systemRole: string }, q: URLSearchParams) {
+  const search = q.get('search')?.toLowerCase()
+  const phase = q.get('phase')
+  const status = q.get('status')
+  const hasDevelopment = q.get('hasDevelopmentVersion')
+  const preset = q.get('preset')
+  return projectsDb.projects
+    .filter((p) => user.systemRole === 'admin' || roleOf(p, user.id))
+    .filter((p) => !search || p.name.toLowerCase().includes(search))
+    .filter((p) => !phase || p.currentPhase === phase)
+    .filter((p) => !status || p.status === status)
+    .filter((p) => !preset || (currentVersionOf(p)?.presetId ?? 'none') === preset)
+    .filter((p) => hasDevelopment === null || (developmentVersionOf(p) !== undefined) === (hasDevelopment === 'true'))
+}
+
 export const projectHandlers = [
   // ---- Projects ----
+  // §7.2: the KPI row over the projects matching the list's filters (mirrors GetProjectKpis).
+  http.get('*/api/projects/kpis', ({ request }) => {
+    const user = currentUser()
+    if (!user) {
+      return unauthenticated()
+    }
+    const items = listFiltered(user, new URL(request.url).searchParams)
+    return HttpResponse.json<Schemas['ProjectKpisDto']>({
+      total: items.length,
+      active: items.filter((p) => p.status !== 'released').length,
+      inReview: items.filter((p) => p.status === 'reviewing').length,
+      awaitingGates: items.reduce((n, p) => n + p.gates.filter((g) => g.status === 'pending').length, 0),
+      released: items.filter((p) => p.status === 'released').length,
+    })
+  }),
+
   http.get('*/api/projects', ({ request }) => {
     const user = currentUser()
     if (!user) {
@@ -425,16 +730,9 @@ export const projectHandlers = [
     const q = new URL(request.url).searchParams
     const page = Number(q.get('page') ?? 1)
     const limit = Number(q.get('limit') ?? 20)
-    const search = q.get('search')?.toLowerCase()
-    const phase = q.get('phase')
-    const status = q.get('status')
     const sortBy = q.get('sortBy') ?? 'updated'
     const dir = q.get('sortOrder') === 'asc' ? 1 : -1
-    const items = projectsDb.projects
-      .filter((p) => user.systemRole === 'admin' || roleOf(p, user.id))
-      .filter((p) => !search || p.name.toLowerCase().includes(search))
-      .filter((p) => !phase || p.currentPhase === phase)
-      .filter((p) => !status || p.status === status)
+    const items = listFiltered(user, q)
       .sort((a, b) => {
         const key = sortBy === 'name' ? 'name' : sortBy === 'created' ? 'createdAt' : 'updatedAt'
         return a[key].localeCompare(b[key]) * dir
@@ -461,11 +759,40 @@ export const projectHandlers = [
     if (!body.name.trim()) {
       errors.name = ['The name is required.']
     }
-    if (body.git.provider === 'github' && !body.git.repoUrl) {
+    const mode = body.git.mode ?? body.git.provider
+    if (!mode) {
+      errors['git.mode'] = ['Choose github_app, github_pat or local.']
+    }
+    if (mode === 'github_pat' && !body.git.repoUrl) {
       errors['git.repoUrl'] = ['A repository URL is required for GitHub.']
+    }
+    if (mode === 'github_app' && (!body.git.installationId || !body.git.repoFullName)) {
+      errors['git.repoFullName'] = ['Pick a repository the AIDE GitHub App is installed on.']
+    }
+    const importing = body.source === 'import'
+    if (importing && !body.import) {
+      errors.import = ['Say which version is released and which to develop.']
+    }
+    if (importing && mode === 'local' && !body.git.localSourcePath?.trim()) {
+      errors['git.localSourcePath'] = ['Enter the path of the repository to import.']
     }
     if (Object.keys(errors).length > 0) {
       return validation(errors)
+    }
+    const versions = importing ? importVersions(body) : scratchVersions(body)
+    if (versions instanceof Response) {
+      return versions
+    }
+    // FR-74: the preset is pinned on the version to develop.
+    const preset = body.presetId ? findPreset(body.presetId) : undefined
+    if (body.presetId && !preset) {
+      return problem(400, 'PRESET_NOT_FOUND', `The preset '${body.presetId}' was not found.`)
+    }
+    const developing = versions.at(-1)
+    if (preset && developing) {
+      developing.presetId = preset.id
+      developing.presetVersion = preset.version
+      developing.presetName = preset.name
     }
     const now = new Date().toISOString()
     const project = seedProject({
@@ -479,21 +806,37 @@ export const projectHandlers = [
       tokenBudget: body.tokenBudget ?? null,
       createdAt: now,
       updatedAt: now,
-      git: {
-        provider: body.git.provider,
-        repoUrl: body.git.repoUrl ?? null,
+      git: gitSettings({
+        provider: mode ?? 'local',
+        ...(mode === 'github_pat' ? { repoUrl: body.git.repoUrl ?? null } : {}),
+        ...(mode === 'github_app'
+          ? { repoFullName: body.git.repoFullName ?? null, installationId: body.git.installationId ?? null }
+          : {}),
         defaultBranch: body.git.defaultBranch ?? 'main',
-        branchName: null,
-        hasToken: Boolean(body.git.token),
-      },
+        hasToken: mode === 'github_pat' && Boolean(body.git.token),
+      }),
       members: [{ userId: user.id, role: 'owner' }],
+      releaseVersions: versions,
     })
-    return HttpResponse.json<Project>(toDto(project, user.id), { status: 201 })
+    // FR-88: the optional Deployment step (one of the caller's own Vercel connections; Local can't deploy).
+    if (body.deployment) {
+      const failed = applyVercelSetup(project, user.id, body.deployment)
+      if (failed) {
+        projectsDb.projects = projectsDb.projects.filter((p) => p !== project)
+        return failed
+      }
+    }
+    // FR-70: an import queues the Repository Analyst for the version to develop.
+    const development = developmentVersionOf(project)
+    if (importing && development) {
+      project.analyst = { [development.id]: { status: 'queued', runId: null, artifactId: null, artifactVersion: null } }
+    }
+    return HttpResponse.json<Project>(projectDto(project, user.id), { status: 201 })
   }),
 
   http.get('*/api/projects/:id', ({ params }) => {
     const a = access(params.id)
-    return a instanceof Response ? a : HttpResponse.json<Project>(toDto(a.project, a.userId))
+    return a instanceof Response ? a : HttpResponse.json<Project>(projectDto(a.project, a.userId))
   }),
 
   http.patch('*/api/projects/:id', async ({ request, params }) => {
@@ -513,7 +856,7 @@ export const projectHandlers = [
     p.maxReviewCycles = body.maxReviewCycles ?? p.maxReviewCycles
     p.tokenBudget = body.clearTokenBudget ? null : (body.tokenBudget ?? p.tokenBudget)
     touch(p)
-    return HttpResponse.json<Project>(toDto(p, a.userId))
+    return HttpResponse.json<Project>(projectDto(p, a.userId))
   }),
 
   http.delete('*/api/projects/:id', async ({ request, params }) => {
@@ -611,8 +954,8 @@ export const projectHandlers = [
       return forbidden()
     }
     return HttpResponse.json<Schemas['ProjectSettingsDto']>({
-      git: a.project.git,
-      llm: llmDto(a.project),
+      git: gitDto(a.project, isOwnerLevel(a)),
+      llm: llmDto(a.project, a.level === 'owner'),
       notifications: { channels: a.project.channels.map(channelDto) },
     })
   }),
@@ -624,33 +967,47 @@ export const projectHandlers = [
     }
     const body = (await record(request)) as Schemas['UpdateGitSettingsRequest']
     const git = a.project.git
-    git.provider = body.provider ?? git.provider
-    git.repoUrl = body.repoUrl !== undefined ? body.repoUrl : git.repoUrl
+    const provider = body.provider ?? git.provider
+    // FR-82/FR-83: only "Switch to GitHub App" moves a project onto the App.
+    if (provider === 'github_app' && git.provider !== 'github_app') {
+      return validation({ provider: ['Use Switch to GitHub App to move this project onto the AIDE GitHub App.'] })
+    }
+    git.provider = provider
+    git.mode = provider
+    if (provider === 'local') {
+      git.repoUrl = null
+    } else if (body.repoUrl) {
+      git.repoUrl = body.repoUrl
+    }
+    if (provider !== 'github_app') {
+      git.installationId = null
+      git.repoId = null
+      git.repoFullName = null
+    }
+    // §4.10, FR-64, FR-65: release settings. The prefix can't change while a release is awaiting merge or in progress.
+    if (body.tagPrefix !== undefined && body.tagPrefix !== null && body.tagPrefix !== git.tagPrefix) {
+      if (checkTagPrefix(body.tagPrefix) !== null) {
+        return validation({
+          tagPrefix: ['Use up to 20 letters, digits, ".", "_", "/" or "-", not starting with ".", "/" or "-".'],
+        })
+      }
+      const releasing =
+        developmentVersionOf(a.project)?.status === 'awaiting_merge' ||
+        a.project.releases?.at(-1)?.status === 'in_progress' ||
+        a.project.releases?.at(-1)?.status === 'awaiting_merge'
+      if (releasing) {
+        return problem(409, 'CONFLICT', 'The tag prefix can’t change while a release is in progress or awaiting its merge.')
+      }
+    }
     git.defaultBranch = body.defaultBranch ?? git.defaultBranch
+    git.mergeStrategy = body.mergeStrategy ?? git.mergeStrategy
+    git.tagPrefix = body.tagPrefix ?? git.tagPrefix
     if (body.clearToken) {
       git.hasToken = false
     } else if (body.token) {
       git.hasToken = true
     }
-    return HttpResponse.json<GitSettings>(git)
-  }),
-
-  http.patch('*/api/projects/:id/settings/llm', async ({ request, params }) => {
-    const a = ownerMutation(request, params.id)
-    if (a instanceof Response) {
-      return a
-    }
-    const body = (await record(request)) as Schemas['UpdateLlmSettingsRequest']
-    const llm = a.project.llm
-    llm.provider = body.provider ?? llm.provider
-    llm.defaultModel = body.defaultModel ?? llm.defaultModel
-    llm.modelsByAgent = body.modelsByAgent ?? llm.modelsByAgent
-    if (body.clearApiKey) {
-      llm.hasApiKey = false
-    } else if (body.apiKey) {
-      llm.hasApiKey = true
-    }
-    return HttpResponse.json<LlmSettings>(llmDto(a.project))
+    return HttpResponse.json<GitSettings>(gitDto(a.project, isOwnerLevel(a)))
   }),
 
   http.patch('*/api/projects/:id/settings/notifications', async ({ request, params }) => {

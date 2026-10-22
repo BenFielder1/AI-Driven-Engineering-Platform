@@ -7,12 +7,16 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Approvals;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
+using Aide.Api.Features.Connections;
+using Aide.Api.Features.Deployments;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Git;
+using Aide.Api.Features.GitHub;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Live;
 using Aide.Api.Features.Notifications;
+using Aide.Api.Features.Presets;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Refinement;
 using Aide.Api.Features.Release;
@@ -20,6 +24,7 @@ using Aide.Api.Features.Review;
 using Aide.Api.Features.Rollback;
 using Aide.Api.Features.Runs;
 using Aide.Api.Features.Tokens;
+using Aide.Api.Features.Versions;
 using Aide.Api.Health;
 using Aide.Api.Jobs;
 using Aide.Api.Json;
@@ -105,18 +110,9 @@ builder.Services.AddOpenApi(options =>
     options.AddSchemaTransformer<FreeFormObjectSchemaTransformer>();
     // SignalR message schemas (FR-46) aren't reachable from any operation; add them to components.
     options.AddDocumentTransformer<LiveContractDocumentTransformer>();
-    // XML-doc descriptions carry the source file's line endings; normalise them so api.json is identical on Windows and CI.
-    options.AddSchemaTransformer((schema, _, _) =>
-    {
-        schema.Description = schema.Description?.ReplaceLineEndings("\n");
-        return Task.CompletedTask;
-    });
-    options.AddOperationTransformer((operation, _, _) =>
-    {
-        operation.Summary = operation.Summary?.ReplaceLineEndings("\n");
-        operation.Description = operation.Description?.ReplaceLineEndings("\n");
-        return Task.CompletedTask;
-    });
+    // XML-doc descriptions carry the source file's line endings; normalise every description on the finished document
+    // (component schemas, property wrappers, parameters, bodies, responses) so api.json is identical on Windows and CI.
+    options.AddDocumentTransformer<LineEndingDocumentTransformer>();
 });
 builder.Services.AddSingleton(TimeProvider.System);
 
@@ -124,6 +120,12 @@ builder.Services.AddAideInfrastructure();
 builder.Services.AddAideDataProtection(builder.Configuration);
 builder.AddAideAuth();
 builder.Services.AddScoped<ProjectCreator>();
+
+// The AIDE GitHub App (FR-80–FR-83, FR-86): connections, the repo picker, project repositories and the manifest flow.
+builder.Services.AddScoped<GitHubConnections>();
+builder.Services.AddScoped<GitHubRepoService>();
+builder.Services.AddSingleton<GitHubManifestStates>();
+builder.Services.AddScoped<GitHubAppAdmin>();
 builder.Services.AddScoped<DeadLetterService>();
 
 // Lifecycle, gates and background work (FR-11–FR-14, §4.9).
@@ -143,6 +145,7 @@ builder.Services.AddScoped<AgentDraftWriter>();
 
 // Agents (FR-22–FR-26): the runner used by agent job handlers; providers and prompts come from Aide.Infrastructure.
 builder.Services.AddScoped<AgentRunner>();
+builder.Services.AddScoped<AgentRepoContext>();
 builder.Services.AddScoped<IJobEndedHook, AgentRunJobEndedHook>();
 
 // Refinement, specification and planning agents (FR-27–FR-30): job handlers, refinement rounds and execution steps.
@@ -156,7 +159,15 @@ builder.Services.AddReview();
 
 // Release and rollback (FR-42–FR-45): the release job, retries, rollback, history and versions.
 builder.Services.AddReleases();
+builder.Services.AddMergeReadiness();
 builder.Services.AddScoped<RollbackService>();
+builder.Services.AddReleaseVersions();
+
+// Vercel deployments (FR-87–FR-91, §4.15): settings, env sync, previews, production and the poll job.
+builder.Services.AddDeployments();
+
+// Tech stack presets (FR-74): pinning and the preset API; the catalogue is loaded by the infrastructure.
+builder.Services.AddPresets();
 
 // Notifications (FR-47–FR-49, FR-15): fan-out job, channels, delivery retries, gate reminders, one-click approval links.
 builder.Services.AddNotifications();
@@ -167,7 +178,8 @@ builder.Services.AddLiveOriginCheck();
 builder.Services.AddOptions<SeedOptions>().BindConfiguration(SeedOptions.SectionName);
 builder.Services.AddHostedService<DevSeeder>();
 builder.Services.AddHealthChecks()
-    .AddCheck<DatabaseReadyHealthCheck>("database", tags: [HealthEndpoints.ReadyTag]);
+    .AddCheck<DatabaseReadyHealthCheck>("database", tags: [HealthEndpoints.ReadyTag])
+    .AddCheck<PresetsHealthCheck>("presets", tags: [HealthEndpoints.ReadyTag]);
 
 var app = builder.Build();
 
@@ -186,11 +198,16 @@ if (app.Environment.IsDevelopment())
 app.MapHealthEndpoints();
 app.MapAuthEndpoints();
 app.MapApiTokenEndpoints();
+app.MapLlmConnectionEndpoints();
+app.MapVercelConnectionEndpoints();
+app.MapGitHubEndpoints();
 app.MapAdminUserEndpoints();
 app.MapAdminOperationsEndpoints();
+app.MapAdminIntegrationEndpoints();
 app.MapProjectEndpoints();
 app.MapProjectMemberEndpoints();
 app.MapProjectSettingsEndpoints();
+app.MapDeploymentEndpoints();
 app.MapLifecycleEndpoints();
 app.MapGateEndpoints();
 app.MapActivityEndpoints();
@@ -202,6 +219,8 @@ app.MapGitEndpoints();
 app.MapReviewEndpoints();
 app.MapReleaseEndpoints();
 app.MapRollbackEndpoints();
+app.MapVersionEndpoints();
+app.MapPresetEndpoints();
 app.MapNotificationEndpoints();
 app.MapApprovalEndpoints();
 app.MapLiveEndpoints();

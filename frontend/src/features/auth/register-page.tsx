@@ -90,9 +90,9 @@ export function RegisterPage({ returnUrl }: { returnUrl?: string }) {
         </Button>
       </form>
       <GitHubButton href={githubSignInHref(destination)} />
-      <p className="mt-6 text-sm text-muted">
+      <p className="mt-6 text-sm text-muted-foreground">
         Already have an account?{' '}
-        <Link to="/login" search={returnUrl ? { returnUrl } : {}} className="font-medium text-link underline">
+        <Link to="/login" search={returnUrl ? { returnUrl } : {}} className="font-medium text-primary underline">
           Sign in
         </Link>
       </p>

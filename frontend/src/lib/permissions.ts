@@ -27,7 +27,11 @@ export type ProjectCapability =
   | 'approveArtifacts'
   | 'requestRelease'
   | 'rollback'
+  | 'startVersion'
+  | 'changePreset'
   | 'changeSettings'
+  | 'deployPreview'
+  | 'manageDeployment'
   | 'manageMembers'
   | 'deleteProject'
 
@@ -39,6 +43,8 @@ const contributor: readonly ProjectCapability[] = [
   'startExecution',
   'createDraft',
   'triggerReview',
+  // FR-90 (SPEC §2 v2): Contributors trigger (and redeploy) preview deployments.
+  'deployPreview',
 ]
 const owner: readonly ProjectCapability[] = [
   ...contributor,
@@ -46,7 +52,13 @@ const owner: readonly ProjectCapability[] = [
   'approveArtifacts',
   'requestRelease',
   'rollback',
+  // FR-60 (SPEC §2 v2): only Owners start a new release version.
+  'startVersion',
+  // FR-74 (SPEC §2 v2): only Owners choose the preset; Contributors and Viewers see it.
+  'changePreset',
   'changeSettings',
+  // FR-88, FR-91 (SPEC §2 v2): bind a Vercel connection, edit env vars, promote and redeploy production.
+  'manageDeployment',
   'manageMembers',
   'deleteProject',
 ]
