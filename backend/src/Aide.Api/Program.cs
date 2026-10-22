@@ -110,18 +110,9 @@ builder.Services.AddOpenApi(options =>
     options.AddSchemaTransformer<FreeFormObjectSchemaTransformer>();
     // SignalR message schemas (FR-46) aren't reachable from any operation; add them to components.
     options.AddDocumentTransformer<LiveContractDocumentTransformer>();
-    // XML-doc descriptions carry the source file's line endings; normalise them so api.json is identical on Windows and CI.
-    options.AddSchemaTransformer((schema, _, _) =>
-    {
-        schema.Description = schema.Description?.ReplaceLineEndings("\n");
-        return Task.CompletedTask;
-    });
-    options.AddOperationTransformer((operation, _, _) =>
-    {
-        operation.Summary = operation.Summary?.ReplaceLineEndings("\n");
-        operation.Description = operation.Description?.ReplaceLineEndings("\n");
-        return Task.CompletedTask;
-    });
+    // XML-doc descriptions carry the source file's line endings; normalise every description on the finished document
+    // (component schemas, property wrappers, parameters, bodies, responses) so api.json is identical on Windows and CI.
+    options.AddDocumentTransformer<LineEndingDocumentTransformer>();
 });
 builder.Services.AddSingleton(TimeProvider.System);
 

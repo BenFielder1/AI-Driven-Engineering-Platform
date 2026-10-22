@@ -327,7 +327,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
     const context = await browser.newContext({ colorScheme })
     try {
       const login = await context.request.post('/api/auth/login', { data: { email, password: adminPassword } })
-      expect(login.status(), await login.text()).toBe(200)
+      // Login answers 204 No Content (cookie only); accept any 2xx.
+      expect(login.ok(), `${String(login.status())} ${await login.text()}`).toBe(true)
       const page = await context.newPage()
       await page.goto('/admin/integrations')
       await expect(page.getByRole('heading', { level: 2, name: 'Integrations', exact: true })).toBeVisible({ timeout: 20_000 })

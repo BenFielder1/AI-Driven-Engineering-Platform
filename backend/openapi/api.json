@@ -10858,7 +10858,7 @@
             "description": "FR-66 (`source: scratch` only): the first release version (semver, a leading `v` is stripped; default\n`0.1.0`). The first release tags it."
           },
           "source": {
-            "description": "FR-73: `scratch` (default) starts from scratch with `initialVersion`; `import` imports the existing\r\nrepository named by `git` with `import` (required) and `idea` as the request for the version to develop.",
+            "description": "FR-73: `scratch` (default) starts from scratch with `initialVersion`; `import` imports the existing\nrepository named by `git` with `import` (required) and `idea` as the request for the version to develop.",
             "$ref": "#/components/schemas/ProjectSource"
           },
           "import": {
@@ -10886,7 +10886,7 @@
                 "type": "null"
               },
               {
-                "description": "FR-88 (wizard Deployment step): deploy to Vercel with one of the caller's own Vercel connections, linking an existing\r\nVercel project or creating one; omitted or `null` = no deployment (it can be set later in Settings →\r\nDeployment). Needs a GitHub-backed project (400 `VALIDATION` on `deployment.provider` for Local).",
+                "description": "FR-88 (wizard Deployment step): deploy to Vercel with one of the caller's own Vercel connections, linking an existing\nVercel project or creating one; omitted or `null` = no deployment (it can be set later in Settings →\nDeployment). Needs a GitHub-backed project (400 `VALIDATION` on `deployment.provider` for Local).",
                 "$ref": "#/components/schemas/CreateProjectDeploymentRequest"
               }
             ]
@@ -16161,7 +16161,7 @@
                 "type": "null"
               },
               {
-                "description": "`github_pat` or `local`. Moving onto `github_app` goes through\r\n    `POST /settings/git/switch-to-app` (400 `VALIDATION` here).",
+                "description": "`github_pat` or `local`. Moving onto `github_app` goes through\n    `POST /settings/git/switch-to-app` (400 `VALIDATION` here).",
                 "$ref": "#/components/schemas/GitProvider"
               }
             ]
@@ -16199,7 +16199,7 @@
                 "type": "null"
               },
               {
-                "description": "FR-65: `aide_merges` (AIDE merges the PR on release) or `manual` (AIDE never merges; the release\r\n    marks the PR ready for review and waits for the merge on GitHub). Applies to the next release attempt.",
+                "description": "FR-65: `aide_merges` (AIDE merges the PR on release) or `manual` (AIDE never merges; the release\n    marks the PR ready for review and waits for the merge on GitHub). Applies to the next release attempt.",
                 "$ref": "#/components/schemas/MergeStrategy"
               }
             ]

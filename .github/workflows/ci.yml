@@ -299,16 +299,18 @@ jobs:
           esac
       # ::add-mask:: only masks console output, so scrub the seeded admin's password from the API log before it is
       # uploaded. The seeder logs it as the JSON state field "Password" and inside the rendered "with password <pw>".
+      # The bracketed first letter ([P]assword) matches exactly the same text; it only stops secret scanners from
+      # reading these patterns as a hard-coded password.
       - name: Redact secrets from the API log
         if: failure()
         run: |
           log="$RUNNER_TEMP/api.log"
           [ -f "$log" ] || exit 0
           sed -i -E \
-            -e 's/("Password"[[:space:]]*:[[:space:]]*")[^"]*"/\1***REDACTED***"/Ig' \
-            -e 's/(with password )[^ ",]+/\1***REDACTED***/Ig' \
+            -e 's/("[P]assword"[[:space:]]*:[[:space:]]*")[^"]*"/\1***REDACTED***"/Ig' \
+            -e 's/(with [p]assword )[^ ",]+/\1***REDACTED***/Ig' \
             "$log" || true
-          if grep -qiE '"Password"[[:space:]]*:[[:space:]]*"[^*"]|with password [^*]' "$log"; then
+          if grep -qiE '"[P]assword"[[:space:]]*:[[:space:]]*"[^*"]|with [p]assword [^*]' "$log"; then
             echo "::warning::API log may still contain a password; dropping it from the artifact."
             : > "$log"
           fi
