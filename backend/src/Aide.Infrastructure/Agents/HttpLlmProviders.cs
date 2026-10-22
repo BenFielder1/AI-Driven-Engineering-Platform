@@ -304,6 +304,8 @@ public sealed class AnthropicLlmProvider(HttpClient http, IOptions<LlmOptions> o
             });
         }
 
+        messages.AddRange(toolRequest.TrailingMessages.Select(m => (object)new { role = Role(m.Role), content = m.Content }));
+
         var body = new
         {
             model = request.Model,
@@ -463,6 +465,8 @@ public sealed class OpenAiLlmProvider(HttpClient http, IOptions<LlmOptions> opti
             });
             messages.AddRange(exchange.Results.Select(r => new { role = "tool", toolCallId = r.CallId, content = r.Content }));
         }
+
+        messages.AddRange(toolRequest.TrailingMessages.Select(m => new { role = m.Role == LlmRole.Assistant ? "assistant" : "user", content = m.Content }));
 
         var body = new
         {
@@ -647,6 +651,8 @@ public sealed class OllamaLlmProvider(HttpClient http, IOptions<LlmOptions> opti
                 toolName = exchange.Calls.FirstOrDefault(c => c.Id == r.CallId)?.Name ?? string.Empty,
             }));
         }
+
+        messages.AddRange(toolRequest.TrailingMessages.Select(m => new { role = m.Role == LlmRole.Assistant ? "assistant" : "user", content = m.Content }));
 
         var body = new
         {

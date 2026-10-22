@@ -33,7 +33,10 @@ public sealed class LlmToolRequest
 
     public bool ForceFinalAnswer { get; init; }
 
-    public override string ToString() => $"LlmToolRequest {{ {Request}, Tools = {Tools.Count}, Exchanges = {Exchanges.Count}, ForceFinalAnswer = {ForceFinalAnswer} }}";
+    /// <summary>Messages rendered after the exchanges (a truncated answer and the request to continue it, <see cref="LlmToolLoop"/>).</summary>
+    public IReadOnlyList<LlmMessage> TrailingMessages { get; init; } = [];
+
+    public override string ToString() => $"LlmToolRequest {{ {Request}, Tools = {Tools.Count}, Exchanges = {Exchanges.Count}, ForceFinalAnswer = {ForceFinalAnswer}, TrailingMessages = {TrailingMessages.Count} }}";
 }
 
 /// <summary>A model turn: its text, the tool calls it wants (none: this is the final answer), tokens and stop reason.</summary>
@@ -114,22 +117,44 @@ public sealed class LlmToolLoopStoppedException : Exception
 /// support (not <see cref="IToolCallingLlmProvider"/>, or a model that doesn't advertise tools) gets one context-only call
 /// (the executor's <see cref="ILlmToolExecutor.FallbackContextAsync"/> appended to the last user message) and the
 /// <see cref="ToolsUnsupportedWarning"/> warning.
+/// <para>
+/// A final answer cut off by the output cap (<see cref="IsLengthStop"/>) is continued: up to <see cref="MaxContinuations"/>
+/// more turns send the answer so far as an <c>assistant</c> message followed by <see cref="ContinuePrompt"/> as a
+/// <c>user</c> message (not an assistant prefill, which current Claude models reject), and the parts are joined
+/// (<see cref="JoinContinuation"/>). An answer still cut off after that gets the <see cref="OutputTruncatedWarning"/> warning.
+/// </para>
 /// </summary>
 public static class LlmToolLoop
 {
     public const string ToolsUnsupportedWarning = "tools_unsupported";
 
+    /// <summary>The final answer still hit the output cap after <see cref="MaxContinuations"/> continuations.</summary>
+    public const string OutputTruncatedWarning = "output_truncated";
+
     /// <summary>Model turns per loop: the 25 calls (one per turn at worst), the refused one, and the forced final answer.</summary>
     public const int MaxTurns = 28;
+
+    /// <summary>How many times a final answer cut off by the output cap is continued.</summary>
+    public const int MaxContinuations = 4;
+
+    /// <summary>The shortest repeated text <see cref="JoinContinuation"/> removes where a continuation overlaps the answer.</summary>
+    public const int MinOverlap = 20;
+
+    private const int MaxOverlap = 2000;
+
+    public const string ContinuePrompt =
+        "Your previous reply was cut off because it reached the output token limit. Continue it from the exact point where it "
+        + "stopped. Do not repeat any text that is already written, do not restart a section, and add no preamble or "
+        + "commentary: your reply is appended directly to the text so far.";
 
     /// <param name="provider">The run's provider.</param>
     /// <param name="request">The rendered prompt, model and key.</param>
     /// <param name="tools">The tools (<c>null</c>: one plain call).</param>
     /// <param name="cancellationToken">Cancels the loop.</param>
     /// <param name="onToolTurn">
-    /// Called after every turn that asks for tools, before they run, with the tokens of all turns so far: the caller records
-    /// them (so a later failure doesn't lose what was paid for) and returns <c>false</c> to stop the loop
-    /// (<see cref="LlmToolLoopStoppedException"/>), e.g. when the token budget is used up.
+    /// Called after every turn that asks for tools (before they run) and before every continuation, with the tokens of all
+    /// turns so far: the caller records them (so a later failure doesn't lose what was paid for) and returns <c>false</c> to
+    /// stop the loop (<see cref="LlmToolLoopStoppedException"/>), e.g. when the token budget is used up.
     /// </param>
     public static async Task<LlmToolLoopResult> RunAsync(
         ILlmProvider provider,
@@ -142,14 +167,15 @@ public static class LlmToolLoop
         ArgumentNullException.ThrowIfNull(request);
         if (tools is null)
         {
-            return new LlmToolLoopResult(await provider.CompleteAsync(request, cancellationToken), 1, []);
+            var completion = await provider.CompleteAsync(request, cancellationToken);
+            return await ContinuePlainAsync(provider, request, completion, [], onToolTurn, cancellationToken);
         }
 
         if (provider is not IToolCallingLlmProvider toolProvider || !await toolProvider.SupportsToolsAsync(request, cancellationToken))
         {
-            var context = await tools.FallbackContextAsync(cancellationToken);
-            var completion = await provider.CompleteAsync(WithContext(request, context), cancellationToken);
-            return new LlmToolLoopResult(completion, 1, [ToolsUnsupportedWarning]);
+            var withContext = WithContext(request, await tools.FallbackContextAsync(cancellationToken));
+            var completion = await provider.CompleteAsync(withContext, cancellationToken);
+            return await ContinuePlainAsync(provider, withContext, completion, [ToolsUnsupportedWarning], onToolTurn, cancellationToken);
         }
 
         var exchanges = new List<LlmToolExchange>();
@@ -164,7 +190,29 @@ public static class LlmToolLoop
             output += answer.OutputTokens;
             if (answer.Calls.Count == 0 || force)
             {
-                return new LlmToolLoopResult(new LlmCompletion(answer.Text, input, output, answer.StopReason), turn, []);
+                var text = answer.Text;
+                var stopReason = answer.StopReason;
+                for (var continuation = 0; continuation < MaxContinuations && IsLengthStop(stopReason) && text.Length > 0; continuation++)
+                {
+                    await CheckCanContinueAsync(onToolTurn, input, output, cancellationToken);
+                    var next = await toolProvider.CompleteTurnAsync(
+                        new LlmToolRequest
+                        {
+                            Request = request,
+                            Tools = tools.Definitions,
+                            Exchanges = [.. exchanges],
+                            ForceFinalAnswer = true,
+                            TrailingMessages = ContinuationMessages(text),
+                        },
+                        cancellationToken);
+                    input += next.InputTokens;
+                    output += next.OutputTokens;
+                    turn++;
+                    text = JoinContinuation(text, next.Text);
+                    stopReason = next.StopReason;
+                }
+
+                return new LlmToolLoopResult(new LlmCompletion(text, input, output, stopReason), turn, IsLengthStop(stopReason) ? [OutputTruncatedWarning] : []);
             }
 
             if (onToolTurn is not null && !await onToolTurn(new LlmTurnTokens(input, output), cancellationToken))
@@ -181,6 +229,75 @@ public static class LlmToolLoop
             exchanges.Add(new LlmToolExchange(answer.Text, answer.Calls, results));
         }
     }
+
+    /// <summary>Whether a provider stopped because the output cap was reached (Anthropic <c>max_tokens</c>; OpenAI and
+    /// Ollama <c>length</c>).</summary>
+    public static bool IsLengthStop(string? stopReason) => stopReason is "max_tokens" or "length";
+
+    /// <summary>
+    /// <paramref name="text"/> followed by <paramref name="continuation"/>, without the text the continuation repeated: the
+    /// longest start of the continuation (at least <see cref="MinOverlap"/> characters) that the text already ends with.
+    /// </summary>
+    public static string JoinContinuation(string text, string continuation)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(continuation);
+        for (var length = Math.Min(MaxOverlap, Math.Min(text.Length, continuation.Length)); length >= MinOverlap; length--)
+        {
+            if (text.AsSpan().EndsWith(continuation.AsSpan(0, length), StringComparison.Ordinal))
+            {
+                return string.Concat(text, continuation.AsSpan(length));
+            }
+        }
+
+        return text + continuation;
+    }
+
+    /// <summary>Continues a plain (no tools) completion cut off by the output cap.</summary>
+    private static async Task<LlmToolLoopResult> ContinuePlainAsync(
+        ILlmProvider provider,
+        LlmRequest request,
+        LlmCompletion completion,
+        IReadOnlyList<string> warnings,
+        Func<LlmTurnTokens, CancellationToken, Task<bool>>? onToolTurn,
+        CancellationToken cancellationToken)
+    {
+        var turns = 1;
+        for (var continuation = 0; continuation < MaxContinuations && IsLengthStop(completion.StopReason) && completion.Text.Length > 0; continuation++)
+        {
+            await CheckCanContinueAsync(onToolTurn, completion.InputTokens, completion.OutputTokens, cancellationToken);
+            var next = await provider.CompleteAsync(
+                new LlmRequest
+                {
+                    Model = request.Model,
+                    System = request.System,
+                    Messages = [.. request.Messages, .. ContinuationMessages(completion.Text)],
+                    MaxTokens = request.MaxTokens,
+                    Agent = request.Agent,
+                    ApiKey = request.ApiKey,
+                },
+                cancellationToken);
+            turns++;
+            completion = new LlmCompletion(
+                JoinContinuation(completion.Text, next.Text),
+                completion.InputTokens + next.InputTokens,
+                completion.OutputTokens + next.OutputTokens,
+                next.StopReason);
+        }
+
+        return new LlmToolLoopResult(completion, turns, IsLengthStop(completion.StopReason) ? [.. warnings, OutputTruncatedWarning] : warnings);
+    }
+
+    private static async Task CheckCanContinueAsync(Func<LlmTurnTokens, CancellationToken, Task<bool>>? onToolTurn, int input, int output, CancellationToken cancellationToken)
+    {
+        if (onToolTurn is not null && !await onToolTurn(new LlmTurnTokens(input, output), cancellationToken))
+        {
+            throw new LlmToolLoopStoppedException("The tool loop was stopped before continuing a truncated answer.", new LlmTurnTokens(input, output));
+        }
+    }
+
+    private static LlmMessage[] ContinuationMessages(string textSoFar) =>
+        [new LlmMessage(LlmRole.Assistant, textSoFar), new LlmMessage(LlmRole.User, ContinuePrompt)];
 
     /// <summary><paramref name="request"/> with <paramref name="context"/> appended to its last user message.</summary>
     internal static LlmRequest WithContext(LlmRequest request, string? context)

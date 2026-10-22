@@ -261,7 +261,7 @@ public sealed partial class AgentRunner(
                 },
                 context.Tools,
                 cancellationToken,
-                context.Tools is null ? null : OnToolTurn);
+                OnToolTurn);
             completion = loop.Completion;
             loopWarnings = loop.Warnings;
         }

@@ -325,6 +325,105 @@ public sealed class LlmToolLoopTests : IDisposable
         Assert.True(provider.LastForced);
     }
 
+    // ------------------------------------------------------------------ Continuing an answer cut off by the output cap
+
+    [Fact]
+    public async Task FR23_Anthropic_answer_cut_off_at_max_tokens_is_continued_and_joined()
+    {
+        var handler = Sequence(
+            """{"content":[{"type":"text","text":"## 1. Overview\nPart one"}],"stop_reason":"max_tokens","usage":{"input_tokens":100,"output_tokens":1000}}""",
+            """{"content":[{"type":"text","text":" and part two.\n## 2. Data"}],"stop_reason":"end_turn","usage":{"input_tokens":120,"output_tokens":300}}""");
+        var provider = new AnthropicLlmProvider(new HttpClient(handler), Options());
+
+        var result = await LlmToolLoop.RunAsync(provider, Request(), null, Ct);
+
+        Assert.Equal(new LlmCompletion("## 1. Overview\nPart one and part two.\n## 2. Data", 220, 1300, "end_turn"), result.Completion);
+        Assert.Equal((2, 0), (result.Turns, result.Warnings.Count));
+        var messages = JsonDocument.Parse(handler.Requests[1].Body).RootElement.GetProperty("messages").EnumerateArray().ToList();
+        Assert.Equal(["user", "assistant", "user"], messages.Select(m => m.GetProperty("role").GetString()));
+        Assert.Equal("## 1. Overview\nPart one", messages[1].GetProperty("content").GetString());
+        Assert.Equal(LlmToolLoop.ContinuePrompt, messages[2].GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public async Task FR23_OpenAI_answer_cut_off_by_length_is_continued()
+    {
+        var handler = Sequence(
+            """{"choices":[{"message":{"content":"First half,"},"finish_reason":"length"}],"usage":{"prompt_tokens":10,"completion_tokens":5}}""",
+            """{"choices":[{"message":{"content":" second half."},"finish_reason":"stop"}],"usage":{"prompt_tokens":15,"completion_tokens":3}}""");
+
+        var result = await LlmToolLoop.RunAsync(new OpenAiLlmProvider(new HttpClient(handler), Options()), Request(), null, Ct);
+
+        Assert.Equal(new LlmCompletion("First half, second half.", 25, 8, "stop"), result.Completion);
+        var messages = JsonDocument.Parse(handler.Requests[1].Body).RootElement.GetProperty("messages").EnumerateArray().ToList();
+        Assert.Equal(["system", "user", "assistant", "user"], messages.Select(m => m.GetProperty("role").GetString()));
+    }
+
+    [Fact]
+    public async Task FR71_tool_loop_answer_cut_off_at_max_tokens_is_continued_after_the_tool_exchanges()
+    {
+        var handler = Sequence(
+            """{"content":[{"type":"tool_use","id":"toolu_1","name":"read_file","input":{"path":"README.md"}}],"stop_reason":"tool_use","usage":{"input_tokens":10,"output_tokens":1}}""",
+            """{"content":[{"type":"text","text":"# Spec\nThe widget service stores widgets"}],"stop_reason":"max_tokens","usage":{"input_tokens":20,"output_tokens":50}}""",
+            """{"content":[{"type":"text","text":"The widget service stores widgets in PostgreSQL."}],"stop_reason":"end_turn","usage":{"input_tokens":30,"output_tokens":10}}""");
+        var provider = new AnthropicLlmProvider(new HttpClient(handler), Options());
+
+        var result = await LlmToolLoop.RunAsync(provider, Request(), new RepoToolSession(_root), Ct);
+
+        // The continuation repeated the cut-off line; the overlap is dropped.
+        Assert.Equal(new LlmCompletion("# Spec\nThe widget service stores widgets in PostgreSQL.", 60, 61, "end_turn"), result.Completion);
+        Assert.Equal(3, result.Turns);
+        var last = JsonDocument.Parse(handler.Requests[2].Body).RootElement;
+        Assert.Equal("none", last.GetProperty("tool_choice").GetProperty("type").GetString());
+        var messages = last.GetProperty("messages").EnumerateArray().ToList();
+        Assert.Equal(["user", "assistant", "user", "assistant", "user"], messages.Select(m => m.GetProperty("role").GetString()));
+        Assert.Equal("tool_result", messages[2].GetProperty("content")[0].GetProperty("type").GetString());
+        Assert.Equal("# Spec\nThe widget service stores widgets", messages[3].GetProperty("content").GetString());
+        Assert.Equal(LlmToolLoop.ContinuePrompt, messages[4].GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public async Task FR23_answer_still_cut_off_after_the_last_continuation_is_returned_with_a_warning()
+    {
+        var handler = Sequence("""{"content":[{"type":"text","text":"more "}],"stop_reason":"max_tokens","usage":{"input_tokens":1,"output_tokens":1}}""");
+
+        var result = await LlmToolLoop.RunAsync(new AnthropicLlmProvider(new HttpClient(handler), Options()), Request(), null, Ct);
+
+        Assert.Equal(LlmToolLoop.MaxContinuations + 1, handler.Requests.Count);
+        Assert.Equal([LlmToolLoop.OutputTruncatedWarning], result.Warnings);
+        Assert.Equal("max_tokens", result.Completion.StopReason);
+        Assert.Equal(string.Concat(Enumerable.Repeat("more ", LlmToolLoop.MaxContinuations + 1)), result.Completion.Text);
+    }
+
+    [Fact]
+    public async Task FR26_a_continuation_is_not_requested_when_the_observer_stops_the_loop()
+    {
+        var handler = Sequence("""{"content":[{"type":"text","text":"cut"}],"stop_reason":"max_tokens","usage":{"input_tokens":7,"output_tokens":9}}""");
+
+        var stopped = await Assert.ThrowsAsync<LlmToolLoopStoppedException>(() => LlmToolLoop.RunAsync(
+            new AnthropicLlmProvider(new HttpClient(handler), Options()), Request(), null, Ct, (_, _) => Task.FromResult(false)));
+
+        Assert.Equal(new LlmTurnTokens(7, 9), stopped.Tokens);
+        Assert.Single(handler.Requests);
+    }
+
+    [Theory]
+    [InlineData("abc", "def", "abcdef")]
+    [InlineData("The quick brown fox jumps", "The quick brown fox jumps over the dog", "The quick brown fox jumps over the dog")]
+    [InlineData("line one\nthe quick brown fox jumps", "the quick brown fox jumps over", "line one\nthe quick brown fox jumps over")]
+    [InlineData("ends with x", "x and more", "ends with xx and more")] // overlap shorter than MinOverlap is kept
+    public void FR23_JoinContinuation_drops_text_the_continuation_repeats(string text, string continuation, string expected) =>
+        Assert.Equal(expected, LlmToolLoop.JoinContinuation(text, continuation));
+
+    [Theory]
+    [InlineData("max_tokens", true)]
+    [InlineData("length", true)]
+    [InlineData("end_turn", false)]
+    [InlineData("stop", false)]
+    [InlineData(null, false)]
+    public void FR23_IsLengthStop_recognises_each_providers_output_cap_reason(string? reason, bool expected) =>
+        Assert.Equal(expected, LlmToolLoop.IsLengthStop(reason));
+
     private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     private sealed class EndlessToolCaller : ILlmProvider, IToolCallingLlmProvider

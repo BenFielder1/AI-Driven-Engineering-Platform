@@ -195,7 +195,7 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Llm:DefaultProvider` | `anthropic`, `openai`, `ollama` or `fake` | `anthropic` | no |
 | `Llm:RequestTimeout` | Per provider call | `00:05:00` | no |
 | `Llm:KeyCheckTimeout` | Per key check when a connection is added or re-tested (FR-78); a timeout is `UPSTREAM_ERROR` | `00:00:15` | no |
-| `Llm:MaxOutputTokens` | Output token cap per call | `16000` | no |
+| `Llm:MaxOutputTokens` | Output token cap per call. An answer cut off by the cap is continued up to 4 more calls and joined; one still cut off records the `output_truncated` run warning | `16000` | no |
 | `Llm:AllowSystemKeys` | Whether the system keys below may be used, and then only for projects with no bound connection (D-V2-5, FR-79). Otherwise runs use the key an Owner bound from Account → Connections | `false` | no |
 | `Llm:Providers:Anthropic:ApiKey` | Anthropic system key (used only with `Llm:AllowSystemKeys=true`) | none | yes |
 | `Llm:Providers:OpenAI:ApiKey` | OpenAI system key (used only with `Llm:AllowSystemKeys=true`) | none | yes |
