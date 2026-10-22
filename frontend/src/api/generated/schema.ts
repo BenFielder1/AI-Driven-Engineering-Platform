@@ -2997,14 +2997,14 @@ export interface components {
          * @description A GitHub App manifest (FR-80, §4.14), in GitHub's own field names so the page can post it unchanged (as the
          *     `manifest` form field, JSON-encoded): name `AIDE ({host})` (the host of `App:PublicBaseUrl`); `url` and `setup_url` under
          *     `App:PublicBaseUrl`; `redirect_url` the manifest callback (`/api/admin/integrations/github/callback`);
-         *     `callback_urls` the sign-in callback (`/api/auth/github/callback`); webhook inactive; private; and
+         *     `callback_urls` the sign-in callback (`/api/auth/github/callback`); no `hook_attributes` (GitHub rejects a
+         *     localhost webhook URL even when inactive, and needs a URL whenever the object is present), so the App has no webhook; private; and
          *     `default_permissions` contents, pull_requests, workflows and administration `write`, metadata, checks and
          *     statuses `read` (the Admin may drop `administration`, which disables "Create repository"); no events.
          */
         GitHubAppManifestDto: {
             name: string;
             url: string;
-            hook_attributes: components["schemas"]["GitHubAppManifestHookDto"];
             redirect_url: string;
             callback_urls: string[];
             setup_url: string;
@@ -3014,10 +3014,6 @@ export interface components {
             };
             default_events: string[];
             request_oauth_on_install: boolean;
-        };
-        /** @description The manifest's webhook settings: AIDE runs on localhost, so the webhook is inactive (§4.14). */
-        GitHubAppManifestHookDto: {
-            active: boolean;
         };
         /**
          * @description What the page posts to GitHub (FR-80): an HTML form `POST` to `postUrl`

@@ -127,7 +127,6 @@ public sealed partial class GitHubAppAdmin(
         var manifest = new GitHubAppManifestDto(
             GitHubRules.ManifestAppName(host),
             baseUrl,
-            new GitHubAppManifestHookDto(false),
             appOptions.Value.Absolute("/api/admin/integrations/github/callback"),
             [appOptions.Value.Absolute(Api.Auth.GitHubAuth.CallbackPath)],
             appOptions.Value.Absolute("/account/connections?github=installed"),

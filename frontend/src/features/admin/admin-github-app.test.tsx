@@ -54,7 +54,7 @@ describe('Admin → Integrations → GitHub App (FR-80)', () => {
     const preview = await within(panel).findByRole('region', { name: 'Manifest preview' })
     expect(githubDb.manifestRequests).toEqual([{ ownerType: 'organization', org: 'acme' }])
     expect(preview).toHaveTextContent('AIDE (localhost)')
-    expect(preview).toHaveTextContent('Inactive')
+    expect(preview).toHaveTextContent('Off (AIDE polls GitHub instead)')
     const permissions = within(preview).getByRole('list', { name: 'Requested permissions' })
     expect(within(permissions).getByText('Administration').closest('li')).toHaveTextContent('Read and write')
     expect(preview).toHaveTextContent(/Unticking Administration disables "Create repository"/)
@@ -71,9 +71,10 @@ describe('Admin → Integrations → GitHub App (FR-80)', () => {
     }
     expect(JSON.parse(manifest)).toMatchObject({
       name: 'AIDE (localhost)',
-      hook_attributes: { active: false },
       default_permissions: { administration: 'write', contents: 'write' },
     })
+    // GitHub refuses a localhost webhook URL, and any hook_attributes without one: the App has no webhook.
+    expect(JSON.parse(manifest)).not.toHaveProperty('hook_attributes')
   })
 
   it('FR80_configured: shows the status, source, slug, owner, permissions and install link', async () => {

@@ -211,6 +211,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 - 2026-10-18 — FR-46 join refetch: every join (first and rejoin) refetches all project queries, restarting in-flight ones, so nothing is lost between page open and Join resolving (at most one extra request per query on open); RUN_COMPLETED restarts artifact fetches — SPEC updated: yes
 - 2026-10-18 — v1-seeded "Demo: Todo API" is upgraded to released 0.1.0 on startup only if strictly untouched (initial checkpoint, seed admin only Owner, no artifacts/runs/gates/steps/reports/releases/rollbacks/deployments, only PROJECT_CREATED); marker DEMO_PROJECT_RELEASE_UPGRADED — §9 — SPEC updated: yes
 - 2026-10-18 — *(superseded by the FR-46 join refetch decision above: every join now refetches all)* First hub join refetches only queries older than page open; a rejoin refetches all; a failed rejoin still refetches; stage empty-state polling only while a producing run is active or a draft is expected — FR-46/FR-55 — SPEC updated: yes
+- 2026-10-21 — The GitHub App manifest omits `hook_attributes` (the App has no webhook). GitHub rejected `{active:false}` without a `url` ("url wasn't supplied") and then rejected `http://localhost:8080` as unreachable from the public Internet, even with the hook inactive. `GitHubAppManifestDto.hook_attributes` and `GitHubAppManifestHookDto` were removed from the contract (a breaking response change; the dashboard is the only reader and was updated). Behaviour is unchanged: AIDE polls instead of using webhooks (D-V2-8) — §4.14 — SPEC updated: no ("webhook inactive" still holds)
 
 ## Known issues
 - CI E2E (v2/a11y shards), sudo for /data/import and admin-password extraction are unverified until the first GitHub run; the uploaded api.log is redacted of the seed-admin password; deploy scripts have shellcheck warnings (unused vars in lib.sh, unchecked cd) — Ben / local-k8s-engineer
@@ -221,7 +222,7 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 - `GitHub` paths (App, PAT import, repo tools over GitHub snapshots) verified only against stub HTTP handlers — orchestrator
 - Vercel flows verified only against stub HTTP handlers + Fake provider (no real Vercel account) — Ben
 - E2E against k8s needs `Deployments__Provider=Fake` + `Deployments__AllowFake=true`; it also needs `Git__Local__ImportRoot` set (and a seeded "existing" repo under it) for the import E2E — local-k8s-engineer (phase 10)
-- §11 to confirm on first real App registration: manifest `hook_attributes {active:false}` accepted without a `url`; GitHub App flows are verified only against stub HTTP handlers (no real App registered) — Ben
+- GitHub App flows are verified only against stub HTTP handlers (no real App registered) — Ben
 - New-project wizard loses entered values when the user leaves to Connect GitHub (the page warns); persist the draft in sessionStorage if wanted — vite-react-engineer
 - E2E lifecycle spec lost its rollback-after-release scenario (FR-63 blocks it); add a rollback-before-release scenario — e2e-qa-engineer (phase 10)
 - ReleaseVersionStampingInterceptor still needed by integration-test seeds (LifecycleSeed, direct inserts); remove once they set release_version_id — ef-data-engineer

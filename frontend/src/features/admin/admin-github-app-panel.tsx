@@ -195,7 +195,7 @@ function RegisterApp() {
             <Row term="Name">{m.name}</Row>
             <Row term="Homepage">{m.url}</Row>
             <Row term="Sign-in callback">{m.callback_urls.join(', ')}</Row>
-            <Row term="Webhook">{m.hook_attributes.active ? 'Active' : 'Inactive (AIDE polls GitHub instead)'}</Row>
+            <Row term="Webhook">Off (AIDE polls GitHub instead)</Row>
             <Row term="Visibility">{m.public ? 'Public' : 'Private (only the owner can install it)'}</Row>
           </dl>
           <PermissionList permissions={m.default_permissions} label="Requested permissions" />

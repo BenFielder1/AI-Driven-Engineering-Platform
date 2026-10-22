@@ -217,7 +217,6 @@ export const githubHandlers = [
       manifest: {
         name: 'AIDE (localhost)',
         url: 'http://localhost:8080',
-        hook_attributes: { active: false },
         redirect_url: 'http://localhost:8080/api/admin/integrations/github/callback',
         callback_urls: ['http://localhost:8080/api/auth/github/callback'],
         setup_url: 'http://localhost:8080/account/connections',

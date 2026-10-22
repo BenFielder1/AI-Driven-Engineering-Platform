@@ -39,21 +39,18 @@ public sealed record CreateGitHubAppManifestRequest
     public string? Org { get; init; }
 }
 
-/// <summary>The manifest's webhook settings: AIDE runs on localhost, so the webhook is inactive (§4.14).</summary>
-public sealed record GitHubAppManifestHookDto([property: JsonPropertyName("active")] bool Active);
-
 /// <summary>
 /// A GitHub App manifest (FR-80, §4.14), in GitHub's own field names so the page can post it unchanged (as the
 /// <c>manifest</c> form field, JSON-encoded): name <c>AIDE ({host})</c> (the host of <c>App:PublicBaseUrl</c>); <c>url</c> and <c>setup_url</c> under
 /// <c>App:PublicBaseUrl</c>; <c>redirect_url</c> the manifest callback (<c>/api/admin/integrations/github/callback</c>);
-/// <c>callback_urls</c> the sign-in callback (<c>/api/auth/github/callback</c>); webhook inactive; private; and
+/// <c>callback_urls</c> the sign-in callback (<c>/api/auth/github/callback</c>); no <c>hook_attributes</c> (GitHub rejects a
+/// localhost webhook URL even when inactive, and needs a URL whenever the object is present), so the App has no webhook; private; and
 /// <c>default_permissions</c> contents, pull_requests, workflows and administration <c>write</c>, metadata, checks and
 /// statuses <c>read</c> (the Admin may drop <c>administration</c>, which disables "Create repository"); no events.
 /// </summary>
 public sealed record GitHubAppManifestDto(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("url")] string Url,
-    [property: JsonPropertyName("hook_attributes")] GitHubAppManifestHookDto HookAttributes,
     [property: JsonPropertyName("redirect_url")] string RedirectUrl,
     [property: JsonPropertyName("callback_urls")] IReadOnlyList<string> CallbackUrls,
     [property: JsonPropertyName("setup_url")] string SetupUrl,

@@ -79,12 +79,11 @@ public sealed class GitHubAppTests(AideApiFactory factory)
         var started = await ProjectApi.ReadAsync<GitHubAppManifestResponseDto>(
             await admin.Client.PostAsJsonAsync("/api/admin/integrations/github/manifest", new { ownerType = "user" }, Ct));
 
-        // §4.14 manifest: name from App:PublicBaseUrl, sign-in callback, inactive webhook, the App permissions.
+        // §4.14 manifest: name from App:PublicBaseUrl, sign-in callback, no webhook, the App permissions.
         var manifest = started.Manifest;
         Assert.Equal("AIDE (localhost)", manifest.Name);
         Assert.Equal(["http://localhost:8080/api/auth/github/callback"], manifest.CallbackUrls);
         Assert.Equal("http://localhost:8080/api/admin/integrations/github/callback", manifest.RedirectUrl);
-        Assert.False(manifest.HookAttributes.Active);
         Assert.False(manifest.Public);
         Assert.Equal(
             ["administration=write", "checks=read", "contents=write", "emails=read", "metadata=read", "pull_requests=write", "statuses=read", "workflows=write"],

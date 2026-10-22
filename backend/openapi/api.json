@@ -12289,7 +12289,6 @@
         "required": [
           "name",
           "url",
-          "hook_attributes",
           "redirect_url",
           "callback_urls",
           "setup_url",
@@ -12305,9 +12304,6 @@
           },
           "url": {
             "type": "string"
-          },
-          "hook_attributes": {
-            "$ref": "#/components/schemas/GitHubAppManifestHookDto"
           },
           "redirect_url": {
             "type": "string"
@@ -12340,19 +12336,7 @@
             "type": "boolean"
           }
         },
-        "description": "A GitHub App manifest (FR-80, §4.14), in GitHub's own field names so the page can post it unchanged (as the\n`manifest` form field, JSON-encoded): name `AIDE ({host})` (the host of `App:PublicBaseUrl`); `url` and `setup_url` under\n`App:PublicBaseUrl`; `redirect_url` the manifest callback (`/api/admin/integrations/github/callback`);\n`callback_urls` the sign-in callback (`/api/auth/github/callback`); webhook inactive; private; and\n`default_permissions` contents, pull_requests, workflows and administration `write`, metadata, checks and\nstatuses `read` (the Admin may drop `administration`, which disables \"Create repository\"); no events."
-      },
-      "GitHubAppManifestHookDto": {
-        "required": [
-          "active"
-        ],
-        "type": "object",
-        "properties": {
-          "active": {
-            "type": "boolean"
-          }
-        },
-        "description": "The manifest's webhook settings: AIDE runs on localhost, so the webhook is inactive (§4.14)."
+        "description": "A GitHub App manifest (FR-80, §4.14), in GitHub's own field names so the page can post it unchanged (as the\n`manifest` form field, JSON-encoded): name `AIDE ({host})` (the host of `App:PublicBaseUrl`); `url` and `setup_url` under\n`App:PublicBaseUrl`; `redirect_url` the manifest callback (`/api/admin/integrations/github/callback`);\n`callback_urls` the sign-in callback (`/api/auth/github/callback`); no `hook_attributes` (GitHub rejects a\nlocalhost webhook URL even when inactive, and needs a URL whenever the object is present), so the App has no webhook; private; and\n`default_permissions` contents, pull_requests, workflows and administration `write`, metadata, checks and\nstatuses `read` (the Admin may drop `administration`, which disables \"Create repository\"); no events."
       },
       "GitHubAppManifestResponseDto": {
         "required": [
