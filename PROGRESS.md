@@ -13,19 +13,19 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 ## Requirements
 | ID | Summary | Spec § | Layer(s) | Phase | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| FR-94 | Next.js App Router app replaces Vite/TanStack Router | 3.1 | frontend | 1 | todo | — |
-| FR-95 | Route parity: every v2 URL, search param and alias | 3.1 | frontend | 2 | todo | — |
-| FR-96 | Pages ported as client components (TanStack Query + generated client) | 3.1 | frontend | 2 | todo | — |
-| FR-97 | Auth redirects (returnUrl, safeReturnUrl) | 3.1 | frontend | 2 | todo | — |
-| FR-98 | Runtime `/api` proxy incl. WebSockets to `BACKEND_URL` | 3.2 | frontend | 1 | todo | — |
-| FR-99 | Security headers + CSP nonce | 3.2 | frontend | 1 | todo | — |
-| FR-100 | Approval-token redaction in web logs | 3.2 | frontend | 1 | todo | — |
-| FR-101 | First paint: theme, fonts, favicon, titles | 3.1 | frontend | 1 | todo | — |
-| FR-102 | Dev loop on :3000 proxying to :5080 | 3.1 | frontend + backend config | 1 | todo | — |
-| FR-103 | Standalone web image, non-root, :8080, `/healthz` | 3.2 | frontend + deploy | 1 | todo | — |
-| FR-104 | Local k8s on the Next.js image | 3.3 | deploy | 3 | todo | — |
-| FR-105 | Configurable forwarded-header hops | 3.4 | backend | 1 | todo | — |
-| FR-106 | API entrypoint: volume ownership, drop to `$APP_UID` | 3.4 | backend + deploy | 1 | todo | — |
+| FR-94 | Next.js App Router app replaces Vite/TanStack Router | 3.1 | frontend | 1 | done | CI 39998009637 |
+| FR-95 | Route parity: every v2 URL, search param and alias | 3.1 | frontend | 2 | done | CI 39998009637 |
+| FR-96 | Pages ported as client components (TanStack Query + generated client) | 3.1 | frontend | 2 | done | CI 39998009637 |
+| FR-97 | Auth redirects (returnUrl, safeReturnUrl) | 3.1 | frontend | 2 | done | CI 39998009637 |
+| FR-98 | Runtime `/api` proxy incl. WebSockets to `BACKEND_URL` | 3.2 | frontend | 1 | done | CI 39998009637 |
+| FR-99 | Security headers + CSP nonce | 3.2 | frontend | 1 | done | CI 39998009637 |
+| FR-100 | Approval-token redaction in web logs | 3.2 | frontend | 1 | done | CI 39998009637 |
+| FR-101 | First paint: theme, fonts, favicon, titles | 3.1 | frontend | 1 | done | CI 39998009637 |
+| FR-102 | Dev loop on :3000 proxying to :5080 | 3.1 | frontend + backend config | 1 | done | CI 39998009637 |
+| FR-103 | Standalone web image, non-root, :8080, `/healthz` | 3.2 | frontend + deploy | 1 | done | CI 39998009637 |
+| FR-104 | Local k8s on the Next.js image | 3.3 | deploy | 3 | done (CI); manual Docker Desktop check pending | CI 39998009637 |
+| FR-105 | Configurable forwarded-header hops | 3.4 | backend | 1 | done | CI 39998009637 |
+| FR-106 | API entrypoint: volume ownership, drop to `$APP_UID` | 3.4 | backend + deploy | 1 | done | CI 39998009637 |
 | FR-107 | `.railway/railway.ts` IaC | 3.5 | deploy | 4 | todo | — |
 | FR-108 | `preview` + `production` environments | 3.5 | deploy | 4 | todo | — |
 | FR-109 | Pre-deploy migrations | 3.5 | deploy + data | 4 | todo | — |
@@ -42,9 +42,9 @@ v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests
     - `app-shell.js` 142.49 kB (gzip 42.94 kB)
     - CSS 62.35 kB (gzip 11.12 kB)
     - initial JS on `/projects` ≈ entry + app-shell ≈ 489.9 kB (gzip ≈ 152.9 kB), plus the projects route chunk
-- [ ] 1 Next.js foundation (M17) ‖ backend hosting (M20): FR-94, FR-98–FR-103, FR-105, FR-106
-- [ ] 2 Page port (M18): FR-95–FR-97
-- [ ] 3 Local Kubernetes + CI (M19): FR-104
+- [x] 1 Next.js foundation (M17) ‖ backend hosting (M20) (base 37fcaca): d4d47ac + fix d10c96f. CI green on 31ba6da: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/39998009637
+- [x] 2 Page port (M18): gated together with phase 1 (d4d47ac); see Decisions
+- [x] 3 Local Kubernetes + CI (M19): 31ba6da, CI green: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/39998009637. The Docker Desktop run is a manual check (see below)
 - [ ] 4 Railway (M21): FR-107–FR-111 (needs Railway CLI/login/tokens from Ben; production only on request)
 - [ ] 5 Final (M22): FR-112, docs, audit over v1+v2+v3
 
