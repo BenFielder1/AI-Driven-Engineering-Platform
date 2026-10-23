@@ -44,7 +44,7 @@ async function openImport({ app = true } = {}) {
     configureGitHubApp()
     connectGitHub(me.id)
   }
-  renderRoute('/projects/new')
+  await renderRoute('/projects/new')
   const user = userEvent.setup()
   await stepHeading(/Step 1 of 8: Source/)
   await user.click(screen.getByRole('radio', { name: 'Import an existing repository' }))
@@ -253,7 +253,7 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     configureGitHubApp()
     connectGitHub(me.id)
     seedShop()
-    renderRoute('/projects/new')
+    await renderRoute('/projects/new')
     const user = userEvent.setup()
     await stepHeading(/Step 1 of 8: Source/)
     await next(user)

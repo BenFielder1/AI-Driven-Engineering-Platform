@@ -20,7 +20,7 @@ const stepHeading = (name: RegExp) => screen.findByRole('heading', { level: 2, n
 /** Opens the wizard and passes the Source step with "Start from scratch". */
 async function startWizard() {
   signInAs({ systemRole: 'user' })
-  const utils = renderRoute('/projects/new')
+  const utils = await renderRoute('/projects/new')
   const user = userEvent.setup()
   await stepHeading(/Step 1 of 8: Source/)
   expect(screen.getByRole('radio', { name: 'Start from scratch' })).toBeChecked()
@@ -50,7 +50,7 @@ async function localToConfiguration(user: User) {
 describe('New project wizard (FR-5, FR-73)', () => {
   it('FR73_source_step_first: the wizard starts with Source, scratch selected', async () => {
     signInAs({ systemRole: 'user' })
-    renderRoute('/projects/new')
+    await renderRoute('/projects/new')
     await stepHeading(/Step 1 of 8: Source/)
     const steps = screen.getByRole('list', { name: 'Wizard steps' })
     expect(within(steps).getAllByRole('listitem').map((li) => li.textContent.replace('Completed: ', ''))).toEqual([

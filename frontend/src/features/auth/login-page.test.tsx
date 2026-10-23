@@ -18,7 +18,7 @@ async function fillAndSubmit(email: string, password: string) {
 describe('LoginPage', () => {
   it('FR-1: signs in with email and password and lands on the returnUrl', async () => {
     seedUser({ email: 'ada@example.com', password: 'password1' })
-    const { router } = renderRoute('/login?returnUrl=%2Faccount')
+    const { router } = await renderRoute('/login?returnUrl=%2Faccount')
 
     await fillAndSubmit('ada@example.com', 'password1')
 
@@ -28,7 +28,7 @@ describe('LoginPage', () => {
 
   it('FR-1: without a returnUrl, signing in lands on /projects', async () => {
     seedUser({ email: 'ada@example.com', password: 'password1' })
-    const { router } = renderRoute('/login')
+    const { router } = await renderRoute('/login')
 
     await fillAndSubmit('ada@example.com', 'password1')
 
@@ -38,7 +38,7 @@ describe('LoginPage', () => {
 
   it('FR-1: ignores an off-site returnUrl', async () => {
     seedUser({ email: 'ada@example.com', password: 'password1' })
-    const { router } = renderRoute('/login?returnUrl=%2F%2Fevil.example.com')
+    const { router } = await renderRoute('/login?returnUrl=%2F%2Fevil.example.com')
 
     await fillAndSubmit('ada@example.com', 'password1')
 
@@ -49,7 +49,7 @@ describe('LoginPage', () => {
 
   it('FR-1: INVALID_CREDENTIALS shows the error in an announced summary', async () => {
     seedUser({ email: 'ada@example.com', password: 'password1' })
-    renderRoute('/login')
+    await renderRoute('/login')
 
     await fillAndSubmit('ada@example.com', 'wrong-password1')
 
@@ -64,7 +64,7 @@ describe('LoginPage', () => {
         problem(429, 'RATE_LIMITED', 'Too many attempts.', { headers: { 'Retry-After': '42' } }),
       ),
     )
-    renderRoute('/login')
+    await renderRoute('/login')
 
     await fillAndSubmit('ada@example.com', 'password1')
 
@@ -72,7 +72,7 @@ describe('LoginPage', () => {
   })
 
   it('FR-1: validates required fields before calling the API', async () => {
-    renderRoute('/login')
+    await renderRoute('/login')
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Sign in' }))
@@ -84,7 +84,7 @@ describe('LoginPage', () => {
 
   it('FR80_login_button_shown_for_the_github_app: githubMode app shows "Continue with GitHub"', async () => {
     authDb.githubMode = 'app'
-    renderRoute('/login')
+    await renderRoute('/login')
 
     expect(await screen.findByRole('link', { name: 'Continue with GitHub' })).toHaveAttribute(
       'href',
@@ -94,12 +94,12 @@ describe('LoginPage', () => {
 
   it('FR80_register_button_follows_githubMode: register shows it for app and hides it for none', async () => {
     authDb.githubMode = 'app'
-    const first = renderRoute('/register')
+    const first = await renderRoute('/register')
     expect(await screen.findByRole('link', { name: 'Continue with GitHub' })).toBeInTheDocument()
     first.unmount()
 
     authDb.githubMode = 'none'
-    renderRoute('/register')
+    await renderRoute('/register')
     await screen.findByRole('button', { name: /Create account/ })
     await waitFor(() => {
       expect(screen.queryByRole('link', { name: 'Continue with GitHub' })).not.toBeInTheDocument()
@@ -108,7 +108,7 @@ describe('LoginPage', () => {
 
   it('FR80_login_button_hidden_when_githubMode_none: hides "Continue with GitHub" when GitHub is not configured', async () => {
     authDb.githubMode = 'none'
-    renderRoute('/login')
+    await renderRoute('/login')
 
     await screen.findByRole('button', { name: 'Sign in' })
     // Let the providers query settle.
@@ -119,21 +119,21 @@ describe('LoginPage', () => {
 
   it('FR-2: shows "Continue with GitHub" as a full-page link carrying the returnUrl', async () => {
     authDb.githubMode = 'oauth'
-    renderRoute('/login?returnUrl=%2Faccount')
+    await renderRoute('/login?returnUrl=%2Faccount')
 
     const link = await screen.findByRole('link', { name: 'Continue with GitHub' })
     expect(link).toHaveAttribute('href', '/api/auth/github?returnUrl=%2Faccount')
   })
 
   it('FR-2: explains a GitHub failure from ?error=GITHUB_AUTH_FAILED&reason=…', async () => {
-    renderRoute('/login?error=GITHUB_AUTH_FAILED&reason=link_required')
+    await renderRoute('/login?error=GITHUB_AUTH_FAILED&reason=link_required')
 
     expect(await screen.findByText(/Sign in with your password, then link GitHub/)).toBeInTheDocument()
     expect(screen.getByText('GitHub sign-in failed')).toBeInTheDocument()
   })
 
   it('FR-2: unknown GitHub failure reasons fall back to generic copy', async () => {
-    renderRoute('/login?error=GITHUB_AUTH_FAILED&reason=something_new')
+    await renderRoute('/login?error=GITHUB_AUTH_FAILED&reason=something_new')
 
     expect(await screen.findByText("GitHub sign-in didn't complete. Try again.")).toBeInTheDocument()
   })

@@ -1,6 +1,6 @@
-import { Link } from '@tanstack/react-router'
 
 import { panelClass } from '../../components/shared/panel-class'
+import { Link } from '../../lib/navigation'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { cn } from '../../lib/utils'
 import { adminSections } from './admin-sections'

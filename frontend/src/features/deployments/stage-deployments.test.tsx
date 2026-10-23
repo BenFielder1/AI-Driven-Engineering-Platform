@@ -55,7 +55,7 @@ describe('Review page → preview deployment (FR-90)', () => {
   }
 
   async function openReview(project: StoredProject) {
-    renderRoute(`/projects/${project.id}/review`)
+    await renderRoute(`/projects/${project.id}/review`)
     await screen.findByRole('heading', { level: 2, name: 'Review' })
     return userEvent.setup()
   }
@@ -137,8 +137,9 @@ describe('Release page → production deployment (FR-91)', () => {
   }
 
   async function openRelease(project: StoredProject) {
-    renderRoute(`/projects/${project.id}/release`)
-    await screen.findByRole('heading', { level: 2, name: 'Release' })
+    await renderRoute(`/projects/${project.id}/release`)
+    // findAll: the stage header and the release panel both have a level-2 "Release" heading.
+    await screen.findAllByRole('heading', { level: 2, name: 'Release' })
     return userEvent.setup()
   }
 
@@ -180,7 +181,7 @@ describe('Overview → latest deployment (FR-90, FR-91)', () => {
       seedDeployment(p, { target: 'production', releaseVersion: '0.1.0' })
       seedDeployment(p, { target: 'preview', status: 'building', url: null, gitSha: 'abcdef0123456789abcdef0123456789abcdef01' })
     })
-    renderRoute(`/projects/${project.id}`)
+    await renderRoute(`/projects/${project.id}`)
     const card = await screen.findByRole('region', { name: 'Latest deployment' })
     const latest = await within(card).findByTestId('latest-deployment')
     expect(latest).toHaveTextContent('Preview')
@@ -191,7 +192,7 @@ describe('Overview → latest deployment (FR-90, FR-91)', () => {
 
   it('FR91_overview_hidden_without_deployment', async () => {
     const project = seedProjectAs('owner')
-    renderRoute(`/projects/${project.id}`)
+    await renderRoute(`/projects/${project.id}`)
     await screen.findByRole('region', { name: 'Review' })
     expect(screen.queryByRole('region', { name: 'Latest deployment' })).not.toBeInTheDocument()
   })

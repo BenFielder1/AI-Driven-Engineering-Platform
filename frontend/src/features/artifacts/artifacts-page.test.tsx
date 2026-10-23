@@ -74,7 +74,7 @@ describe('Artifacts page (FR-16, FR-20, FR-21)', () => {
   it('shows an error with retry when the artifacts fail to load', async () => {
     const project = seedProjectAs('owner')
     server.use(http.get('*/api/projects/:id/artifacts', () => new HttpResponse(null, { status: 500 })))
-    renderRoute(`/projects/${project.id}/artifacts`)
+    await renderRoute(`/projects/${project.id}/artifacts`)
     const user = userEvent.setup()
 
     expect(await screen.findByText("The artifacts couldn't load", {}, { timeout: 5000 })).toBeInTheDocument()

@@ -29,7 +29,7 @@ Added in v2:
 
 ```mermaid
 flowchart LR
-  Browser -->|"http://localhost:8080"| Web["web: nginx + React SPA"]
+  Browser -->|"http://localhost:8080"| Web["web: Next.js server (Node)"]
   Web -->|"/api (same origin, incl. WebSocket /api/hubs)"| Api["api: ASP.NET Core<br/>endpoints + hosted workers + SignalR"]
   CLI["aide CLI"] -->|"Bearer API token"| Web
   Api --> Db[("PostgreSQL 17<br/>data + job/outbox table")]
@@ -44,7 +44,7 @@ flowchart LR
 - One API process runs the endpoints and the background workers. Workers claim jobs from a PostgreSQL table with `FOR UPDATE SKIP LOCKED`. There is no Redis or message broker (SPEC D1).
 - State changes and their follow-up jobs are written in one transaction (outbox).
 - Live updates use one SignalR hub, so run a single API replica.
-- The SPA calls the API only through the generated client, at same-origin `/api`. Vite proxies it in the dev loop. nginx proxies it on Kubernetes.
+- The frontend calls the API only through the generated client, at same-origin `/api`. The web server (`frontend/server.ts`, a custom Node server around Next.js) proxies it, WebSocket upgrades included, to `BACKEND_URL`. It also sets the security headers and CSP nonce, and logs redacted JSON lines.
 - On Kubernetes, `deploy-local.sh` runs the `db-migrate` Job (an EF Core bundle in the API image) and waits for it before it updates the API and web pods. A failed migration leaves the running version untouched.
 
 ### Repo layout
@@ -61,7 +61,8 @@ backend/
 frontend/
   src/api/generated/        GENERATED client
   src/features/             pages, components, hooks per feature
-  src/routes/               TanStack Router file routes
+  src/app/                  Next.js App Router routes (thin; render feature pages)
+  server.ts                 custom Node server: serves the app, proxies /api
   e2e/                      Playwright
 deploy/
   k8s/base, k8s/overlays/local, k8s/overlays/local-e2e   Kustomize manifests
@@ -80,7 +81,7 @@ Business rules live in `Aide.Domain`. Endpoints stay thin. The contract flows on
 | Need | Version / note |
 | --- | --- |
 | .NET SDK | 10.0.401 (`backend/global.json`, roll-forward to the latest feature band) |
-| Node.js | 24 (`frontend/.nvmrc`) |
+| Node.js | 24 (`frontend/.nvmrc`). The web server runs `.ts` files with Node type stripping |
 | Docker Desktop | Needed for the dev database, integration tests and image builds |
 | Kubernetes | Docker Desktop, Settings, Kubernetes, enable. This provides `kubectl` and the `docker-desktop` context |
 | Memory | Give Docker Desktop enough for the cluster, a build, and the pods (limits: api 1 Gi, db 1 Gi, web 128 Mi) |
@@ -113,12 +114,12 @@ Each session:
 ```bash
 docker compose up -d db
 dotnet run --project backend/src/Aide.Api    # http://localhost:5080
-npm --prefix frontend run dev                # http://localhost:5173 (proxies /api to 5080)
+npm --prefix frontend run dev                # http://localhost:3000 (Next.js dev server; proxies /api to BACKEND_URL, default 5080)
 ```
 
 | What | URL |
 | --- | --- |
-| App (use this one) | http://localhost:5173 |
+| App (use this one) | http://localhost:3000 |
 | API | http://localhost:5080 |
 | Database | localhost:5432 |
 
@@ -140,7 +141,7 @@ The script builds the `aide-api` and `aide-web` images, tags them with the git S
   `kubectl --context docker-desktop -n aide logs deploy/api | grep -i 'Seeded admin'`
   After a redeploy the line is gone. Note it on the first deploy.
 - **Logs:** `kubectl --context docker-desktop -n aide logs deploy/api` (also `deploy/web`, `statefulset/db`, `job/db-migrate`). Logs are JSON.
-- **Smoke test only:** `./deploy/scripts/smoke.sh` (checks `/`, a SPA route and `/api/health/ready`; `deploy-local.sh` runs it at the end). Health also fails if an embedded preset does not load.
+- **Smoke test only:** `./deploy/scripts/smoke.sh` (checks `/`, an app route and `/api/health/ready`; `deploy-local.sh` runs it at the end). Health also fails if an embedded preset does not load.
 - **E2E mode:** `./deploy/scripts/deploy-local.sh --e2e` is the only switch. It applies `deploy/k8s/overlays/local-e2e`: `Deployments__Provider=Fake`, `Deployments__AllowFake=true`, `Git__Local__ImportRoot=/data/import` and `Llm__DefaultProvider=fake`. It also seeds the Local import repo `/data/import/existing-app` (tags `v0.1.0`, `v0.2.0`) with `seed-e2e-repo.sh`. The API logs a warning on every boot while Fake deployments are on. Use it only for Playwright runs.
 - **Switch back:** run `./deploy/scripts/deploy-local.sh` again without `--e2e`. The API pod restarts with Vercel deployments and no Local import. The seeded repo stays on the volume, unused.
 - **Teardown:** `./deploy/scripts/teardown-local.sh` (no flags) removes workloads, services, config and secrets. It keeps the namespace and the volumes, so data survives.
@@ -182,7 +183,7 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Workspaces:Root` | Git working copies and local repos | `/data/workspaces` in a container, else `%LOCALAPPDATA%/aide/workspaces` | no |
 | `Telemetry:ConsoleExporter` | OpenTelemetry console exporter | `false` (`true` in Development) | no |
 | `Seed:Enabled` | Create the seed admin and demo projects | `false` (`true` in Development and the local k8s overlay) | no |
-| `App:PublicBaseUrl` | Browser-facing base URL (absolute http(s), validated at start-up): notification links, the GitHub App manifest's callback and setup URLs, PR links back to AIDE | `http://localhost:8080` (`http://localhost:5173` in Development) | no |
+| `App:PublicBaseUrl` | Browser-facing base URL (absolute http(s), validated at start-up): notification links, the GitHub App manifest's callback and setup URLs, PR links back to AIDE | `http://localhost:8080` (`http://localhost:3000` in Development) | no |
 | `Approvals:SigningKey` | HMAC key for one-click approval links, at least 32 chars | none: no links are created | yes |
 | `Auth:Cookie:SecurePolicy` | Auth cookie `Always`, `SameAsRequest` or `None` | `SameAsRequest` | no |
 | `Auth:RateLimits:LoginPerMinute` | Login attempts per IP per minute | `5` | no |
@@ -229,8 +230,9 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Smtp:From` | Sender address | `aide@aide.local` | no |
 | `Smtp:EnableSsl` | TLS for SMTP | `true` | no |
 | `Smtp:Timeout` | One whole send, positive and at most `00:01:00` | `00:00:15` | no |
+| `BACKEND_URL` | Web server only (`frontend/server.ts`): API origin it proxies `/api` to, WebSocket included | `http://localhost:5080` | no |
 | `ASPNETCORE_ENVIRONMENT` | `Development` (dev loop) or `Production` (k8s) | set by launch profile / configmap | no |
-| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | Trust nginx `X-Forwarded-*` | `true` in the k8s configmap | no |
+| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | Trust the web server's `X-Forwarded-*` | `true` in the k8s configmap | no |
 
 `GitHub:AllowInsecureGitBaseUrl` exists for tests only. Do not set it.
 
@@ -239,7 +241,7 @@ Where each value lives:
 | Kind | Dev loop | Kubernetes |
 | --- | --- | --- |
 | Secrets (marked "yes") | `dotnet user-secrets set "<Key>" "<value>" --project backend/src/Aide.Api` | `deploy/k8s/overlays/local/secrets.env`, as `Key__Sub=value` |
-| `App:PublicBaseUrl` | `appsettings.Development.json` (`http://localhost:5173`) | `app-config-local.yaml` |
+| `App:PublicBaseUrl` | `appsettings.Development.json` (`http://localhost:3000`) | `app-config-local.yaml` |
 | `Deployments:*`, `Git:Local:ImportRoot`, `Llm:DefaultProvider` for E2E | environment variables | `deploy/k8s/overlays/local-e2e/app-config-e2e.yaml` (`--e2e` only) |
 | Other non-secrets | `appsettings*.json` or environment variables | `deploy/k8s/base/configmap.yaml` |
 
@@ -248,10 +250,10 @@ Vercel tokens, user LLM keys, GitHub user tokens, the registered GitHub App and 
 ### a. GitHub sign-in (OAuth App)
 
 1. GitHub, Settings, Developer settings, OAuth Apps, New OAuth App.
-2. Homepage URL: `http://localhost:8080` (Kubernetes) or `http://localhost:5173` (dev loop).
+2. Homepage URL: `http://localhost:8080` (Kubernetes) or `http://localhost:3000` (dev loop).
 3. Authorization callback URL: `<homepage>/api/auth/github/callback`. The code builds the callback from the host the browser used, so it must match exactly:
    - Kubernetes: `http://localhost:8080/api/auth/github/callback`
-   - Dev loop: `http://localhost:5173/api/auth/github/callback` (sign in through the Vite URL, not 5080)
+   - Dev loop: `http://localhost:3000/api/auth/github/callback` (sign in through the Next.js URL, not 5080)
    If your OAuth App takes only one callback URL, create one app per host.
 4. Generate a client secret. Scopes requested: `read:user`, `user:email`.
 5. Set `GitHub:OAuth:ClientId` and `GitHub:OAuth:ClientSecret` (dev: user-secrets; k8s: `GitHub__OAuth__ClientId` and `GitHub__OAuth__ClientSecret` in `secrets.env`, then re-run `deploy-local.sh`).
@@ -325,7 +327,7 @@ Override per agent with `Llm__Providers__<Name>__Models__<Agent>`. Agent names: 
 | --- | --- | --- |
 | Backend unit + integration | `cd backend && dotnet test` | Integration tests use Testcontainers, so Docker must run |
 | Frontend unit | `cd frontend && npm test` | Vitest, Testing Library, MSW |
-| E2E | `cd frontend && npm run test:e2e` | Playwright. Starts `npm run dev` unless `BASE_URL` is set |
+| E2E | `cd frontend && npm run test:e2e` | Playwright. Default `BASE_URL` is `http://localhost:3000`; its `webServer` starts `npm run dev` unless `BASE_URL` is set |
 | E2E on Kubernetes | `BASE_URL=http://localhost:8080 npm run test:e2e` | Needs a deployed app |
 | One browser | `npx playwright test --project=chromium` | Projects: `chromium`, `firefox`, `webkit`, `msedge` (only if Edge is installed or `E2E_MSEDGE=1`), `a11y-setup`, `a11y` |
 | Cross-browser | `BASE_URL=http://localhost:8080 npx playwright test --project=firefox --workers=1` | Also `webkit`, `msedge`. Runs the smoke, auth, lifecycle and permissions specs. Use `--workers=1`: registrations are limited to 5 per minute per IP |
@@ -344,7 +346,7 @@ cd backend && dotnet build src/Aide.Api      # writes backend/openapi/api.json
 cd frontend && npm run gen:api               # writes src/api/generated/
 ```
 
-`src/routeTree.gen.ts` is rewritten by `npm run dev` and `npm run build`. Commit all three.
+Commit both generated outputs. There is no generated route tree: Next.js discovers routes from `src/app/`.
 
 Full gate. GitHub Actions runs this, plus E2E and image builds, on every push to `main` and `build/**` and on PRs. Agents
 don't run it locally: they review first, push to the build branch, and fix until CI is green (see CLAUDE.md "Commit
@@ -402,10 +404,10 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on pull requests, pushes to `ma
 | Job | Checks |
 | --- | --- |
 | backend | Release build with warnings as errors, `openapi/api.json` up to date, no pending EF model changes, CLI packs, tests (Testcontainers), `dotnet format` |
-| frontend | Client regenerated and unchanged, typecheck, lint, tests, build, route tree unchanged |
+| frontend | Client regenerated and unchanged, typecheck, lint, tests, build |
 | manifests | `validate-manifests.sh`: Kustomize render plus kubeconform for both overlays (`local`, `local-e2e`) |
 | scripts | `bash -n` on the shell scripts, shellcheck at error severity |
 | images | `api` and `web` images build (no push) |
-| e2e | Three shards on `chromium` against the API (E2E mode: Fake LLM, Fake deployments, Local Git with a seeded import repo) and Vite: `v1` specs, `v2` specs (versions, import, preset), and `a11y` |
+| e2e | Three shards on `chromium` against the API (E2E mode: Fake LLM, Fake deployments, Local Git with a seeded import repo) and the Next.js dev server: `v1` specs, `v2` specs (versions, import, preset), and `a11y` |
 
 CI uses no secrets and no real LLM, GitHub or Vercel access. The Firefox, WebKit and Edge projects and the perf scripts run locally or against Kubernetes. The E2E shards have not yet run on GitHub.

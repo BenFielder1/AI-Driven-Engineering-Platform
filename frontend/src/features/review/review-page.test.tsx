@@ -22,7 +22,7 @@ function seedReview(role: ProjectRole, setup?: (p: StoredProject) => void) {
 }
 
 async function openReview(project: StoredProject) {
-  const utils = renderRoute(`/projects/${project.id}/review`)
+  const utils = await renderRoute(`/projects/${project.id}/review`)
   await screen.findByRole('heading', { level: 2, name: 'Review' })
   await waitFor(() => {
     expect(screen.queryByText('Loading review…')).not.toBeInTheDocument()

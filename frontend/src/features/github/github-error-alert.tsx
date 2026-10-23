@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 import { ExternalLink } from 'lucide-react'
 
 import { Alert } from '../../components/ui/alert'

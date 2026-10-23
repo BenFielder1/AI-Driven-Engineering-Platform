@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useRef, type KeyboardEvent } from 'react'
 

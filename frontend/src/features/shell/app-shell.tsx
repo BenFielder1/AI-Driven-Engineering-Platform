@@ -1,9 +1,9 @@
-import { useRouterState } from '@tanstack/react-router'
+import dynamic from 'next/dynamic'
 import { useEffect, useState, type ReactNode } from 'react'
 
+import { useLocation } from '../../lib/navigation'
 import { cn } from '../../lib/utils'
 import type { User } from '../auth/auth-api'
-import { CommandPalette } from './command-palette'
 import { Header } from './header'
 import { HealthIndicator } from './health-indicator'
 import { MobileDrawer } from './mobile-drawer'
@@ -34,6 +34,30 @@ export function AmbientOrbs() {
   )
 }
 
+/**
+ * SPEC §8 bundle budget: the ⌘K palette (cmdk) is not part of the initial chunks. It is mounted on first open, and its
+ * chunk is fetched while the browser is idle after the shell renders, so the first ⌘K or button press opens it at once
+ * (and still works, after the fetch, if the idle preload hasn't run yet).
+ */
+const loadCommandPalette = () => import('./command-palette')
+const CommandPalette = dynamic(() => loadCommandPalette().then((m) => m.CommandPalette), { ssr: false })
+
+function preloadCommandPalette(): () => void {
+  const preload = () => {
+    void loadCommandPalette()
+  }
+  if (typeof window.requestIdleCallback === 'function') {
+    const id = window.requestIdleCallback(preload, { timeout: 5000 })
+    return () => {
+      window.cancelIdleCallback(id)
+    }
+  }
+  const id = window.setTimeout(preload, 2000)
+  return () => {
+    window.clearTimeout(id)
+  }
+}
+
 const contentPadding: Record<SidebarMode, string> = {
   auto: 'lg:pl-16 xl:pl-64',
   collapsed: 'lg:pl-16',
@@ -49,8 +73,10 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
   const sidebar = useSidebarPreference()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  // Mounted (and its chunk loaded) only once it has been opened.
+  const [paletteMounted, setPaletteMounted] = useState(false)
   // FR-53: any navigation (a nav link, the user menu, Back/Forward) closes the drawer.
-  const href = useRouterState({ select: (s) => s.location.href })
+  const { href } = useLocation()
   const [drawerHref, setDrawerHref] = useState(href)
   if (href !== drawerHref) {
     setDrawerHref(href)
@@ -62,16 +88,20 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
+        setPaletteMounted(true)
         setPaletteOpen((v) => !v)
       }
     }
     window.addEventListener('keydown', onKey)
+    const cancelPreload = preloadCommandPalette()
     return () => {
       window.removeEventListener('keydown', onKey)
+      cancelPreload()
     }
   }, [])
 
   const openPalette = () => {
+    setPaletteMounted(true)
     setPaletteOpen(true)
   }
 
@@ -106,7 +136,7 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
         </footer>
       </div>
       <MobileDrawer open={drawerOpen} onOpenChange={setDrawerOpen} user={user} nav={nav} onOpenPalette={openPalette} />
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} nav={nav} />
+      {paletteMounted && <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} nav={nav} />}
     </div>
   )
 }

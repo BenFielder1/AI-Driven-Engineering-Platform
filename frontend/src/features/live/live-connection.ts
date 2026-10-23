@@ -1,20 +1,12 @@
-import {
-  DefaultHttpClient,
-  HttpTransportType,
-  HubConnectionBuilder,
-  LogLevel,
-  NullLogger,
-  type HttpRequest,
-  type HttpResponse,
-  type ILogger,
-} from '@microsoft/signalr'
+import type * as SignalRModule from '@microsoft/signalr'
+import type { HttpRequest, HttpResponse, HubConnection, ILogger } from '@microsoft/signalr'
 import { createContext } from 'react'
 
 import { readXsrfToken, refreshAntiforgeryToken, XSRF_HEADER, type Schemas } from '../../api/client'
 
 export type ProjectEventMessage = Schemas['ProjectEventMessage']
 
-/** §6 `WS /api/hubs/projects`: same origin, so the Vite dev proxy / nginx forward it (WebSocket upgrade). */
+/** §6 `WS /api/hubs/projects`: same origin, so the web server (server.ts) forwards it (WebSocket upgrade, FR-98). */
 export const PROJECTS_HUB_PATH = '/api/hubs/projects'
 
 /**
@@ -37,58 +29,111 @@ export interface LiveConnection {
 
 export type LiveConnectionFactory = () => LiveConnection
 
+type SignalR = typeof SignalRModule
+
 /**
  * Adds the antiforgery header (NFR-SEC) to SignalR's own HTTP requests (negotiate, and the long-polling/SSE fallbacks),
  * read per request so a refreshed `XSRF-TOKEN` cookie is picked up. Browsers can't set headers on the WebSocket
  * upgrade itself; it's authenticated by the cookie and the negotiated connection token.
  */
-class AntiforgeryHttpClient extends DefaultHttpClient {
-  override async send(request: HttpRequest): Promise<HttpResponse> {
-    if (!readXsrfToken()) {
-      await refreshAntiforgeryToken()
+function antiforgeryHttpClient(signalr: SignalR, logger: ILogger) {
+  class AntiforgeryHttpClient extends signalr.DefaultHttpClient {
+    override async send(request: HttpRequest): Promise<HttpResponse> {
+      if (!readXsrfToken()) {
+        await refreshAntiforgeryToken()
+      }
+      const token = readXsrfToken()
+      return super.send(token ? { ...request, headers: { ...request.headers, [XSRF_HEADER]: token } } : request)
     }
-    const token = readXsrfToken()
-    return super.send(token ? { ...request, headers: { ...request.headers, [XSRF_HEADER]: token } } : request)
   }
+  return new AntiforgeryHttpClient(logger)
 }
 
-/** The production factory: a SignalR connection to the same-origin projects hub, reconnecting automatically. */
-export const createSignalRConnection: LiveConnectionFactory = () => {
-  const logger: ILogger = import.meta.env.DEV ? { log: (level, message) => {
-    if (level >= LogLevel.Warning) {
-      console.warn(`[live] ${message}`)
-    }
-  } } : NullLogger.instance
-  const connection = new HubConnectionBuilder()
+function buildConnection(signalr: SignalR): HubConnection {
+  const logger: ILogger =
+    process.env.NODE_ENV === 'development'
+      ? {
+          log: (level, message) => {
+            if (level >= signalr.LogLevel.Warning) {
+              console.warn(`[live] ${message}`)
+            }
+          },
+        }
+      : signalr.NullLogger.instance
+  const { HttpTransportType } = signalr
+  return new signalr.HubConnectionBuilder()
     .withUrl(PROJECTS_HUB_PATH, {
-      httpClient: new AntiforgeryHttpClient(logger),
+      httpClient: antiforgeryHttpClient(signalr, logger),
       transport: HttpTransportType.WebSockets | HttpTransportType.ServerSentEvents | HttpTransportType.LongPolling,
       withCredentials: true,
     })
     .withAutomaticReconnect()
     .configureLogging(logger)
     .build()
+}
+
+/**
+ * The production factory: a SignalR connection to the same-origin projects hub, reconnecting automatically.
+ * `@microsoft/signalr` is imported on first use (SPEC §8 bundle budget: only project pages need it), so handlers
+ * registered before that are applied once the connection exists.
+ */
+export const createSignalRConnection: LiveConnectionFactory = () => {
+  let connection: HubConnection | undefined
+  let building: Promise<HubConnection> | undefined
+  const pending: ((c: HubConnection) => void)[] = []
+  const ready = () =>
+    (building ??= import('@microsoft/signalr').then((signalr) => {
+      const built = buildConnection(signalr)
+      connection = built
+      for (const apply of pending.splice(0)) {
+        apply(built)
+      }
+      return built
+    }))
+  const register = (apply: (c: HubConnection) => void) => {
+    if (connection) {
+      apply(connection)
+    } else {
+      pending.push(apply)
+    }
+  }
 
   return {
-    start: () => connection.start(),
-    stop: () => connection.stop(),
-    invoke: (method, projectId) => connection.invoke(method, projectId),
+    start: async () => {
+      await (await ready()).start()
+    },
+    stop: async () => {
+      if (building) {
+        await (await building).stop()
+      }
+    },
+    invoke: async (method, projectId) => {
+      await (await ready()).invoke(method, projectId)
+    },
     onProjectEvent: (handler) => {
-      connection.on('projectEvent', handler)
+      register((c) => {
+        c.on('projectEvent', handler)
+      })
     },
     onReconnecting: (handler) => {
-      connection.onreconnecting(() => {
-        handler()
+      register((c) => {
+        c.onreconnecting(() => {
+          handler()
+        })
       })
     },
     onReconnected: (handler) => {
-      connection.onreconnected(() => {
-        handler()
+      register((c) => {
+        c.onreconnected(() => {
+          handler()
+        })
       })
     },
     onClose: (handler) => {
-      connection.onclose(() => {
-        handler()
+      register((c) => {
+        c.onclose(() => {
+          handler()
+        })
       })
     },
   }

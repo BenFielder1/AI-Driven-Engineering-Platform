@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { useRouterState } from '@tanstack/react-router'
 
+import { usePathname } from '../../lib/navigation'
 import { canViewAdmin } from '../../lib/permissions'
 import type { User } from '../auth/auth-api'
 import { projectQueryOptions, projectStateQueryOptions } from '../projects/projects-api'
@@ -29,7 +29,7 @@ export interface ShellNav {
 
 /** What the shell needs to render nav-config for the current route and viewer. */
 export function useShellNav(user: User): ShellNav {
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const pathname = usePathname()
   const projectId = projectIdFromPath(pathname)
   const project = useQuery({ ...projectQueryOptions(projectId ?? ''), enabled: projectId !== undefined })
   // Only once the project loaded: a 403/404 project has no state to show (the layout explains why).

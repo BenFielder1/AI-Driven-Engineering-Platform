@@ -20,7 +20,7 @@ function signInAdmin() {
 
 /** Renders `path` and waits until the admin list has loaded. */
 async function open(path: string, heading: string) {
-  const utils = renderRoute(path)
+  const utils = await renderRoute(path)
   await screen.findByRole('heading', { level: 2, name: heading })
   await waitFor(() => {
     expect(screen.queryByText(/^Loading (events|runs|dead letters|users)…$/)).not.toBeInTheDocument()
@@ -45,7 +45,7 @@ describe('Admin area access (FR-3, FR-51)', () => {
     signInAs({ systemRole: 'user', email: 'bob@example.com', name: 'Bob' })
 
     for (const path of ['/admin', '/admin/events', '/admin/runs', '/admin/dead-letters', '/admin/users', '/admin/integrations']) {
-      const { unmount } = renderRoute(path)
+      const { unmount } = await renderRoute(path)
       expect(await screen.findByRole('heading', { level: 1, name: "You don't have access to this page" })).toBeInTheDocument()
       expect(screen.queryByRole('navigation', { name: 'Admin sections' })).not.toBeInTheDocument()
       unmount()
@@ -55,7 +55,7 @@ describe('Admin area access (FR-3, FR-51)', () => {
 
   it('FR51_ landing: /admin links to every section, and the section nav marks the current one', async () => {
     signInAdmin()
-    renderRoute('/admin')
+    await renderRoute('/admin')
     const user = userEvent.setup()
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument()
@@ -453,7 +453,7 @@ describe('Admin → Integrations → LLM system keys (FR-79)', () => {
   it('FR79_admin_llm_policy: shows the configured policy read-only and where it is set', async () => {
     signInAdmin()
     connectionsDb.policy = { allowSystemKeys: true, systemKeyProviders: ['anthropic', 'openai'] }
-    renderRoute('/admin/integrations')
+    await renderRoute('/admin/integrations')
     const panel = await screen.findByRole('region', { name: 'LLM system keys' })
     expect(await within(panel).findByTestId('system-keys-allowed')).toHaveTextContent('Allowed')
     expect(panel).toHaveTextContent('Keys configured: Anthropic, OpenAI')
@@ -464,7 +464,7 @@ describe('Admin → Integrations → LLM system keys (FR-79)', () => {
 
   it('FR79_admin_llm_policy: off by default, with no keys configured', async () => {
     signInAdmin()
-    renderRoute('/admin/integrations')
+    await renderRoute('/admin/integrations')
     const panel = await screen.findByRole('region', { name: 'LLM system keys' })
     expect(await within(panel).findByTestId('system-keys-allowed')).toHaveTextContent('Not allowed')
     expect(panel).toHaveTextContent('Keys configured: none')

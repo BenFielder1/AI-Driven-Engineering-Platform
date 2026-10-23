@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 
 import type { Schemas } from '../../api/client'
 import { ErrorState, LoadingState } from '../../components/ui/states'

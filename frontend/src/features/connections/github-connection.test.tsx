@@ -7,7 +7,7 @@ import { configureGitHubApp, connectGitHub, githubDb, INSTALL_URL } from '../../
 import { currentHref, renderRoute } from '../../test/render'
 
 async function openConnections(path = '/connections') {
-  renderRoute(path)
+  await renderRoute(path)
   await screen.findByRole('heading', { level: 1, name: 'Connections' })
   return { section: screen.getByRole('region', { name: 'GitHub' }), user: userEvent.setup() }
 }
@@ -103,7 +103,7 @@ describe('/connections → GitHub (FR-81)', () => {
   it('FR81_app_installed: the setup URL /account/connections?github=installed keeps the param, toasts and shows the installations', async () => {
     const me = signInAs({ systemRole: 'user' })
     connectGitHub(me.id, { login: 'ada' })
-    const renderResult = renderRoute('/account/connections?github=installed')
+    const renderResult = await renderRoute('/account/connections?github=installed')
     await screen.findByRole('heading', { level: 1, name: 'Connections' })
 
     expect(await screen.findByText('AIDE installed on GitHub')).toBeInTheDocument()

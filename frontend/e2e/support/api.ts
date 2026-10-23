@@ -34,7 +34,7 @@ export const REGISTER_BUDGET_MS = 6 * 60_000
 const LOCK_WAIT_MS = REGISTER_BUDGET_MS - 90_000
 
 function lockPath(): string {
-  const target = (process.env.BASE_URL ?? 'http://localhost:5173').replace(/[^a-z0-9]+/gi, '_')
+  const target = (process.env.BASE_URL ?? 'http://localhost:3000').replace(/[^a-z0-9]+/gi, '_')
   return join(tmpdir(), `aide-e2e-register-${target}.lock`)
 }
 

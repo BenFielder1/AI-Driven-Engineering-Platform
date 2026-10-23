@@ -37,7 +37,7 @@ function seedWithDeployments(role: ProjectRole) {
 }
 
 async function openDeployments(project: StoredProject) {
-  const utils = renderRoute(`/projects/${project.id}/deployments`)
+  const utils = await renderRoute(`/projects/${project.id}/deployments`)
   await screen.findByRole('heading', { level: 2, name: 'Deployments' })
   return { ...utils, user: userEvent.setup() }
 }
@@ -181,14 +181,14 @@ describe('/projects/:id/deployments (FR-91)', () => {
 describe('FR-54: the Deployments nav item', () => {
   it('FR91_nav_visibility: Deployments shows in the project nav only when deployment is set up', async () => {
     const plain = seedProjectAs('owner')
-    const first = renderRoute(`/projects/${plain.id}`)
+    const first = await renderRoute(`/projects/${plain.id}`)
     const nav = await screen.findByRole('navigation', { name: 'Project sections' })
     await within(nav).findByRole('link', { name: /Activity/ })
     expect(within(nav).queryByRole('link', { name: /Deployments/ })).not.toBeInTheDocument()
     first.unmount()
 
     seedDeploymentSettings(plain)
-    renderRoute(`/projects/${plain.id}`)
+    await renderRoute(`/projects/${plain.id}`)
     const nav2 = await screen.findByRole('navigation', { name: 'Project sections' })
     expect(await within(nav2).findByRole('link', { name: /Deployments/ })).toHaveAttribute('href', `/projects/${plain.id}/deployments`)
   })

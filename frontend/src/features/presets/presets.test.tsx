@@ -38,7 +38,7 @@ function pin(p: StoredProject, presetId: string | null, name: string | null = nu
 /** Source (scratch) → idea → Local repository → Version → the Stack step. */
 async function wizardToStack() {
   owner()
-  renderRoute('/projects/new')
+  await renderRoute('/projects/new')
   const user = userEvent.setup()
   await stepHeading(/Step 1 of 8: Source/)
   await next(user)
@@ -131,7 +131,7 @@ describe('Projects list → preset chip and filter (FR-74, SPEC §7.2)', () => {
     const withPreset = seedProject({ name: 'Storefront' })
     pin(withPreset, 'nextjs-frontend', 'Next.js frontend')
     seedProject({ name: 'Inventory' })
-    const { router } = renderRoute('/projects')
+    const { router } = await renderRoute('/projects')
     const user = userEvent.setup()
 
     // Below md the rows are cards (DataTable); each carries the chip.
@@ -169,7 +169,7 @@ describe('Projects list → preset chip and filter (FR-74, SPEC §7.2)', () => {
 
 describe('Settings → Stack: change preset (FR-74, SPEC §2)', () => {
   async function openGeneral(p: StoredProject) {
-    renderRoute(`/projects/${p.id}/settings/general`)
+    await renderRoute(`/projects/${p.id}/settings/general`)
     const section = await screen.findByRole('region', { name: 'Stack' })
     return { section, user: userEvent.setup() }
   }
@@ -253,7 +253,7 @@ describe('Start new version → preset select (FR-60, FR-74)', () => {
       released.presetVersion = '1.0.0'
       released.presetName = 'Next.js frontend'
     }
-    renderRoute(`/projects/${p.id}/release`)
+    await renderRoute(`/projects/${p.id}/release`)
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Start new version' }))
     const dialog = await screen.findByRole('dialog', { name: 'Start a new version' })
@@ -323,7 +323,7 @@ describe('Planning → specialist agents and preset warnings (FR-76)', () => {
         ],
       })
     })
-    renderRoute(`/projects/${project.id}/planning`)
+    await renderRoute(`/projects/${project.id}/planning`)
     await screen.findByRole('heading', { level: 2, name: 'Planning' })
 
     const table = await screen.findByRole('table', { name: /Plan steps/ })
@@ -346,7 +346,7 @@ describe('Planning → specialist agents and preset warnings (FR-76)', () => {
 describe('Admin → Integrations → Presets (FR-74)', () => {
   it('FR74_admin_presets_list_with_detail_sheet', async () => {
     signInAs({ systemRole: 'admin' })
-    renderRoute('/admin/integrations')
+    await renderRoute('/admin/integrations')
     const user = userEvent.setup()
     const panel = await screen.findByRole('region', { name: 'Presets' })
 
@@ -387,7 +387,7 @@ describe('Activity and runs (FR-74, FR-92)', () => {
     const project = seedProjectAs('viewer', (p) => {
       seedRun(p, { agent: 'code_generator', agentKey: 'ui-engineer', presetId: 'nextjs-frontend', presetVersion: '1.0.0' })
     })
-    renderRoute(`/projects/${project.id}/runs`)
+    await renderRoute(`/projects/${project.id}/runs`)
     expect(await screen.findByTestId('run-preset')).toHaveTextContent('nextjs-frontend@1.0.0')
   })
 })

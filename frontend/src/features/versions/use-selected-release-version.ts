@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useSearch } from '@tanstack/react-router'
 
+import { useNavigate, useSearch } from '../../lib/navigation'
 import { releaseVersionsQueryOptions, type ReleaseVersion } from './versions-api'
 import { normalizeVersion } from './semver'
 
@@ -34,7 +34,7 @@ export interface ReleaseView {
  * or the current version itself, means the current version (editable).
  */
 export function useSelectedReleaseVersion(projectId: string, currentReleaseVersionId: string | null): ReleaseView {
-  const search: Record<string, unknown> = useSearch({ strict: false })
+  const search: Record<string, unknown> = useSearch()
   const requested = parseReleaseSearch(search[RELEASE_SEARCH_PARAM])
   const versions = useQuery(releaseVersionsQueryOptions(projectId))
   const list = versions.data ?? []
@@ -54,9 +54,6 @@ export function useSelectedReleaseVersion(projectId: string, currentReleaseVersi
 export function useShowReleaseVersion(): (version: string | undefined) => void {
   const navigate = useNavigate()
   return (version) => {
-    void navigate({
-      to: '.',
-      search: (prev: Record<string, unknown>) => ({ ...prev, [RELEASE_SEARCH_PARAM]: version }),
-    } as Parameters<typeof navigate>[0])
+    void navigate({ to: '.', search: (prev) => ({ ...prev, [RELEASE_SEARCH_PARAM]: version }) })
   }
 }

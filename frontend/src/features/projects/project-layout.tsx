@@ -1,4 +1,4 @@
-import { Link, useMatchRoute, useRouterState } from '@tanstack/react-router'
+import { Link, useMatchRoute, usePathname } from '../../lib/navigation'
 import type { ReactNode } from 'react'
 
 import { EmptyState } from '../../components/shared/empty-state'
@@ -65,7 +65,7 @@ function ProjectHeader({
   const state = useProjectState(project.id)
   const user = useCurrentUser()
   const role = effectiveProjectRole(user, project.myRole)
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const pathname = usePathname()
   const viewing = stageFromPath(pathname)
   // A past release version is read-only (FR-62): no next action is offered.
   const action = state.data && !readOnly ? nextAction(state.data, (c) => canInProject(user, role, c)) : null
@@ -106,9 +106,9 @@ function ProjectHeader({
  */
 export function ProjectLayout({ projectId, children }: { projectId: string; children: ReactNode }) {
   const project = useProject(projectId)
-  const onOverview = Boolean(useMatchRoute()({ to: '/projects/$projectId', params: { projectId } }))
+  const onOverview = useMatchRoute()({ to: '/projects/$projectId', params: { projectId } })
   const view = useSelectedReleaseVersion(projectId, project.data?.releaseVersionId ?? null)
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const pathname = usePathname()
   // Settings aren't per release version: they stay editable and carry no banner.
   const onSettings = /\/settings(\/|$)/.test(pathname)
 

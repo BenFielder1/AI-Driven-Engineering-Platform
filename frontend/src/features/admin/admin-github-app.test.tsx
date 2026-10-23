@@ -11,7 +11,7 @@ function signInAdmin() {
 }
 
 async function openPanel(path = '/admin/integrations') {
-  renderRoute(path)
+  await renderRoute(path)
   const panel = await screen.findByRole('region', { name: 'GitHub App' })
   return { panel, user: userEvent.setup() }
 }

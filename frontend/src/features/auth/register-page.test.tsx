@@ -19,7 +19,7 @@ async function fillAndSubmit(values: { email: string; name: string; password: st
 
 describe('RegisterPage', () => {
   it('FR-1: registering signs the user in and shows them in the shell', async () => {
-    const { queryClient, router } = renderRoute('/register')
+    const { queryClient, router } = await renderRoute('/register')
 
     await fillAndSubmit({ email: 'a@x.com', name: 'Ada', password: 'password1' })
 
@@ -30,7 +30,7 @@ describe('RegisterPage', () => {
   })
 
   it('FR-3: the first registered user is an Admin and sees the Admin nav', async () => {
-    renderRoute('/register')
+    await renderRoute('/register')
 
     await fillAndSubmit({ email: 'first@x.com', name: 'First', password: 'password1' })
 
@@ -40,7 +40,7 @@ describe('RegisterPage', () => {
 
   it('FR-1: EMAIL_TAKEN marks the email field and keeps the user on the page', async () => {
     seedUser({ email: 'a@x.com' })
-    renderRoute('/register')
+    await renderRoute('/register')
 
     await fillAndSubmit({ email: 'a@x.com', name: 'Ada', password: 'password1' })
 
@@ -51,7 +51,7 @@ describe('RegisterPage', () => {
   })
 
   it('FR-1: enforces the password policy (8+ characters, a letter and a digit) client-side', async () => {
-    renderRoute('/register')
+    await renderRoute('/register')
 
     await fillAndSubmit({ email: 'a@x.com', name: 'Ada', password: 'abcdefgh' })
 
@@ -67,7 +67,7 @@ describe('RegisterPage', () => {
         }),
       ),
     )
-    renderRoute('/register')
+    await renderRoute('/register')
 
     await fillAndSubmit({ email: 'a@x.com', name: 'Ada', password: 'password1' })
 

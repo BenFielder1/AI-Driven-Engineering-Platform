@@ -9,7 +9,7 @@ import { seedProject, type StoredProject } from '../../mocks/handlers/projects'
 import { renderRoute } from '../../test/render'
 
 /** A project in planning with a pending plan_approval gate, seen by `role` on `section`. */
-function openPlanningWithGate(role: ProjectRole, section: string) {
+async function openPlanningWithGate(role: ProjectRole, section: string) {
   const members: { userId: string; role: ProjectRole }[] = []
   if (role !== 'owner') {
     const owner = seedUser({ email: 'grace@example.com', name: 'Grace Hopper', systemRole: 'user' })
@@ -21,14 +21,14 @@ function openPlanningWithGate(role: ProjectRole, section: string) {
   lockArtifact(project, 'project_request')
   lockArtifact(project, 'technical_specification')
   seedGate(project, { type: 'plan_approval', artifactType: 'implementation_plan', artifactVersion: 1 })
-  return { project, ...renderRoute(`/projects/${project.id}/${section}`) }
+  return { project, ...(await renderRoute(`/projects/${project.id}/${section}`)) }
 }
 
 const stepper = () => screen.findByRole('navigation', { name: 'Lifecycle stages' })
 
 describe('FR-54: project header (stage stepper, next action)', () => {
   it('FR54_header: planning + pending plan_approval → stepper ✓ ✓ current(1), and the Owner gets "Approve plan"', async () => {
-    const { project, router } = openPlanningWithGate('owner', 'artifacts')
+    const { project, router } = await openPlanningWithGate('owner', 'artifacts')
 
     const nav = await stepper()
     await waitFor(() => {
@@ -60,25 +60,25 @@ describe('FR-54: project header (stage stepper, next action)', () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe(`/projects/${project.id}/planning`)
     })
-    expect(router.state.location.hash).toBe('stage-gates')
+    expect(router.state.location.hash).toBe('#stage-gates')
   })
 
   it('FR54_header: a Contributor sees the step disabled with the reason; a Viewer sees no action', async () => {
-    openPlanningWithGate('contributor', 'artifacts')
+    await openPlanningWithGate('contributor', 'artifacts')
     const disabled = await screen.findByRole('button', { name: 'Approve plan' })
     expect(disabled).toBeDisabled()
     expect(disabled).toHaveAccessibleDescription('Waiting for a project Owner to approve the plan.')
   })
 
   it('FR54_header: a Viewer gets no next-action button', async () => {
-    openPlanningWithGate('viewer', 'artifacts')
+    await openPlanningWithGate('viewer', 'artifacts')
     await stepper()
     await screen.findByRole('heading', { level: 1, name: 'Inventory tracker' })
     expect(screen.queryByTestId('next-action')).not.toBeInTheDocument()
   })
 
   it('FR54_header: Previous / Next stage follow the stage on screen; the first stage has no previous', async () => {
-    const { project } = openPlanningWithGate('owner', 'refinement')
+    const { project } = await openPlanningWithGate('owner', 'refinement')
     await stepper()
     expect(await screen.findByRole('button', { name: 'Previous stage' })).toBeDisabled()
     expect(screen.getByRole('link', { name: 'Next stage: Specification' })).toHaveAttribute(
@@ -88,7 +88,7 @@ describe('FR-54: project header (stage stepper, next action)', () => {
   })
 
   it('FR53_live: the shell header shows the live indicator on project pages only', async () => {
-    openPlanningWithGate('owner', 'artifacts')
+    await openPlanningWithGate('owner', 'artifacts')
     const live = await screen.findByTestId('live-indicator')
     // In the sticky shell header (SPEC 7.1), not in the page.
     expect(live.closest('header')).toHaveClass('sticky')

@@ -22,7 +22,7 @@ const openUserMenu = async (user: ReturnType<typeof userEvent.setup>) => {
 describe('FR-53: app shell', () => {
   it('FR53_shell: the sidebar shows the lockup, the search trigger and the workspace nav; the header shows breadcrumbs', async () => {
     signInAs({ systemRole: 'user', name: 'Bob' })
-    renderRoute('/projects')
+    await renderRoute('/projects')
 
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
     const aside = sidebar()
@@ -42,7 +42,7 @@ describe('FR-53: app shell', () => {
 
   it('FR53_shell / FR-3: admins get the Admin section with its six pages, and the breadcrumbs follow the route', async () => {
     signInAs({ systemRole: 'admin', name: 'Ada Admin' })
-    renderRoute('/admin/users')
+    await renderRoute('/admin/users')
     const user = userEvent.setup()
 
     await screen.findByRole('heading', { level: 1, name: 'Admin' })
@@ -66,14 +66,14 @@ describe('FR-53: app shell', () => {
 
   it('FR-3: /admin shows a forbidden state to non-admins', async () => {
     signInAs({ systemRole: 'user' })
-    renderRoute('/admin')
+    await renderRoute('/admin')
 
     expect(await screen.findByRole('heading', { level: 1, name: "You don't have access to this page" })).toBeInTheDocument()
   })
 
   it('FR53_shell: /connections shows GitHub and Vercel as not connected (FR-78 lists LLM keys above them)', async () => {
     signInAs()
-    renderRoute('/connections')
+    await renderRoute('/connections')
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Connections' })).toBeInTheDocument()
     for (const name of ['GitHub', 'Vercel']) {
@@ -83,7 +83,7 @@ describe('FR-53: app shell', () => {
 
   it('FR53_palette: ⌘K opens the command palette, which lists nav-config pages and navigates', async () => {
     signInAs({ systemRole: 'admin' })
-    const { router } = renderRoute('/projects')
+    const { router } = await renderRoute('/projects')
     const user = userEvent.setup()
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
 
@@ -102,7 +102,7 @@ describe('FR-53: app shell', () => {
 
   it('FR53_sidebar_collapse: the collapse toggle pins the sidebar and the choice survives a reload', async () => {
     signInAs()
-    const first = renderRoute('/projects')
+    const first = await renderRoute('/projects')
     const user = userEvent.setup()
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
     expect(sidebar()).toHaveAttribute('data-sidebar-mode', 'auto')
@@ -116,7 +116,7 @@ describe('FR-53: app shell', () => {
     expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('collapsed')
     first.unmount()
 
-    renderRoute('/projects')
+    await renderRoute('/projects')
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
     expect(sidebar()).toHaveAttribute('data-sidebar-mode', 'collapsed')
     expect(within(sidebar()).getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument()
@@ -125,7 +125,7 @@ describe('FR-53: app shell', () => {
   it('FR53_sidebar_collapse: unusable storage falls back to auto without breaking the shell', async () => {
     signInAs()
     localStorage.setItem(SIDEBAR_STORAGE_KEY, 'sideways')
-    renderRoute('/projects')
+    await renderRoute('/projects')
 
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
     expect(sidebar()).toHaveAttribute('data-sidebar-mode', 'auto')
@@ -135,7 +135,7 @@ describe('FR-53: app shell', () => {
     window.innerWidth = 375
     window.dispatchEvent(new Event('resize'))
     signInAs()
-    const { router } = renderRoute('/projects')
+    const { router } = await renderRoute('/projects')
     const user = userEvent.setup()
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
 
@@ -162,7 +162,7 @@ describe('FR-53: app shell', () => {
 
   it('FR53_drawer: any location change closes the drawer (Back, the user menu, links outside the nav)', async () => {
     signInAs()
-    const { router } = renderRoute('/projects')
+    const { router } = await renderRoute('/projects')
     const user = userEvent.setup()
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
 
@@ -187,7 +187,7 @@ describe('FR-53: app shell', () => {
 
   it('FR-1: Sign out ends the session, clears cached data and returns to /login', async () => {
     signInAs()
-    const { queryClient, router } = renderRoute('/account')
+    const { queryClient, router } = await renderRoute('/account')
     const user = userEvent.setup()
     await screen.findByRole('heading', { level: 1, name: 'Account' })
     expect(queryClient.getQueryData(['me', 'tokens', 'list'])).toBeDefined()
@@ -226,7 +226,7 @@ describe('FR-53: app shell', () => {
     const trigger = () => within(sidebar()).getByRole('button', { name: /Account menu for/ })
     try {
       signInAs({ name: 'Bob Builder' })
-      renderRoute('/projects')
+      await renderRoute('/projects')
       const user = userEvent.setup()
       await screen.findByRole('heading', { level: 1, name: 'Projects' })
 
@@ -254,7 +254,7 @@ describe('FR-53: app shell', () => {
   it('NFR-A11Y: has a skip link to the main landmark, and the user menu closes with Escape back to its trigger', async () => {
     seedUser({ systemRole: 'admin', email: 'root@example.com' })
     signInAs({ systemRole: 'user', email: 'bob@example.com', name: 'Bob Builder' })
-    renderRoute('/projects')
+    await renderRoute('/projects')
     const user = userEvent.setup()
 
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
@@ -273,7 +273,7 @@ describe('FR-53: app shell', () => {
 
   it('NFR_A11Y_menus: an open user menu does not aria-hide the focusable page behind it (axe aria-hidden-focus)', async () => {
     signInAs({ systemRole: 'user', name: 'Bob Builder', email: 'bob@example.com' })
-    renderRoute('/projects')
+    await renderRoute('/projects')
     const user = userEvent.setup()
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
 
@@ -290,7 +290,7 @@ describe('FR-53: app shell', () => {
 
   it('FR53_theme: the theme menu applies and persists System / Light / Dark', async () => {
     signInAs()
-    renderRoute('/projects')
+    await renderRoute('/projects')
     const user = userEvent.setup()
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
 
@@ -317,7 +317,7 @@ describe('FR-53: app shell', () => {
     server.use(
       http.get('*/api/health/ready', () => HttpResponse.json<Schemas['HealthResponse']>(unhealthyReady, { status: 503 })),
     )
-    renderRoute('/projects')
+    await renderRoute('/projects')
 
     await waitFor(() => {
       expect(screen.getByText(/API status:/)).toHaveTextContent('API status: Unhealthy')
@@ -330,7 +330,7 @@ describe('FR-54: project mode', () => {
     signInAs()
     const project = seedProject({ name: 'Inventory tracker', currentPhase: 'planning' })
     seedGate(project, { type: 'plan_approval', artifactType: 'implementation_plan', artifactVersion: 1 })
-    renderRoute(`/projects/${project.id}`)
+    await renderRoute(`/projects/${project.id}`)
 
     const nav = await screen.findByRole('navigation', { name: 'Project sections' })
     const lifecycle = within(nav).getByRole('list', { name: 'Lifecycle' })
@@ -357,7 +357,7 @@ describe('FR-54: project mode', () => {
     signInAs()
     const project = seedProject({ name: 'Inventory tracker', currentPhase: 'refinement' })
     seedProject({ name: 'Billing service' })
-    const { router } = renderRoute(`/projects/${project.id}/settings`)
+    const { router } = await renderRoute(`/projects/${project.id}/settings`)
     const user = userEvent.setup()
 
     const nav = await screen.findByRole('navigation', { name: 'Project sections' })
@@ -402,7 +402,7 @@ describe('FR-54: project mode', () => {
       ['release', 'Release'],
       ['activity', 'Activity'],
     ] as const) {
-      const { unmount } = renderRoute(`/projects/${project.id}/${path}`)
+      const { unmount } = await renderRoute(`/projects/${project.id}/${path}`)
       expect(await screen.findByRole('heading', { level: 2, name: heading })).toBeInTheDocument()
       expect(screen.queryByRole('heading', { name: 'Page not found' })).not.toBeInTheDocument()
       unmount()

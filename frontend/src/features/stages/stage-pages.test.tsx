@@ -15,8 +15,9 @@ import { dependencyWaves } from './plan-waves'
 import { STAGE_EMPTY_POLL_MS } from './stage-artifact'
 
 async function openStage(project: StoredProject, stage: string, title: string) {
-  const utils = renderRoute(`/projects/${project.id}/${stage}`)
-  await screen.findByRole('heading', { level: 2, name: title })
+  const utils = await renderRoute(`/projects/${project.id}/${stage}`)
+  // findAll: on Release the release panel also has a level-2 "Release" heading once the state has loaded.
+  await screen.findAllByRole('heading', { level: 2, name: title })
   await waitFor(() => {
     expect(screen.queryByText(/^Loading the /)).not.toBeInTheDocument()
   })
@@ -335,7 +336,7 @@ describe('Stage pages (FR-55)', () => {
       p.currentPhase = 'review'
       p.status = 'reviewing'
     })
-    renderRoute(`/projects/${project.id}/review`)
+    await renderRoute(`/projects/${project.id}/review`)
     await screen.findByRole('heading', { level: 2, name: 'Review' })
     expect(await screen.findByRole('region', { name: 'Preview deployment' })).toHaveTextContent("Deployment isn't set up")
   })
@@ -355,7 +356,7 @@ describe('Stage pages (FR-55)', () => {
       seedGate(p, { type: 'plan_approval', status: 'approved', createdAt: '2026-03-01T00:00:00Z', decidedAt: '2026-03-02T00:00:00Z', releaseVersionId: past.id })
       seedGate(p, { type: 'plan_approval', createdAt: '2026-07-01T00:00:00Z', releaseVersionId: current.id })
     })
-    renderRoute(`/projects/${project.id}/planning?release=1.1.0`)
+    await renderRoute(`/projects/${project.id}/planning?release=1.1.0`)
     expect(await screen.findByTestId('read-only-banner')).toHaveTextContent('Viewing 1.1.0 (released). Read-only')
     expect(await screen.findByRole('article', { name: 'Implementation plan v1' })).toHaveTextContent('Plan of 1.1.0')
     expect(screen.getByTestId('stage-status')).toHaveTextContent('Read-only')

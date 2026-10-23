@@ -1,6 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
-import { Link, useRouter } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import type { z } from 'zod'
@@ -12,6 +11,7 @@ import { fieldErrorSummary } from '../../components/ui/form-errors'
 import { LoadingState, PageHeader } from '../../components/ui/states'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { applyFieldErrors, errorMessage, isApiError, messageFor, type ErrorCode } from '../../lib/errors'
+import { Link, useAppRouter } from '../../lib/navigation'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { authKeys } from '../auth/auth-api'
 import { approveEffect, rejectEffect } from '../gates/gate-effects'
@@ -214,7 +214,7 @@ function ConfirmForm({
  * user is sent to sign in and comes back here.
  */
 export function ApprovalPage({ token }: { token: string }) {
-  const router = useRouter()
+  const router = useAppRouter()
   const queryClient = useQueryClient()
   const link = useApprovalLink(token)
   const [result, setResult] = useState<{ gate: Gate } | { terminal: Terminal } | null>(null)

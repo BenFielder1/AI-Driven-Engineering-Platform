@@ -43,7 +43,7 @@ describe('Overview → next action and stage stepper (FR-11, FR-12, FR-54)', () 
   it('FR54_stepper: other project sections show the same stepper, the viewed stage as the page, and Previous / Next stage', async () => {
     signInAs({ email: 'ada@example.com', systemRole: 'user' })
     const project = seedProject({ currentPhase: 'execution' })
-    const { router } = renderRoute(`/projects/${project.id}/review`)
+    const { router } = await renderRoute(`/projects/${project.id}/review`)
 
     const stepper = await screen.findByRole('navigation', { name: 'Lifecycle stages' }, { timeout: 5000 })
     expect(stepper.querySelector('[aria-current="step"]')).toHaveTextContent('Execution')

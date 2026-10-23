@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
 import { ArrowLeft, Check, ChevronsUpDown } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
@@ -11,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu'
+import { Link } from '../../lib/navigation'
 import { cn } from '../../lib/utils'
 import { projectsQueryOptions } from '../projects/projects-api'
 import { whenCollapsed } from './collapse-classes'

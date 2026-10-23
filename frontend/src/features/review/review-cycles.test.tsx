@@ -9,7 +9,7 @@ import { seedProjectAs } from '../../test/artifacts'
 import { renderRoute } from '../../test/render'
 
 async function openReview(project: StoredProject, search = '') {
-  const utils = renderRoute(`/projects/${project.id}/review${search}`)
+  const utils = await renderRoute(`/projects/${project.id}/review${search}`)
   await screen.findByRole('heading', { level: 2, name: 'Review' })
   await screen.findByRole('region', { name: /^Review cycles/ })
   return { ...utils, user: userEvent.setup() }
@@ -56,7 +56,7 @@ describe('Review cycles (FR-56)', () => {
     expect(rows[2]).toHaveTextContent('Another cycle needed')
     // The latest cycle is selected by default.
     expect(within(newest).getByRole('button')).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('region', { name: /^Latest report: cycle 3/ })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: /^Latest report: cycle 3/ })).toBeInTheDocument()
   })
 
   it('FR56_selecting_cycle_1_shows_its_category_scores_and_highlights_point_1', async () => {

@@ -13,7 +13,7 @@ public sealed class LiveOptions
 
     /// <summary>
     /// Extra browser origins (<c>scheme://host[:port]</c>) allowed to open the hub besides the API's own origin. Empty
-    /// by default: the SPA is served same-origin (Vite proxy in the dev loop, nginx in Kubernetes).
+    /// by default: the web app is served same-origin (its server proxies /api to the API).
     /// </summary>
     public IList<string> AllowedOrigins { get; init; } = [];
 }
@@ -23,8 +23,9 @@ public sealed class LiveOptions
 /// POST, but a browser can open the WebSocket directly (skip negotiation) and the <c>SameSite=Lax</c> auth cookie is
 /// sent for any same-site origin (another <c>localhost</c> port is same-site). So every hub request:
 /// <list type="bullet">
-/// <item>with an <c>Origin</c> header must come from the API's own origin (scheme + host, or the
-/// <c>X-Forwarded-Host</c> nginx sets, which a page can't forge on a WebSocket) or <see cref="LiveOptions.AllowedOrigins"/>;</item>
+/// <item>with an <c>Origin</c> header must come from the API's own origin (scheme + host, which the forwarded-headers
+/// middleware sets from <c>X-Forwarded-Host</c> when on (FR-105), or the raw
+/// <c>X-Forwarded-Host</c> the proxy sets, which a page can't forge on a WebSocket) or <see cref="LiveOptions.AllowedOrigins"/>;</item>
 /// <item>that is a WebSocket upgrade without a bearer token (so authenticated by the cookie) must have an <c>Origin</c>
 /// — browsers always send one on a WebSocket handshake.</item>
 /// </list>

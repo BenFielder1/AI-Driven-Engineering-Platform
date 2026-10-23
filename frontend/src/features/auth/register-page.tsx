@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 
@@ -8,6 +7,7 @@ import { Button } from '../../components/ui/button'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
 import { TextField } from '../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, errorMessages, isApiError } from '../../lib/errors'
+import { Link, useAppRouter } from '../../lib/navigation'
 import { safeReturnUrl } from '../../lib/return-url'
 import { githubSignInHref, useRegister } from './auth-api'
 import { AuthCard, GitHubButton } from './auth-layout'
@@ -17,7 +17,7 @@ const fieldIds = { email: 'register-email', name: 'register-name', password: 're
 
 /** /register (FR-1). The first account becomes Admin (FR-3), decided by the server. */
 export function RegisterPage({ returnUrl }: { returnUrl?: string }) {
-  const router = useRouter()
+  const router = useAppRouter()
   const registerUser = useRegister()
   const destination = safeReturnUrl(returnUrl)
   const [serverErrors, setServerErrors] = useState<string[]>([])

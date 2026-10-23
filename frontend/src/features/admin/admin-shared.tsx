@@ -1,5 +1,4 @@
 import type { UseQueryResult } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
 import type { SubmitEventHandler, ReactNode } from 'react'
 
 import { EmptyState } from '../../components/shared/empty-state'
@@ -10,6 +9,7 @@ import { Pagination } from '../../components/ui/pagination'
 import { resultSummary } from '../../components/ui/result-summary'
 import { SelectField } from '../../components/ui/select-field'
 import { ErrorState } from '../../components/ui/states'
+import { Link } from '../../lib/navigation'
 import { cn } from '../../lib/utils'
 import { useProjects } from '../projects/projects-api'
 

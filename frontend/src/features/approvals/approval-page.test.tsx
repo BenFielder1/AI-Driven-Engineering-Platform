@@ -41,7 +41,7 @@ function setup(
 describe('Approval link page (FR-48)', () => {
   it('FR-48: shows the gate summary and confirming approves the gate', async () => {
     const { gate, link } = setup()
-    renderRoute(`/approvals/${link.token}`)
+    await renderRoute(`/approvals/${link.token}`)
     const user = userEvent.setup()
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Approve specification approval?' })).toBeInTheDocument()
@@ -66,7 +66,7 @@ describe('Approval link page (FR-48)', () => {
 
   it('FR-48: a reject link asks for feedback and confirms the rejection', async () => {
     const { gate, link } = setup({ decision: 'reject' })
-    renderRoute(`/approvals/${link.token}`)
+    await renderRoute(`/approvals/${link.token}`)
     const user = userEvent.setup()
 
     await screen.findByRole('heading', { level: 1, name: 'Reject specification approval?' })
@@ -79,7 +79,7 @@ describe('Approval link page (FR-48)', () => {
 
   it('FR-48: a used link says it was already used and nothing changed', async () => {
     const { gate, link } = setup({ usedAt: '2026-09-01T10:00:00Z' })
-    renderRoute(`/approvals/${link.token}`)
+    await renderRoute(`/approvals/${link.token}`)
 
     expect(await screen.findByRole('heading', { level: 1, name: 'This link has already been used' })).toBeInTheDocument()
     expect(screen.getByText(messageFor('LINK_USED', 'approvalLink'))).toHaveTextContent(/nothing changed/)
@@ -89,7 +89,7 @@ describe('Approval link page (FR-48)', () => {
 
   it('FR-48: a link used elsewhere while the page was open shows "already used" on confirm', async () => {
     const { link, gate } = setup()
-    renderRoute(`/approvals/${link.token}`)
+    await renderRoute(`/approvals/${link.token}`)
     const user = userEvent.setup()
 
     const confirm = await screen.findByRole('button', { name: 'Confirm approval' })
@@ -103,7 +103,7 @@ describe('Approval link page (FR-48)', () => {
 
   it('FR-48: an expired link says so and offers no confirmation', async () => {
     const { link } = setup({ expiresAt: '2026-01-01T00:00:00Z' })
-    renderRoute(`/approvals/${link.token}`)
+    await renderRoute(`/approvals/${link.token}`)
 
     expect(await screen.findByRole('heading', { level: 1, name: 'This link has expired' })).toBeInTheDocument()
     expect(screen.getByText(messageFor('LINK_EXPIRED', 'approvalLink'))).toBeInTheDocument()
@@ -112,7 +112,7 @@ describe('Approval link page (FR-48)', () => {
 
   it('FR-48: a non-Owner is forbidden', async () => {
     const { link, gate } = setup({ role: 'viewer' })
-    renderRoute(`/approvals/${link.token}`)
+    await renderRoute(`/approvals/${link.token}`)
 
     expect(await screen.findByRole('heading', { level: 1, name: "You can't use this link" })).toBeInTheDocument()
     expect(screen.getByText(messageFor('FORBIDDEN', 'approvalLink'))).toBeInTheDocument()
@@ -122,7 +122,7 @@ describe('Approval link page (FR-48)', () => {
 
   it('FR-48: an unknown token shows not found', async () => {
     setup()
-    renderRoute('/approvals/tok_unknown')
+    await renderRoute('/approvals/tok_unknown')
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Approval link not found' })).toBeInTheDocument()
   })
@@ -130,7 +130,7 @@ describe('Approval link page (FR-48)', () => {
   it('FR-48: a gate decided elsewhere shows "already closed" without a confirm button', async () => {
     const { gate, link } = setup()
     gate.status = 'approved'
-    renderRoute(`/approvals/${link.token}`)
+    await renderRoute(`/approvals/${link.token}`)
 
     expect(await screen.findByRole('heading', { level: 1, name: 'This gate is already closed' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open Inventory tracker' })).toBeInTheDocument()
@@ -142,7 +142,7 @@ describe('Approval link page (FR-48)', () => {
     server.use(
       http.post('*/api/approvals/:token', () => problem(409, 'GATE_NOT_PENDING', 'Only pending gates can be decided.')),
     )
-    renderRoute(`/approvals/${link.token}`)
+    await renderRoute(`/approvals/${link.token}`)
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Confirm approval' }))
@@ -152,7 +152,7 @@ describe('Approval link page (FR-48)', () => {
   it('FR-48: CONFLICT on confirm keeps the form and explains', async () => {
     const { link } = setup()
     server.use(http.post('*/api/approvals/:token', () => problem(409, 'CONFLICT', 'Concurrent change.')))
-    renderRoute(`/approvals/${link.token}`)
+    await renderRoute(`/approvals/${link.token}`)
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Confirm approval' }))
@@ -163,7 +163,7 @@ describe('Approval link page (FR-48)', () => {
   it('FR-48: a signed-out user is sent to sign in and comes back to the link', async () => {
     const { link } = setup()
     authDb.currentUserId = null
-    const { router } = renderRoute(`/approvals/${link.token}`)
+    const { router } = await renderRoute(`/approvals/${link.token}`)
     const user = userEvent.setup()
 
     await waitFor(() => {
@@ -180,7 +180,7 @@ describe('Approval link page (FR-48)', () => {
   it('FR-48: a session that ended (401 from the API) redirects to sign in with the return path', async () => {
     const { link } = setup()
     server.use(http.get('*/api/approvals/:token', () => problem(401, 'UNAUTHENTICATED', 'Sign in.')))
-    const { router } = renderRoute(`/approvals/${link.token}`)
+    const { router } = await renderRoute(`/approvals/${link.token}`)
 
     await waitFor(() => {
       expect(currentHref(router)).toBe(`/login?returnUrl=${encodeURIComponent(`/approvals/${link.token}`)}`)

@@ -1,7 +1,7 @@
-import { Link } from '@tanstack/react-router'
 import { Check } from 'lucide-react'
 import { useId } from 'react'
 
+import { Link } from '../../lib/navigation'
 import { cn } from '../../lib/utils'
 import { useUnreadCount } from '../notifications/notifications-api'
 import { hrefFor, matchesHref, type NavItem, type NavSection } from './nav-config'

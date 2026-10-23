@@ -33,7 +33,7 @@ function releasedProject(overrides: Partial<StoredProject> = {}) {
 }
 
 async function openRelease(p: StoredProject) {
-  const utils = renderRoute(`/projects/${p.id}/release`)
+  const utils = await renderRoute(`/projects/${p.id}/release`)
   await screen.findAllByRole('heading', { level: 2, name: 'Release' })
   return { ...utils, user: userEvent.setup() }
 }
@@ -153,7 +153,7 @@ describe('Start new version (FR-60, FR-61)', () => {
 
   it('FR60_overview_offers_start_new_version_when_released_and_hides_it_from_contributors', async () => {
     const p = releasedProject()
-    renderRoute(`/projects/${p.id}`)
+    await renderRoute(`/projects/${p.id}`)
     const card = await screen.findByRole('region', { name: '1.1.0 is released' })
     expect(within(card).getByRole('button', { name: 'Start new version' })).not.toHaveAttribute('aria-disabled')
   })
@@ -176,7 +176,7 @@ describe('Version badges, switcher and read-only past versions (FR-62)', () => {
 
   it('FR62_header_and_sidebar_show_both_badges', async () => {
     const { p } = developing()
-    renderRoute(`/projects/${p.id}`)
+    await renderRoute(`/projects/${p.id}`)
 
     await screen.findByRole('heading', { level: 1, name: 'Shop' })
     const header = projectHeader('Shop')
@@ -191,7 +191,7 @@ describe('Version badges, switcher and read-only past versions (FR-62)', () => {
   it('FR62_not_released_badge_and_no_development_badge_when_none', async () => {
     owner()
     const fresh = seedProject({ name: 'Fresh' })
-    renderRoute(`/projects/${fresh.id}`)
+    await renderRoute(`/projects/${fresh.id}`)
     await screen.findByRole('heading', { level: 1, name: 'Fresh' })
     const header = projectHeader('Fresh')
     const badges = await within(header).findByTestId('version-badges')
@@ -201,7 +201,7 @@ describe('Version badges, switcher and read-only past versions (FR-62)', () => {
 
   it('FR62_version_switcher_lists_versions_and_keeps_the_pick_across_pages', async () => {
     const { p } = developing()
-    const { router } = renderRoute(`/projects/${p.id}`)
+    const { router } = await renderRoute(`/projects/${p.id}`)
     const user = userEvent.setup()
     await screen.findByRole('heading', { name: 'Next action' })
 
@@ -231,7 +231,7 @@ describe('Version badges, switcher and read-only past versions (FR-62)', () => {
     expect(await screen.findByTestId('read-only-banner')).toBeInTheDocument()
 
     // Back to the current version.
-    await user.click(screen.getByRole('button', { name: 'Back to the current version' }))
+    await user.click(await screen.findByRole('button', { name: 'Back to the current version' }))
     await waitFor(() => {
       expect(currentHref(router)).toBe(`/projects/${p.id}/artifacts`)
     })
@@ -240,7 +240,7 @@ describe('Version badges, switcher and read-only past versions (FR-62)', () => {
 
   it('FR62_past_version_pages_are_read_only_and_query_that_version', async () => {
     const { p } = developing()
-    renderRoute(`/projects/${p.id}/specification?release=1.1.0`)
+    await renderRoute(`/projects/${p.id}/specification?release=1.1.0`)
 
     expect(await screen.findByTestId('read-only-banner')).toHaveTextContent('Viewing 1.1.0 (released). Read-only')
     expect(await screen.findByRole('article', { name: 'Technical specification v1' })).toHaveTextContent('Spec of 1.1.0')
@@ -253,7 +253,7 @@ describe('Version badges, switcher and read-only past versions (FR-62)', () => {
 
   it('FR62_current_version_stays_editable', async () => {
     const { p } = developing()
-    renderRoute(`/projects/${p.id}/specification`)
+    await renderRoute(`/projects/${p.id}/specification`)
 
     expect(await screen.findByRole('article', { name: 'Technical specification v2' })).toHaveTextContent('Spec of 1.2.0')
     expect(screen.getByRole('button', { name: 'Edit as new draft' })).toBeInTheDocument()
@@ -265,7 +265,7 @@ describe('Version badges, switcher and read-only past versions (FR-62)', () => {
     const p = seedProject({ name: 'Shop', currentPhase: 'execution', status: 'building' })
     seedExecution(p, 2)
     seedReleaseVersions(p, { released: '1.1.0', development: '1.2.0' })
-    renderRoute(`/projects/${p.id}/execution?release=1.1.0`)
+    await renderRoute(`/projects/${p.id}/execution?release=1.1.0`)
 
     expect(await screen.findByTestId('read-only-banner')).toBeInTheDocument()
     await screen.findByRole('heading', { level: 2, name: 'Execution' })

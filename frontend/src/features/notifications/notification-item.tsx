@@ -1,8 +1,8 @@
-import { useRouter } from '@tanstack/react-router'
 import type { MouseEvent } from 'react'
 
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
+import { useAppRouter } from '../../lib/navigation'
 import { safeAppPath } from '../../lib/return-url'
 import { notificationTypeLabels, personalNotificationTypes } from '../projects/labels'
 import { RelativeTime } from '../projects/relative-time'
@@ -29,7 +29,7 @@ export function NotificationItem({
   showMarkRead?: boolean
   onMarkReadError?: (error: unknown) => void
 }) {
-  const router = useRouter()
+  const router = useAppRouter()
   const markRead = useMarkNotificationRead()
   const unread = n.readAt === null
   const href = safeAppPath(n.link)

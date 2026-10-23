@@ -15,7 +15,7 @@ export function signInAsOwner() {
 
 /** Renders /projects/:id/settings/{tab} and waits for the settings secondary nav. */
 export async function openSettings(tab: SettingsTab, project: StoredProject) {
-  const utils = renderRoute(`/projects/${project.id}/settings/${tab}`)
+  const utils = await renderRoute(`/projects/${project.id}/settings/${tab}`)
   await screen.findByRole('navigation', { name: 'Settings sections' })
   return { ...utils, user: userEvent.setup(), project }
 }

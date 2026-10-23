@@ -33,18 +33,28 @@ RUN RID="linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')" \
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 # git: required by the Local Git provider and project working copies (/data/workspaces).
+# setpriv (util-linux): the entrypoint drops from root to $APP_UID with it (FR-106). Installed only if the base image
+# lacks it (some distros ship it as its own package); the final check fails the build if it is still missing.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git \
+ && (command -v setpriv >/dev/null \
+     || apt-get install -y --no-install-recommends setpriv \
+     || apt-get install -y --no-install-recommends util-linux) \
+ && command -v setpriv \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .
 COPY --from=build /app/efbundle /app/efbundle
+COPY --chmod=0755 entrypoint.sh /app/entrypoint.sh
 # The pod runs with a read-only root FS; /tmp is a writable emptyDir. HOME=/tmp gives git (and .NET) a writable
 # home for ~/.gitconfig; GIT_CONFIG_NOSYSTEM skips /etc/gitconfig so only the app's own config applies.
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp \
     HOME=/tmp \
     GIT_CONFIG_NOSYSTEM=1
-USER $APP_UID
+# FR-106, D-V3-10: no USER here. The image starts as root only so /app/entrypoint.sh can hand a root-owned /data
+# volume (Railway) to $APP_UID; it then drops to $APP_UID with setpriv, so the app never runs as root. Kubernetes pins
+# runAsUser/runAsGroup 1654 with runAsNonRoot (deploy/k8s/base/api.yaml, migrate-job.yaml), and the entrypoint then
+# just execs the app. /app/efbundle stays directly runnable (the migration Job overrides the command).
 EXPOSE 8080
-ENTRYPOINT ["dotnet", "Aide.Api.dll"]
+ENTRYPOINT ["/app/entrypoint.sh"]

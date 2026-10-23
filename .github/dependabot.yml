@@ -19,6 +19,10 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # next and its lint plugin are pinned to the same exact version: keep them in one PR, majors included.
+      # (Dependabot puts a dependency in the first group it matches, so this sits before the catch-all.)
+      nextjs:
+        patterns: ["next", "@next/*", "eslint-config-next"]
       npm:
         patterns: ["*"]
         update-types: [minor, patch]

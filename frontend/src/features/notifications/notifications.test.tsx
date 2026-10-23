@@ -27,7 +27,7 @@ describe('Notifications (FR-47)', () => {
     seedNotification({ title: 'Old and read', readAt: '2026-09-01T12:30:00Z' })
     seedNotification({ title: 'Release completed', type: 'release_completed', projectName: 'Inventory tracker' })
     seedNotification({ title: 'Plan approval needs a decision' })
-    renderRoute('/projects')
+    await renderRoute('/projects')
     const user = userEvent.setup()
 
     const bell = await screen.findByRole('button', { name: 'Notifications, 2 unread' })
@@ -52,7 +52,7 @@ describe('Notifications (FR-47)', () => {
 
   it('FR-47: with nothing unread the bell says 0 unread and the dropdown is empty', async () => {
     signInUser()
-    renderRoute('/projects')
+    await renderRoute('/projects')
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Notifications, 0 unread' }))
@@ -62,7 +62,7 @@ describe('Notifications (FR-47)', () => {
   it('FR-47: opening a notification marks it read and goes to its link', async () => {
     signInUser()
     const n = seedNotification({ title: 'Open the project list', link: '/projects' })
-    const { router } = renderRoute('/notifications')
+    const { router } = await renderRoute('/notifications')
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('link', { name: 'Open the project list' }))
@@ -77,7 +77,7 @@ describe('Notifications (FR-47)', () => {
   it('FR-47: mark one read, load more, then mark all as read', async () => {
     signInUser()
     seedNotifications(PAGE_SIZE + 3)
-    renderRoute('/notifications')
+    await renderRoute('/notifications')
     const user = userEvent.setup()
 
     const list = await screen.findByRole('list', { name: 'Notifications' })
@@ -111,7 +111,7 @@ describe('Notifications (FR-47)', () => {
     signInUser()
     seedNotification({ title: 'Already read', readAt: '2026-09-01T12:30:00Z' })
     seedNotification({ title: 'Still unread' })
-    const { router } = renderRoute('/notifications')
+    const { router } = await renderRoute('/notifications')
     const user = userEvent.setup()
 
     expect(await screen.findByText('Already read')).toBeInTheDocument()
@@ -129,7 +129,7 @@ describe('Notifications (FR-47)', () => {
 
   it('FR-47: shows an empty state when there are no notifications', async () => {
     signInUser()
-    renderRoute('/notifications')
+    await renderRoute('/notifications')
 
     expect(await screen.findByText('No notifications yet')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mark all as read' })).toBeDisabled()
@@ -138,7 +138,7 @@ describe('Notifications (FR-47)', () => {
   it('FR-47 (§2): preferences save the unchecked types as muted', async () => {
     const me = signInUser()
     notificationsDb.muted.set(me.id, ['run_failed'])
-    renderRoute('/account')
+    await renderRoute('/account')
     const user = userEvent.setup()
 
     const section = await screen.findByRole('region', { name: 'Notification preferences' })

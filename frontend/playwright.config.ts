@@ -2,9 +2,15 @@ import { existsSync } from 'node:fs'
 
 import { defineConfig, devices } from '@playwright/test'
 
-// BASE_URL: http://localhost:5173 (dev loop, default) or http://localhost:8080 (Docker Desktop Kubernetes).
-const baseURL = process.env.BASE_URL ?? 'http://localhost:5173'
-const startDevServer = !process.env.BASE_URL
+// BASE_URL: http://localhost:3000 (dev loop, default; FR-102) or http://localhost:8080 (Docker Desktop Kubernetes).
+const baseURL = process.env.BASE_URL ?? 'http://localhost:3000'
+const startServer = !process.env.BASE_URL
+/**
+ * Without BASE_URL Playwright starts the web server on port 3000 (API at BACKEND_URL, default http://localhost:5080).
+ * In CI it's the production server (`next build` + `node server.ts`), which is stable under parallel load and matches
+ * the image (no dev compile-on-demand, no `'unsafe-eval'` in the CSP); locally it's the dev server.
+ */
+const webServerCommand = process.env.CI ? 'npm run build && npm start' : 'npm run dev'
 
 /**
  * NFR-Browsers (SPEC §8: current Chrome, Edge, Firefox and Safari). Chromium runs every spec; Firefox and WebKit
@@ -20,6 +26,10 @@ const edgePaths = [
   '/opt/microsoft/msedge/msedge',
 ]
 const edgeAvailable = process.env.E2E_MSEDGE === '1' || (process.env.E2E_MSEDGE !== '0' && edgePaths.some((p) => existsSync(p)))
+
+function definedEnv(): Record<string, string> {
+  return Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined))
+}
 
 export default defineConfig({
   testDir: './e2e',
@@ -44,13 +54,15 @@ export default defineConfig({
     { name: 'a11y-setup', use: { ...devices['Desktop Chrome'] }, testMatch: /a11y\.setup\.ts$/ },
     { name: 'a11y', use: { ...devices['Desktop Chrome'] }, testMatch: /a11y\.spec\.ts$/, dependencies: ['a11y-setup'] },
   ],
-  ...(startDevServer
+  ...(startServer
     ? {
         webServer: {
-          command: 'npm run dev',
+          command: webServerCommand,
           url: baseURL,
-          reuseExistingServer: true,
-          timeout: 60_000,
+          reuseExistingServer: !process.env.CI,
+          timeout: process.env.CI ? 600_000 : 120_000,
+          // server.ts listens on PORT (production default 8080); BACKEND_URL passes through from the environment.
+          env: { ...definedEnv(), PORT: '3000' },
         },
       }
     : {}),

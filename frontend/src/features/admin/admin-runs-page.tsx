@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link } from '@tanstack/react-router'
 import { useRef } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -7,6 +6,7 @@ import { z } from 'zod'
 import { DetailSheet } from '../../components/ui/modal-dialog'
 import { SelectField } from '../../components/ui/select-field'
 import { TextField } from '../../components/ui/text-field'
+import { Link } from '../../lib/navigation'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import {
   agentKindLabels,

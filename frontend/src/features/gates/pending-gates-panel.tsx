@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 

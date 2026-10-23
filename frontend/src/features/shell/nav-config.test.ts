@@ -1,7 +1,7 @@
-import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 
-import { createAppRouter } from '../../router'
+import { toAppRouterPattern } from '../../lib/app-paths'
+import { matchAppRoute } from '../../test/app-routes'
 import { crumbsFor, findNavItem, hrefFor, matchesHref, paletteEntries, projectIdFromPath, projectSections, workspaceSections } from './nav-config'
 
 const admin = { isAdmin: true }
@@ -10,10 +10,10 @@ const user = { isAdmin: false }
 const labels = (sections: ReturnType<typeof workspaceSections>) =>
   sections.map((s) => ({ label: s.label, items: s.items.map((i) => i.label) }))
 
-/** Every full path the router knows (so nav-config can't point at a route that doesn't exist). */
-function routePaths(): Set<string> {
-  const router = createAppRouter(new QueryClient())
-  return new Set(Object.keys(router.routesByPath).map((p) => (p.length > 1 ? p.replace(/\/$/, '') : p)))
+/** True when a src/app page serves the pattern (so nav-config can't point at a route that doesn't exist). */
+function hasPage(to: string): boolean {
+  const pattern = toAppRouterPattern(to)
+  return matchAppRoute(pattern)?.route.pattern === pattern
 }
 
 describe('FR-53: workspace navigation', () => {
@@ -26,10 +26,9 @@ describe('FR-53: workspace navigation', () => {
   })
 
   it('FR53_nav_config: every item points at a route that exists', () => {
-    const paths = routePaths()
     const items = [...workspaceSections(admin), ...projectSections()].flatMap((s) => s.items)
     for (const item of items) {
-      expect(paths, item.to).toContain(item.to)
+      expect(hasPage(item.to), item.to).toBe(true)
     }
   })
 

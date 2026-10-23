@@ -52,7 +52,11 @@ v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests
 - FR-106: build the API image and start it on a root-owned empty `/data`. Check that keys are written to `/data/keys`, the app runs as uid 1654 (`ps`), and `/api/health/ready` returns 200.
 
 ## Follow-ups queued
+- 3000 instead of 5173: CI E2E job (`App__PublicBaseUrl`, Vite dev server step), `e2e/support/api.ts`, `scripts/perf/nfr-perf.mjs`, README, CLAUDE.md (1c/CI).
+- CI: the route-tree freshness check must go. The Dockerfile build needs a read-only-root-FS check (phase 1 CI / phase 3).
+- k8s `web`: `BACKEND_URL` and the `/tmp` emptyDir (phase 3).
 - CI: add `backend/entrypoint.sh` to the `bash -n` and shellcheck steps (phase 1 CI pass).
+- Railway `web`: `TRUST_EDGE_FORWARDED=true`, so the web server keeps the X-Forwarded-Proto/Host values Railway's edge sets. Elsewhere it overwrites them (phase-1 review).
 - Railway `api`: `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, `ForwardedHeaders__ForwardLimit=2`. **No** `RAILWAY_RUN_UID` (the image starts as root, and the entrypoint drops to `$APP_UID`).
 - `deploy/k8s/base/configmap.yaml`: the comment still mentions nginx (phase 3).
 
@@ -63,5 +67,17 @@ v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests
 - 2026-10-23 — FR-106: the API image has no `USER` line and starts as root. `entrypoint.sh` fixes `/data` ownership and drops to `$APP_UID` with `setpriv`, so Railway needs no `RAILWAY_RUN_UID`. Kubernetes still forces uid 1654 through `securityContext`. Trade-off: a plain `docker run` starts as root until the drop — SPEC updated: no (matches D-V3-10)
 - 2026-10-23 — FR-105: `X-Forwarded-Host` is now honoured too (v2 handled only For and Proto). `ForwardedHeaders:KnownNetworks` replaces the trusted-proxy lists when set — SPEC updated: no
 
+- 2026-10-23 — FR-98: the web server is a custom Node server (`frontend/server.ts`, run by Node 24's built-in TypeScript support, helpers in `src/server/*`). It handles the `/api` HTTP and WebSocket proxy, the CSP nonce and headers, and redacted JSON logs. Next 16.4.2's built-in proxy rewrites Host, times out after 30 s, answers 500 instead of 502 problem+json, logs the upstream URL (leaking approval tokens), and fixes `rewrites()` at build time — SPEC updated: no (SPEC allows this fallback)
+- 2026-10-23 — FR-98: a request body over 10 MB → 413 with `errorCode` `VALIDATION` (SPEC doesn't name a code) — SPEC updated: no
+- 2026-10-23 — FR-97: there's no early redirect in Next.js middleware/`proxy.ts` when the `aide.auth` cookie is missing. The client guard in the `(app)` layout is the only redirect (SPEC makes the early redirect optional) — SPEC updated: no
+- 2026-10-23 — Navigation adapter (`src/lib/navigation.ts`) serialises search values as plain strings. TanStack JSON-quoted numeric strings, so URLs can differ in quoting only — SPEC updated: no
+
+- 2026-10-23 — §8 bundle baseline corrected: the first v2 figure (152.9 kB gzip) left out the `/projects` route's own chunks, including recharts at 88.5 kB gzip. Both builds are re-measured the same way in the phase-1 fixes — SPEC updated: no
+
+- 2026-10-23 — §8 bundle, re-measured the same way for both builds (gzip -9 of every JS chunk loaded for the initial `/projects` document): v2 (37fcaca, Vite manifest closure of entry + `_app` + `projects/index`) **355.0 kB**; v3 (Next, after lazy-loading Sparkline, CommandPalette and SignalR) **300.0 kB**, i.e. **−15.5%** (budget ≤ +10%) — SPEC updated: no
+- 2026-10-23 — FR-100: approval tokens are redacted anywhere in a path, query or Referer, after `/`, `%2F` or `%252F`. Paths like `/projects/approvals/x` get over-redacted in logs, which is acceptable — SPEC updated: no
+- 2026-10-23 — FR-98: the web server overwrites `X-Forwarded-Proto` and `X-Forwarded-Host` from the connection unless `TRUST_EDGE_FORWARDED=true` (Railway web). A path that resolves outside `/api` → 400 `VALIDATION` — SPEC updated: no
+- 2026-10-23 — CI E2E runs against a production Next.js server (`npm run build && npm start`, set up by playwright.config.ts when `CI` is set), not `next dev`, to avoid per-route cold compiles. The dev loop still uses `npm run dev` — SPEC updated: no
+
 ## Known issues
-- (none yet)
+- Local Vitest at default parallelism: 15 shell/projects/components tests time out at 20 s on this machine under load, and pass with `--maxWorkers=2` or on their own. Watch for it on CI.
