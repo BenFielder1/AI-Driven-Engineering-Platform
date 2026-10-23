@@ -49,6 +49,11 @@ v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests
 - [ ] 5 Final (M22): FR-112, docs, audit over v1+v2+v3
 
 ## Manual checks (Ben, Docker Desktop)
+- FR-104: run `./deploy/scripts/deploy-local.sh`. The web rollout should become ready on `/healthz`, and `smoke.sh` should pass (`/healthz`, `/` 307/200, `/login` CSP nonce + XFO DENY + nosniff, `/api/health/ready`).
+- FR-104: run `./deploy/scripts/deploy-local.sh --e2e`. Smoke should pass and the import repo should be seeded.
+- FR-104: run `BASE_URL=http://localhost:8080 npm --prefix frontend run test:e2e --workers=1` in Chromium, Firefox and WebKit, including a SignalR live update through `web`.
+- FR-105 on Docker Desktop: the LoadBalancer (externalTrafficPolicy Cluster) probably SNATs the browser address, so all browsers share one login/register rate-limit bucket. This was the same with nginx in v2. Per-client IP is covered by the FR-105 integration tests and will be checked on Railway.
+- FR-104/FR-103: `kubectl --context docker-desktop -n aide logs deploy/web` should show JSON request lines and no EROFS/cache errors.
 - FR-106: build the API image and start it on a root-owned empty `/data`. Check that keys are written to `/data/keys`, the app runs as uid 1654 (`ps`), and `/api/health/ready` returns 200.
 
 ## Follow-ups queued

@@ -1,4 +1,6 @@
-# Single entry point: SPA + /api proxy. Docker Desktop publishes LoadBalancer Services on localhost.
+# Single entry point (FR-103, FR-104): the Next.js standalone server (frontend/server.ts) serves the app, sets the
+# security headers + CSP nonce (FR-99) and proxies /api, incl. the SignalR WebSockets, to BACKEND_URL (FR-98).
+# Docker Desktop publishes LoadBalancer Services on localhost.
 apiVersion: v1
 kind: Service
 metadata:
@@ -30,10 +32,13 @@ spec:
       labels:
         app.kubernetes.io/name: web
     spec:
+      # The web server needs no Kubernetes API access.
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 101
-        runAsGroup: 101
+        # USER node in node:24-slim (frontend/Dockerfile).
+        runAsUser: 1000
+        runAsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -43,24 +48,45 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: NODE_ENV
+              value: production
+            # Read at runtime by server.ts (src/lib/env.ts). Server-only, never NEXT_PUBLIC_*.
+            - name: BACKEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: BACKEND_URL
+            # No TRUST_EDGE_FORWARDED: no edge proxy in front of web here, so the /api proxy overwrites any
+            # client-sent X-Forwarded-Proto/Host (default false). Railway sets it to true.
+          # /healthz answers "ok" without calling the API, so an API outage never restarts web.
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
           readinessProbe:
-            httpGet: { path: /, port: http }
+            httpGet: { path: /healthz, port: http }
             periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           livenessProbe:
-            httpGet: { path: /, port: http }
+            httpGet: { path: /healthz, port: http }
             periodSeconds: 15
+            timeoutSeconds: 3
             failureThreshold: 4
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
           resources:
-            requests: { cpu: 20m, memory: 32Mi }
-            limits: { memory: 128Mi }
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
           volumeMounts:
-            # nginx-unprivileged keeps its pid file and temp paths under /tmp.
+            # The only writable path: the image symlinks Next's runtime cache (.next/cache) to /tmp.
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: tmp
-          emptyDir: {}
+          emptyDir: { sizeLimit: 256Mi }
