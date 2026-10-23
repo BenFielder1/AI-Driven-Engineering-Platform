@@ -9,16 +9,17 @@ AIDE (AI-Driven Engineering Framework) coordinates specialised AI agents through
 | Version | Spec | Build log | Status |
 | --- | --- | --- | --- |
 | v1 | [`docs/v1/SPEC.md`](docs/v1/SPEC.md) | [`docs/v1/PROGRESS.md`](docs/v1/PROGRESS.md) | Built and merged (PR #1). Frozen; never edit except to fix links |
-| v2 | [`SPEC.md`](SPEC.md) | `PROGRESS.md` (root; created by build-from-spec) | Current |
+| v2 | [`docs/v2/SPEC.md`](docs/v2/SPEC.md) | [`docs/v2/PROGRESS.md`](docs/v2/PROGRESS.md) | Built and merged (PR #13). Frozen; never edit except to fix links |
+| v3 | [`SPEC.md`](SPEC.md) | `PROGRESS.md` (root; created by orchestrate-stack) | Current: Next.js frontend migration + Railway deploy, no new features. Stack in [`STACK.md`](STACK.md) |
 
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/v<N>/` and add a row here.
 - **v2 is an increment on the v1 codebase:** v1 requirements (FR-1–FR-52) stay in force unless `SPEC.md` amends them (its §3.0 lists the amendments). Requirement IDs continue across versions (v2 starts at FR-53), and the spec-verifier checks both versions' requirements.
 - v2 M0 is a baseline check (gate + deploy on `build/aide-v2`), not a scaffold. Never re-scaffold the repo.
 - Version assets (e.g. the logo in `docs/v2/brand/`) live under `docs/v<N>/`.
 
-This is a rewrite of the previous implementation in `../AIDE-Platform-old-stack/` (read-only; see `../WORKSPACE.md` for the rewrite rules and a map of where things live in the old code).
-
 ## Stack
+
+Packs and the v3 target stack (Next.js frontend, Railway deploy) are recorded in [`STACK.md`](STACK.md). The list below is the v2 stack as built.
 
 - **Frontend** (`frontend/`): TypeScript (strict) + React + Vite, TanStack Router, TanStack Query, Tailwind, React Hook Form + Zod, Vitest + Testing Library + MSW, Playwright, ESLint (typescript-eslint strict type-checked). Versions: React 19, Vite 8, TypeScript 6, Tailwind 4, TanStack Router (file-based: `src/routes/` → generated `src/routeTree.gen.ts`)
 - **Backend** (`backend/`): C# / ASP.NET Core (.NET 10), minimal APIs, EF Core 10 (`dotnet-ef`, local tool manifest `backend/dotnet-tools.json`) + PostgreSQL 17 via Npgsql (snake_case naming, history table `__ef_migrations_history`), xUnit v3 on Microsoft.Testing.Platform (opted in via `global.json`), Testcontainers.PostgreSql; JSON console logs, OpenTelemetry (console exporter when `Telemetry:ConsoleExporter=true`, on in Development)
@@ -61,7 +62,7 @@ docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml
 SPEC.md · PROGRESS.md · CLAUDE.md   current version (v2)
 docs/v1/                    v1 SPEC.md + PROGRESS.md (frozen)
-docs/v2/brand/              AIDE logo source (aide-mark.svg, aide-logo.svg)
+docs/v2/                    v2 SPEC.md + PROGRESS.md (frozen) + AIDE brand assets
 ```
 
 ## Commands
@@ -89,10 +90,49 @@ npm run test:e2e                                          # Playwright (BASE_URL
 ./deploy/scripts/teardown-local.sh                        # remove app (keeps DB data unless --wipe-data)
 ```
 
-**Gate:**
+**Gate** (what GitHub Actions CI runs, in `.github/workflows/ci.yml`. **Don't run it locally:** see Commit gate below):
 ```bash
 (cd backend && dotnet build -warnaserror && dotnet test && dotnet format --verify-no-changes) && (cd frontend && npm run typecheck && npm run lint && npm test && npm run build) && ./deploy/scripts/validate-manifests.sh
 ```
+
+## Commit gate: review locally, gate on CI
+
+This machine doesn't have the memory to run Docker Desktop, Testcontainers integration tests and E2E alongside the
+build, so **the gate runs on GitHub Actions, not locally.** This overrides any skill or agent instruction to run the gate,
+the tests or a local deploy before committing. That includes `orchestrate-stack` §7 steps 1 and 5, the "Done when: <gate
+commands>" lines in its briefs, `stack-reviewer` "runs the gates", and `build-from-spec`.
+
+For every phase or fix:
+
+1. **Review first.** Launch the step reviewer (`stack-reviewer`) on the diff, with the requirement IDs, spec sections,
+   base SHA and packs. It reviews statically (reading code, tests, contract and config) and **doesn't run** the gate,
+   tests, Docker or deploys. Fix its Critical and Major findings through the owning agent before committing. The point
+   of this step is to catch what CI would catch.
+2. **Local commands are limited to:**
+   - producing files that must be committed: `dotnet build src/Aide.Api` (contract), `npm run gen:api`,
+     `dotnet ef migrations add`, and Next.js/route generation if a tool writes committed files
+   - optionally, single quick checks on the touched layer, one at a time: `npm run typecheck`, `npm run lint`, a single
+     Vitest file, `dotnet build` of one project
+
+   **Never run locally:** the full `dotnet test` (integration tests start PostgreSQL in Docker), Playwright E2E,
+   `docker build`, `docker compose`, `deploy-local.sh`, or the whole gate command.
+3. **Commit and push** to the current build branch (e.g. `build/aide-v3`). This is standing permission to push **build
+   branches only.** Never push to `main`, never force-push, and never amend a pushed commit. Use the commit format
+   `phase N: <summary> (<IDs>)` or `fix: <summary> (<IDs>)`.
+4. **Wait for CI on that commit.**
+   - Find the run: `gh run list --branch <branch> --commit <sha> --json databaseId,status,conclusion,name`.
+   - Wait for it in the background: `gh run watch <id> --exit-status`.
+   - On failure, read the logs: `gh run view <id> --log-failed`. For job detail use
+     `gh run view <id> --json jobs`, and download artifacts (test results) with `gh run download <id>`.
+5. **Fix and repeat.** Send each failure to the owning agent. Review the fix diff (step 1), commit a new commit, push,
+   and wait for CI again, until the head commit's run is green. A phase is done only when **CI is green on its head
+   commit.** CI skips commits that only touch `*.md`, `docs/**` or `.claude/**`, so for those, the latest code commit's
+   run counts. Record the run URL in PROGRESS.md.
+6. **Local Kubernetes and three-browser E2E** aren't part of the agent gate. CI's image builds, manifest render and
+   Chromium E2E stand in for them. List anything that still needs a manual Docker Desktop check under "Manual checks"
+   in PROGRESS.md for Ben to run.
+
+If CI can't run (no `gh` auth, Actions outage), stop and tell Ben. Don't fall back to running the gate locally.
 
 ## Rules that must not be broken
 
@@ -103,11 +143,9 @@ npm run test:e2e                                          # Playwright (BASE_URL
 5. Every schema change is an EF Core migration. Never edit a committed migration, and never use `EnsureCreated` outside tests.
 6. Secrets are never committed: user-secrets for the dev loop, `deploy/k8s/overlays/local/secrets.env` (git-ignored) for Kubernetes. This includes LLM provider keys and GitHub credentials.
 7. Deploy scripts target only the `docker-desktop` Kubernetes context.
-8. Never edit, build, run or commit anything in `../AIDE-Platform-old-stack/`. Read it for behaviour only.
-9. Project lifecycle changes go only through the domain state machine. Every allowed and forbidden phase/status transition has a unit test.
-10. Artifacts are immutable once `locked`. New content means a new version with a content hash and parent version; invalidation and rollback never rewrite history.
-11. Agent (LLM) calls sit behind one provider abstraction, are never made from endpoints directly, and are faked in tests — no test hits a real provider API.
-12. Behaviour that differs from the old stack is logged under Decisions in PROGRESS.md with the reason. Removing an old-stack feature is an open question, not a decision.
+8. Project lifecycle changes go only through the domain state machine. Every allowed and forbidden phase/status transition has a unit test.
+9. Artifacts are immutable once `locked`. New content means a new version with a content hash and parent version; invalidation and rollback never rewrite history.
+10. Agent (LLM) calls sit behind one provider abstraction, are never made from endpoints directly, and are faked in tests — no test hits a real provider API.
 
 ## Conventions
 
@@ -118,12 +156,14 @@ npm run test:e2e                                          # Playwright (BASE_URL
 
 ## Workflow
 
-Use the `build-from-spec` skill for multi-phase work. Stack skills: `aspnet-endpoints`, `efcore-data`, `vite-react-ui`, `openapi-contract`, `docker-desktop-k8s`, `github-actions-ci`.
+Use the `orchestrate-stack` skill for multi-phase work (v3 onwards). It loads the packs named in [`STACK.md`](STACK.md). v1 and v2 were built with `build-from-spec`. Either way, the commit gate above replaces the skill's local gate and local-run steps.
 
 ## Definition of done
 
-- The gate passes, and new behaviour has tests named after the requirement IDs.
+- The step reviewer has no open Critical or Major findings, and GitHub Actions CI is green on the pushed head commit (see
+  Commit gate). New behaviour has tests named after the requirement IDs.
 - Contract and client are regenerated (if the API changed).
 - Migration added and reviewed (if the schema changed).
-- Redeployed to Docker Desktop, and the smoke test passes (if Kubernetes is available).
+- Docker Desktop redeploy and smoke test: not run by agents on this machine. They're listed under "Manual checks" in
+  PROGRESS.md for Ben.
 - SPEC.md is updated if behaviour differs from it.

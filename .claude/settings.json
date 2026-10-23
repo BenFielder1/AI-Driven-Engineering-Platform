@@ -1,15 +1,11 @@
 {
   "enabledPlugins": {
-    "react-dotnet-local-kit@bens-claude-kits": true
-  },
-  "permissions": {
-    "additionalDirectories": [
-      "../AIDE-Platform-old-stack",
-      "../../Space Worm Analytics"
-    ],
-    "deny": [
-      "Edit(//**/AIDE-Platform-old-stack/**)",
-      "Edit(//**/Space Worm Analytics/**)"
-    ]
+    "stack-core@bens-claude-kits": true,
+    "fe-nextjs@bens-claude-kits": true,
+    "be-aspnet@bens-claude-kits": true,
+    "data-efcore-postgres@bens-claude-kits": true,
+    "vcs-github@bens-claude-kits": true,
+    "deploy-railway@bens-claude-kits": true,
+    "local-docker-desktop-k8s@bens-claude-kits": true
   }
 }

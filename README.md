@@ -346,7 +346,9 @@ cd frontend && npm run gen:api               # writes src/api/generated/
 
 `src/routeTree.gen.ts` is rewritten by `npm run dev` and `npm run build`. Commit all three.
 
-Full gate (run before every commit):
+Full gate. GitHub Actions runs this, plus E2E and image builds, on every push to `main` and `build/**` and on PRs. Agents
+don't run it locally: they review first, push to the build branch, and fix until CI is green (see CLAUDE.md "Commit
+gate"). On a machine with enough memory for Docker, you can still run it yourself:
 
 ```bash
 (cd backend && dotnet build -warnaserror && dotnet test && dotnet format --verify-no-changes) && (cd frontend && npm run typecheck && npm run lint && npm test && npm run build) && ./deploy/scripts/validate-manifests.sh
