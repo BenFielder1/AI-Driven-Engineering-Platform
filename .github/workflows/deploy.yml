@@ -249,11 +249,16 @@ jobs:
             done
             [ -n "$before" ] || fail "$service: railway deployment list failed 6 times before the upload, so $service was not deployed."
             echo "::group::railway up --service $service (build log)"
-            if ! railway up --service "$service" --environment "$DEPLOY_ENV" --ci --message "$DEPLOY_SHA (GitHub run $GITHUB_RUN_ID)"; then
-              echo "::endgroup::"
+            # `railway up --ci` can hang without exiting (it never returned when Railway skipped a build, 2026-10-24), so
+            # it is capped. On the cap, the deployment-status poll below decides: it reports SKIPPED, FAILED or SUCCESS.
+            rc=0
+            timeout 1200 railway up --service "$service" --environment "$DEPLOY_ENV" --ci --message "$DEPLOY_SHA (GitHub run $GITHUB_RUN_ID)" || rc=$?
+            echo "::endgroup::"
+            if [ "$rc" = 124 ]; then
+              echo "::warning::$service: railway up didn't exit within 1200s; checking the deployment status instead."
+            elif [ "$rc" != 0 ]; then
               fail "$service: railway up failed (upload or image build). The previous $service deployment keeps serving."
             fi
-            echo "::endgroup::"
             start=$SECONDS
             while :; do
               line=""
@@ -269,6 +274,7 @@ jobs:
                 case "$status" in
                   SUCCESS) echo "$service is live: deployment $id"; return 0 ;;
                   FAILED|CRASHED|REMOVED|REMOVING|SKIPPED|NEEDS_APPROVAL)
+                    [ "$status" != SKIPPED ] || hint="Railway skipped the build (e.g. watch paths), so nothing was deployed."
                     fail "$service deployment $id ended $status. $hint Logs: railway logs $id --service $service --environment $DEPLOY_ENV --deployment" ;;
                 esac
               elif [ $((SECONDS - start)) -ge 180 ]; then
@@ -460,11 +466,16 @@ jobs:
             done
             [ -n "$before" ] || fail "$service: railway deployment list failed 6 times before the upload, so $service was not deployed."
             echo "::group::railway up --service $service (build log)"
-            if ! railway up --service "$service" --environment "$DEPLOY_ENV" --ci --message "$DEPLOY_SHA (GitHub run $GITHUB_RUN_ID)"; then
-              echo "::endgroup::"
+            # `railway up --ci` can hang without exiting (it never returned when Railway skipped a build, 2026-10-24), so
+            # it is capped. On the cap, the deployment-status poll below decides: it reports SKIPPED, FAILED or SUCCESS.
+            rc=0
+            timeout 1200 railway up --service "$service" --environment "$DEPLOY_ENV" --ci --message "$DEPLOY_SHA (GitHub run $GITHUB_RUN_ID)" || rc=$?
+            echo "::endgroup::"
+            if [ "$rc" = 124 ]; then
+              echo "::warning::$service: railway up didn't exit within 1200s; checking the deployment status instead."
+            elif [ "$rc" != 0 ]; then
               fail "$service: railway up failed (upload or image build). The previous $service deployment keeps serving."
             fi
-            echo "::endgroup::"
             start=$SECONDS
             while :; do
               line=""
@@ -480,6 +491,7 @@ jobs:
                 case "$status" in
                   SUCCESS) echo "$service is live: deployment $id"; return 0 ;;
                   FAILED|CRASHED|REMOVED|REMOVING|SKIPPED|NEEDS_APPROVAL)
+                    [ "$status" != SKIPPED ] || hint="Railway skipped the build (e.g. watch paths), so nothing was deployed."
                     fail "$service deployment $id ended $status. $hint Logs: railway logs $id --service $service --environment $DEPLOY_ENV --deployment" ;;
                 esac
               elif [ $((SECONDS - start)) -ge 180 ]; then
