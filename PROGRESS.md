@@ -14,13 +14,13 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | ID | Summary | Spec § | Layer(s) | Phase | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | FR-94 | Next.js App Router app replaces Vite/TanStack Router | 3.1 | frontend | 1 | done | CI 39998009637 |
-| FR-95 | Route parity: every v2 URL, search param and alias | 3.1 | frontend | 2 | done | CI 39998009637 |
+| FR-95 | Route parity: every v2 URL, search param and alias | 3.1 | frontend | 2 | done | CI 39998009637 + audit tests in CI 40088027372 |
 | FR-96 | Pages ported as client components (TanStack Query + generated client) | 3.1 | frontend | 2 | done | CI 39998009637 |
-| FR-97 | Auth redirects (returnUrl, safeReturnUrl) | 3.1 | frontend | 2 | done | CI 39998009637 |
+| FR-97 | Auth redirects (returnUrl, safeReturnUrl) | 3.1 | frontend | 2 | done | CI 39998009637 + audit tests in CI 40088027372 |
 | FR-98 | Runtime `/api` proxy incl. WebSockets to `BACKEND_URL` | 3.2 | frontend | 1 | done | CI 39998009637 |
 | FR-99 | Security headers + CSP nonce | 3.2 | frontend | 1 | done | CI 39998009637 |
 | FR-100 | Approval-token redaction in web logs | 3.2 | frontend | 1 | done | CI 39998009637 |
-| FR-101 | First paint: theme, fonts, favicon, titles | 3.1 | frontend | 1 | done | CI 39998009637 |
+| FR-101 | First paint: theme, fonts, favicon, titles | 3.1 | frontend | 1 | done | CI 39998009637 + audit tests in CI 40088027372 |
 | FR-102 | Dev loop on :3000 proxying to :5080 | 3.1 | frontend + backend config | 1 | done | CI 39998009637 |
 | FR-103 | Standalone web image, non-root, :8080, `/healthz` | 3.2 | frontend + deploy | 1 | done | CI 39998009637 |
 | FR-104 | Local k8s on the Next.js image | 3.3 | deploy | 3 | done (CI); manual Docker Desktop check pending | CI 39998009637 |
@@ -31,7 +31,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-109 | Pre-deploy migrations | 3.5 | deploy + data | 4 | in IaC; verified on first deploy | static review |
 | FR-110 | GitHub Actions deploy workflow | 3.5 | deploy + CI | 4 | written; runs once on main + Railway secrets | static review |
 | FR-111 | `smoke-remote.sh` | 3.5 | deploy | 4 | written; runs on first deploy | static review |
-| FR-112 | Railway operations docs | 3.5 | docs | 5 | written (deploy/railway/*); final docs sync in M22 | static review |
+| FR-112 | Railway operations docs | 3.5 | docs | 5 | done | 4bad5f8, CI 40088027372 |
 
 v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests must stay green on CI.
 
@@ -46,7 +46,7 @@ v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests
 - [x] 2 Page port (M18): gated together with phase 1 (d4d47ac); see Decisions
 - [x] 3 Local Kubernetes + CI (M19): 31ba6da, CI green: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/39998009637. The Docker Desktop run is a manual check (see below)
 - [~] 4 Railway (M21): IaC, deploy workflow, smoke-remote and docs written and reviewed (static). First real `railway config plan`/apply, preview deploy and smoke need Ben's Railway setup; production only on request
-- [ ] 5 Final (M22): FR-112, docs, audit over v1+v2+v3
+- [x] 5 Final (M22): acceptance audit over v1+v2+v3 (no regressions; 0 Critical). Audit fixes, Railway CI checks and docs sync in 4bad5f8. CI green (10 jobs): https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40088027372
 
 ## Manual checks (Ben, Docker Desktop)
 - FR-104: run `./deploy/scripts/deploy-local.sh`. The web rollout should become ready on `/healthz`, and `smoke.sh` should pass (`/healthz`, `/` 307/200, `/login` CSP nonce + XFO DENY + nosniff, `/api/health/ready`).
@@ -100,6 +100,12 @@ Setup steps are in `deploy/railway/README.md`. Things only a real run can prove 
 - 2026-10-24 — §8 observability: the web server logs one JSON line per request, except `/_next/static/*` assets and `/healthz` probes (noise). Errors are always logged — SPEC updated: no
 - 2026-10-24 — FR-111: the "API not public" check runs in `deploy.yml` (Railway domain and TCP-proxy listing), not in `smoke-remote.sh` unless `API_PUBLIC_URL` is set — SPEC updated: yes
 - 2026-10-24 — SPEC §9: `TRUST_EDGE_FORWARDED=true` was added to the Railway web variables — SPEC updated: yes
+
+## Status at end of agent build (2026-10-24)
+- **Done on CI:** FR-94–FR-103, FR-105, FR-106, FR-112, plus all v1/v2 tests (backend 3646, Vitest 72 files, E2E v1/v2/a11y).
+- **Done on CI, manual check pending (Ben):** FR-104 (Docker Desktop deploy + 3-browser E2E), FR-106 (start on a root-owned volume).
+- **Written and reviewed, pending the first Railway deploy (Ben's setup, then `preview`):** FR-107–FR-111. See "First Railway deploy".
+- **v3 completion:** after the first Railway deploy is verified, merge `build/aide-v3` to `main`, then move SPEC.md and PROGRESS.md to `docs/v3/` and add the CLAUDE.md row.
 
 ## Known issues
 - Local Vitest at default parallelism: 15 shell/projects/components tests time out at 20 s on this machine under load, and pass with `--maxWorkers=2` or on their own. Watch for it on CI.
