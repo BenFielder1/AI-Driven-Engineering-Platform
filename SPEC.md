@@ -286,7 +286,7 @@ Auth is unchanged: cookie auth plus API tokens (v1), GitHub App sign-in (v2).
   - `GET /api/health/ready` (through `web`) → 200
   - `GET /login` → 200 with the FR-99 headers
   - `GET /api/auth/me` without a cookie → 401 ProblemDetails
-  - the API is unreachable at a public URL (no `api` domain configured)
+  - the API is unreachable at a public URL (no `api` domain configured). In CI, `deploy.yml` checks this by listing the `api` service's domains and TCP proxies (read-only). For manual runs the script checks it only when `API_PUBLIC_URL` is set *(build decision 2026-10-24)*
 - **Sign-in round trip (only when `SMOKE_EMAIL` and `SMOKE_PASSWORD` are set):** sign in, `GET /api/projects` → 200,
   open a SignalR WebSocket to `/api/hubs/projects` → connected, sign out.
 - The script never registers accounts (FR-3: the first account becomes Admin).
@@ -406,7 +406,7 @@ v1 §8 and v2 §8 apply, plus:
 - **References:** `ConnectionStrings__Aide` (FR-107), `App__PublicBaseUrl=https://${{web.RAILWAY_PUBLIC_DOMAIN}}`.
 - **Secrets:** `Approvals__SigningKey` (64 random characters). Optional: `Llm__*`, `GitHub__*`, `Smtp__*`.
 
-**Railway `web` variables:** `BACKEND_URL`, `PORT=8080`, `NODE_ENV=production`.
+**Railway `web` variables:** `BACKEND_URL`, `PORT=8080`, `NODE_ENV=production`, `TRUST_EDGE_FORWARDED=true` (keep the edge's X-Forwarded-Proto/Host; elsewhere the web server overwrites them) *(build decision 2026-10-23)*.
 
 **External services:** unchanged (LLM providers, GitHub, Vercel and SMTP, all optional). On Railway, Ollama needs an
 explicit `Llm__Providers__Ollama__BaseUrl`.

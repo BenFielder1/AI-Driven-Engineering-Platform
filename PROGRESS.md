@@ -57,13 +57,17 @@ v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests
 - FR-106: build the API image and start it on a root-owned empty `/data`. Check that keys are written to `/data/keys`, the app runs as uid 1654 (`ps`), and `/api/health/ready` returns 200.
 
 ## Follow-ups queued
-- 3000 instead of 5173: CI E2E job (`App__PublicBaseUrl`, Vite dev server step), `e2e/support/api.ts`, `scripts/perf/nfr-perf.mjs`, README, CLAUDE.md (1c/CI).
-- CI: the route-tree freshness check must go. The Dockerfile build needs a read-only-root-FS check (phase 1 CI / phase 3).
-- k8s `web`: `BACKEND_URL` and the `/tmp` emptyDir (phase 3).
-- CI: add `backend/entrypoint.sh` to the `bash -n` and shellcheck steps (phase 1 CI pass).
-- Railway `web`: `TRUST_EDGE_FORWARDED=true`, so the web server keeps the X-Forwarded-Proto/Host values Railway's edge sets. Elsewhere it overwrites them (phase-1 review).
-- Railway `api`: `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, `ForwardedHeaders__ForwardLimit=2`. **No** `RAILWAY_RUN_UID` (the image starts as root, and the entrypoint drops to `$APP_UID`).
-- `deploy/k8s/base/configmap.yaml`: the comment still mentions nginx (phase 3).
+- All phase 1–4 follow-ups are done. The Railway variables they named (`TRUST_EDGE_FORWARDED=true` on web, `ForwardedHeaders__ForwardLimit=2` on api, no `RAILWAY_RUN_UID`) are in `.railway/railway.ts`.
+
+## First Railway deploy (Ben, then agents within `preview` autonomy)
+Setup steps are in `deploy/railway/README.md`. Things only a real run can prove (from the reviews and audit):
+- `railway config plan` shows no drift after apply, and `preserve()` on unset optional secrets plans no change.
+- The pre-deploy `/bin/sh -c '…'` quoting works through the image ENTRYPOINT, and the migration runs before `api` starts.
+- `railway up` from the repo root honours each service's root directory (fallback: `railway up backend --path-as-root`).
+- The JSON shapes of `deployment list`, `domain list` and `tcp-proxy list`, and that a project token may call them. `up --ci` fails when the build fails.
+- Railway's edge appends exactly one `X-Forwarded-For` entry, so `ForwardLimit=2` resolves the client IP (FR-105). WebSockets work through `web` (FR-98).
+- `smoke-remote.sh` passes, including the sign-in and WebSocket round trip with the smoke account (FR-111).
+- §8: Railway p95 for the project list is < 500 ms. The `aide` CLI works against the Railway web URL (D-V3-12).
 
 ## Decisions
 - 2026-10-23 — The gate runs on GitHub Actions CI, not locally. CI now also triggers on pushes to `build/**` — the machine can't run Docker + integration tests + E2E — SPEC updated: yes (M0, FR-104, §8)
@@ -92,6 +96,10 @@ v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests
 - 2026-10-24 — FR-111: before the smoke test, deploy.yml fails if `api` has any domain (`railway domain list`) or TCP proxy (`railway tcp-proxy list`). Both are read-only, and plain `railway domain` is never called. `API_PUBLIC_URL` stays for manual smoke runs — SPEC updated: no
 - 2026-10-24 — FR-109: the 600 s pre-deploy timeout is in IaC (`deploy.preDeployTimeoutSeconds`), not a dashboard step — SPEC updated: no
 - 2026-10-24 — FR-110: a `workflow_run` for a commit older than the newest main commit with green CI (push or manual CI run) is skipped with a notice, so out-of-order CI completions never roll preview back — SPEC updated: no
+
+- 2026-10-24 — §8 observability: the web server logs one JSON line per request, except `/_next/static/*` assets and `/healthz` probes (noise). Errors are always logged — SPEC updated: no
+- 2026-10-24 — FR-111: the "API not public" check runs in `deploy.yml` (Railway domain and TCP-proxy listing), not in `smoke-remote.sh` unless `API_PUBLIC_URL` is set — SPEC updated: yes
+- 2026-10-24 — SPEC §9: `TRUST_EDGE_FORWARDED=true` was added to the Railway web variables — SPEC updated: yes
 
 ## Known issues
 - Local Vitest at default parallelism: 15 shell/projects/components tests time out at 20 s on this machine under load, and pass with `--maxWorkers=2` or on their own. Watch for it on CI.

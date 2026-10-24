@@ -27,6 +27,16 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
 
+  # Railway IaC (FR-107): the `railway` SDK and TypeScript, typechecked by CI's railway-workflows job.
+  - package-ecosystem: npm
+    directory: /.railway
+    schedule:
+      interval: weekly
+    groups:
+      railway-iac:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

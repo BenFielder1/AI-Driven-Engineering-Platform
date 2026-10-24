@@ -1,4 +1,4 @@
-# Mirrors the CLAUDE.md gate, plus contract/client freshness, EF model drift, CLI packaging, manifest validation of both
+# Mirrors the CLAUDE.md gate, plus contract/client freshness, Railway IaC typecheck + actionlint, EF model drift, CLI packaging, manifest validation of both
 # overlays (local, local-e2e; kubeconform), shell script checks, image builds with container smoke checks (web: read-only
 # root FS, /healthz, CSP nonce, 502 when the API is absent; api: setpriv drop to uid 1654, efbundle as non-root) and
 # Playwright E2E against the API + a production Next.js server (`next build && npm start`) in E2E mode (v1 specs, v2 specs and a11y as parallel shards).
@@ -157,6 +157,28 @@ jobs:
         run: >-
           docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.11.0 -s sh -S warning
           backend/entrypoint.sh
+
+  # FR-107 / FR-110 (CI side): keeps the Railway IaC and the workflows from rotting before the first deploy. No Railway
+  # auth and no railway CLI commands: the IaC is only installed and typechecked. actionlint checks every workflow,
+  # with shellcheck (bundled in the pinned image) on each run: block, so the job runs whenever .github/** changes too.
+  railway-workflows:
+    name: Railway IaC + workflows (typecheck, actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: .railway/package-lock.json
+      - run: npm ci --prefix .railway
+      - name: Typecheck the Railway IaC (.railway/railway.ts)
+        run: npm --prefix .railway run typecheck
+      # Pinned image, so local runs match (`actionlint -shellcheck=<shellcheck 0.11>` gives the same result).
+      - name: actionlint (.github/workflows/*.yml, shellcheck on run blocks)
+        run: >-
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
 
   images:
     name: Image build (${{ matrix.image }})

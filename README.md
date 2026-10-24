@@ -44,7 +44,7 @@ flowchart LR
 - One API process runs the endpoints and the background workers. Workers claim jobs from a PostgreSQL table with `FOR UPDATE SKIP LOCKED`. There is no Redis or message broker (SPEC D1).
 - State changes and their follow-up jobs are written in one transaction (outbox).
 - Live updates use one SignalR hub, so run a single API replica.
-- The frontend calls the API only through the generated client, at same-origin `/api`. The web server (`frontend/server.ts`, a custom Node server around Next.js) proxies it, WebSocket upgrades included, to `BACKEND_URL`. It also sets the security headers and CSP nonce, and logs redacted JSON lines.
+- The frontend calls the API only through the generated client, at same-origin `/api`. The web server (`frontend/server.ts`, a custom Node server around Next.js) proxies it, WebSocket upgrades included, to `BACKEND_URL`. It also sets the security headers and CSP nonce, and logs one redacted JSON line per request, except static assets and `/healthz`.
 - On Kubernetes, `deploy-local.sh` runs the `db-migrate` Job (an EF Core bundle in the API image) and waits for it before it updates the API and web pods. A failed migration leaves the running version untouched.
 
 ### Repo layout
@@ -253,6 +253,9 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Smtp:EnableSsl` | TLS for SMTP | `true` | no |
 | `Smtp:Timeout` | One whole send, positive and at most `00:01:00` | `00:00:15` | no |
 | `BACKEND_URL` | Web server only (`frontend/server.ts`): API origin it proxies `/api` to, WebSocket included | `http://localhost:5080` | no |
+| `TRUST_EDGE_FORWARDED` | Web server only: keep the edge's `X-Forwarded-Proto`/`-Host`. `true` on Railway | unset (off) | no |
+| `PORT` | Web server listen port (and Railway healthcheck port) | `8080` (`3000` in dev) | no |
+| `ForwardedHeaders:ForwardLimit` (`ForwardedHeaders__ForwardLimit`) | Forwarded hops the API trusts. `2` on Railway (edge, web) | `1` | no |
 | `ASPNETCORE_ENVIRONMENT` | `Development` (dev loop) or `Production` (k8s) | set by launch profile / configmap | no |
 | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | Trust the web server's `X-Forwarded-*` | `true` in the k8s configmap | no |
 

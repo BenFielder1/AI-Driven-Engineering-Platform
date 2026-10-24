@@ -1,12 +1,14 @@
 import { expect, test, type Page, type WebSocket } from '@playwright/test'
 
-import { createProjectViaApi, registerViaApi } from './support/api.ts'
+import { createProjectViaApi, password, registerViaApi } from './support/api.ts'
 
 /**
  * v3 web server checks in a real browser (runs in CI's v1 shard: every spec not named as v2 or a11y):
  * - FR-98: on a project page, SignalR's projects hub runs over a WebSocket through the same-origin /api proxy
  * - FR-99: the security headers and the per-request CSP nonce on /login, and no CSP violations during a smoke flow
- * - FR-101: the theme class is on <html> before hydration (the inline theme-init script, no light flash)
+ * - FR-95: an unknown path renders the v2 not-found page with HTTP 404
+ * - FR-101: the theme class is on <html> before hydration (the inline theme-init script, no light flash), and a smoke
+ *   flow requests nothing from a third-party origin (fonts are self-hosted)
  * Test-only observation goes through Playwright (WebSocket events, init scripts); the app has no test hooks.
  */
 
@@ -118,3 +120,40 @@ for (const scheme of ['dark', 'light'] as const) {
     await context.close()
   })
 }
+
+test('FR-95: an unknown path renders the v2 not-found page with HTTP 404', async ({ page }) => {
+  const res = await page.goto('/this-route-does-not-exist')
+  expect(res?.status()).toBe(404)
+  await expect(page.getByRole('heading', { level: 1, name: 'Page not found', exact: true })).toBeVisible()
+})
+
+test('FR-101: a smoke flow (sign in → projects → a project) requests nothing from a third-party origin', async ({ browser, page }) => {
+  // The user and project are set up in a separate context, so this page signs in through the form.
+  const setup = await browser.newContext()
+  const user = await registerViaApi(setup, 'v3origin')
+  const project = await createProjectViaApi(setup, `V3 origin ${String(Date.now())}`)
+  await setup.close()
+
+  const requested: string[] = []
+  page.on('request', (request) => {
+    requested.push(request.url())
+  })
+
+  await page.goto('/login')
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in to AIDE', exact: true })).toBeVisible()
+  const appOrigin = new URL(page.url()).origin
+  await page.getByLabel('Email').fill(user.email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Projects', exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/\/projects$/)
+  await page.goto(`/projects/${project.id}`)
+  await expect(page.getByRole('heading', { level: 1, name: project.name })).toBeVisible()
+  // Let the page's own requests (API calls, lazy chunks, hub negotiate) finish. WebSocket frames don't count as
+  // requests here; FR-98's test covers the hub connection.
+  await page.waitForLoadState('networkidle')
+
+  const network = requested.filter((url) => !url.startsWith('data:') && !url.startsWith('blob:'))
+  expect(network.length).toBeGreaterThan(0)
+  expect(network.filter((url) => new URL(url).origin !== appOrigin)).toEqual([])
+})

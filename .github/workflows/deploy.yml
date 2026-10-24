@@ -75,7 +75,8 @@ jobs:
         run: |
           set -euo pipefail
           # "Latest green main" everywhere: the newest successful CI run on main from a push or a manual CI run in this
-          # repository (never a fork PR whose branch is also called main).
+          # repository (never a fork PR whose branch is also called main). $repo is a jq variable, not a shell one.
+          # shellcheck disable=SC2016
           newest='[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .head_repository.full_name == $repo)] | first | .head_sha // ""'
           if [ "$EVENT" = workflow_run ]; then
             environment=preview

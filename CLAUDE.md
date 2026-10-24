@@ -13,8 +13,8 @@ AIDE (AI-Driven Engineering Framework) coordinates specialised AI agents through
 | v3 | [`SPEC.md`](SPEC.md) | `PROGRESS.md` (root; created by orchestrate-stack) | Current: Next.js frontend migration + Railway deploy, no new features. Stack in [`STACK.md`](STACK.md) |
 
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/v<N>/` and add a row here.
-- **v2 is an increment on the v1 codebase:** v1 requirements (FR-1–FR-52) stay in force unless `SPEC.md` amends them (its §3.0 lists the amendments). Requirement IDs continue across versions (v2 starts at FR-53), and the spec-verifier checks both versions' requirements.
-- v2 M0 is a baseline check (gate + deploy on `build/aide-v2`), not a scaffold. Never re-scaffold the repo.
+- **v3 is an increment on v2 (and v1):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94), and the spec-verifier checks the requirements of v1, v2 and v3.
+- **Scaffolding:** v2 M0 was a baseline check, and v3 migrated the frontend in place. Never re-scaffold the repo.
 - Version assets (e.g. the logo in `docs/v2/brand/`) live under `docs/v<N>/`.
 
 ## Stack
@@ -27,7 +27,7 @@ Packs and conventions are recorded in [`STACK.md`](STACK.md). The current stack:
 - **Backend** (`backend/`): C# / ASP.NET Core (.NET 10), minimal APIs, EF Core 10 (`dotnet-ef`, local tool manifest `backend/dotnet-tools.json`) + PostgreSQL 17 via Npgsql (snake_case naming, history table `__ef_migrations_history`), xUnit v3 on Microsoft.Testing.Platform (opted in via `global.json`), Testcontainers.PostgreSql; JSON console logs, OpenTelemetry (console exporter when `Telemetry:ConsoleExporter=true`, on in Development)
 - **Background work**: hosted services in `Aide.Api` reading a PostgreSQL-backed job/outbox table — no Redis, no message broker (SPEC.md §10 D1)
 - **Contract**: `backend/openapi/api.json` (generated, committed) → `frontend/src/api/generated/` (generated with `openapi-typescript` + `openapi-fetch`)
-- **Deploy**: Docker images and Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`)
+- **Deploy**: Docker images. Local: Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`). Remote: Railway `preview` and `production`, deployed by `.github/workflows/deploy.yml`, defined as code in `.railway/railway.ts`
 - **VCS/CI**: Git, GitHub, GitHub Actions
 
 Router, auth and background-work choices come from SPEC.md; if SPEC.md changes them, update this file.
@@ -59,11 +59,14 @@ deploy/
   k8s/base/                 namespace, db, api, web, migration job
   k8s/overlays/local/       docker-desktop overlay, secrets.env (git-ignored), secrets.env.example
   k8s/.generated/           GIT-IGNORED overlay written by deploy-local.sh (pins image tags)
-  scripts/                  deploy-local.sh, teardown-local.sh, smoke.sh, validate-manifests.sh (offline render, no real secrets needed)
+  scripts/                  deploy-local.sh, teardown-local.sh, smoke.sh, validate-manifests.sh (offline render, no real secrets needed),
+                            smoke-remote.sh (+ smoke-ws.mjs) for a deployed Railway URL
+  railway/                  Railway ops docs (README.md) and variable inventory (variables.md)
+.railway/                   Railway IaC (railway.ts), applied with `railway config plan|apply`
 scripts/ci/check-generated.sh  CI: fails if generated files differ from what is committed
 docker-compose.yml          dev-loop database only
-.github/workflows/ci.yml
-SPEC.md · PROGRESS.md · CLAUDE.md   current version (v2)
+.github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on dispatch)
+SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v3)
 docs/v1/                    v1 SPEC.md + PROGRESS.md (frozen)
 docs/v2/                    v2 SPEC.md + PROGRESS.md (frozen) + AIDE brand assets
 ```
@@ -91,7 +94,13 @@ npm run test:e2e                                          # Playwright (BASE_URL
 # Local Kubernetes (Docker Desktop)
 ./deploy/scripts/deploy-local.sh                          # build images, apply, migrate, roll out, smoke test → http://localhost:8080
 ./deploy/scripts/teardown-local.sh                        # remove app (keeps DB data unless --wipe-data)
+
+# Railway (deploys go through .github/workflows/deploy.yml, not from this machine)
+railway config plan                                       # read-only diff of Railway vs .railway/railway.ts
+bash deploy/scripts/smoke-remote.sh <web-url>             # smoke test a deployed environment
 ```
+
+Agents follow STACK.md autonomy `preview`: they may deploy `preview`, and touch production only when Ben asks explicitly in the session.
 
 **Gate** (what GitHub Actions CI runs, in `.github/workflows/ci.yml`. **Don't run it locally:** see Commit gate below):
 ```bash

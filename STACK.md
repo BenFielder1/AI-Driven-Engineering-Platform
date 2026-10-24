@@ -29,9 +29,9 @@ Kubernetes only. v3 has two main stack changes: **deploy to Railway**, and **con
   `PGUSER`/`PGPASSWORD` references, so the API and the migration bundle share one variable. The API doesn't parse
   `DATABASE_URL` (SPEC.md D-V3-9).
 - **Origin model:** same-origin. The browser only talks to the Next.js server, which proxies `/api/*` (including the
-  SignalR WebSocket) to the API: `http://api:8080` in Kubernetes, `http://api.railway.internal:8080` on Railway. Server
-  components may call the API directly through `BACKEND_URL` (server-only env) and forward the auth cookie. The API has
-  no public domain. Cookie auth (`aide.auth`, `SameSite=Lax`), antiforgery (`XSRF-TOKEN` → header) and the Live origin
+  SignalR WebSocket) to the API: `http://api:8080` in Kubernetes, `http://api.railway.internal:8080` on Railway, read from
+  `BACKEND_URL` (server-only env) at runtime. Pages are client components and there is no server-side data fetching
+  (SPEC.md D-V3-2). The API has no public domain. Cookie auth (`aide.auth`, `SameSite=Lax`), antiforgery (`XSRF-TOKEN` → header) and the Live origin
   check stay as they are, with no CORS.
 - **Frontend env:** `BACKEND_URL` (server, runtime). `NEXT_PUBLIC_*` only for true build-time constants. Validate env
   with Zod in `src/lib/env.ts`.
@@ -55,7 +55,9 @@ cd backend && dotnet ef migrations has-pending-model-changes --project src/Aide.
 scripts/ci/check-generated.sh
 # Deploy/local config validation
 ./deploy/scripts/validate-manifests.sh          # Kustomize render, offline
-railway config plan                             # Railway IaC diff, read-only (needs `railway login`; skipped in the gate when not logged in)
+# Railway IaC + workflows (CI job `railway-workflows`): typecheck .railway, actionlint (+ shellcheck) on .github/workflows
+npm ci --prefix .railway && npm --prefix .railway run typecheck
+# `railway config plan` is read-only and needs Railway auth. It runs in deploy.yml (and locally after `railway login`), not in CI.
 ```
 
 ## Deploy
@@ -63,9 +65,13 @@ railway config plan                             # Railway IaC diff, read-only (n
   - `web`: the Next.js standalone container from `frontend/`, root dir `frontend`, public `*.up.railway.app` domain
     (custom domain optional)
   - `api`: the ASP.NET container from `backend/Dockerfile`, root dir `backend`, private only, a volume at `/data`
-    (Data Protection keys, Git working copies), one replica, pre-deploy `/app/efbundle --connection "$ConnectionStrings__Aide"`,
-    healthcheck `/api/health/ready`
+    (Data Protection keys, Git working copies), one replica, pre-deploy `/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Aide"'` with a 600 s
+    timeout, healthcheck `/api/health/ready`, `ForwardedHeaders__ForwardLimit=2`
+  - `web` also sets `TRUST_EDGE_FORWARDED=true`, so it keeps the edge's `X-Forwarded-Proto`/`-Host`
   - `postgres`: Railway Postgres (17), with backups on
+- **How deploys happen:** `.github/workflows/deploy.yml` deploys `preview` after green CI on `main` and `production` on
+  manual dispatch. It runs `railway config plan` (drift fails the deploy) and `deploy/scripts/smoke-remote.sh`. Ops
+  docs: `deploy/railway/README.md`, `deploy/railway/variables.md`.
 - **Config as code:** Railway IaC in `.railway/railway.ts` (`railway config plan` / `apply`). Not the deprecated
   `railway.json`/`railway.toml`. Set watch paths per service so a frontend change doesn't redeploy the API.
 - **Environments:** `production`, plus a non-production `preview` environment (or PR environments, if you enable them on
@@ -78,22 +84,17 @@ railway config plan                             # Railway IaC diff, read-only (n
   Actions secret if CI deploys. Locally: user-secrets and `deploy/k8s/overlays/local/secrets.env` (git-ignored).
   Never in git.
 
-## Caveats from compose-stack
-- ⚠ **WebSockets through Next.js.** SignalR (`/api/hubs/`) needs WebSocket upgrades proxied through the Next.js server.
-  Check that the installed Next.js version proxies upgrades for `/api/hubs/*`. Otherwise SignalR falls back to SSE or
-  long polling. The alternative is a small custom server or a route-level proxy for the hub path.
-- ⚠ **Runtime upstream.** `rewrites()` in `next.config` are fixed at build time in `output: 'standalone'`. To run one image
-  in both Kubernetes and Railway, read `BACKEND_URL` at runtime (in `proxy.ts`/middleware or a catch-all
-  `app/api/[...path]/route.ts` proxy), not in a build-time rewrite.
-- ⚠ **Security headers move from nginx to Next.js.** Today `frontend/nginx.conf` sets the CSP (`script-src 'self'`, no
-  inline script), `X-Frame-Options`, `nosniff` and the approval-token log redaction (NFR-SEC). Next.js injects inline
-  scripts, so the CSP needs per-request nonces (`proxy.ts`), and the Next server's logging must not record
-  `/approvals/<token>` paths.
-- ⚠ **Client IP for rate limits.** The API trusts one forwarded hop (`ForwardLimit 1`). Behind Railway's edge proxy and
-  then Next.js there are two hops. Make sure the per-IP login/register limits see the real client IP (forward Railway's
-  `X-Forwarded-For` unchanged, or set the forward limit and known networks for Railway).
-- ⚠ **Railway volume permissions.** Volumes mount owned by root, and the API image runs as `$APP_UID` (1654). The API
-  entrypoint `chown`s `/data` when it starts as root, then drops privileges (SPEC.md FR-106, D-V3-10).
+## Caveats
+Resolved in v3:
+- **WebSockets through Next.js:** resolved. The custom server `frontend/server.ts` proxies `/api` and the SignalR upgrades.
+- **Runtime upstream:** resolved. `BACKEND_URL` is read at runtime by `server.ts`, so one image runs on both targets.
+- **Security headers and CSP:** resolved. `server.ts` sets the headers and per-request CSP nonce, and redacts
+  `/approvals/<token>` in logs.
+- **Client IP for rate limits:** resolved. `ForwardLimit=2` on the API and `TRUST_EDGE_FORWARDED=true` on the web server.
+- **Railway volume permissions:** resolved. The API `entrypoint.sh` starts as root, fixes `/data` and drops privileges
+  with `setpriv` (FR-106, D-V3-10).
+
+Still open:
 - ⚠ **Data Protection keys live on the `/data` volume** and encrypt credentials stored in the database (the GitHub App
   key, users' LLM and Vercel tokens). Back up the volume. Losing it makes those secrets unreadable.
 - ⚠ **First registered user becomes Admin** (FR-3). On a public Railway URL, register the admin straight after the
@@ -101,19 +102,11 @@ railway config plan                             # Railway IaC diff, read-only (n
 - ⚠ **Ollama default** (`host.docker.internal:11434`) doesn't resolve on Railway. Set `Llm__Providers__Ollama__BaseUrl`
   or leave Ollama unused.
 
-## v3 stack changes: affected code (detail to come in SPEC.md)
-- **Frontend conversion** (`fe-react-vite` → `fe-nextjs`):
-  - `frontend/` is rebuilt on the Next.js App Router: TanStack Router file routes become `src/app/` segments (with
-    `loading`/`error`/`not-found`), and `routeTree.gen.ts` and the Vite config go away.
-  - Feature folders, the generated client, Zod forms, MSW mocks, Vitest and Playwright carry over.
-  - TanStack Query stays for client-side server state where interactivity needs it.
-  - `frontend/Dockerfile` and `nginx.conf` become a standalone Node image.
-- **Railway deploy:**
-  - `.railway/railway.ts` (new).
-  - API connection-string handling (`DATABASE_URL` conversion) and volume permissions.
-  - README and config docs, with secrets inventory entries for Railway.
-  - CI: a `railway config plan` job and an optional deploy to `preview`.
-- **Local k8s:** the `web` Deployment runs the Next.js server (with `BACKEND_URL=http://api:8080`) instead of nginx.
-  `smoke.sh` and the E2E overlay are updated to match.
-- **Docs and rules:** CLAUDE.md's Stack and Layout sections, the spec's §9 deployment section and the Decisions in
-  PROGRESS.md are updated when v3 starts (CLAUDE.md rule 12).
+## As built (v3)
+- **Frontend:** `frontend/` is on the Next.js App Router (`src/app/`, thin client pages). `server.ts` is a custom Node
+  server (Node 24 type stripping) that serves Next, proxies `/api`, sets headers and logs. Standalone image, no nginx.
+- **Railway:** `.railway/railway.ts` defines `web`, `api` and `postgres` for `preview` and `production`. Deploys run
+  through `.github/workflows/deploy.yml`. The API takes `ConnectionStrings__Aide` from `PG*` references (D-V3-9).
+- **Local k8s:** the `web` Deployment runs the Next.js image with `BACKEND_URL=http://api:8080`. `smoke.sh` checks
+  `/healthz`, the CSP nonce and the proxy.
+- **Docs:** decisions live in PROGRESS.md. Ops docs are in `deploy/railway/`.
