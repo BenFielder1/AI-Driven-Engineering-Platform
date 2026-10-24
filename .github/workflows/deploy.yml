@@ -197,7 +197,7 @@ jobs:
           case "$code" in
             0) echo "Railway config matches .railway/railway.ts" ;;
             2)
-              msg="Railway '$DEPLOY_ENV' differs from .railway/railway.ts (plan above). If the plan deletes a variable that is set in Railway, declare the variable in .railway/railway.ts (preserve()); otherwise run 'railway config plan' locally for '$DEPLOY_ENV' and review it (deploy/railway/README.md, step 2). Never apply a plan that deletes secrets. CI never applies."
+              msg="Railway '$DEPLOY_ENV' differs from .railway/railway.ts (plan above). If the plan deletes a variable that is set in Railway, add the variable's name to operatorSetApiVariables (variables.ignore) in .railway/railway.ts; otherwise run 'railway config plan' locally for '$DEPLOY_ENV' and review it (deploy/railway/README.md, step 2). Never apply a plan that deletes secrets. CI never applies."
               echo "::error::$msg"
               { echo "### Deploy stopped: Railway config drift"; echo "$msg Then re-run this workflow."; } >> "$GITHUB_STEP_SUMMARY"
               exit 1 ;;
@@ -402,7 +402,7 @@ jobs:
           case "$code" in
             0) echo "Railway config matches .railway/railway.ts" ;;
             2)
-              msg="Railway '$DEPLOY_ENV' differs from .railway/railway.ts (plan above). If the plan deletes a variable that is set in Railway, declare the variable in .railway/railway.ts (preserve()); otherwise run 'railway config plan' locally for '$DEPLOY_ENV' and review it (deploy/railway/README.md, step 2). Never apply a plan that deletes secrets. CI never applies."
+              msg="Railway '$DEPLOY_ENV' differs from .railway/railway.ts (plan above). If the plan deletes a variable that is set in Railway, add the variable's name to operatorSetApiVariables (variables.ignore) in .railway/railway.ts; otherwise run 'railway config plan' locally for '$DEPLOY_ENV' and review it (deploy/railway/README.md, step 2). Never apply a plan that deletes secrets. CI never applies."
               echo "::error::$msg"
               { echo "### Deploy stopped: Railway config drift"; echo "$msg Then re-run this workflow."; } >> "$GITHUB_STEP_SUMMARY"
               exit 1 ;;

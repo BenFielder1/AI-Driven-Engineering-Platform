@@ -4,7 +4,7 @@ One Railway project, `aide`, with two environments: `preview` and `production`. 
 
 - **`web`:** the Next.js server from `frontend/Dockerfile`, with a public `*.up.railway.app` domain and healthcheck
   `/healthz`
-- **`api`:** the ASP.NET API from `backend/Dockerfile`, private only, with a 5 GB volume at `/data`, migrations as its
+- **`api`:** the ASP.NET API from `backend/Dockerfile`, private only, with a 500 MB volume at `/data` (5 GB after a plan upgrade), migrations as its
   pre-deploy command, and healthcheck `/api/health/ready`
 - **`postgres`:** Railway Postgres 17
 
@@ -77,24 +77,41 @@ railway config plan
 
 Git Bash can't do this: bash sets `_` to each command's own path. Use PowerShell. Linux and macOS (including CI) are unaffected.
 
+**What the first apply on preview taught us (2026-10-24).** The early applies failed with
+`Apply finished with status failed; failed changes: change ×N`. The human output lists every change as failed, because one
+rejected change fails the whole batch. The cause was the `api-data` volume: 5 GB exceeds the current plan's 500 MB maximum.
+Only `railway config apply --json --yes` shows it, under `applyResult.diagnostics` ("Max size of 500 MB on current plan").
+To diagnose a failed apply, run that command and read the diagnostics. `railway.ts` now holds settings that keep the
+plan drift-free after apply:
+
+- **Volume:** `sizeMB: 500` and `region: 'iad'`. Railway assigns a region, and leaving it unset plans a destructive change.
+- **Services:** `source: { type: 'github', rootDirectory }` with no repo. That is how Railway records a repo-less service
+  with a root directory. Nothing is connected to GitHub.
+- **Build:** `dockerfilePath: 'Dockerfile'` next to `builder: 'DOCKERFILE'`. Without it Railway kept RAILPACK.
+- **Restart policy:** omitted. Railway's default (ON_FAILURE, 10 retries) is stored as null, so declaring it drifts forever.
+
 Plan and apply use the linked environment. In CI they use the environment of `RAILWAY_TOKEN`. `railway.ts` doesn't
 branch on the environment, so both environments get the same configuration. After the first apply, `railway config plan`
 should report no changes (FR-107). CI checks that with `railway config plan --detailed-exit-code` before every deploy,
 where exit 2 means drift and stops the deploy.
 
-**Operator-set variables and `preserve()`.** IaC owns every variable on a service, so a variable that exists in Railway
-but not in `railway.ts` is planned for **deletion**, which would also make CI's drift check fail. To keep one file for
-both environments, `railway.ts` declares `Approvals__SigningKey` and the **full optional set** from
-[variables.md](variables.md) (`Llm__*`, `GitHub__App__*`, `GitHub__OAuth__*`, `Smtp__*`) as `preserve()` up front, in
-`operatorSetApiVariables`. `preserve()` keeps whatever value Railway holds, so setting any of them in either environment
-needs no code change. The `railway` package only emits a `{ type: "preserve" }` marker (the plan engine is in the CLI),
-so what `preserve()` does for a variable that isn't set can't be confirmed offline. Hence the checklist below.
+**Operator-set variables and `variables.ignore`.** IaC owns every variable on a service, so a variable that exists in
+Railway but not in `railway.ts` is planned for **deletion**, which would also make CI's drift check fail. To keep one
+file for both environments, `railway.ts` lists `Approvals__SigningKey` and the **full optional set** from
+[variables.md](variables.md) (`Llm__*`, `GitHub__App__*`, `GitHub__OAuth__*`, `Smtp__*`, 19 names) in
+`operatorSetApiVariables`, which is the project-level `variables.ignore`. IaC never touches an ignored name, whether it
+is set or not, so setting any of them in either environment needs no code change. An ignored name may be set or unset,
+which is why it is used instead of `preserve()`. `variables.ignore` is a CLI 5.71 feature that the `railway` 3.16 package doesn't type yet, hence a cast in `railway.ts`.
+
+While a name is unset, `railway config plan` prints one warning per name:
+`variables.ignore pattern "<name>" matches no variable`. That is expected and harmless. A variable set in Railway that is
+neither declared in `railway.ts` nor in the ignore list is still planned for deletion.
 
 **First-plan checklist** (each environment, before the first apply):
 
 - [ ] The plan creates `postgres`, volume `api-data`, and services `api` and `web`, and destroys nothing.
-- [ ] Confirm `preserve()` on unset optional secrets plans no change: no add, change or error for the `Llm__*`,
-      `GitHub__*` and `Smtp__*` names you haven't set.
+- [ ] The plan shows no add, change or error for the ignored `Approvals__SigningKey`, `Llm__*`, `GitHub__*` and `Smtp__*`
+      names. Only the "matches no variable" warnings for names you haven't set are expected.
 - [ ] `api` shows the pre-deploy command, `preDeployTimeoutSeconds: 600`, healthcheck `/api/health/ready`, and no
       domain or TCP proxy.
 - [ ] After the apply and the step 3 secrets, `railway config plan --detailed-exit-code` exits 0.
@@ -102,13 +119,10 @@ so what `preserve()` does for a variable that isn't set can't be confirmed offli
       `No domains found for service …` / `No TCP proxies found for service …` instead of JSON, which the step treats as
       empty. Any other non-JSON output or error fails the step: check the CLI output format if that happens.
 
-If the second item fails (the plan adds the unset names, or rejects `preserve()` for a missing variable), switch
-`railway.ts` to per-environment lists: `export default defineRailway((ctx) => …)`, and spread only the names that
-environment actually uses, for example
-`...(ctx.isEnvironment('production') ? { Smtp__Password: preserve() } : {})`. Adding a secret to one environment is then:
-set the value in Railway, add its name to that environment's list, and plan (no destroys, no changes). Until then,
-`Approvals__SigningKey` can be handled the same way: remove its line locally, apply, set the secret (step 3), restore
-the line, and plan again.
+If the apply still fails on these names, `railway.ts` can instead use per-environment lists:
+`export default defineRailway((ctx) => …)`, spreading only the names that environment actually uses. Adding a secret to
+one environment is then: set the value in Railway, add its name to that environment's list, and plan (no destroys, no
+changes).
 
 ### 3. One-time dashboard or CLI steps (not expressible in IaC)
 
@@ -119,11 +133,11 @@ Do these per environment, with that environment linked:
 | **Generate the web domain** | `railway domain --service web --port 8080` (or `web` → Settings → Networking → Generate Domain, port 8080). Note the URL. Generated domains are not part of IaC |
 | **No api domain** | Check `api` → Settings → Networking shows no public domain and no TCP proxy. Never generate one. Every deploy fails if one exists (FR-111) |
 | **Signing key** | `openssl rand -hex 32 \| railway variable set Approvals__SigningKey --stdin --service api --environment <env> --skip-deploys` (64 characters, read from stdin so it never appears in argv or shell history). Use a new value for each environment. Don't echo it anywhere else |
-| **Optional secrets** | LLM, GitHub App/OAuth and SMTP values: see [variables.md](variables.md). Set them the same way (`--stdin` for secrets). Their names are already declared `preserve()` in `railway.ts`. A name not in that list must be added there first, or the next plan deletes it |
+| **Optional secrets** | LLM, GitHub App/OAuth and SMTP values: see [variables.md](variables.md). Set them the same way (`--stdin` for secrets). Their names are already in `operatorSetApiVariables` (`variables.ignore`) in `railway.ts`. A name not in that list must be added there first, or the next plan deletes it |
 | **Postgres backups** | `postgres` → Backups → schedule **Daily + Weekly** in `production`. Optional in `preview` |
 | **Volume backups** | `api` → Backups (the `api-data` volume) → **Daily + Weekly** in `production`. See [Backups](#backups) |
-| **Volume size** | Shown in the plan as 5120 MB. Hobby's per-volume maximum is 5 GB. Raise `sizeMB` in `railway.ts` (on Pro) and apply. Shrinking is destructive |
-| **Source** | Don't connect the GitHub repo to `web` or `api`. Deploys come from GitHub Actions with `railway up` (D-V3-7). The watch paths in `railway.ts` (`/frontend/**`, `/backend/**`) only matter if a repo is connected later |
+| **Volume size** | 500 MB, the current plan's maximum. SPEC Q2 wants 5 GB: upgrade the plan, raise `sizeMB` in `railway.ts` and apply. Shrinking is destructive |
+| **Source** | Don't connect the GitHub repo to `web` or `api`. Deploys come from GitHub Actions with `railway up` (D-V3-7). `railway.ts` declares `source` with a root directory and no repo, so nothing is connected. The watch paths in `railway.ts` (`/frontend/**`, `/backend/**`) only matter if a repo is connected later |
 
 `App__PublicBaseUrl` is the reference `https://${{web.RAILWAY_PUBLIC_DOMAIN}}`, so it picks up the generated domain with
 no extra step. The API validates it at start-up, so generate the domain before the first deploy. If you add a custom
@@ -187,7 +201,7 @@ URLs are per environment, so register a separate GitHub App (or OAuth App) for `
   - Homepage URL: `https://<web-domain>`
   - Callback URL: `https://<web-domain>/api/auth/github/callback`
   - Set `GitHub__OAuth__ClientId` and the `GitHub__OAuth__ClientSecret` secret in Railway for that environment (both
-    are declared `preserve()` in `railway.ts`).
+    are in `operatorSetApiVariables` in `railway.ts`).
 - **A custom domain later:** re-register the App, or edit its URLs, after changing `App__PublicBaseUrl`.
 
 ## Deploys and the smoke test
@@ -265,7 +279,7 @@ Each rollback is a deployment, so run `deploy/scripts/smoke-remote.sh` afterward
 | --- | --- |
 | Plan | Hobby is $5/month including $5 of usage; Pro is $20/month. Two environments double the usage |
 | Usage | Each environment runs 3 always-on containers (web, api, postgres). RAM ($10/GB/month) dominates: .NET + Next.js + Postgres use roughly 0.6–1 GB per environment. Set usage limits and alerts (Workspace → Usage) |
-| Volumes | $0.15/GB/month. The Hobby maximum per volume is 5 GB, and `api-data` starts at 5 GB. Watch `/data/workspaces` growth (Git working copies) |
+| Volumes | $0.15/GB/month. `api-data` is 500 MB, the current plan's maximum (SPEC Q2 wants 5 GB after an upgrade). Watch the size: Data Protection keys are small, but `/data/workspaces` (Git working copies) can fill it |
 | Backups | Billed as volume storage |
 | Egress | $0.05/GB. LLM calls and Git clones count. Keep Postgres private (no TCP proxy) |
 | Downtime on deploy | A service with a volume can't overlap deployments, so each `api` deploy has a short gap. SignalR clients reconnect. `web` deploys have no gap |
@@ -284,7 +298,12 @@ Each rollback is a deployment, so run `deploy/scripts/smoke-remote.sh` afterward
 | `/api/...` returns 502 `UPSTREAM_ERROR` | `web` can't reach `api.railway.internal:8080`: `api` down, or `BACKEND_URL` wrong. Kestrel listens on IPv4 and IPv6, so legacy IPv6-only private networks work |
 | Cookies not `Secure`, or the live WebSocket refused (403) | `TRUST_EDGE_FORWARDED=true` missing on `web`, or `ForwardedHeaders__ForwardLimit` not 2 on `api` |
 | Every user shares one login rate-limit bucket | `ForwardedHeaders__ForwardLimit` is not 2 |
-| Plan wants to delete a variable (CI: "Railway config drift") | It exists in Railway but not in `railway.ts`. Declare it in `railway.ts` (`preserve()`), then plan again. Never apply a plan that deletes secrets, and don't pass `--confirm-destructive` |
+| `railway config apply` fails: `Apply finished with status failed; failed changes: change ×N` | One rejected change fails the whole batch. Run `railway config apply --json --yes` and read `applyResult.diagnostics`. Seen: "Max size of 500 MB on current plan" for the `api-data` volume. Set `sizeMB: 500`, or upgrade the plan first |
+| Plan warns `variables.ignore pattern "<name>" matches no variable` | Expected and harmless: that operator-set variable isn't set in this environment yet |
+| Plan wants to delete a variable (CI: "Railway config drift") | It exists in Railway but not in `railway.ts`. Add its name to `operatorSetApiVariables` (`variables.ignore`) in `railway.ts`, then plan again. Never apply a plan that deletes secrets, and don't pass `--confirm-destructive` |
 | Deploy fails "api is publicly reachable" | `api` has a service domain, custom domain or TCP proxy. Remove it in `api` → Settings → Networking |
 | Deploy fails waiting for `api` (`FAILED`) | Usually the pre-deploy migration: `railway logs <deployment-id> --service api --environment <env> --deployment` |
 | Plan wants to replace postgres | The image differs from `postgres-ssl:17`. Stop and reconcile. Never accept a database destroy |
+| Plan wants to change or destroy volume `api-data` | `region` is unset in `railway.ts`. Railway assigns one (`iad`). Declare `region: 'iad'`. Don't accept a destructive volume change |
+| Plan wants to change `builder` from RAILPACK to DOCKERFILE after apply | `build.dockerfilePath: 'Dockerfile'` is missing next to `builder: 'DOCKERFILE'` in `railway.ts` |
+| Plan shows a restart-policy change every time | The policy is declared in `railway.ts`. Remove it: Railway's default (ON_FAILURE, 10) is stored as null |
