@@ -247,7 +247,7 @@ Auth is unchanged: cookie auth plus API tokens (v1), GitHub App sign-in (v2).
   - volume mounted at `/data` (default 5 GB)
   - pre-deploy command from FR-109
   - variables per §9
-- **`postgres`:** Railway Postgres 17, with backups on in `production`.
+- **`postgres`:** Railway Postgres 17, with backups on in `production`. The IaC `postgres()` helper now provisions 18, so 17 is pinned with `database()` and the `postgres-ssl:17` image *(build decision 2026-10-23)*.
 - **Connection string:** built from references:
   `ConnectionStrings__Aide=Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}`
   (private network).
@@ -264,7 +264,7 @@ Auth is unchanged: cookie auth plus API tokens (v1), GitHub App sign-in (v2).
 - `App__PublicBaseUrl` is each environment's own web URL.
 
 **FR-109 acceptance**
-- The API's pre-deploy command is `/app/efbundle --connection "$ConnectionStrings__Aide"`.
+- The API's pre-deploy command is `/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Aide"'`. Railway runs it in exec form, so the shell is what expands the variable *(build decision 2026-10-23)*.
 - Given a pending migration, then it is applied before the new API container starts.
 - Given a migration that fails, then the deploy is marked failed, the previous deployment keeps serving, and
   `/api/health/ready` on it stays 200.
@@ -272,7 +272,7 @@ Auth is unchanged: cookie auth plus API tokens (v1), GitHub App sign-in (v2).
 **FR-110 acceptance**
 - `.github/workflows/deploy.yml`:
   - `deploy-preview` runs on `workflow_run` of CI succeeding on `main`. It runs `railway up` for `api`, then `web`, to
-    environment `preview` (`--ci`, waiting for the build), then FR-111 against the preview URL.
+    environment `preview` (`--ci`), waiting after each upload until Railway reports the new deployment SUCCESS (api, including its pre-deploy migration, before web). It then checks that `api` has no public domain or TCP proxy and runs FR-111 against the preview URL *(build decision 2026-10-24)*.
   - `deploy-production` runs on `workflow_dispatch` with a commit SHA (default: the latest green `main`). It uses GitHub
     environment `production` (required reviewer: the repo owner), the same steps, and the production URL.
 - `RAILWAY_TOKEN` is a project token per environment, stored as GitHub environment secrets `preview` and `production`.

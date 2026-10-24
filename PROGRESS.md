@@ -26,12 +26,12 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-104 | Local k8s on the Next.js image | 3.3 | deploy | 3 | done (CI); manual Docker Desktop check pending | CI 39998009637 |
 | FR-105 | Configurable forwarded-header hops | 3.4 | backend | 1 | done | CI 39998009637 |
 | FR-106 | API entrypoint: volume ownership, drop to `$APP_UID` | 3.4 | backend + deploy | 1 | done | CI 39998009637 |
-| FR-107 | `.railway/railway.ts` IaC | 3.5 | deploy | 4 | todo | — |
-| FR-108 | `preview` + `production` environments | 3.5 | deploy | 4 | todo | — |
-| FR-109 | Pre-deploy migrations | 3.5 | deploy + data | 4 | todo | — |
-| FR-110 | GitHub Actions deploy workflow | 3.5 | deploy + CI | 4 | todo | — |
-| FR-111 | `smoke-remote.sh` | 3.5 | deploy | 4 | todo | — |
-| FR-112 | Railway operations docs | 3.5 | docs | 5 | todo | — |
+| FR-107 | `.railway/railway.ts` IaC | 3.5 | deploy | 4 | written; first `config plan` pending (Ben) | static review |
+| FR-108 | `preview` + `production` environments | 3.5 | deploy | 4 | documented; environments created by Ben | static review |
+| FR-109 | Pre-deploy migrations | 3.5 | deploy + data | 4 | in IaC; verified on first deploy | static review |
+| FR-110 | GitHub Actions deploy workflow | 3.5 | deploy + CI | 4 | written; runs once on main + Railway secrets | static review |
+| FR-111 | `smoke-remote.sh` | 3.5 | deploy | 4 | written; runs on first deploy | static review |
+| FR-112 | Railway operations docs | 3.5 | docs | 5 | written (deploy/railway/*); final docs sync in M22 | static review |
 
 v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests must stay green on CI.
 
@@ -45,7 +45,7 @@ v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests
 - [x] 1 Next.js foundation (M17) ‖ backend hosting (M20) (base 37fcaca): d4d47ac + fix d10c96f. CI green on 31ba6da: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/39998009637
 - [x] 2 Page port (M18): gated together with phase 1 (d4d47ac); see Decisions
 - [x] 3 Local Kubernetes + CI (M19): 31ba6da, CI green: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/39998009637. The Docker Desktop run is a manual check (see below)
-- [ ] 4 Railway (M21): FR-107–FR-111 (needs Railway CLI/login/tokens from Ben; production only on request)
+- [~] 4 Railway (M21): IaC, deploy workflow, smoke-remote and docs written and reviewed (static). First real `railway config plan`/apply, preview deploy and smoke need Ben's Railway setup; production only on request
 - [ ] 5 Final (M22): FR-112, docs, audit over v1+v2+v3
 
 ## Manual checks (Ben, Docker Desktop)
@@ -83,6 +83,15 @@ v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests
 - 2026-10-23 — FR-100: approval tokens are redacted anywhere in a path, query or Referer, after `/`, `%2F` or `%252F`. Paths like `/projects/approvals/x` get over-redacted in logs, which is acceptable — SPEC updated: no
 - 2026-10-23 — FR-98: the web server overwrites `X-Forwarded-Proto` and `X-Forwarded-Host` from the connection unless `TRUST_EDGE_FORWARDED=true` (Railway web). A path that resolves outside `/api` → 400 `VALIDATION` — SPEC updated: no
 - 2026-10-23 — CI E2E runs against a production Next.js server (`npm run build && npm start`, set up by playwright.config.ts when `CI` is set), not `next dev`, to avoid per-route cold compiles. The dev loop still uses `npm run dev` — SPEC updated: no
+
+- 2026-10-23 — FR-109: the pre-deploy command is shell-wrapped (`/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Aide"'`), because Railway runs commands in exec form and wouldn't expand the variable — SPEC updated: yes
+- 2026-10-23 — FR-107: Postgres is pinned to 17 with `database()` and the `postgres-ssl:17` image. The `postgres()` helper now gives 18 — SPEC updated: yes
+- 2026-10-23 — FR-107: `api` also sets `PORT=8080`, because Railway's healthcheck targets `$PORT`. SPEC Q4: no IPv6 change is needed. Kestrel `*:8080` (ASPNETCORE_HTTP_PORTS) is dual-stack, and Node `listen(port)` binds `::` — SPEC updated: no
+- 2026-10-24 — FR-107/FR-112: a variable set in Railway but not declared in `.railway/railway.ts` is planned for deletion, which also makes CI's `config plan --detailed-exit-code` fail. So the signing key and the full optional set (`Llm__*`, `GitHub__App__*`, `GitHub__OAuth__*`, `Smtp__*`) are declared `preserve()` up front, for both environments. railway 3.16.0 only emits a `{ type: "preserve" }` marker, and the plan engine is in the CLI, so whether `preserve()` on an unset variable is a no-op can't be shown offline. It's a first-plan check in deploy/railway/README.md, with a fallback to per-environment `defineRailway((ctx) => …)` lists. The drift error now says to declare the variable or review the plan locally, and never to apply a plan that deletes secrets — SPEC updated: no
+- 2026-10-24 — FR-109/FR-110: `railway up --ci` exits after the build, so deploy.yml polls `railway deployment list --json` for the deployment that upload created (the newest id not listed before it) until `SUCCESS`. It fails on `FAILED`/`CRASHED`/`REMOVED`/`SKIPPED`/`NEEDS_APPROVAL` or a timeout (api 15 min, naming a failed migration as the likely cause, then web 10 min). web deploys only after api is live — SPEC updated: no
+- 2026-10-24 — FR-111: before the smoke test, deploy.yml fails if `api` has any domain (`railway domain list`) or TCP proxy (`railway tcp-proxy list`). Both are read-only, and plain `railway domain` is never called. `API_PUBLIC_URL` stays for manual smoke runs — SPEC updated: no
+- 2026-10-24 — FR-109: the 600 s pre-deploy timeout is in IaC (`deploy.preDeployTimeoutSeconds`), not a dashboard step — SPEC updated: no
+- 2026-10-24 — FR-110: a `workflow_run` for a commit older than the newest main commit with green CI (push or manual CI run) is skipped with a notice, so out-of-order CI completions never roll preview back — SPEC updated: no
 
 ## Known issues
 - Local Vitest at default parallelism: 15 shell/projects/components tests time out at 20 s on this machine under load, and pass with `--maxWorkers=2` or on their own. Watch for it on CI.

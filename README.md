@@ -171,14 +171,29 @@ The script builds the `aide-api` and `aide-web` images, tags them with the git S
 | `/api/...` returns 502 `UPSTREAM_ERROR` | The web server can't reach the API. Check the `api` pod, and that `BACKEND_URL` in `app-config` is `http://api:8080` |
 | web pod crash-loops with `Invalid web server environment` | `BACKEND_URL` (or `PORT`) is not a valid URL or number. Fix it in `deploy/k8s/base/configmap.yaml` and redeploy |
 
+## Deploy to Railway
+
+AIDE runs on Railway as one project with two environments, `preview` and `production`. Each has a public `web`, a
+private `api` with a `/data` volume, and its own Postgres 17. The project is defined as code in
+[`.railway/railway.ts`](.railway/railway.ts) (`railway config plan` / `apply`). GitHub Actions deploys `preview` after
+green CI on `main`, and `production` on manual dispatch. `deploy/scripts/smoke-remote.sh <web-url>` checks each
+deploy.
+
+- **Setup and operations:** [`deploy/railway/README.md`](deploy/railway/README.md) covers first-time setup, secrets,
+  the first Admin, the smoke account, GitHub App URLs, backups (Postgres **and** the `/data` volume), rollback, and
+  costs.
+- **Variables:** [`deploy/railway/variables.md`](deploy/railway/variables.md) lists every Railway variable per service,
+  and whether it is a literal, a reference or a secret.
+
 ## Configuration reference
 
 ASP.NET Core reads `appsettings.json`, `appsettings.Development.json`, user-secrets (Development), then environment variables. In an environment variable, replace `:` with `__` (for example `Llm__Providers__Anthropic__ApiKey`).
 
 - **Dev loop:** non-secrets in `backend/src/Aide.Api/appsettings*.json` or environment variables; secrets with `dotnet user-secrets set "<Key>" "<value>" --project backend/src/Aide.Api` (run from the repo root).
 - **Kubernetes:** secrets and any extra key go in `deploy/k8s/overlays/local/secrets.env` (`KEY=value`, no quotes). Non-secrets are in `deploy/k8s/base/configmap.yaml` and `deploy/k8s/overlays/local/app-config-local.yaml`. The API loads both as environment variables. Re-run `deploy-local.sh` after a change.
+- **Railway (FR-112):** every variable per service and environment, and whether it is a literal, a reference, a secret or operator-set, is in [`deploy/railway/variables.md`](deploy/railway/variables.md). Literals and references live in [`.railway/railway.ts`](.railway/railway.ts). Secrets and optional values are set per environment in Railway (`railway variable set <NAME> --stdin ...`) and declared `preserve()` in `railway.ts`.
 
-Values are never shown here. "Secret" means: never commit it, set it only through user-secrets or `secrets.env`.
+Values are never shown here. "Secret" means: never commit it, set it only through user-secrets, `secrets.env` or Railway variables.
 
 | Key (env var form) | Purpose | Default | Secret |
 | --- | --- | --- | --- |

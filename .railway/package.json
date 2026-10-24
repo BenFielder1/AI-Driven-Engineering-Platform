@@ -1,0 +1,16 @@
+{
+  "name": "aide-railway-iac",
+  "private": true,
+  "description": "Railway Infrastructure as Code for AIDE (FR-107). Evaluated by `railway config plan|apply` (CLI 5.42.1+).",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "railway": "3.16.0",
+    "typescript": "~6.0.2"
+  }
+}
