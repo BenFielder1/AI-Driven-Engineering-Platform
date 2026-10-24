@@ -34,8 +34,13 @@ deploys and `config apply` against production happen only on Ben's explicit requ
    `npm --prefix .railway run typecheck`.
 5. **One project token per environment** (dashboard: Project → Settings → Tokens → choose the environment). Store each
    one as the `RAILWAY_TOKEN` secret of the matching GitHub environment (`preview`, `production`). A project token
-   can deploy and plan only in its own environment. Creating environments needs your login (or an account token),
-   not a project token.
+   can deploy only in its own environment. Creating environments needs your login (or an account token), not a
+   project token.
+6. **A workspace token for the drift check** (dashboard: Account → Tokens → workspace "Ben Fielder's Projects"), stored
+   as the `RAILWAY_API_TOKEN` secret of both GitHub environments. `railway config plan` (IaC) rejects project tokens
+   with "Unauthorized" even when `railway status` works with them (found on the first preview deploy, 2026-10-24), so
+   `deploy.yml` runs only the read-only plan with this token, scoped by `RAILWAY_PROJECT_ID` and `--environment`.
+   Everything else (`railway up`, deployment, domain and TCP-proxy listing) uses the project token.
 
 ## First-time setup
 
@@ -90,7 +95,7 @@ plan drift-free after apply:
 - **Build:** `dockerfilePath: 'Dockerfile'` next to `builder: 'DOCKERFILE'`. Without it Railway kept RAILPACK.
 - **Restart policy:** omitted. Railway's default (ON_FAILURE, 10 retries) is stored as null, so declaring it drifts forever.
 
-Plan and apply use the linked environment. In CI they use the environment of `RAILWAY_TOKEN`. `railway.ts` doesn't
+Plan and apply use the linked environment. In CI, plan uses the workspace token with `--environment <env>` (step 5, item 6). `railway.ts` doesn't
 branch on the environment, so both environments get the same configuration. After the first apply, `railway config plan`
 should report no changes (FR-107). CI checks that with `railway config plan --detailed-exit-code` before every deploy,
 where exit 2 means drift and stops the deploy.

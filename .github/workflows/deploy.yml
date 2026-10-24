@@ -7,7 +7,9 @@
 # Every dispatched commit must be on main and have a successful CI run, or the workflow fails before deploying.
 #
 # Per GitHub environment (`preview`, `production`), created by Ben (deploy/railway/README.md, variables.md):
-#   secrets    RAILWAY_TOKEN (Railway project token scoped to that Railway environment), SMOKE_EMAIL, SMOKE_PASSWORD
+#   secrets    RAILWAY_TOKEN (Railway project token scoped to that Railway environment), SMOKE_EMAIL, SMOKE_PASSWORD,
+#              RAILWAY_API_TOKEN (Railway workspace token: `railway config plan` (IaC) rejects project tokens with
+#              "Unauthorized", so only the read-only drift check uses it; deploys and queries use RAILWAY_TOKEN)
 #   variable   RAILWAY_WEB_URL (https://<generated web domain>). CI never runs `railway domain` (it creates domains).
 # Until RAILWAY_TOKEN exists in `preview`, the automatic preview deploy skips with a notice instead of failing.
 # CI never runs `railway config apply`: drift found by `railway config plan` fails the deploy, and Ben reviews it.
@@ -190,10 +192,17 @@ jobs:
       - name: Railway config has no drift (railway config plan)
         if: steps.configured.outputs.ok == 'true'
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          # IaC needs a workspace token (project tokens get "Unauthorized"). RAILWAY_TOKEN is deliberately not set here,
+          # so the CLI uses this token, scoped to the aide project and this environment.
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_PROJECT_ID: 2b44afd5-e80c-407f-838f-1f07a354b6e1
         run: |
+          if [ -z "$RAILWAY_API_TOKEN" ]; then
+            msg="RAILWAY_API_TOKEN (Railway workspace token) is not set in the GitHub environment '$DEPLOY_ENV'. The drift check (railway config plan) needs it (deploy/railway/README.md, prerequisites)."
+            echo "::error::$msg"; echo "### Deploy stopped: $msg" >> "$GITHUB_STEP_SUMMARY"; exit 1
+          fi
           code=0
-          railway config plan --detailed-exit-code || code=$?
+          railway config plan --environment "$DEPLOY_ENV" --detailed-exit-code || code=$?
           case "$code" in
             0) echo "Railway config matches .railway/railway.ts" ;;
             2)
@@ -395,10 +404,17 @@ jobs:
 
       - name: Railway config has no drift (railway config plan)
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          # IaC needs a workspace token (project tokens get "Unauthorized"). RAILWAY_TOKEN is deliberately not set here,
+          # so the CLI uses this token, scoped to the aide project and this environment.
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_PROJECT_ID: 2b44afd5-e80c-407f-838f-1f07a354b6e1
         run: |
+          if [ -z "$RAILWAY_API_TOKEN" ]; then
+            msg="RAILWAY_API_TOKEN (Railway workspace token) is not set in the GitHub environment '$DEPLOY_ENV'. The drift check (railway config plan) needs it (deploy/railway/README.md, prerequisites)."
+            echo "::error::$msg"; echo "### Deploy stopped: $msg" >> "$GITHUB_STEP_SUMMARY"; exit 1
+          fi
           code=0
-          railway config plan --detailed-exit-code || code=$?
+          railway config plan --environment "$DEPLOY_ENV" --detailed-exit-code || code=$?
           case "$code" in
             0) echo "Railway config matches .railway/railway.ts" ;;
             2)
