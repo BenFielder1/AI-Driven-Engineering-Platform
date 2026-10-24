@@ -6,7 +6,7 @@ One Railway project, `aide`, with two environments: `preview` and `production`. 
   `/healthz`
 - **`api`:** the ASP.NET API from `backend/Dockerfile`, private only, with a 500 MB volume at `/data` (5 GB after a plan upgrade), migrations as its
   pre-deploy command, and healthcheck `/api/health/ready`
-- **`postgres`:** Railway Postgres 17
+- **`postgres`:** Railway Postgres 18 (`postgres-ssl:18`; local and CI use 17, SPEC D-V3-13)
 
 The browser only talks to `web`, which proxies `/api` and the SignalR WebSockets to
 `http://api.railway.internal:8080`.
@@ -308,7 +308,8 @@ Each rollback is a deployment, so run `deploy/scripts/smoke-remote.sh` afterward
 | Plan wants to delete a variable (CI: "Railway config drift") | It exists in Railway but not in `railway.ts`. Add its name to `operatorSetApiVariables` (`variables.ignore`) in `railway.ts`, then plan again. Never apply a plan that deletes secrets, and don't pass `--confirm-destructive` |
 | Deploy fails "api is publicly reachable" | `api` has a service domain, custom domain or TCP proxy. Remove it in `api` → Settings → Networking |
 | Deploy fails waiting for `api` (`FAILED`) | Usually the pre-deploy migration: `railway logs <deployment-id> --service api --environment <env> --deployment` |
-| Plan wants to replace postgres | The image differs from `postgres-ssl:17`. Stop and reconcile. Never accept a database destroy |
+| Plan wants to replace postgres | The image differs from `postgres-ssl:18`. Stop and reconcile. Never accept a database destroy |
+| Postgres logs "This image runs PostgreSQL 17 but the data directory holds major version 18"; the API times out connecting | The image was changed after Railway created the database. Railway always provisions from its template default (18) and applies a pinned image only afterwards. Keep the pin at the version Railway creates (18). Never change a database's major version through the image tag: use Railway's major-version upgrade |
 | Plan wants to change or destroy volume `api-data` | `region` is unset in `railway.ts`. Railway assigns one (`iad`). Declare `region: 'iad'`. Don't accept a destructive volume change |
 | Plan wants to change `builder` from RAILPACK to DOCKERFILE after apply | `build.dockerfilePath: 'Dockerfile'` is missing next to `builder: 'DOCKERFILE'` in `railway.ts` |
 | Plan shows a restart-policy change every time | The policy is declared in `railway.ts`. Remove it: Railway's default (ON_FAILURE, 10) is stored as null |

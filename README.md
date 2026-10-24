@@ -174,7 +174,7 @@ The script builds the `aide-api` and `aide-web` images, tags them with the git S
 ## Deploy to Railway
 
 AIDE runs on Railway as one project with two environments, `preview` and `production`. Each has a public `web`, a
-private `api` with a `/data` volume, and its own Postgres 17. The project is defined as code in
+private `api` with a `/data` volume, and its own Postgres 18 (local and CI use 17). The project is defined as code in
 [`.railway/railway.ts`](.railway/railway.ts) (`railway config plan` / `apply`). GitHub Actions deploys `preview` after
 green CI on `main`, and `production` on manual dispatch. `deploy/scripts/smoke-remote.sh <web-url>` checks each
 deploy.
