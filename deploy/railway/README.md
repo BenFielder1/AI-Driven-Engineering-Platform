@@ -64,6 +64,19 @@ railway environment link production
 railway config plan && railway config apply
 ```
 
+Run these from `.railway/`: `railway link` is stored per directory, and that's where the IaC lives.
+
+**Windows (npm-installed CLI).** `railway/iac` 3.16 checks the CLI version by running `process.env._` (or plain `railway`)
+with `execFileSync`. On Windows that only finds the npm shims (`railway.cmd`/`.ps1`), which it can't run, so the plan
+fails with "requires Railway CLI 5.42.1 or newer" even on 5.71. In PowerShell, point `_` at the real binary first:
+
+```powershell
+$env:_ = "$env:APPDATA\npm\node_modules\@railway\cli\bin\railway.exe"
+railway config plan
+```
+
+Git Bash can't do this: bash sets `_` to each command's own path. Use PowerShell. Linux and macOS (including CI) are unaffected.
+
 Plan and apply use the linked environment. In CI they use the environment of `RAILWAY_TOKEN`. `railway.ts` doesn't
 branch on the environment, so both environments get the same configuration. After the first apply, `railway config plan`
 should report no changes (FR-107). CI checks that with `railway config plan --detailed-exit-code` before every deploy,
@@ -264,6 +277,7 @@ Each rollback is a deployment, so run `deploy/scripts/smoke-remote.sh` afterward
 
 | Symptom | Check |
 | --- | --- |
+| `railway config plan` says "requires Railway CLI 5.42.1 or newer" on Windows | `railway/iac` can't execute the npm shim. Set `$env:_` to `railway.exe` in PowerShell (step 2) |
 | `api` deploy fails in pre-deploy | Deploy logs show the bundle error. `ConnectionStrings__Aide` should resolve: postgres running, and `PG*` references spelt with the service name `postgres` |
 | `api` healthcheck fails (503) | DB unreachable, or migrations pending. `railway logs --service api` |
 | `api` exits at start with an `App:PublicBaseUrl` validation error | `web` has no generated domain yet (step 3), so the reference resolved to `https://` |

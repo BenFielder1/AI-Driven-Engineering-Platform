@@ -61,7 +61,7 @@ v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests
 
 ## First Railway deploy (Ben, then agents within `preview` autonomy)
 Setup steps are in `deploy/railway/README.md`. Things only a real run can prove (from the reviews and audit):
-- `railway config plan` shows no drift after apply, and `preserve()` on unset optional secrets plans no change.
+- `railway config plan` shows no drift after apply, and `preserve()` on unset optional secrets plans no change. *(2026-10-24: the first plan on `preview` evaluated cleanly: 4 to add (postgres, volume api-data, services api and web), 0 to change or destroy, and no error from the 19 unset `preserve()` variables. Drift after apply is still to confirm.)*
 - The pre-deploy `/bin/sh -c '…'` quoting works through the image ENTRYPOINT, and the migration runs before `api` starts.
 - `railway up` from the repo root honours each service's root directory (fallback: `railway up backend --path-as-root`).
 - The JSON shapes of `deployment list`, `domain list` and `tcp-proxy list`, and that a project token may call them. `up --ci` fails when the build fails.
@@ -106,6 +106,8 @@ Setup steps are in `deploy/railway/README.md`. Things only a real run can prove 
 - **Done on CI, manual check pending (Ben):** FR-104 (Docker Desktop deploy + 3-browser E2E), FR-106 (start on a root-owned volume).
 - **Written and reviewed, pending the first Railway deploy (Ben's setup, then `preview`):** FR-107–FR-111. See "First Railway deploy".
 - **v3 completion:** `deploy.yml` only deploys commits on `main`, so the first preview deploy follows the merge of `build/aide-v3`. Order: set up Railway and the GitHub environments, merge (CI on `main` → preview deploy + smoke), verify the First Railway deploy checklist, then move SPEC.md and PROGRESS.md to `docs/v3/` and add the CLAUDE.md row.
+
+- 2026-10-24 — Railway IaC on Windows: `railway/iac` 3.16 runs `process.env._ || "railway"` with `execFileSync` to check the CLI version. That can't run the npm shims, so plan reports "requires CLI 5.42.1" on 5.71. Workaround: PowerShell `$env:_ = <path to railway.exe>` (documented in deploy/railway/README.md). Linux CI is unaffected — SPEC updated: no
 
 ## Known issues
 - Local Vitest at default parallelism: 15 shell/projects/components tests time out at 20 s on this machine under load, and pass with `--maxWorkers=2` or on their own. Watch for it on CI.
