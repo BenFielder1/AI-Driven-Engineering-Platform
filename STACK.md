@@ -80,8 +80,8 @@ npm ci --prefix .railway && npm --prefix .railway run typecheck
   Production deploys and `railway config apply` against production happen only when the user explicitly asks in the
   session. Agents never delete services, volumes or databases, approve destructive plan items or use `accept-deploy`
   without explicit approval. Local deploys stay limited to the `docker-desktop` context (CLAUDE.md rule 7).
-- **Secrets:** Railway service variables (using references to the Postgres service), and `RAILWAY_TOKEN` as a GitHub
-  Actions secret if CI deploys. Locally: user-secrets and `deploy/k8s/overlays/local/secrets.env` (git-ignored).
+- **Secrets:** Railway service variables (using references to the Postgres service), and `RAILWAY_TOKEN` (project token)
+  plus `RAILWAY_API_TOKEN` (workspace token, for the IaC drift check only) as GitHub environment secrets. Locally: user-secrets and `deploy/k8s/overlays/local/secrets.env` (git-ignored).
   Never in git.
 
 ## Caveats

@@ -73,6 +73,7 @@ Railway manages these (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`,
 
 | Name | Kind | Where | Notes |
 | --- | --- | --- | --- |
-| `RAILWAY_TOKEN` | secret | GitHub environment `preview`, and GitHub environment `production` | A Railway **project token** scoped to that Railway environment |
+| `RAILWAY_TOKEN` | secret | GitHub environment `preview`, and GitHub environment `production` | A Railway **project token** scoped to that Railway environment. Used by `railway up` and the read-only deployment, domain and TCP-proxy queries |
+| `RAILWAY_API_TOKEN` | secret | both GitHub environments | A Railway **workspace token**. Used only by the read-only `railway config plan` drift check, because IaC rejects project tokens ("Unauthorized") |
 | `SMOKE_EMAIL`, `SMOKE_PASSWORD` | secret | both GitHub environments | The per-environment smoke account (README). Optional: without them only the read-only checks run |
 | `RAILWAY_WEB_URL` | variable | both GitHub environments | `https://<web domain>`. The smoke test base URL |
