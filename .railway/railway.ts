@@ -4,48 +4,48 @@
  * environment the CLI is linked to (or the one the project token is scoped to). Field names follow the `railway`
  * package's IaC types (`railway/iac`, 3.16.0) and https://docs.railway.com/infrastructure-as-code/reference.
  *
- * - No secret values here. Secrets are set per environment in Railway (deploy/railway/variables.md). Every API variable
- *   an operator may set in Railway (the required signing key and the full optional LLM / GitHub / SMTP set) is
- *   declared with `preserve()`. IaC owns every variable on a service, so an undeclared variable that exists in
- *   Railway is planned for deletion; that would also make CI's `railway config plan --detailed-exit-code` fail.
- *   `preserve()` keeps whatever Railway holds. The `railway` package only emits a `{ type: "preserve" }` marker (the
- *   diff engine is in the CLI), so "preserve() on a variable that isn't set plans no change" is a first-plan check in
- *   deploy/railway/README.md, with the per-environment fallback described there.
+ * - No secret values here. Secrets and optional settings are set per environment in Railway (deploy/railway/variables.md)
+ *   and listed in the project's `variables.ignore` (`operatorSetApiVariables` below). IaC owns every variable it isn't
+ *   told to ignore, so without this list a variable set in Railway would be planned for deletion (and CI's
+ *   `railway config plan --detailed-exit-code` would fail). `variables.ignore` rather than `preserve()`: an ignored name
+ *   may be set or unset, and plan warns (harmlessly) while it is unset. What apply does with `preserve()` for a variable
+ *   that doesn't exist was never established: the early applies on preview failed on the volume size, not the variables. `variables` on `project()` is supported by the CLI's IaC engine (CLI 5.71) but not yet typed in the
+ *   `railway` 3.16 package, hence the cast.
  * - `${{service.VAR}}` inside a plain string is Railway's own reference syntax, resolved by Railway at deploy time.
  *   Ordinary (non-template) string literals are used for those values so TypeScript doesn't interpolate them.
  * - Not expressible here (one-time dashboard/CLI steps in deploy/railway/README.md): the generated `*.up.railway.app`
  *   domain for `web`, Postgres and volume backup schedules, and the GitHub repo connection (none: deploys come from
  *   GitHub Actions with `railway up`, SPEC D-V3-7).
  */
-import { database, defineRailway, preserve, project, service, volume } from 'railway/iac'
+import { database, defineRailway, project, service, volume } from 'railway/iac'
 
-// FR-107 / FR-112: API variables set per environment in Railway, never in git (deploy/railway/variables.md). All are
-// declared up front, so setting one in either environment needs no change here and never shows up as drift.
-const operatorSetApiVariables = {
+// FR-107 / FR-112: variables set per environment in Railway, never in git (deploy/railway/variables.md). IaC ignores
+// these names, so setting or removing one in either environment needs no change here and never shows up as drift.
+const operatorSetApiVariables = [
   // Required secret: one-click approval links (FR-48), 64 random characters, different per environment.
-  Approvals__SigningKey: preserve(),
+  'Approvals__SigningKey',
   // Optional: system LLM keys (FR-79) and a reachable Ollama.
-  Llm__AllowSystemKeys: preserve(),
-  Llm__Providers__Anthropic__ApiKey: preserve(),
-  Llm__Providers__OpenAI__ApiKey: preserve(),
-  Llm__Providers__Ollama__BaseUrl: preserve(),
+  'Llm__AllowSystemKeys',
+  'Llm__Providers__Anthropic__ApiKey',
+  'Llm__Providers__OpenAI__ApiKey',
+  'Llm__Providers__Ollama__BaseUrl',
   // Optional: GitHub App override (all five or none) and v1 OAuth sign-in.
-  GitHub__App__AppId: preserve(),
-  GitHub__App__ClientId: preserve(),
-  GitHub__App__ClientSecret: preserve(),
-  GitHub__App__PrivateKey: preserve(),
-  GitHub__App__Slug: preserve(),
-  GitHub__OAuth__ClientId: preserve(),
-  GitHub__OAuth__ClientSecret: preserve(),
+  'GitHub__App__AppId',
+  'GitHub__App__ClientId',
+  'GitHub__App__ClientSecret',
+  'GitHub__App__PrivateKey',
+  'GitHub__App__Slug',
+  'GitHub__OAuth__ClientId',
+  'GitHub__OAuth__ClientSecret',
   // Optional: email channel (FR-47).
-  Smtp__Host: preserve(),
-  Smtp__Port: preserve(),
-  Smtp__Username: preserve(),
-  Smtp__Password: preserve(),
-  Smtp__From: preserve(),
-  Smtp__EnableSsl: preserve(),
-  Smtp__Timeout: preserve(),
-}
+  'Smtp__Host',
+  'Smtp__Port',
+  'Smtp__Username',
+  'Smtp__Password',
+  'Smtp__From',
+  'Smtp__EnableSsl',
+  'Smtp__Timeout',
+]
 
 export default defineRailway(() => {
   // Railway Postgres 17 (SPEC §3.5). `postgres()` would provision the template's current default (postgres-ssl:18), so
@@ -57,19 +57,25 @@ export default defineRailway(() => {
   })
 
   // Data Protection keys (/data/keys: they decrypt credentials stored in the DB) and Git working copies
-  // (/data/workspaces). Each environment gets its own volume. 5 GB default (SPEC FR-107, Q2).
-  const apiData = volume('api-data', { sizeMB: 5120 })
+  // (/data/workspaces). Each environment gets its own volume. 500 MB is the current Railway plan's maximum (the first
+  // applies on preview failed with "Max size of 500 MB on current plan"). Raise it (SPEC Q2: 5 GB) after upgrading the plan.
+  // Region pinned to where Railway placed it (us-east, `iad`): leaving it unset plans a destructive volume change.
+  const apiData = volume('api-data', { sizeMB: 500, region: 'iad' })
 
   const api = service('api', {
-    rootDirectory: 'backend',
-    build: { builder: 'DOCKERFILE', watchPatterns: ['/backend/**'] },
+    // Railway records a repo-less service with a root directory as source type "github" (no repo is connected:
+    // deploys come from `railway up` in deploy.yml). Declared as Railway stores it, so plan shows no drift.
+    source: { type: 'github', rootDirectory: 'backend' },
+    build: { builder: 'DOCKERFILE', dockerfilePath: 'Dockerfile', watchPatterns: ['/backend/**'] },
     // FR-109: migrations before the new container starts; a failure stops the deploy and the old one keeps serving.
     // Railway runs Dockerfile commands in exec form (no variable expansion), so a shell expands the variable.
     preDeploy: `/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Aide"'`,
     healthcheck: '/api/health/ready',
     replicas: 1,
     // preDeployTimeoutSeconds: a hung migration fails the deploy after 10 minutes instead of blocking it.
-    deploy: { restartPolicyType: 'ON_FAILURE', restartPolicyMaxRetries: 10, preDeployTimeoutSeconds: 600 },
+    // Restart policy is Railway's default (ON_FAILURE, 10 retries). Railway stores defaults as null, so declaring them
+    // here would show as permanent drift.
+    deploy: { preDeployTimeoutSeconds: 600 },
     // No `domains` and no generated domain: the API is reachable only on the private network (SPEC §8).
     volumeMounts: { '/data': apiData },
     env: {
@@ -91,16 +97,14 @@ export default defineRailway(() => {
         'Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};' +
         'Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}',
       App__PublicBaseUrl: 'https://${{web.RAILWAY_PUBLIC_DOMAIN}}',
-      ...operatorSetApiVariables,
     },
   })
 
   const web = service('web', {
-    rootDirectory: 'frontend',
-    build: { builder: 'DOCKERFILE', watchPatterns: ['/frontend/**'] },
+    source: { type: 'github', rootDirectory: 'frontend' },
+    build: { builder: 'DOCKERFILE', dockerfilePath: 'Dockerfile', watchPatterns: ['/frontend/**'] },
     healthcheck: '/healthz',
     replicas: 1,
-    deploy: { restartPolicyType: 'ON_FAILURE', restartPolicyMaxRetries: 10 },
     // The public *.up.railway.app domain is generated once per environment (`railway domain --service web`, target
     // port 8080). Generated domains are not part of IaC; a custom domain would go in `domains` (SPEC Q3).
     env: {
@@ -112,5 +116,9 @@ export default defineRailway(() => {
     },
   })
 
-  return project('aide', { resources: [db, apiData, api, web] })
+  // `variables` isn't in the railway 3.16 types yet; project() passes unknown fields through to the CLI engine.
+  return project('aide', {
+    resources: [db, apiData, api, web],
+    variables: { managed: true, ignore: operatorSetApiVariables },
+  } as Parameters<typeof project>[1])
 })

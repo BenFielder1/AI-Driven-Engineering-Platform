@@ -244,7 +244,7 @@ Auth is unchanged: cookie auth plus API tokens (v1), GitHub App sign-in (v2).
   - **no public domain**
   - healthcheck `/api/health/ready`
   - one replica
-  - volume mounted at `/data` (default 5 GB)
+  - volume mounted at `/data` (5 GB target; 500 MB, the current Railway plan's maximum, until the plan is upgraded (Q2) *(build decision 2026-10-24)*)
   - pre-deploy command from FR-109
   - variables per §9
 - **`postgres`:** Railway Postgres 17, with backups on in `production`. The IaC `postgres()` helper now provisions 18, so 17 is pinned with `database()` and the `postgres-ssl:17` image *(build decision 2026-10-23)*.

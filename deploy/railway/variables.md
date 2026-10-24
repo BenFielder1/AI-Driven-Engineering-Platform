@@ -6,10 +6,10 @@ Every variable per Railway service, for both environments (`preview` and `produc
 - **Reference:** Railway reference syntax `${{service.VAR}}`, also in `railway.ts`. Railway resolves it at deploy time.
 - **Secret:** set by an operator per environment in Railway (dashboard **Variables**, or
   `… | railway variable set <NAME> --stdin --service api --environment <env> --skip-deploys`, so the value never
-  appears in argv). Never in git, in `railway.ts` or in CI logs. Each environment gets its **own** values. Declared
-  `preserve()` in `railway.ts`.
-- **Operator-set:** a non-secret optional value, set in Railway per environment only when used. Declared `preserve()`
-  in `railway.ts`, so it differs per environment with no code change.
+  appears in argv). Never in git, in `railway.ts` or in CI logs. Each environment gets its **own** values. Ignored by
+  IaC (`variables.ignore`) in `railway.ts`.
+- **Operator-set:** a non-secret optional value, set in Railway per environment only when used. Ignored by IaC
+  (`variables.ignore`) in `railway.ts`, so it differs per environment with no code change.
 - **Railway:** injected by Railway. Don't set it.
 
 Configuration keys use `__` for `:` (`Auth__Cookie__SecurePolicy` = `Auth:Cookie:SecurePolicy`). Defaults and the meaning
@@ -31,28 +31,28 @@ of every API key are in the [README configuration reference](../../README.md#con
 | `Telemetry__ConsoleExporter` | literal | `false` | yes | JSON logs only |
 | `ConnectionStrings__Aide` | reference | `Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}` | yes | D-V3-9. Private network. Used by the app and by the pre-deploy migration bundle |
 | `App__PublicBaseUrl` | reference | `https://${{web.RAILWAY_PUBLIC_DOMAIN}}` | yes | Resolves once `web` has a generated domain. Validated at start-up, so generate the domain before the first deploy |
-| `Approvals__SigningKey` | **secret** | 64 random characters | yes | One-click approval links (FR-48). Different per environment. `preserve()` in `railway.ts`. Under 32 characters means no approval links |
-| `Llm__AllowSystemKeys` | operator-set (`preserve()`) | `true` | no | Only if system LLM keys should be used (FR-79). Default `false` |
-| `Llm__Providers__Anthropic__ApiKey` | **secret** (`preserve()`) | | no | System key, used only with `Llm__AllowSystemKeys=true` |
-| `Llm__Providers__OpenAI__ApiKey` | **secret** (`preserve()`) | | no | Same as above |
-| `Llm__Providers__Ollama__BaseUrl` | operator-set (`preserve()`) | `https://…` | no | The container default `host.docker.internal:11434` doesn't resolve on Railway |
-| `GitHub__App__AppId`, `GitHub__App__ClientId`, `GitHub__App__Slug` | operator-set (`preserve()`) | | no | Only to override the App registered in Admin → Integrations. Set all five `GitHub__App__*` values or none |
-| `GitHub__App__ClientSecret`, `GitHub__App__PrivateKey` | **secret** (`preserve()`) | | no | Same as above. PEM with `\n` escapes |
-| `GitHub__OAuth__ClientId` | operator-set (`preserve()`) | | no | v1 GitHub sign-in, used only while no GitHub App exists |
-| `GitHub__OAuth__ClientSecret` | **secret** (`preserve()`) | | no | Same as above |
-| `Smtp__Host`, `Smtp__Username`, `Smtp__From`, `Smtp__Port`, `Smtp__EnableSsl`, `Smtp__Timeout` | operator-set (`preserve()`) | | no | Email channel (FR-47). Leave a key out rather than blank: a blank number fails binding |
-| `Smtp__Password` | **secret** (`preserve()`) | | no | |
+| `Approvals__SigningKey` | **secret** | 64 random characters | yes | One-click approval links (FR-48). Different per environment. Ignored in IaC (`railway.ts`). Under 32 characters means no approval links |
+| `Llm__AllowSystemKeys` | operator-set (ignored in IaC) | `true` | no | Only if system LLM keys should be used (FR-79). Default `false` |
+| `Llm__Providers__Anthropic__ApiKey` | **secret** (ignored in IaC) | | no | System key, used only with `Llm__AllowSystemKeys=true` |
+| `Llm__Providers__OpenAI__ApiKey` | **secret** (ignored in IaC) | | no | Same as above |
+| `Llm__Providers__Ollama__BaseUrl` | operator-set (ignored in IaC) | `https://…` | no | The container default `host.docker.internal:11434` doesn't resolve on Railway |
+| `GitHub__App__AppId`, `GitHub__App__ClientId`, `GitHub__App__Slug` | operator-set (ignored in IaC) | | no | Only to override the App registered in Admin → Integrations. Set all five `GitHub__App__*` values or none |
+| `GitHub__App__ClientSecret`, `GitHub__App__PrivateKey` | **secret** (ignored in IaC) | | no | Same as above. PEM with `\n` escapes |
+| `GitHub__OAuth__ClientId` | operator-set (ignored in IaC) | | no | v1 GitHub sign-in, used only while no GitHub App exists |
+| `GitHub__OAuth__ClientSecret` | **secret** (ignored in IaC) | | no | Same as above |
+| `Smtp__Host`, `Smtp__Username`, `Smtp__From`, `Smtp__Port`, `Smtp__EnableSsl`, `Smtp__Timeout` | operator-set (ignored in IaC) | | no | Email channel (FR-47). Leave a key out rather than blank: a blank number fails binding |
+| `Smtp__Password` | **secret** (ignored in IaC) | | no | |
 | `Deployments__AllowFake`, `Deployments__Provider=Fake`, `Git__Local__ImportRoot` | — | **unset** | — | Never on Railway (FR-108) |
 | `RAILWAY_RUN_UID` | — | **unset** | — | The image starts as root and its entrypoint drops to `$APP_UID` (FR-106, D-V3-10) |
 | `RAILWAY_PRIVATE_DOMAIN`, `RAILWAY_ENVIRONMENT`, … | Railway | | | Injected |
 
 **Using an optional variable:** `railway config plan` / `apply` treat a variable that exists in Railway but not in
-`railway.ts` as a deletion (and CI's drift check fails). Every optional variable above is already declared `preserve()`
-in `operatorSetApiVariables` in `railway.ts`, so an environment starts using one by setting it in Railway. Nothing else
-changes. For a name **not** in this table, add `Name: preserve()` to `operatorSetApiVariables` first (or a literal, if
-it's the same non-secret value in both environments). `railway config plan` must then show no changes and no destroys.
-If the first-plan check in [README.md](README.md#2-apply-the-iac-to-each-environment) shows that `preserve()` on an unset
-variable is not a no-op, `railway.ts` switches to per-environment lists, described there.
+`railway.ts` as a deletion (and CI's drift check fails). Every optional variable above is already listed in
+`operatorSetApiVariables` in `railway.ts` (the project's `variables.ignore`), so an environment starts using one by
+setting it in Railway. Nothing else changes. For a name **not** in this table, add it to `operatorSetApiVariables`
+first (or declare a literal, if it's the same non-secret value in both environments). `railway config plan` must then
+show no changes and no destroys. While a listed name is unset, the plan prints
+`variables.ignore pattern "<name>" matches no variable`: expected and harmless.
 
 ## `web` (Next.js custom server, public)
 
