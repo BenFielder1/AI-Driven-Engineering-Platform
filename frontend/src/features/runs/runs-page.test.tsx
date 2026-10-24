@@ -27,7 +27,7 @@ function seedProjectAs(role: ProjectRole, setup?: (p: StoredProject) => void): S
 
 /** /projects/:id/runs, waiting until the first page has loaded. */
 async function openRuns(project: StoredProject, query = '') {
-  const utils = renderRoute(`/projects/${project.id}/runs${query}`)
+  const utils = await renderRoute(`/projects/${project.id}/runs${query}`)
   // hidden: a deep-linked run opens the modal sheet, which hides the page behind it from assistive tech.
   await screen.findByRole('heading', { name: 'Agent runs', hidden: true })
   await waitFor(() => {

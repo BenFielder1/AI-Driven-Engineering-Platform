@@ -1,9 +1,13 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import type { ReactNode } from 'react'
 
 import { cn } from '../../lib/utils'
 import { panelClass } from './panel-class'
-import { Sparkline } from './sparkline'
+
+/** SPEC §8 bundle budget: recharts loads after first paint, outside the initial /projects chunks. */
+const Sparkline = dynamic(() => import('./sparkline').then((m) => m.Sparkline), { ssr: false })
+const SPARKLINE_HEIGHT = 40
 
 export type DeltaTone = 'positive' | 'negative' | 'neutral'
 
@@ -67,7 +71,12 @@ export function MetricCard({
           {delta.label && <span className="text-muted-foreground">{delta.label}</span>}
         </p>
       )}
-      {sparkline && sparkline.length > 1 && <Sparkline data={sparkline} color={sparkColor[tone]} className="mt-3" />}
+      {sparkline && sparkline.length > 1 && (
+        // Fixed-size slot, so the chart arriving after the lazy import causes no layout shift.
+        <div aria-hidden className="mt-3 w-full" style={{ height: SPARKLINE_HEIGHT }}>
+          <Sparkline data={sparkline} color={sparkColor[tone]} height={SPARKLINE_HEIGHT} />
+        </div>
+      )}
       {footer && <div className="mt-2 text-xs text-muted-foreground">{footer}</div>}
     </div>
   )

@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 /**
  * SPEC §7.1: system / light / dark, system by default; the user's override is kept in localStorage.
- * public/theme-init.js applies the same rule before first paint (keep the two in step).
+ * src/lib/theme-init.ts applies the same rule before first paint (keep the two in step).
  */
 export type ThemePreference = 'system' | 'light' | 'dark'
 

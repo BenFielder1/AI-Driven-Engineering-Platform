@@ -30,7 +30,7 @@ function seedInRefinement(role: ProjectRole, setup?: (p: StoredProject) => void)
 }
 
 async function openRefinement(project: StoredProject) {
-  const utils = renderRoute(`/projects/${project.id}/refinement`)
+  const utils = await renderRoute(`/projects/${project.id}/refinement`)
   await screen.findByRole('heading', { level: 2, name: 'Refinement' })
   await waitFor(() => {
     expect(screen.queryByText('Loading refinement…')).not.toBeInTheDocument()

@@ -82,7 +82,7 @@ describe('FR-92: v2 notification types in the UI', () => {
       projectId: personal ? null : PROJECT,
       projectName: personal ? null : 'Inventory tracker',
     })
-    const { router } = renderRoute('/notifications')
+    const { router } = await renderRoute('/notifications')
     const user = userEvent.setup()
 
     const list = await screen.findByRole('list', { name: 'Notifications' })
@@ -111,7 +111,7 @@ describe('FR-92: v2 notification types in the UI', () => {
       projectId: null,
       projectName: null,
     })
-    const { router } = renderRoute('/projects')
+    const { router } = await renderRoute('/projects')
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }))
@@ -130,7 +130,7 @@ describe('FR-92: v2 notification types in the UI', () => {
 
   it('FR92_preferences_list_the_new_types_on_by_default_and_muting_connection_invalid_notes_the_email', async () => {
     const me = signInUser()
-    renderRoute('/account')
+    await renderRoute('/account')
     const user = userEvent.setup()
 
     const section = await screen.findByRole('region', { name: 'Notification preferences' })

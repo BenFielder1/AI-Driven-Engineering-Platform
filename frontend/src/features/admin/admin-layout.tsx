@@ -1,7 +1,7 @@
-import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import { ForbiddenState } from '../../components/ui/states'
+import { Link } from '../../lib/navigation'
 import { canViewAdmin } from '../../lib/permissions'
 import { useCurrentUser } from '../auth/auth-api'
 import { adminSections } from './admin-sections'

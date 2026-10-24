@@ -10,7 +10,7 @@ type SeedOverrides = Omit<NonNullable<Parameters<typeof seedProject>[0]>, 'membe
 
 /** Renders /projects/:id (Overview) and waits for the lifecycle card and the pending gates. */
 export async function openOverview(project: StoredProject) {
-  const utils = renderRoute(`/projects/${project.id}`)
+  const utils = await renderRoute(`/projects/${project.id}`)
   // findBy and waitFor use the suite-wide asyncUtilTimeout (src/test/setup.ts).
   await screen.findByRole('heading', { name: 'Next action' })
   await waitFor(() => {

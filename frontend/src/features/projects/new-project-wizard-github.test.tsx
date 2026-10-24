@@ -22,7 +22,7 @@ async function openGitStep({ app = true, connect = true } = {}) {
   if (connect) {
     connectGitHub(me.id)
   }
-  renderRoute('/projects/new')
+  await renderRoute('/projects/new')
   const user = userEvent.setup()
   await screen.findByRole('heading', { level: 2, name: /Step 1 of 8: Source/ })
   await user.click(screen.getByRole('button', { name: 'Next' }))

@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 import type { ReactNode } from 'react'
 
 import { formatDateTime } from '../projects/labels'

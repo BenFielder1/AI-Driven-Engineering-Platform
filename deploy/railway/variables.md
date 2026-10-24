@@ -1,0 +1,78 @@
+# Railway variables (FR-112)
+
+Every variable per Railway service, for both environments (`preview` and `production`). Sources:
+
+- **Literal:** fixed value in [`.railway/railway.ts`](../../.railway/railway.ts), applied by `railway config apply`.
+- **Reference:** Railway reference syntax `${{service.VAR}}`, also in `railway.ts`. Railway resolves it at deploy time.
+- **Secret:** set by an operator per environment in Railway (dashboard **Variables**, or
+  `… | railway variable set <NAME> --stdin --service api --environment <env> --skip-deploys`, so the value never
+  appears in argv). Never in git, in `railway.ts` or in CI logs. Each environment gets its **own** values. Declared
+  `preserve()` in `railway.ts`.
+- **Operator-set:** a non-secret optional value, set in Railway per environment only when used. Declared `preserve()`
+  in `railway.ts`, so it differs per environment with no code change.
+- **Railway:** injected by Railway. Don't set it.
+
+Configuration keys use `__` for `:` (`Auth__Cookie__SecurePolicy` = `Auth:Cookie:SecurePolicy`). Defaults and the meaning
+of every API key are in the [README configuration reference](../../README.md#configuration-reference).
+
+## `api` (ASP.NET Core, private only)
+
+| Variable | Source | Value | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `ASPNETCORE_ENVIRONMENT` | literal | `Production` | yes | Both environments (FR-108). Production config: no seed, no Fake providers |
+| `ASPNETCORE_HTTP_PORTS` | literal | `8080` | yes | Kestrel binds `http://*:8080`, which is IPv6Any in dual mode. So `api.railway.internal` works whether it resolves to IPv4, IPv6 or both. No `ASPNETCORE_URLS` needed |
+| `PORT` | literal | `8080` | yes | Railway healthchecks target `$PORT`. Kestrel ignores it |
+| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | literal | `true` | yes | FR-105 |
+| `ForwardedHeaders__ForwardLimit` | literal | `2` | yes | Browser → Railway edge → web → api. The rate limits see the client IP the edge appended |
+| `DataProtection__KeysPath` | literal | `/data/keys` | yes | On the `api-data` volume. **Back it up** (see README) |
+| `DataProtection__ApplicationName` | literal | `aide` | yes | Never change it: the key ring is bound to it |
+| `Auth__Cookie__SecurePolicy` | literal | `Always` | yes | §8 security |
+| `Seed__Enabled` | literal | `false` | yes | FR-108. No seed admin on Railway: register the first Admin yourself |
+| `Telemetry__ConsoleExporter` | literal | `false` | yes | JSON logs only |
+| `ConnectionStrings__Aide` | reference | `Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}` | yes | D-V3-9. Private network. Used by the app and by the pre-deploy migration bundle |
+| `App__PublicBaseUrl` | reference | `https://${{web.RAILWAY_PUBLIC_DOMAIN}}` | yes | Resolves once `web` has a generated domain. Validated at start-up, so generate the domain before the first deploy |
+| `Approvals__SigningKey` | **secret** | 64 random characters | yes | One-click approval links (FR-48). Different per environment. `preserve()` in `railway.ts`. Under 32 characters means no approval links |
+| `Llm__AllowSystemKeys` | operator-set (`preserve()`) | `true` | no | Only if system LLM keys should be used (FR-79). Default `false` |
+| `Llm__Providers__Anthropic__ApiKey` | **secret** (`preserve()`) | | no | System key, used only with `Llm__AllowSystemKeys=true` |
+| `Llm__Providers__OpenAI__ApiKey` | **secret** (`preserve()`) | | no | Same as above |
+| `Llm__Providers__Ollama__BaseUrl` | operator-set (`preserve()`) | `https://…` | no | The container default `host.docker.internal:11434` doesn't resolve on Railway |
+| `GitHub__App__AppId`, `GitHub__App__ClientId`, `GitHub__App__Slug` | operator-set (`preserve()`) | | no | Only to override the App registered in Admin → Integrations. Set all five `GitHub__App__*` values or none |
+| `GitHub__App__ClientSecret`, `GitHub__App__PrivateKey` | **secret** (`preserve()`) | | no | Same as above. PEM with `\n` escapes |
+| `GitHub__OAuth__ClientId` | operator-set (`preserve()`) | | no | v1 GitHub sign-in, used only while no GitHub App exists |
+| `GitHub__OAuth__ClientSecret` | **secret** (`preserve()`) | | no | Same as above |
+| `Smtp__Host`, `Smtp__Username`, `Smtp__From`, `Smtp__Port`, `Smtp__EnableSsl`, `Smtp__Timeout` | operator-set (`preserve()`) | | no | Email channel (FR-47). Leave a key out rather than blank: a blank number fails binding |
+| `Smtp__Password` | **secret** (`preserve()`) | | no | |
+| `Deployments__AllowFake`, `Deployments__Provider=Fake`, `Git__Local__ImportRoot` | — | **unset** | — | Never on Railway (FR-108) |
+| `RAILWAY_RUN_UID` | — | **unset** | — | The image starts as root and its entrypoint drops to `$APP_UID` (FR-106, D-V3-10) |
+| `RAILWAY_PRIVATE_DOMAIN`, `RAILWAY_ENVIRONMENT`, … | Railway | | | Injected |
+
+**Using an optional variable:** `railway config plan` / `apply` treat a variable that exists in Railway but not in
+`railway.ts` as a deletion (and CI's drift check fails). Every optional variable above is already declared `preserve()`
+in `operatorSetApiVariables` in `railway.ts`, so an environment starts using one by setting it in Railway. Nothing else
+changes. For a name **not** in this table, add `Name: preserve()` to `operatorSetApiVariables` first (or a literal, if
+it's the same non-secret value in both environments). `railway config plan` must then show no changes and no destroys.
+If the first-plan check in [README.md](README.md#2-apply-the-iac-to-each-environment) shows that `preserve()` on an unset
+variable is not a no-op, `railway.ts` switches to per-environment lists, described there.
+
+## `web` (Next.js custom server, public)
+
+| Variable | Source | Value | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `BACKEND_URL` | reference | `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080` | yes | Server-only, read at runtime (never `NEXT_PUBLIC_*`). `/api` and the SignalR WebSockets go there |
+| `PORT` | literal | `8080` | yes | Listen port, healthcheck port and the generated domain's target port |
+| `NODE_ENV` | literal | `production` | yes | Also set in the image |
+| `TRUST_EDGE_FORWARDED` | literal | `true` | yes | Keeps the `X-Forwarded-Proto`/`-Host` values Railway's edge sets, for the API's Secure cookies and the Live origin check (FR-98). Not set in Kubernetes |
+
+## `postgres` (Railway Postgres 17)
+
+Railway manages these (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `DATABASE_URL`, `DATABASE_PUBLIC_URL`,
+`POSTGRES_*`). Don't edit them. The API only uses the five `PG*` values, through `ConnectionStrings__Aide`.
+`DATABASE_PUBLIC_URL` exists only if a TCP proxy is enabled. Keep it disabled.
+
+## GitHub Actions (deploy workflow, FR-110)
+
+| Name | Kind | Where | Notes |
+| --- | --- | --- | --- |
+| `RAILWAY_TOKEN` | secret | GitHub environment `preview`, and GitHub environment `production` | A Railway **project token** scoped to that Railway environment |
+| `SMOKE_EMAIL`, `SMOKE_PASSWORD` | secret | both GitHub environments | The per-environment smoke account (README). Optional: without them only the read-only checks run |
+| `RAILWAY_WEB_URL` | variable | both GitHub environments | `https://<web domain>`. The smoke test base URL |

@@ -187,7 +187,7 @@ public sealed class ProjectsHubTests(AideApiFactory factory)
     // ---------- NFR-SEC: cross-site WebSocket hijacking ----------
 
     [Theory]
-    [InlineData("http://localhost:5174")] // another local app: same-site, so the Lax cookie is sent
+    [InlineData("http://localhost:3001")] // another local app: same-site, so the Lax cookie is sent
     [InlineData("https://localhost:8443")]
     [InlineData("http://localhost")] // scheme differs
     [InlineData("null")] // sandboxed frame
@@ -228,7 +228,7 @@ public sealed class ProjectsHubTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
 
-        var foreign = await NegotiateAsync(fixture.Owner.Client, "http://localhost:5174");
+        var foreign = await NegotiateAsync(fixture.Owner.Client, "http://localhost:3001");
         var own = await NegotiateAsync(fixture.Owner.Client, LiveClient.OwnOrigin);
 
         await Problems.AssertAsync(foreign, HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
@@ -240,7 +240,7 @@ public sealed class ProjectsHubTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
 
-        // nginx forwards Host without the port and the browser's host:port as X-Forwarded-Host.
+        // A reverse proxy (the Next.js web server, v2's nginx) may send Host without the port and the browser's host:port as X-Forwarded-Host.
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/hubs/projects/negotiate?negotiateVersion=1");
         request.Headers.Add("Origin", "https://localhost:8080");
         request.Headers.Add("X-Forwarded-Host", "localhost:8080");
@@ -253,12 +253,12 @@ public sealed class ProjectsHubTests(AideApiFactory factory)
     public async Task NFR_SEC_FR46_Configured_allowed_origins_may_connect()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        await using var configured = factory.WithWebHostBuilder(b => b.UseSetting("Live:AllowedOrigins:0", "http://localhost:5173/"));
+        await using var configured = factory.WithWebHostBuilder(b => b.UseSetting("Live:AllowedOrigins:0", "http://localhost:3000/"));
 
-        await using var live = await LiveClient.ConnectAsync(configured, fixture.Owner, "http://localhost:5173");
+        await using var live = await LiveClient.ConnectAsync(configured, fixture.Owner, "http://localhost:3000");
         await live.JoinAsync(fixture.Project.Id);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => LiveClient.ConnectAsync(configured, fixture.Owner, "http://localhost:5174"));
+        await Assert.ThrowsAnyAsync<Exception>(() => LiveClient.ConnectAsync(configured, fixture.Owner, "http://localhost:3001"));
     }
 
     [Fact]

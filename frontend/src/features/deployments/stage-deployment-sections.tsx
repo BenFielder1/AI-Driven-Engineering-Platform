@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import { useProjectAccess } from '../projects/project-context'

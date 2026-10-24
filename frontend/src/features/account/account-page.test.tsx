@@ -10,7 +10,7 @@ const PLAIN = 'aide_pat_' + 'x'.repeat(43)
 describe('AccountPage', () => {
   it('FR-3: shows the profile with the system role', async () => {
     signInAs({ name: 'Ada Lovelace', email: 'ada@example.com', systemRole: 'admin' })
-    renderRoute('/account')
+    await renderRoute('/account')
 
     const profile = await screen.findByRole('region', { name: 'Profile' })
     expect(within(profile).getByText('Ada Lovelace')).toBeInTheDocument()
@@ -21,7 +21,7 @@ describe('AccountPage', () => {
   it('FR-2: offers "Link GitHub" only when GitHub is enabled and not yet linked', async () => {
     authDb.githubMode = 'oauth'
     signInAs({ githubLinked: false })
-    renderRoute('/account')
+    await renderRoute('/account')
 
     const link = await screen.findByRole('link', { name: 'Link GitHub' })
     expect(link).toHaveAttribute('href', '/api/auth/github/link?returnUrl=%2Faccount')
@@ -30,7 +30,7 @@ describe('AccountPage', () => {
   it('FR-2: shows the linked state instead of the link button', async () => {
     authDb.githubMode = 'oauth'
     signInAs({ githubLinked: true })
-    renderRoute('/account')
+    await renderRoute('/account')
 
     expect(await screen.findByText(/Your GitHub account is linked/)).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Link GitHub' })).not.toBeInTheDocument()
@@ -39,7 +39,7 @@ describe('AccountPage', () => {
   it('FR-2: hides "Link GitHub" when GitHub is not configured', async () => {
     authDb.githubMode = 'none'
     signInAs()
-    renderRoute('/account')
+    await renderRoute('/account')
 
     expect(await screen.findByText(/GitHub sign-in isn't configured/)).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Link GitHub' })).not.toBeInTheDocument()
@@ -47,14 +47,14 @@ describe('AccountPage', () => {
 
   it('FR-4: shows an empty state when there are no tokens', async () => {
     signInAs()
-    renderRoute('/account')
+    await renderRoute('/account')
 
     expect(await screen.findByText('No tokens yet')).toBeInTheDocument()
   })
 
   it('FR-4: creating a token shows the plain token once, with a copy button', async () => {
     signInAs()
-    renderRoute('/account')
+    await renderRoute('/account')
     const user = userEvent.setup()
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
@@ -78,7 +78,7 @@ describe('AccountPage', () => {
 
   it('FR-4: requires a token name', async () => {
     signInAs()
-    renderRoute('/account')
+    await renderRoute('/account')
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Create token' }))
@@ -90,7 +90,7 @@ describe('AccountPage', () => {
   it('FR-4: revoking asks for confirmation; Cancel keeps the token', async () => {
     signInAs()
     seedToken({ name: 'Old laptop' })
-    renderRoute('/account')
+    await renderRoute('/account')
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Revoke Old laptop' }))
@@ -106,7 +106,7 @@ describe('AccountPage', () => {
   it('FR-4: confirming revokes the token and the list shows it as revoked', async () => {
     signInAs()
     seedToken({ name: 'Old laptop' })
-    renderRoute('/account')
+    await renderRoute('/account')
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Revoke Old laptop' }))

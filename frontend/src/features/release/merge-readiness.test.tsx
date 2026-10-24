@@ -13,7 +13,7 @@ import { describeActivity } from '../activity/activity-summary'
 import { restoreBlockReason } from '../stages/stage-model'
 
 async function openRelease(project: StoredProject) {
-  const utils = renderRoute(`/projects/${project.id}/release`)
+  const utils = await renderRoute(`/projects/${project.id}/release`)
   await screen.findByRole('region', { name: 'Merge readiness' })
   return { ...utils, user: userEvent.setup() }
 }
@@ -172,7 +172,7 @@ describe('Awaiting merge (FR-65)', () => {
     const project = seedProjectAs('owner', (p) => {
       seedAwaitingMerge(p)
     })
-    renderRoute(`/projects/${project.id}/settings/danger`)
+    await renderRoute(`/projects/${project.id}/settings/danger`)
     const button = await screen.findByRole('button', { name: 'Roll back…' })
     expect(button).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByText(rollbackBlockedMessages.awaitingMerge)).toBeInTheDocument()

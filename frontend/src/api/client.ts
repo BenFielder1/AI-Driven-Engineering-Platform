@@ -80,10 +80,12 @@ export async function apiFetch(request: Request): Promise<Response> {
 
 /**
  * The only way the frontend talks to the backend (CLAUDE.md rule 2).
- * Same-origin: generated paths already start with `/api`, so the base is the page origin.
+ * Same-origin: generated paths already start with `/api`, so the base is the page origin. During Next.js server
+ * rendering there is no page origin and no API call is made (D-V3-2), so the module only needs to load there.
  */
 export const api = createClient<paths>({
-  baseUrl: globalThis.location.origin,
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- undefined on the server (SSR)
+  baseUrl: globalThis.location?.origin ?? 'http://localhost',
   credentials: 'same-origin',
   fetch: apiFetch,
 })

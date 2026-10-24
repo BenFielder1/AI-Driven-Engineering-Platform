@@ -1,8 +1,7 @@
 import js from '@eslint/js'
+import nextPlugin from '@next/eslint-plugin-next'
 import pluginQuery from '@tanstack/eslint-plugin-query'
-import pluginRouter from '@tanstack/eslint-plugin-router'
 import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
@@ -10,12 +9,13 @@ import tseslint from 'typescript-eslint'
 export default defineConfig([
   // Generated code is never linted (or hand-edited).
   globalIgnores([
+    '.next',
     'dist',
     'coverage',
     'playwright-report',
     'test-results',
+    'next-env.d.ts',
     'src/api/generated',
-    'src/routeTree.gen.ts',
   ]),
   {
     files: ['**/*.{ts,tsx}'],
@@ -24,9 +24,8 @@ export default defineConfig([
       tseslint.configs.strictTypeChecked,
       tseslint.configs.stylisticTypeChecked,
       reactHooks.configs.flat.recommended,
-      reactRefresh.configs.vite,
       pluginQuery.configs['flat/recommended'],
-      pluginRouter.configs['flat/recommended'],
+      nextPlugin.configs['core-web-vitals'],
     ],
     languageOptions: {
       ecmaVersion: 2023,
@@ -39,15 +38,13 @@ export default defineConfig([
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
+      // Avatars are external URLs (GitHub) shown at a fixed small size; next/image isn't used (no image optimisation).
+      '@next/next/no-img-element': 'off',
     },
   },
   {
-    // TanStack Router route files export `Route` alongside components.
-    files: ['src/routes/**/*.tsx'],
-    rules: { 'react-refresh/only-export-components': 'off' },
-  },
-  {
-    files: ['e2e/**/*.ts', 'playwright.config.ts', 'vite.config.ts'],
+    // Node code: the custom web server, its helpers and tool configs.
+    files: ['server.ts', 'src/server/**/*.ts', 'e2e/**/*.ts', '*.config.{ts,js,mjs}'],
     languageOptions: { globals: globals.node },
   },
 ])

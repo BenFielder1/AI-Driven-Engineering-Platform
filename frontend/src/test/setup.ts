@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, configure } from '@testing-library/react'
-import { afterAll, afterEach, beforeAll } from 'vitest'
+import { afterAll, afterEach, beforeAll, vi } from 'vitest'
 
 import { resetAdminDb } from '../mocks/handlers/admin'
 import { resetAuthDb } from '../mocks/handlers/auth'
@@ -11,10 +11,15 @@ import { resetNotificationsDb } from '../mocks/handlers/notifications'
 import { resetPresetCatalog } from '../mocks/handlers/preset-catalog'
 import { resetProjectsDb } from '../mocks/handlers/projects'
 import { server } from '../mocks/server'
+import { router } from './memory-router'
+
+// Next.js routing runs on an in-memory router in tests (src/test/memory-router.ts): `next/navigation` hooks and
+// `next/link` read and drive it. `renderRoute` (src/test/render.tsx) renders the src/app tree for its URL.
+vi.mock('next/navigation', async () => (await import('./next-mocks')).navigationMock)
+vi.mock('next/link', async () => ({ default: (await import('./next-mocks')).LinkMock }))
 
 // findBy*/waitFor default to 1 s, too short for whole-app renders (MSW round trips, route loaders) when the whole
-// suite runs in parallel on a busy machine (NFR-TEST: no flaky tests). Route chunks aren't lazy under Vitest
-// (vite.config.ts), so nothing here waits on a module transform.
+// suite runs in parallel on a busy machine (NFR-TEST: no flaky tests).
 configure({ asyncUtilTimeout: 5000 })
 
 // jsdom lacks APIs that radix-ui (menus, dialogs), cmdk and recharts call: minimal no-op stand-ins.
@@ -71,6 +76,7 @@ afterEach(() => {
   resetGitHubDb()
   resetPresetCatalog()
   localStorage.clear()
+  router.reset('/')
 })
 afterAll(() => {
   server.close()

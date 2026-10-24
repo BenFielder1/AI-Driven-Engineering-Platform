@@ -30,12 +30,12 @@ import {
 } from 'lucide-react'
 
 import type { Schemas } from '../../api/client'
-import type { FileRouteTypes } from '../../routeTree.gen'
+import type { AppPath } from '../../lib/app-paths'
 import { artifactTypeLabels, phaseLabels, phases } from '../projects/labels'
 import { parseSettingsTab, settingsTabLabels } from '../projects/settings/settings-tabs'
 
-/** Every navigable route path (typed by the router), e.g. `/projects/$projectId/review`. */
-export type AppPath = FileRouteTypes['to']
+/** Every navigable route path, e.g. `/projects/$projectId/review` (src/lib/app-paths.ts). */
+export type { AppPath }
 export type Phase = Schemas['Phase']
 
 /** Who is looking: decides which items show. */

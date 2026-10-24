@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 
@@ -8,6 +7,7 @@ import { Button } from '../../components/ui/button'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
 import { TextField } from '../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, githubFailureMessage } from '../../lib/errors'
+import { Link, useAppRouter } from '../../lib/navigation'
 import { safeReturnUrl } from '../../lib/return-url'
 import { githubSignInHref, useLogin } from './auth-api'
 import { AuthCard, GitHubButton } from './auth-layout'
@@ -23,7 +23,7 @@ interface LoginPageProps {
 
 /** /login (FR-1, FR-2). */
 export function LoginPage({ returnUrl, githubError }: LoginPageProps) {
-  const router = useRouter()
+  const router = useAppRouter()
   const login = useLogin()
   const destination = safeReturnUrl(returnUrl)
   const [serverErrors, setServerErrors] = useState<string[]>([])

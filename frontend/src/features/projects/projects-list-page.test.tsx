@@ -22,7 +22,7 @@ describe('Projects list (FR-6)', () => {
     signInAsUser()
     seedProject({ name: 'Mine', currentPhase: 'planning', status: 'active', checkpoint: 3 })
     seedProject({ name: 'Not mine', members: [{ userId: other.id, role: 'owner' }] })
-    renderRoute('/projects')
+    await renderRoute('/projects')
 
     const list = await screen.findByRole('list', { name: 'Projects' })
     const card = within(list).getByRole('listitem') // throws unless exactly one
@@ -42,7 +42,7 @@ describe('Projects list (FR-6)', () => {
     seedReleaseVersions(p, { released: '1.1.0', development: '1.2.0' })
     const done = seedProject({ name: 'Done', currentPhase: 'release', status: 'released' })
     seedReleaseVersions(done, { released: '2.0.0' })
-    renderRoute('/projects')
+    await renderRoute('/projects')
 
     const list = await screen.findByRole('list', { name: 'Projects' })
     const row = (name: string) => within(list).getByRole('link', { name }).closest('li') as HTMLElement
@@ -63,7 +63,7 @@ describe('Projects list (FR-6)', () => {
     seedReleaseVersions(dev, { released: '1.1.0', development: '1.2.0' })
     const done = seedProject({ name: 'Finished', status: 'released' })
     seedReleaseVersions(done, { released: '1.0.0' })
-    const { router } = renderRoute('/projects')
+    const { router } = await renderRoute('/projects')
     const user = userEvent.setup()
     await screen.findByRole('link', { name: 'Finished' })
 
@@ -86,7 +86,7 @@ describe('Projects list (FR-6)', () => {
 
   it('FR-6: shows an empty state with a "New project" call to action', async () => {
     signInAsUser()
-    renderRoute('/projects')
+    await renderRoute('/projects')
 
     expect(await screen.findByText('No projects yet')).toBeInTheDocument()
     const links = screen.getAllByRole('link', { name: 'New project' })
@@ -97,7 +97,7 @@ describe('Projects list (FR-6)', () => {
   it('FR-6: phase, status and sort filters are kept in the URL search params', async () => {
     signInAsUser()
     seedProject({ name: 'Alpha', currentPhase: 'planning' })
-    const { router } = renderRoute('/projects')
+    const { router } = await renderRoute('/projects')
     const user = userEvent.setup()
     await screen.findByRole('link', { name: 'Alpha' })
 
@@ -124,7 +124,7 @@ describe('Projects list (FR-6)', () => {
     signInAsUser()
     seedProject({ name: 'Alpha' })
     seedProject({ name: 'Beta' })
-    const { router } = renderRoute('/projects')
+    const { router } = await renderRoute('/projects')
     const user = userEvent.setup()
     await screen.findByRole('link', { name: 'Alpha' })
 
@@ -142,7 +142,7 @@ describe('Projects list (FR-6)', () => {
   it('FR-6: filters from the URL apply on load, and "Clear filters" resets them', async () => {
     signInAsUser()
     seedProject({ name: 'Alpha', status: 'active' })
-    const { router } = renderRoute('/projects?status=released')
+    const { router } = await renderRoute('/projects?status=released')
     const user = userEvent.setup()
 
     expect(await screen.findByText('No projects match your filters')).toBeInTheDocument()
@@ -159,7 +159,7 @@ describe('Projects list (FR-6)', () => {
     for (let i = 1; i <= 21; i += 1) {
       seedProject({ name: `Project ${String(i).padStart(2, '0')}` })
     }
-    const { router } = renderRoute('/projects?sortBy=name&sortOrder=asc')
+    const { router } = await renderRoute('/projects?sortBy=name&sortOrder=asc')
     const user = userEvent.setup()
     await screen.findByRole('link', { name: 'Project 01' })
     expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
@@ -175,7 +175,7 @@ describe('Projects list (FR-6)', () => {
   it('FR-6: shows an error state with a retry when the list fails to load', async () => {
     signInAsUser()
     server.use(http.get('*/api/projects', () => problem(500, 'VALIDATION', 'boom')))
-    renderRoute('/projects')
+    await renderRoute('/projects')
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
@@ -188,7 +188,7 @@ describe('Projects list (FR-6)', () => {
     seedGate(beta, { type: 'escalation' })
     seedGate(beta, { type: 'pre_release' })
     seedProject({ name: 'Gamma', currentPhase: 'release', status: 'released' })
-    renderRoute('/projects')
+    await renderRoute('/projects')
 
     const totals = await screen.findByRole('region', { name: 'Project totals' })
     const tile = (label: string) => within(totals).getByText(label).nextElementSibling
@@ -204,7 +204,7 @@ describe('Projects list (FR-6)', () => {
     signInAsUser()
     seedProject({ name: 'Alpha', status: 'active' })
     seedProject({ name: 'Gamma', currentPhase: 'release', status: 'released' })
-    renderRoute('/projects?status=released')
+    await renderRoute('/projects?status=released')
     const filteredTotals = await screen.findByRole('region', { name: 'Project totals' })
     await waitFor(() => {
       expect(within(filteredTotals).getByText('Active').nextElementSibling).toHaveTextContent('0')
@@ -223,7 +223,7 @@ describe('Projects list (FR-6)', () => {
     try {
       signInAsUser()
       seedProject({ name: 'Alpha' })
-      const { router } = renderRoute('/projects')
+      const { router } = await renderRoute('/projects')
       const user = userEvent.setup()
 
       const table = await screen.findByRole('table', { name: 'Projects' })

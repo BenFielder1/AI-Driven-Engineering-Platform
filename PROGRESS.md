@@ -1,234 +1,111 @@
-# Build progress (v2)
+# Build progress (v3)
 
-Spec: `SPEC.md` (v2; v1 requirements FR-1–FR-52 from `docs/v1/SPEC.md` stay in force unless amended, §3.0) · Branch: `build/aide-v2` · Started: 2026-10-15 · v1 log: `docs/v1/PROGRESS.md`
+Spec: `SPEC.md` (v3; v1 and v2 in `docs/`) · Stack: `STACK.md` · Branch: `build/aide-v3` · Started: 2026-10-23
+
+**Gate:** GitHub Actions CI on the pushed head commit, after a static `stack-reviewer` pass (CLAUDE.md "Commit gate").
+Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 ## Environment
-- .NET SDK: 10.0.401 · Node: v24.21.0 · Docker: 29.8.2 (Docker Desktop) · gh: installed
-- Kubernetes: `docker-desktop` context present + reachable (node Ready, v1.36.1)
-- Optional tools: kubeconform, oasdiff, actionlint — not installed (CI runs kubeconform; actionlint via Docker if needed)
-- Local app URL: http://localhost:8080 · Dev loop: API :5080, Vite :5173, DB :5432
+- Tool versions: node 24.14.1 · dotnet SDK 10.0.402 · Docker 28.3.2 (installed, but not used by agents: commit gate) · Railway CLI: **not installed**
+- Local: Docker Desktop Kubernetes is **manual checks only** (Ben)
+- VCS CLI auth: gh yes (BenFielder1) · Deploy CLI/MCP auth: Railway no (needed for M21: CLI install + `railway login` + project tokens by Ben)
 
 ## Requirements
-Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live in `docs/v1/PROGRESS.md`; amended v1 IDs are listed here when their amendment lands.
-
-| ID | Summary | Spec § | Area | Phase | Status | Evidence |
+| ID | Summary | Spec § | Layer(s) | Phase | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| FR-53 | Design system + app shell (sidebar, header, ⌘K, logo) | 3.1, 7.1 | frontend | 1 | done | tokens + contrast test, shell/nav-config, restyled pages; FR53_* tests; e2e/a11y.spec |
-| FR-54 | Project-mode sidebar, stage stepper, next action | 3.1 | frontend | 1 | done (badges wired in phase 2) | stage-states.ts, StageStepper, next-action.ts; FR54_* tests |
-| FR-55 | One page per stage, `?version=` read-only | 3.1 | both | 3 | done | six stage pages, in-place approvals, read-only past versions; FR55_* tests |
-| FR-56 | Review page: every cycle, cycle picker, recharts trend | 3.1 | both | 3 | done | cycles table + ?cycle/&report, category bars, trend select; FR56_* tests |
-| FR-57 | Execution page: every run, attempt history | 3.1 | both | 3 | done | ExecutionRunReader, attempt history; FR57_*/D_V2_14_* tests incl. 10×30 perf |
-| FR-58 | Restore artifact version as new draft | 3.1 | both | 3 | done | RestoreRules + dialog; FR58_* tests |
-| FR-59 | Artifacts page per release version; cross-version diff | 3.1 | both | 3 | done | artifacts per release version, allReleaseVersions diff; FR59_* tests |
-| FR-60 | Start new version after merged release | 3.2 | both | 2 | done | POST /versions, start dialog; FR60_* tests |
-| FR-61 | Version validation errors | 3.2, 4.10 | backend | 2 | done | SemVer + VERSION_* errors; FR61_* tests |
-| FR-62 | Released + in-development badges, version switcher, read-only past | 3.2 | both | 2 | done | badges, switcher, ?release= read-only, list filter; FR62_* tests |
-| FR-63 | Checkpoints per release version; rollback scoped; released closed | 3.2, 4.10 | both | 2 | done | checkpoints, scoped rollback, version_released; FR63_*/FR44_amended_* tests |
-| FR-64 | Release tags user semver; GitHub Release (GitHub part phase 7) | 3.2 | backend | 2, 7 | done | DecideTag, GitHub Release + ReleaseNotes; FR64_*/FR42_amended_by_FR64_* tests |
-| FR-65 | Merge strategy, awaiting_merge, merge poll | 3.2, 4.14 | both | 7 | done (stub-verified) | merge strategies, awaiting_merge, merge_poll job; FR65_*/S4_14_* tests |
-| FR-66 | Initial version for new projects | 3.2 | both | 2 | done | initialVersion + wizard Version step; FR66_* tests |
-| FR-67 | v1 project migration to release versions | 3.2, 4.10 | backend | 2 | done | migration ReleaseVersions backfill; FR67_* migration tests; applied on k8s |
-| FR-70 | Repository Analyst → codebase_summary (auto-locked) | 3.3 | backend | 6 | done | Repository Analyst job → locked codebase_summary; FR70_* tests |
-| FR-71 | Read-only repo tools (tool use, limits, path safety, redaction) | 3.3 | backend | 6 | done | RepoToolSession + LlmToolLoop + snapshots; FR71_* tests |
-| FR-72 | Iteration refinement inputs | 3.3 | backend | 6 | done | iteration refinement inputs; FR72_* tests |
-| FR-73 | Import existing repo wizard | 3.4 | both | 6 | done | import (App, PAT, Local) + wizard; FR73_* tests |
-| FR-74 | Presets: data bundles, wizard Stack step, pinned per version | 3.5, 4.11 | both | 8 | done | preset catalog + API + pinning + run stamping; FR74_* tests |
-| FR-75 | Preset spec sections; mandatory FR IDs + GWT | 3.5, 4.13 | backend | 6, 8 | done | SpecValidator + preset sections retry; FR75_* tests |
-| FR-76 | Plan steps carry agent + covers; preset plan validation | 3.5, 4.11 | both | 8 | done | plan rules + specialist execution; FR76_* tests |
-| FR-77 | Preset review checklist + deterministic checks | 3.5 | backend | 8 | done | checklist + rls_on_every_table + no_secret_env_in_client; FR77_* tests |
-| FR-78 | User LLM connections | 3.6 | both | 4 | done | me/connections/llm CRUD + test, list-models validation; FR78_* tests |
-| FR-79 | Bind Owner's LLM connection to project | 3.6 | both | 4 | done | binding + clearing rules under project lock, runs use bound key, Llm:AllowSystemKeys; FR79_* tests |
-| FR-80 | GitHub App manifest registration + App sign-in | 3.7 | both | 5 | done (stub-verified) | manifest flow + App sign-in PKCE (stub HTTP); FR80_* tests |
-| FR-81 | User GitHub connection, repo picker, create repo | 3.7 | both | 5 | done (stub-verified) | connection + refresh, picker, create repo; FR81_* tests |
-| FR-82 | `github_app` provider, installation tokens, per-version branch | 3.7 | backend | 5 | done (stub-verified) | github_app provider, scoped installation tokens ≤55 min; FR82_*/S4_14_* tests |
-| FR-83 | PAT fallback | 3.7 | both | 5 | done (stub-verified) | PAT mode + switch-to-app with push check; FR83_* tests |
-| FR-84 | Merge readiness | 3.7 | both | 7 | done (stub-verified) | MergeReadinessService (branch rules + GraphQL, fallback); FR84_* tests |
-| FR-85 | Check runs as review input | 3.7 | backend | 7 | done (stub-verified) | required check runs → testing finding, 15-min wait; FR85_* tests |
-| FR-86 | Wizard Repository step | 3.7 | frontend | 5 | done (stub-verified) | wizard Repository step, has-code warning; FR86_* tests |
-| FR-87 | Vercel connection | 3.8 | both | 9 | done (stub/Fake-verified) | Vercel connections; FR87_* tests |
-| FR-88 | Deployment settings + env vars | 3.8 | both | 9 | done (stub/Fake-verified) | deployment settings, project link/create, env sync; FR88_* tests |
-| FR-89 | vercel.json disables aide/** auto deploys | 3.8 | backend | 9 | done (stub/Fake-verified) | preset scaffolders write vercel.json aide/** disable (syntax to confirm live) |
-| FR-90 | Preview deployments in review | 3.8 | both | 9 | done (stub/Fake-verified) | preview deployments + review wait + build-failed finding; FR90_* tests |
-| FR-91 | Production deployments, promote, Deployments page | 3.8 | both | 9 | done (stub/Fake-verified) | production deployments, promote, Deployments page; FR91_* tests |
-| FR-92 | New events + notification types | 3.9 | both | 10 | done | 5 notification types + events live/activity/admin; FR92_* tests |
-| FR-93 | CLI additions | 3.9 | backend | 10 | done | CLI version start/versions/deployments/artifact restore/status; FR93_* tests |
-| §4.10 | Release versions, semver, checkpoints, rollback scope, migration | 4.10 | backend | 2 | done | SemVer, ReleaseVersionRules, NewVersion transition matrix; S4_10_* tests |
-| §4.11–4.12 | Preset format and the two presets | 4.11 | backend | 8 | done | Presets/{nextjs-supabase,nextjs-frontend}, PresetLoader, PresetPathRules; S4_11_*/S4_12_* tests |
-| §4.13 | Iteration specs, review scope, plan scope | 4.13 | backend | 6 | done | SpecValidator tags, IterationReviewScope, PlanScope; S4_13_* tests |
-| §4.14 | GitHub permissions, tokens, polling, merge detection | 4.14 | backend | 5, 7 | done | installation tokens (RS256 JWT, ≤55 min, repository_ids), polling/ETag/backoff, merge detection, release notes; S4_14_* tests (stub HTTP) |
-| §4.15 | Deployments (Vercel) states, polling, Fake provider | 4.15 | backend | 9 | done | DeploymentPolling, IDeploymentProvider (Vercel, Fake); S4_15_* tests |
-| NFR-SEC2 | Secret encryption, scoped tokens, fixed hosts, signed state | 8 | backend | 4–9 | done | per-purpose Data Protection protectors, secrets never returned/logged, scoped tokens, fixed hosts, signed single-use manifest state, masked build logs; review-verified each phase |
-| NFR-REL2 | Polls as jobs, restart resume, rate-limit backoff | 8 | backend | 7, 9 | done | merge_poll / deployment / checks waits as self-deferring jobs, restart resume, rate-limit deferral without attempts; S4_14_*/S4_15_NFR_REL2_* tests |
-| NFR-PERF2 | List p95 < 300 ms with badges; runs/cycles p95 < 300 ms | 8 | backend | 10 | done | backend perf tests + scripts/perf/v2-perf.mjs p95 ≤ 11 ms on k8s |
-| NFR-A11Y2 | WCAG AA both themes (token test), keyboard nav, chart tables, axe | 8 | frontend | 1, 10 | done | token + tinted-pair contrast tests; a11y.spec 116 passed both themes; keyboard sidebar/stepper |
-| NFR-TEST2 | Domain worked-example tests, stub HTTP, two-version/import/preset E2E | 8 | both | all, 10 | done | e2e versions/import/preset specs pass on k8s (Chromium); domain worked-example tests per phase |
-| DEP-V2 | Public base URL, optional App secrets, dev seed, Fake deployments | 9 | deploy | 2, 5, 9, 10 | done (v1-seeded demo upgraded to released 0.1.0, marker DEMO_PROJECT_RELEASE_UPGRADED; verified on the cluster) | App:PublicBaseUrl, GitHub__App__* optional secrets, Fake provider + AllowFake, E2E overlay; DEPV2_* tests |
+| FR-94 | Next.js App Router app replaces Vite/TanStack Router | 3.1 | frontend | 1 | done | CI 39998009637 |
+| FR-95 | Route parity: every v2 URL, search param and alias | 3.1 | frontend | 2 | done | CI 39998009637 + audit tests in CI 40088027372 |
+| FR-96 | Pages ported as client components (TanStack Query + generated client) | 3.1 | frontend | 2 | done | CI 39998009637 |
+| FR-97 | Auth redirects (returnUrl, safeReturnUrl) | 3.1 | frontend | 2 | done | CI 39998009637 + audit tests in CI 40088027372 |
+| FR-98 | Runtime `/api` proxy incl. WebSockets to `BACKEND_URL` | 3.2 | frontend | 1 | done | CI 39998009637 |
+| FR-99 | Security headers + CSP nonce | 3.2 | frontend | 1 | done | CI 39998009637 |
+| FR-100 | Approval-token redaction in web logs | 3.2 | frontend | 1 | done | CI 39998009637 |
+| FR-101 | First paint: theme, fonts, favicon, titles | 3.1 | frontend | 1 | done | CI 39998009637 + audit tests in CI 40088027372 |
+| FR-102 | Dev loop on :3000 proxying to :5080 | 3.1 | frontend + backend config | 1 | done | CI 39998009637 |
+| FR-103 | Standalone web image, non-root, :8080, `/healthz` | 3.2 | frontend + deploy | 1 | done | CI 39998009637 |
+| FR-104 | Local k8s on the Next.js image | 3.3 | deploy | 3 | done (CI); manual Docker Desktop check pending | CI 39998009637 |
+| FR-105 | Configurable forwarded-header hops | 3.4 | backend | 1 | done | CI 39998009637 |
+| FR-106 | API entrypoint: volume ownership, drop to `$APP_UID` | 3.4 | backend + deploy | 1 | done | CI 39998009637 |
+| FR-107 | `.railway/railway.ts` IaC | 3.5 | deploy | 4 | written; first `config plan` pending (Ben) | static review |
+| FR-108 | `preview` + `production` environments | 3.5 | deploy | 4 | documented; environments created by Ben | static review |
+| FR-109 | Pre-deploy migrations | 3.5 | deploy + data | 4 | in IaC; verified on first deploy | static review |
+| FR-110 | GitHub Actions deploy workflow | 3.5 | deploy + CI | 4 | written; runs once on main + Railway secrets | static review |
+| FR-111 | `smoke-remote.sh` | 3.5 | deploy | 4 | written; runs on first deploy | static review |
+| FR-112 | Railway operations docs | 3.5 | docs | 5 | done | 4bad5f8, CI 40088027372 |
+
+v1 (FR-1–FR-52) and v2 (FR-53–FR-93) requirements stay in force. Their tests must stay green on CI.
 
 ## Phases
-- [x] 0 M0 Baseline (base: af23fae) — gate green (backend 2193 tests, frontend 335 tests, manifests OK) · deploy-local + smoke ✓ on docker-desktop
-- [x] 1 M9 Design system + shell (base: 8d174d0) — IDs: FR-53, FR-54, NFR-A11Y2 (tokens)
-  - [x] vite-react-engineer (tokens, fonts, shadcn primitives, logo, shell, nav config, ⌘K — 427 frontend tests; placeholder routes connections, admin/integrations, specification, planning, release, activity)
-  - [x] vite-react-engineer (restyle v1 pages, stage stepper, next-action helper, settings sub-routes, recharts trend, axe e2e specs — 453 frontend tests)
-  - [x] gate (frontend ✓) · review (0 Critical, 1 Major, 6 Minor — all fixed or logged) · commit — redeploy deferred to end of phase 2 (backend M10 in flight in the same tree)
-- [x] 2 M10 Versions + checkpoints (base: e8a957e) — IDs: FR-60–FR-64 (Local), FR-66, FR-67, §4.10
-  - [x] ef-data-engineer (migration ReleaseVersions + FR-67 backfill; SQL reviewed — see Decisions; 4 FR67_* migration tests; checked on a scratch copy of the k8s DB, 172 projects)
-  - [x] aspnet-engineer (SemVer + ReleaseVersionRules, NewVersion transition, scoped rollback, /versions + /checkpoints, D-V2-11 renames incl. rollback/gate targetCheckpoint, Local+GitHub tag lookup, seed released at 0.1.0 — 2441 backend tests)
-  - [x] vite-react-engineer (client regen, D-V2-11 renames, badges, switcher + read-only, start-version dialog, checkpoint rollback, wizard Version step — 479 frontend tests)
-  - [x] gate (backend 2444, frontend 481, manifests, contract fresh) · review (0 Critical, 0 Major, 2 Minor — both fixed) · redeploy (migration ReleaseVersions applied on k8s: 56 released + 152 in-development versions, every project has a current version; smoke ✓) · commit
-- [x] 3 M11 Stage pages + history (base: 4c68a68) — IDs: FR-55–FR-59
-  - [x] aspnet-engineer (contract stubs: RestoreArtifactVersion, ListExecutionRuns, ListStepAttempts, ListComplianceReports, GetComplianceReport; oasdiff additive only)
-  - [x] aspnet-engineer (restore rules, attempt recording, runs/reports readers with fixed query count + <300 ms test, history `allReleaseVersions` — 2503 backend tests)
-  - [x] vite-react-engineer (stage pages, runs/attempts, review cycles, restore, artifacts across versions — first agent interrupted by session end, finished by a fresh agent; 511 frontend tests)
-  - [x] gate (backend 2507, frontend 511, manifests, contract fresh + additive) · review (0 Critical, 1 Major, 4 Minor — all fixed) · redeploy (smoke ✓) · commit
-- [x] 4 M12a LLM connections (base: 816ff13) — IDs: FR-78, FR-79
-  - [x] ef-data-engineer (migration LlmCredentials: llm_credentials, binding columns, agent_runs FK, v1 keys → earliest Owner's connection; last4 startup backfill; FR79_* migration tests)
-  - [x] aspnet-engineer (connections API, list-models validation, binding + clearing rules, run credential, Llm:AllowSystemKeys, admin LLM policy, GateDto.releaseVersionId — 2579 backend tests; oasdiff: only apiKey/clearApiKey removed from PATCH /settings/llm, accepted by FR-79)
-  - [x] vite-react-engineer (Connections page LLM section, Settings → LLM binding, admin system-key panel — 527 frontend tests)
-  - [x] gate (backend 2584, frontend 527, manifests, contract fresh) · review (0 Critical, 0 Major, 4 Minor — all fixed/logged: binding lock, 15 s key-check timeout `Llm:KeyCheckTimeout`, key cleared from MutationCache) · redeploy (migration LlmCredentials applied; k8s DB had no v1 keys; smoke ✓) · commit
-- [x] 5 M12b GitHub App (base: de44304) — IDs: FR-80–FR-83, FR-86, §4.14 (tokens)
-  - [x] ef-data-engineer (migration GitHubApp: github_apps singleton, github_connections, git settings installation/repo ids, provider github → github_pat; new secret purposes)
-  - [x] aspnet-engineer (contract stubs; oasdiff: only the accepted GitProvider rename)
-  - [x] aspnet-engineer (manifest flow, App sign-in PKCE, user connection + refresh, repo picker/create, installation tokens, github_app provider, rate-limit deferral — 2724 backend tests) ‖ vite-react-engineer (admin GitHub, connections GitHub, wizard Repository step, settings Git — 555 frontend tests)
-  - [x] gate (backend 2729, frontend 561, manifests, contract fresh) · review (1 Critical, 2 Major, 3 Minor — all fixed, Critical/Major re-verified: switch-to-app/create now require the caller's own push access; refresh serialised) · redeploy (migration GitHubApp applied; smoke ✓) · commit
-- [x] 6 M13a Iteration + import (base: 784fc18) — IDs: FR-70–FR-73, §4.13, FR-75 (FR IDs part)
-  - [x] aspnet-engineer A (§4.13 + FR-75 domain rules, import contract; oasdiff additive) ‖ aspnet-engineer B (repo tools, snapshots, LlmToolLoop for Anthropic/OpenAI/Ollama fallback, Fake scripts — ~98 FR71_* tests)
-  - [x] aspnet-engineer C (Repository Analyst job, refinement wait + iteration inputs, spec/review/plan integration, import implementation — 2938 backend tests) ‖ vite-react-engineer (import wizard, codebase summary, tool calls, e2e wizard selectors — 573 frontend tests)
-  - [x] gate (backend 2945, frontend 579, manifests, contract fresh, no vulnerable packages) · review (0 Critical, 3 Major, 4 Minor — all fixed: linear-time regex + per-line budget, tool-loop tokens counted + mid-loop budget stop, exact tag lookups + paginated picker, link-safe Local import, snapshot cleanup, /tmp sizeLimit 6Gi, tool error copy in errors.ts) · redeploy (smoke ✓) · commit
-- [x] 7 M13b Merge strategies + GitHub release (base: 77ddc9a) — IDs: FR-64 (GitHub), FR-65, FR-84, FR-85
-  - [x] aspnet-engineer (contract: GetMergeReadiness stub, git settings mergeStrategy/tagPrefix implemented, release fields, ExternalChecksDto, ProjectStatus awaiting_merge)
-  - [x] aspnet-engineer (merge strategies, awaiting_merge, merge poll, GitHub Release + notes, merge readiness, check runs in review — 3162 backend tests) ‖ vite-react-engineer (settings Git, Release page readiness/awaiting/GitHub Release, review external checks — 601 frontend tests)
-  - [x] gate (backend 3165, frontend 619, manifests) · review (0 Critical, 1 Major, 4 Minor — all fixed: rate-limited merge defers, tag reuse only at merge commit + annotated-tag commit resolution, merged-externally flag, readiness refresh throttle, tag-prefix client rule; backend 3165, frontend 619) · redeploy (smoke ✓; first attempt 2026-10-16 was stopped for low system memory, rerun 2026-10-17) · commit
-- [x] 8 M14 Presets (base: c4a8565) — IDs: FR-74–FR-77, §4.11–4.12
-  - [x] aspnet-engineer A (preset model, loader, hash, readiness check, plan rules, preset API — 3248 backend tests; oasdiff additive) ‖ aspnet-engineer B (preset content from claude-kits@14ada86: 7/6 specialist prompts, skills, conventions)
-  - [x] aspnet-engineer C (spec/plan/code/review integration, deterministic preset checks, Guardian protected paths, Fake specialist scripts, "Demo: Recipe Finder" seed — 3300 backend tests; resumed once after a usage-limit stop) ‖ vite-react-engineer (wizard Stack step, preset chips + filter, change preset, start-version preset, planning agents/warnings, admin presets — 635 frontend tests)
-  - [x] gate (backend 3306, frontend 635, manifests, contract fresh, oasdiff additive) · review (0 Critical, 2 Major, 3 Minor — all fixed: base-commit immutable migrations enforced in plan + Guardian + Owner edits, case-insensitive preset paths, prompt wording, decision log) · redeploy (readiness: presets 2 loaded; smoke ✓) · commit
-- [x] 9 M15 Vercel (base: f2c9a8a) — IDs: FR-87–FR-91, §4.15
-  - [x] ef-data-engineer (migration VercelDeployments, additive)
-  - [x] aspnet-engineer (contract stubs; oasdiff: only externalChecks.preview typing)
-  - [x] aspnet-engineer (connection, project link/create, env sync, preview/production deployments + polls, promote, Fake provider; migration regenerated as 20261017171130_VercelDeployments with vercel_username — 3491 backend tests) ‖ vite-react-engineer (connections Vercel, settings Deployment + env, wizard Deployment step, review preview, release production, Deployments page — 675 frontend tests)
-  - [x] gate (backend 3515, frontend 677, manifests) · review (0 Critical, 1 Major, 4 Minor — all fixed: co-Owner can't use another Owner's Vercel binding, mask-then-cut build logs, dot-only project ids rejected, idempotent deployment creation + orphan cancel, Fake provider guard; backend 3515, frontend 677) · redeploy (migration VercelDeployments applied; smoke ✓; first attempt stopped for low system memory, rerun) · commit
-- [x] 10 M16 Integrate & harden (base: 38afcc0) — IDs: FR-92, FR-93, NFR-*2, E2E
-  - [x] aspnet-engineer (5 notification types, FR-92 events live/activity/admin, CLI version/versions/deployments/artifact restore/status, NFR-PERF2 tests — 3591 backend tests) ‖ local-k8s-engineer (E2E overlay `deploy-local.sh --e2e`, seed-e2e-repo.sh)
-  - [x] vite-react-engineer (notification types, preferences, channel events, activity — 689 frontend tests)
-  - [x] local-k8s-engineer (deploy --e2e + seed: cluster in E2E mode, readiness Healthy, /data/import/existing-app with v0.1.0/v0.2.0)
-  - [x] checkpoint gate (backend 3591, frontend 689, manifests both variants) · review (0 Critical, 0 Major, 3 Minor — all fixed: CLI bare `@`, `--e2e` only switch, log grep pipefail) · commit (phase 10a)
-  - [x] e2e-qa-engineer, one suite per agent (first run was stopped by Ben 2026-10-17): versions.spec (two-version, 3/3 passes ~3.8 min), import.spec (2 tests, 3/3), preset.spec (fail-build path passes; main path exposed a Fake-script bug → fixed in backend), a11y.spec (118 tests, 46 failed on 6 real contrast/focus bugs → frontend fixing), scripts/perf/v2-perf.mjs (p95 list 7.4 ms, runs 11.5 ms, reports 6.2 ms at 4 clients)
-  - [x] fixes: live artifact refresh, Fake preset spec/deps consistency, a11y contrast + user-menu focus → redeploy --e2e → full E2E rerun on Chromium: v2 5/5 (5.8 min), a11y 116 passed / 2 skipped (admin creds), v1 11/11 (2 stale tests fixed), perf p95 ≤ 10.6 ms; firefox/webkit/edge not run (memory)
-  - [x] gate (backend 3595, frontend 731, manifests) · review (0 Critical, 0 Major, 5 Minor — logged for the Final fix round) · commit (phase 10b)
-- [x] Final (base: c8fcd38) — spec-verifier (v1 + v2) → fixes → github-ci-engineer → readme-writer
-  - [x] spec-verifier: v2 49 Done / 4 Partial / 0 Missing; v1 60 Done / 1 Partial / 0 Missing; no CLAUDE.md violations. Partials: DEP-V2 seed on v1 DB, FR-55 refinement rounds, FR-89 deterministic check, §7.2 awaiting-gates KPI, v1 §8 cross-browser E2E
-  - [x] fixes: aspnet-engineer (rounds, KPI endpoint, FR-89 rule + finding, seed upgrade, gates filter — targeted tests green) ‖ vite-react-engineer (10b Minors, menu click, rounds UI, KPI row, gates filter — 738 frontend tests) DONE → pr-reviewer (0 Critical / 1 Major / 6 Minor) → fixes (FR-46 join race, FR-89 scope/root/tree-cap + integration tests, CI log redaction) → gate rerun (the first rerun had 2 FR-89 side-effect failures, now fixed) → gate green (backend 3625; one rerun after a one-off 0xC0000005 crash of the integration test host with 0 failures; frontend 740; manifests) → redeploy --e2e + smoke green → E2E --workers=1: v2 5/5, v1 11/11 on chromium, firefox, webkit and msedge; a11y 116 passed / 2 skipped (admin creds); perf p95 ≤ 10.3 ms → commit (final)
-  - [x] github-ci-engineer (both overlays kubeconform-checked; scripts job bash -n + shellcheck errors; E2E sharded v1/v2/a11y with Fake + ImportRoot config and scripts/ci/seed-e2e-repo-local.sh; actionlint clean; perf not in CI)
-  - [x] readme-writer (README v2, config reference, SPEC sync of all "SPEC updated: no" Decisions)
-  - [x] spec-verifier re-audit of the former Partials at 6d614a1: DEP-V2, FR-55, FR-89, §7.2 KPI, v1 §8 cross-browser all Done (0 Partial / 0 Missing)
+- [x] 0 Baseline (M0, base: e385c52): CI green on e385c52 (all 9 jobs): https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/39948638817
+  - v2 Vite bundle (CI build), for the §8 "≤ 10% larger" check:
+    - entry `index.js` 347.44 kB (gzip 109.95 kB)
+    - `app-shell.js` 142.49 kB (gzip 42.94 kB)
+    - CSS 62.35 kB (gzip 11.12 kB)
+    - initial JS on `/projects` ≈ entry + app-shell ≈ 489.9 kB (gzip ≈ 152.9 kB), plus the projects route chunk
+- [x] 1 Next.js foundation (M17) ‖ backend hosting (M20) (base 37fcaca): d4d47ac + fix d10c96f. CI green on 31ba6da: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/39998009637
+- [x] 2 Page port (M18): gated together with phase 1 (d4d47ac); see Decisions
+- [x] 3 Local Kubernetes + CI (M19): 31ba6da, CI green: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/39998009637. The Docker Desktop run is a manual check (see below)
+- [~] 4 Railway (M21): IaC, deploy workflow, smoke-remote and docs written and reviewed (static). First real `railway config plan`/apply, preview deploy and smoke need Ben's Railway setup; production only on request
+- [x] 5 Final (M22): acceptance audit over v1+v2+v3 (no regressions; 0 Critical). Audit fixes, Railway CI checks and docs sync in 4bad5f8. CI green (10 jobs): https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40088027372
+
+## Manual checks (Ben, Docker Desktop)
+- FR-104: run `./deploy/scripts/deploy-local.sh`. The web rollout should become ready on `/healthz`, and `smoke.sh` should pass (`/healthz`, `/` 307/200, `/login` CSP nonce + XFO DENY + nosniff, `/api/health/ready`).
+- FR-104: run `./deploy/scripts/deploy-local.sh --e2e`. Smoke should pass and the import repo should be seeded.
+- FR-104: run `BASE_URL=http://localhost:8080 npm --prefix frontend run test:e2e --workers=1` in Chromium, Firefox and WebKit, including a SignalR live update through `web`.
+- FR-105 on Docker Desktop: the LoadBalancer (externalTrafficPolicy Cluster) probably SNATs the browser address, so all browsers share one login/register rate-limit bucket. This was the same with nginx in v2. Per-client IP is covered by the FR-105 integration tests and will be checked on Railway.
+- FR-104/FR-103: `kubectl --context docker-desktop -n aide logs deploy/web` should show JSON request lines and no EROFS/cache errors.
+- FR-106: build the API image and start it on a root-owned empty `/data`. Check that keys are written to `/data/keys`, the app runs as uid 1654 (`ps`), and `/api/health/ready` returns 200.
+
+## Follow-ups queued
+- All phase 1–4 follow-ups are done. The Railway variables they named (`TRUST_EDGE_FORWARDED=true` on web, `ForwardedHeaders__ForwardLimit=2` on api, no `RAILWAY_RUN_UID`) are in `.railway/railway.ts`.
+
+## First Railway deploy (Ben, then agents within `preview` autonomy)
+Setup steps are in `deploy/railway/README.md`. Things only a real run can prove (from the reviews and audit):
+- `railway config plan` shows no drift after apply, and `preserve()` on unset optional secrets plans no change.
+- The pre-deploy `/bin/sh -c '…'` quoting works through the image ENTRYPOINT, and the migration runs before `api` starts.
+- `railway up` from the repo root honours each service's root directory (fallback: `railway up backend --path-as-root`).
+- The JSON shapes of `deployment list`, `domain list` and `tcp-proxy list`, and that a project token may call them. `up --ci` fails when the build fails.
+- Railway's edge appends exactly one `X-Forwarded-For` entry, so `ForwardLimit=2` resolves the client IP (FR-105). WebSockets work through `web` (FR-98).
+- `smoke-remote.sh` passes, including the sign-in and WebSocket round trip with the smoke account (FR-111).
+- §8: Railway p95 for the project list is < 500 ms. The `aide` CLI works against the Railway web URL (D-V3-12).
 
 ## Decisions
-- 2026-10-15 — M12 and M13 are each split into two phases (connections/GitHub App; iteration/merge) — keeps phases at 2–5 tasks — SPEC updated: n/a
-- 2026-10-15 — M10 migration `20261015174144_ReleaseVersions`: v1 rows are assigned to release versions by `created_at` window (version i = (released_at[i-1], released_at[i]]) instead of checkpoint range, because projects rolled back after a release have overlapping checkpoint ranges; live state at checkpoint ≤ the first post-release rollback target moves to the in-development version — FR-67 — SPEC updated: yes
-- 2026-10-15 — `projects.current_release_version_id` points at the latest released version when nothing is in development (spec said nullable when only released) — lets every version-scoped read resolve a default version — SPEC updated: yes
-- 2026-10-15 — FK `projects.current_release_version_id` is DEFERRABLE INITIALLY DEFERRED and created in SQL (not mapped in EF): project and its first version reference each other and are inserted in one save — SPEC updated: n/a
-- 2026-10-15 — Releases uniqueness is (release_version_id, checkpoint, attempt), was (project_id, version, attempt): checkpoints restart per version — SPEC updated: yes
-- 2026-10-15 — Branch/PR fields moved from project_git_settings to release_versions (per §5); `ReleaseVersionStampingInterceptor` stamps missing release_version_id with the project's current version as a safety net — to be removed once all writers set it explicitly — SPEC updated: n/a
-- 2026-10-15 — ReleaseVersions migration is not rolling-update safe (renames/drops); fine with the Recreate strategy, but the migrate Job runs while v1 pods are up — expect transient errors until the rollout — SPEC updated: n/a
-- 2026-10-15 — Three Space Worm token values were adjusted to pass WCAG AA (dark muted-foreground L 0.57→0.59, dark destructive-foreground near-black, light success 0.50/0.15) and a `field-border` token added for 3:1 form-field borders; reasons in `frontend/src/lib/ui/tokens.ts` — NFR-A11Y2 — SPEC updated: yes
-- 2026-10-15 — Theme class is set before first paint by same-origin `public/theme-init.js` (no inline script) so the v1 CSP is unchanged — SPEC updated: n/a
-- 2026-10-15 — Projects-list "Awaiting gates" KPI shows "—": the list API returns no gate counts; add a count to the list DTO if wanted — §7.2 — SPEC updated: yes
-- 2026-10-15 — D-V2-11 renames also cover rollback/gate fields (`targetVersion`→`targetCheckpoint`, `fromVersion/toVersion`→`fromCheckpoint/toCheckpoint`); oasdiff (Docker): 58 errors + 3 warnings, all from D-V2-11 renames, `/versions` meaning change and new enum values (`codebase_summary`, `awaiting_merge`) — accepted per D-V2-11 — SPEC updated: yes
-- 2026-10-15 — `repository_analysis` job is a placeholder (logs and completes) until FR-70 lands in phase 6; non-null `presetId` → PRESET_NOT_FOUND until presets land in phase 8 — SPEC updated: n/a
-- 2026-10-15 — Activity `releaseVersionId` filter is a time window (version start → next version start); events have no version column — SPEC updated: yes
-- 2026-10-15 — Closed-version rollback checks (`version_released`) run before INVALID_TARGET_VERSION so callers get the useful reason; the two v1 re-release-after-rollback tests were removed (behaviour removed by D-V2-3) — SPEC updated: yes
-- 2026-10-15 — UPSTREAM_ERROR 502 on POST /versions when the repo's tags can't be checked — SPEC updated: yes
-- 2026-10-15 — Per-version branch `aide/<slug>/v<version>` (all new versions incl. first) is stored on release_versions.branch_name when the working copy is first prepared, not at version start: a stored branch name is the lifecycle's "working copy prepared" fact; VERSION_STARTED records the intended name — FR-82 — SPEC updated: yes
-- 2026-10-15 — Past-version selection uses `?release=<semver>` (spec FR-55 says `?version=`) because artifact pages already use `?version=N` for the artifact version; kept across project navigation — SPEC updated: yes
-- 2026-10-15 — Settings pages stay editable while viewing a past version (settings aren't versioned) — SPEC updated: yes
-- 2026-10-15 — AgentRunDto.checkpoint is derived on read (produced artifact → compliance report → null; step runs null) — no migration — SPEC updated: n/a
-- 2026-10-15 — Execution run status: a started, unpaused run with no queued job shows `paused` (PlanRunStatus has no idle value); a cycle's optimisation plan is matched by optimization_plan_artifact_id, else the latest report at or before the plan — SPEC updated: n/a
-- 2026-10-15 — ARTIFACT_RESTORED also triggers the "artifact ready" notification (same as ARTIFACT_CREATED) — SPEC updated: yes
-- 2026-10-15 — Artifact history gains optional `allReleaseVersions=true` (additive) for FR-59 cross-version diff — SPEC updated: yes
-- 2026-10-16 — Restore reason `stage_not_reached` added (project before the producing phase, e.g. after a rollback); spec listed only stage_completed — FR-58 — SPEC updated: yes
-- 2026-10-16 — Compliance reports carry `id`; GetComplianceReport accepts `reportId` and runs carry `complianceReportId`, because cycle numbers restart after a rollback within one release version. For the version in development, pre-rollback reports stay hidden (v1 §4.8 rule kept); duplicates show only in past-version history — FR-56 — SPEC updated: yes
-- 2026-10-16 — Migrated v1 project LLM keys keep the shared v1 Data Protection purpose `Aide.Secrets.v1` (now `SecretPurposes.LlmApiKey`) so ciphertext is reused without re-encryption; new secret kinds (GitHub tokens, App key, Vercel tokens, env values) get their own purposes per §8 — SPEC updated: n/a
-- 2026-10-16 — Migrated credentials get last4 `????` in SQL, filled by an idempotent startup backfill (LlmCredentialLast4Backfill) that decrypts in-process — SPEC updated: n/a
-- 2026-10-16 — `GET /api/projects/:id/settings/llm` added so all members can see the binding ("connected by …") while `GET /settings` stays Owner-only — FR-79 — SPEC updated: yes
-- 2026-10-16 — An Owner may unbind the project's LLM connection; only choosing a keyed provider with no usable key is VALIDATION. An undecryptable bound key → PROVIDER_NOT_CONFIGURED (no silent system-key fallback) — FR-79 — SPEC updated: yes
-- 2026-10-16 — New event `LLM_BINDING_CLEARED {reason: owner_role_lost|member_removed|connection_deleted}` (not in FR-92's list); "LLM binding cleared" / "connection invalid" notification types deferred to phase 10 (FR-92) — until then a rejected key reaches Owners via RUN_FAILED — SPEC updated: yes
-- 2026-10-16 — Admins see the system-key policy read-only (`GET /api/admin/integrations/llm`); it is set by config `Llm:AllowSystemKeys`, not from the UI — §2 Admin — SPEC updated: yes
-- 2026-10-16 — LlmCredentials migration drops `project_llm_settings.api_key_encrypted` (not rolling-update safe): old pods error on LLM settings reads and agent jobs until the Recreate rollout finishes — acceptable locally, same as ReleaseVersions — SPEC updated: n/a
-- 2026-10-16 — Git provider wire value `github` renamed to `github_pat` (spec FR-82 name), migrated in SQL; breaking enum change accepted in the D-V2-11 spirit (web + CLI ship together); CLI flag `--git-provider github` still maps to `github_pat`. Migration GitHubApp is not rolling-update safe (old pods can't parse `github_pat`) — SPEC updated: n/a
-- 2026-10-16 — github_connections refresh fields are nullable (no refresh token when the App has token expiration off); check constraint: a `github_app` project must have installation_id, repo_id and repo_full_name — SPEC updated: yes
-- 2026-10-16 — v1 GitHub links live in `users.github_id`; App sign-in matches on the same column (FR-80) — SPEC updated: n/a
-- 2026-10-16 — Manifest `state` = Data Protection time-limited (10 min) + single-use nonce bound to the Admin, held in memory (a restart means the Admin restarts the flow) — FR-80, §8 — SPEC updated: yes
-- 2026-10-16 — FR-86 "repo has code" is stored as the in-development release version's `base_commit_sha` (head) with no base tag (= "Never released"), plus `repoHasCode` in PROJECT_CREATED; a repo with only GitHub starter files (README/LICENSE/.gitignore) counts as empty so `auto_init` repos aren't flagged — SPEC updated: yes
-- 2026-10-16 — GitHub rate limits: request paths → 429 GITHUB_RATE_LIMITED + Retry-After; jobs are re-queued at the reset without counting an attempt (capped at 1 h), also for PAT projects — NFR-REL2 — SPEC updated: yes
-- 2026-10-16 — Repo creation uses the user token for both user and org owners (installation tokens can't create repos on personal accounts; §11 check, from GitHub docs, not fetched live) — SPEC updated: n/a
-- 2026-10-16 — Repo push access (push/maintain/admin with the caller's own token) is checked when a project is bound to a repo (create, switch-to-app); it isn't re-checked later, so members keep working via the App on the binding Owner's behalf (§2) even if that Owner later loses GitHub access — SPEC updated: yes
-- 2026-10-16 — Security: NU1903 advisory on Microsoft.AspNetCore.SignalR.Common 10.0.12 (published mid-build) → ASP.NET Core packages bumped to 10.0.13 (OpenApi, Identity.EFCore, Mvc.Testing, SignalR.Client); Docker images use the floating `10.0` tags so the runtime is patched on rebuild — SPEC updated: n/a
-- 2026-10-16 — §4.13 rule details: `[removed]` requirements need no Given/When/Then; regressions reported on [new]/[changed] IDs count as missing features, on removed/unknown IDs are dropped; import also rejects a development tag that already exists (TAG_EXISTS); for import the project `idea` field carries the version request (no separate `request` field) — SPEC updated: yes
-- 2026-10-16 — Local import (E2E/dev only): `git.mode=local` + `git.localSourcePath` resolved under `Git:Local:ImportRoot` — §8 Testing — SPEC updated: yes
-- 2026-10-16 — Repo tools details: every tool's output counts toward the 400 KB run cap; after TOOL_LIMIT (or 28 turns) the next turn is forced to answer (`tool_choice: none`; tools omitted for Ollama); `.aide/` reads as NOT_FOUND and `.git` as UNSAFE_PATH (v1 path rules); search runs on redacted text; `search_code` has an optional `regex` flag (plain text case-insensitive); the no-tools fallback appends a depth-2 file listing; snapshots under `{temp}/aide-snapshots` (≤8 per project/commit) — FR-71 — SPEC updated: yes
-- 2026-10-16 — Run warnings (tools_unsupported, snapshot_unavailable, summary_wait_timeout, summary_unavailable) are stored in the run output + RUN_COMPLETED payload and exposed on AgentRunDetailDto (no column, no migration) — FR-70/71 — SPEC updated: yes
-- 2026-10-16 — Refinement waits for the codebase summary by re-queuing its job (JobDeferredException, attempt not counted) up to 10 min from version start — FR-70 — SPEC updated: n/a
-- 2026-10-16 — Plan warnings (UNCOVERED_REQUIREMENTS) are computed on read against the version's latest locked spec and returned as ArtifactDto.warnings for implementation_plan — §4.13 — SPEC updated: yes
-- 2026-10-16 — PAT import lists tags via the REST API with the token (not git ls-remote); Local import clones `--no-hardlinks` from under `Git:Local:ImportRoot` (empty = disabled) — FR-73 — SPEC updated: yes
-- 2026-10-16 — AgentKind enum gains `repository_analyst` (response enum value added; oasdiff flags it — accepted, same precedent as D-V2-11) — SPEC updated: n/a
-- 2026-10-16 — ProjectStatus enum gains `awaiting_merge` and ComplianceReportDetailDto.externalChecks becomes typed ExternalChecksDto (oasdiff: enum-value-added + one-of-added, accepted — FR-65/FR-85) — SPEC updated: n/a
-- 2026-10-16 — Changing tagPrefix is blocked (409 CONFLICT) while a version is awaiting_merge or a release attempt/job is in progress; a new prefix also applies to the in-development version. Release DTO `mergeStrategy` is the project's current strategy (not stored per attempt) — SPEC updated: yes
-- 2026-10-16 — Merge poll is one self-deferring `merge_poll` job with the ETag and wait state in its payload (restart-safe). PR_CLOSED / MERGE_TIMEOUT return the project to status `releasing` in phase release so an Owner can retry `POST /release` — FR-65 — SPEC updated: yes
-- 2026-10-16 — Local manual-merge detection: the merge commit is the oldest first-parent commit on the default branch that contains the branch head (the head itself after a fast-forward) — FR-65 — SPEC updated: yes
-- 2026-10-16 — GitHub refusing GitHub Release creation (403/404/422) is logged and the release completes without a URL (5xx retries) — FR-64 — SPEC updated: yes
-- 2026-10-16 — Merge readiness is computed by a `merge_readiness` job when the pre-release gate is created and cached 5 min (MERGE_READINESS_CHECKED event); without GraphQL access, mergeStateStatus/reviewDecision are null and required approvals count as missing (§11 check) — FR-84 — SPEC updated: yes
-- 2026-10-16 — Until phase 10 adds the dedicated type, "release awaiting merge" notifications reuse `release_failed` (Owners) with awaiting-merge wording — FR-92 — SPEC updated: n/a
-- 2026-10-17 — Preset content adapted from claude-kits@14ada86 (local marketplace clone at that exact commit). FR-89 `vercel.json` uses `{"git":{"deploymentEnabled":{"aide/**":false}}}` — confirm against Vercel docs/live project that branch keys are globs and API-triggered gitSource deploys are unaffected (§11 check) — SPEC updated: yes
-- 2026-10-17 — With a preset, a plan step may declare a v1-protected path (`.github/workflows/**`, `.env.example`) only when the step's agent owns it (e.g. devops-engineer, project-scaffolder), consistent with §4.14 Workflows RW "when a step declares it"; lockfiles stay non-declarable (preset protectedPaths: see the later 2026-10-17 entry — owner may declare, except migrations existing on base); without a preset v1 rules are unchanged — §4.11 — SPEC updated: yes
-- 2026-10-17 — Generated repos commit no lockfile (AIDE agents can't run npm); preset CI uses `npm ci` when a lockfile exists else `npm install`; db-engineer writes `lib/database.types.ts` by hand in the generator's shape — SPEC updated: yes
-- 2026-10-17 — Preset format extensions beyond §4.11: `planRules.maxFilesPerStep[] {glob, max}` (`oneMigrationPerStep` shorthand), `soft`/`reason` on order/exclusive rules, protected paths `{glob, existingOnBase, except, reason}`, unknown properties = load error; globs without `/` match a file name at any depth; dependency-free glob matcher in Domain — §4.11 — SPEC updated: yes
-- 2026-10-17 — Scaffolder steps are exempt from preset order rules (otherwise step 1's `app/layout.tsx` breaks "migrations before app/**"); soft order violations are warning `PLAN_ORDER` (spec names no code) — §4.12 — SPEC updated: yes
-- 2026-10-17 — POST /versions without `presetId` keeps the base version's preset, re-pinned at the currently shipped version/hash; explicit null = no preset. "Plan locked" for PRESET_LOCKED = any implementation_plan of the version locked/approved — FR-74 — SPEC updated: yes
-- 2026-10-17 — Preset protectedPaths follow §4.11's "unless declared in this step" exception for the owning agent (e.g. db-engineer may declare `lib/database.types.ts`); migrations already on the base commit are never declarable. Optimisation plans accept catalogue keys or generalist, protected paths enforced, ordering rules off — SPEC updated: yes
-- 2026-10-17 — `no_secret_env_in_client` ignores NODE_ENV (inlined by Next.js, not secret); preset checklist items are numbered [Cn] in the review prompt and violations tagged [Cn] take that item's category/severity with no penalty; preset guidance is in a `<stack_preset>` platform-guidance block (prompt versions: spec 3, plan 3, code 4, review 5) — FR-77 — SPEC updated: yes
-- 2026-10-17 — Projects list `?preset=none` filters projects without a preset — §7.2 — SPEC updated: yes
-- 2026-10-17 — Migrations already on the version's base commit are immutable for everyone: agent plans, Owner-edited plans and the Guardian at execution all reject them; preset path matching is case-insensitive (like v1 PathRules) — §4.11/§4.12 — SPEC updated: yes
-- 2026-10-17 — Plans are validated against the base commit's file list (fetched if not local); if it still can't be listed, a generated plan may not create any migration (fail closed). nextjs-supabase preset bumped to 1.0.1 (db-engineer prompt wording) — §4.11 — SPEC updated: yes
-- 2026-10-17 — Redeploy permissions: a preview redeploy needs a writer (FR-90 "a Contributor can redeploy"), a production redeploy an Owner (§6) — SPEC updated: yes
-- 2026-10-17 — Env var PUT saves locally and returns 502 UPSTREAM_ERROR with `syncError` when the Vercel push fails (retried on next save/deployment); DELETE is all-or-nothing (502, nothing deleted) — FR-88 — SPEC updated: yes
-- 2026-10-17 — Local Git projects may use deployments only when `Deployments:Provider=Fake` (enables the §8 E2E with Local Git + Fake deployments); Vercel requires a GitHub-backed project — FR-88 — SPEC updated: yes
-- 2026-10-17 — A superseded preview row is marked `canceled` (with reason); review waits for the version's newest preview row (created by the PR job from the PR head); adopting Vercel's own production deployment of the merge SHA (within 30 s) only with the Vercel provider — §4.15 — SPEC updated: yes
-- 2026-10-17 — Build-log tails are masked (project env values, the token and secret-shaped text removed) before storage/display; only 401 or 403 `invalidToken` invalidates a Vercel connection — NFR-SEC2 — SPEC updated: yes
-- 2026-10-17 — Until phase 10: DEPLOYMENT_FAILED reaches Owners via `release_failed`, preview ready reaches members via `review_completed` (own wording); new events DEPLOYMENT_FAILED, DEPLOYMENT_PREVIEW_READY; binding-cleared notifications deferred — FR-92 — SPEC updated: n/a
-- 2026-10-17 — Vercel §11 checks from API knowledge, not verified live: env create v10 (upsert) / edit+delete v9; promote doesn't rebuild; `/v5/user/tokens/current` introspection, `/v6/deployments` sha filter (also checks meta.githubCommitSha), `/v3/deployments/{id}/events` shape, error-message matching for git-not-connected/plan-limit — to confirm with a real Vercel account — SPEC updated: yes
-- 2026-10-17 — Changing the Vercel provider/project requires the binding Owner or the caller's own connection (rebinds to them); other Owner actions (env, promote, production redeploy) act on the binder's behalf per §2 — FR-88 — SPEC updated: yes
-- 2026-10-17 — Deployment creation is idempotent: the AIDE row id goes in Vercel `meta.aideDeploymentId`; retries adopt an existing deployment, builds for rows stopped mid-create are cancelled — §4.15 — SPEC updated: yes
-- 2026-10-17 — Fake deployment provider outside Development/Testing requires `Deployments:AllowFake=true` as well (startup refuses otherwise; warning logged every boot) — §9 — SPEC updated: yes
-- 2026-10-17 — FR-92 notification types replace the interim mappings; channels subscribed to `release_failed`/`review_completed` don't receive awaiting-merge/deployment-failed/preview-ready unless they opt into the new events; `connection_invalid` is personal (in-app + account email, never project channels; muting stops both) — FR-92 — SPEC updated: yes
-- 2026-10-17 — CLI: System.CommandLine `@response-file` expansion disabled so `--request @file` reads the file (`@-` = stdin) — FR-93 — SPEC updated: yes
-- 2026-10-17 — E2E mode on k8s: `deploy-local.sh --e2e` (overlay local-e2e: Fake deployments + AllowFake, ImportRoot /data/import, Fake default LLM) + seeded `/data/import/existing-app` (tags v0.1.0, v0.2.0); plain deploy-local.sh switches back — §8/§9 — SPEC updated: yes
-- 2026-10-18 — Perf on k8s measured with ~10 review cycles × ~13 steps (Fake LLM step counts aren't controllable via the API); the full 10 × 30 case is covered by the backend integration test that seeds directly — NFR-PERF2 — SPEC updated: n/a
-- 2026-10-18 — Light `primary`/`ring`/`sidebar-primary` deepened oklch(0.50 0.19 195) → (0.44 0.15 195) and dark `muted-foreground` 0.59 → 0.63 so tinted surfaces pass AA (axe found 3.7:1 avatar initials etc.); token test now checks tinted pairs (`TINTED_TEXT_PAIRS`). DropdownMenu defaults to Radix `modal={false}` to fix aria-hidden-focus — NFR-A11Y2 — SPEC updated: yes
-- 2026-10-18 — Projects KPI row comes from a separate `GET /api/projects/kpis` (same filters as the list; awaitingGates = pending gates across the filtered projects) to keep the paged list type unchanged — §7.2 — SPEC updated: yes
-- 2026-10-18 — RefinementDto gains `rounds` (newest first, latest 50, per release version) — FR-55/FR-27 — SPEC updated: yes
-- 2026-10-18 — FR-89 checks: plan warning MISSING_VERCEL_CONFIG only when base files are known to lack a root vercel.json (in practice new repos); review finding (major architecture) when vercel.json is missing or doesn't disable `aide/**`, only for the real Vercel provider (not Fake) — SPEC updated: yes
-- 2026-10-18 — FR-89 (final review): the review finding needs a Vercel settings row AND the app not on the Fake provider; the plan warning stays preset-keyed (vercel.json is scaffolded before deployment is bound). Both look for `<RootDirectory>/vercel.json` with one case-sensitive match, and the review always reads the file directly (not limited by the tree cap) — SPEC updated: yes
-- 2026-10-18 — FR-46 join refetch: every join (first and rejoin) refetches all project queries, restarting in-flight ones, so nothing is lost between page open and Join resolving (at most one extra request per query on open); RUN_COMPLETED restarts artifact fetches — SPEC updated: yes
-- 2026-10-18 — v1-seeded "Demo: Todo API" is upgraded to released 0.1.0 on startup only if strictly untouched (initial checkpoint, seed admin only Owner, no artifacts/runs/gates/steps/reports/releases/rollbacks/deployments, only PROJECT_CREATED); marker DEMO_PROJECT_RELEASE_UPGRADED — §9 — SPEC updated: yes
-- 2026-10-18 — *(superseded by the FR-46 join refetch decision above: every join now refetches all)* First hub join refetches only queries older than page open; a rejoin refetches all; a failed rejoin still refetches; stage empty-state polling only while a producing run is active or a draft is expected — FR-46/FR-55 — SPEC updated: yes
-- 2026-10-21 — The GitHub App manifest omits `hook_attributes` (the App has no webhook). GitHub rejected `{active:false}` without a `url` ("url wasn't supplied") and then rejected `http://localhost:8080` as unreachable from the public Internet, even with the hook inactive. `GitHubAppManifestDto.hook_attributes` and `GitHubAppManifestHookDto` were removed from the contract (a breaking response change; the dashboard is the only reader and was updated). Behaviour is unchanged: AIDE polls instead of using webhooks (D-V2-8) — §4.14 — SPEC updated: no ("webhook inactive" still holds)
-- 2026-10-22 — Agent answers cut off by the output cap (`Llm:MaxOutputTokens`, stop reason `max_tokens`/`length`) are continued instead of used as-is: up to 4 more calls send the answer so far as an assistant message plus a "continue exactly where you stopped" user message (current Claude models reject assistant prefill), after the tool exchanges with `tool_choice: none` in a tool loop; the parts are joined with repeated overlap removed, tokens summed, the budget checked before each continuation; an answer still cut off records the `output_truncated` warning. Previously a long spec stopped mid-requirements at 16,000 tokens and failed `MISSING_SECTIONS` twice (seen on a live Anthropic Haiku run). The per-call cap stays 16,000 (non-streaming calls; some OpenAI models cap below that) — FR-23, FR-71 — SPEC updated: no (spec silent on output caps)
-- 2026-10-22 — DB probes: readiness `timeoutSeconds: 5`, liveness `timeoutSeconds: 10` / `failureThreshold: 6` (were the 1 s default / 4). `pg_isready` missed the 1 s timeout while Docker Desktop was busy (image builds, API start-up), so a healthy Postgres was restarted repeatedly (35 restarts) and a redeploy failed — DEP — SPEC updated: no
-- 2026-10-22 — OpenAPI descriptions are normalised to LF by a document transformer over the finished document (components, property `$ref` wrappers via their Reference override, parameters, bodies, responses) instead of the schema/operation transformers: on Windows the XML-comment generator emits CRLF line endings in every multi-line description and the schema hook never sees the `{description, $ref}` property wrappers, so api.json differed from CI in 4 lines — SPEC updated: n/a
-- 2026-10-22 — GitGuardian flagged three false positives on PR #13 (the CI log-redaction regexes containing the word "Password", and a fake `Basic <base64>` header in RepoSnapshotTests). Reworded as `[P]assword` (same match) and built the header at runtime; no real secret was committed, so history is not rewritten — the incidents need closing as false positives in the GitGuardian dashboard — SPEC updated: n/a
+- 2026-10-23 — The gate runs on GitHub Actions CI, not locally. CI now also triggers on pushes to `build/**` — the machine can't run Docker + integration tests + E2E — SPEC updated: yes (M0, FR-104, §8)
+
+- 2026-10-23 — M17 and M18 are gated as one CI phase. Sub-steps (1a foundation, 1b route-group ports, 1c integration) are committed locally and pushed together — about 90 files import TanStack Router, so a foundation-only push can't pass E2E — SPEC updated: no
+- 2026-10-23 — FR-106: the API image has no `USER` line and starts as root. `entrypoint.sh` fixes `/data` ownership and drops to `$APP_UID` with `setpriv`, so Railway needs no `RAILWAY_RUN_UID`. Kubernetes still forces uid 1654 through `securityContext`. Trade-off: a plain `docker run` starts as root until the drop — SPEC updated: no (matches D-V3-10)
+- 2026-10-23 — FR-105: `X-Forwarded-Host` is now honoured too (v2 handled only For and Proto). `ForwardedHeaders:KnownNetworks` replaces the trusted-proxy lists when set — SPEC updated: no
+
+- 2026-10-23 — FR-98: the web server is a custom Node server (`frontend/server.ts`, run by Node 24's built-in TypeScript support, helpers in `src/server/*`). It handles the `/api` HTTP and WebSocket proxy, the CSP nonce and headers, and redacted JSON logs. Next 16.4.2's built-in proxy rewrites Host, times out after 30 s, answers 500 instead of 502 problem+json, logs the upstream URL (leaking approval tokens), and fixes `rewrites()` at build time — SPEC updated: no (SPEC allows this fallback)
+- 2026-10-23 — FR-98: a request body over 10 MB → 413 with `errorCode` `VALIDATION` (SPEC doesn't name a code) — SPEC updated: no
+- 2026-10-23 — FR-97: there's no early redirect in Next.js middleware/`proxy.ts` when the `aide.auth` cookie is missing. The client guard in the `(app)` layout is the only redirect (SPEC makes the early redirect optional) — SPEC updated: no
+- 2026-10-23 — Navigation adapter (`src/lib/navigation.ts`) serialises search values as plain strings. TanStack JSON-quoted numeric strings, so URLs can differ in quoting only — SPEC updated: no
+
+- 2026-10-23 — §8 bundle baseline corrected: the first v2 figure (152.9 kB gzip) left out the `/projects` route's own chunks, including recharts at 88.5 kB gzip. Both builds are re-measured the same way in the phase-1 fixes — SPEC updated: no
+
+- 2026-10-23 — §8 bundle, re-measured the same way for both builds (gzip -9 of every JS chunk loaded for the initial `/projects` document): v2 (37fcaca, Vite manifest closure of entry + `_app` + `projects/index`) **355.0 kB**; v3 (Next, after lazy-loading Sparkline, CommandPalette and SignalR) **300.0 kB**, i.e. **−15.5%** (budget ≤ +10%) — SPEC updated: no
+- 2026-10-23 — FR-100: approval tokens are redacted anywhere in a path, query or Referer, after `/`, `%2F` or `%252F`. Paths like `/projects/approvals/x` get over-redacted in logs, which is acceptable — SPEC updated: no
+- 2026-10-23 — FR-98: the web server overwrites `X-Forwarded-Proto` and `X-Forwarded-Host` from the connection unless `TRUST_EDGE_FORWARDED=true` (Railway web). A path that resolves outside `/api` → 400 `VALIDATION` — SPEC updated: no
+- 2026-10-23 — CI E2E runs against a production Next.js server (`npm run build && npm start`, set up by playwright.config.ts when `CI` is set), not `next dev`, to avoid per-route cold compiles. The dev loop still uses `npm run dev` — SPEC updated: no
+
+- 2026-10-23 — FR-109: the pre-deploy command is shell-wrapped (`/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Aide"'`), because Railway runs commands in exec form and wouldn't expand the variable — SPEC updated: yes
+- 2026-10-23 — FR-107: Postgres is pinned to 17 with `database()` and the `postgres-ssl:17` image. The `postgres()` helper now gives 18 — SPEC updated: yes
+- 2026-10-23 — FR-107: `api` also sets `PORT=8080`, because Railway's healthcheck targets `$PORT`. SPEC Q4: no IPv6 change is needed. Kestrel `*:8080` (ASPNETCORE_HTTP_PORTS) is dual-stack, and Node `listen(port)` binds `::` — SPEC updated: no
+- 2026-10-24 — FR-107/FR-112: a variable set in Railway but not declared in `.railway/railway.ts` is planned for deletion, which also makes CI's `config plan --detailed-exit-code` fail. So the signing key and the full optional set (`Llm__*`, `GitHub__App__*`, `GitHub__OAuth__*`, `Smtp__*`) are declared `preserve()` up front, for both environments. railway 3.16.0 only emits a `{ type: "preserve" }` marker, and the plan engine is in the CLI, so whether `preserve()` on an unset variable is a no-op can't be shown offline. It's a first-plan check in deploy/railway/README.md, with a fallback to per-environment `defineRailway((ctx) => …)` lists. The drift error now says to declare the variable or review the plan locally, and never to apply a plan that deletes secrets — SPEC updated: no
+- 2026-10-24 — FR-109/FR-110: `railway up --ci` exits after the build, so deploy.yml polls `railway deployment list --json` for the deployment that upload created (the newest id not listed before it) until `SUCCESS`. It fails on `FAILED`/`CRASHED`/`REMOVED`/`SKIPPED`/`NEEDS_APPROVAL` or a timeout (api 15 min, naming a failed migration as the likely cause, then web 10 min). web deploys only after api is live — SPEC updated: no
+- 2026-10-24 — FR-111: before the smoke test, deploy.yml fails if `api` has any domain (`railway domain list`) or TCP proxy (`railway tcp-proxy list`). Both are read-only, and plain `railway domain` is never called. `API_PUBLIC_URL` stays for manual smoke runs — SPEC updated: no
+- 2026-10-24 — FR-109: the 600 s pre-deploy timeout is in IaC (`deploy.preDeployTimeoutSeconds`), not a dashboard step — SPEC updated: no
+- 2026-10-24 — FR-110: a `workflow_run` for a commit older than the newest main commit with green CI (push or manual CI run) is skipped with a notice, so out-of-order CI completions never roll preview back — SPEC updated: no
+
+- 2026-10-24 — §8 observability: the web server logs one JSON line per request, except `/_next/static/*` assets and `/healthz` probes (noise). Errors are always logged — SPEC updated: no
+- 2026-10-24 — FR-111: the "API not public" check runs in `deploy.yml` (Railway domain and TCP-proxy listing), not in `smoke-remote.sh` unless `API_PUBLIC_URL` is set — SPEC updated: yes
+- 2026-10-24 — SPEC §9: `TRUST_EDGE_FORWARDED=true` was added to the Railway web variables — SPEC updated: yes
+
+## Status at end of agent build (2026-10-24)
+- **Done on CI:** FR-94–FR-103, FR-105, FR-106, FR-112, plus all v1/v2 tests (backend 3646, Vitest 72 files, E2E v1/v2/a11y).
+- **Done on CI, manual check pending (Ben):** FR-104 (Docker Desktop deploy + 3-browser E2E), FR-106 (start on a root-owned volume).
+- **Written and reviewed, pending the first Railway deploy (Ben's setup, then `preview`):** FR-107–FR-111. See "First Railway deploy".
+- **v3 completion:** `deploy.yml` only deploys commits on `main`, so the first preview deploy follows the merge of `build/aide-v3`. Order: set up Railway and the GitHub environments, merge (CI on `main` → preview deploy + smoke), verify the First Railway deploy checklist, then move SPEC.md and PROGRESS.md to `docs/v3/` and add the CLAUDE.md row.
 
 ## Known issues
-- CI first run on PR #13 (2026-10-22): v1 and v2 E2E shards, /data/import seeding and admin-password extraction all worked; the a11y shard failed only on the admin-integrations test asserting login = 200 (the endpoint answers 204; fixed to accept any 2xx). The uploaded api.log is redacted of the seed-admin password; deploy scripts have shellcheck warnings (unused vars in lib.sh, unchecked cd) — Ben / local-k8s-engineer
-- v2-perf.mjs prints PASS even if fewer than the requested review cycles were seeded (other phase 10b Minors fixed in e602cab) — e2e-qa-engineer
-- playwright.config.ts runs only smoke/auth/lifecycle/permissions on firefox/webkit/msedge; the 2026-10-18 cross-browser run of the v2 and remaining v1 specs used a temporary config. Widen `crossBrowserSpecs` to cover them by default (and in CI) — e2e-qa-engineer
-- a11y E2E runs with `--project=a11y` (not chromium); admin-integrations axe check is skipped unless E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD are set (seed admin password is only logged on first creation) — e2e-qa-engineer
-- scripts/perf/v2-perf.mjs writes a perf user and projects to the k8s DB (reused on re-runs) — Ben
-- `GitHub` paths (App, PAT import, repo tools over GitHub snapshots) verified only against stub HTTP handlers — orchestrator
-- Vercel flows verified only against stub HTTP handlers + Fake provider (no real Vercel account) — Ben
-- E2E against k8s needs `Deployments__Provider=Fake` + `Deployments__AllowFake=true`; it also needs `Git__Local__ImportRoot` set (and a seeded "existing" repo under it) for the import E2E — local-k8s-engineer (phase 10)
-- GitHub App flows are verified only against stub HTTP handlers (no real App registered) — Ben
-- New-project wizard loses entered values when the user leaves to Connect GitHub (the page warns); persist the draft in sessionStorage if wanted — vite-react-engineer
-- E2E lifecycle spec lost its rollback-after-release scenario (FR-63 blocks it); add a rollback-before-release scenario — e2e-qa-engineer (phase 10)
-- ReleaseVersionStampingInterceptor still needed by integration-test seeds (LifecycleSeed, direct inserts); remove once they set release_version_id — ef-data-engineer
-- M9a screenshot check left a test user and project "Shell check" in the k8s DB — delete if unwanted — Ben
-- Carried from v1 (see `docs/v1/PROGRESS.md`): rollback_events.restored_phase nullable (folded into the M10 versions migration per SPEC §5); TAG_CONFLICT cleanup; gates list unpaged — orchestrator
+- Local Vitest at default parallelism: 15 shell/projects/components tests time out at 20 s on this machine under load, and pass with `--maxWorkers=2` or on their own. Watch for it on CI.

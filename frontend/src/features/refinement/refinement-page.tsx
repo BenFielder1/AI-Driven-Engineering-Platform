@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 import { useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 

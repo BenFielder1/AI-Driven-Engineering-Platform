@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 import { ArrowRight } from 'lucide-react'
 import { useId } from 'react'
 import { toast } from 'sonner'

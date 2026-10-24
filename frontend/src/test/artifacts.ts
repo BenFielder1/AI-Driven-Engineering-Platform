@@ -38,7 +38,7 @@ export function seedProjectAs(role: ProjectRole, setup?: (p: StoredProject) => v
 
 /** /projects/:id/artifacts, waiting for the type cards. */
 export async function openArtifacts(project: StoredProject) {
-  const utils = renderRoute(`/projects/${project.id}/artifacts`)
+  const utils = await renderRoute(`/projects/${project.id}/artifacts`)
   await screen.findByRole('list', { name: 'Artifact types' })
   return { ...utils, user: userEvent.setup(), project }
 }
@@ -48,7 +48,7 @@ export async function openArtifacts(project: StoredProject) {
  * the shown version to finish loading (no "Loading the …" status left), so tests start from the settled page.
  */
 export async function openArtifact(project: StoredProject, type: Schemas['ArtifactType'], version?: number) {
-  const utils = renderRoute(`/projects/${project.id}/artifacts/${type}${version ? `?version=${String(version)}` : ''}`)
+  const utils = await renderRoute(`/projects/${project.id}/artifacts/${type}${version ? `?version=${String(version)}` : ''}`)
   await screen.findByRole('heading', { level: 2 })
   await waitFor(() => {
     expect(screen.queryByText(/^Loading the /)).not.toBeInTheDocument()

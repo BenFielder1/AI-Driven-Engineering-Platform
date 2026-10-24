@@ -12,7 +12,7 @@
 //
 // Usage (Node 24; run from the repo root after `npm --prefix frontend ci`):
 //   node scripts/perf/nfr-perf.mjs                       # against http://localhost:8080 (Docker Desktop Kubernetes)
-//   BASE_URL=http://localhost:5173 node scripts/perf/nfr-perf.mjs
+//   BASE_URL=http://localhost:3000 node scripts/perf/nfr-perf.mjs   # dev loop (npm run dev)
 // Options (env): REQUESTS=200 CONCURRENCY=8 EVENTS=30 PERF_EMAIL=nfr-perf@perf.aide.local PERF_PASSWORD=…
 // NOTE: this creates data in the target database (the perf user and its 50 "NFR-PERF …" projects). Re-runs reuse them.
 // The per-run personal API token is revoked when the run ends.

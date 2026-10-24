@@ -26,6 +26,7 @@ using Aide.Api.Features.Runs;
 using Aide.Api.Features.Tokens;
 using Aide.Api.Features.Versions;
 using Aide.Api.Health;
+using Aide.Api.Hosting;
 using Aide.Api.Jobs;
 using Aide.Api.Json;
 using Aide.Api.Logging;
@@ -115,6 +116,10 @@ builder.Services.AddOpenApi(options =>
     options.AddDocumentTransformer<LineEndingDocumentTransformer>();
 });
 builder.Services.AddSingleton(TimeProvider.System);
+
+// Client IP, scheme and host behind one or more proxies (FR-105); the middleware itself is the
+// ASPNETCORE_FORWARDEDHEADERS_ENABLED switch.
+builder.Services.AddAideForwardedHeaders();
 
 builder.Services.AddAideInfrastructure();
 builder.Services.AddAideDataProtection(builder.Configuration);

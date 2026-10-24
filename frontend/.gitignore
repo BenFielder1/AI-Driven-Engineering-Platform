@@ -8,3 +8,7 @@ playwright-report
 test-results
 blob-report
 playwright/.cache
+
+# Next.js
+.next/
+next-env.d.ts

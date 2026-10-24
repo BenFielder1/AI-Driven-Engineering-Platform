@@ -21,7 +21,7 @@ function seedWithSteps(role: ProjectRole, count: number, setup?: (steps: StoredE
 }
 
 async function openExecution(project: StoredProject) {
-  const utils = renderRoute(`/projects/${project.id}/execution`)
+  const utils = await renderRoute(`/projects/${project.id}/execution`)
   await screen.findByRole('heading', { level: 2, name: 'Execution' })
   await waitFor(() => {
     expect(screen.queryByText('Loading execution…')).not.toBeInTheDocument()

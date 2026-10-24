@@ -1,8 +1,8 @@
-import { Link } from '@tanstack/react-router'
 import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
 
 import { BrandLockup } from '../../components/brand'
 import { ProjectVersionBadges } from '../../components/shared/version-badge'
+import { Link } from '../../lib/navigation'
 import { cn } from '../../lib/utils'
 import type { User } from '../auth/auth-api'
 import { whenCollapsed } from './collapse-classes'

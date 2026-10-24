@@ -4,8 +4,8 @@
 /*
  * AIDE v2 design tokens (SPEC §7.1). Source of truth: src/lib/ui/tokens.ts; src/lib/ui/tokens.test.ts checks that
  * every value below matches it and meets WCAG AA (NFR-A11Y2).
- * Dark is the default: `:root` carries the dark palette, so first paint is dark until public/theme-init.js (a blocking,
- * same-origin script, so CSP-safe) puts `.dark` or `.light` on <html> from the stored preference or the system setting.
+ * Dark is the default: `:root` carries the dark palette, so first paint is dark until src/lib/theme-init.ts (an inline, nonce'd,
+ * render-blocking script, allowed by the CSP nonce) puts `.dark` or `.light` on <html> from the stored preference or the system setting.
  */
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant light (&:where(.light, .light *));
@@ -49,7 +49,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Self-hosted via @fontsource (src/main.tsx): no font CDN, so the v1 CSP is unchanged. */
+  /* Self-hosted via @fontsource (src/app/layout.tsx): no font CDN, so the CSP stays same-origin. */
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --font-heading: 'Outfit', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

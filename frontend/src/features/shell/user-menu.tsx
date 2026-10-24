@@ -1,4 +1,3 @@
-import { Link, useRouter } from '@tanstack/react-router'
 import { LogOut, Plug, User as UserIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -11,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu'
 import { errorMessage } from '../../lib/errors'
+import { Link, useAppRouter } from '../../lib/navigation'
 import { cn } from '../../lib/utils'
 import { useLogout, type User } from '../auth/auth-api'
 import { whenCollapsed } from './collapse-classes'
@@ -24,7 +24,7 @@ const roleLabel = { admin: 'Admin', user: 'User' } as const
  * (FR-1). Shows the system role (FR-3).
  */
 export function UserMenu({ user, mode = 'expanded' }: { user: User; mode?: SidebarMode }) {
-  const router = useRouter()
+  const router = useAppRouter()
   const logout = useLogout()
 
   function signOut() {

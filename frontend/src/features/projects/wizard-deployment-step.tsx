@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 import type { FieldErrors, UseFormRegister } from 'react-hook-form'
 
 import { Alert } from '../../components/ui/alert'

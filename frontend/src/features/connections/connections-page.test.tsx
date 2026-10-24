@@ -13,7 +13,7 @@ function signInAda() {
 }
 
 async function openConnections(path = '/connections') {
-  const utils = renderRoute(path)
+  const utils = await renderRoute(path)
   await screen.findByRole('heading', { level: 1, name: 'Connections' })
   return { ...utils, user: userEvent.setup() }
 }

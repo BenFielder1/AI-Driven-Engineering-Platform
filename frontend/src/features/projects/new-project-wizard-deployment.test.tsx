@@ -17,7 +17,7 @@ const next = (user: User) => user.click(screen.getByRole('button', { name: 'Next
 async function toDeployment(repo: 'github' | 'local', seed?: (me: string) => void) {
   const me = signInAs({ email: 'ada@example.com', name: 'Ada Lovelace', systemRole: 'user' })
   seed?.(me.id)
-  renderRoute('/projects/new')
+  await renderRoute('/projects/new')
   const user = userEvent.setup()
   await stepHeading(/Step 1 of 8: Source/)
   await next(user)

@@ -1,0 +1,550 @@
+# FR-110 / D-V3-7: deploys AIDE to Railway with the Railway CLI, then runs the FR-111 smoke test against the web URL.
+#   preview     automatically after the "CI" workflow succeeds on a push to main (the exact commit CI tested), or by
+#               manual dispatch with environment=preview.
+#   production  manual dispatch only (environment=production, optional sha; default: the latest main commit with a
+#               green CI run). The GitHub environment `production` must have Ben as required reviewer (repo
+#               Settings -> Environments -> production -> Required reviewers); this file can't enforce that.
+# Every dispatched commit must be on main and have a successful CI run, or the workflow fails before deploying.
+#
+# Per GitHub environment (`preview`, `production`), created by Ben (deploy/railway/README.md, variables.md):
+#   secrets    RAILWAY_TOKEN (Railway project token scoped to that Railway environment), SMOKE_EMAIL, SMOKE_PASSWORD
+#   variable   RAILWAY_WEB_URL (https://<generated web domain>). CI never runs `railway domain` (it creates domains).
+# Until RAILWAY_TOKEN exists in `preview`, the automatic preview deploy skips with a notice instead of failing.
+# CI never runs `railway config apply`: drift found by `railway config plan` fails the deploy, and Ben reviews it.
+# Each `railway up` is followed by a wait until that deployment is SUCCESS (pre-deploy migration + healthcheck), api
+# before web. Before the smoke test, CI fails if `api` has any public domain or TCP proxy (FR-111).
+# A workflow_run for a commit older than the newest green main commit is skipped (out-of-order CI completions).
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Railway environment to deploy
+        type: choice
+        options: [preview, production]
+        default: preview
+      sha:
+        description: Commit on main to deploy (default - the latest main commit with a successful CI run)
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  # Railway CLI: IaC needs >= 5.42.1, pre-deploy handling is fixed in 5.49.1 (deploy/railway/README.md).
+  RAILWAY_CLI_VERSION: 5.71.0
+
+jobs:
+  # Decides the target environment and the exact commit, and checks CI passed for it. Holds no deploy secrets.
+  resolve:
+    name: Resolve commit and environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # workflow_run: only a successful CI run for a push (or a manual CI run) to main in this repository. A fork's PR
+    # whose branch is also called "main" reports head_branch=main, so the event and head repository are checked too:
+    # untrusted code must never reach a job that holds deploy secrets.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      environment: ${{ steps.resolve.outputs.environment }}
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - name: Resolve and verify the commit
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          # "Latest green main" everywhere: the newest successful CI run on main from a push or a manual CI run in this
+          # repository (never a fork PR whose branch is also called main). $repo is a jq variable, not a shell one.
+          # shellcheck disable=SC2016
+          newest='[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .head_repository.full_name == $repo)] | first | .head_sha // ""'
+          if [ "$EVENT" = workflow_run ]; then
+            environment=preview
+            sha="$RUN_SHA"
+            # CI runs can finish out of order. Deploy only the newest green main commit, so a late finish for an older
+            # commit never rolls preview back.
+            latest="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" \
+              | jq -r --arg repo "$REPO" "$newest")"
+            if [ -n "$latest" ] && [ "$latest" != "$sha" ] \
+              && [ "$(gh api "repos/$REPO/compare/$sha...$latest" --jq .status)" = ahead ]; then
+              echo "::notice::Skipping the preview deploy of $sha: main has a newer commit with green CI ($latest), which is deployed instead."
+              echo "Skipped: \`$sha\` is older than \`$latest\`, the newest main commit with green CI." >> "$GITHUB_STEP_SUMMARY"
+              echo "environment=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            environment="$INPUT_ENVIRONMENT"
+            case "$environment" in preview|production) ;; *) echo "::error::unknown environment '$environment'"; exit 1;; esac
+            sha="$(printf '%s' "$INPUT_SHA" | tr -d '[:space:]')"
+            if [ -z "$sha" ]; then
+              # The same "latest green main" filter as the workflow_run check.
+              sha="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" \
+                | jq -r --arg repo "$REPO" "$newest")"
+              [ -n "$sha" ] || { echo "::error::no successful CI run on main found"; exit 1; }
+              echo "Defaulted to the latest main commit with a green CI run: $sha"
+            fi
+          fi
+          [[ "$sha" =~ ^[0-9a-fA-F]{7,40}$ ]] || { echo "::error::sha must be a 7-40 character hex commit id"; exit 1; }
+          # Expand a short sha to the full commit id (fails if the commit doesn't exist in this repo).
+          sha="$(gh api "repos/$REPO/commits/$sha" --jq .sha)"
+
+          # The commit must be on main: main is identical to it or ahead of it.
+          status="$(gh api "repos/$REPO/compare/$sha...main" --jq .status)"
+          case "$status" in
+            identical|ahead) ;;
+            *) echo "::error::$sha is not on main (compare status: $status). Only commits on main are deployed."; exit 1;;
+          esac
+
+          # CI ("CI" = .github/workflows/ci.yml) must have succeeded for exactly this commit.
+          green="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$sha&status=success&per_page=1" \
+            --jq '.total_count')"
+          if [ "${green:-0}" -lt 1 ]; then
+            echo "::error::CI has no successful run for $sha. Deploy only commits with green CI."
+            exit 1
+          fi
+
+          echo "Deploying $sha to $environment"
+          { echo "environment=$environment"; echo "sha=$sha"; } >> "$GITHUB_OUTPUT"
+          echo "Target: \`$environment\` at \`$sha\`" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-preview:
+    name: Deploy preview
+    needs: resolve
+    if: needs.resolve.outputs.environment == 'preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # two image builds + up to 25 min of deployment waits
+    environment:
+      name: preview
+      url: ${{ vars.RAILWAY_WEB_URL }}
+    concurrency:
+      group: deploy-preview
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      DEPLOY_ENV: preview
+      DEPLOY_SHA: ${{ needs.resolve.outputs.sha }}
+    steps:
+      # Secrets can't be used in a job-level `if`, so this step gates the rest. Until Ben creates the token, the
+      # automatic preview deploy is skipped (notice, green run) rather than failing on every push to main.
+      - name: Check Railway is configured
+        id: configured
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_WEB_URL: ${{ vars.RAILWAY_WEB_URL }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "::notice::RAILWAY_TOKEN is not set in the GitHub environment 'preview': skipping the deploy (deploy/railway/README.md, prerequisites)."
+            echo "Skipped: RAILWAY_TOKEN is not configured for \`preview\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$RAILWAY_WEB_URL" ]; then
+            echo "::error::RAILWAY_TOKEN is set but the variable RAILWAY_WEB_URL is missing in the GitHub environment 'preview'."
+            exit 1
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        if: steps.configured.outputs.ok == 'true'
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          persist-credentials: false
+
+      # Node 24 runs the Railway CLI, evaluates .railway/railway.ts, and runs smoke-ws.mjs (FR-111).
+      - uses: actions/setup-node@v7
+        if: steps.configured.outputs.ok == 'true'
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: .railway/package-lock.json
+
+      - name: Install the Railway CLI and the IaC package
+        if: steps.configured.outputs.ok == 'true'
+        run: |
+          npm install --global "@railway/cli@$RAILWAY_CLI_VERSION"
+          railway --version
+          npm ci --prefix .railway
+
+      # Read-only. Exit 2 = Railway differs from .railway/railway.ts; Ben runs `railway config apply` (never CI).
+      - name: Railway config has no drift (railway config plan)
+        if: steps.configured.outputs.ok == 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          code=0
+          railway config plan --detailed-exit-code || code=$?
+          case "$code" in
+            0) echo "Railway config matches .railway/railway.ts" ;;
+            2)
+              msg="Railway '$DEPLOY_ENV' differs from .railway/railway.ts (plan above). If the plan deletes a variable that is set in Railway, declare the variable in .railway/railway.ts (preserve()); otherwise run 'railway config plan' locally for '$DEPLOY_ENV' and review it (deploy/railway/README.md, step 2). Never apply a plan that deletes secrets. CI never applies."
+              echo "::error::$msg"
+              { echo "### Deploy stopped: Railway config drift"; echo "$msg Then re-run this workflow."; } >> "$GITHUB_STEP_SUMMARY"
+              exit 1 ;;
+            *) echo "::error::railway config plan failed (exit $code)"; exit 1 ;;
+          esac
+
+      # FR-109 / FR-110. `railway up --ci` streams the build log and exits once the image is built: it does NOT wait for
+      # the pre-deploy migration or the healthcheck. So after each upload this step polls the deployment that upload
+      # created (the newest id that wasn't listed before it) until SUCCESS, and fails on FAILED/CRASHED/REMOVED/SKIPPED
+      # or a timeout. api first (migrations + /api/health/ready, up to 15 min after the build), web only once api is
+      # live (/healthz, up to 10 min).
+      # Root directories: Railway builds each service from its root directory in railway.ts (api: backend, web:
+      # frontend). If the build log shows no Dockerfile was found, the fallback is `railway up backend --path-as-root
+      # --service api ...` (and `frontend` for web) with rootDirectory removed from railway.ts (deploy/railway/README.md,
+      # step 4).
+      - name: Deploy api, then web (wait for migrations and healthchecks)
+        if: steps.configured.outputs.ok == 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Deployment nodes from `railway deployment list --json` (a bare array, or a wrapped list of nodes).
+          nodes='(if type == "array" then . else (.deployments // .edges // []) end) | map(.node // .)'
+          list_deployments() {
+            railway deployment list --service "$1" --environment "$DEPLOY_ENV" --limit 50 --json
+          }
+          fail() {
+            echo "::error::$1"
+            { echo "### Deploy to \`$DEPLOY_ENV\` stopped"; echo "$1"; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          # deploy_and_wait SERVICE TIMEOUT_SECONDS HINT
+          deploy_and_wait() {
+            local service="$1" timeout="$2" hint="$3" before json line id="" status="" last="" start
+            # Deployments that exist before the upload (retried: one transient API error must not fail the deploy).
+            before=""
+            for _ in 1 2 3 4 5 6; do
+              if json="$(list_deployments "$service")" && before="$(jq -ec "$nodes | map(.id)" <<<"$json")"; then break; fi
+              before=""; echo "::warning::railway deployment list failed for $service; retrying"; sleep 10
+            done
+            [ -n "$before" ] || fail "$service: railway deployment list failed 6 times before the upload, so $service was not deployed."
+            echo "::group::railway up --service $service (build log)"
+            if ! railway up --service "$service" --environment "$DEPLOY_ENV" --ci --message "$DEPLOY_SHA (GitHub run $GITHUB_RUN_ID)"; then
+              echo "::endgroup::"
+              fail "$service: railway up failed (upload or image build). The previous $service deployment keeps serving."
+            fi
+            echo "::endgroup::"
+            start=$SECONDS
+            while :; do
+              line=""
+              if json="$(list_deployments "$service")"; then
+                line="$(jq -r --argjson before "$before" "$nodes"' | map(select(.id as $i | $before | any(. == $i) | not))
+                  | sort_by(.createdAt) | last // empty | "\(.id) \(.status)"' <<<"$json")" || line=""
+              else
+                echo "::warning::railway deployment list failed; retrying"
+              fi
+              if [ -n "$line" ]; then
+                id="${line%% *}"; status="${line#* }"
+                [ "$status" = "$last" ] || { echo "$service deployment $id: $status ($((SECONDS - start))s)"; last="$status"; }
+                case "$status" in
+                  SUCCESS) echo "$service is live: deployment $id"; return 0 ;;
+                  FAILED|CRASHED|REMOVED|REMOVING|SKIPPED|NEEDS_APPROVAL)
+                    fail "$service deployment $id ended $status. $hint Logs: railway logs $id --service $service --environment $DEPLOY_ENV --deployment" ;;
+                esac
+              elif [ $((SECONDS - start)) -ge 180 ]; then
+                fail "$service: no new deployment appeared in 'railway deployment list' within 180s of railway up."
+              fi
+              if [ $((SECONDS - start)) -ge "$timeout" ]; then
+                fail "$service deployment ${id:-?} is still ${status:-unknown} after ${timeout}s. $hint It may still go live later: check Railway (Deployments) before re-running."
+              fi
+              sleep 10
+            done
+          }
+          deploy_and_wait api 900 "A failed or timed-out pre-deploy migration (efbundle, pre-deploy timeout 600s) is the likely cause; otherwise the /api/health/ready healthcheck never returned 200 (DB unreachable, App__PublicBaseUrl invalid). The previous api deployment keeps serving (FR-109)."
+          deploy_and_wait web 600 "The /healthz healthcheck never passed or the container crashed. The previous web deployment keeps serving; api is already on the new release (check they are compatible, deploy/railway/README.md#rollback)."
+
+      # FR-111 / SPEC §8: the API must not be reachable at a public URL. Read-only listings only (never plain
+      # `railway domain`, which creates a domain): any service domain, custom domain or TCP proxy on api fails the deploy.
+      - name: api has no public domain or TCP proxy (FR-111)
+        if: steps.configured.outputs.ok == 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          public='[.. | objects | select((.domain? | type) == "string" and .deletedAt == null) | .domain]'
+          # public_names KIND CMD...: JSON list of public names. With none, the CLI may print "No domains found for
+          # service …" / "No TCP proxies found for service …" instead of JSON (possibly with a non-zero exit): that is
+          # the healthy state. Any other non-JSON output or error fails, so a broken check never passes silently.
+          public_names() {
+            local kind="$1" out err code=0
+            shift
+            err="$(mktemp)"
+            out="$("$@" 2>"$err")" || code=$?
+            # JSON on stdout with exit 0: list the public names.
+            if [ "$code" -eq 0 ] && jq -e . >/dev/null 2>&1 <<<"$out"; then
+              jq -c "$public" <<<"$out"
+            # Otherwise the only acceptable answer is the CLI's "none found" text (stdout or stderr).
+            elif grep -qE '^No (domains|TCP proxies) found' - "$err" <<<"$out"; then
+              echo '[]'
+            else
+              echo "::error::could not list api $kind (exit $code): $(cat - "$err" <<<"$out" | head -c 300)" >&2
+              rm -f -- "$err"
+              return 1
+            fi
+            rm -f -- "$err"
+          }
+          domains="$(public_names domains railway domain list --service api --environment "$DEPLOY_ENV" --json)"
+          proxies="$(public_names "TCP proxies" railway tcp-proxy list --service api --environment "$DEPLOY_ENV" --json)"
+          if [ "$domains" != "[]" ] || [ "$proxies" != "[]" ]; then
+            msg="api is publicly reachable (domains: $domains, TCP proxies: $proxies). Remove them in Railway: api -> Settings -> Networking. The API must be private (SPEC §8, FR-111)."
+            echo "::error::$msg"
+            { echo "### Deploy to \`$DEPLOY_ENV\` failed FR-111"; echo "$msg"; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "PASS  api has no public domain and no TCP proxy"
+
+      - name: Smoke test (FR-111)
+        if: steps.configured.outputs.ok == 'true'
+        env:
+          RAILWAY_WEB_URL: ${{ vars.RAILWAY_WEB_URL }}
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+        run: |
+          if bash deploy/scripts/smoke-remote.sh "$RAILWAY_WEB_URL"; then
+            echo "Deployed \`$DEPLOY_SHA\` to \`$DEPLOY_ENV\`: smoke test passed ($RAILWAY_WEB_URL)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ### Smoke test failed on \`$DEPLOY_ENV\` (\`$DEPLOY_SHA\`)
+          The new deployment is live but failed FR-111. Roll back (deploy/railway/README.md#rollback):
+          1. Railway dashboard → \`$DEPLOY_ENV\` → \`web\` and/or \`api\` → Deployments → previous successful deployment → **Rollback**
+             (reuses the old image; after the image retention window, **Redeploy** rebuilds it). Roll back both if both changed.
+          2. Migrations are **forward-only**: an older \`api\` only runs if it tolerates the new schema (additive migrations).
+             Otherwise ship a fix forward. If the schema or data is broken, restore Postgres and \`/data\` from the same point in time.
+          3. Run \`deploy/scripts/smoke-remote.sh $RAILWAY_WEB_URL\` after the rollback.
+          EOF
+          echo "::error::Smoke test failed. Rollback instructions are in the job summary."
+          exit 1
+
+      - name: Deploy failure summary
+        if: failure() && steps.configured.outputs.ok == 'true'
+        run: |
+          {
+            echo "### Deploy to \`$DEPLOY_ENV\` failed (\`$DEPLOY_SHA\`)"
+            echo "After each \`railway up\` the workflow waits for that deployment to reach SUCCESS. If a deployment failed (build, pre-deploy migration or healthcheck), the previous deployment of that service keeps serving (FR-109). If the wait timed out, the deployment may still go live later: check Railway before re-running."
+            echo "If \`api\` went live but \`web\` failed, check they are compatible or roll \`api\` back (deploy/railway/README.md#rollback)."
+            echo "Logs: Railway dashboard, or \`railway logs --service <api|web>\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Same steps as deploy-preview against `production`. Dispatch only; the GitHub environment's required reviewer
+  # approves before any step (and before the production secrets are exposed).
+  deploy-production:
+    name: Deploy production
+    needs: resolve
+    if: github.event_name == 'workflow_dispatch' && needs.resolve.outputs.environment == 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # two image builds + up to 25 min of deployment waits
+    environment:
+      name: production
+      url: ${{ vars.RAILWAY_WEB_URL }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      DEPLOY_ENV: production
+      DEPLOY_SHA: ${{ needs.resolve.outputs.sha }}
+    steps:
+      # A production deploy is always an explicit request, so missing configuration fails instead of skipping.
+      - name: Check Railway is configured
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_WEB_URL: ${{ vars.RAILWAY_WEB_URL }}
+        run: |
+          [ -n "$RAILWAY_TOKEN" ] || { echo "::error::RAILWAY_TOKEN is not set in the GitHub environment 'production'."; exit 1; }
+          [ -n "$RAILWAY_WEB_URL" ] || { echo "::error::The variable RAILWAY_WEB_URL is not set in the GitHub environment 'production'."; exit 1; }
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: .railway/package-lock.json
+
+      - name: Install the Railway CLI and the IaC package
+        run: |
+          npm install --global "@railway/cli@$RAILWAY_CLI_VERSION"
+          railway --version
+          npm ci --prefix .railway
+
+      - name: Railway config has no drift (railway config plan)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          code=0
+          railway config plan --detailed-exit-code || code=$?
+          case "$code" in
+            0) echo "Railway config matches .railway/railway.ts" ;;
+            2)
+              msg="Railway '$DEPLOY_ENV' differs from .railway/railway.ts (plan above). If the plan deletes a variable that is set in Railway, declare the variable in .railway/railway.ts (preserve()); otherwise run 'railway config plan' locally for '$DEPLOY_ENV' and review it (deploy/railway/README.md, step 2). Never apply a plan that deletes secrets. CI never applies."
+              echo "::error::$msg"
+              { echo "### Deploy stopped: Railway config drift"; echo "$msg Then re-run this workflow."; } >> "$GITHUB_STEP_SUMMARY"
+              exit 1 ;;
+            *) echo "::error::railway config plan failed (exit $code)"; exit 1 ;;
+          esac
+
+      # FR-109 / FR-110. `railway up --ci` streams the build log and exits once the image is built: it does NOT wait for
+      # the pre-deploy migration or the healthcheck. So after each upload this step polls the deployment that upload
+      # created (the newest id that wasn't listed before it) until SUCCESS, and fails on FAILED/CRASHED/REMOVED/SKIPPED
+      # or a timeout. api first (migrations + /api/health/ready, up to 15 min after the build), web only once api is
+      # live (/healthz, up to 10 min).
+      # Root directories: Railway builds each service from its root directory in railway.ts (api: backend, web:
+      # frontend). If the build log shows no Dockerfile was found, the fallback is `railway up backend --path-as-root
+      # --service api ...` (and `frontend` for web) with rootDirectory removed from railway.ts (deploy/railway/README.md,
+      # step 4).
+      - name: Deploy api, then web (wait for migrations and healthchecks)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Deployment nodes from `railway deployment list --json` (a bare array, or a wrapped list of nodes).
+          nodes='(if type == "array" then . else (.deployments // .edges // []) end) | map(.node // .)'
+          list_deployments() {
+            railway deployment list --service "$1" --environment "$DEPLOY_ENV" --limit 50 --json
+          }
+          fail() {
+            echo "::error::$1"
+            { echo "### Deploy to \`$DEPLOY_ENV\` stopped"; echo "$1"; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          # deploy_and_wait SERVICE TIMEOUT_SECONDS HINT
+          deploy_and_wait() {
+            local service="$1" timeout="$2" hint="$3" before json line id="" status="" last="" start
+            # Deployments that exist before the upload (retried: one transient API error must not fail the deploy).
+            before=""
+            for _ in 1 2 3 4 5 6; do
+              if json="$(list_deployments "$service")" && before="$(jq -ec "$nodes | map(.id)" <<<"$json")"; then break; fi
+              before=""; echo "::warning::railway deployment list failed for $service; retrying"; sleep 10
+            done
+            [ -n "$before" ] || fail "$service: railway deployment list failed 6 times before the upload, so $service was not deployed."
+            echo "::group::railway up --service $service (build log)"
+            if ! railway up --service "$service" --environment "$DEPLOY_ENV" --ci --message "$DEPLOY_SHA (GitHub run $GITHUB_RUN_ID)"; then
+              echo "::endgroup::"
+              fail "$service: railway up failed (upload or image build). The previous $service deployment keeps serving."
+            fi
+            echo "::endgroup::"
+            start=$SECONDS
+            while :; do
+              line=""
+              if json="$(list_deployments "$service")"; then
+                line="$(jq -r --argjson before "$before" "$nodes"' | map(select(.id as $i | $before | any(. == $i) | not))
+                  | sort_by(.createdAt) | last // empty | "\(.id) \(.status)"' <<<"$json")" || line=""
+              else
+                echo "::warning::railway deployment list failed; retrying"
+              fi
+              if [ -n "$line" ]; then
+                id="${line%% *}"; status="${line#* }"
+                [ "$status" = "$last" ] || { echo "$service deployment $id: $status ($((SECONDS - start))s)"; last="$status"; }
+                case "$status" in
+                  SUCCESS) echo "$service is live: deployment $id"; return 0 ;;
+                  FAILED|CRASHED|REMOVED|REMOVING|SKIPPED|NEEDS_APPROVAL)
+                    fail "$service deployment $id ended $status. $hint Logs: railway logs $id --service $service --environment $DEPLOY_ENV --deployment" ;;
+                esac
+              elif [ $((SECONDS - start)) -ge 180 ]; then
+                fail "$service: no new deployment appeared in 'railway deployment list' within 180s of railway up."
+              fi
+              if [ $((SECONDS - start)) -ge "$timeout" ]; then
+                fail "$service deployment ${id:-?} is still ${status:-unknown} after ${timeout}s. $hint It may still go live later: check Railway (Deployments) before re-running."
+              fi
+              sleep 10
+            done
+          }
+          deploy_and_wait api 900 "A failed or timed-out pre-deploy migration (efbundle, pre-deploy timeout 600s) is the likely cause; otherwise the /api/health/ready healthcheck never returned 200 (DB unreachable, App__PublicBaseUrl invalid). The previous api deployment keeps serving (FR-109)."
+          deploy_and_wait web 600 "The /healthz healthcheck never passed or the container crashed. The previous web deployment keeps serving; api is already on the new release (check they are compatible, deploy/railway/README.md#rollback)."
+
+      # FR-111 / SPEC §8: the API must not be reachable at a public URL. Read-only listings only (never plain
+      # `railway domain`, which creates a domain): any service domain, custom domain or TCP proxy on api fails the deploy.
+      - name: api has no public domain or TCP proxy (FR-111)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          public='[.. | objects | select((.domain? | type) == "string" and .deletedAt == null) | .domain]'
+          # public_names KIND CMD...: JSON list of public names. With none, the CLI may print "No domains found for
+          # service …" / "No TCP proxies found for service …" instead of JSON (possibly with a non-zero exit): that is
+          # the healthy state. Any other non-JSON output or error fails, so a broken check never passes silently.
+          public_names() {
+            local kind="$1" out err code=0
+            shift
+            err="$(mktemp)"
+            out="$("$@" 2>"$err")" || code=$?
+            # JSON on stdout with exit 0: list the public names.
+            if [ "$code" -eq 0 ] && jq -e . >/dev/null 2>&1 <<<"$out"; then
+              jq -c "$public" <<<"$out"
+            # Otherwise the only acceptable answer is the CLI's "none found" text (stdout or stderr).
+            elif grep -qE '^No (domains|TCP proxies) found' - "$err" <<<"$out"; then
+              echo '[]'
+            else
+              echo "::error::could not list api $kind (exit $code): $(cat - "$err" <<<"$out" | head -c 300)" >&2
+              rm -f -- "$err"
+              return 1
+            fi
+            rm -f -- "$err"
+          }
+          domains="$(public_names domains railway domain list --service api --environment "$DEPLOY_ENV" --json)"
+          proxies="$(public_names "TCP proxies" railway tcp-proxy list --service api --environment "$DEPLOY_ENV" --json)"
+          if [ "$domains" != "[]" ] || [ "$proxies" != "[]" ]; then
+            msg="api is publicly reachable (domains: $domains, TCP proxies: $proxies). Remove them in Railway: api -> Settings -> Networking. The API must be private (SPEC §8, FR-111)."
+            echo "::error::$msg"
+            { echo "### Deploy to \`$DEPLOY_ENV\` failed FR-111"; echo "$msg"; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "PASS  api has no public domain and no TCP proxy"
+
+      - name: Smoke test (FR-111)
+        env:
+          RAILWAY_WEB_URL: ${{ vars.RAILWAY_WEB_URL }}
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+        run: |
+          if bash deploy/scripts/smoke-remote.sh "$RAILWAY_WEB_URL"; then
+            echo "Deployed \`$DEPLOY_SHA\` to \`$DEPLOY_ENV\`: smoke test passed ($RAILWAY_WEB_URL)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ### Smoke test failed on \`$DEPLOY_ENV\` (\`$DEPLOY_SHA\`)
+          The new deployment is live but failed FR-111. Roll back (deploy/railway/README.md#rollback):
+          1. Railway dashboard → \`$DEPLOY_ENV\` → \`web\` and/or \`api\` → Deployments → previous successful deployment → **Rollback**
+             (reuses the old image; after the image retention window, **Redeploy** rebuilds it). Roll back both if both changed.
+          2. Migrations are **forward-only**: an older \`api\` only runs if it tolerates the new schema (additive migrations).
+             Otherwise ship a fix forward. If the schema or data is broken, restore Postgres and \`/data\` from the same point in time.
+          3. Run \`deploy/scripts/smoke-remote.sh $RAILWAY_WEB_URL\` after the rollback.
+          EOF
+          echo "::error::Smoke test failed. Rollback instructions are in the job summary."
+          exit 1
+
+      - name: Deploy failure summary
+        if: failure()
+        run: |
+          {
+            echo "### Deploy to \`$DEPLOY_ENV\` failed (\`$DEPLOY_SHA\`)"
+            echo "After each \`railway up\` the workflow waits for that deployment to reach SUCCESS. If a deployment failed (build, pre-deploy migration or healthcheck), the previous deployment of that service keeps serving (FR-109). If the wait timed out, the deployment may still go live later: check Railway before re-running."
+            echo "If \`api\` went live but \`web\` failed, check they are compatible or roll \`api\` back (deploy/railway/README.md#rollback)."
+            echo "Logs: Railway dashboard, or \`railway logs --service <api|web>\`."
+          } >> "$GITHUB_STEP_SUMMARY"

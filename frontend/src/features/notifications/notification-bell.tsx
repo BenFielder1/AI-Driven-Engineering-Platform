@@ -1,10 +1,10 @@
-import { Link } from '@tanstack/react-router'
 import { Bell } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 
 import { Button } from '../../components/ui/button'
 import { buttonClasses } from '../../components/ui/button-classes'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
+import { Link } from '../../lib/navigation'
 import { errorMessage } from '../../lib/errors'
 import { NotificationItem } from './notification-item'
 import { useLatestNotifications, useMarkAllNotificationsRead, useUnreadCount } from './notifications-api'

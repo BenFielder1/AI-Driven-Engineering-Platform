@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 import { useState } from 'react'
 
 import { panelClass } from '../../components/shared/panel-class'

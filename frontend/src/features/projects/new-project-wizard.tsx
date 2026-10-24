@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate } from '../../lib/navigation'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useForm, useWatch, type Path } from 'react-hook-form'
 import { Check } from 'lucide-react'

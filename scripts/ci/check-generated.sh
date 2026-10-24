@@ -3,11 +3,10 @@
 # Run AFTER regenerating them; this script only compares the working tree with the index/HEAD.
 #
 # Usage: scripts/ci/check-generated.sh [target|path]...
-#   (no args)  all generated artefacts (same as: contract client routes)
+#   (no args)  all generated artefacts (same as: contract client)
 #   contract   backend/openapi/api.json        regenerate: dotnet build backend/src/Aide.Api
 #   client     frontend/src/api/generated/     regenerate: npm --prefix frontend run gen:api
-#   routes     frontend/src/routeTree.gen.ts   regenerate: npm --prefix frontend run build (router plugin)
-#   all        the three above
+#   all        both of the above
 #   <path>     any other repo-relative path, checked as-is
 #
 # Works from any working directory, on ubuntu (CI) and Git Bash on Windows.
@@ -28,22 +27,17 @@ add_target() {
       paths+=("frontend/src/api/generated")
       hints+=("client: run 'npm --prefix frontend run gen:api' and commit frontend/src/api/generated")
       ;;
-    routes)
-      paths+=("frontend/src/routeTree.gen.ts")
-      hints+=("routes: run 'npm --prefix frontend run build' and commit frontend/src/routeTree.gen.ts")
-      ;;
     all)
       add_target contract
       add_target client
-      add_target routes
       ;;
     -h | --help)
-      sed -n '2,13p' "${BASH_SOURCE[0]}"
+      sed -n '2,12p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *)
       if [[ ! -e "$1" ]] && ! git ls-files --error-unmatch -- "$1" >/dev/null 2>&1; then
-        echo "ERROR: unknown target or path '$1' (targets: contract, client, routes, all)." >&2
+        echo "ERROR: unknown target or path '$1' (targets: contract, client, all)." >&2
         exit 2
       fi
       paths+=("$1")

@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 
 import { Alert } from '../../components/ui/alert'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'

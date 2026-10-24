@@ -19,7 +19,21 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # next and its lint plugin are pinned to the same exact version: keep them in one PR, majors included.
+      # (Dependabot puts a dependency in the first group it matches, so this sits before the catch-all.)
+      nextjs:
+        patterns: ["next", "@next/*", "eslint-config-next"]
       npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # Railway IaC (FR-107): the `railway` SDK and TypeScript, typechecked by CI's railway-workflows job.
+  - package-ecosystem: npm
+    directory: /.railway
+    schedule:
+      interval: weekly
+    groups:
+      railway-iac:
         patterns: ["*"]
         update-types: [minor, patch]
 

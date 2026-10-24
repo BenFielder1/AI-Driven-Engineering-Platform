@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from '../../lib/navigation'
 import { useState, type ReactNode } from 'react'
 
 import { EmptyState as SharedEmptyState } from '../../components/shared/empty-state'

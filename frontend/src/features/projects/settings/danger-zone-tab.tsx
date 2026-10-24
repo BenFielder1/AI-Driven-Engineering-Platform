@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate } from '../../../lib/navigation'
 import { useRef, useState } from 'react'
 
 import { Alert } from '../../../components/ui/alert'

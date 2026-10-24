@@ -174,8 +174,8 @@ public static partial class AuthSetup
         };
     }
 
-    /// <summary>Fixed 1-minute window per client IP. Behind the web proxy the IP comes from X-Forwarded-For
-    /// (ASPNETCORE_FORWARDEDHEADERS_ENABLED in Kubernetes).</summary>
+    /// <summary>Fixed 1-minute window per client IP. Behind proxies the IP comes from X-Forwarded-For
+    /// (ASPNETCORE_FORWARDEDHEADERS_ENABLED, trusted hops per ForwardedHeaders:ForwardLimit, FR-105).</summary>
     private static RateLimitPartition<string> PerIpPerMinute(
         HttpContext context, Func<AideAuthOptions.RateLimitSettings, int> limit, string policy)
     {
