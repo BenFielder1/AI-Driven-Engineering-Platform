@@ -63,7 +63,7 @@ show no changes and no destroys. While a listed name is unset, the plan prints
 | `NODE_ENV` | literal | `production` | yes | Also set in the image |
 | `TRUST_EDGE_FORWARDED` | literal | `true` | yes | Keeps the `X-Forwarded-Proto`/`-Host` values Railway's edge sets, for the API's Secure cookies and the Live origin check (FR-98). Not set in Kubernetes |
 
-## `postgres` (Railway Postgres 17)
+## `postgres` (Railway Postgres 18)
 
 Railway manages these (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `DATABASE_URL`, `DATABASE_PUBLIC_URL`,
 `POSTGRES_*`). Don't edit them. The API only uses the five `PG*` values, through `ConnectionStrings__Aide`.

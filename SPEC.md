@@ -247,7 +247,7 @@ Auth is unchanged: cookie auth plus API tokens (v1), GitHub App sign-in (v2).
   - volume mounted at `/data` (5 GB target; 500 MB, the current Railway plan's maximum, until the plan is upgraded (Q2) *(build decision 2026-10-24)*)
   - pre-deploy command from FR-109
   - variables per §9
-- **`postgres`:** Railway Postgres 17, with backups on in `production`. The IaC `postgres()` helper now provisions 18, so 17 is pinned with `database()` and the `postgres-ssl:17` image *(build decision 2026-10-23)*.
+- **`postgres`:** Railway Postgres **18** (`postgres-ssl:18`, pinned with `database()`), with backups on in `production`. Railway provisions databases from its template default (18), and pinning 17 broke the data directory, so Railway runs 18 while local Kubernetes, compose, CI and Testcontainers stay on 17 (D-V3-13) *(build decision 2026-10-24, Ben)*.
 - **Connection string:** built from references:
   `ConnectionStrings__Aide=Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}`
   (private network).
@@ -429,6 +429,7 @@ v1 D1–D21 and v2 D-V2-1 to D-V2-15 stand.
 | D-V3-10 | The API keeps running as non-root on Railway through an entrypoint that fixes volume ownership and drops privileges, not `RAILWAY_RUN_UID=0` | build | assumed |
 | D-V3-11 | Local Docker Desktop Kubernetes stays the full local deployment. CLAUDE.md rule 7 still applies to `deploy/scripts/*`. Railway deploys come only from the deploy workflow, or from agents within STACK.md autonomy | Ben, compose-stack 2026-10-23 | agreed |
 | D-V3-12 | The `aide` CLI (FR-52) is unaffected. On Railway it targets the web URL (`/api` is proxied) | build | assumed |
+| D-V3-13 | Railway runs Postgres 18 (`postgres-ssl:18`). Local Kubernetes, compose, CI and Testcontainers stay on 17. Why: Railway provisions databases from its template default (18) and applies a pinned image only afterwards, and Postgres 17 can't open an 18 data directory. EF Core 10 / Npgsql 10 support 18, and the migrations are plain SQL | Ben, 2026-10-24 | agreed |
 
 ## 11. Open questions
 

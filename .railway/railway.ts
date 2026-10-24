@@ -48,10 +48,13 @@ const operatorSetApiVariables = [
 ]
 
 export default defineRailway(() => {
-  // Railway Postgres 17 (SPEC §3.5). `postgres()` would provision the template's current default (postgres-ssl:18), so
-  // the same template image is pinned to 17 through the generic helper, with postgres()'s own output and mount path.
+  // Railway Postgres 18 (SPEC §3.5, D-V3-13). Railway always provisions a database from its template default
+  // (postgres-ssl:18) and applies a different `image` only afterwards as an update. Postgres can't open a newer major's
+  // data directory, so pinning 17 left the server unable to start (preview, 2026-10-24). The pin matches what Railway
+  // creates, so a change to the template default can't silently change the major version. Local Kubernetes, compose,
+  // CI and Testcontainers stay on 17.
   const db = database('postgres', 'postgres', {
-    image: 'ghcr.io/railwayapp-templates/postgres-ssl:17',
+    image: 'ghcr.io/railwayapp-templates/postgres-ssl:18',
     output: 'DATABASE_URL',
     defaultMountPath: '/var/lib/postgresql/data',
   })

@@ -11,7 +11,7 @@ Kubernetes only. v3 has two main stack changes: **deploy to Railway**, and **con
 | --- | --- | --- | --- |
 | Frontend | `fe-nextjs` (UI for a separate backend) | `frontend/` | dev port 3000, container port 8080. **v3 change:** replaces `fe-react-vite` (v2: React 19 + Vite 8, TanStack Router, dev port 5173) |
 | Backend | `be-aspnet` | `backend/` | .NET 10 minimal APIs, dev port 5080, container port 8080. Unchanged from v2 |
-| Data | `data-efcore-postgres` | inside `backend/` (`Aide.Infrastructure`) | engine: PostgreSQL 17 · mode: ORM (EF Core owns migrations; bundle at `/app/efbundle`) |
+| Data | `data-efcore-postgres` | inside `backend/` (`Aide.Infrastructure`) | engine: PostgreSQL 17 (Railway: 18, SPEC D-V3-13) · mode: ORM (EF Core owns migrations; bundle at `/app/efbundle`) |
 | VCS / CI | `vcs-github` | `.github/` | default branch: `main`. Build branch for v3: `build/aide-v3` |
 | Deploy | `deploy-railway` (web + api + Postgres) | `.railway/railway.ts` | **v3 change:** new target. See Deploy below |
 | Local | `local-docker-desktop-k8s` | `deploy/k8s/`, `deploy/scripts/` | app URL: http://localhost:8080. Kept from v2; the `web` image becomes the Next.js standalone server |
