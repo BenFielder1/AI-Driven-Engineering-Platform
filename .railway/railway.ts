@@ -65,11 +65,14 @@ export default defineRailway(() => {
   // Region pinned to where Railway placed it (us-east, `iad`): leaving it unset plans a destructive volume change.
   const apiData = volume('api-data', { sizeMB: 500, region: 'iad' })
 
+  // No watchPatterns on either service: deploys are explicit `railway up` uploads from deploy.yml, and with watch paths
+  // Railway skips the build when a commit only touches other paths (it skipped api's build, 2026-10-24). Note: omitting
+  // the field doesn't clear existing patterns on apply; they were cleared once by applying `watchPatterns: []`.
   const api = service('api', {
     // Railway records a repo-less service with a root directory as source type "github" (no repo is connected:
     // deploys come from `railway up` in deploy.yml). Declared as Railway stores it, so plan shows no drift.
     source: { type: 'github', rootDirectory: 'backend' },
-    build: { builder: 'DOCKERFILE', dockerfilePath: 'Dockerfile', watchPatterns: ['/backend/**'] },
+    build: { builder: 'DOCKERFILE', dockerfilePath: 'Dockerfile' },
     // FR-109: migrations before the new container starts; a failure stops the deploy and the old one keeps serving.
     // Railway runs Dockerfile commands in exec form (no variable expansion), so a shell expands the variable.
     preDeploy: `/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Aide"'`,
@@ -105,7 +108,7 @@ export default defineRailway(() => {
 
   const web = service('web', {
     source: { type: 'github', rootDirectory: 'frontend' },
-    build: { builder: 'DOCKERFILE', dockerfilePath: 'Dockerfile', watchPatterns: ['/frontend/**'] },
+    build: { builder: 'DOCKERFILE', dockerfilePath: 'Dockerfile' },
     healthcheck: '/healthz',
     replicas: 1,
     // The public *.up.railway.app domain is generated once per environment (`railway domain --service web`, target
