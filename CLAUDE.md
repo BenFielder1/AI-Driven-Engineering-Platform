@@ -10,7 +10,7 @@ AIDE (AI-Driven Engineering Framework) coordinates specialised AI agents through
 | --- | --- | --- | --- |
 | v1 | [`docs/v1/SPEC.md`](docs/v1/SPEC.md) | [`docs/v1/PROGRESS.md`](docs/v1/PROGRESS.md) | Built and merged (PR #1). Frozen; never edit except to fix links |
 | v2 | [`docs/v2/SPEC.md`](docs/v2/SPEC.md) | [`docs/v2/PROGRESS.md`](docs/v2/PROGRESS.md) | Built and merged (PR #13). Frozen; never edit except to fix links |
-| v3 | [`SPEC.md`](SPEC.md) | `PROGRESS.md` (root; created by orchestrate-stack) | Current: Next.js frontend migration + Railway deploy, no new features. Stack in [`STACK.md`](STACK.md) |
+| v3 | [`docs/v3/SPEC.md`](docs/v3/SPEC.md) | [`docs/v2/PROGRESS.md`](docs/v3/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
 
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/v<N>/` and add a row here.
 - **v3 is an increment on v2 (and v1):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94), and the spec-verifier checks the requirements of v1, v2 and v3.
