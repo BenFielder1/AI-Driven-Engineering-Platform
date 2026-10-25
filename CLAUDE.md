@@ -10,11 +10,12 @@ AIDE (AI-Driven Engineering Framework) coordinates specialised AI agents through
 | --- | --- | --- | --- |
 | v1 | [`docs/v1/SPEC.md`](docs/v1/SPEC.md) | [`docs/v1/PROGRESS.md`](docs/v1/PROGRESS.md) | Built and merged (PR #1). Frozen; never edit except to fix links |
 | v2 | [`docs/v2/SPEC.md`](docs/v2/SPEC.md) | [`docs/v2/PROGRESS.md`](docs/v2/PROGRESS.md) | Built and merged (PR #13). Frozen; never edit except to fix links |
-| v3 | [`docs/v3/SPEC.md`](docs/v3/SPEC.md) | [`docs/v2/PROGRESS.md`](docs/v3/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
+| v3 | [`docs/v3/SPEC.md`](docs/v3/SPEC.md) | [`docs/v3/PROGRESS.md`](docs/v3/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
+| v4 | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: stack composition from stack-packs (replaces presets), GitLab + Bitbucket, deployment platforms and managed databases, LLM choice at creation and long outputs. Draft: [`docs/v4/DRAFT_SPEC.md`](docs/v4/DRAFT_SPEC.md) |
 
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/v<N>/` and add a row here.
-- **v3 is an increment on v2 (and v1):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94), and the spec-verifier checks the requirements of v1, v2 and v3.
-- **Scaffolding:** v2 M0 was a baseline check, and v3 migrated the frontend in place. Never re-scaffold the repo.
+- **v4 is an increment on v3 (and v1, v2):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94, v4 at FR-113), and the spec-verifier checks the requirements of v1–v4.
+- **Scaffolding:** v2 and v4 M0 were baseline checks, and v3 migrated the frontend in place. Never re-scaffold the repo.
 - Version assets (e.g. the logo in `docs/v2/brand/`) live under `docs/v<N>/`.
 
 ## Stack

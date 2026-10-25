@@ -1368,7 +1368,7 @@ v1 D1–D21, v2 D-V2-1 to D-V2-15 and v3 D-V3-1 to D-V3-13 stand, except where a
 
 ## Revision notes
 
-- 2026-10-25: v4 spec created from `DRAFT_SPEC.md` (2026-10-18) and Ben's v4 brief.
+- 2026-10-25: v4 spec created from `docs/v4/DRAFT_SPEC.md` (2026-10-18) and Ben's v4 brief.
   - **Renumbering:** draft FR-94–FR-137 → FR-113–FR-156, D-V3-1–19 → D-V4-1–19, milestones M17–M24 → M24–M31.
   - **Updated against stack-packs as of 2026-10-25:**
     - section headings per layer, and heading-suffix matching
