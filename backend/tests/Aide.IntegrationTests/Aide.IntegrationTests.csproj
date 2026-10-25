@@ -22,6 +22,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Reports tests running longer than 60 s in the CI log, so a hang names its test. -->
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Test-only preset fixtures (FR-74, FR-76), embedded like the shipped presets but under their own prefix. -->
     <EmbeddedResource Include="..\Fixtures\Presets\**\*" LogicalName="Aide.Tests.Presets/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>

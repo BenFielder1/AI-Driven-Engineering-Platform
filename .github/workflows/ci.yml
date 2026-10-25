@@ -62,6 +62,9 @@ jobs:
       - name: CLI packs as a .NET tool (FR-52)
         run: dotnet pack src/Aide.Cli -c Release --no-build -o "$RUNNER_TEMP/nupkg"
       - name: Test (unit, CLI, integration via Testcontainers)
+        # A step timeout (inside the job's 25) fails the step instead of cancelling the job, so the log and the
+        # test-results artifact survive a hang. xunit.runner.json names tests that run longer than 60 s.
+        timeout-minutes: 18
         run: dotnet test -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
       - name: Format
         run: dotnet format --verify-no-changes --no-restore
