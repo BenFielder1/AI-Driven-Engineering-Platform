@@ -70,7 +70,7 @@ public static partial class ProjectSettingsEndpoints
 
         group.MapPatch("/llm", UpdateLlmSettings)
             .WithName("UpdateLlmSettings")
-            .WithSummary("Update the LLM provider and models, and bind one of the caller's own connections (credentialId; null unbinds) (Owner). 403 CREDENTIAL_NOT_OWNER for another user's connection, 404 NOT_FOUND for an unknown one.")
+            .WithSummary("Update the LLM provider and models, and bind one of the caller's own connections (credentialId; null unbinds) (Owner). 403 CREDENTIAL_NOT_OWNER for another user's connection, 404 NOT_FOUND for an unknown one, 400 LLM_PROVIDER_UNAVAILABLE when the provider (sent or kept) is disabled on this server (FR-157).")
             .Produces<LlmSettingsDto>()
             .ProducesValidationProblem();
 
@@ -322,6 +322,13 @@ public static partial class ProjectSettingsEndpoints
         var settings = await LlmAsync(db, id, catalog, cancellationToken);
         var provider = request.Provider ?? settings.Provider;
         var providerChanged = provider != settings.Provider;
+
+        // FR-157: a provider this deployment disabled can't be chosen or kept (the Owner must choose another one).
+        var enabled = LlmProviderRules.IsEnabled(provider, catalog.IsEnabled(provider));
+        if (enabled.IsFailure)
+        {
+            return ApiProblems.FromError(enabled.Error!);
+        }
         var current = settings.CredentialId is { } currentId
             ? await db.LlmCredentials.AsNoTracking().Where(c => c.Id == currentId).Select(c => new LlmConnectionRef(c.Id, c.UserId, c.Provider)).FirstOrDefaultAsync(cancellationToken)
             : null;
@@ -645,7 +652,7 @@ public static partial class ProjectSettingsEndpoints
 
     private static ProjectLlmSettings DefaultLlm(Guid id, ILlmProviderCatalog catalog)
     {
-        var provider = catalog.DefaultForNewProject;
+        var provider = catalog.FallbackProvider;
         return new ProjectLlmSettings
         {
             ProjectId = id,

@@ -23,7 +23,8 @@ namespace Aide.Api.Features.Projects;
 /// <summary>
 /// FR-5, FR-66, FR-73, FR-86: creates a project with everything it starts with, in one <c>SaveChanges</c> (one
 /// transaction): the project (refinement / active / checkpoint 1) and its release versions, the Owner membership, Git
-/// settings (token encrypted), LLM settings (system default provider if usable, else Fake), empty notification settings,
+/// settings (token encrypted), LLM settings (FR-159: the request's <c>llm</c> choice, bound to the chosen connection, or the
+/// §4.24 default for the creator; never a disabled provider), empty notification settings,
 /// the creation state transition (none → refinement at checkpoint 1, the anchor for a rollback to checkpoint 1) and the
 /// <c>PROJECT_CREATED</c> event.
 /// <list type="bullet">
@@ -84,6 +85,13 @@ public sealed partial class ProjectCreator(
             return Result.Failure<Project>(validation.Error!);
         }
 
+        // FR-157, FR-159: the LLM choice (or the default), checked before anything is read from a repository.
+        var llmPlan = await PlanLlmAsync(request.Llm, ownerId, cancellationToken);
+        if (llmPlan.IsFailure)
+        {
+            return Result.Failure<Project>(llmPlan.Error!);
+        }
+
         // FR-74: the wizard's Stack step, pinned on the version to develop.
         var preset = Presets.PresetService.Resolve(presets, request.PresetId);
         if (preset.IsFailure)
@@ -118,7 +126,7 @@ public sealed partial class ProjectCreator(
 
         try
         {
-            return await SaveAsync(request, project, start.Value, preset.Value, gitProvider, ownerId, actor, now, cancellationToken);
+            return await SaveAsync(request, project, start.Value, preset.Value, llmPlan.Value, gitProvider, ownerId, actor, now, cancellationToken);
         }
         catch
         {
@@ -130,6 +138,116 @@ public sealed partial class ProjectCreator(
 
             throw;
         }
+    }
+
+    /// <summary>The new project's LLM settings (FR-159): provider, models, the bound connection, and whether it was the default.</summary>
+    private sealed record LlmPlan(
+        LlmProvider Provider,
+        string DefaultModel,
+        IReadOnlyDictionary<string, string> ModelsByAgent,
+        LlmConnectionRef? Binding,
+        bool Defaulted);
+
+    /// <summary>
+    /// FR-157, FR-159, §4.24: the LLM settings of a project created by <paramref name="ownerId"/>.
+    /// <list type="bullet">
+    /// <item>No <paramref name="choice"/>: <see cref="ILlmProviderCatalog.DefaultForNewProject"/> for the creator's
+    /// connections (<c>LLM_PROVIDER_UNAVAILABLE</c> when no enabled provider is usable), with the provider's configured models.</item>
+    /// <item>A choice: the provider must be enabled (<c>LLM_PROVIDER_UNAVAILABLE</c>), the models non-blank (<c>VALIDATION</c>),
+    /// a sent connection the creator's own for that provider (<see cref="LlmConnectionRules.CanBind"/>: <c>NOT_FOUND</c>,
+    /// <c>CREDENTIAL_NOT_OWNER</c>, <c>VALIDATION</c>), and the provider usable by the creator (<c>LLM_PROVIDER_UNAVAILABLE</c>).</item>
+    /// </list>
+    /// A provider that needs a key and has no usable system key is bound to the sent connection, else to the creator's newest
+    /// valid connection for it, so the first run has a key (FR-79 binding semantics). Connections whose last check failed
+    /// (<c>invalid</c>) count for nothing here: not for availability, the default, or the fallback binding.
+    /// </summary>
+    private async Task<Result<LlmPlan>> PlanLlmAsync(CreateProjectLlmRequest? choice, Guid ownerId, CancellationToken cancellationToken)
+    {
+        var connections = await db.LlmCredentials.AsNoTracking()
+            .Where(c => c.UserId == ownerId)
+            .OrderByDescending(c => c.CreatedAt)
+            .ThenByDescending(c => c.Id)
+            .Where(c => c.Status != LlmCredentialStatus.Invalid) // FR-159: an invalid connection doesn't make a provider usable
+            .Select(c => new { c.Id, c.UserId, c.Provider })
+            .ToListAsync(cancellationToken);
+        LlmConnectionRef? NewestConnection(LlmProvider provider) =>
+            connections
+                .Where(c => c.Provider == provider)
+                .Select(c => new LlmConnectionRef(c.Id, c.UserId, c.Provider))
+                .FirstOrDefault();
+        bool NeedsBinding(LlmProvider provider) => ProjectSettingsRules.RequiresApiKey(provider) && !llm.HasSystemKey(provider);
+
+        if (choice is null)
+        {
+            var chosen = llm.DefaultForNewProject([.. connections.Select(c => c.Provider)]);
+            if (chosen.IsFailure)
+            {
+                return Result.Failure<LlmPlan>(chosen.Error!);
+            }
+
+            var provider = chosen.Value;
+            return Result.Success(new LlmPlan(
+                provider,
+                llm.DefaultModel(provider),
+                llm.DefaultAgentModels(provider),
+                NeedsBinding(provider) ? NewestConnection(provider) : null,
+                Defaulted: true));
+        }
+
+        var enabled = LlmProviderRules.IsEnabled(choice.Provider, llm.IsEnabled(choice.Provider));
+        if (enabled.IsFailure)
+        {
+            return Result.Failure<LlmPlan>(enabled.Error!);
+        }
+
+        var sentModels = choice.ModelsByAgent is { } dto ? ProjectMapping.FromAgentModels(dto) : null;
+        var models = ProjectSettingsRules.ValidateLlm(
+            choice.Provider,
+            choice.DefaultModel,
+            sentModels?.ToDictionary(m => m.FieldName, m => m.Model),
+            hasSystemKey: true,
+            hasBindingAfter: true,
+            providerChanged: false,
+            prefix: "llm.");
+        if (models.IsFailure)
+        {
+            return Result.Failure<LlmPlan>(models.Error!);
+        }
+
+        LlmConnectionRef? binding = null;
+        if (choice.CredentialId is { } credentialId)
+        {
+            var connection = await db.LlmCredentials.AsNoTracking()
+                .Where(c => c.Id == credentialId)
+                .Select(c => new LlmConnectionRef(c.Id, c.UserId, c.Provider))
+                .FirstOrDefaultAsync(cancellationToken);
+            var allowed = LlmConnectionRules.CanBind(ownerId, ProjectRole.Owner, connection, choice.Provider);
+            if (allowed.IsFailure)
+            {
+                var error = allowed.Error!;
+                return Result.Failure<LlmPlan>(error.Code == ErrorCodes.Validation
+                    ? error with { Details = [.. error.Details.Select(d => "llm." + d)] }
+                    : error);
+            }
+
+            binding = connection;
+        }
+
+        var usable = LlmProviderRules.CanChoose(choice.Provider, llm.Availability(choice.Provider, connections.Count(c => c.Provider == choice.Provider)));
+        if (usable.IsFailure)
+        {
+            return Result.Failure<LlmPlan>(usable.Error!);
+        }
+
+        if (binding is null && NeedsBinding(choice.Provider))
+        {
+            binding = NewestConnection(choice.Provider);
+        }
+
+        var modelsByAgent = sentModels is not null
+            ? sentModels.Where(m => m.Model is not null).ToDictionary(m => m.Agent.ToWire(), m => m.Model!.Trim(), StringComparer.Ordinal)
+            : new Dictionary<string, string>(llm.DefaultAgentModels(choice.Provider), StringComparer.Ordinal);
+        return Result.Success(new LlmPlan(choice.Provider, choice.DefaultModel.Trim(), modelsByAgent, binding, Defaulted: false));
     }
 
     /// <summary>What the repository gives the new project: its versions, base commit, default branch and the App repo.</summary>
@@ -319,7 +437,16 @@ public sealed partial class ProjectCreator(
     }
 
     private async Task<Result<Project>> SaveAsync(
-        CreateProjectRequest request, Project project, RepositoryStart start, Preset? preset, GitProvider gitProvider, Guid ownerId, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+        CreateProjectRequest request,
+        Project project,
+        RepositoryStart start,
+        Preset? preset,
+        LlmPlan llmPlan,
+        GitProvider gitProvider,
+        Guid ownerId,
+        string actor,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
         var git = request.Git;
         var appRepo = start.AppRepo;
@@ -364,10 +491,10 @@ public sealed partial class ProjectCreator(
         project.CurrentReleaseVersionId = version.Id;
         ReleaseVersionScope.Refresh(project, versions);
 
-        var provider = llm.DefaultForNewProject;
-        if (provider != llm.ConfiguredDefault)
+        var provider = llmPlan.Provider;
+        if (llmPlan.Defaulted && provider != llm.ConfiguredDefault)
         {
-            LogFakeDefault(logger, llm.ConfiguredDefault, provider);
+            LogDefaultFallback(logger, llm.ConfiguredDefault, provider);
         }
 
         db.Projects.Add(project);
@@ -388,8 +515,12 @@ public sealed partial class ProjectCreator(
         {
             ProjectId = project.Id,
             Provider = provider,
-            DefaultModel = llm.DefaultModel(provider),
-            ModelsByAgent = new Dictionary<string, string>(llm.DefaultAgentModels(provider)),
+            DefaultModel = llmPlan.DefaultModel,
+            ModelsByAgent = new Dictionary<string, string>(llmPlan.ModelsByAgent, StringComparer.Ordinal),
+
+            // FR-79, FR-159: the binding Owner is the connection's owner (the creator).
+            CredentialId = llmPlan.Binding?.Id,
+            BoundByUserId = llmPlan.Binding?.UserId,
         });
         db.ProjectNotificationSettings.Add(new ProjectNotificationSettings { ProjectId = project.Id, Channels = [] });
         db.StateTransitions.Add(new StateTransition
@@ -455,8 +586,8 @@ public sealed partial class ProjectCreator(
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} created (LLM provider {LlmProvider}, Git provider {GitProvider}, source {Source})")]
     private static partial void LogCreated(ILogger logger, Guid projectId, LlmProvider llmProvider, GitProvider gitProvider, ProjectSource source);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Default LLM provider {ConfiguredProvider} has no API key configured; the new project uses {Provider}")]
-    private static partial void LogFakeDefault(ILogger logger, LlmProvider configuredProvider, LlmProvider provider);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Default LLM provider {ConfiguredProvider} has no API key configured or isn't usable by the creator; the new project uses {Provider}")]
+    private static partial void LogDefaultFallback(ILogger logger, LlmProvider configuredProvider, LlmProvider provider);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Reading the repository to import failed (HTTP {Status}, {Kind})")]
     private static partial void LogImportLookupFailed(ILogger logger, int? status, GitHubFailureKind kind);

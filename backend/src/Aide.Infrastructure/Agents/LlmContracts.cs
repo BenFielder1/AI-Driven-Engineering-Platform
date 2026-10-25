@@ -26,14 +26,26 @@ public sealed class LlmRequest
 
     public required IReadOnlyList<LlmMessage> Messages { get; init; }
 
-    public int MaxTokens { get; init; } = 16_000;
+    /// <summary>
+    /// FR-160: the call's output token limit (<c>max_tokens</c>, <c>max_completion_tokens</c>, <c>num_predict</c>), resolved
+    /// per provider and model by the agent runner (<see cref="Llm.ILlmOutputLimits"/>). Unset: the provider uses
+    /// <c>Llm:MaxOutputTokens</c>.
+    /// </summary>
+    public int? MaxTokens { get; init; }
+
+    /// <summary>
+    /// FR-162: the model's context window in tokens (the catalog's <c>ContextTokens</c>), used to stop continuing a cut-off
+    /// answer before the next request would overflow it (<see cref="LlmToolLoop"/>). <c>null</c> or 0: unknown, not checked.
+    /// Providers don't send it.
+    /// </summary>
+    public int? ContextTokens { get; init; }
 
     public AgentKind? Agent { get; init; }
 
     /// <summary>Anthropic/OpenAI credential. Never logged or persisted.</summary>
     public string? ApiKey { get; init; }
 
-    public override string ToString() => $"LlmRequest {{ Model = {Model}, Agent = {Agent?.ToWire()}, Messages = {Messages.Count}, MaxTokens = {MaxTokens} }}";
+    public override string ToString() => $"LlmRequest {{ Model = {Model}, Agent = {Agent?.ToWire()}, Messages = {Messages.Count}, MaxTokens = {MaxTokens}, ContextTokens = {ContextTokens} }}";
 }
 
 /// <summary>A provider's answer: the text and the token usage it reported.</summary>

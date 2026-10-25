@@ -23,12 +23,14 @@ import { connectGitHubHref, useGitHubConnection, useGitHubRepoRefs, type GitHubR
 import { GitHubErrorAlert } from '../github/github-error-alert'
 import { RepoPicker } from '../github/repo-picker'
 import { connectionLabel } from '../connections/connection-format'
+import { useLlmProviders, type LlmProviderOption } from '../connections/connections-api'
 import { useVercelConnections } from '../connections/vercel-connections-api'
 import { VercelGitAlert } from '../deployments/vercel-git-alert'
 import { suggestVercelProjectName } from '../deployments/vercel-project-rules'
 import { PresetPicker } from '../presets/preset-picker'
 import { usePresets } from '../presets/presets-api'
-import { approvalModeDescriptions, approvalModeLabels, approvalModes } from './labels'
+import { agentKeys, agentLabels, approvalModeDescriptions, approvalModeLabels, approvalModes, llmProviderLabels } from './labels'
+import { catalogModel } from './model-picker'
 import { useCreateProject } from './projects-api'
 import { ReleasedVersionField } from './released-version-field'
 import { deploymentFieldIds } from './wizard-deployment-ids'
@@ -40,10 +42,22 @@ import {
   NEVER_RELEASED,
   releasedTagOf,
   toBudget,
+  wizardAgentModelFields,
   wizardDefaults,
   wizardSchema,
   type WizardValues,
 } from './schemas'
+import { clearWizardDraft, readWizardDraft, saveWizardDraft } from './wizard-draft'
+import {
+  defaultLlmProvider,
+  initialModel,
+  llmFieldIds,
+  llmFields,
+  llmValuesFor,
+  showsConnectionPicker,
+  toLlmRequest,
+} from './wizard-llm'
+import { WizardLlmSection } from './wizard-llm-section'
 
 type Field = Path<WizardValues>
 type Source = WizardValues['source']
@@ -71,6 +85,7 @@ const fieldIds: Record<Field, string> = {
   localSourcePath: 'project-local-source-path',
   presetId: 'project-preset',
   ...deploymentFieldIds,
+  ...llmFieldIds,
 }
 
 /**
@@ -86,7 +101,7 @@ const stepFields: Record<StepKey, readonly Field[]> = {
   repository: ['gitMode', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken', 'releasedTag', 'localSourcePath'],
   version: ['initialVersion', 'developmentVersion'],
   stack: ['presetId'],
-  configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget'],
+  configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget', ...llmFields],
   deployment: ['deploymentMode', 'vercelConnectionId', 'vercelProjectMode', 'vercelProjectName', 'vercelRootDirectory', 'vercelProjectId'],
   review: [],
 }
@@ -149,6 +164,35 @@ const serverFieldMap: Record<string, Field> = {
   'deployment.create': 'vercelProjectName',
   'deployment.create.name': 'vercelProjectName',
   'deployment.create.rootdirectory': 'vercelRootDirectory',
+  // FR-159: the AI model section.
+  llm: 'llmProvider',
+  'llm.provider': 'llmProvider',
+  'llm.credentialid': 'llmCredentialId',
+  'llm.defaultmodel': 'llmDefaultModel',
+  'llm.modelsbyagent': 'llmModelIdeaRefinement',
+  // Per-agent models (`llm.modelsByAgent.codeGenerator` → the Code generator field).
+  ...Object.fromEntries(
+    Object.entries(wizardAgentModelFields).map(([agent, field]) => [`llm.modelsbyagent.${agent.toLowerCase()}`, field]),
+  ),
+}
+
+/**
+ * Which credential a CREDENTIAL_NOT_OWNER / NOT_FOUND on create is about: the ProblemDetails `errors` key says so
+ * (`llm.credentialId` vs `deployment.connectionId`). Without one, the old rule: an LLM credential unless Vercel is
+ * chosen (CREDENTIAL_NOT_OWNER), or unless a PAT import's repository is the likely 404 (NOT_FOUND).
+ */
+function credentialErrorTarget(error: unknown, v: WizardValues, importing: boolean): 'llm' | 'other' {
+  const keys = isApiError(error) ? Object.keys(error.fieldErrors).map((k) => k.toLowerCase()) : []
+  if (keys.some((k) => k.startsWith('llm'))) {
+    return 'llm'
+  }
+  if (keys.length > 0) {
+    return 'other'
+  }
+  if (isApiError(error, 'CREDENTIAL_NOT_OWNER')) {
+    return v.deploymentMode === 'vercel' ? 'other' : 'llm'
+  }
+  return importing && v.gitMode === 'github_pat' ? 'other' : 'llm'
 }
 
 function firstStepWithError(errors: Partial<Record<Field, unknown>>): number {
@@ -194,6 +238,7 @@ function toDeploymentRequest(v: WizardValues): Schemas['CreateProjectDeploymentR
  */
 function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
   const deployment = toDeploymentRequest(v)
+  const llm = toLlmRequest(v)
   const base = {
     ...(v.presetId ? { presetId: v.presetId } : {}),
     name: v.name.trim(),
@@ -206,6 +251,8 @@ function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
     git: toGitRequest(v),
     // FR-88: `deployment` only when Vercel is chosen (skipping omits it).
     ...(deployment ? { deployment } : {}),
+    // FR-159: the AI model section.
+    ...(llm ? { llm } : {}),
   }
   return v.source === 'import'
     ? {
@@ -331,7 +378,17 @@ function AppRepository({
 export function NewProjectWizard() {
   const navigate = useNavigate()
   const create = useCreateProject()
-  const [step, setStep] = useState(0)
+  /**
+   * FR-159: back from Connections ("Add a connection"), the wizard saved in session storage. The authenticated layout
+   * renders pages only in the browser, so it is read on the first render (and removed once used).
+   */
+  const [draft] = useState(readWizardDraft)
+  useEffect(() => {
+    if (draft) {
+      clearWizardDraft()
+    }
+  }, [draft])
+  const [step, setStep] = useState(() => (draft ? Math.min(draft.step, LAST_STEP) : 0))
   /** The create failure, with the error itself so GitHub codes can offer their way out (install link, connect). */
   const [serverError, setServerError] = useState<{ message: string; error?: unknown } | null>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
@@ -351,7 +408,7 @@ export function NewProjectWizard() {
     formState: { errors },
   } = useForm<WizardValues>({
     resolver: zodResolver(wizardSchema),
-    defaultValues: wizardDefaults,
+    defaultValues: draft?.values ?? wizardDefaults,
     mode: 'onTouched',
   })
 
@@ -380,6 +437,7 @@ export function NewProjectWizard() {
   const deploymentMode = useWatch({ control, name: 'deploymentMode' })
   const vercelProjectMode = useWatch({ control, name: 'vercelProjectMode' })
   const vercelConnectionId = useWatch({ control, name: 'vercelConnectionId' })
+  const llmProvider = useWatch({ control, name: 'llmProvider' })
 
   // FR-88: suggest the new Vercel project's name from the project name when the step opens.
   useEffect(() => {
@@ -393,7 +451,8 @@ export function NewProjectWizard() {
   const appAvailable = providers.data?.githubMode === 'app'
   const connection = useGitHubConnection(appAvailable)
   const connected = connection.data?.connected === true && connection.data.status === 'valid'
-  const defaultApplied = useRef(false)
+  // A restored wizard keeps its Git option.
+  const defaultApplied = useRef(draft !== null)
   useEffect(() => {
     if (!defaultApplied.current && appAvailable && connected && !getFieldState('gitMode').isDirty) {
       defaultApplied.current = true
@@ -414,8 +473,8 @@ export function NewProjectWizard() {
    * Whether the user chose the released version / edited the version to develop. Kept here rather than read from
    * RHF's dirty state, which also turns true for programmatic prefills once any other field changes.
    */
-  const [releasedChosen, setReleasedChosen] = useState(false)
-  const [versionEdited, setVersionEdited] = useState(false)
+  const [releasedChosen, setReleasedChosen] = useState(draft !== null)
+  const [versionEdited, setVersionEdited] = useState(draft !== null)
   const resetReleased = useCallback(() => {
     setReleasedChosen(false)
     resetField('releasedTag')
@@ -462,6 +521,62 @@ export function NewProjectWizard() {
     setValue('source', 'import', { shouldDirty: true })
     setReleasedChosen(true)
     setValue('releasedTag', NEVER_RELEASED, { shouldDirty: true })
+  }
+
+  // FR-158, FR-159: the AI model section. Keep a usable chosen provider (filling in its connection and model), else
+  // preselect the default one. An unusable provider is never preselected.
+  const llmProviders = useLlmProviders()
+  const llmOptions = llmProviders.data
+  // Back from Connections, the cached list may predate the new connection: refetch it, and wait for that answer
+  // before keeping or replacing the intended provider.
+  const [mountedAt] = useState(() => Date.now())
+  const { refetch: refetchLlmProviders } = llmProviders
+  useEffect(() => {
+    if (draft) {
+      void refetchLlmProviders()
+    }
+  }, [draft, refetchLlmProviders])
+  const settledLlmOptions = !draft || llmProviders.dataUpdatedAt >= mountedAt ? llmOptions : undefined
+  const applyLlm = useCallback(
+    (values: ReturnType<typeof llmValuesFor> | Pick<WizardValues, 'llmProvider' | 'llmCredentialId' | 'llmDefaultModel'>) => {
+      for (const [field, value] of Object.entries(values) as [keyof typeof values, string][]) {
+        setValue(field, value)
+      }
+    },
+    [setValue],
+  )
+  useEffect(() => {
+    if (!settledLlmOptions) {
+      return
+    }
+    const current = settledLlmOptions.find((p) => p.provider === getValues('llmProvider'))
+    if (current?.usable) {
+      const credential = getValues('llmCredentialId')
+      if (showsConnectionPicker(current) && !current.connections.some((c) => c.id === credential)) {
+        setValue('llmCredentialId', current.connections[0]?.id ?? '')
+      } else if (!showsConnectionPicker(current) && credential) {
+        setValue('llmCredentialId', '')
+      }
+      if (!getValues('llmDefaultModel').trim()) {
+        setValue('llmDefaultModel', initialModel(current))
+      }
+      return
+    }
+    const fallback = defaultLlmProvider(settledLlmOptions)
+    applyLlm(fallback ? llmValuesFor(fallback) : { llmProvider: '', llmCredentialId: '', llmDefaultModel: '' })
+  }, [settledLlmOptions, getValues, setValue, applyLlm])
+
+  const chooseLlmProvider = (option: LlmProviderOption) => {
+    applyLlm(llmValuesFor(option))
+  }
+
+  /** "Add a connection": saves the wizard, with that provider as the intended choice, before Connections opens. */
+  const addLlmConnection = (provider: LlmProviderOption['provider']) => {
+    const noOverrides = Object.fromEntries(Object.values(wizardAgentModelFields).map((f) => [f, ''])) as Partial<WizardValues>
+    saveWizardDraft(
+      { ...getValues(), ...noOverrides, llmProvider: provider, llmCredentialId: '', llmDefaultModel: '' },
+      step,
+    )
   }
 
   async function next() {
@@ -522,6 +637,20 @@ export function NewProjectWizard() {
             // FR-74: the preset was withdrawn since the list loaded; pick again from the fresh list.
             setError('presetId', { type: 'server', message: errorMessage(error, 'createProject') })
             goTo(stepIndex('stack'))
+          } else if (isApiError(error, 'LLM_PROVIDER_UNAVAILABLE')) {
+            // FR-157, FR-159: the provider was turned off, or the user can no longer use it. Choose again.
+            void llmProviders.refetch()
+            setError('llmProvider', { type: 'server', message: errorMessage(error, 'createProject') })
+            goTo(stepIndex('configuration'))
+          } else if (
+            values.llmCredentialId &&
+            (isApiError(error, 'CREDENTIAL_NOT_OWNER') || isApiError(error, 'NOT_FOUND')) &&
+            credentialErrorTarget(error, values, importValues) === 'llm'
+          ) {
+            // FR-159: the AI model section's connection isn't the caller's, or no longer exists.
+            void llmProviders.refetch()
+            setError('llmCredentialId', { type: 'server', message: errorMessage(error, 'createProjectLlm') })
+            goTo(stepIndex('configuration'))
           } else if (isApiError(error, 'CREDENTIAL_NOT_OWNER')) {
             // FR-88: only the caller's own Vercel connections can be used.
             setError('vercelConnectionId', { type: 'server', message: errorMessage(error, 'createProject') })
@@ -876,6 +1005,15 @@ export function NewProjectWizard() {
                 error={errors.tokenBudget?.message}
                 {...register('tokenBudget')}
               />
+              <WizardLlmSection
+                providers={llmProviders}
+                control={control}
+                register={register}
+                errors={errors}
+                provider={llmProvider}
+                onChooseProvider={chooseLlmProvider}
+                onAddConnection={addLlmConnection}
+              />
             </>
           )}
 
@@ -887,7 +1025,7 @@ export function NewProjectWizard() {
             />
           )}
 
-          {key === 'review' && <ReviewSummary values={getValues()} onEdit={goTo} />}
+          {key === 'review' && <ReviewSummary values={getValues()} llmOptions={llmOptions} onEdit={goTo} />}
         </div>
 
         <div className="mt-6 flex flex-wrap justify-between gap-2">
@@ -1022,7 +1160,48 @@ function DeploymentSummary({ values }: { values: WizardValues }) {
   )
 }
 
-function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step: number) => void }) {
+/** FR-159: the AI model section in the summary (provider, connection, default model and any per-agent models). */
+function LlmSummary({ values, options }: { values: WizardValues; options: readonly LlmProviderOption[] | undefined }) {
+  if (!values.llmProvider) {
+    return <SummaryRow term="AI provider">Not chosen</SummaryRow>
+  }
+  const option = options?.find((p) => p.provider === values.llmProvider)
+  const catalog = option?.catalog ?? []
+  const modelText = (id: string) => {
+    const m = catalogModel(catalog, id)
+    return m ? `${m.name} (${m.id})` : id
+  }
+  const connection = option?.connections.find((c) => c.id === values.llmCredentialId)
+  return (
+    <>
+      <SummaryRow term="AI provider">{llmProviderLabels[values.llmProvider]}</SummaryRow>
+      {values.llmCredentialId ? (
+        <SummaryRow term="Connection">{connection ? connectionLabel(connection) : values.llmCredentialId}</SummaryRow>
+      ) : (
+        option?.reason === 'system_key' && <SummaryRow term="Connection">This server&apos;s key</SummaryRow>
+      )}
+      <SummaryRow term="Default model">{modelText(values.llmDefaultModel.trim())}</SummaryRow>
+      {agentKeys.map((agent) => {
+        const model = values[wizardAgentModelFields[agent]].trim()
+        return model ? (
+          <SummaryRow key={agent} term={`${agentLabels[agent]} model`}>
+            {modelText(model)}
+          </SummaryRow>
+        ) : null
+      })}
+    </>
+  )
+}
+
+function ReviewSummary({
+  values,
+  llmOptions,
+  onEdit,
+}: {
+  values: WizardValues
+  llmOptions: readonly LlmProviderOption[] | undefined
+  onEdit: (step: number) => void
+}) {
   const pat = values.gitMode === 'github_pat'
   const app = values.gitMode === 'github_app'
   const importing = values.source === 'import'
@@ -1069,6 +1248,7 @@ function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step
         <SummaryRow term="Token budget">
           {values.tokenBudget.trim() ? `${Number(values.tokenBudget).toLocaleString()} tokens` : 'No limit'}
         </SummaryRow>
+        <LlmSummary values={values} options={llmOptions} />
       </SummarySection>
       <SummarySection title="Deployment" step="deployment" onEdit={onEdit}>
         <DeploymentSummary values={values} />

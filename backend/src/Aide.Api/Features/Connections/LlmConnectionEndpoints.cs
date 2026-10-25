@@ -72,18 +72,27 @@ public static partial class LlmConnectionEndpoints
         return app;
     }
 
-    private static async Task<Ok<LlmConnectionsDto>> ListLlmConnections(ICurrentUser currentUser, AideDbContext db, CancellationToken cancellationToken)
+    private static async Task<Ok<LlmConnectionsDto>> ListLlmConnections(
+        ICurrentUser currentUser,
+        AideDbContext db,
+        Infrastructure.Llm.ILlmProviderCatalog catalog,
+        CancellationToken cancellationToken)
     {
         var userId = currentUser.RequiredUserId;
-        var credentials = await db.LlmCredentials.AsNoTracking()
-            .Where(c => c.UserId == userId)
-            .OrderByDescending(c => c.CreatedAt)
-            .ThenByDescending(c => c.Id)
-            .ToListAsync(cancellationToken);
+
+        // FR-157: a disabled provider is absent from every list, its stored connections included (they stay stored and
+        // reappear if the provider is turned back on).
+        var credentials = (await db.LlmCredentials.AsNoTracking()
+                .Where(c => c.UserId == userId)
+                .OrderByDescending(c => c.CreatedAt)
+                .ThenByDescending(c => c.Id)
+                .ToListAsync(cancellationToken))
+            .Where(c => catalog.IsEnabled(c.Provider))
+            .ToList();
         var bound = await BoundProjectsAsync(db, [.. credentials.Select(c => c.Id)], cancellationToken);
         return TypedResults.Ok(new LlmConnectionsDto(
             [.. credentials.Select(c => ToDto(c, bound.GetValueOrDefault(c.Id) ?? []))],
-            LlmConnectionRules.KeylessProviders));
+            [.. LlmConnectionRules.KeylessProviders.Where(catalog.IsEnabled)]));
     }
 
     private static async Task<Results<Created<LlmCredentialDto>, ValidationProblem, ProblemHttpResult>> CreateLlmConnection(
@@ -92,6 +101,7 @@ public static partial class LlmConnectionEndpoints
         AideDbContext db,
         ISecretProtector secrets,
         ILlmKeyValidator validator,
+        Infrastructure.Llm.ILlmProviderCatalog catalog,
         TimeProvider time,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
@@ -100,6 +110,12 @@ public static partial class LlmConnectionEndpoints
         if (validation.IsFailure)
         {
             return ApiProblems.Validation(validation.Error!);
+        }
+
+        // FR-157: a disabled provider can't get a connection, and its key is never sent anywhere.
+        if (LlmProviderRules.IsEnabled(request.Provider, catalog.IsEnabled(request.Provider)) is { IsFailure: true } disabled)
+        {
+            return ApiProblems.FromError(disabled.Error!);
         }
 
         var logger = loggers.CreateLogger(typeof(LlmConnectionEndpoints));
@@ -189,6 +205,7 @@ public static partial class LlmConnectionEndpoints
         AideDbContext db,
         ISecretProtector secrets,
         ILlmKeyValidator validator,
+        Infrastructure.Llm.ILlmProviderCatalog catalog,
         TimeProvider time,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
@@ -197,6 +214,12 @@ public static partial class LlmConnectionEndpoints
         if (credential is null)
         {
             return NotFound();
+        }
+
+        // FR-157: a connection of a disabled provider isn't checked (no outbound call) and its status is left as it was.
+        if (LlmProviderRules.IsEnabled(credential.Provider, catalog.IsEnabled(credential.Provider)) is { IsFailure: true } disabled)
+        {
+            return ApiProblems.FromError(disabled.Error!);
         }
 
         var logger = loggers.CreateLogger(typeof(LlmConnectionEndpoints));

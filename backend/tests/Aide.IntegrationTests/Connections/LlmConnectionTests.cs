@@ -233,13 +233,61 @@ public sealed class LlmConnectionTests(AideApiFactory factory) : IDisposable
         await Problems.AssertAsync(await user.Client.GetAsync(new Uri("/api/admin/integrations/llm", UriKind.Relative), Ct), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
     }
 
+    // ------------------------------------------------------------------ Disabled providers (FR-157)
+
+    [Fact]
+    public async Task FR157_Adding_a_key_for_a_disabled_provider_is_LLM_PROVIDER_UNAVAILABLE_and_never_reaches_it()
+    {
+        var app = App(("Llm:Providers:OpenAI:Enabled", "false"));
+        using var user = await ApiSession.RegisterAsync(app);
+
+        var response = await user.Client.PostAsJsonAsync("/api/me/connections/llm", new { provider = "openai", label = "Work", apiKey = OpenAiKey }, Ct);
+
+        await Problems.AssertAsync(response, HttpStatusCode.BadRequest, ErrorCodes.LlmProviderUnavailable);
+        Assert.Empty(_openai.Requests);
+        Assert.Equal(0, await CountAsync(app, user.User!.Id));
+    }
+
+    [Fact]
+    public async Task FR157_Testing_a_connection_of_a_disabled_provider_is_LLM_PROVIDER_UNAVAILABLE_and_keeps_its_status()
+    {
+        using var enabled = await ApiSession.RegisterAsync(App());
+        var created = await LlmStubs.CreateAsync(enabled.Client, "openai", OpenAiKey);
+        var requestsBefore = _openai.Requests.Count;
+        var disabled = App(("Llm:Providers:OpenAI:Enabled", "false"));
+        using var user = await ApiSession.LoginAsync(disabled, enabled.User!.Email);
+
+        var response = await user.Client.PostAsync(new Uri($"/api/me/connections/llm/{created.Id}/test", UriKind.Relative), null, Ct);
+
+        await Problems.AssertAsync(response, HttpStatusCode.BadRequest, ErrorCodes.LlmProviderUnavailable);
+        Assert.Equal(requestsBefore, _openai.Requests.Count);
+        var stored = await ProjectApi.WithDbAsync(disabled, db => db.LlmCredentials.AsNoTracking().SingleAsync(c => c.Id == created.Id, Ct));
+        Assert.Equal((LlmCredentialStatus.Valid, created.LastValidatedAt), (stored.Status, stored.LastValidatedAt));
+    }
+
+    [Fact]
+    public async Task FR157_The_list_omits_stored_connections_of_a_disabled_provider()
+    {
+        using var enabled = await ApiSession.RegisterAsync(App());
+        var openai = await LlmStubs.CreateAsync(enabled.Client, "openai", OpenAiKey);
+        var anthropic = await LlmStubs.CreateAsync(enabled.Client, "anthropic", AnthropicKey);
+        var disabled = App(("Llm:Providers:OpenAI:Enabled", "false"));
+        using var user = await ApiSession.LoginAsync(disabled, enabled.User!.Email);
+
+        var list = await ProjectApi.ReadAsync<LlmConnectionsDto>(await user.Client.GetAsync(new Uri("/api/me/connections/llm", UriKind.Relative), Ct));
+
+        Assert.Equal(anthropic.Id, Assert.Single(list.Credentials).Id);
+        Assert.DoesNotContain(list.Credentials, c => c.Id == openai.Id);
+        Assert.Equal(2, await CountAsync(disabled, enabled.User.Id)); // still stored, only hidden
+    }
+
     public void Dispose()
     {
         _anthropic.Dispose();
         _openai.Dispose();
     }
 
-    private WebApplicationFactory<Program> App() => LlmStubs.App(factory, _anthropic, _openai);
+    private WebApplicationFactory<Program> App(params (string Key, string Value)[] settings) => LlmStubs.App(factory, _anthropic, _openai, settings);
 
     private static Task<int> CountAsync(WebApplicationFactory<Program> app, Guid userId) =>
         ProjectApi.WithDbAsync(app, db => db.LlmCredentials.CountAsync(c => c.UserId == userId, Ct));

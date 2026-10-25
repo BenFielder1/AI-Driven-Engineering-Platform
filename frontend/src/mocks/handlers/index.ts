@@ -9,6 +9,7 @@ import { refinementHandlers } from './refinement'
 import { releaseHandlers } from './release'
 import { healthHandlers } from './health'
 import { lifecycleHandlers } from './lifecycle'
+import { llmHandlers } from './llm'
 import { notificationHandlers } from './notifications'
 import { presetHandlers } from './presets'
 import { projectHandlers } from './projects'
@@ -22,6 +23,7 @@ export const handlers = [
   ...presetHandlers,
   ...projectHandlers,
   ...connectionHandlers,
+  ...llmHandlers,
   ...deploymentHandlers,
   ...githubHandlers,
   ...lifecycleHandlers,

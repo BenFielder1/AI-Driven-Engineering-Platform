@@ -70,7 +70,8 @@ internal static class ProjectMapping
     public static LlmSettingsDto ToDto(ProjectLlmSettings s, ILlmProviderCatalog catalog, LlmBindingDto? binding, bool canBind)
     {
         var bound = binding is not null && binding.Provider == s.Provider ? binding : null;
-        var providers = Enum.GetValues<LlmProvider>()
+        // FR-157: only the providers enabled on this deployment are listed.
+        var providers = catalog.EnabledProviders
             .Select(p => new LlmProviderStatusDto(
                 p,
                 ProjectSettingsRules.IsConfigured(p, catalog.HasSystemKey(p), bound is not null && s.Provider == p),

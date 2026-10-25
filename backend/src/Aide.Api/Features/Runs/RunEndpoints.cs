@@ -166,7 +166,9 @@ public static class RunEndpoints
             r.ToolCallCount,
             r.CredentialLabel,
             Execution.ExecutionRunReader.ToolCalls(run.ToolCalls),
-            stored?.Warnings ?? []));
+            stored?.Warnings ?? [],
+            stored?.Continuations,
+            stored?.MaxOutputTokens));
     }
 
     /// <summary>

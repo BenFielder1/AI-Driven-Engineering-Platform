@@ -63,6 +63,9 @@ internal enum GitProvider
 
 internal sealed record CreateProjectGitRequest(GitProvider Provider, string? RepoUrl, string? DefaultBranch, string? Token);
 
+/// <summary>FR-159: the new project's LLM provider (wire value), default model and, optionally, the caller's connection.</summary>
+internal sealed record CreateProjectLlmRequest(string Provider, string DefaultModel, Guid? CredentialId);
+
 internal sealed record CreateProjectRequest(
     string Name,
     string Idea,
@@ -71,7 +74,8 @@ internal sealed record CreateProjectRequest(
     int? MaxFilesPerStep,
     int? MaxReviewCycles,
     long? TokenBudget,
-    CreateProjectGitRequest Git);
+    CreateProjectGitRequest Git,
+    CreateProjectLlmRequest? Llm = null);
 
 internal sealed record ArtifactStateDto(string Type, int? LatestVersion, string? LatestStatus, int? CurrentLockedVersion);
 

@@ -5,7 +5,7 @@ using Aide.Cli.Config;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>`aide projects list`, `aide project init`, `aide status &lt;id&gt;`.</summary>
+/// <summary>`aide projects list`, `aide project init` (alias `aide project create`, FR-156), `aide status &lt;id&gt;`.</summary>
 internal static class ProjectCommands
 {
     private static readonly string[] Phases = ["refinement", "specification", "planning", "execution", "review", "release"];
@@ -92,6 +92,10 @@ internal static class ProjectCommands
         var repoUrl = new Option<string?>("--repo-url") { Description = "GitHub repository URL (https://github.com/OWNER/REPO); required for github." };
         var defaultBranch = new Option<string?>("--default-branch") { Description = "Default branch (server default: main)." };
         var noInput = new Option<bool>("--no-input") { Description = "Never prompt; fail with a usage error if something required is missing." };
+        var llmProvider = new Option<string?>("--llm-provider") { Description = "LLM provider: anthropic, openai, ollama or fake (only those enabled on the server). Omit for the server's default." };
+        llmProvider.AcceptOnlyFromAmong("anthropic", "openai", "ollama", "fake");
+        var llmModel = new Option<string?>("--llm-model") { Description = "Default model id for --llm-provider (e.g. claude-opus-5-5); required with it." };
+        var llmConnection = new Option<Guid?>("--llm-connection") { Description = "Id of your LLM connection to bind (Account > Connections). Default: your newest one for the provider, when it needs a key." };
 
         var command = new Command(
             "init",
@@ -99,7 +103,11 @@ internal static class ProjectCommands
             "For GitHub, the access token is read from AIDE_GIT_TOKEN (or prompted for), never from a flag.")
         {
             name, idea, ideaFile, approvalMode, compliance, maxFiles, maxCycles, tokenBudget, gitProvider, repoUrl, defaultBranch, noInput,
+            llmProvider, llmModel, llmConnection,
         };
+
+        // FR-156: `aide project create` is the v4 name of the same command.
+        command.Aliases.Add("create");
 
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
@@ -173,6 +181,25 @@ internal static class ProjectCommands
                 throw new UsageException("--repo-url is only used with --git-provider github.");
             }
 
+            // FR-156, FR-159: the LLM choice is flags only (never prompted); omitted, the server's default applies.
+            var chosenProvider = context.Get(llmProvider);
+            var chosenModel = context.Get(llmModel);
+            var chosenConnection = context.Get(llmConnection);
+            CreateProjectLlmRequest? llm = null;
+            if (chosenProvider is not null)
+            {
+                if (string.IsNullOrWhiteSpace(chosenModel))
+                {
+                    throw new UsageException("--llm-model is required with --llm-provider.");
+                }
+
+                llm = new CreateProjectLlmRequest(chosenProvider.ToLowerInvariant(), chosenModel.Trim(), chosenConnection);
+            }
+            else if (chosenModel is not null || chosenConnection is not null)
+            {
+                throw new UsageException("--llm-model and --llm-connection need --llm-provider.");
+            }
+
             var request = new CreateProjectRequest(
                 projectName,
                 ideaText,
@@ -181,7 +208,8 @@ internal static class ProjectCommands
                 context.Get(maxFiles),
                 context.Get(maxCycles),
                 context.Get(tokenBudget),
-                new CreateProjectGitRequest(provider == "github" ? GitProvider.GithubPat : GitProvider.Local, repo, context.Get(defaultBranch), gitToken));
+                new CreateProjectGitRequest(provider == "github" ? GitProvider.GithubPat : GitProvider.Local, repo, context.Get(defaultBranch), gitToken),
+                llm);
 
             var created = await context.Api().PostAsync<ProjectDto>("api/projects", request, cancellationToken).ConfigureAwait(false);
             if (context.Json)

@@ -234,6 +234,13 @@ public static class ErrorCodes
     /// <summary>FR-25: the provider failed (status, timeout or unreadable response); transient ones are retried first.</summary>
     public const string ProviderError = "PROVIDER_ERROR";
 
+    /// <summary>
+    /// FR-157, FR-159: the LLM provider is disabled on this deployment (<c>Llm:Providers:&lt;P&gt;:Enabled=false</c>) or not
+    /// usable by the caller (no allowed system key and no connection). Returned (400) on project create and
+    /// <c>PATCH …/settings/llm</c>, and recorded as the failure code of an agent run whose project is bound to a disabled provider.
+    /// </summary>
+    public const string LlmProviderUnavailable = "LLM_PROVIDER_UNAVAILABLE";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {
@@ -293,6 +300,7 @@ public static class ErrorCodes
         [PresetLocked] = 409,
         [CredentialInvalid] = 400,
         [CredentialNotOwner] = 403,
+        [LlmProviderUnavailable] = 400,
         [UpstreamError] = 502,
         [GitHubNotConnected] = 409,
         [GitHubAppNotInstalled] = 409,

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { checkRootDirectory, checkVercelProjectName } from '../deployments/vercel-project-rules'
 import { checkNewVersion, DEFAULT_INITIAL_VERSION, normalizeVersion } from '../versions/semver'
-import { approvalModes } from './labels'
+import { approvalModes, type agentKeys } from './labels'
 
 /**
  * Client-side validation mirroring the API's limits (backend ProjectLimits / ProjectDefaults). Numeric inputs are
@@ -132,112 +132,141 @@ export function releasedTagOf(v: Pick<WizardValues, 'releasedTag'>): string | nu
 
 export const localSourcePathMax = 1024
 
+/** FR-159: the wizard's per-agent model fields (flat, so the error summary and field ids stay one level). */
+export const wizardAgentModelFields = {
+  ideaRefinement: 'llmModelIdeaRefinement',
+  specGenerator: 'llmModelSpecGenerator',
+  planGenerator: 'llmModelPlanGenerator',
+  codeGenerator: 'llmModelCodeGenerator',
+  codeReview: 'llmModelCodeReview',
+} as const satisfies Record<(typeof agentKeys)[number], string>
+
+const modelTooLong = `Model ids are at most ${String(limits.modelMax)} characters.`
+
+/** The wizard's fields, without the cross-field refinement (also used to check a restored session-storage draft). */
+export const wizardShape = z.object({
+  /** FR-73: start from scratch, or import an existing repository. */
+  source: z.enum(['scratch', 'import']),
+  name: str,
+  idea: str,
+  approvalMode: z.enum(approvalModes),
+  complianceThreshold: str,
+  maxFilesPerStep: str,
+  maxReviewCycles: str,
+  tokenBudget: str,
+  /** FR-82, FR-86: `github_app` (picker / create), `github_pat` (URL + token) or `local`. */
+  gitMode: z.enum(['github_app', 'github_pat', 'local']),
+  repoUrl: str,
+  defaultBranch: str,
+  gitToken: str,
+  /** `github_app`: the picked repository (`owner/name`) and the installation that grants it (a number, as text). */
+  repoFullName: str,
+  installationId: str,
+  /** `github_app`: the picked repository already has commits (FR-86 warning). */
+  repoHasCode: z.boolean(),
+  initialVersion: str,
+  /** FR-73 import: the released tag (a tag name, NEVER_RELEASED, or '' typed as "never released"). */
+  releasedTag: str,
+  /** FR-73 import: the released tag's semver ('' when never released or not a version), kept in sync by the wizard. */
+  releasedVersion: str,
+  /** FR-73 import: the version to develop. */
+  developmentVersion: str,
+  /** FR-73 import with `local` (development only): the server path of the repository to import. */
+  localSourcePath: str,
+  /** FR-74 Stack step: a preset id from GET /api/presets, or '' for "No preset (general)". */
+  presetId: str,
+  /** FR-88 Deployment step (optional): skip, or Vercel with one of the caller's own connections. */
+  deploymentMode: z.enum(['none', 'vercel']),
+  vercelConnectionId: str,
+  /** Create a new Vercel project (name, root directory) or link an existing one (id or name). */
+  vercelProjectMode: z.enum(['create', 'link']),
+  vercelProjectName: str,
+  vercelRootDirectory: str,
+  vercelProjectId: str,
+  /** FR-159 AI model section: '' until a usable provider is chosen (an unusable one is never preselected). */
+  llmProvider: z.enum(['anthropic', 'openai', 'ollama', 'fake', '']),
+  /** One of the caller's own connections for the provider, or '' (system key, keyless, or none shown). */
+  llmCredentialId: str,
+  llmDefaultModel: str,
+  llmModelIdeaRefinement: str,
+  llmModelSpecGenerator: str,
+  llmModelPlanGenerator: str,
+  llmModelCodeGenerator: str,
+  llmModelCodeReview: str,
+})
+
 /** One loose object plus one refinement, so every field is checked together (per-step checks use RHF `trigger`). */
-export const wizardSchema = z
-  .object({
-    /** FR-73: start from scratch, or import an existing repository. */
-    source: z.enum(['scratch', 'import']),
-    name: str,
-    idea: str,
-    approvalMode: z.enum(approvalModes),
-    complianceThreshold: str,
-    maxFilesPerStep: str,
-    maxReviewCycles: str,
-    tokenBudget: str,
-    /** FR-82, FR-86: `github_app` (picker / create), `github_pat` (URL + token) or `local`. */
-    gitMode: z.enum(['github_app', 'github_pat', 'local']),
-    repoUrl: str,
-    defaultBranch: str,
-    gitToken: str,
-    /** `github_app`: the picked repository (`owner/name`) and the installation that grants it (a number, as text). */
-    repoFullName: str,
-    installationId: str,
-    /** `github_app`: the picked repository already has commits (FR-86 warning). */
-    repoHasCode: z.boolean(),
-    initialVersion: str,
-    /** FR-73 import: the released tag (a tag name, NEVER_RELEASED, or '' typed as "never released"). */
-    releasedTag: str,
-    /** FR-73 import: the released tag's semver ('' when never released or not a version), kept in sync by the wizard. */
-    releasedVersion: str,
-    /** FR-73 import: the version to develop. */
-    developmentVersion: str,
-    /** FR-73 import with `local` (development only): the server path of the repository to import. */
-    localSourcePath: str,
-    /** FR-74 Stack step: a preset id from GET /api/presets, or '' for "No preset (general)". */
-    presetId: str,
-    /** FR-88 Deployment step (optional): skip, or Vercel with one of the caller's own connections. */
-    deploymentMode: z.enum(['none', 'vercel']),
-    vercelConnectionId: str,
-    /** Create a new Vercel project (name, root directory) or link an existing one (id or name). */
-    vercelProjectMode: z.enum(['create', 'link']),
-    vercelProjectName: str,
-    vercelRootDirectory: str,
-    vercelProjectId: str,
-  })
-  .superRefine((v, ctx) => {
-    const importing = v.source === 'import'
-    addCheck(ctx, 'name', checkName(v.name))
-    if (importing) {
-      const releasedTag = releasedTagOf(v)
-      const released = releasedTag === null ? null : v.releasedVersion || normalizeVersion(releasedTag)
-      if (releasedTag !== null && !released) {
-        addCheck(
-          ctx,
-          'releasedTag',
-          "This tag isn't a semantic version (for example v2.3.0). Enter the released version's tag, or leave it empty.",
-        )
-      }
-      const check = checkNewVersion(v.developmentVersion, released)
-      addCheck(ctx, 'developmentVersion', check.ok ? null : check.message)
-      if (v.gitMode === 'local') {
-        const path = v.localSourcePath.trim()
-        addCheck(
-          ctx,
-          'localSourcePath',
-          !path
-            ? 'Enter the path of the repository to import.'
-            : path.length > localSourcePathMax
-              ? `The path is at most ${String(localSourcePathMax)} characters.`
-              : null,
-        )
-      }
+export const wizardSchema = wizardShape.superRefine((v, ctx) => {
+  const importing = v.source === 'import'
+  addCheck(ctx, 'name', checkName(v.name))
+  if (importing) {
+    const releasedTag = releasedTagOf(v)
+    const released = releasedTag === null ? null : v.releasedVersion || normalizeVersion(releasedTag)
+    if (releasedTag !== null && !released) {
+      addCheck(
+        ctx,
+        'releasedTag',
+        "This tag isn't a semantic version (for example v2.3.0). Enter the released version's tag, or leave it empty.",
+      )
+    }
+    const check = checkNewVersion(v.developmentVersion, released)
+    addCheck(ctx, 'developmentVersion', check.ok ? null : check.message)
+    if (v.gitMode === 'local') {
+      const path = v.localSourcePath.trim()
+      addCheck(
+        ctx,
+        'localSourcePath',
+        !path
+          ? 'Enter the path of the repository to import.'
+          : path.length > localSourcePathMax
+            ? `The path is at most ${String(localSourcePathMax)} characters.`
+            : null,
+      )
+    }
+  } else {
+    addCheck(ctx, 'initialVersion', checkInitialVersion(v.initialVersion))
+  }
+  addCheck(
+    ctx,
+    'idea',
+    !v.idea.trim()
+      ? importing
+        ? 'Describe what this version should deliver.'
+        : 'Describe your idea: what should the software do, and for whom?'
+      : v.idea.length > limits.ideaMax
+        ? `The ${importing ? 'request' : 'idea'} is at most ${limits.ideaMax.toLocaleString()} characters.`
+        : null,
+  )
+  addCheck(ctx, 'complianceThreshold', checkThreshold(v.complianceThreshold))
+  addCheck(ctx, 'maxFilesPerStep', checkMaxFiles(v.maxFilesPerStep))
+  addCheck(ctx, 'maxReviewCycles', checkMaxCycles(v.maxReviewCycles))
+  addCheck(ctx, 'tokenBudget', checkTokenBudget(v.tokenBudget))
+  addCheck(ctx, 'defaultBranch', checkBranch(v.defaultBranch))
+  if (v.gitMode === 'github_pat') {
+    addCheck(ctx, 'repoUrl', checkRepoUrl(v.repoUrl))
+    addCheck(ctx, 'gitToken', checkSecret(v.gitToken, 'access token'))
+  }
+  if (v.gitMode === 'github_app' && (!v.repoFullName || !v.installationId)) {
+    addCheck(ctx, 'repoFullName', 'Pick a repository, or create one.')
+  }
+  // FR-88: the server decides whether a Local project can deploy (VALIDATION unless it runs the Fake provider).
+  if (v.deploymentMode === 'vercel') {
+    addCheck(ctx, 'vercelConnectionId', v.vercelConnectionId ? null : 'Pick one of your Vercel connections, or skip deployment.')
+    if (v.vercelProjectMode === 'create') {
+      addCheck(ctx, 'vercelProjectName', checkVercelProjectName(v.vercelProjectName))
+      addCheck(ctx, 'vercelRootDirectory', checkRootDirectory(v.vercelRootDirectory))
     } else {
-      addCheck(ctx, 'initialVersion', checkInitialVersion(v.initialVersion))
+      addCheck(ctx, 'vercelProjectId', v.vercelProjectId.trim() ? null : 'Enter the Vercel project id (prj_…) or name.')
     }
-    addCheck(
-      ctx,
-      'idea',
-      !v.idea.trim()
-        ? importing
-          ? 'Describe what this version should deliver.'
-          : 'Describe your idea: what should the software do, and for whom?'
-        : v.idea.length > limits.ideaMax
-          ? `The ${importing ? 'request' : 'idea'} is at most ${limits.ideaMax.toLocaleString()} characters.`
-          : null,
-    )
-    addCheck(ctx, 'complianceThreshold', checkThreshold(v.complianceThreshold))
-    addCheck(ctx, 'maxFilesPerStep', checkMaxFiles(v.maxFilesPerStep))
-    addCheck(ctx, 'maxReviewCycles', checkMaxCycles(v.maxReviewCycles))
-    addCheck(ctx, 'tokenBudget', checkTokenBudget(v.tokenBudget))
-    addCheck(ctx, 'defaultBranch', checkBranch(v.defaultBranch))
-    if (v.gitMode === 'github_pat') {
-      addCheck(ctx, 'repoUrl', checkRepoUrl(v.repoUrl))
-      addCheck(ctx, 'gitToken', checkSecret(v.gitToken, 'access token'))
-    }
-    if (v.gitMode === 'github_app' && (!v.repoFullName || !v.installationId)) {
-      addCheck(ctx, 'repoFullName', 'Pick a repository, or create one.')
-    }
-    // FR-88: the server decides whether a Local project can deploy (VALIDATION unless it runs the Fake provider).
-    if (v.deploymentMode === 'vercel') {
-      addCheck(ctx, 'vercelConnectionId', v.vercelConnectionId ? null : 'Pick one of your Vercel connections, or skip deployment.')
-      if (v.vercelProjectMode === 'create') {
-        addCheck(ctx, 'vercelProjectName', checkVercelProjectName(v.vercelProjectName))
-        addCheck(ctx, 'vercelRootDirectory', checkRootDirectory(v.vercelRootDirectory))
-      } else {
-        addCheck(ctx, 'vercelProjectId', v.vercelProjectId.trim() ? null : 'Enter the Vercel project id (prj_…) or name.')
-      }
-    }
-  })
+  }
+  // FR-159: the AI model section.
+  addCheck(ctx, 'llmProvider', v.llmProvider ? null : 'Choose an AI provider you can use, or add a connection for one.')
+  const model = v.llmDefaultModel.trim()
+  addCheck(ctx, 'llmDefaultModel', !model ? 'Choose the default model, or enter its id.' : model.length > limits.modelMax ? modelTooLong : null)
+  for (const field of Object.values(wizardAgentModelFields)) {
+    addCheck(ctx, field, v[field].trim().length > limits.modelMax ? modelTooLong : null)
+  }
+})
 
 export type WizardValues = z.infer<typeof wizardSchema>
 
@@ -269,6 +298,14 @@ export const wizardDefaults: WizardValues = {
   vercelProjectName: '',
   vercelRootDirectory: '',
   vercelProjectId: '',
+  llmProvider: '',
+  llmCredentialId: '',
+  llmDefaultModel: '',
+  llmModelIdeaRefinement: '',
+  llmModelSpecGenerator: '',
+  llmModelPlanGenerator: '',
+  llmModelCodeGenerator: '',
+  llmModelCodeReview: '',
 }
 
 // ---- Settings → General (FR-7) ---------------------------------------------------------------------------------

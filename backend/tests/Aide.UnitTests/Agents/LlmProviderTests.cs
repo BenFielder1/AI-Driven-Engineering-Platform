@@ -11,7 +11,9 @@ using Microsoft.Extensions.Options;
 namespace Aide.UnitTests.Agents;
 
 /// <summary>FR-22, FR-25: each provider's request/response mapping and failure classification, against fake HTTP handlers
-/// (no test reaches a real provider).</summary>
+/// (no test reaches a real provider). Requests stream (FR-161); these handlers answer whole <c>application/json</c> bodies,
+/// which the providers still read (a server that ignores <c>stream</c>). The streamed replies are in
+/// <see cref="LlmStreamingTests"/>.</summary>
 public class LlmProviderTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -55,6 +57,7 @@ public class LlmProviderTests
         var body = JsonDocument.Parse(sent.Body).RootElement;
         Assert.Equal("claude-opus-5-5", body.GetProperty("model").GetString());
         Assert.Equal(1234, body.GetProperty("max_tokens").GetInt32());
+        Assert.True(body.GetProperty("stream").GetBoolean());
         Assert.Equal("You are a test.", body.GetProperty("system").GetString());
         var message = Assert.Single(body.GetProperty("messages").EnumerateArray());
         Assert.Equal(("user", "Hello"), (message.GetProperty("role").GetString(), message.GetProperty("content").GetString()));
@@ -155,6 +158,8 @@ public class LlmProviderTests
         Assert.Equal("Bearer sk-test-key", sent.Headers["Authorization"]);
         var body = JsonDocument.Parse(sent.Body).RootElement;
         Assert.Equal(("gpt-6-astra", 1234), (body.GetProperty("model").GetString(), body.GetProperty("max_completion_tokens").GetInt32()));
+        Assert.True(body.GetProperty("stream").GetBoolean());
+        Assert.True(body.GetProperty("stream_options").GetProperty("include_usage").GetBoolean());
         var messages = body.GetProperty("messages").EnumerateArray().Select(m => (m.GetProperty("role").GetString(), m.GetProperty("content").GetString())).ToList();
         Assert.Equal([("system", "You are a test."), ("user", "Hello")], messages);
     }
@@ -216,7 +221,7 @@ public class LlmProviderTests
     // ------------------------------------------------------------------ Ollama
 
     [Fact]
-    public async Task FR22_Ollama_example_posts_api_chat_with_the_model_and_stream_false()
+    public async Task FR22_FR161_Ollama_example_posts_api_chat_with_the_model_and_stream_true()
     {
         var handler = new FakeHandler(HttpStatusCode.OK, """
             {"model":"qwen2.5-coder","message":{"role":"assistant","content":"done"},"done":true,"done_reason":"stop",
@@ -232,7 +237,7 @@ public class LlmProviderTests
         Assert.False(sent.Headers.ContainsKey("Authorization"));
         var body = JsonDocument.Parse(sent.Body).RootElement;
         Assert.Equal("qwen2.5-coder", body.GetProperty("model").GetString());
-        Assert.False(body.GetProperty("stream").GetBoolean());
+        Assert.True(body.GetProperty("stream").GetBoolean());
         Assert.Equal(1234, body.GetProperty("options").GetProperty("num_predict").GetInt32());
         Assert.Equal("system", body.GetProperty("messages")[0].GetProperty("role").GetString());
     }

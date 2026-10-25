@@ -103,7 +103,7 @@ where exit 2 means drift and stops the deploy.
 **Operator-set variables and `variables.ignore`.** IaC owns every variable on a service, so a variable that exists in
 Railway but not in `railway.ts` is planned for **deletion**, which would also make CI's drift check fail. To keep one
 file for both environments, `railway.ts` lists `Approvals__SigningKey` and the **full optional set** from
-[variables.md](variables.md) (`Llm__*`, `GitHub__App__*`, `GitHub__OAuth__*`, `Smtp__*`, 19 names) in
+[variables.md](variables.md) (`Llm__*`, `GitHub__App__*`, `GitHub__OAuth__*`, `Smtp__*`, 21 names) in
 `operatorSetApiVariables`, which is the project-level `variables.ignore`. IaC never touches an ignored name, whether it
 is set or not, so setting any of them in either environment needs no code change. An ignored name may be set or unset,
 which is why it is used instead of `preserve()`. `variables.ignore` is a CLI 5.71 feature that the `railway` 3.16 package doesn't type yet, hence a cast in `railway.ts`.

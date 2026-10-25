@@ -99,8 +99,8 @@ Still open:
   key, users' LLM and Vercel tokens). Back up the volume. Losing it makes those secrets unreadable.
 - ⚠ **First registered user becomes Admin** (FR-3). On a public Railway URL, register the admin straight after the
   first deploy.
-- ⚠ **Ollama default** (`host.docker.internal:11434`) doesn't resolve on Railway. Set `Llm__Providers__Ollama__BaseUrl`
-  or leave Ollama unused.
+- **Ollama and Fake are disabled on Railway** (`Llm__Providers__{Ollama,Fake}__Enabled=false`, SPEC FR-157). Local runs
+  and CI keep all four LLM providers.
 
 ## As built (v3)
 - **Frontend:** `frontend/` is on the Next.js App Router (`src/app/`, thin client pages). `server.ts` is a custom Node

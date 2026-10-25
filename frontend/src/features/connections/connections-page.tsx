@@ -1,5 +1,5 @@
 import { KeyRound } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useRef, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 
 import { EmptyState } from '../../components/shared/empty-state'
@@ -13,6 +13,7 @@ import { errorMessage } from '../../lib/errors'
 import { Link } from '../../lib/navigation'
 import { cn } from '../../lib/utils'
 import { llmProviderLabels } from '../projects/labels'
+import { hasWizardDraft } from '../projects/wizard-draft'
 import { RelativeTime } from '../projects/relative-time'
 import { credentialStatusLabels, maskedKey } from './connection-format'
 import { useDeleteLlmConnection, useLlmConnections, useTestLlmConnection, type LlmCredential } from './connections-api'
@@ -289,6 +290,29 @@ function LlmProvidersSection() {
  * /connections (alias /account/connections; SPEC §7.2): the user's LLM providers (FR-78), GitHub (FR-81) and Vercel
  * (FR-87). `githubError` is a failed Connect GitHub coming back as `?error=GITHUB_AUTH_FAILED&reason=…`.
  */
+/**
+ * FR-159: "Add a connection" in the new-project wizard saved it in session storage and opened this page; this offers
+ * the way back (the wizard restores its state). Session storage only exists in the browser (server snapshot: none).
+ */
+const noSubscription = () => () => undefined
+
+function WizardReturnNotice() {
+  const waiting = useSyncExternalStore(noSubscription, hasWizardDraft, () => false)
+  if (!waiting) {
+    return null
+  }
+  return (
+    <Alert tone="info" title="You were creating a project">
+      <p>Add the connection you need, then go back: what you entered in the new-project wizard is kept.</p>
+      <p className="mt-2">
+        <Link to="/projects/new" className="text-primary underline">
+          Back to the new project
+        </Link>
+      </p>
+    </Alert>
+  )
+}
+
 export function ConnectionsPage({
   githubError,
   githubInstalled = false,
@@ -300,6 +324,7 @@ export function ConnectionsPage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Connections" description="LLM providers, GitHub and Vercel, connected to your account." />
+      <WizardReturnNotice />
       <LlmProvidersSection />
       <GitHubConnectionSection callbackError={githubError} installed={githubInstalled} />
       <VercelConnectionSection />

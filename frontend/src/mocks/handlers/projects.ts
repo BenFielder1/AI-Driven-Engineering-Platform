@@ -5,8 +5,10 @@ import { checkTagPrefix } from '../../features/projects/settings/release-setting
 import { compareSemVer, normalizeVersion, parseSemVer } from '../../features/versions/semver'
 import type { ProjectRole } from '../../lib/permissions'
 import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from './auth'
+import { bindCredential, connectionsDb } from './connections'
 import { applyVercelSetup } from './deployments'
 import { githubDb } from './github'
+import { checkCreateLlm, isLlmProviderEnabled } from './llm'
 import { findPreset, presetNameOf } from './preset-catalog'
 import { problem } from './problem'
 
@@ -435,8 +437,31 @@ export function llmDto(project: StoredProject, canBind: boolean): LlmSettings {
     ...project.llm,
     hasApiKey: binding !== null,
     canBind,
-    providers: projectsDb.providers.map((p) => ({ ...p, configured: p.configured || binding?.provider === p.provider })),
+    // FR-157: only providers enabled on this server are listed.
+    providers: projectsDb.providers
+      .filter((p) => isLlmProviderEnabled(p.provider))
+      .map((p) => ({ ...p, configured: p.configured || binding?.provider === p.provider })),
   }
+}
+
+/**
+ * FR-159: the new project's LLM settings, bound to the chosen connection, or (a keyed provider without one) to the
+ * caller's newest connection for it, as the API does.
+ */
+function applyCreateLlm(project: StoredProject, llm: Schemas['CreateProjectLlmRequest'], userId: string) {
+  project.llm.provider = llm.provider
+  project.llm.defaultModel = llm.defaultModel.trim()
+  project.llm.modelsByAgent = llm.modelsByAgent ?? {}
+  project.llm.binding = null
+  const credential = llm.credentialId
+    ? connectionsDb.credentials.find((c) => c.id === llm.credentialId)
+    : llm.provider === 'anthropic' || llm.provider === 'openai'
+      ? connectionsDb.credentials.find((c) => c.userId === userId && c.provider === llm.provider)
+      : undefined
+  if (credential) {
+    bindCredential(project, credential)
+  }
+  project.llm.hasApiKey = credential !== undefined
 }
 
 const urlIsSecret = (type: Channel['type']) => type === 'slack' || type === 'teams'
@@ -779,6 +804,11 @@ export const projectHandlers = [
     if (Object.keys(errors).length > 0) {
       return validation(errors)
     }
+    // FR-159: the AI model section (enabled and usable provider, the caller's own connection, a model id).
+    const llmFailure = body.llm ? checkCreateLlm(body.llm, user.id) : null
+    if (llmFailure) {
+      return llmFailure
+    }
     const versions = importing ? importVersions(body) : scratchVersions(body)
     if (versions instanceof Response) {
       return versions
@@ -825,6 +855,9 @@ export const projectHandlers = [
         projectsDb.projects = projectsDb.projects.filter((p) => p !== project)
         return failed
       }
+    }
+    if (body.llm) {
+      applyCreateLlm(project, body.llm, user.id)
     }
     // FR-70: an import queues the Repository Analyst for the version to develop.
     const development = developmentVersionOf(project)

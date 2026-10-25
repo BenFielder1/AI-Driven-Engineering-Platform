@@ -49,7 +49,9 @@ public sealed record AgentRunDto(
 /// to the first 200,000 characters (<c>outputTruncated</c>). The v2 fields are as on <see cref="AgentRunDto"/>.
 /// <c>toolCalls</c> is the run's repo tool log (FR-71: tool, arguments, bytes, truncated, error code) and <c>warnings</c>
 /// what was recorded on it (FR-70, FR-71): <c>tools_unsupported</c>, <c>snapshot_unavailable</c>,
-/// <c>summary_wait_timeout</c>, <c>summary_unavailable</c>.
+/// <c>summary_wait_timeout</c>, <c>summary_unavailable</c>, and <c>output_truncated</c> (FR-162). <c>continuations</c> is how
+/// many continuations the answer took (0–5, FR-162) and <c>maxOutputTokens</c> the output token limit its calls used
+/// (FR-160); both are <c>null</c> for runs stored before v4 and for runs that haven't succeeded.
 /// </summary>
 public sealed record AgentRunDetailDto(
     Guid Id,
@@ -80,4 +82,6 @@ public sealed record AgentRunDetailDto(
     int ToolCallCount,
     string? CredentialLabel,
     IReadOnlyList<Execution.ToolCallDto> ToolCalls,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    int? Continuations,
+    int? MaxOutputTokens);

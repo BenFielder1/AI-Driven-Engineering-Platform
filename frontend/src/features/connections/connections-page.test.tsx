@@ -4,9 +4,11 @@ import { describe, expect, it } from 'vitest'
 
 import { signInAs } from '../../mocks/handlers/auth'
 import { bindCredential, connectionsDb, seedCredential } from '../../mocks/handlers/connections'
+import { disableLlmProviders } from '../../mocks/handlers/llm'
 import { projectsDb, seedProject } from '../../mocks/handlers/projects'
 import { renderRoute } from '../../test/render'
 import { describeActivity } from '../activity/activity-summary'
+import { WIZARD_DRAFT_KEY } from '../projects/wizard-draft'
 
 function signInAda() {
   return signInAs({ email: 'ada@example.com', name: 'Ada Lovelace', systemRole: 'user' })
@@ -162,5 +164,37 @@ describe('/connections → LLM providers (FR-78)', () => {
     expect(
       describeActivity({ type: 'LLM_BINDING_CLEARED', summary: 'x', payload: { provider: 'anthropic', reason: 'owner_role_lost' } }),
     ).toBe('Anthropic connection unbound: the Owner who bound it is no longer an Owner')
+  })
+})
+
+describe('/connections: providers enabled on this server and the way back to the wizard (FR-157, FR-159)', () => {
+  it('FR157_connections_list_only_enabled_providers: turned-off providers are neither listed nor offered for a key', async () => {
+    disableLlmProviders('openai', 'ollama')
+    signInAda()
+    const { user } = await openConnections()
+
+    const keyless = await within(llmSection()).findByRole('list', { name: 'Providers without a key' })
+    expect(within(keyless).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      expect.stringContaining('Fake (testing)'),
+    ])
+    await user.click(screen.getByRole('button', { name: 'Add key' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add an LLM key' })
+    const provider = within(dialog).getByLabelText('Provider')
+    await waitFor(() => {
+      expect(within(provider).getAllByRole('option').map((o) => o.textContent)).toEqual(['Anthropic'])
+    })
+  })
+
+  it('FR159_connections_show_no_way_back_without_a_saved_wizard', async () => {
+    signInAda()
+    await openConnections()
+    expect(screen.queryByRole('link', { name: 'Back to the new project' })).not.toBeInTheDocument()
+  })
+
+  it('FR159_connections_link_back_to_the_new_project_when_the_wizard_was_saved', async () => {
+    sessionStorage.setItem(WIZARD_DRAFT_KEY, JSON.stringify({ values: { name: 'Inventory tracker' }, step: 5 }))
+    signInAda()
+    await openConnections()
+    expect(await screen.findByRole('link', { name: 'Back to the new project' })).toHaveAttribute('href', '/projects/new')
   })
 })

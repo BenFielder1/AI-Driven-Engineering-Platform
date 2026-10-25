@@ -52,7 +52,7 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
         var sent = Assert.Single(_ollama.Requests);
         Assert.Equal("http://ollama.test:11434/api/chat", sent.Uri);
         var body = JsonDocument.Parse(sent.Body).RootElement;
-        Assert.Equal(("qwen2.5-coder", false), (body.GetProperty("model").GetString(), body.GetProperty("stream").GetBoolean()));
+        Assert.Equal(("qwen2.5-coder", true), (body.GetProperty("model").GetString(), body.GetProperty("stream").GetBoolean())); // FR-161
         Assert.Contains(ProjectRequest, body.GetProperty("messages")[1].GetProperty("content").GetString(), StringComparison.Ordinal);
         Assert.Equal((LlmProvider.Ollama, "qwen2.5-coder", "spec text"), (outcome.Provider, outcome.Model, outcome.Text));
         Assert.Equal(0, _spec.Calls);
@@ -101,6 +101,143 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
         var run = await LoadRunAsync(outcome.RunId);
         Assert.Equal(1.4m, run.CostEstimate); // 100k × $4/MTok + 50k × $20/MTok
         Assert.Equal(150_000, await TokensUsedAsync(fixture.Project.Id));
+    }
+
+    [Fact]
+    public async Task FR160_A_spec_run_on_claude_opus_5_5_sends_max_tokens_128000_and_records_it()
+    {
+        var app = App();
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        await SetLlmInDbAsync(fixture.Project.Id, LlmProvider.Anthropic, "claude-opus-5-5", apiKey: "sk-project-key");
+        _anthropic.Enqueue(HttpStatusCode.OK, """{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":5}}""");
+
+        var outcome = await RunAsync(app, Spec(fixture.Project.Id, NewJob(fixture.Project.Id)));
+
+        var sent = Assert.Single(_anthropic.Requests); // a listed model: no discovery lookup
+        Assert.Equal(128_000, JsonDocument.Parse(sent.Body).RootElement.GetProperty("max_tokens").GetInt32());
+        var run = await ProjectApi.ReadAsync<AgentRunDetailDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/runs/{outcome.RunId}", UriKind.Relative), Ct));
+        Assert.Equal(128_000, run.MaxOutputTokens);
+    }
+
+    [Fact]
+    public async Task FR160_claude_haiku_4_5_sends_max_tokens_64000_and_a_ceiling_caps_it()
+    {
+        var app = App();
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        await SetLlmInDbAsync(fixture.Project.Id, LlmProvider.Anthropic, "claude-haiku-4-5", apiKey: "sk-project-key");
+        const string reply = """{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":5}}""";
+        _anthropic.Enqueue(HttpStatusCode.OK, reply);
+        await RunAsync(app, Spec(fixture.Project.Id, NewJob(fixture.Project.Id)));
+
+        var capped = App(("Llm:MaxOutputTokensCeiling", "32000"));
+        _anthropic.Enqueue(HttpStatusCode.OK, reply);
+        await RunAsync(capped, Spec(fixture.Project.Id, NewJob(fixture.Project.Id)));
+
+        Assert.Equal(
+            [64_000, 32_000],
+            _anthropic.Requests.Select(r => JsonDocument.Parse(r.Body).RootElement.GetProperty("max_tokens").GetInt32()));
+    }
+
+    [Fact]
+    public async Task FR162_A_streamed_answer_cut_off_at_max_tokens_is_continued_and_the_run_records_the_continuations()
+    {
+        var app = App();
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        await SetLlmInDbAsync(fixture.Project.Id, LlmProvider.Anthropic, "claude-opus-5-5", apiKey: "sk-project-key");
+        _anthropic.EnqueueStream(AnthropicStream("## 1. Overview Part one", "max_tokens", 100, 1_000));
+        _anthropic.EnqueueStream(AnthropicStream(" and part two.", "end_turn", 120, 40));
+
+        var outcome = await RunAsync(app, Spec(fixture.Project.Id, NewJob(fixture.Project.Id)));
+
+        Assert.Equal(2, _anthropic.Requests.Count);
+        Assert.True(JsonDocument.Parse(_anthropic.Requests[0].Body).RootElement.GetProperty("stream").GetBoolean());
+        Assert.Equal("## 1. Overview Part one and part two.", outcome.Text);
+        var run = await ProjectApi.ReadAsync<AgentRunDetailDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/runs/{outcome.RunId}", UriKind.Relative), Ct));
+        Assert.Equal((1, 128_000), (run.Continuations, run.MaxOutputTokens));
+        Assert.Empty(run.Warnings);
+        Assert.Equal((220, 1_040), (run.InputTokens, run.OutputTokens));
+    }
+
+    [Fact]
+    public async Task FR162_A_Fake_run_records_zero_continuations()
+    {
+        var app = App();
+        using var fixture = await ProjectApi.FixtureAsync(app);
+
+        var outcome = await RunAsync(app, Spec(fixture.Project.Id, NewJob(fixture.Project.Id)));
+
+        Assert.Equal(0, AgentRunner.ReadOutput((await LoadRunAsync(outcome.RunId)).Output)!.Continuations);
+    }
+
+    [Fact]
+    public async Task FR160_An_unlisted_Ollama_model_uses_Llm_MaxOutputTokens()
+    {
+        var app = App();
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        await SetLlmInDbAsync(fixture.Project.Id, LlmProvider.Ollama, "llama3.3", apiKey: null);
+        _ollama.Enqueue(HttpStatusCode.OK, """{"message":{"role":"assistant","content":"spec text"},"done_reason":"stop","prompt_eval_count":5,"eval_count":2}""");
+
+        var outcome = await RunAsync(app, Spec(fixture.Project.Id, NewJob(fixture.Project.Id)));
+
+        var body = JsonDocument.Parse(Assert.Single(_ollama.Requests).Body).RootElement;
+        Assert.Equal(16_000, body.GetProperty("options").GetProperty("num_predict").GetInt32());
+        Assert.Equal(16_000, AgentRunner.ReadOutput((await LoadRunAsync(outcome.RunId)).Output)!.MaxOutputTokens);
+    }
+
+    [Fact]
+    public async Task FR160_An_unlisted_Anthropic_model_uses_the_max_tokens_Anthropic_reports_and_caches_it()
+    {
+        var app = App();
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        var model = $"claude-new-{Guid.NewGuid():N}"[..20];
+        await SetLlmInDbAsync(fixture.Project.Id, LlmProvider.Anthropic, model, apiKey: "sk-project-key");
+        const string reply = """{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":5}}""";
+        _anthropic.Enqueue(HttpStatusCode.OK, "{\"id\":\"" + model + "\",\"type\":\"model\",\"max_tokens\":96000}");
+        _anthropic.Enqueue(HttpStatusCode.OK, reply);
+        _anthropic.Enqueue(HttpStatusCode.OK, reply);
+
+        await RunAsync(app, Spec(fixture.Project.Id, NewJob(fixture.Project.Id)));
+        await RunAsync(app, Spec(fixture.Project.Id, NewJob(fixture.Project.Id)));
+
+        var requests = _anthropic.Requests;
+        Assert.Equal(3, requests.Count); // one lookup, then cached for 24 h
+        Assert.EndsWith($"/v1/models/{model}", requests[0].Uri, StringComparison.Ordinal);
+        Assert.Equal("sk-project-key", requests[0].Headers["x-api-key"]);
+        Assert.Equal(96_000, JsonDocument.Parse(requests[1].Body).RootElement.GetProperty("max_tokens").GetInt32());
+        Assert.Equal(96_000, JsonDocument.Parse(requests[2].Body).RootElement.GetProperty("max_tokens").GetInt32());
+    }
+
+    [Fact]
+    public async Task FR160_A_failed_Anthropic_lookup_is_ignored_and_the_fallback_is_used()
+    {
+        var app = App();
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        var model = $"claude-new-{Guid.NewGuid():N}"[..20];
+        await SetLlmInDbAsync(fixture.Project.Id, LlmProvider.Anthropic, model, apiKey: "sk-project-key");
+        _anthropic.Enqueue(HttpStatusCode.NotFound, """{"type":"error","error":{"type":"not_found_error"}}""");
+        _anthropic.Enqueue(HttpStatusCode.OK, """{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":5}}""");
+
+        await RunAsync(app, Spec(fixture.Project.Id, NewJob(fixture.Project.Id)));
+
+        Assert.Equal(16_000, JsonDocument.Parse(_anthropic.Requests[1].Body).RootElement.GetProperty("max_tokens").GetInt32());
+    }
+
+    [Fact]
+    public async Task FR157_A_run_of_a_project_set_to_a_disabled_provider_fails_with_LLM_PROVIDER_UNAVAILABLE_without_calling()
+    {
+        var app = App(("Llm:Providers:Ollama:Enabled", "false"));
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        await SetLlmInDbAsync(fixture.Project.Id, LlmProvider.Ollama, "qwen2.5-coder", apiKey: null);
+        var job = NewJob(fixture.Project.Id);
+
+        var ex = await Assert.ThrowsAsync<JobFailedException>(() => RunAsync(app, Spec(fixture.Project.Id, job)));
+
+        Assert.Equal((false, ErrorCodes.LlmProviderUnavailable), (ex.Transient, ex.ErrorCode));
+        Assert.Empty(_ollama.Requests);
+        var run = await LoadRunAsync(job.Id);
+        Assert.Equal((AgentRunStatus.Failed, 0), (run.Status, run.Attempts));
+        Assert.StartsWith("LLM_PROVIDER_UNAVAILABLE: ", run.Error, StringComparison.Ordinal);
+        Assert.Equal([EventTypes.RunStarted, EventTypes.RunFailed], await RunEventsAsync(fixture.Project.Id));
     }
 
     [Fact]
@@ -429,18 +566,36 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
 
     // ------------------------------------------------------------------ helpers
 
-    private WebApplicationFactory<Program> App() =>
+    private WebApplicationFactory<Program> App(params (string Key, string Value)[] settings) =>
         factory.WithWebHostBuilder(b =>
         {
             b.UseSetting("Llm:Providers:Ollama:BaseUrl", "http://ollama.test:11434");
+            foreach (var (key, value) in settings)
+            {
+                b.UseSetting(key, value);
+            }
+
             b.ConfigureTestServices(services =>
             {
                 services.AddHttpClient<OllamaLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => _ollama);
                 services.AddHttpClient<AnthropicLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => _anthropic);
+                services.AddHttpClient(Aide.Infrastructure.Llm.IAnthropicModelInfo.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _anthropic);
                 services.AddHttpClient<OpenAiLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new ScriptedHandler());
                 services.AddSingleton<IFakeAgentResponder>(_spec);
             });
         });
+
+    /// <summary>An Anthropic Messages SSE stream (FR-161) answering <paramref name="text"/>.</summary>
+    private static string AnthropicStream(string text, string stopReason, int inputTokens, int outputTokens) => string.Concat(
+        new object[]
+        {
+            new { type = "message_start", message = new { usage = new { input_tokens = inputTokens, output_tokens = 1 } } },
+            new { type = "content_block_start", index = 0, content_block = new { type = "text", text = string.Empty } },
+            new { type = "content_block_delta", index = 0, delta = new { type = "text_delta", text } },
+            new { type = "content_block_stop", index = 0 },
+            new { type = "message_delta", delta = new { stop_reason = stopReason }, usage = new { output_tokens = outputTokens } },
+            new { type = "message_stop" },
+        }.Select(e => "data: " + JsonSerializer.Serialize(e) + Environment.NewLine + Environment.NewLine));
 
     private static JobExecution NewJob(Guid projectId) => new(Guid.CreateVersion7(), JobTypes.SpecGeneration, "{}", projectId, 1);
 
@@ -569,12 +724,16 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
     private sealed class ScriptedHandler : HttpMessageHandler
     {
         private readonly ConcurrentQueue<(HttpStatusCode Status, string Body, Exception? Error)> _responses = new();
+        private readonly ConcurrentQueue<string> _streams = new();
 
         public ConcurrentQueue<SentRequest> RequestLog { get; } = new();
 
         public IReadOnlyList<SentRequest> Requests => [.. RequestLog];
 
         public void Enqueue(HttpStatusCode status, string body) => _responses.Enqueue((status, body, null));
+
+        /// <summary>FR-161: the next answer is a 200 Server-Sent Events stream with <paramref name="body"/>.</summary>
+        public void EnqueueStream(string body) => _streams.Enqueue(body);
 
         /// <summary>The next request throws <paramref name="error"/> (an exception the provider doesn't classify).</summary>
         public void EnqueueException(Exception error) => _responses.Enqueue((HttpStatusCode.InternalServerError, string.Empty, error));
@@ -584,6 +743,11 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
             var headers = request.Headers.ToDictionary(h => h.Key, h => string.Join(",", h.Value), StringComparer.OrdinalIgnoreCase);
             var body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
             RequestLog.Enqueue(new SentRequest(request.RequestUri!.ToString(), headers, body));
+            if (_streams.TryDequeue(out var stream))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(stream, Encoding.UTF8, "text/event-stream") };
+            }
+
             var (status, text, error) = _responses.TryDequeue(out var next) ? next : (HttpStatusCode.ServiceUnavailable, "{}", null);
             if (error is not null)
             {

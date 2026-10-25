@@ -7,6 +7,7 @@ import { resetAuthDb } from '../mocks/handlers/auth'
 import { resetConnectionsDb } from '../mocks/handlers/connections'
 import { resetVercelDb } from '../mocks/handlers/deployments'
 import { resetGitHubDb } from '../mocks/handlers/github'
+import { resetLlmDb } from '../mocks/handlers/llm'
 import { resetNotificationsDb } from '../mocks/handlers/notifications'
 import { resetPresetCatalog } from '../mocks/handlers/preset-catalog'
 import { resetProjectsDb } from '../mocks/handlers/projects'
@@ -72,10 +73,12 @@ afterEach(() => {
   resetNotificationsDb()
   resetAdminDb()
   resetConnectionsDb()
+  resetLlmDb()
   resetVercelDb()
   resetGitHubDb()
   resetPresetCatalog()
   localStorage.clear()
+  sessionStorage.clear()
   router.reset('/')
 })
 afterAll(() => {

@@ -13,7 +13,8 @@ internal static class ExitCodes
 
     /// <summary>
     /// FR-93: release-version errors are conflicts with the project's versions or tags whatever their HTTP status
-    /// (<c>VERSION_INVALID</c> is a 400), so scripts can tell them apart from other failures.
+    /// (<c>VERSION_INVALID</c> is a 400), so scripts can tell them apart from other failures. FR-156 adds
+    /// <c>LLM_PROVIDER_UNAVAILABLE</c>.
     /// </summary>
     public static readonly IReadOnlySet<string> ConflictErrorCodes = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -23,6 +24,9 @@ internal static class ExitCodes
         "TAG_EXISTS",
         "RELEASE_NOT_MERGED",
         "NOT_RELEASED",
+
+        // FR-156: the chosen LLM provider is disabled on the server or not usable by the caller (a 400).
+        "LLM_PROVIDER_UNAVAILABLE",
     };
 
     /// <summary>401/403 → auth, 409 → conflict, anything else that failed → error.</summary>

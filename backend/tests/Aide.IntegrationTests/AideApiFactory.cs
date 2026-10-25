@@ -69,6 +69,10 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
         builder.UseSetting("Llm:Providers:Anthropic:ApiKey", string.Empty);
         builder.UseSetting("Llm:Providers:OpenAI:ApiKey", string.Empty);
 
+        // §9 CI defaults: all four providers enabled and Fake as the default provider, so new projects run offline (§4.24:
+        // with "anthropic" and no key the default would be Ollama). Tests of the default rule set Llm:DefaultProvider.
+        builder.UseSetting("Llm:DefaultProvider", "fake");
+
         // No test can reach a real LLM provider (CLAUDE.md rule 11): unresolvable base URLs, and every provider's
         // HttpClient answers through a handler that refuses to send. Tests that script a provider swap in their own
         // handler with ConfigureTestServices (registered later, so it wins).
@@ -80,6 +84,7 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
             services.AddHttpClient<AnthropicLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
             services.AddHttpClient<OpenAiLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
             services.AddHttpClient<OllamaLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
+            services.AddHttpClient(Aide.Infrastructure.Llm.IAnthropicModelInfo.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
 
             // §8, CLAUDE.md rule 11 for deployments: no test reaches api.vercel.com; Vercel tests swap in a stub handler.
             services.AddHttpClient(Aide.Infrastructure.Deployments.VercelDeploymentProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());

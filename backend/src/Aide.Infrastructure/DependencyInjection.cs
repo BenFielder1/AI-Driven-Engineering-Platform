@@ -106,6 +106,12 @@ public static class DependencyInjection
         services.AddScoped<ILlmResolver, LlmResolver>();
         services.AddScoped<ILlmKeyValidator, LlmKeyValidator>();
 
+        // FR-160: per-model output limits (catalog, Anthropic discovery cached 24 h, ceiling, fallback).
+        services.AddHttpClient(IAnthropicModelInfo.HttpClientName, ConfigureLlmClient);
+        services.AddSingleton<AnthropicModelInfoCache>();
+        services.AddScoped<IAnthropicModelInfo, AnthropicModelInfo>();
+        services.AddScoped<ILlmOutputLimits, LlmOutputLimitResolver>();
+
         // Git providers (FR-10, FR-35) and working copies.
         services.AddSingleton<IWorkspaceStore, WorkspaceStore>();
         services.AddSingleton<IGitCli, GitCli>();
@@ -170,9 +176,14 @@ public static class DependencyInjection
         return services;
     }
 
-    private static void ConfigureLlmClient(IServiceProvider sp, HttpClient client)
+    /// <summary>
+    /// FR-161: no client timeout. Streamed completions can run for many minutes and are bounded by
+    /// <c>Llm:RequestTimeout</c> and <c>Llm:StreamIdleTimeout</c> per call (<c>LlmStream</c>); key checks, model lookups and
+    /// Ollama <c>/api/show</c> set their own short timeouts.
+    /// </summary>
+    private static void ConfigureLlmClient(HttpClient client)
     {
-        client.Timeout = sp.GetRequiredService<IOptions<LlmOptions>>().Value.RequestTimeout;
+        client.Timeout = Timeout.InfiniteTimeSpan;
         client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
     }
 }

@@ -271,10 +271,38 @@ public static partial class ProjectSettingsRules
     public static bool IsConfigured(LlmProvider provider, bool hasSystemKey, bool hasProjectKey) =>
         !RequiresApiKey(provider) || hasSystemKey || hasProjectKey;
 
-    /// <summary>The provider for a new project: the configured default if it is usable without a project key,
-    /// otherwise <see cref="LlmProvider.Fake"/>.</summary>
-    public static LlmProvider DefaultProviderForNewProject(LlmProvider configuredDefault, bool defaultHasSystemKey) =>
-        IsConfigured(configuredDefault, defaultHasSystemKey, hasProjectKey: false) ? configuredDefault : LlmProvider.Fake;
+    /// <summary>
+    /// §4.24 (amends FR-5): the provider for a new project created by a user: the configured <c>DefaultProvider</c> if it's
+    /// enabled and usable by that user; otherwise the first enabled usable provider in the order Anthropic, OpenAI, Ollama,
+    /// Fake (<see cref="LlmProviderRules.PreferenceOrder"/>); otherwise <c>LLM_PROVIDER_UNAVAILABLE</c>. A disabled provider
+    /// is never chosen.
+    /// </summary>
+    /// <param name="configuredDefault"><c>Llm:DefaultProvider</c>.</param>
+    /// <param name="availability">Each provider's <see cref="LlmProviderRules.Available"/> result for the user (missing or
+    /// <c>null</c>: disabled).</param>
+    public static Result<LlmProvider> DefaultForNewProject(
+        LlmProvider configuredDefault,
+        IReadOnlyDictionary<LlmProvider, LlmProviderAvailability?> availability)
+    {
+        ArgumentNullException.ThrowIfNull(availability);
+        bool Usable(LlmProvider provider) => availability.TryGetValue(provider, out var a) && a is { Usable: true };
+        if (Usable(configuredDefault))
+        {
+            return Result.Success(configuredDefault);
+        }
+
+        foreach (var provider in LlmProviderRules.PreferenceOrder)
+        {
+            if (Usable(provider))
+            {
+                return Result.Success(provider);
+            }
+        }
+
+        return Result.Failure<LlmProvider>(new DomainError(
+            ErrorCodes.LlmProviderUnavailable,
+            "No AI provider is available to you on this server. Add a connection under Account → Connections."));
+    }
 
     /// <summary>
     /// NFR-SEC: a provider API key is sent as an HTTP header, so it may not contain whitespace or control characters
@@ -298,25 +326,26 @@ public static partial class ProjectSettingsRules
         IReadOnlyDictionary<string, string?>? modelsByAgent,
         bool hasSystemKey,
         bool hasBindingAfter,
-        bool providerChanged)
+        bool providerChanged,
+        string prefix = "")
     {
         var problems = new List<string>();
         if (string.IsNullOrWhiteSpace(defaultModel))
         {
-            problems.Add("defaultModel: A default model is required.");
+            problems.Add($"{prefix}defaultModel: A default model is required.");
         }
 
         foreach (var (agent, model) in modelsByAgent ?? new Dictionary<string, string?>())
         {
             if (model is not null && string.IsNullOrWhiteSpace(model))
             {
-                problems.Add($"modelsByAgent.{agent}: A model can't be blank; omit it to use the default model.");
+                problems.Add($"{prefix}modelsByAgent.{agent}: A model can't be blank; omit it to use the default model.");
             }
         }
 
         if (problems.Count == 0 && providerChanged && !IsConfigured(provider, hasSystemKey, hasBindingAfter))
         {
-            problems.Add($"provider: {provider.ToWire()} is not configured. Bind one of your {provider.ToWire()} connections (credentialId).");
+            problems.Add($"{prefix}provider: {provider.ToWire()} is not configured. Bind one of your {provider.ToWire()} connections (credentialId).");
         }
 
         return ProjectRules.ToResult(problems, "The LLM settings are invalid.");

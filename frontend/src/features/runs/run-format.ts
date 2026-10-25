@@ -20,7 +20,7 @@ export const isUnfinished = (run: Pick<AgentRun, 'status'>) => run.status === 'q
 /** Prompt template versions are bare numbers in the template front matter: show them as "v1". */
 export const formatPromptVersion = (version: string) => (/^\d+$/.test(version) ? `v${version}` : version)
 
-/** FR-70, FR-71: the warnings recorded on a run, in words. */
+/** FR-70, FR-71, FR-162: the warnings recorded on a run, in words. */
 export const runWarningLabels: Readonly<Record<string, string>> = {
   tools_unsupported:
     "The model doesn't support tool use, so the agent got the context in its prompt instead of reading the repository.",
@@ -28,6 +28,8 @@ export const runWarningLabels: Readonly<Record<string, string>> = {
   summary_wait_timeout:
     'The codebase summary wasn’t ready after 10 minutes, so the run continued without it.',
   summary_unavailable: 'There was no codebase summary for this version, so the run continued without it.',
+  output_truncated:
+    'The model hit its output limit and was still writing after 5 continuations, so this output may be incomplete.',
 }
 
 export const runWarningText = (code: string) => runWarningLabels[code] ?? code

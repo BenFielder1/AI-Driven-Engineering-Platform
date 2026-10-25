@@ -555,6 +555,7 @@ Each FR names its layer in italics. Acceptance criteria follow the requirement, 
   - the user's LLM connections for it (id, label, last4; FR-78)
   - its **model catalog** (§4.24): id, display name, max output tokens, context window, recommended flag
   - the provider's default model
+  - `isDefault`: true on the one provider the default rule (§4.24) would pick for this user, so the wizard preselects it *(build decision 2026-10-25)*
 
   It replaces the per-project `providers[]` as the wizard's source. `providers[]` on project LLM settings stays, filtered to enabled providers.
   - Given Anthropic with no system key and a user holding one Anthropic connection, then Anthropic is `usable` with reason `own_connection` and lists that connection. Its catalog shows `claude-opus-5-5` (128,000 max output tokens, recommended).
@@ -566,6 +567,7 @@ Each FR names its layer in italics. Acceptance criteria follow the requirement, 
 
   Create request and defaults:
   - `POST /api/projects` gains `llm {provider, credentialId?, defaultModel, modelsByAgent?}`. It creates `ProjectLlmSettings` bound to that credential, as v2 FR-79 binding does.
+  - When the provider needs a key, no system key is usable and no `credentialId` is sent, the caller's newest valid connection for that provider is bound *(build decision 2026-10-25)*.
   - `llm` is optional for API and CLI callers. When omitted, today's default applies (`DefaultForNewProject`), **except that a disabled provider is never chosen**. If no enabled provider is usable, create fails with `LLM_PROVIDER_UNAVAILABLE`.
   - The Review step shows the provider, model and connection.
   - **Errors:** provider disabled or not usable by this user → `LLM_PROVIDER_UNAVAILABLE → 400`. A credential that isn't the caller's → `CREDENTIAL_NOT_OWNER → 403`. An empty model id → `VALIDATION → 400`.
@@ -1036,7 +1038,7 @@ v1 §5 and v2 §5 apply. Changes (all snake_case, UUIDv7, UTC):
 | release_version (changed) | + `stack_composition jsonb?`, `catalog_version?`, `catalog_hash?`; `preset_id/version/hash` kept (legacy, read-only) | | The composition is validated by the Domain on write |
 | project (changed) | + `stack_packs text[]` (denormalised pack ids of the current version) | GIN index on `stack_packs` | List filter `?pack=` replaces the preset filter |
 | execution_step (changed) | `agent_key` values are v4 keys; + `legacy_agent_key?` | | |
-| agent_run (changed) | + `packs jsonb` (`[{id, version, sections[]}]`), `catalog_version?`, `max_output_tokens int?`; `preset_*` kept | | `continuations` lives in the run output JSON |
+| agent_run (changed) | + `packs jsonb` (`[{id, version, sections[]}]`), `catalog_version?`; `preset_*` kept | | `maxOutputTokens` and `continuations` live in the run output JSON *(build decision 2026-10-25: no M23 migration)* |
 | **git_host_instance** (new) | id, kind (`gitlab`/`bitbucket`), name, base_url (null for Bitbucket and gitlab.com), oauth_client_id, oauth_client_secret_encrypted, allow_insecure_http, enabled, version?, created_by, created_at | unique (kind, base_url) | Env config overrides rows with the same base URL |
 | **user_external_login** (new) | id, user_id, provider (`github`/`gitlab`/`bitbucket`), instance_id?, external_user_id, login, created_at | unique (provider, instance_id, external_user_id) | `users.github_id` is backfilled here (kept for v2 code paths until removed) |
 | **git_connection** (new) | id, user_id, provider (`gitlab`/`bitbucket`), instance_id, auth_kind (`oauth`/`token`), external_user_id, login, access_token_encrypted, access_expires_at?, refresh_token_encrypted?, token_email_encrypted? (Bitbucket API token), scopes text[], expires_at?, status (`valid`/`invalid`/`insufficient_scope`), last_validated_at, updated_at, `xmin` | unique (user_id, provider, instance_id, external_user_id) | Refresh rotation updates are concurrency-checked. `github_connection` (v2) is unchanged |
@@ -1093,7 +1095,7 @@ The web app and CLI ship together (D-V2-11 precedent). Record the `oasdiff` resu
 | GET/POST | /api/projects/:id/deployments (changed) · /deployments/preview | component?, environment? / — | deployments / 202 preview rollout | `DEPLOYMENT_NOT_CONFIGURED → 409`, `PREVIEW_DATABASE_DIVERGED → 409` | member / writer |
 | POST | /api/projects/:id/deployments/:deploymentId/rollback (renamed from /promote; /promote kept as an alias for Vercel) · /redeploy | — | 202 deployment | `INVALID_DEPLOYMENT → 409`, `DEPLOYMENT_ACTION_UNSUPPORTED → 409` | owner |
 | PATCH | /api/projects/:id/settings/git (changed) | + connectionId (rebind, GitLab/Bitbucket); mergeStrategy adds `fast_forward` | section | `CREDENTIAL_NOT_OWNER → 403`, `GIT_NOT_CONNECTED → 409`, `FORBIDDEN → 403` | owner |
-| GET | /api/llm/providers (new) | — | enabled providers: `usable`, `reason`, connections, catalog (id, name, maxOutputTokens, contextTokens, recommended), defaultModel | — | user |
+| GET | /api/llm/providers (new) | — | enabled providers: `usable`, `reason`, `isDefault`, connections, catalog (id, name, maxOutputTokens, contextTokens, recommended), defaultModel | — | user |
 | PATCH | /api/projects/:id/settings/llm (changed) | as v2 | section (providers filtered to enabled) | + `LLM_PROVIDER_UNAVAILABLE → 400` | owner |
 | POST | /api/projects (changed) | − presetId; + stack (composition); + llm {provider, credentialId?, defaultModel, modelsByAgent?}; git {mode: github_app\|github_pat\|gitlab\|bitbucket\|local, instanceId?, connectionId?, repoId?, repoFullName? …} | 201 project | + `STACK_INCOMPATIBLE`, `VCS_MISMATCH`, `GIT_NOT_CONNECTED`, `LLM_PROVIDER_UNAVAILABLE`, `CREDENTIAL_NOT_OWNER` | user |
 | POST | /api/projects/:id/versions (changed) | − presetId; + stack? (omitted = keep the base version's, re-pinned to the current catalog) | 201 | + `STACK_INCOMPATIBLE` | owner |

@@ -154,10 +154,19 @@ function RunError({ error, attempts, retrying }: { error: string; attempts: numb
   )
 }
 
-/** FR-70, FR-71: the run's recorded warnings and its repository tool log (from the detail response). */
+/**
+ * FR-70, FR-71: the run's recorded warnings and its repository tool log (from the detail response). FR-160, FR-162:
+ * the output token limit its calls used and how many continuations the answer took (null before v4 or until it succeeds).
+ */
 function RunToolLog({ run }: { run: AgentRunDetail }) {
   return (
     <>
+      {(run.maxOutputTokens !== null || run.continuations !== null) && (
+        <dl className="mt-1" aria-label="Output limits">
+          {run.maxOutputTokens !== null && <Row term="Max output tokens">{formatNumber(run.maxOutputTokens)}</Row>}
+          {run.continuations !== null && <Row term="Continuations">{formatNumber(run.continuations)}</Row>}
+        </dl>
+      )}
       {run.warnings.length > 0 && (
         <Section title="Warnings">
           <Alert tone="warning">

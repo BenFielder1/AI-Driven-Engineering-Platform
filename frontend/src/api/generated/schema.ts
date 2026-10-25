@@ -279,6 +279,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/llm/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-158: the LLM providers enabled on this server (disabled ones are never listed, FR-157), in the order anthropic, openai, ollama, fake, each with whether the caller can use it and why, the caller's connections for it (no keys), its model catalog (max output tokens, context window, recommended), its default model, and whether it is the provider a new project would default to for the caller (isDefault, FR-159). */
+        get: operations["ListLlmProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/connections/vercel": {
         parameters: {
             query?: never;
@@ -599,7 +616,7 @@ export interface paths {
         /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and preset (FR-74: the current version's preset id, or none for projects without a preset) filters and sorting. Rows carry the released and in-development version badges (FR-62) and the preset chip. */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -761,7 +778,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the LLM provider and models, and bind one of the caller's own connections (credentialId; null unbinds) (Owner). 403 CREDENTIAL_NOT_OWNER for another user's connection, 404 NOT_FOUND for an unknown one. */
+        /** Update the LLM provider and models, and bind one of the caller's own connections (credentialId; null unbinds) (Owner). 403 CREDENTIAL_NOT_OWNER for another user's connection, 404 NOT_FOUND for an unknown one, 400 LLM_PROVIDER_UNAVAILABLE when the provider (sent or kept) is disabled on this server (FR-157). */
         patch: operations["UpdateLlmSettings"];
         trace?: never;
     };
@@ -1861,7 +1878,8 @@ export interface components {
          * @description §2 Admin: the system LLM key policy (D-V2-5). `allowSystemKeys` is `Llm:AllowSystemKeys` (configuration,
          *     read-only here: set `Llm__AllowSystemKeys` in `secrets.env` / user-secrets and restart). When it is on,
          *     projects with no bound connection use the system key of their provider; `systemKeyProviders` lists the
-         *     providers that have one configured (allowed or not). Keys are never returned.
+         *     providers that have one configured (allowed or not). Keys are never returned. Providers disabled on this deployment
+         *     (FR-157) are never listed.
          */
         AdminLlmPolicyDto: {
             allowSystemKeys: boolean;
@@ -1912,7 +1930,9 @@ export interface components {
          *     to the first 200,000 characters (`outputTruncated`). The v2 fields are as on AgentRunDto.
          *     `toolCalls` is the run's repo tool log (FR-71: tool, arguments, bytes, truncated, error code) and `warnings`
          *     what was recorded on it (FR-70, FR-71): `tools_unsupported`, `snapshot_unavailable`,
-         *     `summary_wait_timeout`, `summary_unavailable`.
+         *     `summary_wait_timeout`, `summary_unavailable`, and `output_truncated` (FR-162). `continuations` is how
+         *     many continuations the answer took (0–5, FR-162) and `maxOutputTokens` the output token limit its calls used
+         *     (FR-160); both are `null` for runs stored before v4 and for runs that haven't succeeded.
          */
         AgentRunDetailDto: {
             /** Format: uuid */
@@ -1956,6 +1976,10 @@ export interface components {
             credentialLabel: null | string;
             toolCalls: components["schemas"]["ToolCallDto"][];
             warnings: string[];
+            /** Format: int32 */
+            continuations: null | number;
+            /** Format: int32 */
+            maxOutputTokens: null | number;
         };
         /**
          * @description An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt
@@ -2498,6 +2522,22 @@ export interface components {
             releasedTag?: null | string;
             developmentVersion: string;
         };
+        /**
+         * @description FR-159: the LLM choice of a new project. `provider` must be enabled and usable by the caller (else 400
+         *     `LLM_PROVIDER_UNAVAILABLE`). `credentialId` binds one of the caller's own connections for that provider, as
+         *     `PATCH …/settings/llm` does (FR-79: 403 `CREDENTIAL_NOT_OWNER` for another user's, 404 `NOT_FOUND` for an
+         *     unknown one, 400 `VALIDATION` for one of another provider); omitted, a provider that needs a key and has no usable
+         *     system key is bound to the caller's newest connection for it. `defaultModel` is required (400 `VALIDATION`
+         *     when blank) and need not be in the catalog. `modelsByAgent` overrides models per agent; omitted, the provider's
+         *     configured per-agent defaults apply.
+         */
+        CreateProjectLlmRequest: {
+            provider: components["schemas"]["LlmProvider"];
+            /** Format: uuid */
+            credentialId?: null | string;
+            defaultModel: string;
+            modelsByAgent?: null | components["schemas"]["AgentModelsDto"];
+        };
         /** @description The new-project wizard (FR-5). Omitted settings take the FR-5 defaults. */
         CreateProjectRequest: {
             name: string;
@@ -2532,6 +2572,7 @@ export interface components {
              */
             presetId?: null | string;
             deployment?: null | components["schemas"]["CreateProjectDeploymentRequest"];
+            llm?: null | components["schemas"]["CreateProjectLlmRequest"];
         };
         /**
          * @description Add a Vercel connection (FR-87): a label and an access token (team- or account-scoped, ideally with an expiry).
@@ -3274,7 +3315,7 @@ export interface components {
         };
         /**
          * @description The caller's LLM connections, newest first (FR-78), and `keylessProviders`: the providers that need no key and
-         *     are always available (Ollama at the system base URL, and Fake).
+         *     are always available (Ollama at the system base URL, and Fake), when enabled on this deployment (FR-157).
          */
         LlmConnectionsDto: {
             credentials: components["schemas"]["LlmCredentialDto"][];
@@ -3304,10 +3345,53 @@ export interface components {
          */
         LlmCredentialStatus: "valid" | "invalid" | "unchecked";
         /**
+         * @description A model of a provider's catalog (FR-158, §4.24): id, display name, max output tokens per call, context window and
+         *         whether it's recommended.
+         */
+        LlmModelDto: {
+            id: string;
+            name: string;
+            /** Format: int32 */
+            maxOutputTokens: number;
+            /** Format: int32 */
+            contextTokens: number;
+            recommended: boolean;
+        };
+        /**
          * @description LLM provider (FR-22). Wire values: `anthropic`, `openai`, `ollama`, `fake`.
          * @enum {unknown}
          */
         LlmProvider: "anthropic" | "openai" | "ollama" | "fake";
+        /** @description One of the caller's LLM connections for a provider (FR-78, FR-158): never the key, only its last 4 characters. */
+        LlmProviderConnectionDto: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+            last4: string;
+        };
+        /**
+         * @description An LLM provider enabled on this deployment, as seen by the caller (FR-158). `usable` and `reason`
+         *     (`system_key`, `own_connection`, `keyless`, `needs_connection`) say whether the caller can choose it
+         *     now; `connections` are the caller's own connections for it (newest first); `catalog` is its model catalog and
+         *     `defaultModel` the system default model (`Llm:Providers:&lt;P&gt;:DefaultModel`). `isDefault` (FR-159) is true
+         *     on the one provider a project created now by the caller without an LLM choice would get (§4.24
+         *     `DefaultForNewProject`), false on all others (all false when that rule yields `LLM_PROVIDER_UNAVAILABLE`).
+         */
+        LlmProviderDto: {
+            provider: components["schemas"]["LlmProvider"];
+            usable: boolean;
+            reason: components["schemas"]["LlmProviderReason"];
+            defaultModel: string;
+            connections: components["schemas"]["LlmProviderConnectionDto"][];
+            catalog: components["schemas"]["LlmModelDto"][];
+            isDefault: boolean;
+        };
+        /**
+         * @description Why an enabled LLM provider is or isn't usable by a user (FR-158, §4.24). Wire values: `system_key`,
+         *     `own_connection`, `keyless`, `needs_connection`.
+         * @enum {unknown}
+         */
+        LlmProviderReason: "system_key" | "own_connection" | "keyless" | "needs_connection";
         /** @description Whether a provider can be used: an allowed system key is configured or the project has a bound connection for it (Ollama and Fake are always configured). */
         LlmProviderStatusDto: {
             provider: components["schemas"]["LlmProvider"];
@@ -3318,7 +3402,7 @@ export interface components {
          * @description LLM settings (FR-9, FR-22, FR-79). Keys are never returned. `hasApiKey` is true while a connection is bound
          *     (kept from v1); `binding` describes it (`null` when nothing is bound). `canBind` is true when the caller
          *     is a project Owner and so may bind one of their own connections or unbind. `providers` lists every provider with
-         *     whether it's usable and its system default model.
+         *     whether it's usable and its system default model; only providers enabled on this deployment are listed (FR-157).
          */
         LlmSettingsDto: {
             provider: components["schemas"]["LlmProvider"];
@@ -5206,6 +5290,35 @@ export interface operations {
             };
         };
     };
+    ListLlmProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmProviderDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListVercelConnections: {
         parameters: {
             query?: never;
@@ -6459,7 +6572,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectDto"];
                 };
             };
-            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository) or PRESET_NOT_FOUND */
+            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), PRESET_NOT_FOUND or LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6477,7 +6590,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) or CREDENTIAL_NOT_OWNER (deployment: another user's Vercel connection) */
+            /** @description FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) or CREDENTIAL_NOT_OWNER (deployment: another user's Vercel connection; llm: another user's LLM connection) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6486,7 +6599,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it; deployment: unknown Vercel connection or project) */
+            /** @description NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it; deployment: unknown Vercel connection or project; llm: unknown LLM connection) */
             404: {
                 headers: {
                     [name: string]: unknown;

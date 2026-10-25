@@ -128,14 +128,7 @@ public class ProjectSettingsRulesTests
     public void FR9_Provider_is_configured_with_a_system_or_project_key(LlmProvider provider, bool systemKey, bool projectKey, bool configured) =>
         Assert.Equal(configured, ProjectSettingsRules.IsConfigured(provider, systemKey, projectKey));
 
-    [Fact]
-    public void FR9_New_projects_fall_back_to_Fake_when_the_default_has_no_system_key()
-    {
-        Assert.Equal(LlmProvider.Fake, ProjectSettingsRules.DefaultProviderForNewProject(LlmProvider.Anthropic, defaultHasSystemKey: false));
-        Assert.Equal(LlmProvider.Anthropic, ProjectSettingsRules.DefaultProviderForNewProject(LlmProvider.Anthropic, defaultHasSystemKey: true));
-        Assert.Equal(LlmProvider.Ollama, ProjectSettingsRules.DefaultProviderForNewProject(LlmProvider.Ollama, defaultHasSystemKey: false));
-    }
-
+    // The new-project default provider (amended by §4.24) is tested in LlmProviderRulesTests (FR157_/FR159_).
     [Fact]
     public void FR9_ValidateLlm_accepts_a_configured_provider_with_models() =>
         Assert.True(Llm(LlmProvider.Fake, "fake-1", new Dictionary<string, string?> { ["codeReview"] = "fake-2", ["planGenerator"] = null }).IsSuccess);

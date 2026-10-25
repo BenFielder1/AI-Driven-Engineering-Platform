@@ -117,6 +117,8 @@ export const errorMessages = {
   PROVIDER_NOT_CONFIGURED:
     "The project has no LLM connection bound for this provider, and system keys aren't allowed. An Owner can bind one of their connections in Settings → LLM.",
   PROVIDER_ERROR: "The model provider returned an error.",
+  // FR-157, FR-159: a provider turned off on this server, or one the user can't use yet.
+  LLM_PROVIDER_UNAVAILABLE: "This AI provider isn't available here. Choose another provider or add a connection.",
   // Restore (FR-58); the specific copy per `reason` is restoreNotAllowedMessage().
   RESTORE_NOT_ALLOWED: "This version can't be restored right now.",
 } as const satisfies Record<string, string>;
@@ -386,6 +388,12 @@ export const contextualErrorMessages = {
     NOT_FOUND:
       "We couldn't find that repository, or the access token can't see it. Check the URL and the token's repository access.",
     CREDENTIAL_NOT_OWNER: "You can only use one of your own Vercel connections. Pick another, or skip deployment.",
+  },
+  /** POST /api/projects `llm` (FR-159): the AI model section's connection. */
+  createProjectLlm: {
+    CREDENTIAL_NOT_OWNER: "You can only use one of your own connections. Pick another, or add a key under Connections.",
+    NOT_FOUND: "That connection no longer exists. Pick another, or add a key under Connections.",
+    VALIDATION: "Enter the model id, and pick a connection for the chosen provider.",
   },
   /** PATCH /api/admin/users/:id/role (FR-3). */
   changeSystemRole: {

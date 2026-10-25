@@ -24,11 +24,15 @@ import { database, defineRailway, project, service, volume } from 'railway/iac'
 const operatorSetApiVariables = [
   // Required secret: one-click approval links (FR-48), 64 random characters, different per environment.
   'Approvals__SigningKey',
-  // Optional: system LLM keys (FR-79) and a reachable Ollama.
+  // Optional: system LLM keys (FR-79). No Ollama base URL: Ollama is disabled on Railway (FR-157, env below).
   'Llm__AllowSystemKeys',
   'Llm__Providers__Anthropic__ApiKey',
   'Llm__Providers__OpenAI__ApiKey',
-  'Llm__Providers__Ollama__BaseUrl',
+  // Optional: output-token ceiling (FR-160) and streaming timeouts (FR-161). Catalog extensions
+  // (`Llm__Providers__<P>__Catalog__<n>__*`) are added here by exact name when an environment needs one.
+  'Llm__MaxOutputTokensCeiling',
+  'Llm__StreamIdleTimeout',
+  'Llm__RequestTimeout',
   // Optional: GitHub App override (all five or none) and v1 OAuth sign-in.
   'GitHub__App__AppId',
   'GitHub__App__ClientId',
@@ -103,6 +107,14 @@ export default defineRailway(() => {
         'Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};' +
         'Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}',
       App__PublicBaseUrl: 'https://${{web.RAILWAY_PUBLIC_DOMAIN}}',
+      // FR-157: only Anthropic and OpenAI on Railway. Ollama has no reachable default here (host.docker.internal
+      // doesn't resolve) and Fake must never serve real users. Startup validation requires the default provider
+      // (appsettings) to be enabled.
+      Llm__Providers__Ollama__Enabled: 'false',
+      Llm__Providers__Fake__Enabled: 'false',
+      // SPEC §8: on Railway, private addresses (10/8, *.railway.internal, ...) are AIDE's own services, so GitLab hosts
+      // there are refused (SSRF). The backend default (true) suits Docker Desktop and the dev loop.
+      GitLab__AllowPrivateNetworks: 'false',
     },
   })
 

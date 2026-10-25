@@ -31,11 +31,18 @@ of every API key are in the [README configuration reference](../../README.md#con
 | `Telemetry__ConsoleExporter` | literal | `false` | yes | JSON logs only |
 | `ConnectionStrings__Aide` | reference | `Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}` | yes | D-V3-9. Private network. Used by the app and by the pre-deploy migration bundle |
 | `App__PublicBaseUrl` | reference | `https://${{web.RAILWAY_PUBLIC_DOMAIN}}` | yes | Resolves once `web` has a generated domain. Validated at start-up, so generate the domain before the first deploy |
+| `Llm__Providers__Ollama__Enabled` | literal | `false` | yes | FR-157. Ollama has no reachable endpoint on Railway (the default `host.docker.internal:11434` doesn't resolve, and AIDE doesn't host an Ollama service), so it is turned off and hidden from every provider list |
+| `Llm__Providers__Fake__Enabled` | literal | `false` | yes | FR-157. The Fake LLM never serves real users. Projects still bound to Fake from before v4 fail their next run with `LLM_PROVIDER_UNAVAILABLE` |
+| `GitLab__AllowPrivateNetworks` | literal | `false` | yes | SPEC §8 SSRF guard. On Railway private addresses (10/8, 172.16/12, 192.168/16, fc00::/7, `*.railway.internal`) are AIDE's own services, so GitLab hosts resolving there are refused. Backend default `true` (Docker Desktop, dev loop) |
 | `Approvals__SigningKey` | **secret** | 64 random characters | yes | One-click approval links (FR-48). Different per environment. Ignored in IaC (`railway.ts`). Under 32 characters means no approval links |
 | `Llm__AllowSystemKeys` | operator-set (ignored in IaC) | `true` | no | Only if system LLM keys should be used (FR-79). Default `false` |
 | `Llm__Providers__Anthropic__ApiKey` | **secret** (ignored in IaC) | | no | System key, used only with `Llm__AllowSystemKeys=true` |
 | `Llm__Providers__OpenAI__ApiKey` | **secret** (ignored in IaC) | | no | Same as above |
-| `Llm__Providers__Ollama__BaseUrl` | operator-set (ignored in IaC) | `https://…` | no | The container default `host.docker.internal:11434` doesn't resolve on Railway |
+| `Llm__MaxOutputTokensCeiling` | operator-set (ignored in IaC) | integer ≥ 1 | no | FR-160. Caps every call's resolved max output tokens (`min(catalog/discovered, ceiling)`). Unset = no ceiling |
+| `Llm__StreamIdleTimeout` | operator-set (ignored in IaC) | `00:02:00` | no | FR-161. Fails a streaming call that receives no data for this long. Default `00:02:00` |
+| `Llm__RequestTimeout` | operator-set (ignored in IaC) | `00:30:00` | no | FR-161. Whole-call ceiling for one LLM call. Default `00:30:00` (was shorter before v4) |
+| `Llm__Providers__<P>__Catalog__<n>__Id`, `__Name`, `__MaxOutputTokens`, `__ContextTokens`, `__Recommended` | operator-set (**not** yet ignored in IaC) | | no | §4.24. Extends the model catalog shipped in `appsettings.json` for `Anthropic` or `OpenAI`. `<n>` continues after the shipped entries (a lower index overrides that shipped entry). Each exact name must be added to `operatorSetApiVariables` in `railway.ts` before it is set, or the next plan deletes it |
+| `Llm__Providers__Ollama__BaseUrl` | — | **unset** | — | Ollama is disabled on Railway (FR-157), so it is no longer in `variables.ignore`. If an environment still has it, the next plan deletes it (not a secret; harmless) |
 | `GitHub__App__AppId`, `GitHub__App__ClientId`, `GitHub__App__Slug` | operator-set (ignored in IaC) | | no | Only to override the App registered in Admin → Integrations. Set all five `GitHub__App__*` values or none |
 | `GitHub__App__ClientSecret`, `GitHub__App__PrivateKey` | **secret** (ignored in IaC) | | no | Same as above. PEM with `\n` escapes |
 | `GitHub__OAuth__ClientId` | operator-set (ignored in IaC) | | no | v1 GitHub sign-in, used only while no GitHub App exists |
@@ -43,6 +50,7 @@ of every API key are in the [README configuration reference](../../README.md#con
 | `Smtp__Host`, `Smtp__Username`, `Smtp__From`, `Smtp__Port`, `Smtp__EnableSsl`, `Smtp__Timeout` | operator-set (ignored in IaC) | | no | Email channel (FR-47). Leave a key out rather than blank: a blank number fails binding |
 | `Smtp__Password` | **secret** (ignored in IaC) | | no | |
 | `Deployments__AllowFake`, `Deployments__Provider=Fake`, `Git__Local__ImportRoot` | — | **unset** | — | Never on Railway (FR-108) |
+| `Llm__Providers__Anthropic__Enabled`, `Llm__Providers__OpenAI__Enabled` | — | **unset** | — | Default `true`. Never disable both: startup fails unless at least one provider is enabled and `Llm:DefaultProvider` (default `anthropic`) is enabled (FR-157) |
 | `RAILWAY_RUN_UID` | — | **unset** | — | The image starts as root and its entrypoint drops to `$APP_UID` (FR-106, D-V3-10) |
 | `RAILWAY_PRIVATE_DOMAIN`, `RAILWAY_ENVIRONMENT`, … | Railway | | | Injected |
 

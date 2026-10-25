@@ -80,9 +80,18 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 
 ## Decisions
 - 2026-10-25 — The draft moved to `docs/v4/DRAFT_SPEC.md` (Ben's prep commit); SPEC.md's source line points there — SPEC updated: yes
+- 2026-10-25 — M23: `maxOutputTokens` and `continuations` are stored in the run output JSON, not new `agent_runs` columns (no migration needed) — SPEC updated: yes (§5)
+- 2026-10-25 — M23: `GET /api/llm/providers` returns `isDefault` so the wizard preselects the server's default provider (CI default `fake` keeps E2E flows working) — SPEC updated: yes (FR-158, §6)
+- 2026-10-25 — M23: create binds the caller's newest **valid** connection when the provider needs a key and none is sent; invalid connections don't make a provider usable — SPEC updated: yes (FR-159)
+- 2026-10-25 — M23: CLI LLM flags live on `aide project init`, with `create` added as an alias — SPEC updated: no (alias matches the spec's `project create`)
+- 2026-10-25 — M23: a provider that answers `application/json` to a streaming request is read as a whole body (keeps compatible servers and the JSON-stubbed tests working) — SPEC updated: no
+- 2026-10-25 — M23: the integration test factory pins `Llm:DefaultProvider=fake`, matching CI — SPEC updated: no
 
 ## Known issues
 - Railway `preview` deploy of 83d8fa5 (run 40130552891): the deploy succeeded, but the smoke test's sign-in returned 401. The `SMOKE_EMAIL` account is missing on `preview` or its password differs. Operator fix (Ben): create the smoke user on preview, or correct the `SMOKE_PASSWORD` secret.
 
 ## Manual checks (Ben)
 - Railway preview smoke account (see Known issues).
+- **Before the next Railway deploy after merging M23:** run `railway config plan` then `railway config apply` for `preview` and `production`. M23 adds `Llm__Providers__Ollama__Enabled=false`, `Llm__Providers__Fake__Enabled=false` and `GitLab__AllowPrivateNetworks=false`, and removes `Llm__Providers__Ollama__BaseUrl` from the ignore list (the plan deletes it where set). Until applied, deploy.yml's drift check fails.
+- After that apply, Railway projects still set to Fake (or Ollama) fail their next agent run with `LLM_PROVIDER_UNAVAILABLE`; their Owners choose another provider in Settings → LLM.
+- OpenAI catalog limits for `gpt-6-astra` / `gpt-6.1-sol` are placeholders (16,000 output, 400,000 context) until checked against OpenAI's docs (SPEC Q5).

@@ -436,4 +436,34 @@ describe('Agent runs page (SPEC §7.2, v2 columns)', () => {
     expect(within(sheet).getByRole('heading', { name: 'Repository tool calls (2)' })).toBeInTheDocument()
     expect(within(sheet).getByText(/doesn't support tool use/)).toBeInTheDocument()
   })
+
+  it('FR160_FR162_run_details_show_output_truncated_copy_continuations_and_max_output_tokens', async () => {
+    const project = seedProjectAs('viewer', (p) => {
+      seedRun(p, { warnings: ['output_truncated'], continuations: 5, maxOutputTokens: 128_000 })
+    })
+    const { user } = await openRuns(project)
+
+    await user.click(within(rowFor('Spec generator')).getByRole('button', { name: /^Spec generator run/ }))
+    const sheet = await screen.findByRole('dialog', { name: 'Spec generator run' })
+    expect(
+      await within(sheet).findByText(
+        'The model hit its output limit and was still writing after 5 continuations, so this output may be incomplete.',
+      ),
+    ).toBeInTheDocument()
+    expect(within(sheet).getByText('Continuations').nextElementSibling).toHaveTextContent('5')
+    expect(within(sheet).getByText('Max output tokens').nextElementSibling).toHaveTextContent('128,000')
+  })
+
+  it('FR162_runs_stored_before_v4_show_no_continuations_or_output_limit', async () => {
+    const project = seedProjectAs('viewer', (p) => {
+      seedRun(p, { continuations: null, maxOutputTokens: null })
+    })
+    const { user } = await openRuns(project)
+
+    await user.click(within(rowFor('Spec generator')).getByRole('button', { name: /^Spec generator run/ }))
+    const sheet = await screen.findByRole('dialog', { name: 'Spec generator run' })
+    await within(sheet).findByRole('heading', { name: /Repository tool calls/ })
+    expect(within(sheet).queryByText('Continuations')).not.toBeInTheDocument()
+    expect(within(sheet).queryByText('Max output tokens')).not.toBeInTheDocument()
+  })
 })

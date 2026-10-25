@@ -8,6 +8,8 @@ export type LlmConnections = Schemas['LlmConnectionsDto']
 export type LlmCredential = Schemas['LlmCredentialDto']
 export type LlmCredentialStatus = Schemas['LlmCredentialStatus']
 export type AdminLlmPolicy = Schemas['AdminLlmPolicyDto']
+export type LlmProviderOption = Schemas['LlmProviderDto']
+export type LlmModel = Schemas['LlmModelDto']
 
 /** Providers that take a user key (FR-78); Ollama and Fake are keyless. */
 export const keyedProviders = ['anthropic', 'openai'] as const satisfies readonly Schemas['LlmProvider'][]
@@ -15,6 +17,8 @@ export const keyedProviders = ['anthropic', 'openai'] as const satisfies readonl
 export const connectionKeys = {
   all: ['me', 'connections'] as const,
   llm: () => [...connectionKeys.all, 'llm'] as const,
+  /** GET /api/llm/providers (FR-158): under `all`, so a connection change refreshes it. */
+  llmProviders: () => [...connectionKeys.all, 'llm-providers'] as const,
   /** GET /api/me/connections/vercel (FR-87). */
   vercel: () => [...connectionKeys.all, 'vercel'] as const,
   adminLlmPolicy: () => ['admin', 'integrations', 'llm'] as const,
@@ -25,6 +29,18 @@ export function useLlmConnections(enabled = true) {
   return useQuery({
     queryKey: connectionKeys.llm(),
     queryFn: async ({ signal }) => unwrap(await api.GET('/api/me/connections/llm', { signal })),
+    enabled,
+  })
+}
+
+/**
+ * FR-158: the LLM providers enabled on this server, in server order, with whether the caller can use each (and why),
+ * the caller's connections for it, its model catalog and default model.
+ */
+export function useLlmProviders(enabled = true) {
+  return useQuery({
+    queryKey: connectionKeys.llmProviders(),
+    queryFn: async ({ signal }) => unwrap(await api.GET('/api/llm/providers', { signal })),
     enabled,
   })
 }

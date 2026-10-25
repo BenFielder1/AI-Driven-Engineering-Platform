@@ -216,9 +216,13 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Jobs:Concurrency` | Jobs run at once | `4` | no |
 | `Jobs:LeaseDuration` | Lease before a stalled job is re-queued | `00:05:00` | no |
 | `Llm:DefaultProvider` | `anthropic`, `openai`, `ollama` or `fake` | `anthropic` | no |
-| `Llm:RequestTimeout` | Per provider call | `00:05:00` | no |
+| `Llm:RequestTimeout` | Whole provider call, including a streamed answer (FR-161) | `00:30:00` | no |
+| `Llm:StreamIdleTimeout` | Fails a streamed call that receives no data for this long (FR-161) | `00:02:00` | no |
 | `Llm:KeyCheckTimeout` | Per key check when a connection is added or re-tested (FR-78); a timeout is `UPSTREAM_ERROR` | `00:00:15` | no |
-| `Llm:MaxOutputTokens` | Output token cap per call. An answer cut off by the cap is continued up to 4 more calls and joined; one still cut off records the `output_truncated` run warning | `16000` | no |
+| `Llm:MaxOutputTokens` | Output token limit per call for models **not** in their provider's catalog (and, for Anthropic, whose limit `GET /v1/models/{id}` couldn't report). Listed models use their catalog `MaxOutputTokens` (FR-160). An answer cut off at the limit is continued and joined; one still cut off records the `output_truncated` run warning | `16000` | no |
+| `Llm:MaxOutputTokensCeiling` | Optional cap (at least 1) on every call's output token limit, whatever the catalog says (FR-160) | unset | no |
+| `Llm:Providers:<Name>:Enabled` | Whether the provider (`Anthropic`, `OpenAI`, `Ollama`, `Fake`) is offered on this deployment (FR-157). A disabled provider is absent from every list, refused on project create and LLM settings (`LLM_PROVIDER_UNAVAILABLE`), and fails the runs of projects still set to it. At least one must be enabled, and `Llm:DefaultProvider` must be one of them. Railway sets `Ollama` and `Fake` to `false` | `true` | no |
+| `Llm:Providers:<Name>:Catalog:<n>:Id`, `Name`, `MaxOutputTokens`, `ContextTokens`, `Recommended` | The provider's model catalog (FR-158, §4.24): what the wizard offers and each model's output limit and context window. Shipped in `appsettings.json`; extend it per deployment with the next index (e.g. `Llm__Providers__Anthropic__Catalog__7__Id`). Ids must be unique per provider, `MaxOutputTokens` at least 1. The OpenAI entries (`gpt-6-astra`, `gpt-6.1-sol`: 16,000 output, 400,000 context) are **unverified** placeholders until checked against OpenAI's model docs (SPEC §11 Q5) | see `appsettings.json` | no |
 | `Llm:AllowSystemKeys` | Whether the system keys below may be used, and then only for projects with no bound connection (D-V2-5, FR-79). Otherwise runs use the key an Owner bound from Account → Connections | `false` | no |
 | `Llm:Providers:Anthropic:ApiKey` | Anthropic system key (used only with `Llm:AllowSystemKeys=true`) | none | yes |
 | `Llm:Providers:OpenAI:ApiKey` | OpenAI system key (used only with `Llm:AllowSystemKeys=true`) | none | yes |
@@ -302,7 +306,7 @@ Once an App exists, "Continue with GitHub" uses its user authorization (PKCE) an
 
 ### c. Real LLM providers
 
-Without keys, new projects and the seed default to the Fake provider, and Anthropic and OpenAI show "not configured".
+Without keys, Anthropic and OpenAI need a user connection (Connections) or an allowed system key. A new project gets the configured `Llm:DefaultProvider` when it is enabled and usable by its creator, else the first usable provider in the order Anthropic, OpenAI, Ollama, Fake (SPEC §4.24). Providers can be turned off per deployment with `Llm__Providers__<Name>__Enabled=false`; Railway turns off Ollama and Fake (FR-157).
 
 | Setting | How |
 | --- | --- |

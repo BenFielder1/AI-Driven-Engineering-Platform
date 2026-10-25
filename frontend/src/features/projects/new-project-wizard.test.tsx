@@ -229,6 +229,8 @@ describe('New project wizard (FR-5, FR-73)', () => {
       source: 'scratch',
       initialVersion: '0.1.0',
       git: { mode: 'github_pat', repoUrl: 'https://github.com/acme/inventory', defaultBranch: 'main', token: TOKEN },
+      // FR-159: no connections and no system keys, so the first usable provider (keyless Ollama) is preselected.
+      llm: { provider: 'ollama', defaultModel: 'qwen2.5-coder' },
     })
   })
 

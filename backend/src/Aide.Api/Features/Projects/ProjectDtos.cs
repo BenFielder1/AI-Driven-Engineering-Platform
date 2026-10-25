@@ -239,6 +239,35 @@ public sealed record CreateProjectRequest
     /// Deployment). Needs a GitHub-backed project (400 <c>VALIDATION</c> on <c>deployment.provider</c> for Local).
     /// </summary>
     public Deployments.CreateProjectDeploymentRequest? Deployment { get; init; }
+
+    /// <summary>
+    /// FR-159 (wizard Configuration step, AI model section): the project's LLM provider, connection and models. Omitted or
+    /// <c>null</c>: the default for the caller (§4.24: the configured default provider if enabled and usable, else the first
+    /// enabled usable one in the order anthropic, openai, ollama, fake; 400 <c>LLM_PROVIDER_UNAVAILABLE</c> when none is).
+    /// </summary>
+    public CreateProjectLlmRequest? Llm { get; init; }
+}
+
+/// <summary>
+/// FR-159: the LLM choice of a new project. <c>provider</c> must be enabled and usable by the caller (else 400
+/// <c>LLM_PROVIDER_UNAVAILABLE</c>). <c>credentialId</c> binds one of the caller's own connections for that provider, as
+/// <c>PATCH …/settings/llm</c> does (FR-79: 403 <c>CREDENTIAL_NOT_OWNER</c> for another user's, 404 <c>NOT_FOUND</c> for an
+/// unknown one, 400 <c>VALIDATION</c> for one of another provider); omitted, a provider that needs a key and has no usable
+/// system key is bound to the caller's newest connection for it. <c>defaultModel</c> is required (400 <c>VALIDATION</c>
+/// when blank) and need not be in the catalog. <c>modelsByAgent</c> overrides models per agent; omitted, the provider's
+/// configured per-agent defaults apply.
+/// </summary>
+public sealed record CreateProjectLlmRequest
+{
+    public required LlmProvider Provider { get; init; }
+
+    public Guid? CredentialId { get; init; }
+
+    [Required]
+    [MaxLength(ProjectLimits.ModelMaxLength)]
+    public required string DefaultModel { get; init; }
+
+    public AgentModelsDto? ModelsByAgent { get; init; }
 }
 
 /// <summary>Partial update of a project (FR-7). Omitted fields are unchanged.</summary>
@@ -405,7 +434,7 @@ public sealed record LlmBindingDto(
 /// LLM settings (FR-9, FR-22, FR-79). Keys are never returned. <c>hasApiKey</c> is true while a connection is bound
 /// (kept from v1); <c>binding</c> describes it (<c>null</c> when nothing is bound). <c>canBind</c> is true when the caller
 /// is a project Owner and so may bind one of their own connections or unbind. <c>providers</c> lists every provider with
-/// whether it's usable and its system default model.
+/// whether it's usable and its system default model; only providers enabled on this deployment are listed (FR-157).
 /// </summary>
 public sealed record LlmSettingsDto(
     LlmProvider Provider,
