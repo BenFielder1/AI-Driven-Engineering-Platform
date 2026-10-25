@@ -1,0 +1,215 @@
+{
+  "id": "fe-nextjs",
+  "layer": "frontend",
+  "name": "Next.js",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "fe-nextjs",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Next.js",
+    "React",
+    "TypeScript",
+    "App Router"
+  ],
+  "description": "A Next.js App Router app: full-stack on its own, or the UI for a separate backend.",
+  "defaultPath": "frontend",
+  "publicEnvPrefix": "NEXT_PUBLIC_",
+  "runtime": "node",
+  "modes": [
+    {
+      "id": "full-stack",
+      "name": "Full-stack",
+      "description": "Route handlers and server actions with a data pack, and no separate backend."
+    },
+    {
+      "id": "ui",
+      "name": "UI",
+      "description": "The UI for a separate backend, called from the server or through an /api rewrite."
+    }
+  ],
+  "specSections": [
+    {
+      "title": "Routes & Rendering Strategy",
+      "guidance": "For each route: path and segment layout, rendering (static, dynamic server rendering, or client), how data is fetched (Server Component, Server Action, route handler, or a call to the backend with BACKEND_URL), caching and revalidation (revalidatePath/revalidateTag), where auth and permission checks run on the server, and the loading, error and not-found behaviour. Name the server-only modules and every client component that needs \"use client\". State the mode (full-stack or ui) and, for full-stack, the route handlers that form the HTTP API with their errorCodes."
+    },
+    {
+      "title": "Data Sources & Consumed APIs",
+      "guidance": "There is no backend or database in this stack. List every data source and third-party API the frontend consumes: base URL and endpoints used, authentication (public keys only, never secrets in the browser), CORS and rate limits, the response fields the UI relies on, where in the app each is called, caching, and how failures, empty results and offline states are shown. Static or bundled data: name its file and how it is updated.",
+      "when": "backend == none && data == none"
+    }
+  ],
+  "ownership": {
+    "frontend-engineer": [
+      "{fe}/**",
+      "{fe}/src/app/api/**",
+      "{fe}/src/server/**",
+      "!{fe}/e2e/**",
+      "!{fe}/playwright.config.*",
+      "!{fe}/**/Dockerfile",
+      "!{fe}/**/.dockerignore",
+      "!{fe}/**/nginx.conf",
+      "!{fe}/vercel.json",
+      "!{fe}/netlify.toml",
+      "!{fe}/**/_redirects",
+      "!{fe}/**/wrangler.jsonc",
+      "!{fe}/worker/**",
+      "!{fe}/**/.env.example",
+      "!{fe}/supabase/**",
+      "!{fe}/src/lib/database.types.ts",
+      "!{fe}/prisma/**",
+      "!{fe}/src/db/**",
+      "!{fe}/drizzle/**"
+    ]
+  },
+  "agentSections": {
+    "scaffolder": [
+      "Detect",
+      "Scaffold",
+      "Conventions",
+      "Config"
+    ],
+    "frontend-engineer": [
+      "*"
+    ],
+    "test-engineer": [
+      "Testing",
+      "Gate"
+    ],
+    "ci-engineer": [
+      "Gate"
+    ],
+    "deploy-engineer": [
+      "Containerise",
+      "Deploy notes"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{be}/openapi/api.json"
+        ],
+        "after": [
+          "{fe}/src/api/generated/**"
+        ],
+        "soft": true,
+        "reason": "Change the API contract before the frontend steps that update the generated client from it."
+      }
+    ],
+    "exclusive": [],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [
+    {
+      "glob": "{fe}/src/api/generated/**",
+      "handling": "hand_written",
+      "ciCheck": "cd {fe} && npm run gen:api && git diff --exit-code src/api/generated"
+    },
+    {
+      "glob": "{fe}/package-lock.json",
+      "handling": "ci_generated",
+      "ciCheck": null
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "BACKEND_URL",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": false,
+      "description": "The backend origin for server-side calls and /api rewrites (ui mode), read at runtime on the server only.",
+      "when": "nextjsMode == ui"
+    },
+    {
+      "key": "NEXT_PUBLIC_API_BASE_URL",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": true,
+      "description": "The backend origin for the generated client, inlined at build (cross-origin only).",
+      "when": "originModel == cross-origin"
+    },
+    {
+      "key": "NEXT_PUBLIC_SUPABASE_URL",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": false,
+      "public": true,
+      "description": "The Supabase project URL (https://<ref>.supabase.co), public, inlined at build.",
+      "when": "data == data-supabase"
+    },
+    {
+      "key": "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": false,
+      "public": true,
+      "description": "The Supabase publishable key (sb_publishable_...), public, inlined at build.",
+      "when": "data == data-supabase"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Server/client boundaries are right, and secrets stay server-only.",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "Every action and handler validates input and checks auth and permissions on the server.",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "loading, error and not-found exist per route, and error codes map to copy.",
+        "category": "feature_coverage",
+        "severity": "major"
+      },
+      {
+        "item": "The mode (full-stack or ui) matches the composition, and client components never access the DB.",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Tests cover the FRs, and the gate passes.",
+        "category": "testing",
+        "severity": "major"
+      }
+    ],
+    "deterministic": [
+      "no_secret_in_client"
+    ]
+  },
+  "gate": [
+    "cd {fe} && npm ci && npm run typecheck && npm run lint && npm test && npm run build"
+  ],
+  "migrate": null,
+  "deploy": null
+}

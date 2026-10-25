@@ -1,0 +1,201 @@
+{
+  "id": "deploy-vercel",
+  "layer": "deploy",
+  "name": "Vercel",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "deploy-vercel",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Next.js",
+    "Static",
+    "Functions"
+  ],
+  "description": "Next.js natively, static SPAs, and Express, NestJS or FastAPI as Vercel Functions.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Environments & Configuration",
+      "guidance": "Per environment (production, preview): the Vercel projects (one per deployed folder), their URLs and the preview URL pattern, every env var with its scope (build-time public vs server-only), the origin model (Next.js same-origin or proxy via rewrites; static SPA cross-origin with API_BASE_URL and CORS_ALLOWED_ORIGINS), the database (pooled DATABASE_URL, DIRECT_URL) and whether AIDE_RUN_MIGRATIONS is true. Note serverless limits: no background work."
+    }
+  ],
+  "ownership": {
+    "deploy-engineer": [
+      "**/Dockerfile",
+      "**/.dockerignore",
+      "compose.yaml",
+      "**/nginx.conf",
+      "vercel.json",
+      "netlify.toml",
+      "**/_redirects",
+      "**/wrangler.jsonc",
+      ".github/workflows/pages.yml",
+      "render.yaml",
+      ".railway/**",
+      ".env.example"
+    ]
+  },
+  "agentSections": {
+    "deploy-engineer": [
+      "Supports",
+      "Prerequisites and auth",
+      "Config as code",
+      "Environment variables",
+      "Database",
+      "Deploy commands",
+      "Previews and promotion",
+      "Troubleshooting",
+      "Checklist"
+    ]
+  },
+  "planRules": {
+    "order": [],
+    "exclusive": [
+      {
+        "agent": "scaffolder",
+        "notWithGlobs": [
+          "vercel.json"
+        ],
+        "reason": "The deploy-engineer is the only agent for Vercel config (vercel.json) (§4.18)."
+      },
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          "vercel.json"
+        ],
+        "reason": "The deploy-engineer is the only agent for Vercel config (vercel.json) (§4.18)."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "vercel.json"
+        ],
+        "reason": "The deploy-engineer is the only agent for Vercel config (vercel.json) (§4.18)."
+      },
+      {
+        "agent": "frontend-engineer",
+        "notWithGlobs": [
+          "vercel.json"
+        ],
+        "reason": "The deploy-engineer is the only agent for Vercel config (vercel.json) (§4.18)."
+      },
+      {
+        "agent": "test-engineer",
+        "notWithGlobs": [
+          "vercel.json"
+        ],
+        "reason": "The deploy-engineer is the only agent for Vercel config (vercel.json) (§4.18)."
+      },
+      {
+        "agent": "ci-engineer",
+        "notWithGlobs": [
+          "vercel.json"
+        ],
+        "reason": "The deploy-engineer is the only agent for Vercel config (vercel.json) (§4.18)."
+      },
+      {
+        "agent": "docs-writer",
+        "notWithGlobs": [
+          "vercel.json"
+        ],
+        "reason": "The deploy-engineer is the only agent for Vercel config (vercel.json) (§4.18)."
+      }
+    ],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [],
+  "requiredEnv": [
+    {
+      "key": "AIDE_RUN_MIGRATIONS",
+      "appliesTo": [
+        "frontend",
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": false,
+      "description": "true where the environment has its own database (production; preview when a preview database exists), else false. The build runs the data pack's migrate command only when true (FR-154, D-V4-13). Derived by AIDE.",
+      "when": "data != none && data != data-supabase && databaseHost != none && backendHost != deploy-render && backendHost != deploy-railway"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Every folder deployed to Vercel has vercel.json with git.deploymentEnabled {\"aide/**\": false} and no other true rule matching aide/**",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "A static SPA on Vercel has no /api rewrite to a fixed backend URL (cross-origin only, D-V4-20) and has the SPA fallback where its preset needs it",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Migrations run only in the build command gated by AIDE_RUN_MIGRATIONS, using DIRECT_URL, never in request handlers or at cold start",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Functions use the pooled DATABASE_URL and hold no in-memory sessions or background work",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "No tokens, project ids or .vercel/ in the repo (.vercel is git-ignored)",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "No CI job, script or package script deploys with the Vercel CLI; AIDE triggers every deploy",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": ".env.example lists every variable the app needs, with placeholders only",
+        "category": "feature_coverage",
+        "severity": "minor"
+      }
+    ],
+    "deterministic": [
+      "deploy_branch_control"
+    ]
+  },
+  "gate": null,
+  "migrate": null,
+  "deploy": {
+    "provider": "vercel",
+    "shapes": [
+      {
+        "id": "static",
+        "component": "frontend",
+        "runtimes": [
+          "static"
+        ]
+      },
+      {
+        "id": "nextjs",
+        "component": "frontend",
+        "runtimes": [
+          "node"
+        ]
+      },
+      {
+        "id": "functions",
+        "component": "backend",
+        "runtimes": [
+          "node",
+          "python"
+        ]
+      }
+    ]
+  }
+}

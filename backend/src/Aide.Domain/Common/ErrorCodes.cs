@@ -241,6 +241,12 @@ public static class ErrorCodes
     /// </summary>
     public const string LlmProviderUnavailable = "LLM_PROVIDER_UNAVAILABLE";
 
+    /// <summary>
+    /// FR-116, §4.17: a composition breaks a compatibility rule (400); the ProblemDetails <c>violations</c> extension lists
+    /// each <c>{layer, option, rule, reason}</c>.
+    /// </summary>
+    public const string StackIncompatible = "STACK_INCOMPATIBLE";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {
@@ -301,6 +307,7 @@ public static class ErrorCodes
         [CredentialInvalid] = 400,
         [CredentialNotOwner] = 403,
         [LlmProviderUnavailable] = 400,
+        [StackIncompatible] = 400,
         [UpstreamError] = 502,
         [GitHubNotConnected] = 409,
         [GitHubAppNotInstalled] = 409,

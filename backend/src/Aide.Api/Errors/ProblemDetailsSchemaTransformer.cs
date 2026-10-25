@@ -4,7 +4,7 @@ using Microsoft.OpenApi;
 
 namespace Aide.Api.Errors;
 
-/// <summary>Documents the <c>errorCode</c>, <c>traceId</c>, <c>details</c>, <c>reason</c> and <c>installUrl</c> extensions on the ProblemDetails
+/// <summary>Documents the <c>errorCode</c>, <c>traceId</c>, <c>details</c>, <c>reason</c>, <c>installUrl</c> and <c>violations</c> extensions on the ProblemDetails
 /// schemas, so the generated client types them.</summary>
 internal sealed class ProblemDetailsSchemaTransformer : IOpenApiSchemaTransformer
 {
@@ -42,6 +42,23 @@ internal sealed class ProblemDetailsSchemaTransformer : IOpenApiSchemaTransforme
         {
             Type = JsonSchemaType.String,
             Description = "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88).",
+        };
+        schema.Properties[ApiProblems.ViolationsKey] = new OpenApiSchema
+        {
+            Type = JsonSchemaType.Array,
+            Items = new OpenApiSchema
+            {
+                Type = JsonSchemaType.Object,
+                Required = new HashSet<string> { "layer", "option", "rule", "reason" },
+                Properties = new Dictionary<string, IOpenApiSchema>
+                {
+                    ["layer"] = new OpenApiSchema { Type = JsonSchemaType.String, Description = "The choice: frontend, backend, data, vcs, frontendHost, backendHost, databaseHost, local or originModel." },
+                    ["option"] = new OpenApiSchema { Type = JsonSchemaType.String, Description = "The option id that breaks the rule." },
+                    ["rule"] = new OpenApiSchema { Type = JsonSchemaType.String, Description = "The rule id (R1…R12, SPEC §4.17)." },
+                    ["reason"] = new OpenApiSchema { Type = JsonSchemaType.String, Description = "The rule's reason text." },
+                },
+            },
+            Description = "STACK_INCOMPATIBLE: each broken compatibility rule (FR-116).",
         };
         return Task.CompletedTask;
     }

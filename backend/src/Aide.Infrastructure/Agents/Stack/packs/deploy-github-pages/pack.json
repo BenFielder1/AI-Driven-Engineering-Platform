@@ -1,0 +1,165 @@
+{
+  "id": "deploy-github-pages",
+  "layer": "deploy",
+  "name": "GitHub Pages",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "deploy-github-pages",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Static",
+    "GitHub Actions"
+  ],
+  "description": "Static sites and SPAs (and Next.js static export) deployed by a GitHub Actions workflow.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Environments & Configuration",
+      "guidance": "Production only (Pages has no previews): the site URL (project site base path or custom domain), the public build-time values and where they come from (repository variables), and for a backend the cross-origin setup: API_BASE_URL with the frontend prefix and the Pages origin in CORS_ALLOWED_ORIGINS. State that everything in the bundle is public."
+    }
+  ],
+  "ownership": {
+    "deploy-engineer": [
+      "**/Dockerfile",
+      "**/.dockerignore",
+      "compose.yaml",
+      "**/nginx.conf",
+      "vercel.json",
+      "netlify.toml",
+      "**/_redirects",
+      "**/wrangler.jsonc",
+      ".github/workflows/pages.yml",
+      "render.yaml",
+      ".railway/**",
+      ".env.example"
+    ]
+  },
+  "agentSections": {
+    "deploy-engineer": [
+      "Supports",
+      "Prerequisites and auth",
+      "Config as code",
+      "Base path",
+      "Environment variables",
+      "Database",
+      "Deploy commands",
+      "Previews and promotion",
+      "Troubleshooting",
+      "Checklist"
+    ]
+  },
+  "planRules": {
+    "order": [],
+    "exclusive": [
+      {
+        "agent": "scaffolder",
+        "notWithGlobs": [
+          ".github/workflows/pages.yml"
+        ],
+        "reason": "The deploy-engineer is the only agent for the Pages workflow (.github/workflows/pages.yml) (§4.18)."
+      },
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          ".github/workflows/pages.yml"
+        ],
+        "reason": "The deploy-engineer is the only agent for the Pages workflow (.github/workflows/pages.yml) (§4.18)."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          ".github/workflows/pages.yml"
+        ],
+        "reason": "The deploy-engineer is the only agent for the Pages workflow (.github/workflows/pages.yml) (§4.18)."
+      },
+      {
+        "agent": "frontend-engineer",
+        "notWithGlobs": [
+          ".github/workflows/pages.yml"
+        ],
+        "reason": "The deploy-engineer is the only agent for the Pages workflow (.github/workflows/pages.yml) (§4.18)."
+      },
+      {
+        "agent": "test-engineer",
+        "notWithGlobs": [
+          ".github/workflows/pages.yml"
+        ],
+        "reason": "The deploy-engineer is the only agent for the Pages workflow (.github/workflows/pages.yml) (§4.18)."
+      },
+      {
+        "agent": "ci-engineer",
+        "notWithGlobs": [
+          ".github/workflows/pages.yml"
+        ],
+        "reason": "The deploy-engineer is the only agent for the Pages workflow (.github/workflows/pages.yml) (§4.18)."
+      },
+      {
+        "agent": "docs-writer",
+        "notWithGlobs": [
+          ".github/workflows/pages.yml"
+        ],
+        "reason": "The deploy-engineer is the only agent for the Pages workflow (.github/workflows/pages.yml) (§4.18)."
+      }
+    ],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [],
+  "requiredEnv": [],
+  "review": {
+    "checklist": [
+      {
+        "item": "pages.yml triggers on the default branch with permissions contents: read, pages: write, id-token: write, the github-pages environment and the right artifact path",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "The base path and router basename are handled for project sites, with a 404.html SPA fallback where needed",
+        "category": "feature_coverage",
+        "severity": "major"
+      },
+      {
+        "item": "Only public build-time values reach the bundle; the cross-origin API URL comes from a repository variable",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "Deploy steps exist only in pages.yml, not in ci.yml",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": ".env.example lists every variable the app needs, with placeholders only",
+        "category": "feature_coverage",
+        "severity": "minor"
+      }
+    ],
+    "deterministic": []
+  },
+  "gate": null,
+  "migrate": null,
+  "deploy": {
+    "provider": "github-pages",
+    "shapes": [
+      {
+        "id": "static",
+        "component": "frontend",
+        "runtimes": [
+          "static"
+        ]
+      },
+      {
+        "id": "nextjs-static-export",
+        "component": "frontend",
+        "runtimes": [
+          "node"
+        ]
+      }
+    ]
+  }
+}

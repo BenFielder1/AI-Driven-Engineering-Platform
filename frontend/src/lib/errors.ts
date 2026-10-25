@@ -121,6 +121,9 @@ export const errorMessages = {
   LLM_PROVIDER_UNAVAILABLE: "This AI provider isn't available here. Choose another provider or add a connection.",
   // Restore (FR-58); the specific copy per `reason` is restoreNotAllowedMessage().
   RESTORE_NOT_ALLOWED: "This version can't be restored right now.",
+  // FR-116: a stack composition breaks a compatibility rule. The map doesn't interpolate, so callers append the
+  // ProblemDetails `violations[].reason` list themselves (M25 Stack UI).
+  STACK_INCOMPATIBLE: "These stack choices don't work together.",
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;

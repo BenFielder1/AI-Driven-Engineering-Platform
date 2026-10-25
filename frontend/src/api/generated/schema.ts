@@ -1653,6 +1653,74 @@ export interface paths {
         patch: operations["UpdateProjectPreset"];
         trace?: never;
     };
+    "/api/admin/stack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin → Stack catalog (§6): the catalog version, content hash and load status, every load error, and each pack with its stack-packs source, version, content hash and load status. */
+        get: operations["GetAdminStackCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stack/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The stack catalog (FR-113): layers, choices in evaluation order with their options (chips, description, pack, pack version, stack-packs source, modes), the compatibility rule statements and the recommended combinations, plus the catalog version and content hash. */
+        get: operations["GetStackCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stack/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Option states for a partial composition (FR-114, FR-115, §4.17): every choice with each option's state (allowed, caveat, forbidden, or invalidated for a selection that earlier choices now forbid), the reasons (rule id and text), whether a recommended combination includes it, and the default to preselect. */
+        post: operations["GetStackOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stack/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate a composition (FR-116): the normalised composition with its derived fields (Next.js mode, specialists, origin model options, spec sections, env names, gates) and caveats. Left-out layers are None; the local dev loop and origin model take their defaults; vcs is required. */
+        post: operations["ValidateStack"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/notifications": {
         parameters: {
             query?: never;
@@ -1884,6 +1952,28 @@ export interface components {
         AdminLlmPolicyDto: {
             allowSystemKeys: boolean;
             systemKeyProviders: components["schemas"]["LlmProvider"][];
+        };
+        /**
+         * @description Admin → Stack catalog (§6 `GET /api/admin/stack`): the catalog version and hash, whether it loaded (`loaded`
+         *     or `failed`), every load error, and each pack with its source, version, hash and load status.
+         */
+        AdminStackCatalogDto: {
+            version: null | string;
+            contentHash: string;
+            status: string;
+            errors: string[];
+            packs: components["schemas"]["AdminStackPackDto"][];
+        };
+        /** @description A pack folder: what its `pack.json` says (when readable), the SHA-256 of its files, and `loaded`/`failed` with the reasons. */
+        AdminStackPackDto: {
+            id: string;
+            layer: null | string;
+            name: null | string;
+            version: null | string;
+            source: null | components["schemas"]["StackPackSourceDto"];
+            contentHash: string;
+            status: string;
+            errors: string[];
         };
         /** @description A user as shown on the admin users page. */
         AdminUserDto: {
@@ -3265,6 +3355,17 @@ export interface components {
             reason?: string;
             /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88). */
             installUrl?: string;
+            /** @description STACK_INCOMPATIBLE: each broken compatibility rule (FR-116). */
+            violations?: {
+                /** @description The choice: frontend, backend, data, vcs, frontendHost, backendHost, databaseHost, local or originModel. */
+                layer: string;
+                /** @description The option id that breaks the rule. */
+                option: string;
+                /** @description The rule id (R1…R12, SPEC §4.17). */
+                rule: string;
+                /** @description The rule's reason text. */
+                reason: string;
+            }[];
         };
         /** @description A background job (§4.9): the job queued by a dead-letter retry (FR-51). */
         JobDto: {
@@ -3740,6 +3841,17 @@ export interface components {
             reason?: string;
             /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88). */
             installUrl?: string;
+            /** @description STACK_INCOMPATIBLE: each broken compatibility rule (FR-116). */
+            violations?: {
+                /** @description The choice: frontend, backend, data, vcs, frontendHost, backendHost, databaseHost, local or originModel. */
+                layer: string;
+                /** @description The option id that breaks the rule. */
+                option: string;
+                /** @description The rule id (R1…R12, SPEC §4.17). */
+                rule: string;
+                /** @description The rule's reason text. */
+                reason: string;
+            }[];
         };
         /**
          * @description A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null`
@@ -4306,6 +4418,205 @@ export interface components {
          * @enum {unknown}
          */
         Severity: "minor" | "major" | "critical";
+        /**
+         * @description The stack catalog (FR-113, §4.16) for the wizard's Stack step, Settings → Stack and Admin → Stack catalog: the five
+         *     layers, the choices in evaluation order (frontend, backend, data, vcs, then the deployment choices frontendHost,
+         *     backendHost, databaseHost, local and originModel) with their options, the rule statements and the recommended
+         *     combinations. `version` and `contentHash` are what release versions pin.
+         */
+        StackCatalogDto: {
+            version: string;
+            contentHash: string;
+            layers: components["schemas"]["StackLayerDto"][];
+            choices: components["schemas"]["StackChoiceDto"][];
+            rules: components["schemas"]["StackRuleDto"][];
+            recommendations: components["schemas"]["StackRecommendationDto"][];
+        };
+        /** @description A caveat of a chosen option: the choice (`layer`), the option, the rule and its text. */
+        StackCaveatDto: {
+            layer: string;
+            option: string;
+            rule: string;
+            text: string;
+        };
+        /** @description A choice of the Stack step; `layer` is the layer it belongs to (the deployment choices share `deploy`). */
+        StackChoiceDto: {
+            id: string;
+            layer: string;
+            name: string;
+            options: components["schemas"]["StackOptionDto"][];
+        };
+        /**
+         * @description A choice's options for the choices made so far: `selected` is the current selection, `default` the option to
+         *     preselect (R12 Compose, "same as frontend" for the backend host, the R10 origin model).
+         */
+        StackChoiceStateDto: {
+            choice: string;
+            layer: string;
+            selected: null | string;
+            default: null | string;
+            options: components["schemas"]["StackOptionStateDto"][];
+        };
+        StackComponentDto: {
+            pack: string;
+            path: string;
+        };
+        /** @description A frontend or backend: the pack id (or `none`) and its path in the repo (FR-119; default `frontend`/`backend`). */
+        StackComponentSelection: {
+            pack: string;
+            path?: null | string;
+        };
+        /**
+         * @description The normalised composition (§4.18) returned by `POST /api/stack/validate`: None is `null`;
+         *     `originModel` is `null` without a frontend (API only).
+         */
+        StackCompositionDto: {
+            catalogVersion: string;
+            catalogHash: string;
+            frontend: null | components["schemas"]["StackComponentDto"];
+            backend: null | components["schemas"]["StackComponentDto"];
+            data: null | components["schemas"]["StackDataDto"];
+            vcs: components["schemas"]["StackVcsDto"];
+            deploy: components["schemas"]["StackDeployDto"];
+            originModel: null | string;
+            derived: components["schemas"]["StackDerivedDto"];
+            caveats: components["schemas"]["StackCaveatDto"][];
+        };
+        /**
+         * @description A (partial) composition (§4.17, §4.18). For `/options` a missing layer is "not chosen yet"; for `/validate` it
+         *     is None, except `vcs` (required), `deploy.local` (default: Compose when there's a backend or a database, R12)
+         *     and `originModel` (the default of R10). `"none"` as a pack or host is an explicit None.
+         */
+        StackCompositionRequest: {
+            frontend?: null | components["schemas"]["StackComponentSelection"];
+            backend?: null | components["schemas"]["StackComponentSelection"];
+            data?: null | components["schemas"]["StackDataSelection"];
+            vcs?: null | components["schemas"]["StackVcsSelection"];
+            deploy?: null | components["schemas"]["StackDeploySelection"];
+            /** @description `same-origin`, `proxy` or `cross-origin`. */
+            originModel?: null | string;
+        };
+        StackDataDto: {
+            pack: string;
+            mode: null | string;
+        };
+        /** @description The data layer: the pack id (or `none`); `mode` defaults to the option's (Supabase: `baas`). */
+        StackDataSelection: {
+            pack: string;
+            mode?: null | string;
+        };
+        /** @description Host option ids (`null` = None) and the local dev loop (`compose` or `none`). */
+        StackDeployDto: {
+            frontendHost: null | string;
+            backendHost: null | string;
+            databaseHost: null | string;
+            local: string;
+        };
+        /** @description The Deployment layer: option ids of the frontend, backend and database hosts (or `none`) and the local dev loop (`compose`/`none`). */
+        StackDeploySelection: {
+            frontendHost?: null | string;
+            backendHost?: null | string;
+            databaseHost?: null | string;
+            local?: null | string;
+        };
+        /**
+         * @description Derived facts (§4.18): the Next.js mode (R2), the specialists in play (FR-120), the origin models the Owner can switch
+         *     between (R10), and the selected packs' spec sections, env names and gate commands.
+         */
+        StackDerivedDto: {
+            nextjsMode: null | string;
+            agents: string[];
+            originModelOptions: string[];
+            specSections: string[];
+            envNames: string[];
+            gates: string[];
+        };
+        /** @description One of the five layers (Frontend, Backend, Data, VCS, Deployment). */
+        StackLayerDto: {
+            id: string;
+            name: string;
+            description: string;
+        };
+        StackModeDto: {
+            id: string;
+            name: string;
+            description: string;
+        };
+        /**
+         * @description An option card: name, one-line description, chips, and for pack options the pack id, its version
+         *     (`&lt;plugin version&gt;+aide.&lt;n&gt;`), its stack-packs source and its modes. `mode` is the pack mode the option
+         *     selects (Supabase: `baas`). Plain options (None, External, origin models) have no pack.
+         */
+        StackOptionDto: {
+            id: string;
+            name: string;
+            description: string;
+            chips: string[];
+            pack: null | string;
+            packVersion: null | string;
+            source: null | components["schemas"]["StackPackSourceDto"];
+            modes: components["schemas"]["StackModeDto"][];
+            mode: null | string;
+        };
+        /**
+         * @description §4.17: the state of an option for the choices made so far.
+         * @enum {unknown}
+         */
+        StackOptionState: "allowed" | "caveat" | "forbidden" | "invalidated";
+        /** @description An option's state (`allowed`, `caveat`, `forbidden`, `invalidated`) with its reasons, and whether a recommended combination includes it. */
+        StackOptionStateDto: {
+            id: string;
+            state: components["schemas"]["StackOptionState"];
+            reasons: components["schemas"]["StackReasonDto"][];
+            recommended: boolean;
+        };
+        /**
+         * @description `POST /api/stack/options` (§4.17): every choice in evaluation order with every option's state. A selection that
+         *     earlier choices now forbid is `invalidated` (the wizard clears it and names the reason); later choices are
+         *     evaluated without it. `nextjsMode` is R2's derived mode once known.
+         */
+        StackOptionsDto: {
+            catalogVersion: string;
+            choices: components["schemas"]["StackChoiceStateDto"][];
+            nextjsMode: null | string;
+        };
+        /** @description Where a pack was adapted from (FR-122): the stack-packs plugin, its version and the snapshot date. */
+        StackPackSourceDto: {
+            plugin: string;
+            version: string;
+            snapshot: string;
+        };
+        /** @description A rule id (`R1`…) and its text, e.g. `R3` "Prisma needs Express, NestJS or Next.js full-stack". */
+        StackReasonDto: {
+            rule: string;
+            text: string;
+        };
+        /** @description A recommended combination (stack-packs `compose-stack`): option ids per choice id. */
+        StackRecommendationDto: {
+            id: string;
+            name: string;
+            choices: {
+                [key: string]: string[];
+            };
+        };
+        /** @description A compatibility rule (§4.17): its stable id (`R1`…) and statement. */
+        StackRuleDto: {
+            id: string;
+            statement: string;
+        };
+        StackVcsDto: {
+            pack: string;
+            /** Format: uuid */
+            instanceId: null | string;
+            selfManaged: boolean;
+        };
+        /** @description The VCS layer: the pack id, the GitLab host instance, and whether it is self-managed (R9). */
+        StackVcsSelection: {
+            pack: string;
+            /** Format: uuid */
+            instanceId?: null | string;
+            selfManaged?: boolean;
+        };
         /** @description Start a refinement round (FR-27), optionally answering some or all clarifying questions of the latest round. */
         StartRefinementRequest: {
             answers?: null | components["schemas"]["RefinementAnswerRequest"][];
@@ -10517,6 +10828,157 @@ export interface operations {
             };
             /** @description PRESET_LOCKED (the version's implementation plan is locked, or no version is in development) or CONFLICT (a concurrent edit). */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAdminStackCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStackCatalogDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetStackCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StackCatalogDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetStackOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StackCompositionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StackOptionsDto"];
+                };
+            };
+            /** @description VALIDATION: an unknown pack or option id, or a malformed layer path. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ValidateStack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StackCompositionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StackCompositionDto"];
+                };
+            };
+            /** @description STACK_INCOMPATIBLE: the composition breaks a compatibility rule (the violations extension lists {layer, option, rule, reason}); VALIDATION: an unknown id, a missing vcs or a malformed path. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

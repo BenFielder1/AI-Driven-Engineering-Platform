@@ -1,0 +1,230 @@
+{
+  "id": "deploy-railway",
+  "layer": "deploy",
+  "name": "Railway",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "deploy-railway",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Services",
+    "Postgres"
+  ],
+  "description": "Every backend (Railpack or Dockerfile), Next.js, static SPAs in a container, and Railway Postgres.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Environments & Configuration",
+      "guidance": "Per environment (production on main; preview = the aide-preview environment): each service's root directory, Dockerfile, health path, pre-deploy migrate command and domain, the database (Railway Postgres, DATABASE_URL = ${{Postgres.DATABASE_URL}}), every env var, and the origin model (same-origin SPA container proxying over the private network, or cross-origin). Note Railway Free/Trial limits."
+    }
+  ],
+  "ownership": {
+    "deploy-engineer": [
+      "**/Dockerfile",
+      "**/.dockerignore",
+      "compose.yaml",
+      "**/nginx.conf",
+      "vercel.json",
+      "netlify.toml",
+      "**/_redirects",
+      "**/wrangler.jsonc",
+      ".github/workflows/pages.yml",
+      "render.yaml",
+      ".railway/**",
+      ".env.example"
+    ]
+  },
+  "agentSections": {
+    "deploy-engineer": [
+      "Supports",
+      "Prerequisites and auth",
+      "Config as code",
+      "Environment variables",
+      "Database",
+      "Deploy commands",
+      "Previews and promotion",
+      "Troubleshooting",
+      "Checklist"
+    ]
+  },
+  "planRules": {
+    "order": [],
+    "exclusive": [
+      {
+        "agent": "scaffolder",
+        "notWithGlobs": [
+          ".railway/**",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for Railway config (.railway/, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          ".railway/**",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for Railway config (.railway/, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          ".railway/**",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for Railway config (.railway/, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "frontend-engineer",
+        "notWithGlobs": [
+          ".railway/**",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for Railway config (.railway/, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "test-engineer",
+        "notWithGlobs": [
+          ".railway/**",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for Railway config (.railway/, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "ci-engineer",
+        "notWithGlobs": [
+          ".railway/**",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for Railway config (.railway/, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "docs-writer",
+        "notWithGlobs": [
+          ".railway/**",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for Railway config (.railway/, Dockerfiles, nginx.conf) (§4.18)."
+      }
+    ],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [],
+  "requiredEnv": [
+    {
+      "key": "API_ORIGIN",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": false,
+      "description": "The backend's private-network URL (e.g. http://api.railway.internal:8080) that the SPA container's nginx proxies /api/ to (same-origin on Railway, FR-146).",
+      "when": "originModel == same-origin && frontendHost == deploy-railway && backendHost == deploy-railway"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Each service has a multi-stage Dockerfile with a non-root USER and a .dockerignore, and listens on $PORT on IPv4 and IPv6",
+        "category": "security",
+        "severity": "minor"
+      },
+      {
+        "item": "The image contains the data pack's one-off migrate command for the pre-deploy",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "The backend's ready health path exists and checks the database",
+        "category": "feature_coverage",
+        "severity": "minor"
+      },
+      {
+        "item": "The backend handles Railway's postgresql:// DATABASE_URL reference",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Same-origin SPA: nginx proxies /api/ to API_ORIGIN over the private network, re-resolving railway.internal",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Any .railway/railway.ts is marked as documentation; no legacy railway.json or railway.toml and no literal secrets",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "No CI job, script or package script deploys with the Railway CLI; AIDE triggers every deploy",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": ".env.example lists every variable the app needs, with placeholders only",
+        "category": "feature_coverage",
+        "severity": "minor"
+      }
+    ],
+    "deterministic": []
+  },
+  "gate": null,
+  "migrate": null,
+  "deploy": {
+    "provider": "railway",
+    "shapes": [
+      {
+        "id": "static-container",
+        "component": "frontend",
+        "runtimes": [
+          "static"
+        ]
+      },
+      {
+        "id": "node-service",
+        "component": "frontend",
+        "runtimes": [
+          "node"
+        ]
+      },
+      {
+        "id": "backend-service",
+        "component": "backend",
+        "runtimes": [
+          "node",
+          "python",
+          "dotnet",
+          "java"
+        ]
+      },
+      {
+        "id": "postgres",
+        "component": "database",
+        "runtimes": []
+      }
+    ]
+  }
+}

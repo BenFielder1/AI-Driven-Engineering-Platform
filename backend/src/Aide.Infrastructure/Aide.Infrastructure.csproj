@@ -25,6 +25,9 @@
     <!-- Tech stack presets (FR-74, §4.11, D-V2-12): every file of Agents/Presets/<id>/, loaded and content-hashed by
          PresetCatalog. Logical names keep the folder layout: Aide.Infrastructure.Agents.Presets/<id>/<path>. -->
     <EmbeddedResource Include="Agents\Presets\**\*" LogicalName="Aide.Infrastructure.Agents.Presets/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Stack catalog (FR-113, §4.16): every file of Agents/Stack/, loaded and content-hashed by StackCatalogProvider.
+         Logical names keep the folder layout: Aide.Infrastructure.Agents.Stack/<path>. -->
+    <EmbeddedResource Include="Agents\Stack\**\*" LogicalName="Aide.Infrastructure.Agents.Stack/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

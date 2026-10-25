@@ -24,6 +24,7 @@ using Aide.Api.Features.Release;
 using Aide.Api.Features.Review;
 using Aide.Api.Features.Rollback;
 using Aide.Api.Features.Runs;
+using Aide.Api.Features.Stack;
 using Aide.Api.Features.Tokens;
 using Aide.Api.Features.Versions;
 using Aide.Api.Health;
@@ -185,7 +186,8 @@ builder.Services.AddOptions<SeedOptions>().BindConfiguration(SeedOptions.Section
 builder.Services.AddHostedService<DevSeeder>();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseReadyHealthCheck>("database", tags: [HealthEndpoints.ReadyTag])
-    .AddCheck<PresetsHealthCheck>("presets", tags: [HealthEndpoints.ReadyTag]);
+    .AddCheck<PresetsHealthCheck>("presets", tags: [HealthEndpoints.ReadyTag])
+    .AddCheck<StackCatalogHealthCheck>("stack-catalog", tags: [HealthEndpoints.ReadyTag]);
 
 var app = builder.Build();
 
@@ -228,6 +230,7 @@ app.MapReleaseEndpoints();
 app.MapRollbackEndpoints();
 app.MapVersionEndpoints();
 app.MapPresetEndpoints();
+app.MapStackEndpoints();
 app.MapNotificationEndpoints();
 app.MapApprovalEndpoints();
 app.MapLiveEndpoints();

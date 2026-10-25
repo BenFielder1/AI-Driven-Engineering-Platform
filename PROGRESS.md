@@ -86,6 +86,25 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 - 2026-10-25 — M23: CLI LLM flags live on `aide project init`, with `create` added as an alias — SPEC updated: no (alias matches the spec's `project create`)
 - 2026-10-25 — M23: a provider that answers `application/json` to a streaming request is read as a whole body (keeps compatible servers and the JSON-stubbed tests working) — SPEC updated: no
 - 2026-10-25 — M23: the integration test factory pins `Llm:DefaultProvider=fake`, matching CI — SPEC updated: no
+- 2026-10-25 — M24: a catalog that fails to load makes readiness (`stack-catalog`) unhealthy and logs Critical instead of stopping startup; the stack endpoints then answer 500. The readiness probe keeps the instance out of service, so no coded error is added — SPEC updated: no
+- 2026-10-25 — M24: `/api/stack/options` returns all 9 choices (frontend, backend, data, vcs, frontendHost, backendHost, databaseHost, local, originModel) with `selected`/`default`; violation `layer` is the choice id (e.g. `backendHost`) — SPEC updated: no
+- 2026-10-25 — M24: Supabase in the Data layer is always BaaS; host mode is the database host `supabase` with another ORM (`data.mode = "host"` → VALIDATION) — SPEC updated: no
+- 2026-10-25 — M24: R10 gaps filled: a static SPA on Railway with the backend elsewhere → proxy or cross-origin; Next.js ui mode on GitHub Pages → cross-origin only. R12: Compose forbidden with no backend and no data — SPEC updated: no
+- 2026-10-25 — M24: the Admin → Stack catalog page moves to M25 (with the other Stack UI); M24 ships `GET /api/admin/stack` only — SPEC updated: no
+- 2026-10-25 — M24: `legacy/` is created in M25 together with a catalog version bump, so the pinned hash only changes with a version — SPEC updated: no
+- 2026-10-25 — M24: pack skills are 70–115% of the source length (not 40–60%): hand-writing generated files and CI checks needs the room — SPEC updated: no
+- 2026-10-25 — M24: review category for migrations is `data_model` (v1 enum), not `data` — SPEC updated: yes
+
+## M26 inputs (from M24 catalog content)
+The catalog schema can't express these, so the M26 resolver must implement them:
+- Expand `{fe}`, `{be}`, `{app}` (the backend, or the Next.js full-stack app) in ownership globs, `gate`, `ciCheck`, plan-rule globs and agent prompts. Define what a missing layer expands to (e.g. no `{fe}` → drop the rule).
+- `requiredEnv` public keys (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, API base URL) get the frontend pack's `publicEnvPrefix` (Angular: unprefixed, written into `assets/config.json`). `appliesTo: backend` means `{app}` in Next.js full-stack.
+- Mode-dependent sections: Prisma/Drizzle `Setup` for frontend-engineer only in Next.js full-stack; `data-supabase` in host mode → data-engineer and deploy-engineer load only `Production notes`; Supabase-only checks (`rls_on_every_table`, `grants_for_exposed_tables`) only in BaaS mode; `fe-nextjs` full-stack-only ownership and generated client only in ui mode.
+- `container_non_root` / `health_endpoints` inputs (health paths per backend pack, Docker deploy) aren't manifest fields: derive from the backend pack id or add fields.
+- `AIDE_RUN_MIGRATIONS` ("serverless host in host mode") is computed by the resolver, not declared by packs (no OR in `when`).
+- Composition summary template (`core/composition-summary.md`): `{{UPPER_SNAKE}}` placeholders, rendered separately from the base prompt template; strip leading provenance comments from agent prompts and the summary; mirror `SpecialistPrompt.ComposeSystem`.
+- Plan rules: scaffolder exemption from the deploy/ci exclusivity entries (v2 decision); `planRules.exclusive` has no `soft` flag.
+- SPEC follow-ups: §4.22 should name `API_ORIGIN` for the Railway same-origin SPA proxy; §4.20 should say who sets `VITE_API_BASE_URL` for GitHub Pages (repo variable via the GitHub App).
 
 ## Known issues
 - Railway `preview` deploy of 83d8fa5 (run 40130552891): the deploy succeeded, but the smoke test's sign-in returned 401. The `SMOKE_EMAIL` account is missing on `preview` or its password differs. Operator fix (Ben): create the smoke user on preview, or correct the `SMOKE_PASSWORD` secret.

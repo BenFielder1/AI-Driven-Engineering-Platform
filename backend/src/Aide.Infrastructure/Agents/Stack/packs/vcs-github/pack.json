@@ -1,0 +1,201 @@
+{
+  "id": "vcs-github",
+  "layer": "vcs",
+  "name": "GitHub",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "vcs-github",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "GitHub",
+    "GitHub Actions"
+  ],
+  "description": "GitHub repositories with GitHub Actions CI composed from each layer's gate.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [],
+  "ownership": {
+    "ci-engineer": [
+      ".github/**",
+      "!.github/workflows/pages.yml",
+      ".gitlab-ci.yml",
+      ".gitlab/**",
+      "bitbucket-pipelines.yml",
+      "renovate.json",
+      "CODEOWNERS",
+      "scripts/ci/**",
+      "docs/pr/**"
+    ]
+  },
+  "agentSections": {
+    "ci-engineer": [
+      "*"
+    ],
+    "scaffolder": [
+      "Detect"
+    ]
+  },
+  "planRules": {
+    "order": [],
+    "exclusive": [
+      {
+        "agent": "scaffolder",
+        "notWithGlobs": [
+          ".github/**",
+          ".gitlab-ci.yml",
+          ".gitlab/**",
+          "bitbucket-pipelines.yml",
+          "renovate.json",
+          "CODEOWNERS",
+          "scripts/ci/**",
+          "docs/pr/**"
+        ],
+        "reason": "The ci-engineer is the only agent for CI files (§4.18)."
+      },
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          ".github/**",
+          ".gitlab-ci.yml",
+          ".gitlab/**",
+          "bitbucket-pipelines.yml",
+          "renovate.json",
+          "CODEOWNERS",
+          "scripts/ci/**",
+          "docs/pr/**"
+        ],
+        "reason": "The ci-engineer is the only agent for CI files (§4.18)."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          ".github/**",
+          ".gitlab-ci.yml",
+          ".gitlab/**",
+          "bitbucket-pipelines.yml",
+          "renovate.json",
+          "CODEOWNERS",
+          "scripts/ci/**",
+          "docs/pr/**"
+        ],
+        "reason": "The ci-engineer is the only agent for CI files (§4.18)."
+      },
+      {
+        "agent": "frontend-engineer",
+        "notWithGlobs": [
+          ".github/**",
+          ".gitlab-ci.yml",
+          ".gitlab/**",
+          "bitbucket-pipelines.yml",
+          "renovate.json",
+          "CODEOWNERS",
+          "scripts/ci/**",
+          "docs/pr/**"
+        ],
+        "reason": "The ci-engineer is the only agent for CI files (§4.18)."
+      },
+      {
+        "agent": "test-engineer",
+        "notWithGlobs": [
+          ".github/**",
+          ".gitlab-ci.yml",
+          ".gitlab/**",
+          "bitbucket-pipelines.yml",
+          "renovate.json",
+          "CODEOWNERS",
+          "scripts/ci/**",
+          "docs/pr/**"
+        ],
+        "reason": "The ci-engineer is the only agent for CI files (§4.18)."
+      },
+      {
+        "agent": "deploy-engineer",
+        "notWithGlobs": [
+          ".github/*",
+          ".github/ISSUE_TEMPLATE/**",
+          ".github/workflows/ci.{yml,yaml}",
+          ".gitlab-ci.yml",
+          ".gitlab/**",
+          "bitbucket-pipelines.yml",
+          "renovate.json",
+          "CODEOWNERS",
+          "scripts/ci/**",
+          "docs/pr/**"
+        ],
+        "reason": "The ci-engineer is the only agent for CI files (§4.18)."
+      },
+      {
+        "agent": "docs-writer",
+        "notWithGlobs": [
+          ".github/**",
+          ".gitlab-ci.yml",
+          ".gitlab/**",
+          "bitbucket-pipelines.yml",
+          "renovate.json",
+          "CODEOWNERS",
+          "scripts/ci/**",
+          "docs/pr/**"
+        ],
+        "reason": "The ci-engineer is the only agent for CI files (§4.18)."
+      }
+    ],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [],
+  "requiredEnv": [],
+  "review": {
+    "checklist": [
+      {
+        "item": "GitHub Actions CI has one job or step per layer, running that layer pack's Gate commands unchanged in its directory",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "CI includes the freshness checks for every generated file with a ciCheck, the data pack's migration check, and Docker image builds without push",
+        "category": "testing",
+        "severity": "major"
+      },
+      {
+        "item": "CI contains no deploy, push, tag or release steps (platforms build from Git themselves)",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "CI works before lockfiles exist (lockfile-only install commands are guarded)",
+        "category": "architecture",
+        "severity": "minor"
+      },
+      {
+        "item": "Test reports are uploaded or published, caches are set and jobs have timeouts",
+        "category": "testing",
+        "severity": "minor"
+      },
+      {
+        "item": "No secret values are committed outside *.example files, and CI never echoes secrets or variables",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "Workflows set least-privilege permissions (contents: read by default) and concurrency, and never use pull_request_target",
+        "category": "security",
+        "severity": "major"
+      },
+      {
+        "item": "Dependabot covers each ecosystem and directory with grouped minor and patch updates, and the PR template is present",
+        "category": "feature_coverage",
+        "severity": "minor"
+      }
+    ],
+    "deterministic": [
+      "no_committed_secrets"
+    ]
+  },
+  "gate": null,
+  "migrate": null,
+  "deploy": null
+}

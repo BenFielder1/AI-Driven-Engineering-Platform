@@ -1,0 +1,222 @@
+{
+  "id": "data-prisma",
+  "layer": "data",
+  "name": "Prisma",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "data-prisma",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Prisma",
+    "PostgreSQL"
+  ],
+  "description": "Prisma ORM and Prisma Migrate on PostgreSQL, for Express, NestJS or Next.js full-stack.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Data Model & Migrations",
+      "guidance": "For each entity/table: columns with types, lengths and numeric precision, nullability and defaults; the primary key (UUIDv7 or identity); foreign keys with an explicit on-delete behaviour; unique indexes from business rules (say which are case-insensitive); check constraints; indexes for foreign keys and query predicates; enums stored as strings; UTC timestamps; and which aggregates are edited concurrently and need a concurrency token (409 CONFLICT). Then the migration plan: one migration per change, named, in order, with which steps are expand/contract (add, backfill, switch code, drop later) so the previous version keeps working during rollout; any data backfill; the reference/seed data (dev-only seed per role and state); and how migrations run in each environment (prisma migrate deploy as the platform's pre-deploy step, or the build command gated by AIDE_RUN_MIGRATIONS on serverless hosts, over DIRECT_URL)."
+    }
+  ],
+  "ownership": {
+    "data-engineer": [
+      "{app}/prisma/**"
+    ]
+  },
+  "agentSections": {
+    "data-engineer": [
+      "*"
+    ],
+    "backend-engineer": [
+      "Setup",
+      "Modelling"
+    ],
+    "scaffolder": [
+      "Setup"
+    ],
+    "test-engineer": [
+      "Testing"
+    ],
+    "ci-engineer": [
+      "Migrations"
+    ],
+    "deploy-engineer": [
+      "Migrations",
+      "Production notes"
+    ],
+    "frontend-engineer": [
+      "Setup"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{app}/prisma/migrations/**"
+        ],
+        "after": [
+          "{app}/src/**"
+        ],
+        "soft": false,
+        "reason": "Migrations come before the backend or Next.js server code that uses their tables."
+      }
+    ],
+    "exclusive": [
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          "{app}/src/**"
+        ],
+        "reason": "The data engineer owns prisma/ (schema, migrations, seed), not endpoints, pages or the client wrapper."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "{app}/prisma/migrations/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      },
+      {
+        "agent": "frontend-engineer",
+        "notWithGlobs": [
+          "{app}/prisma/migrations/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      }
+    ],
+    "maxFilesPerStep": [
+      {
+        "glob": "{app}/prisma/migrations/*/migration.sql",
+        "max": 1
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "glob": "{app}/prisma/migrations/**",
+      "existingOnBase": true,
+      "reason": "Prisma migrations on the base commit are immutable (FR-125, migrate deploy checksums); a schema change is a new migration folder."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "glob": "{app}/prisma/migrations/*/migration.sql",
+      "handling": "hand_written",
+      "ciCheck": "npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code (shadow database from the CI Postgres service)"
+    },
+    {
+      "glob": "{app}/src/generated/prisma/**",
+      "handling": "ci_generated",
+      "ciCheck": "npx prisma generate (postinstall/build); the output is git-ignored"
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "DATABASE_URL",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": true,
+      "public": false,
+      "description": "PostgreSQL connection for the app (the backend, or the Next.js full-stack app when there is no backend). The Supabase transaction pooler (:6543, pgbouncer=true) on serverless hosts, the session pooler (:5432) or the platform's internal URL otherwise; sslmode=require on managed hosts."
+    },
+    {
+      "key": "DIRECT_URL",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": true,
+      "public": false,
+      "description": "Non-pooled connection used by prisma migrate deploy: the Supabase session pooler (:5432), else the same value as DATABASE_URL. Applies to the same component as DATABASE_URL."
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Exactly one new migration per schema change, never an edit to a migration that exists on the base commit.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Breaking changes (rename, drop, type change) use expand/contract so the previous version runs against the new schema during preview and production rollout.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Columns are explicit (lengths, precision, nullability), foreign keys have a deliberate on-delete, and every foreign key and query predicate is indexed.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Uniqueness rules from the spec are unique indexes or constraints (case-insensitive where the spec says so), and concurrently edited aggregates have a concurrency token mapped to 409 CONFLICT.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Timestamps are UTC (timestamptz/datetimeoffset) from an injected clock, and enums are stored as strings.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Integration tests run against the real engine in a container with every migration applied; no in-memory or SQLite substitute.",
+        "category": "testing",
+        "severity": "major"
+      },
+      {
+        "item": "Queries are parameterised, project only the needed columns, paginate lists and avoid N+1.",
+        "category": "architecture",
+        "severity": "minor"
+      },
+      {
+        "item": "The seed is idempotent, dev-only and gated; reference data is part of the migrations.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "No prisma db push in package scripts or CI; prisma migrate deploy is the one-off pre-start migrate step.",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "migration.sql matches schema.prisma (CI: prisma migrate diff --exit-code), and renames or data moves are written by hand rather than drop plus add.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "One PrismaClient instance (createApp deps, a Nest provider, or a server-only Next.js singleton), and raw SQL only through tagged $queryRaw.",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "The setup matches the installed Prisma major (generator output, prisma.config.ts, driver adapter), and the generated client is never edited.",
+        "category": "architecture",
+        "severity": "minor"
+      }
+    ],
+    "deterministic": [
+      "no_schema_push",
+      "migration_backward_compatible"
+    ]
+  },
+  "gate": null,
+  "migrate": {
+    "command": "npx prisma migrate deploy",
+    "needsDirectUrl": true
+  },
+  "deploy": null
+}

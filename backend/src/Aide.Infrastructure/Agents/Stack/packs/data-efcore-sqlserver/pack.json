@@ -1,0 +1,207 @@
+{
+  "id": "data-efcore-sqlserver",
+  "layer": "data",
+  "name": "EF Core + SQL Server",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "data-efcore-sqlserver",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "EF Core",
+    "SQL Server"
+  ],
+  "description": "EF Core with Microsoft SQL Server and dotnet-ef migrations, for ASP.NET Core.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Data Model & Migrations",
+      "guidance": "For each entity/table: columns with types, lengths and numeric precision, nullability and defaults; the primary key (UUIDv7 or identity); foreign keys with an explicit on-delete behaviour; unique indexes from business rules (say which are case-insensitive); check constraints; indexes for foreign keys and query predicates; enums stored as strings; UTC timestamps; and which aggregates are edited concurrently and need a concurrency token (409 CONFLICT). Then the migration plan: one migration per change, named, in order, with which steps are expand/contract (add, backfill, switch code, drop later) so the previous version keeps working during rollout; any data backfill; the reference/seed data (dev-only seed per role and state); and how migrations run in each environment (an EF migration bundle run as the platform's pre-deploy step against the External SQL Server, never at app start)."
+    }
+  ],
+  "ownership": {
+    "data-engineer": [
+      "{be}/src/*Infrastructure*/Persistence/**",
+      "{be}/src/*Infrastructure*/Migrations/**"
+    ]
+  },
+  "agentSections": {
+    "data-engineer": [
+      "*"
+    ],
+    "backend-engineer": [
+      "Setup",
+      "Modelling"
+    ],
+    "scaffolder": [
+      "Setup"
+    ],
+    "test-engineer": [
+      "Testing"
+    ],
+    "ci-engineer": [
+      "Migrations"
+    ],
+    "deploy-engineer": [
+      "Migrations",
+      "Production notes"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{be}/src/*Infrastructure*/Migrations/**"
+        ],
+        "after": [
+          "{be}/src/*Api*/**"
+        ],
+        "soft": false,
+        "reason": "Migrations come before the endpoints that use their tables."
+      }
+    ],
+    "exclusive": [
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          "{be}/src/*Api*/**"
+        ],
+        "reason": "The data engineer owns the schema, not endpoints or DTOs; those are backend steps."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "{be}/src/*Infrastructure*/Migrations/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      }
+    ],
+    "maxFilesPerStep": [
+      {
+        "glob": "{be}/src/*Infrastructure*/Migrations/*.Designer.cs",
+        "max": 1
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "glob": "{be}/src/*Infrastructure*/Migrations/**",
+      "existingOnBase": true,
+      "except": [
+        "{be}/src/*Infrastructure*/Migrations/*ModelSnapshot.cs"
+      ],
+      "reason": "Migrations on the base commit are immutable (FR-125); a schema change is a new migration. Only the EF Core model snapshot is updated."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "glob": "{be}/src/*Infrastructure*/Migrations/*_*.cs",
+      "handling": "hand_written",
+      "ciCheck": "dotnet ef migrations has-pending-model-changes --project src/<App>.Infrastructure --startup-project src/<App>.Api"
+    },
+    {
+      "glob": "{be}/src/*Infrastructure*/Migrations/*ModelSnapshot.cs",
+      "handling": "hand_written",
+      "ciCheck": "dotnet ef migrations has-pending-model-changes --project src/<App>.Infrastructure --startup-project src/<App>.Api"
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "DATABASE_URL",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": true,
+      "public": false,
+      "description": "SQL Server ADO.NET connection string (External, e.g. Azure SQL) with Encrypt=True and no TrustServerCertificate; used as ConnectionStrings:Default when that is empty. Local development uses user-secrets instead."
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Exactly one new migration per schema change, never an edit to a migration that exists on the base commit.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Breaking changes (rename, drop, type change) use expand/contract so the previous version runs against the new schema during preview and production rollout.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Columns are explicit (lengths, precision, nullability), foreign keys have a deliberate on-delete, and every foreign key and query predicate is indexed.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Uniqueness rules from the spec are unique indexes or constraints (case-insensitive where the spec says so), and concurrently edited aggregates have a concurrency token mapped to 409 CONFLICT.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Timestamps are UTC (timestamptz/datetimeoffset) from an injected clock, and enums are stored as strings.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Integration tests run against the real engine in a container with every migration applied; no in-memory or SQLite substitute.",
+        "category": "testing",
+        "severity": "major"
+      },
+      {
+        "item": "Queries are parameterised, project only the needed columns, paginate lists and avoid N+1.",
+        "category": "architecture",
+        "severity": "minor"
+      },
+      {
+        "item": "The seed is idempotent, dev-only and gated; reference data is part of the migrations.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "No EnsureCreated(), Database.Migrate() or MigrateAsync() in app code; the migration bundle runs as the one-off pre-start step.",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Each migration has its .Designer.cs and the model snapshot is updated to match (CI: dotnet ef migrations has-pending-model-changes).",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Entity configuration is explicit (IEntityTypeConfiguration per entity), and DbUpdateConcurrencyException maps to 409 CONFLICT.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Concurrency uses a rowversion column, and the database collation was confirmed for the spec's uniqueness rules.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "UseSqlServer has EnableRetryOnFailure, there are no multiple cascade paths, and TrustServerCertificate appears only in local configuration.",
+        "category": "security",
+        "severity": "major"
+      }
+    ],
+    "deterministic": [
+      "no_ensure_created",
+      "migration_backward_compatible"
+    ]
+  },
+  "gate": null,
+  "migrate": {
+    "command": "/app/efbundle",
+    "needsDirectUrl": false
+  },
+  "deploy": null
+}

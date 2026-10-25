@@ -6,6 +6,7 @@ using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Presets;
 using Aide.Infrastructure.RepoTools;
+using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -103,6 +104,11 @@ public static class DependencyInjection
         services.AddSingleton<IPresetSource>(EmbeddedPresetSource.Shipped);
         services.TryAddSingleton<IPresetCatalog, PresetCatalog>();
         services.AddHostedService<PresetCatalogStartup>();
+
+        // Stack catalog (FR-113, FR-122, §4.16): the shipped catalog (embedded), loaded once at startup; tests may replace the source.
+        services.TryAddSingleton<IStackCatalogSource>(EmbeddedStackCatalogSource.Shipped);
+        services.TryAddSingleton<IStackCatalog, StackCatalogProvider>();
+        services.AddHostedService<StackCatalogStartup>();
         services.AddScoped<ILlmResolver, LlmResolver>();
         services.AddScoped<ILlmKeyValidator, LlmKeyValidator>();
 

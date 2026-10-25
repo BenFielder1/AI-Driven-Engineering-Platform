@@ -1,0 +1,195 @@
+{
+  "id": "data-jpa-flyway",
+  "layer": "data",
+  "name": "JPA + Flyway",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "data-jpa-flyway",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Spring Data JPA",
+    "Flyway",
+    "PostgreSQL"
+  ],
+  "description": "Spring Data JPA (Hibernate) with hand-written Flyway migrations on PostgreSQL, for Spring Boot.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Data Model & Migrations",
+      "guidance": "For each entity/table: columns with types, lengths and numeric precision, nullability and defaults; the primary key (UUIDv7 or identity); foreign keys with an explicit on-delete behaviour; unique indexes from business rules (say which are case-insensitive); check constraints; indexes for foreign keys and query predicates; enums stored as strings; UTC timestamps; and which aggregates are edited concurrently and need a concurrency token (409 CONFLICT). Then the migration plan: one migration per change, named, in order, with which steps are expand/contract (add, backfill, switch code, drop later) so the previous version keeps working during rollout; any data backfill; the reference/seed data (dev-only seed per role and state); and how migrations run in each environment (Flyway run by a migrate-only profile of the app image as the platform's pre-deploy step; ddl-auto=validate everywhere)."
+    }
+  ],
+  "ownership": {
+    "data-engineer": [
+      "{be}/src/main/resources/db/migration/**",
+      "{be}/src/main/java/**/domain/**/*Entity.java"
+    ]
+  },
+  "agentSections": {
+    "data-engineer": [
+      "*"
+    ],
+    "backend-engineer": [
+      "Setup",
+      "Modelling"
+    ],
+    "scaffolder": [
+      "Setup"
+    ],
+    "test-engineer": [
+      "Testing"
+    ],
+    "ci-engineer": [
+      "Migrations"
+    ],
+    "deploy-engineer": [
+      "Migrations",
+      "Production notes"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{be}/src/main/resources/db/migration/**"
+        ],
+        "after": [
+          "{be}/src/main/java/**/*Controller.java",
+          "{be}/src/main/java/**/*Service.java",
+          "{be}/src/main/java/**/*Repository.java"
+        ],
+        "soft": false,
+        "reason": "Migrations come before the repositories, services and controllers that use their tables."
+      }
+    ],
+    "exclusive": [
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          "{be}/src/main/java/**/*Controller.java",
+          "{be}/src/main/java/**/web/**"
+        ],
+        "reason": "The data engineer owns migrations and entities, not endpoints or DTOs."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "{be}/src/main/resources/db/migration/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      }
+    ],
+    "maxFilesPerStep": [
+      {
+        "glob": "{be}/src/main/resources/db/migration/V*.sql",
+        "max": 1
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "glob": "{be}/src/main/resources/db/migration/**",
+      "existingOnBase": true,
+      "except": [
+        "{be}/src/main/resources/db/migration/R__*.sql"
+      ],
+      "reason": "Versioned Flyway migrations on the base commit are immutable (FR-125, Flyway checksums); a schema change is a new V<n>__ file. Repeatable R__ migrations may change."
+    }
+  ],
+  "generatedFiles": [],
+  "requiredEnv": [
+    {
+      "key": "DATABASE_URL",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": true,
+      "public": false,
+      "description": "PostgreSQL connection for the API. A postgres:// URI (Render, Railway ${{Postgres.DATABASE_URL}}, the Supabase session pooler, or External), converted at startup by an EnvironmentPostProcessor into spring.datasource url/username/password with sslmode=require; the migrate profile reads it the same way."
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Exactly one new migration per schema change, never an edit to a migration that exists on the base commit.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Breaking changes (rename, drop, type change) use expand/contract so the previous version runs against the new schema during preview and production rollout.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Columns are explicit (lengths, precision, nullability), foreign keys have a deliberate on-delete, and every foreign key and query predicate is indexed.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Uniqueness rules from the spec are unique indexes or constraints (case-insensitive where the spec says so), and concurrently edited aggregates have a concurrency token mapped to 409 CONFLICT.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Timestamps are UTC (timestamptz/datetimeoffset) from an injected clock, and enums are stored as strings.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Integration tests run against the real engine in a container with every migration applied; no in-memory or SQLite substitute.",
+        "category": "testing",
+        "severity": "major"
+      },
+      {
+        "item": "Queries are parameterised, project only the needed columns, paginate lists and avoid N+1.",
+        "category": "architecture",
+        "severity": "minor"
+      },
+      {
+        "item": "The seed is idempotent, dev-only and gated; reference data is part of the migrations.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "spring.jpa.hibernate.ddl-auto is validate (never update/create/create-drop outside test config) and spring.jpa.open-in-view is false.",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Migrations are V<n>__<description>.sql with the next free version; CREATE INDEX CONCURRENTLY is alone in a non-transactional migration.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Entities map columns explicitly, use LAZY relationships with entity graphs or join fetches, @Version on concurrent aggregates, EnumType.STRING and Instant/OffsetDateTime.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Production runs Flyway as the one-off migrate step (migrate profile), with spring.flyway.enabled=false in the serving profile when there is more than one replica.",
+        "category": "architecture",
+        "severity": "major"
+      }
+    ],
+    "deterministic": [
+      "no_ddl_auto_update",
+      "migration_backward_compatible"
+    ]
+  },
+  "gate": null,
+  "migrate": {
+    "command": "java -jar app.jar --spring.profiles.active=migrate",
+    "needsDirectUrl": false
+  },
+  "deploy": null
+}

@@ -1,0 +1,149 @@
+{
+  "id": "local-docker-desktop",
+  "layer": "local",
+  "name": "Docker Compose",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "local-docker-desktop",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Docker Desktop",
+    "Compose"
+  ],
+  "description": "The local dev loop: a Compose database service, plus an optional full-stack profile.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [],
+  "ownership": {
+    "deploy-engineer": [
+      "**/Dockerfile",
+      "**/.dockerignore",
+      "compose.yaml",
+      "**/nginx.conf",
+      "vercel.json",
+      "netlify.toml",
+      "**/_redirects",
+      "**/wrangler.jsonc",
+      ".github/workflows/pages.yml",
+      "render.yaml",
+      ".railway/**",
+      ".env.example"
+    ]
+  },
+  "agentSections": {
+    "deploy-engineer": [
+      "*"
+    ]
+  },
+  "planRules": {
+    "order": [],
+    "exclusive": [
+      {
+        "agent": "scaffolder",
+        "notWithGlobs": [
+          "compose.yaml",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for the local Compose setup (compose.yaml, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          "compose.yaml",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for the local Compose setup (compose.yaml, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "compose.yaml",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for the local Compose setup (compose.yaml, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "frontend-engineer",
+        "notWithGlobs": [
+          "compose.yaml",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for the local Compose setup (compose.yaml, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "test-engineer",
+        "notWithGlobs": [
+          "compose.yaml",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for the local Compose setup (compose.yaml, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "ci-engineer",
+        "notWithGlobs": [
+          "compose.yaml",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for the local Compose setup (compose.yaml, Dockerfiles, nginx.conf) (§4.18)."
+      },
+      {
+        "agent": "docs-writer",
+        "notWithGlobs": [
+          "compose.yaml",
+          "**/Dockerfile",
+          "**/.dockerignore",
+          "**/nginx.conf"
+        ],
+        "reason": "The deploy-engineer is the only agent for the local Compose setup (compose.yaml, Dockerfiles, nginx.conf) (§4.18)."
+      }
+    ],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [],
+  "requiredEnv": [],
+  "review": {
+    "checklist": [
+      {
+        "item": "compose.yaml has a db service with a health check and a named volume, and the app profile runs migrate, api and web in dependency order",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "The web container proxies /api to the api service (same-origin locally)",
+        "category": "architecture",
+        "severity": "minor"
+      },
+      {
+        "item": "Published ports are bound to 127.0.0.1",
+        "category": "security",
+        "severity": "minor"
+      },
+      {
+        "item": "No secrets in compose.yaml: values come from the git-ignored .env, and .env.example is complete with placeholders",
+        "category": "security",
+        "severity": "critical"
+      }
+    ],
+    "deterministic": []
+  },
+  "gate": null,
+  "migrate": null,
+  "deploy": null
+}

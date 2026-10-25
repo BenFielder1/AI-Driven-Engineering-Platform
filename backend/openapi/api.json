@@ -8249,6 +8249,180 @@
         }
       }
     },
+    "/api/admin/stack": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Admin → Stack catalog (§6): the catalog version, content hash and load status, every load error, and each pack with its stack-packs source, version, content hash and load status.",
+        "operationId": "GetAdminStackCatalog",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStackCatalogDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stack/catalog": {
+      "get": {
+        "tags": [
+          "Stack"
+        ],
+        "summary": "The stack catalog (FR-113): layers, choices in evaluation order with their options (chips, description, pack, pack version, stack-packs source, modes), the compatibility rule statements and the recommended combinations, plus the catalog version and content hash.",
+        "operationId": "GetStackCatalog",
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StackCatalogDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stack/options": {
+      "post": {
+        "tags": [
+          "Stack"
+        ],
+        "summary": "Option states for a partial composition (FR-114, FR-115, §4.17): every choice with each option's state (allowed, caveat, forbidden, or invalidated for a selection that earlier choices now forbid), the reasons (rule id and text), whether a recommended combination includes it, and the default to preselect.",
+        "operationId": "GetStackOptions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StackCompositionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StackOptionsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION: an unknown pack or option id, or a malformed layer path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stack/validate": {
+      "post": {
+        "tags": [
+          "Stack"
+        ],
+        "summary": "Validate a composition (FR-116): the normalised composition with its derived fields (Next.js mode, specialists, origin model options, spec sections, env names, gates) and caveats. Left-out layers are None; the local dev loop and origin model take their defaults; vcs is required.",
+        "operationId": "ValidateStack",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StackCompositionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StackCompositionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "STACK_INCOMPATIBLE: the composition breaks a compatibility rule (the violations extension lists {layer, option, rule, reason}); VALIDATION: an unknown id, a missing vcs or a malformed path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/notifications": {
       "get": {
         "tags": [
@@ -9060,6 +9234,102 @@
           }
         },
         "description": "§2 Admin: the system LLM key policy (D-V2-5). `allowSystemKeys` is `Llm:AllowSystemKeys` (configuration,\nread-only here: set `Llm__AllowSystemKeys` in `secrets.env` / user-secrets and restart). When it is on,\nprojects with no bound connection use the system key of their provider; `systemKeyProviders` lists the\nproviders that have one configured (allowed or not). Keys are never returned. Providers disabled on this deployment\n(FR-157) are never listed."
+      },
+      "AdminStackCatalogDto": {
+        "required": [
+          "version",
+          "contentHash",
+          "status",
+          "errors",
+          "packs"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "packs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminStackPackDto"
+            }
+          }
+        },
+        "description": "Admin → Stack catalog (§6 `GET /api/admin/stack`): the catalog version and hash, whether it loaded (`loaded`\nor `failed`), every load error, and each pack with its source, version, hash and load status."
+      },
+      "AdminStackPackDto": {
+        "required": [
+          "id",
+          "layer",
+          "name",
+          "version",
+          "source",
+          "contentHash",
+          "status",
+          "errors"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "layer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StackPackSourceDto"
+              }
+            ]
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "A pack folder: what its `pack.json` says (when readable), the SHA-256 of its files, and `loaded`/`failed` with the reasons."
       },
       "AdminUserDto": {
         "required": [
@@ -13016,6 +13286,37 @@
           "installUrl": {
             "type": "string",
             "description": "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88)."
+          },
+          "violations": {
+            "type": "array",
+            "items": {
+              "required": [
+                "layer",
+                "option",
+                "rule",
+                "reason"
+              ],
+              "type": "object",
+              "properties": {
+                "layer": {
+                  "type": "string",
+                  "description": "The choice: frontend, backend, data, vcs, frontendHost, backendHost, databaseHost, local or originModel."
+                },
+                "option": {
+                  "type": "string",
+                  "description": "The option id that breaks the rule."
+                },
+                "rule": {
+                  "type": "string",
+                  "description": "The rule id (R1…R12, SPEC §4.17)."
+                },
+                "reason": {
+                  "type": "string",
+                  "description": "The rule's reason text."
+                }
+              }
+            },
+            "description": "STACK_INCOMPATIBLE: each broken compatibility rule (FR-116)."
           }
         }
       },
@@ -14355,6 +14656,37 @@
           "installUrl": {
             "type": "string",
             "description": "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88)."
+          },
+          "violations": {
+            "type": "array",
+            "items": {
+              "required": [
+                "layer",
+                "option",
+                "rule",
+                "reason"
+              ],
+              "type": "object",
+              "properties": {
+                "layer": {
+                  "type": "string",
+                  "description": "The choice: frontend, backend, data, vcs, frontendHost, backendHost, databaseHost, local or originModel."
+                },
+                "option": {
+                  "type": "string",
+                  "description": "The option id that breaks the rule."
+                },
+                "rule": {
+                  "type": "string",
+                  "description": "The rule id (R1…R12, SPEC §4.17)."
+                },
+                "reason": {
+                  "type": "string",
+                  "description": "The rule's reason text."
+                }
+              }
+            },
+            "description": "STACK_INCOMPATIBLE: each broken compatibility rule (FR-116)."
           }
         }
       },
@@ -16039,6 +16371,758 @@
         ],
         "description": "Severity of a review finding or drift area (§4.7)."
       },
+      "StackCatalogDto": {
+        "required": [
+          "version",
+          "contentHash",
+          "layers",
+          "choices",
+          "rules",
+          "recommendations"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackLayerDto"
+            }
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackChoiceDto"
+            }
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackRuleDto"
+            }
+          },
+          "recommendations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackRecommendationDto"
+            }
+          }
+        },
+        "description": "The stack catalog (FR-113, §4.16) for the wizard's Stack step, Settings → Stack and Admin → Stack catalog: the five\nlayers, the choices in evaluation order (frontend, backend, data, vcs, then the deployment choices frontendHost,\nbackendHost, databaseHost, local and originModel) with their options, the rule statements and the recommended\ncombinations. `version` and `contentHash` are what release versions pin."
+      },
+      "StackCaveatDto": {
+        "required": [
+          "layer",
+          "option",
+          "rule",
+          "text"
+        ],
+        "type": "object",
+        "properties": {
+          "layer": {
+            "type": "string"
+          },
+          "option": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "description": "A caveat of a chosen option: the choice (`layer`), the option, the rule and its text."
+      },
+      "StackChoiceDto": {
+        "required": [
+          "id",
+          "layer",
+          "name",
+          "options"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "layer": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackOptionDto"
+            }
+          }
+        },
+        "description": "A choice of the Stack step; `layer` is the layer it belongs to (the deployment choices share `deploy`)."
+      },
+      "StackChoiceStateDto": {
+        "required": [
+          "choice",
+          "layer",
+          "selected",
+          "default",
+          "options"
+        ],
+        "type": "object",
+        "properties": {
+          "choice": {
+            "type": "string"
+          },
+          "layer": {
+            "type": "string"
+          },
+          "selected": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "default": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackOptionStateDto"
+            }
+          }
+        },
+        "description": "A choice's options for the choices made so far: `selected` is the current selection, `default` the option to\npreselect (R12 Compose, \"same as frontend\" for the backend host, the R10 origin model)."
+      },
+      "StackComponentDto": {
+        "required": [
+          "pack",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "pack": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "StackComponentSelection": {
+        "required": [
+          "pack"
+        ],
+        "type": "object",
+        "properties": {
+          "pack": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A frontend or backend: the pack id (or `none`) and its path in the repo (FR-119; default `frontend`/`backend`)."
+      },
+      "StackCompositionDto": {
+        "required": [
+          "catalogVersion",
+          "catalogHash",
+          "frontend",
+          "backend",
+          "data",
+          "vcs",
+          "deploy",
+          "originModel",
+          "derived",
+          "caveats"
+        ],
+        "type": "object",
+        "properties": {
+          "catalogVersion": {
+            "type": "string"
+          },
+          "catalogHash": {
+            "type": "string"
+          },
+          "frontend": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StackComponentDto"
+              }
+            ]
+          },
+          "backend": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StackComponentDto"
+              }
+            ]
+          },
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StackDataDto"
+              }
+            ]
+          },
+          "vcs": {
+            "$ref": "#/components/schemas/StackVcsDto"
+          },
+          "deploy": {
+            "$ref": "#/components/schemas/StackDeployDto"
+          },
+          "originModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "derived": {
+            "$ref": "#/components/schemas/StackDerivedDto"
+          },
+          "caveats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackCaveatDto"
+            }
+          }
+        },
+        "description": "The normalised composition (§4.18) returned by `POST /api/stack/validate`: None is `null`;\n`originModel` is `null` without a frontend (API only)."
+      },
+      "StackCompositionRequest": {
+        "type": "object",
+        "properties": {
+          "frontend": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StackComponentSelection"
+              }
+            ]
+          },
+          "backend": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StackComponentSelection"
+              }
+            ]
+          },
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StackDataSelection"
+              }
+            ]
+          },
+          "vcs": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StackVcsSelection"
+              }
+            ]
+          },
+          "deploy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StackDeploySelection"
+              }
+            ]
+          },
+          "originModel": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "`same-origin`, `proxy` or `cross-origin`."
+          }
+        },
+        "description": "A (partial) composition (§4.17, §4.18). For `/options` a missing layer is \"not chosen yet\"; for `/validate` it\nis None, except `vcs` (required), `deploy.local` (default: Compose when there's a backend or a database, R12)\nand `originModel` (the default of R10). `\"none\"` as a pack or host is an explicit None."
+      },
+      "StackDataDto": {
+        "required": [
+          "pack",
+          "mode"
+        ],
+        "type": "object",
+        "properties": {
+          "pack": {
+            "type": "string"
+          },
+          "mode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "StackDataSelection": {
+        "required": [
+          "pack"
+        ],
+        "type": "object",
+        "properties": {
+          "pack": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "mode": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The data layer: the pack id (or `none`); `mode` defaults to the option's (Supabase: `baas`)."
+      },
+      "StackDeployDto": {
+        "required": [
+          "frontendHost",
+          "backendHost",
+          "databaseHost",
+          "local"
+        ],
+        "type": "object",
+        "properties": {
+          "frontendHost": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "backendHost": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "databaseHost": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "local": {
+            "type": "string"
+          }
+        },
+        "description": "Host option ids (`null` = None) and the local dev loop (`compose` or `none`)."
+      },
+      "StackDeploySelection": {
+        "type": "object",
+        "properties": {
+          "frontendHost": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "backendHost": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "databaseHost": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "local": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The Deployment layer: option ids of the frontend, backend and database hosts (or `none`) and the local dev loop (`compose`/`none`)."
+      },
+      "StackDerivedDto": {
+        "required": [
+          "nextjsMode",
+          "agents",
+          "originModelOptions",
+          "specSections",
+          "envNames",
+          "gates"
+        ],
+        "type": "object",
+        "properties": {
+          "nextjsMode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "originModelOptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "specSections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "envNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "gates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Derived facts (§4.18): the Next.js mode (R2), the specialists in play (FR-120), the origin models the Owner can switch\nbetween (R10), and the selected packs' spec sections, env names and gate commands."
+      },
+      "StackLayerDto": {
+        "required": [
+          "id",
+          "name",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "description": "One of the five layers (Frontend, Backend, Data, VCS, Deployment)."
+      },
+      "StackModeDto": {
+        "required": [
+          "id",
+          "name",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "StackOptionDto": {
+        "required": [
+          "id",
+          "name",
+          "description",
+          "chips",
+          "pack",
+          "packVersion",
+          "source",
+          "modes",
+          "mode"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "chips": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "packVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StackPackSourceDto"
+              }
+            ]
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackModeDto"
+            }
+          },
+          "mode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "An option card: name, one-line description, chips, and for pack options the pack id, its version\n(`&lt;plugin version&gt;+aide.&lt;n&gt;`), its stack-packs source and its modes. `mode` is the pack mode the option\nselects (Supabase: `baas`). Plain options (None, External, origin models) have no pack."
+      },
+      "StackOptionState": {
+        "enum": [
+          "allowed",
+          "caveat",
+          "forbidden",
+          "invalidated"
+        ],
+        "description": "§4.17: the state of an option for the choices made so far."
+      },
+      "StackOptionStateDto": {
+        "required": [
+          "id",
+          "state",
+          "reasons",
+          "recommended"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/StackOptionState"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackReasonDto"
+            }
+          },
+          "recommended": {
+            "type": "boolean"
+          }
+        },
+        "description": "An option's state (`allowed`, `caveat`, `forbidden`, `invalidated`) with its reasons, and whether a recommended combination includes it."
+      },
+      "StackOptionsDto": {
+        "required": [
+          "catalogVersion",
+          "choices",
+          "nextjsMode"
+        ],
+        "type": "object",
+        "properties": {
+          "catalogVersion": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackChoiceStateDto"
+            }
+          },
+          "nextjsMode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "`POST /api/stack/options` (§4.17): every choice in evaluation order with every option's state. A selection that\nearlier choices now forbid is `invalidated` (the wizard clears it and names the reason); later choices are\nevaluated without it. `nextjsMode` is R2's derived mode once known."
+      },
+      "StackPackSourceDto": {
+        "required": [
+          "plugin",
+          "version",
+          "snapshot"
+        ],
+        "type": "object",
+        "properties": {
+          "plugin": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "snapshot": {
+            "type": "string"
+          }
+        },
+        "description": "Where a pack was adapted from (FR-122): the stack-packs plugin, its version and the snapshot date."
+      },
+      "StackReasonDto": {
+        "required": [
+          "rule",
+          "text"
+        ],
+        "type": "object",
+        "properties": {
+          "rule": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "description": "A rule id (`R1`…) and its text, e.g. `R3` \"Prisma needs Express, NestJS or Next.js full-stack\"."
+      },
+      "StackRecommendationDto": {
+        "required": [
+          "id",
+          "name",
+          "choices"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "description": "A recommended combination (stack-packs `compose-stack`): option ids per choice id."
+      },
+      "StackRuleDto": {
+        "required": [
+          "id",
+          "statement"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "statement": {
+            "type": "string"
+          }
+        },
+        "description": "A compatibility rule (§4.17): its stable id (`R1`…) and statement."
+      },
+      "StackVcsDto": {
+        "required": [
+          "pack",
+          "instanceId",
+          "selfManaged"
+        ],
+        "type": "object",
+        "properties": {
+          "pack": {
+            "type": "string"
+          },
+          "instanceId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "selfManaged": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StackVcsSelection": {
+        "required": [
+          "pack"
+        ],
+        "type": "object",
+        "properties": {
+          "pack": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "instanceId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "selfManaged": {
+            "type": "boolean"
+          }
+        },
+        "description": "The VCS layer: the pack id, the GitLab host instance, and whether it is self-managed (R9)."
+      },
       "StartRefinementRequest": {
         "type": "object",
         "properties": {
@@ -16895,6 +17979,9 @@
     },
     {
       "name": "Presets"
+    },
+    {
+      "name": "Stack"
     },
     {
       "name": "Notifications"

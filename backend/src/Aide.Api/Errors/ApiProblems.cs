@@ -25,6 +25,9 @@ public static class ApiProblems
     /// </summary>
     public const string NotImplementedCode = "NOT_IMPLEMENTED";
 
+    /// <summary>FR-116: the broken rules on a <c>STACK_INCOMPATIBLE</c> problem, each <c>{layer, option, rule, reason}</c>.</summary>
+    public const string ViolationsKey = "violations";
+
     /// <summary>A ProblemDetails result for a domain error (status from the domain's HTTP status map).</summary>
     public static ProblemHttpResult FromError(DomainError error)
     {
@@ -77,6 +80,22 @@ public static class ApiProblems
         }
 
         return TypedResults.Problem(title: title, statusCode: StatusFor(ErrorCodes.VercelGitNotConnected), extensions: extensions);
+    }
+
+    /// <summary>400 <c>STACK_INCOMPATIBLE</c> (FR-116) with the <c>violations</c> extension and the reasons as <c>details</c>.</summary>
+    public static ProblemHttpResult StackIncompatible(IReadOnlyList<Domain.Stack.StackViolation> violations)
+    {
+        ArgumentNullException.ThrowIfNull(violations);
+        var error = Domain.Stack.StackCompatibility.IncompatibleError(violations);
+        return TypedResults.Problem(
+            title: error.Message,
+            statusCode: StatusFor(ErrorCodes.StackIncompatible),
+            extensions: new Dictionary<string, object?>
+            {
+                [ErrorCodeKey] = ErrorCodes.StackIncompatible,
+                [DetailsKey] = error.Details,
+                [ViolationsKey] = violations.Select(v => new Features.Stack.StackViolationDto(v.Layer, v.Option, v.Rule, v.Reason)).ToList(),
+            });
     }
 
     public static ProblemHttpResult NotFound(string title = "The resource was not found.") => Of(ErrorCodes.NotFound, title);

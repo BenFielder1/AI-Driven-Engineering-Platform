@@ -1,0 +1,213 @@
+{
+  "id": "deploy-cloudflare",
+  "layer": "deploy",
+  "name": "Cloudflare",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "deploy-cloudflare",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Workers",
+    "Static assets"
+  ],
+  "description": "Static SPAs on Workers with static assets, and Next.js through Cloudflare's adapter.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Environments & Configuration",
+      "guidance": "Per environment (production trigger on the default branch; preview = Worker versions of the version branch): the Worker name and URLs, build variables per trigger, runtime vars and secrets (runtime secrets are shared by preview and production), the origin model (proxy Worker with API_ORIGIN, or cross-origin with API_BASE_URL and CORS_ALLOWED_ORIGINS) and the backend URL each environment targets."
+    }
+  ],
+  "ownership": {
+    "deploy-engineer": [
+      "**/Dockerfile",
+      "**/.dockerignore",
+      "compose.yaml",
+      "**/nginx.conf",
+      "vercel.json",
+      "netlify.toml",
+      "**/_redirects",
+      "**/wrangler.jsonc",
+      ".github/workflows/pages.yml",
+      "render.yaml",
+      ".railway/**",
+      ".env.example",
+      "{fe}/worker/**"
+    ]
+  },
+  "agentSections": {
+    "deploy-engineer": [
+      "Supports",
+      "Prerequisites and auth",
+      "Config as code",
+      "Environment variables",
+      "Database",
+      "Deploy commands",
+      "Previews and promotion",
+      "Troubleshooting",
+      "Checklist"
+    ]
+  },
+  "planRules": {
+    "order": [],
+    "exclusive": [
+      {
+        "agent": "scaffolder",
+        "notWithGlobs": [
+          "**/wrangler.jsonc",
+          "{fe}/worker/**"
+        ],
+        "reason": "The deploy-engineer is the only agent for Cloudflare config (wrangler.jsonc, the proxy Worker) (§4.18)."
+      },
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          "**/wrangler.jsonc",
+          "{fe}/worker/**"
+        ],
+        "reason": "The deploy-engineer is the only agent for Cloudflare config (wrangler.jsonc, the proxy Worker) (§4.18)."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "**/wrangler.jsonc",
+          "{fe}/worker/**"
+        ],
+        "reason": "The deploy-engineer is the only agent for Cloudflare config (wrangler.jsonc, the proxy Worker) (§4.18)."
+      },
+      {
+        "agent": "frontend-engineer",
+        "notWithGlobs": [
+          "**/wrangler.jsonc",
+          "{fe}/worker/**"
+        ],
+        "reason": "The deploy-engineer is the only agent for Cloudflare config (wrangler.jsonc, the proxy Worker) (§4.18)."
+      },
+      {
+        "agent": "test-engineer",
+        "notWithGlobs": [
+          "**/wrangler.jsonc",
+          "{fe}/worker/**"
+        ],
+        "reason": "The deploy-engineer is the only agent for Cloudflare config (wrangler.jsonc, the proxy Worker) (§4.18)."
+      },
+      {
+        "agent": "ci-engineer",
+        "notWithGlobs": [
+          "**/wrangler.jsonc",
+          "{fe}/worker/**"
+        ],
+        "reason": "The deploy-engineer is the only agent for Cloudflare config (wrangler.jsonc, the proxy Worker) (§4.18)."
+      },
+      {
+        "agent": "docs-writer",
+        "notWithGlobs": [
+          "**/wrangler.jsonc",
+          "{fe}/worker/**"
+        ],
+        "reason": "The deploy-engineer is the only agent for Cloudflare config (wrangler.jsonc, the proxy Worker) (§4.18)."
+      }
+    ],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [],
+  "requiredEnv": [
+    {
+      "key": "API_ORIGIN",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": false,
+      "description": "The backend target URL for this environment; the frontend platform proxies /api/* to it (FR-146). Derived by AIDE.",
+      "when": "originModel == proxy"
+    },
+    {
+      "key": "AIDE_RUN_MIGRATIONS",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": false,
+      "description": "true where the environment has its own database (production; preview when a preview database exists), else false. The build runs the data pack's migrate command only when true (FR-154, D-V4-13). Derived by AIDE.",
+      "when": "nextjsMode == full-stack && data != none && data != data-supabase && databaseHost != none"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "wrangler.jsonc has the Worker name, assets directory, single-page-application not-found handling and a real compatibility date",
+        "category": "architecture",
+        "severity": "minor"
+      },
+      {
+        "item": "Proxy origin model: main points at the Worker, assets has binding ASSETS and run_worker_first [\"/api/*\"], and the Worker forwards /api/* to env.API_ORIGIN",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "No backend runs on Cloudflare, and no backend URL is hard-coded in the Worker or vars",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Next.js full-stack migrations run only in the build gated by AIDE_RUN_MIGRATIONS",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "No API tokens or account ids in the repo; .dev.vars and .wrangler/ are git-ignored",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "No CI job, script or package script deploys with the Wrangler CLI; AIDE triggers every deploy",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": ".env.example lists every variable the app needs, with placeholders only",
+        "category": "feature_coverage",
+        "severity": "minor"
+      }
+    ],
+    "deterministic": [
+      "deploy_branch_control"
+    ]
+  },
+  "gate": null,
+  "migrate": null,
+  "deploy": {
+    "provider": "cloudflare",
+    "shapes": [
+      {
+        "id": "workers-static-assets",
+        "component": "frontend",
+        "runtimes": [
+          "static"
+        ]
+      },
+      {
+        "id": "nextjs-adapter",
+        "component": "frontend",
+        "runtimes": [
+          "node"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,230 @@
+{
+  "version": "1.0.0",
+  "layers": [
+    { "id": "frontend", "name": "Frontend", "description": "The web UI, or None for an API-only project." },
+    { "id": "backend", "name": "Backend", "description": "The API service, or None for a static site, Next.js full-stack or an SPA with Supabase." },
+    { "id": "data", "name": "Data", "description": "The ORM and migrations (or Supabase as a backend-as-a-service), or None for no database." },
+    { "id": "vcs", "name": "Version control", "description": "The Git host of the repository and its CI." },
+    { "id": "deploy", "name": "Deployment", "description": "Where each component runs, the local dev loop and the origin model." }
+  ],
+  "choices": [
+    {
+      "id": "frontend",
+      "layer": "frontend",
+      "name": "Frontend",
+      "options": [
+        { "id": "fe-react-vite", "pack": "fe-react-vite" },
+        { "id": "fe-nextjs", "pack": "fe-nextjs" },
+        { "id": "fe-angular", "pack": "fe-angular" },
+        { "id": "fe-vue", "pack": "fe-vue" },
+        { "id": "fe-vanilla", "pack": "fe-vanilla" },
+        { "id": "none", "name": "None", "description": "No frontend: an API-only project." }
+      ]
+    },
+    {
+      "id": "backend",
+      "layer": "backend",
+      "name": "Backend",
+      "options": [
+        { "id": "be-aspnet", "pack": "be-aspnet" },
+        { "id": "be-spring-boot", "pack": "be-spring-boot" },
+        { "id": "be-fastapi", "pack": "be-fastapi" },
+        { "id": "be-express", "pack": "be-express" },
+        { "id": "be-nestjs", "pack": "be-nestjs" },
+        { "id": "none", "name": "None", "description": "No separate backend: a static site, Next.js full-stack, or an SPA with Supabase." }
+      ]
+    },
+    {
+      "id": "data",
+      "layer": "data",
+      "name": "Data",
+      "options": [
+        { "id": "data-efcore-postgres", "pack": "data-efcore-postgres" },
+        { "id": "data-efcore-sqlserver", "pack": "data-efcore-sqlserver" },
+        { "id": "data-jpa-flyway", "pack": "data-jpa-flyway" },
+        { "id": "data-sqlalchemy", "pack": "data-sqlalchemy" },
+        { "id": "data-prisma", "pack": "data-prisma" },
+        { "id": "data-drizzle", "pack": "data-drizzle" },
+        { "id": "data-supabase", "pack": "data-supabase", "mode": "baas", "name": "Supabase (BaaS)" },
+        { "id": "none", "name": "None", "description": "No database." }
+      ]
+    },
+    {
+      "id": "vcs",
+      "layer": "vcs",
+      "name": "Version control",
+      "options": [
+        { "id": "vcs-github", "pack": "vcs-github", "vcsHost": "github" },
+        { "id": "vcs-gitlab", "pack": "vcs-gitlab", "vcsHost": "gitlab", "selfManagedVcsHost": "gitlab-self-managed" },
+        { "id": "vcs-bitbucket", "pack": "vcs-bitbucket", "vcsHost": "bitbucket" }
+      ]
+    },
+    {
+      "id": "frontendHost",
+      "layer": "deploy",
+      "name": "Frontend host",
+      "options": [
+        { "id": "deploy-vercel", "pack": "deploy-vercel" },
+        { "id": "deploy-netlify", "pack": "deploy-netlify" },
+        { "id": "deploy-cloudflare", "pack": "deploy-cloudflare" },
+        { "id": "deploy-github-pages", "pack": "deploy-github-pages" },
+        { "id": "deploy-render", "pack": "deploy-render" },
+        { "id": "deploy-railway", "pack": "deploy-railway" },
+        { "id": "none", "name": "None", "description": "Local only: the frontend isn't deployed." }
+      ]
+    },
+    {
+      "id": "backendHost",
+      "layer": "deploy",
+      "name": "Backend host",
+      "options": [
+        { "id": "deploy-vercel", "pack": "deploy-vercel" },
+        { "id": "deploy-netlify", "pack": "deploy-netlify" },
+        { "id": "deploy-cloudflare", "pack": "deploy-cloudflare" },
+        { "id": "deploy-github-pages", "pack": "deploy-github-pages" },
+        { "id": "deploy-render", "pack": "deploy-render" },
+        { "id": "deploy-railway", "pack": "deploy-railway" },
+        { "id": "none", "name": "None", "description": "Local only: the backend isn't deployed." }
+      ]
+    },
+    {
+      "id": "databaseHost",
+      "layer": "deploy",
+      "name": "Database host",
+      "options": [
+        { "id": "supabase", "pack": "data-supabase", "name": "Supabase", "description": "A Supabase project: the BaaS itself, or managed PostgreSQL for an ORM pack (host mode)." },
+        { "id": "render-postgres", "pack": "deploy-render", "name": "Render Postgres", "description": "A Render Postgres database." },
+        { "id": "railway-postgres", "pack": "deploy-railway", "name": "Railway Postgres", "description": "A Railway Postgres database." },
+        { "id": "external", "name": "External", "description": "A connection string the Owner enters, e.g. Neon or Azure SQL." },
+        { "id": "none", "name": "None", "description": "Local only: the database runs in the local dev loop." }
+      ]
+    },
+    {
+      "id": "local",
+      "layer": "deploy",
+      "name": "Local dev loop",
+      "options": [
+        { "id": "compose", "pack": "local-docker-desktop" },
+        { "id": "none", "name": "None", "description": "No local dev loop." }
+      ]
+    },
+    {
+      "id": "originModel",
+      "layer": "deploy",
+      "name": "Origin model",
+      "options": [
+        { "id": "same-origin", "name": "Same origin", "description": "The browser calls /api on the frontend's own origin: one app, or a proxy over a private network." },
+        { "id": "proxy", "name": "Proxy", "description": "The frontend host proxies /api to the backend's URL, so the browser stays same-origin." },
+        { "id": "cross-origin", "name": "Cross-origin", "description": "The browser calls the backend's URL directly: CORS, plus SameSite=None cookies or bearer tokens." }
+      ]
+    }
+  ],
+  "rules": {
+    "statements": {
+      "R1": "Frontend and Backend can't both be None.",
+      "R2": "The fe-nextjs mode is derived: full-stack when Backend is None, ui when there's a backend.",
+      "R3": "Each data pack works only with its backends (or Next.js full-stack, or Backend None for Supabase BaaS).",
+      "R4": "EF Core + SQL Server has no managed host on the catalog's platforms.",
+      "R5": "VCS: any option, fixed to the repository's host once a repository is chosen or imported.",
+      "R6": "Frontend host, by frontend and Next.js mode.",
+      "R7": "Backend host, by backend.",
+      "R8": "Database host, by data pack; Render or Railway Postgres is best on the backend's platform.",
+      "R9": "Each platform must build from the repository's Git host.",
+      "R10": "Origin model, by frontend, backend and their hosts.",
+      "R11": "A database host needs a deployed component that can reach it.",
+      "R12": "The Compose dev loop is offered, and the default, when there's a backend or a database."
+    },
+    "constraints": [
+      { "rule": "R1", "choices": ["backend"], "options": ["none"], "state": "forbidden", "when": [{ "frontend": ["none"] }], "text": "Frontend and Backend can't both be None" },
+
+      { "rule": "R3", "choices": ["data"], "options": ["data-efcore-postgres"], "state": "forbidden", "unless": [{ "backend": ["be-aspnet"] }], "text": "EF Core + PostgreSQL needs ASP.NET Core" },
+      { "rule": "R3", "choices": ["data"], "options": ["data-efcore-sqlserver"], "state": "forbidden", "unless": [{ "backend": ["be-aspnet"] }], "text": "EF Core + SQL Server needs ASP.NET Core" },
+      { "rule": "R3", "choices": ["data"], "options": ["data-jpa-flyway"], "state": "forbidden", "unless": [{ "backend": ["be-spring-boot"] }], "text": "JPA + Flyway needs Spring Boot" },
+      { "rule": "R3", "choices": ["data"], "options": ["data-sqlalchemy"], "state": "forbidden", "unless": [{ "backend": ["be-fastapi"] }], "text": "SQLAlchemy needs FastAPI" },
+      { "rule": "R3", "choices": ["data"], "options": ["data-prisma"], "state": "forbidden", "unless": [{ "backend": ["be-express", "be-nestjs"] }, { "frontend": ["fe-nextjs"], "backend": ["none"] }], "text": "Prisma needs Express, NestJS or Next.js full-stack" },
+      { "rule": "R3", "choices": ["data"], "options": ["data-drizzle"], "state": "forbidden", "unless": [{ "backend": ["be-express", "be-nestjs"] }, { "frontend": ["fe-nextjs"], "backend": ["none"] }], "text": "Drizzle needs Express, NestJS or Next.js full-stack" },
+      { "rule": "R3", "choices": ["data"], "options": ["data-supabase"], "state": "forbidden", "unless": [{ "backend": ["none"] }], "text": "Supabase (BaaS) needs Backend None" },
+
+      { "rule": "R4", "choices": ["data"], "options": ["data-efcore-sqlserver"], "state": "caveat", "text": "No managed SQL Server on the catalog's platforms: use an External connection string (e.g. Azure SQL) or local only." },
+
+      { "rule": "R6", "choices": ["frontendHost"], "options": ["deploy-vercel", "deploy-netlify", "deploy-cloudflare", "deploy-github-pages", "deploy-render", "deploy-railway"], "state": "forbidden", "when": [{ "frontend": ["none"] }], "text": "There's no frontend to host" },
+      { "rule": "R6", "choices": ["frontendHost"], "options": ["deploy-cloudflare"], "state": "caveat", "when": [{ "frontend": ["fe-nextjs"] }], "text": "Cloudflare's Next.js adapter: some Node APIs and middleware are limited" },
+      { "rule": "R6", "choices": ["frontendHost"], "options": ["deploy-github-pages"], "state": "caveat", "when": [{ "frontend": ["fe-nextjs"], "nextjsMode": ["ui"] }, { "frontend": ["fe-nextjs"], "data": ["data-supabase"] }], "text": "Static export: no server actions, route handlers or SSR" },
+      { "rule": "R6", "choices": ["frontendHost"], "options": ["deploy-github-pages"], "state": "forbidden", "when": [{ "frontend": ["fe-nextjs"] }], "unless": [{ "nextjsMode": ["ui"] }, { "data": ["data-supabase"] }], "text": "Next.js full-stack needs a server" },
+
+      { "rule": "R7", "choices": ["backendHost"], "options": ["deploy-vercel", "deploy-netlify", "deploy-cloudflare", "deploy-github-pages", "deploy-render", "deploy-railway"], "state": "forbidden", "when": [{ "backend": ["none"] }], "text": "There's no backend to host" },
+      { "rule": "R7", "choices": ["backendHost"], "options": ["deploy-vercel"], "state": "forbidden", "when": [{ "backend": ["be-aspnet", "be-spring-boot"] }], "text": "{option} can't run {backend}" },
+      { "rule": "R7", "choices": ["backendHost"], "options": ["deploy-netlify", "deploy-cloudflare", "deploy-github-pages"], "state": "forbidden", "when": [{ "backend": ["!none"] }], "text": "{option} can't host backends: not covered by the deploy pack" },
+      { "rule": "R7", "choices": ["backendHost"], "options": ["deploy-vercel"], "state": "caveat", "when": [{ "backend": ["be-fastapi", "be-express", "be-nestjs"] }], "text": "Serverless functions: no background work, pooled DB connections" },
+
+      { "rule": "R8", "choices": ["databaseHost"], "options": ["supabase", "render-postgres", "railway-postgres", "external"], "state": "forbidden", "when": [{ "data": ["none"] }], "text": "There's no data layer, so no database to host" },
+      { "rule": "R8", "choices": ["databaseHost"], "options": ["supabase", "render-postgres", "railway-postgres"], "state": "forbidden", "when": [{ "data": ["data-efcore-sqlserver"] }], "text": "{option} is PostgreSQL: SQL Server needs an External connection string or local only" },
+      { "rule": "R8", "choices": ["databaseHost"], "options": ["render-postgres", "railway-postgres", "external", "none"], "state": "forbidden", "when": [{ "data": ["data-supabase"] }], "text": "Supabase (BaaS) runs on Supabase" },
+      { "rule": "R8", "choices": ["databaseHost"], "options": ["render-postgres"], "state": "caveat", "when": [{ "data": ["data-efcore-postgres", "data-jpa-flyway", "data-sqlalchemy", "data-prisma", "data-drizzle"] }], "unless": [{ "backendHost": ["deploy-render"] }, { "nextjsMode": ["full-stack"], "frontendHost": ["deploy-render"] }], "text": "Database on a different platform from the backend: higher latency, public connection" },
+      { "rule": "R8", "choices": ["databaseHost"], "options": ["railway-postgres"], "state": "caveat", "when": [{ "data": ["data-efcore-postgres", "data-jpa-flyway", "data-sqlalchemy", "data-prisma", "data-drizzle"] }], "unless": [{ "backendHost": ["deploy-railway"] }, { "nextjsMode": ["full-stack"], "frontendHost": ["deploy-railway"] }], "text": "Database on a different platform from the backend: higher latency, public connection" },
+
+      { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-railway"], "state": "forbidden", "when": [{ "vcsHost": ["!github"] }], "text": "Railway only builds from GitHub" },
+      { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-github-pages"], "state": "forbidden", "when": [{ "vcsHost": ["!github"] }], "text": "GitHub Pages only builds from GitHub" },
+      { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-cloudflare"], "state": "forbidden", "when": [{ "vcsHost": ["bitbucket"] }], "text": "Cloudflare can't build Bitbucket repos" },
+      { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-vercel", "deploy-cloudflare", "deploy-render"], "state": "forbidden", "when": [{ "vcsHost": ["gitlab-self-managed"] }], "text": "Only Netlify builds from self-managed GitLab" },
+      { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-netlify"], "state": "caveat", "when": [{ "vcsHost": ["gitlab", "gitlab-self-managed", "bitbucket"] }], "text": "Linked with a deploy key and webhook that AIDE adds to the repo" },
+
+      { "rule": "R11", "choices": ["databaseHost"], "options": ["supabase", "render-postgres", "railway-postgres", "external"], "state": "caveat", "unless": [{ "backendHost": ["!none"] }, { "frontendHost": ["!none"], "nextjsMode": ["full-stack"] }, { "frontendHost": ["!none"], "data": ["data-supabase"] }], "text": "Database only used by the local dev loop" },
+
+      { "rule": "R12", "choices": ["local"], "options": ["compose"], "state": "forbidden", "when": [{ "backend": ["none"], "data": ["none"] }], "text": "The Compose dev loop needs a backend or a database" }
+    ],
+    "originModel": [
+      { "when": [{ "frontend": ["none"] }], "allowed": [], "text": "API only: there's no frontend, so there's no origin model" },
+      { "when": [{ "backend": ["none"] }], "allowed": ["same-origin"], "default": "same-origin", "text": "No separate backend: the frontend serves its own /api, or calls none" },
+      { "when": [{ "frontendHost": ["none"] }], "allowed": ["same-origin"], "default": "same-origin", "text": "The frontend isn't deployed: same-origin through the local proxy" },
+      { "when": [{ "frontendHost": ["deploy-github-pages"] }], "allowed": ["cross-origin"], "default": "cross-origin", "text": "GitHub Pages serves static files only, so the browser calls the backend cross-origin" },
+      { "when": [{ "frontendHost": ["deploy-vercel"], "frontend": ["!fe-nextjs"] }], "allowed": ["cross-origin"], "default": "cross-origin", "text": "A static SPA on Vercel is cross-origin only: its rewrites can't point preview and production at different backends" },
+      { "when": [{ "frontend": ["!fe-nextjs"], "frontendHost": ["deploy-railway"], "backendHost": ["deploy-railway"] }], "allowed": ["same-origin", "cross-origin"], "default": "same-origin", "text": "The SPA container proxies /api to the backend over Railway's private network" },
+      { "when": [{ "frontend": ["fe-nextjs"] }], "allowed": ["proxy", "cross-origin"], "default": "proxy", "text": "Next.js calls the backend from the server or rewrites /api to it" },
+      { "allowed": ["proxy", "cross-origin"], "default": "proxy", "text": "The frontend host proxies /api to the backend's URL" }
+    ],
+    "defaults": [
+      { "choice": "backendHost", "sameAs": "frontendHost" },
+      { "choice": "databaseHost", "option": "supabase", "when": [{ "data": ["data-supabase"] }], "implicit": true },
+      { "choice": "local", "option": "compose", "when": [{ "backend": ["!none"] }, { "data": ["!none"] }], "implicit": true },
+      { "choice": "local", "option": "none", "implicit": true }
+    ]
+  },
+  "recommendations": [
+    {
+      "id": "content-site",
+      "name": "Simple content or marketing site",
+      "choices": { "frontend": ["fe-vanilla", "fe-vue", "fe-react-vite"], "backend": ["none"], "data": ["none"], "frontendHost": ["deploy-github-pages", "deploy-netlify", "deploy-cloudflare"] }
+    },
+    {
+      "id": "fullstack-typescript",
+      "name": "Full-stack TypeScript, fastest route to production",
+      "choices": { "frontend": ["fe-nextjs"], "backend": ["none"], "data": ["data-prisma", "data-drizzle"], "frontendHost": ["deploy-vercel"], "databaseHost": ["supabase"] }
+    },
+    {
+      "id": "spa-dotnet",
+      "name": "SPA + .NET API",
+      "choices": { "frontend": ["fe-react-vite", "fe-angular"], "backend": ["be-aspnet"], "data": ["data-efcore-postgres"], "backendHost": ["deploy-render", "deploy-railway"], "databaseHost": ["render-postgres", "railway-postgres"] }
+    },
+    {
+      "id": "java-enterprise",
+      "name": "Java enterprise",
+      "choices": { "frontend": ["fe-angular"], "backend": ["be-spring-boot"], "data": ["data-jpa-flyway"], "backendHost": ["deploy-render", "deploy-railway"], "databaseHost": ["render-postgres", "railway-postgres"] }
+    },
+    {
+      "id": "python-api",
+      "name": "Python API",
+      "choices": { "frontend": ["fe-react-vite", "fe-vue"], "backend": ["be-fastapi"], "data": ["data-sqlalchemy"], "backendHost": ["deploy-render", "deploy-railway", "deploy-vercel"] }
+    },
+    {
+      "id": "structured-node-api",
+      "name": "Structured Node API",
+      "choices": { "frontend": ["fe-angular", "fe-react-vite"], "backend": ["be-nestjs"], "data": ["data-prisma"] }
+    },
+    {
+      "id": "spa-supabase",
+      "name": "No backend, with auth and data",
+      "choices": { "frontend": ["fe-react-vite", "fe-vue", "fe-angular", "fe-vanilla"], "backend": ["none"], "data": ["data-supabase"], "databaseHost": ["supabase"] }
+    }
+  ]
+}

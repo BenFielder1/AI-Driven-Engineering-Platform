@@ -438,7 +438,7 @@ Each FR names its layer in italics. Acceptance criteria follow the requirement, 
   - The Review page shows each component's preview URL, state and build-log tail. A Contributor can redeploy.
   - Review waits for the whole rollout, up to 30 minutes (the v2 ceiling).
     - A failed build or pre-deploy is a **critical `architecture`** finding, with the log tail as evidence (v2 FR-90).
-    - A failed preview migration is a critical `data` finding.
+    - A failed preview migration is a critical `data_model` finding.
   - Hosts without previews (GitHub Pages) are skipped, with a note on the Review page. Review doesn't wait for them.
   - Given a React (Netlify) + ASP.NET (Render) + Render Postgres project, when execution completes, then:
     - the preview database is migrated by the backend's pre-deploy on `<app>-api-preview`
@@ -640,9 +640,9 @@ v1 §4.1–4.9 and v2 §4.10 and §4.13–§4.15 apply, with these amendments an
   ```
 - **Section headings** are the pack's `## ` headings, matched after stripping a trailing parenthetical. For example, `## Modelling (BaaS)` matches `Modelling`, and `## Config as code (\`netlify.toml\`)` matches `Config as code`. The headings per layer, from stack-packs `author-pack` and the packs as they stand:
   - **frontend:** `Detect · Scaffold · Conventions · API consumption · Errors, permissions, states · Config · Testing · Gate · Containerise · Deploy notes · Checklist`
-  - **backend:** the same set, with backend sections in place of `API consumption`, as in each pack
+  - **backend:** `Detect · Scaffold · Conventions · Errors · Auth · Contract export · Config and database URL · Health · Testing · Gate · Containerise · Deploy notes · Checklist`
   - **data:** `Detect · Compatible with · Setup · Modelling · Migrations · Local database · Testing · Production notes · Checklist` (no `Gate`)
-  - **vcs:** `Detect · Branches and commits · PRs · CI · …` per pack, plus `Auth` on Bitbucket
+  - **vcs:** `Detect · Branches and commits · PRs · CI · Secrets and variables · Dependency updates · Templates · Safety · Checklist`. vcs-gitlab has `PRs/MRs` instead of `PRs`, and vcs-bitbucket adds `Auth`
   - **deploy:** `Supports · Prerequisites and auth · Config as code · Environment variables · Database · Deploy commands · Previews and promotion · Agent autonomy · Troubleshooting · Checklist`, plus `Base path` on GitHub Pages
   - **local:** `Prerequisites · Files · Commands · Safety · Troubleshooting · Checklist`
 - **Adaptation rules** (D-V4-3, extending v2's claude-kits rules):
@@ -712,7 +712,7 @@ Worked examples:
 
   | Agent | Loads |
   | --- | --- |
-  | `scaffolder` | frontend/backend packs: `Detect`, `Scaffold`, `Conventions`, `Config`. Data pack: `Setup`. VCS pack: `Detect`. `stack-api-contract` when there's a backend |
+  | `scaffolder` | frontend packs: `Detect`, `Scaffold`, `Conventions`, `Config`. Backend packs: `Detect`, `Scaffold`, `Conventions`, `Config and database URL`. Data pack: `Setup`. VCS pack: `Detect`. `stack-api-contract` when there's a backend |
   | `data-engineer` | data pack `*`. With database host Supabase in host mode, also `data-supabase`: `Production notes` |
   | `backend-engineer` | backend pack `*`, `stack-api-contract`, and the data pack's `Setup` and `Modelling` (to use the client, not to own the schema) |
   | `frontend-engineer` | frontend pack `*`. `stack-api-contract` when there's a backend. `data-supabase` `*` in BaaS mode. The data pack's `Setup` in Next.js full-stack mode |
@@ -760,7 +760,7 @@ Worked examples:
   | `no_ddl_auto_update` | `data-jpa-flyway` | `ddl-auto` set to `update`, `create` or `create-drop` outside test config → major architecture |
   | `no_create_all` | `data-sqlalchemy` | `create_all(` outside tests → major architecture |
   | `no_schema_push` | `data-prisma`, `data-drizzle` | `prisma db push` or `drizzle-kit push` in package scripts → major architecture |
-  | `migration_backward_compatible` | every data pack | `drop table`, `drop column`, `rename column` or a type change in a new migration → major `data` ("expand/contract required", because preview and production deploys aren't atomic) |
+  | `migration_backward_compatible` | every data pack | `drop table`, `drop column`, `rename column` or a type change in a new migration → major `data_model` ("expand/contract required", because preview and production deploys aren't atomic) |
   | `container_non_root` | backend packs with a Docker deploy | a backend `Dockerfile` without a non-root `USER` → minor security |
   | `deploy_branch_control` | `deploy-vercel`, `deploy-netlify`, `deploy-cloudflare` | major architecture (generalises v2 FR-89) when: `vercel.json` lacks `git.deploymentEnabled {"aide/**": false}`, `netlify.toml` lacks the `aide/*` ignore rule, or the Workers preview trigger lacks the `aide/*` exclude |
   | `health_endpoints` | backend packs | the pack's live/ready health paths are absent from the source → minor feature_coverage |
