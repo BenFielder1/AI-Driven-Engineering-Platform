@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
+    <!-- The CI hangdump option names the tests still running when a hang passes its timeout. -->
+    <PackageReference Include="Microsoft.Testing.Extensions.HangDump" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
     <PackageReference Include="Testcontainers.PostgreSql" />
