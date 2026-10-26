@@ -63,11 +63,18 @@ jobs:
           --configuration Release --no-build
       - name: CLI packs as a .NET tool (FR-52)
         run: dotnet pack src/Aide.Cli -c Release --no-build -o "$RUNNER_TEMP/nupkg"
-      - name: Test (unit, CLI, integration via Testcontainers)
-        # A step timeout (inside the job's 25) fails the step instead of cancelling the job, so the log and the
-        # test-results artifact survive a hang. xunit.runner.json names tests that run longer than 60 s.
-        timeout-minutes: 38
-        run: dotnet test -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx --hangdump --hangdump-timeout 12m --hangdump-type Mini
+      - name: Test (unit, CLI)
+        timeout-minutes: 5
+        run: |
+          dotnet test --project tests/Aide.UnitTests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
+          dotnet test --project tests/Aide.Cli.Tests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
+      - name: Test (integration via Testcontainers)
+        # TEMPORARY (v4 M23/M24 hang investigation): the native xUnit runner prints "[Long Running Test]" with the
+        # test name live, so a hang names its test even if the step is killed. Restore `dotnet test` once fixed.
+        timeout-minutes: 30
+        run: >-
+          dotnet tests/Aide.IntegrationTests/bin/Release/net10.0/Aide.IntegrationTests.dll
+          -longRunning 60 -noColor -trx "${{ github.workspace }}/backend/TestResults/integration.trx"
       - name: Format
         run: dotnet format --verify-no-changes --no-restore
       - uses: actions/upload-artifact@v7
