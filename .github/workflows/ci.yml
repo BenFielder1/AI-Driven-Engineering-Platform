@@ -70,6 +70,8 @@ jobs:
         # TEMPORARY (v4 hang investigation): native runner prints "[Long Running Test]" names live.
         timeout-minutes: 30
         run: |
+          dotnet tool install --global dotnet-gcdump >/dev/null && export PATH="$PATH:$HOME/.dotnet/tools"
+          (sleep 360; PID=$(pgrep -f Aide.IntegrationTests.dll | head -1); echo "GCDUMP pid=$PID"; dotnet-gcdump collect -p "$PID" -o "${{ github.workspace }}/backend/TestResults/integration.gcdump" || true) &
           (while true; do echo "MEM $(date +%T) $(free -m | awk '/Mem:/{print $3"MB used of "$2}') top: $(ps -eo rss=,comm= --sort=-rss | head -3 | awk '{printf "%s=%dMB ", $2, $1/1024}')"; sleep 20; done) &
           dotnet tests/Aide.IntegrationTests/bin/Release/net10.0/Aide.IntegrationTests.dll -verbose -longRunning 60 -noColor -result-trx "${{ github.workspace }}/backend/TestResults/integration.trx"
       - name: Format
