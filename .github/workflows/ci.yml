@@ -69,6 +69,7 @@ jobs:
           dotnet test --project tests/Aide.UnitTests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
           dotnet test --project tests/Aide.Cli.Tests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
       - name: Test (integration via Testcontainers)
+        if: false # TEMPORARY: bisected by the backend-integration-bisect job below
         # TEMPORARY (v4 M23/M24 hang investigation): the native xUnit runner prints "[Long Running Test]" with the
         # test name live, so a hang names its test even if the step is killed. Restore `dotnet test` once fixed.
         timeout-minutes: 30
@@ -81,6 +82,52 @@ jobs:
         if: always()
         with:
           name: backend-test-results
+          path: backend/TestResults
+          if-no-files-found: ignore
+
+  backend-integration-bisect:
+    # TEMPORARY (v4 M23/M24 hang investigation): integration tests split by namespace on separate runners, each with
+    # xUnit long-running detection, to find the hang. Remove once fixed and restore the single integration step.
+    name: Backend integration (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: agents
+            ns: -namespace Aide.IntegrationTests.Agents -namespace Aide.IntegrationTests.Artifacts -namespace Aide.IntegrationTests.Activity -namespace Aide.IntegrationTests.Admin
+          - group: auth-llm
+            ns: -namespace Aide.IntegrationTests.Auth -namespace Aide.IntegrationTests.Connections -namespace Aide.IntegrationTests.Llm -namespace Aide.IntegrationTests.Logging
+          - group: deploy-exec
+            ns: -namespace Aide.IntegrationTests.Deployments -namespace Aide.IntegrationTests.Execution -namespace Aide.IntegrationTests.Gates -namespace Aide.IntegrationTests.Git
+          - group: github-live
+            ns: -namespace Aide.IntegrationTests.GitHub -namespace Aide.IntegrationTests.Health -namespace Aide.IntegrationTests.Jobs -namespace Aide.IntegrationTests.Lifecycle -namespace Aide.IntegrationTests.Live
+          - group: notify-persist
+            ns: -namespace Aide.IntegrationTests.Notifications -namespace Aide.IntegrationTests.Persistence
+          - group: projects
+            ns: -namespace Aide.IntegrationTests.Presets -namespace Aide.IntegrationTests.Projects -namespace Aide.IntegrationTests.Stack -namespace Aide.IntegrationTests.Seed
+          - group: releases
+            ns: -namespace Aide.IntegrationTests.Releases -namespace Aide.IntegrationTests.Review -namespace Aide.IntegrationTests.Rollback -namespace Aide.IntegrationTests.Stages -namespace Aide.IntegrationTests.Versions
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: backend/global.json
+      - run: dotnet restore
+      - run: dotnet build tests/Aide.IntegrationTests -c Release --no-restore
+      - name: Integration tests (${{ matrix.group }})
+        timeout-minutes: 22
+        run: >-
+          dotnet tests/Aide.IntegrationTests/bin/Release/net10.0/Aide.IntegrationTests.dll
+          ${{ matrix.ns }} -longRunning 60 -noColor -trx "${{ github.workspace }}/backend/TestResults/${{ matrix.group }}.trx"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: integration-${{ matrix.group }}
           path: backend/TestResults
           if-no-files-found: ignore
 
