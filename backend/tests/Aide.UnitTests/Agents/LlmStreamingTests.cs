@@ -381,7 +381,8 @@ public sealed class LlmStreamingTests
     public async Task FR161_OpenAI_stall_longer_than_the_idle_timeout_is_a_transient_failure()
     {
         var handler = new StreamHandler(_ => StreamScript.Sse(Sse(
-            """{"choices":[{"index":0,"delta":{"role":"assistant","content":"Half"},"finish_reason":null}]}""")) with { StallAtEnd = true });
+            """{"choices":[{"index":0,"delta":{"role":"assistant","content":"Half"},"finish_reason":null}]}""")) with
+        { StallAtEnd = true });
         var provider = new OpenAiLlmProvider(new HttpClient(handler), Options(idleTimeout: TimeSpan.FromMilliseconds(200)));
 
         var ex = await Assert.ThrowsAsync<LlmProviderException>(() => provider.CompleteAsync(Request(), Ct));

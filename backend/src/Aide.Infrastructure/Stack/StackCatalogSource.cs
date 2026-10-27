@@ -74,7 +74,9 @@ public sealed partial class StackCatalogProvider : IStackCatalog
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(logger);
-        var result = StackCatalogLoader.Load(source.ReadFiles());
+        // Loaded once per source per process: each host (and each test host) would otherwise re-parse and validate
+        // every pack, which is seconds of CPU per host.
+        var result = Loads.GetValue(source, s => StackCatalogLoader.Load(s.ReadFiles()));
         Catalog = result.Catalog;
         Version = result.Version;
         ContentHash = result.ContentHash;
@@ -94,6 +96,8 @@ public sealed partial class StackCatalogProvider : IStackCatalog
             LogFailed(logger, Errors.Count);
         }
     }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IStackCatalogSource, StackCatalogLoadResult> Loads = new();
 
     public StackCatalog? Catalog { get; }
 
