@@ -39,7 +39,7 @@ jobs:
   backend:
     name: Backend (build, contract, EF drift, CLI pack, test, format)
     runs-on: ubuntu-latest
-    timeout-minutes: 45 # TEMPORARY (v4 hang investigation), restore 25
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: backend
@@ -62,24 +62,56 @@ jobs:
       - name: CLI packs as a .NET tool (FR-52)
         run: dotnet pack src/Aide.Cli -c Release --no-build -o "$RUNNER_TEMP/nupkg"
       - name: Test (unit, CLI)
-        timeout-minutes: 5
+        # Integration tests run in the backend-integration shards below.
+        timeout-minutes: 10
         run: |
           dotnet test --project tests/Aide.UnitTests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
           dotnet test --project tests/Aide.Cli.Tests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
-      - name: Test (integration via Testcontainers)
-        # TEMPORARY (v4 hang investigation): native runner prints "[Long Running Test]" names live.
-        timeout-minutes: 30
-        run: |
-          dotnet tool install --global dotnet-gcdump >/dev/null && export PATH="$PATH:$HOME/.dotnet/tools"
-          (sleep 150; PID=$(pgrep -f Aide.IntegrationTests.dll | head -1); echo "GCDUMP pid=$PID"; dotnet-gcdump collect -p "$PID" -o "${{ github.workspace }}/backend/TestResults/integration.gcdump"; echo "GCDUMP done $?"; ls -la "${{ github.workspace }}/backend/TestResults"; kill "$PID") &
-          (while true; do echo "MEM $(date +%T) $(free -m | awk '/Mem:/{print $3"MB used of "$2}') top: $(ps -eo rss=,comm= --sort=-rss | head -3 | awk '{printf "%s=%dMB ", $2, $1/1024}')"; sleep 20; done) &
-          dotnet tests/Aide.IntegrationTests/bin/Release/net10.0/Aide.IntegrationTests.dll -verbose -longRunning 60 -noColor -result-trx "${{ github.workspace }}/backend/TestResults/integration.trx"
       - name: Format
         run: dotnet format --verify-no-changes --no-restore
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: backend-test-results
+          path: backend/TestResults
+          if-no-files-found: ignore
+
+  backend-integration:
+    # Integration tests (WebApplicationFactory + Testcontainers) in 3 shards on separate runners. Every derived test
+    # host stays alive on the shared AideApiFactory until its run ends, so one process for the whole suite outgrows a
+    # runner's memory. The last shard runs every namespace not named in the first two, so new namespaces are covered.
+    name: Backend integration (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: auth-connections-notifications
+            filter: -namespace Aide.IntegrationTests.Auth -namespace Aide.IntegrationTests.Connections -namespace Aide.IntegrationTests.Llm -namespace Aide.IntegrationTests.Logging -namespace Aide.IntegrationTests.Notifications -namespace Aide.IntegrationTests.Persistence
+          - shard: agents-github-deployments
+            filter: -namespace Aide.IntegrationTests.Agents -namespace Aide.IntegrationTests.Artifacts -namespace Aide.IntegrationTests.Activity -namespace Aide.IntegrationTests.Admin -namespace Aide.IntegrationTests.GitHub -namespace Aide.IntegrationTests.Health -namespace Aide.IntegrationTests.Jobs -namespace Aide.IntegrationTests.Lifecycle -namespace Aide.IntegrationTests.Live -namespace Aide.IntegrationTests.Deployments -namespace Aide.IntegrationTests.Execution -namespace Aide.IntegrationTests.Gates -namespace Aide.IntegrationTests.Git
+          - shard: rest
+            filter: -nonamespace Aide.IntegrationTests.Auth -nonamespace Aide.IntegrationTests.Connections -nonamespace Aide.IntegrationTests.Llm -nonamespace Aide.IntegrationTests.Logging -nonamespace Aide.IntegrationTests.Notifications -nonamespace Aide.IntegrationTests.Persistence -nonamespace Aide.IntegrationTests.Agents -nonamespace Aide.IntegrationTests.Artifacts -nonamespace Aide.IntegrationTests.Activity -nonamespace Aide.IntegrationTests.Admin -nonamespace Aide.IntegrationTests.GitHub -nonamespace Aide.IntegrationTests.Health -nonamespace Aide.IntegrationTests.Jobs -nonamespace Aide.IntegrationTests.Lifecycle -nonamespace Aide.IntegrationTests.Live -nonamespace Aide.IntegrationTests.Deployments -nonamespace Aide.IntegrationTests.Execution -nonamespace Aide.IntegrationTests.Gates -nonamespace Aide.IntegrationTests.Git
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: backend/global.json
+      - run: dotnet restore
+      - run: dotnet build tests/Aide.IntegrationTests -c Release --no-restore
+      - name: Integration tests (${{ matrix.shard }})
+        timeout-minutes: 18
+        run: >-
+          dotnet tests/Aide.IntegrationTests/bin/Release/net10.0/Aide.IntegrationTests.dll
+          ${{ matrix.filter }} -longRunning 120 -noColor -result-trx "${{ github.workspace }}/backend/TestResults/integration-${{ matrix.shard }}.trx"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: backend-integration-${{ matrix.shard }}
           path: backend/TestResults
           if-no-files-found: ignore
 

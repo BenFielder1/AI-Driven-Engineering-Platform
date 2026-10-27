@@ -107,6 +107,7 @@ The catalog schema can't express these, so the M26 resolver must implement them:
 - SPEC follow-ups: §4.22 should name `API_ORIGIN` for the Railway same-origin SPA proxy; §4.20 should say who sets `VITE_API_BASE_URL` for GitHub Pages (repo variable via the GitHub App).
 
 ## Known issues
+- Integration test memory (found 2026-10-27): every derived test host (`WithWebHostBuilder`, e.g. `LlmStubs.App`, harnesses) stays alive on the shared `AideApiFactory` until the run ends (~37 MB each). With v4's extra tests one process outgrew a 16 GB runner (heap dump: 50 live hosts after 150 s; RSS ~14.7 GB). Fixed for CI by running integration tests in 3 shards (`backend-integration` job, ci.yml); the stack catalog is also loaded once per process now. Follow-up (test-engineer): dispose derived factories per test so a single process stays small.
 - Railway `preview` deploy of 83d8fa5 (run 40130552891): the deploy succeeded, but the smoke test's sign-in returned 401. The `SMOKE_EMAIL` account is missing on `preview` or its password differs. Operator fix (Ben): create the smoke user on preview, or correct the `SMOKE_PASSWORD` secret.
 
 ## Manual checks (Ben)
