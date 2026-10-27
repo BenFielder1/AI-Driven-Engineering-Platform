@@ -39,7 +39,7 @@ jobs:
   backend:
     name: Backend (build, contract, EF drift, CLI pack, test, format)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45 # TEMPORARY (v4 hang investigation), restore 25
     defaults:
       run:
         working-directory: backend
@@ -61,11 +61,17 @@ jobs:
           --configuration Release --no-build
       - name: CLI packs as a .NET tool (FR-52)
         run: dotnet pack src/Aide.Cli -c Release --no-build -o "$RUNNER_TEMP/nupkg"
-      - name: Test (unit, CLI, integration via Testcontainers)
-        # A step timeout (inside the job's 25) fails the step instead of cancelling the job, so the log and the
-        # test-results artifact survive a hang.
-        timeout-minutes: 18
-        run: dotnet test -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
+      - name: Test (unit, CLI)
+        timeout-minutes: 5
+        run: |
+          dotnet test --project tests/Aide.UnitTests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
+          dotnet test --project tests/Aide.Cli.Tests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
+      - name: Test (integration via Testcontainers)
+        # TEMPORARY (v4 hang investigation): native runner prints "[Long Running Test]" names live.
+        timeout-minutes: 30
+        run: >-
+          dotnet tests/Aide.IntegrationTests/bin/Release/net10.0/Aide.IntegrationTests.dll
+          -longRunning 60 -noColor -trx "${{ github.workspace }}/backend/TestResults/integration.trx"
       - name: Format
         run: dotnet format --verify-no-changes --no-restore
       - uses: actions/upload-artifact@v7
