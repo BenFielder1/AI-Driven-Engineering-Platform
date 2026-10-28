@@ -13,23 +13,23 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 ## Requirements
 | ID | Summary | Spec § | Layer(s) | Phase | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| FR-113 | Stack catalog (versioned data, `GET /api/stack/catalog`) | 3.1 | backend + data | M24 | todo | — |
+| FR-113 | Stack catalog (versioned data, `GET /api/stack/catalog`) | 3.1 | backend + data | M24 | done | CI 40579534195 |
 | FR-114 | Wizard Stack step: five ordered sub-steps | 3.1 | frontend + backend | M25 | todo | — |
 | FR-115 | Deployment sub-step: per-component hosts, origin model | 3.1 | frontend + backend | M25 | todo | — |
-| FR-116 | Server-side composition validation | 3.1 | backend | M24 | todo | — |
+| FR-116 | Server-side composition validation | 3.1 | backend | M24 | done | CI 40579534195 |
 | FR-117 | Composition pinned on release version; stack change; `STACK_LOCKED` | 3.1 | backend + frontend + data | M25 | todo | — |
 | FR-118 | Import stack detection | 3.1 | backend + frontend | M25 | todo | — |
 | FR-119 | Layer paths | 3.1 | backend | M25 | todo | — |
 | FR-120 | Generic specialists catalogue | 3.2 | backend | M26 | todo | — |
 | FR-121 | Specialists load pack skills | 3.2 | backend | M26 | todo | — |
-| FR-122 | Adapted pack content; strict catalog loading | 3.2 | backend | M24 | todo | — |
+| FR-122 | Adapted pack content; strict catalog loading | 3.2 | backend | M24 | done | CI 40579534195 |
 | FR-123 | Spec Generator: composed spec sections | 3.3 | backend | M26 | todo | — |
 | FR-124 | Plan Generator: composed plan rules | 3.3 | backend | M26 | todo | — |
 | FR-125 | Execution: Guardian protected paths from packs | 3.3 | backend | M26 | todo | — |
 | FR-126 | Code Review: composed checklist + deterministic checks | 3.3 | backend | M26 | todo | — |
 | FR-127 | Generated-files policy | 3.3 | backend | M26 | todo | — |
 | FR-128 | Repository Analyst + refinement get the composition | 3.3 | backend | M26 | todo | — |
-| FR-129 | Retire v2 presets (migration + removal) | 3.4 | backend + frontend + data | M25 | todo | — |
+| FR-129 | Retire v2 presets (migration + removal) | 3.4 | backend + frontend + data | M26 | todo | — |
 | FR-130 | GitLab instances (Admin) | 3.5 | backend + frontend + data | M27 | todo | — |
 | FR-131 | GitLab connections + sign-in | 3.5 | backend + frontend + data | M27 | todo | — |
 | FR-132 | GitLab repo picker + create | 3.5 | backend + frontend | M27 | todo | — |
@@ -56,22 +56,22 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-153 | Supabase BaaS (keys, auth URLs, migrations, advisors) | 3.10 | backend | M30 | todo | — |
 | FR-154 | Host-mode database migrations on the platform | 3.10 | backend + deploy | M30 | todo | — |
 | FR-155 | Events and notifications | 3.11 | backend + frontend | M31 | todo | — |
-| FR-156 | CLI additions | 3.11 | cli + backend | M31 (LLM flags: M23) | todo | — |
-| FR-157 | LLM provider enablement per deployment | 3.12 | backend + frontend + deploy | M23 | todo | — |
-| FR-158 | `GET /api/llm/providers` | 3.12 | backend | M23 | todo | — |
-| FR-159 | LLM choice at project creation | 3.12 | frontend + backend + cli | M23 | todo | — |
-| FR-160 | Per-model max output tokens | 3.12 | backend | M23 | todo | — |
-| FR-161 | Streaming LLM calls | 3.12 | backend | M23 | todo | — |
-| FR-162 | Up to 5 continuations; `output_truncated` | 3.12 | backend + frontend | M23 | todo | — |
+| FR-156 | CLI additions | 3.11 | cli + backend | M31 (LLM flags: M23) | partial: LLM flags done (CI 40579534195) | — |
+| FR-157 | LLM provider enablement per deployment | 3.12 | backend + frontend + deploy | M23 | done | CI 40579534195 |
+| FR-158 | `GET /api/llm/providers` | 3.12 | backend | M23 | done | CI 40579534195 |
+| FR-159 | LLM choice at project creation | 3.12 | frontend + backend + cli | M23 | done | CI 40579534195 |
+| FR-160 | Per-model max output tokens | 3.12 | backend | M23 | done | CI 40579534195 |
+| FR-161 | Streaming LLM calls | 3.12 | backend | M23 | done | CI 40579534195 |
+| FR-162 | Up to 5 continuations; `output_truncated` | 3.12 | backend + frontend | M23 | done | CI 40579534195 |
 
 v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay in force. Their tests must stay green on CI.
 
 ## Phases
 - [x] M0 Baseline (base: 83d8fa5): CI green on 83d8fa5 (`main`): https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40129842995. The v4 prep commit f8a6dfc only touches docs (CI skips it).
-- [ ] M23 LLM providers and long outputs — FR-157–FR-162 (+ FR-156 LLM flags)
-- [ ] M24 Stack catalog + compatibility — FR-113, FR-116, FR-122
-- [ ] M25 Composition in projects + preset retirement — FR-114, FR-115, FR-117–FR-119, FR-129
-- [ ] M26 Specialists across the lifecycle — FR-120, FR-121, FR-123–FR-128
+- [x] M23 LLM providers and long outputs — FR-157–FR-162 (+ FR-156 LLM flags). Commits df8f119 + fixes; CI green on 7fcb9b9: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40579534195
+- [x] M24 Stack catalog + compatibility — FR-113, FR-116, FR-122. Commit 24eaf5b + fixes; CI green on 7fcb9b9 (same run)
+- [ ] M25 Composition in projects — FR-114, FR-115, FR-117–FR-119, Admin → Stack catalog page
+- [ ] M26 Specialists across the lifecycle + preset retirement — FR-120, FR-121, FR-123–FR-128, FR-129
 - [ ] M27 GitLab — FR-130–FR-132, FR-136–FR-141 (GitLab)
 - [ ] M28 Bitbucket — FR-133–FR-135, FR-136–FR-141 (Bitbucket)
 - [ ] M29 Platforms I — FR-142–FR-146, FR-150/151 (frontend parts)
@@ -91,7 +91,8 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 - 2026-10-25 — M24: Supabase in the Data layer is always BaaS; host mode is the database host `supabase` with another ORM (`data.mode = "host"` → VALIDATION) — SPEC updated: no
 - 2026-10-25 — M24: R10 gaps filled: a static SPA on Railway with the backend elsewhere → proxy or cross-origin; Next.js ui mode on GitHub Pages → cross-origin only. R12: Compose forbidden with no backend and no data — SPEC updated: no
 - 2026-10-25 — M24: the Admin → Stack catalog page moves to M25 (with the other Stack UI); M24 ships `GET /api/admin/stack` only — SPEC updated: no
-- 2026-10-25 — M24: `legacy/` is created in M25 together with a catalog version bump, so the pinned hash only changes with a version — SPEC updated: no
+- 2026-10-28 — FR-129 (preset retirement) moves from M25 to the end of M26: migrated in-flight plans must run as the new specialists, which M26 builds — SPEC updated: no
+- 2026-10-25 — M24: `legacy/` is created in M26 together with a catalog version bump, so the pinned hash only changes with a version — SPEC updated: no
 - 2026-10-25 — M24: pack skills are 70–115% of the source length (not 40–60%): hand-writing generated files and CI checks needs the room — SPEC updated: no
 - 2026-10-25 — M24: review category for migrations is `data_model` (v1 enum), not `data` — SPEC updated: yes
 
