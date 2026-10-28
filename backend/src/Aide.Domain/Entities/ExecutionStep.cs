@@ -30,6 +30,9 @@ public sealed class ExecutionStep
     /// <summary>The preset specialist assigned to the step (FR-76); null for v1 plans.</summary>
     public string? AgentKey { get; set; }
 
+    /// <summary>The v2 preset key the step was planned with, kept for history display when <see cref="AgentKey"/> was mapped to a v4 specialist (§4.23); null otherwise.</summary>
+    public string? LegacyAgentKey { get; set; }
+
     /// <summary>Requirement IDs the step covers (FR-76).</summary>
     public IReadOnlyList<string> Covers { get; set; } = [];
 

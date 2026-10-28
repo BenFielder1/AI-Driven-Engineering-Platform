@@ -44,6 +44,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("attempts");
 
+                    b.Property<string>("CatalogVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("catalog_version");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
@@ -91,6 +95,10 @@ namespace Aide.Infrastructure.Migrations
                     b.Property<int>("OutputTokens")
                         .HasColumnType("integer")
                         .HasColumnName("output_tokens");
+
+                    b.Property<string>("Packs")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("packs");
 
                     b.Property<string>("Phase")
                         .IsRequired()
@@ -890,6 +898,10 @@ namespace Aide.Infrastructure.Migrations
                     b.Property<string>("FileManifest")
                         .HasColumnType("jsonb")
                         .HasColumnName("file_manifest");
+
+                    b.Property<string>("LegacyAgentKey")
+                        .HasColumnType("text")
+                        .HasColumnName("legacy_agent_key");
 
                     b.Property<Guid>("PlanArtifactId")
                         .HasColumnType("uuid")

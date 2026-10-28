@@ -46,3 +46,18 @@ Every adapted file starts with a provenance comment. For `skill.md` it must be
 See `PackManifest` and SPEC §4.16. Globs may use the layer-path placeholders `{fe}`, `{be}` and `{app}` (the backend
 path, else the frontend path). `agentSections` values are `*` or skill headings matched after stripping a trailing
 parenthetical (`## Modelling (BaaS)` is `Modelling`); a heading the skill doesn't have, or `Agent autonomy`, fails loading.
+
+## Resolution (SPEC §4.18, FR-120–FR-127)
+
+`StackResolver.Resolve(composition, catalog, change?, baseline?)` turns a normalised composition into a
+`StackResolution`: the specialists in play (owned globs, skills in prompt order, prompt), spec sections, plan rules,
+protected paths, generated files, the review checklist and deterministic check ids, env names and the rendered
+composition summary. Everything is expanded with the layer paths (`StackPlaceholders`); an entry whose layer is None is
+dropped. What the manifests can't express (PROGRESS "M26 inputs") is in `StackResolver`'s summary and
+`StackCoreContent.cs` (specialist names, core ownership, API-surface globs, health paths, core spec sections).
+
+- `StackPrompt.Compose` builds a specialist's prompt: base → summary → role → `## Skill: <pack> — <section>` blocks;
+  `StackSpecialist.Packs` is the run record (`packs[] {id, version, sections[]}`).
+- `CompositionPlanValidator` checks the composed plan rules (`INVALID_PLAN`, `STACK_CHANGE_UNPLANNED`) and warnings
+  (`AGENT_SCOPE`, `PLAN_ORDER`, `UNDECLARED_GENERATED_FILE`); `StackPathRules` the protected-path exceptions.
+- `StackReviewChecks.Run` runs the registered deterministic checks; `StackReviewChecklist` maps `[Cn]` violations.

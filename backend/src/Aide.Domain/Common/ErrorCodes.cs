@@ -214,6 +214,18 @@ public static class ErrorCodes
     public const string PlanOrder = "PLAN_ORDER";
 
     /// <summary>
+    /// FR-117, FR-124 (a plan <b>error</b>, recorded on the plan generator run like <see cref="InvalidPlan"/>): a stack change
+    /// has no step assigned to a changed layer's specialist; each missing layer is in the details.
+    /// </summary>
+    public const string StackChangeUnplanned = "STACK_CHANGE_UNPLANNED";
+
+    /// <summary>
+    /// FR-127 (a <b>warning</b>, never blocking): a step changes the API under the backend but neither it nor a later step
+    /// declares the generated contract file (e.g. <c>backend/openapi/api.json</c>); each step is in the details.
+    /// </summary>
+    public const string UndeclaredGeneratedFile = "UNDECLARED_GENERATED_FILE";
+
+    /// <summary>
     /// FR-89 (a <b>warning</b>, never blocking): the version's preset deploys to Vercel, the base commit has no
     /// <c>vercel.json</c> and no plan step declares one, so nothing would stop Vercel's automatic deploys of <c>aide/**</c>.
     /// </summary>

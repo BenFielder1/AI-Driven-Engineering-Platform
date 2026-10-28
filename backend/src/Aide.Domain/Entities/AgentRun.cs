@@ -22,6 +22,15 @@ public sealed class AgentRun
 
     public string? PresetVersion { get; set; }
 
+    /// <summary>
+    /// The pack skills the specialist loaded (FR-121) as raw JSON: <c>[{id, version, sections[]}]</c>, where an empty
+    /// <c>sections</c> means the full skill. Null for runs recorded before v4.
+    /// </summary>
+    public string? Packs { get; set; }
+
+    /// <summary>The stack catalog version the run resolved its skills from (FR-121); null for runs recorded before v4.</summary>
+    public string? CatalogVersion { get; set; }
+
     /// <summary>The LLM connection that paid for the run (never the key itself).</summary>
     public Guid? CredentialId { get; set; }
 
