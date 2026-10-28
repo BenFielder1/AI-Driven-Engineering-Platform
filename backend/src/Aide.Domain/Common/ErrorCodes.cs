@@ -114,15 +114,6 @@ public static class ErrorCodes
     /// </summary>
     public const string TagNotFound = "TAG_NOT_FOUND";
 
-    /// <summary>FR-74: the preset doesn't exist (until presets land, every preset id).</summary>
-    public const string PresetNotFound = "PRESET_NOT_FOUND";
-
-    /// <summary>
-    /// FR-74 (409 on <c>PATCH /api/projects/:id/preset</c>): the version's first implementation plan is locked (or nothing
-    /// is in development), so its preset can't change; a new version can pick another one.
-    /// </summary>
-    public const string PresetLocked = "PRESET_LOCKED";
-
     // Vercel deployments (FR-87–FR-91, §4.15)
 
     /// <summary>
@@ -208,7 +199,7 @@ public static class ErrorCodes
     public const string AgentScope = "AGENT_SCOPE";
 
     /// <summary>
-    /// §4.11, §4.12 (a <b>warning</b>, never blocking): a <i>soft</i> preset ordering rule is broken (e.g. a
+    /// §4.11, §4.12 (a <b>warning</b>, never blocking): a <i>soft</i> pack ordering rule is broken (e.g. a
     /// <c>lib/&lt;domain&gt;</c> step after an <c>app/**</c> step); hard ordering rules are <see cref="InvalidPlan"/>.
     /// </summary>
     public const string PlanOrder = "PLAN_ORDER";
@@ -226,7 +217,7 @@ public static class ErrorCodes
     public const string UndeclaredGeneratedFile = "UNDECLARED_GENERATED_FILE";
 
     /// <summary>
-    /// FR-89 (a <b>warning</b>, never blocking): the version's preset deploys to Vercel, the base commit has no
+    /// FR-89 (a <b>warning</b>, never blocking): the version's stack deploys to Vercel, the base commit has no
     /// <c>vercel.json</c> and no plan step declares one, so nothing would stop Vercel's automatic deploys of <c>aide/**</c>.
     /// </summary>
     public const string MissingVercelConfig = "MISSING_VERCEL_CONFIG";
@@ -332,8 +323,6 @@ public static class ErrorCodes
         [ReleaseNotMerged] = 409,
         [NotReleased] = 409,
         [TagNotFound] = 400,
-        [PresetNotFound] = 400,
-        [PresetLocked] = 409,
         [CredentialInvalid] = 400,
         [CredentialNotOwner] = 403,
         [LlmProviderUnavailable] = 400,

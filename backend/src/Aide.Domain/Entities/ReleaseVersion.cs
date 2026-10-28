@@ -45,7 +45,7 @@ public sealed class ReleaseVersion
     /// <summary>
     /// FR-117, FR-119, §4.18: the normalised stack composition pinned on the version (a serialised
     /// <see cref="Aide.Domain.Stack.StackComposition"/>, stored as <c>jsonb</c>), validated by the Domain on write.
-    /// Null for versions pinned to a legacy preset or with no stack chosen.
+    /// Null for versions with no stack chosen (FR-129 migrated every preset-pinned version to its equivalent composition).
     /// </summary>
     public string? StackComposition { get; set; }
 

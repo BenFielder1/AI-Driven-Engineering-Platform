@@ -236,24 +236,15 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
             ? $"\n\n## Changes in this version\n- [new] FR-{newId}: {summary}\n- Every other requirement is unchanged."
             : string.Empty;
 
-        // FR-75: with a preset, the stack, dependencies and endpoints are the Fake specialists' (FakePresetScripts), so the
-        // review's deterministic checks match what they generate.
-        var preset = FakePrompt.PresetId(request) is not null;
-        var architecture = preset
-            ? "A Next.js (App Router) app in TypeScript strict with Tailwind; thin Zod-validated route handlers under app/api."
-            : "A Node.js 22 HTTP service using Express 5, with an in-process data layer behind a repository module.";
-        var dependencies = preset
-            ? string.Join("\n", FakePresetScripts.Dependencies.Concat(FakePresetScripts.DevDependencies).Select(d => $"- {d.Name}"))
-            : "- express\n- jest\n- supertest";
-        var endpoints = preset
-            ? string.Join("\n", FakePresetScripts.Endpoints(rs).Select(e => $"| {e.Method} | {e.Path} | {(e.Method == "POST" ? $"201 {r}" : e.Method == "DELETE" ? "204" : "200")} | 400, 404 |"))
-            : $"| GET | /api/{rs} | 200 list | — |\n| POST | /api/{rs} | 201 {r} | 400 |\n| GET | /api/{rs}/{{id}} | 200 {r} | 404 |\n| PUT | /api/{rs}/{{id}} | 200 {r} | 400, 404 |\n| DELETE | /api/{rs}/{{id}} | 204 | 404 |";
-        var testing = preset ? "Vitest and Testing Library for units and route handlers, Playwright end to end." : "Jest and Supertest";
+        var architecture = "A Node.js 22 HTTP service using Express 5, with an in-process data layer behind a repository module.";
+        var dependencies = "- express\n- jest\n- supertest";
+        var endpoints = $"| GET | /api/{rs} | 200 list | — |\n| POST | /api/{rs} | 201 {r} | 400 |\n| GET | /api/{rs}/{{id}} | 200 {r} | 404 |\n| PUT | /api/{rs}/{{id}} | 200 {r} | 400, 404 |\n| DELETE | /api/{rs}/{{id}} | 204 | 404 |";
+        var testing = "Jest and Supertest";
 
-        // FR-75: a preset's extra sections, after the eleven (and before "Changes in this version").
-        var presetSections = string.Concat(FakePrompt.PresetSpecSections(request).Select(title =>
-            $"\n\n## {title}\n{title} for {name}, following the preset's guidance and the requirements above."));
-        changes = presetSections + changes;
+        // FR-123: the composition's extra sections, after the eleven (and before "Changes in this version").
+        var stackSections = string.Concat(FakePrompt.StackSpecSections(request).Select(title =>
+            $"\n\n## {title}\n{title} for {name}, following the stack's guidance and the requirements above."));
+        changes = stackSections + changes;
         return $"""
             ## 1. Overview
             {name}: {summary} Users manage {rs} through a JSON REST API. Non-goals: third-party integrations.
@@ -302,7 +293,7 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
 /// <summary>
 /// Fake Plan Generator (FR-29, D13): a valid four-step plan for the project's main resource, as the JSON the prompt asks
 /// for. Its files are ordinary repository files (no protected paths), so the Local Git provider can commit them later.
-/// FR-76: with a shipped preset in the prompt, the preset's scripted plan instead (<see cref="FakePresetScripts.Plan"/>).
+/// FR-124: with a stack composition in the prompt, its specialists' scripted plan instead (<see cref="FakeStackScripts.Plan"/>).
 /// </summary>
 public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
 {
@@ -318,12 +309,6 @@ public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
         var scope = Domain.Specs.RequirementParser.Parse(FakePrompt.Tag(request, "technical_specification")).NewOrChangedIds;
         string[] apiCovers = scope.Count > 0 ? [.. scope] : ["FR-1", "FR-2", "FR-3", "FR-4"];
         string[] modelCovers = scope.Count > 0 ? [] : ["FR-1", "FR-4"];
-        if (FakePrompt.PresetId(request) is { } presetId
-            && FakePresetScripts.Plan(presetId, r, rs, [.. scope], FakePrompt.RepoHasCode(request)) is { } presetSteps)
-        {
-            return JsonSerializer.Serialize(new { steps = presetSteps });
-        }
-
         // FR-124: with a stack composition, its specialists' scripted plan (FakeStackScripts.Plan).
         if (FakeComposition.Read(request.System) is { } composition)
         {
@@ -357,7 +342,7 @@ public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
 /// Fake Code Generator (FR-31, D13): implements the requested step by writing exactly its declared files (read from the
 /// prompt's <c>&lt;declared_files&gt;</c> list), with deterministic content per file type, so execution runs end to end with
 /// the Fake and Local providers. The content never matches a secret pattern, so the Guardian accepts it. FR-76: a specialist
-/// step (a preset role in the prompt) writes the preset's scripted files where it has them (<see cref="FakePresetScripts.Content"/>).
+/// step (a specialist role in the prompt) writes the composition's scripted files where it has them (<see cref="FakeStackScripts.Content"/>).
 /// </summary>
 public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
 {
@@ -375,15 +360,13 @@ public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
         var title = FakePrompt.Tag(request, "step_title") is { Length: > 0 } t ? t : $"Step {number}";
         var name = FakePrompt.Title(FakePrompt.Tag(request, "project_request"), "project");
         var specialist = FakePrompt.SpecialistKey(request);
-        var composed = FakeComposition.Read(request.System) is not null;
         var files = FilePattern().Matches(FakePrompt.Tag(request, "declared_files"))
             .Select(f => (Path: f.Groups["path"].Value.Trim(), Action: f.Groups["action"].Value))
             .Select(f => new
             {
                 path = f.Path,
-                content = (specialist is null ? null
-                    : composed ? FakeStackScripts.Content(specialist, f.Path, name, number, title)
-                    : FakePresetScripts.Content(specialist, f.Path, name, number, title)) ?? Content(f.Path, f.Action, name, number, title),
+                content = (specialist is null ? null : FakeStackScripts.Content(specialist, f.Path, name, number, title))
+                    ?? Content(f.Path, f.Action, name, number, title),
             })
             .ToList();
         return JsonSerializer.Serialize(new

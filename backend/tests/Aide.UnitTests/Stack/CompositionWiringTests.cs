@@ -58,7 +58,7 @@ public sealed class CompositionWiringTests
             ["PROJECT_REQUEST"] = "# Demo: Recipe Finder\n\n## Summary\nRecipes.",
             ["TECHNICAL_SPECIFICATION"] = "## 2. Functional Requirements\n- **FR-1** x. Given a, when b, then c.",
             ["MAX_FILES_PER_STEP"] = "20",
-            ["PRESET_GUIDANCE"] = StackGuidance.Plan(stack, repoEmpty: true),
+            ["STACK_GUIDANCE"] = StackGuidance.Plan(stack, repoEmpty: true),
         }));
 
         var agents = PlanAgents.ForStack(stack, repoEmpty: true, new HashSet<string>(StringComparer.Ordinal));
@@ -80,7 +80,7 @@ public sealed class CompositionWiringTests
             ["PROJECT_REQUEST"] = "# Demo: Recipe Finder",
             ["TECHNICAL_SPECIFICATION"] = "## 2. Functional Requirements\n- **FR-5** [new] x. Given a, when b, then c.",
             ["MAX_FILES_PER_STEP"] = "20",
-            ["PRESET_GUIDANCE"] = StackGuidance.Plan(stack, repoEmpty: false),
+            ["STACK_GUIDANCE"] = StackGuidance.Plan(stack, repoEmpty: false),
         }));
 
         var plan = PlanDocument.ParseAgentOutput(reply, 20, PlanAgents.ForStack(stack, repoEmpty: false, new HashSet<string>(StringComparer.Ordinal)));
@@ -176,7 +176,7 @@ public sealed class CompositionWiringTests
     // ---------- FR-125: Guardian ----------
 
     private static GuardianInput Guard(StackResolution stack, string declared, string produced, Func<string, bool> existsOnBase) =>
-        new(1, 1, [new StepState(1, StepStatus.InProgress, [], [declared])], [new ProducedFile(produced, "-- sql\n")], 20, null, existsOnBase, stack);
+        new(1, 1, [new StepState(1, StepStatus.InProgress, [], [declared])], [new ProducedFile(produced, "-- sql\n")], 20, existsOnBase, stack);
 
     [Fact]
     public void FR125_The_Guardian_rejects_a_step_modifying_a_Flyway_migration_that_exists_on_the_base_commit()
@@ -198,7 +198,7 @@ public sealed class CompositionWiringTests
         const string declared = "backend/src/App.Api/Program.cs";
 
         var undeclared = ExecutionGuardian.Validate(new GuardianInput(1, 1, [new StepState(1, StepStatus.InProgress, [], [declared])],
-            [new ProducedFile(declared, "x"), new ProducedFile("backend/src/App.Infrastructure/Migrations/1_X.cs", "x")], 20, null, p => p.EndsWith("1_X.cs", StringComparison.Ordinal), stack));
+            [new ProducedFile(declared, "x"), new ProducedFile("backend/src/App.Infrastructure/Migrations/1_X.cs", "x")], 20, p => p.EndsWith("1_X.cs", StringComparison.Ordinal), stack));
 
         Assert.Contains(undeclared.Errors, v => v.Code == ErrorCodes.Guardian.ProtectedPath && v.Path == "backend/src/App.Infrastructure/Migrations/1_X.cs");
     }
@@ -217,7 +217,7 @@ public sealed class CompositionWiringTests
         var reply = new FakeSpecGeneratorResponder().Respond(Rendered(AgentKind.SpecGenerator, new()
         {
             ["PROJECT_REQUEST"] = "# Demo: Recipe Finder\n\n## Summary\nRecipes.",
-            ["PRESET_GUIDANCE"] = guidance,
+            ["STACK_GUIDANCE"] = guidance,
         }));
         Assert.True(SpecValidator.Check(reply, SpecValidationContext.ForVersion(false, null, titles)).IsSuccess);
     }

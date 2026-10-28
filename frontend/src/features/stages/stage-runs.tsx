@@ -7,6 +7,7 @@ import { useProjectAccess } from '../projects/project-context'
 import { RelativeTime } from '../projects/relative-time'
 import { RunStatusBadge } from '../runs/run-badges'
 import { isUnfinished } from '../runs/run-format'
+import { specialistText } from '../stack/legacy-preset'
 import { useRuns } from '../runs/runs-api'
 import { StageSection } from './stage-section'
 
@@ -51,7 +52,7 @@ export function StageRuns({ agent }: { agent: Schemas['AgentKind'] }) {
                     className="text-primary underline"
                     aria-label={`${label} run, started ${formatDateTime(run.createdAt)}`}
                   >
-                    {run.agentKey ?? label}
+                    {specialistText(run.agentKey, run.legacyAgentKey) ?? label}
                   </Link>
                 </th>
                 <td className="px-2 py-1">

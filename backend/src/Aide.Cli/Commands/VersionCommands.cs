@@ -7,8 +7,8 @@ namespace Aide.Cli.Commands;
 /// <summary>FR-93: `aide version start`, `aide versions`, `aide deployments`.</summary>
 internal static class VersionCommands
 {
-    /// <summary>The <c>--preset</c> value that starts the version without a preset.</summary>
-    internal const string NoPreset = "none";
+    /// <summary>FR-156, FR-129: what <c>aide version start --preset</c> prints before exiting 2 (usage).</summary>
+    internal const string PresetRemoved = "presets were removed in v4; use --frontend, --backend, --data, --vcs and the host options to choose a stack (omit them to keep the current one).";
 
     public static Command BuildVersion(CommandFactory factory)
     {
@@ -26,10 +26,12 @@ internal static class VersionCommands
             Description = "What the version adds, improves or fixes: the text itself, or @path to read it from a file (@- for stdin).",
             Required = true,
         };
+        // FR-156: kept only to explain its removal (hidden from help); any use exits 2.
         var preset = new Option<string?>("--preset")
         {
-            Description = $"Tech stack preset id of the new version (default: keep the current one; '{NoPreset}' for no preset).",
+            Description = "Removed in v4 (presets were replaced by stack compositions).",
             HelpName = "id",
+            Hidden = true,
         };
         var command = new Command(
             "start",
@@ -42,13 +44,14 @@ internal static class VersionCommands
 
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
+            if (context.Get(preset) is not null)
+            {
+                throw new UsageException(PresetRemoved);
+            }
+
             var projectId = context.Get(id);
             var text = ReadRequest(context.Get(request) ?? string.Empty, context.Host.Terminal);
             var body = new JsonObject { ["version"] = context.Get(version)?.Trim(), ["request"] = text };
-            if (context.Get(preset) is { } presetId)
-            {
-                body["presetId"] = string.Equals(presetId.Trim(), NoPreset, StringComparison.OrdinalIgnoreCase) ? null : presetId.Trim();
-            }
 
             var started = await context.Api().PostAsync<StartReleaseVersionResultDto>($"api/projects/{projectId}/versions", body, cancellationToken).ConfigureAwait(false);
             if (context.Json)
@@ -60,7 +63,7 @@ internal static class VersionCommands
             var v = started.Value.ReleaseVersion;
             var state = started.Value.State;
             await context.Out.WriteLineAsync(
-                $"Started version {v.Version}{(v.BaseTag is { } baseTag ? $" (from {baseTag})" : string.Empty)}: phase {state.Phase}, checkpoint {Output.Num(state.Checkpoint)}, preset {PresetText(v.PresetName ?? v.PresetId, v.PresetVersion)}.").ConfigureAwait(false);
+                $"Started version {v.Version}{(v.BaseTag is { } baseTag ? $" (from {baseTag})" : string.Empty)}: phase {state.Phase}, checkpoint {Output.Num(state.Checkpoint)}.").ConfigureAwait(false);
             await context.Out.WriteLineAsync($"Next: aide status {projectId}").ConfigureAwait(false);
             return ExitCodes.Success;
         });
@@ -137,8 +140,9 @@ internal static class VersionCommands
         return string.IsNullOrWhiteSpace(text) ? throw new UsageException("--request is empty.") : text;
     }
 
+    /// <summary>FR-129: the retired preset a migrated version was pinned to (history), or <c>none</c>.</summary>
     internal static string PresetText(string? preset, string? version) =>
-        preset is null ? "none" : version is null ? preset : $"{preset} {version}";
+        preset is null ? "none" : $"{preset}{(version is null ? string.Empty : "@" + version)} (retired, migrated)";
 
     internal static string ShortSha(string sha) => sha.Length > 7 ? sha[..7] : sha;
 

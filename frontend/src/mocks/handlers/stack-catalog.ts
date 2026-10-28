@@ -42,11 +42,20 @@ export const stackCatalog: Catalog = {
   version: STACK_CATALOG_VERSION,
   contentHash: STACK_CATALOG_HASH,
   layers: [
-    { id: 'frontend', name: 'Frontend', description: 'The user interface.' },
-    { id: 'backend', name: 'Backend', description: 'The API and background work.' },
-    { id: 'data', name: 'Data', description: 'The database and how the code talks to it.' },
-    { id: 'vcs', name: 'VCS', description: 'Where the repository lives and CI runs.' },
-    { id: 'deploy', name: 'Deployment', description: 'Where each part runs, and the local dev loop.' },
+    // The layer names and descriptions of backend/src/Aide.Infrastructure/Agents/Stack/catalog.json, verbatim.
+    { id: 'frontend', name: 'Frontend', description: 'The web UI, or None for an API-only project.' },
+    {
+      id: 'backend',
+      name: 'Backend',
+      description: 'The API service, or None for a static site, Next.js full-stack or an SPA with Supabase.',
+    },
+    {
+      id: 'data',
+      name: 'Data',
+      description: 'The ORM and migrations (or Supabase as a backend-as-a-service), or None for no database.',
+    },
+    { id: 'vcs', name: 'Version control', description: 'The Git host of the repository and its CI.' },
+    { id: 'deploy', name: 'Deployment', description: 'Where each component runs, the local dev loop and the origin model.' },
   ],
   choices: [
     {
@@ -150,10 +159,17 @@ export const stackCatalog: Catalog = {
     { id: 'R3', statement: 'Data packs need their backend.' },
   ],
   recommendations: [
+    // catalog.json's "spa-dotnet" (the mock lists fewer options, so only those it has are named).
     {
-      id: 'react-aspnet',
-      name: 'React + ASP.NET Core',
-      choices: { frontend: ['fe-react-vite'], backend: ['be-aspnet'], data: ['data-efcore-postgres'] },
+      id: 'spa-dotnet',
+      name: 'SPA + .NET API',
+      choices: {
+        frontend: ['fe-react-vite'],
+        backend: ['be-aspnet'],
+        data: ['data-efcore-postgres'],
+        backendHost: ['deploy-render', 'deploy-railway'],
+        databaseHost: ['render-postgres', 'railway-postgres'],
+      },
     },
   ],
 }

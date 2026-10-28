@@ -74,7 +74,7 @@ export const stackLayerLabels: Readonly<Record<string, string>> = {
   frontend: 'Frontend',
   backend: 'Backend',
   data: 'Data',
-  vcs: 'VCS',
+  vcs: 'Version control',
   deploy: 'Deployment',
 }
 

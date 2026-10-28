@@ -1,10 +1,8 @@
-using Aide.Api.Features.Presets;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Presets;
 using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,14 +11,13 @@ namespace Aide.Api.Features.Stack;
 /// <summary>
 /// FR-114–FR-119: compositions on projects and release versions. Validation is <see cref="StackCompatibility.Validate"/>
 /// after the R5 VCS rule (<see cref="StackPinning.FixVcs"/>); pinning writes the normalised composition with the catalog
-/// version and hash on the version, clears a legacy preset (a version has one or the other) and keeps
+/// version and hash on the version (a migrated version keeps its retired preset columns as history, FR-129) and keeps
 /// <c>projects.stack_packs</c> in sync with the current version. Used by project create, <c>POST /versions</c> and
 /// <c>GET/PUT /api/projects/:id/stack</c>.
 /// </summary>
 public sealed partial class ProjectStackService(
     AideDbContext db,
     IStackCatalog stacks,
-    IPresetCatalog presets,
     VersionStackReader reader,
     TimeProvider time,
     ILogger<ProjectStackService> logger)
@@ -69,17 +66,16 @@ public sealed partial class ProjectStackService(
     public Result<StackComposition> Repin(StackComposition composition, string? repoVcs) =>
         Resolve(StackPinning.ToSelection(composition), repoVcs, "stack.");
 
-    /// <summary>FR-117: pins <paramref name="composition"/> (or none) on <paramref name="version"/>; a composition replaces a legacy preset.</summary>
+    /// <summary>
+    /// FR-117: pins <paramref name="composition"/> (or none) on <paramref name="version"/>. FR-129: the retired preset columns
+    /// (<c>preset_id/version/hash</c>) are history and are never cleared.
+    /// </summary>
     public static void Pin(ReleaseVersion version, StackComposition? composition)
     {
         ArgumentNullException.ThrowIfNull(version);
         version.StackComposition = composition is null ? null : StackCompositionJson.Serialize(composition);
         version.CatalogVersion = composition?.CatalogVersion;
         version.CatalogHash = composition?.CatalogHash;
-        if (composition is not null)
-        {
-            PresetService.Pin(version, null);
-        }
     }
 
     /// <summary>§5: <c>projects.stack_packs</c> = the pack ids of the current version's composition (<paramref name="composition"/>).</summary>
@@ -115,7 +111,7 @@ public sealed partial class ProjectStackService(
     /// <summary>
     /// <c>PUT /api/projects/:id/stack</c> (FR-117): pins <paramref name="request"/> on the version in development. Checks, in
     /// order: <c>STACK_LOCKED</c> (nothing in development, or its first implementation plan was locked), <c>VCS_MISMATCH</c>,
-    /// <c>VALIDATION</c>, <c>STACK_INCOMPATIBLE</c>. A change records <c>STACK_CHANGED</c> and replaces a legacy preset; the
+    /// <c>VALIDATION</c>, <c>STACK_INCOMPATIBLE</c>. A change records <c>STACK_CHANGED</c> (with the retired preset id of a migrated version); the
     /// pinned composition again (same catalog) changes nothing. <c>CONFLICT</c> on a concurrent edit.
     /// </summary>
     public async Task<Result<ProjectStackDto>> ChangeAsync(Guid projectId, StackCompositionRequest request, string actor, CancellationToken cancellationToken)
@@ -145,7 +141,7 @@ public sealed partial class ProjectStackService(
 
         var to = resolved.Value;
         var from = StackCompositionJson.Deserialize(target.StackComposition);
-        if (target.PresetId is null && from is not null && StackCompositionJson.Serialize(from) == StackCompositionJson.Serialize(to))
+        if (from is not null && StackCompositionJson.Serialize(from) == StackCompositionJson.Serialize(to))
         {
             return await GetAsync(projectId, cancellationToken);
         }
@@ -200,7 +196,6 @@ public sealed partial class ProjectStackService(
     {
         var version = stack.Version;
         var catalog = stacks.Current;
-        var preset = version.PresetId is { } presetId ? PresetService.Describe(presets, presetId, version.PresetVersion) : null;
         return new ProjectStackDto(
             version.Id,
             version.Version,
@@ -213,9 +208,19 @@ public sealed partial class ProjectStackService(
             stackLock.Locked,
             stackLock.Reason,
             new StackChangeDto(stack.Change.BaseHasCode, stack.Change.LayersChanged, stack.Change.IsStackChange),
-            preset is null ? null : new LegacyPresetDto(preset.PresetId!, preset.PresetName!, preset.PresetVersion),
+            LegacyPreset(version, stacks.Catalog?.Legacy),
             repoVcs);
     }
+
+    /// <summary>FR-129: the retired preset a migrated version was pinned to (kept as history), or <c>null</c>.</summary>
+    internal static LegacyPresetDto? LegacyPreset(ReleaseVersion version, LegacyPresets? legacy) =>
+        version.PresetId is { } presetId
+            ? new LegacyPresetDto(
+                presetId,
+                legacy?.Find(presetId)?.Name ?? presetId,
+                version.PresetVersion,
+                Domain.Stack.LegacyPreset.HistoryLabel(presetId, version.PresetVersion))
+            : null;
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} version {Version}: stack changed (layers {Layers})")]
     private static partial void LogChanged(ILogger logger, Guid projectId, string version, string layers);
@@ -227,6 +232,8 @@ public static class ProjectStackServiceCollectionExtensions
     public static IServiceCollection AddProjectStacks(this IServiceCollection services)
     {
         services.AddScoped<VersionStackReader>();
+        services.AddScoped<VersionStackLoader>();
+        services.AddScoped<RetiredPresets>();
         services.AddScoped<ProjectStackService>();
         services.AddScoped<StackDetectionService>();
         return services;

@@ -27,8 +27,6 @@ import { useLlmProviders, type LlmProviderOption } from '../connections/connecti
 import { useVercelConnections } from '../connections/vercel-connections-api'
 import { VercelGitAlert } from '../deployments/vercel-git-alert'
 import { suggestVercelProjectName } from '../deployments/vercel-project-rules'
-import { PresetPicker } from '../presets/preset-picker'
-import { usePresets } from '../presets/presets-api'
 import { agentKeys, agentLabels, approvalModeDescriptions, approvalModeLabels, approvalModes, llmProviderLabels } from './labels'
 import { catalogModel } from './model-picker'
 import { useCreateProject } from './projects-api'
@@ -101,7 +99,6 @@ const fieldIds: Record<Field, string> = {
   releasedVersion: 'project-released-tag',
   developmentVersion: 'project-development-version',
   localSourcePath: 'project-local-source-path',
-  presetId: 'project-preset',
   stackDetection: 'project-stack-kind',
   ...wizardStackFieldIds,
   ...deploymentFieldIds,
@@ -120,7 +117,7 @@ const stepFields: Record<StepKey, readonly Field[]> = {
   idea: ['name', 'idea'],
   repository: ['gitMode', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken', 'releasedTag', 'localSourcePath'],
   version: ['initialVersion', 'developmentVersion'],
-  stack: ['stackKind', ...wizardStackFieldList, 'presetId'],
+  stack: ['stackKind', ...wizardStackFieldList],
   configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget', ...llmFields],
   deployment: ['deploymentMode', 'vercelConnectionId', 'vercelProjectMode', 'vercelProjectName', 'vercelRootDirectory', 'vercelProjectId'],
   review: [],
@@ -185,8 +182,7 @@ const serverFieldMap: Record<string, Field> = {
   import: 'developmentVersion',
   'import.developmentversion': 'developmentVersion',
   'import.releasedtag': 'releasedTag',
-  presetid: 'presetId',
-  // FR-114: `stack.*` keys map through stackFieldOfKey; `stack` itself (e.g. presetId and stack together) is the kind.
+  // FR-114: `stack.*` keys map through stackFieldOfKey; `stack` itself is the kind.
   stack: 'stackKind',
   deployment: 'deploymentMode',
   // A Local project without the Fake provider: VALIDATION on the deployment (FR-88).
@@ -267,13 +263,12 @@ function toDeploymentRequest(v: WizardValues): Schemas['CreateProjectDeploymentR
 
 /**
  * FR-5, FR-66, FR-73: scratch sends `initialVersion`; import sends `import`, and `idea` is the version's request.
- * FR-114: `stack` for a composition; FR-74: `presetId` only for a legacy preset ("No stack (general)" sends neither).
+ * FR-114: `stack` for a composition ("No stack (general)" omits it).
  */
 function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
   const deployment = toDeploymentRequest(v)
   const llm = toLlmRequest(v)
   const base = {
-    ...(v.stackKind === 'preset' && v.presetId ? { presetId: v.presetId } : {}),
     ...(v.stackKind === 'compose' ? { stack: toWizardStackRequest(v) } : {}),
     name: v.name.trim(),
     idea: v.idea.trim(),
@@ -470,7 +465,6 @@ export function NewProjectWizard() {
   const repoHasCode = useWatch({ control, name: 'repoHasCode' })
   const releasedTag = useWatch({ control, name: 'releasedTag' })
   const releasedVersion = useWatch({ control, name: 'releasedVersion' })
-  const presetId = useWatch({ control, name: 'presetId' })
   const deploymentMode = useWatch({ control, name: 'deploymentMode' })
   const vercelProjectMode = useWatch({ control, name: 'vercelProjectMode' })
   const vercelConnectionId = useWatch({ control, name: 'vercelConnectionId' })
@@ -663,7 +657,6 @@ export function NewProjectWizard() {
     }
     const found = detectedAnything(detection.data)
     setStack(found ? selectionFromDetection(detection.data, emptyStackSelection) : emptyStackSelection)
-    setValue('presetId', '')
     setValue('stackKind', found ? 'compose' : 'general', { shouldDirty: true })
     setValue('stackDetection', detectionKey)
     lastApplied.current = stackSnapshot(getValues())
@@ -757,10 +750,6 @@ export function NewProjectWizard() {
             // FR-73: the repository to import doesn't exist, or the token can't see it.
             setError('repoUrl', { type: 'server', message: errorMessage(error, 'createProject') })
             goTo(stepIndex('repository'))
-          } else if (isApiError(error, 'PRESET_NOT_FOUND')) {
-            // FR-74: the preset was withdrawn since the list loaded; pick again from the fresh list.
-            setError('presetId', { type: 'server', message: errorMessage(error, 'createProject') })
-            goTo(stepIndex('stack'))
           } else if (isApiError(error, 'STACK_INCOMPATIBLE') || isApiError(error, 'VCS_MISMATCH')) {
             // FR-116, FR-117: the composition breaks a rule (the reasons are listed), or the VCS isn't the repo's host.
             goTo(stepIndex('stack'))
@@ -1067,11 +1056,7 @@ export function NewProjectWizard() {
               <RadioGroup
                 id={fieldIds.stackKind}
                 legend="How should the agents build it?"
-                inputProps={register('stackKind', {
-                  onChange: () => {
-                    setValue('presetId', '')
-                  },
-                })}
+                inputProps={register('stackKind')}
                 error={errors.stackKind?.message}
                 options={[
                   {
@@ -1115,25 +1100,6 @@ export function NewProjectWizard() {
                     <StackSummary catalog={stackCatalog.data} value={stackSelection} onFieldErrors={setLiveStackErrors} />
                   </>
                 ))}
-              <details
-                className="rounded-lg border border-border/60 bg-background/40 p-3"
-                open={stackKind === 'preset' ? true : undefined}
-              >
-                <summary className="min-h-6 cursor-pointer font-medium">Legacy presets (retiring in v4)</summary>
-                <div className="mt-3">
-                  <PresetPicker
-                    id={fieldIds.presetId}
-                    selected={presetId}
-                    hideNone
-                    inputProps={register('presetId', {
-                      onChange: (e: { target: { value: string } }) => {
-                        setValue('stackKind', e.target.value ? 'preset' : 'general')
-                      },
-                    })}
-                    error={errors.presetId?.message}
-                  />
-                </div>
-              </details>
             </>
           )}
 
@@ -1215,7 +1181,7 @@ export function NewProjectWizard() {
             <WizardDeploymentStep
               register={register}
               errors={errors}
-              values={{ gitMode, presetId, deploymentMode, vercelProjectMode, vercelConnectionId }}
+              values={{ gitMode, stackKind, stackFrontendHost: stackSelection.frontendHost, deploymentMode, vercelProjectMode, vercelConnectionId }}
             />
           )}
 
@@ -1316,16 +1282,6 @@ function SummarySection({ title, step, onEdit, children }: {
       <dl className="divide-y divide-border/60">{children}</dl>
     </section>
   )
-}
-
-/** The picked preset's name and version (from the cached list), or "No preset (general)". */
-function PresetName({ presetId }: { presetId: string }) {
-  const presets = usePresets(Boolean(presetId))
-  if (!presetId) {
-    return <>No preset (general)</>
-  }
-  const preset = presets.data?.find((p) => p.id === presetId)
-  return <>{preset ? `${preset.name} ${preset.version}` : presetId}</>
 }
 
 /** FR-114: the composition in the summary, layer by layer (names from the catalog). */
@@ -1471,10 +1427,6 @@ function ReviewSummary({
       <SummarySection title="Stack" step="stack" onEdit={onEdit}>
         {values.stackKind === 'compose' ? (
           <StackReview values={values} />
-        ) : values.stackKind === 'preset' ? (
-          <SummaryRow term="Legacy preset">
-            <PresetName presetId={values.presetId} />
-          </SummaryRow>
         ) : (
           <SummaryRow term="Stack">No stack (general)</SummaryRow>
         )}

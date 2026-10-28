@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "layers": [
     { "id": "frontend", "name": "Frontend", "description": "The web UI, or None for an API-only project." },
     { "id": "backend", "name": "Backend", "description": "The API service, or None for a static site, Next.js full-stack or an SPA with Supabase." },

@@ -134,8 +134,12 @@ public static class CompositionPlanValidator
         return new DomainError(code, $"The plan is invalid: {first.Message}") { Details = [.. issues.Select(i => i.Message)] };
     }
 
-    /// <summary>The composition warnings: <c>AGENT_SCOPE</c>, <c>PLAN_ORDER</c>, <c>UNDECLARED_GENERATED_FILE</c> (at most one of each, in that order).</summary>
-    public static IReadOnlyList<ValidationWarning> Warnings(IReadOnlyList<PlanStep> steps, StackResolution resolution)
+    /// <summary>
+    /// The composition warnings: <c>AGENT_SCOPE</c>, <c>PLAN_ORDER</c>, <c>UNDECLARED_GENERATED_FILE</c> (at most one of each, in
+    /// that order). §4.23: a step mapped from a v2 key (<see cref="PlanStep.LegacyAgent"/>) is checked against the frozen v2
+    /// globs of <paramref name="legacy"/> (the migrated version's preset) instead of its specialist's.
+    /// </summary>
+    public static IReadOnlyList<ValidationWarning> Warnings(IReadOnlyList<PlanStep> steps, StackResolution resolution, LegacyPreset? legacy = null)
     {
         ArgumentNullException.ThrowIfNull(steps);
         ArgumentNullException.ThrowIfNull(resolution);
@@ -144,6 +148,17 @@ public static class CompositionPlanValidator
         var outside = new List<string>();
         foreach (var step in steps)
         {
+            if (step.LegacyAgent is { } legacyKey && legacy?.OwnsOf(legacyKey) is { } frozen)
+            {
+                var outsideFrozen = step.Files.Select(f => f.Path).Where(p => !frozen.IsMatch(p)).ToList();
+                if (outsideFrozen.Count > 0)
+                {
+                    outside.Add($"Step {step.Number} ({legacyKey}) declares {Join(outsideFrozen)} outside its owned paths ({string.Join(", ", frozen.Patterns)}).");
+                }
+
+                continue;
+            }
+
             if (resolution.Specialist(step.Agent) is not { } agent)
             {
                 continue; // an unknown agent is an INVALID_PLAN error, not a scope warning
@@ -179,7 +194,7 @@ public static class CompositionPlanValidator
     }
 
     /// <summary>Every plan warning: <c>UNCOVERED_REQUIREMENTS</c> (§4.13, when <paramref name="requirements"/> are given), then <see cref="Warnings"/>.</summary>
-    public static IReadOnlyList<ValidationWarning> AllWarnings(IReadOnlyList<PlanStep> steps, IEnumerable<SpecRequirement>? requirements, StackResolution resolution)
+    public static IReadOnlyList<ValidationWarning> AllWarnings(IReadOnlyList<PlanStep> steps, IEnumerable<SpecRequirement>? requirements, StackResolution resolution, LegacyPreset? legacy = null)
     {
         ArgumentNullException.ThrowIfNull(steps);
         ArgumentNullException.ThrowIfNull(resolution);
@@ -189,7 +204,7 @@ public static class CompositionPlanValidator
             warnings.Add(uncovered);
         }
 
-        warnings.AddRange(Warnings(steps, resolution));
+        warnings.AddRange(Warnings(steps, resolution, legacy));
         return warnings;
     }
 

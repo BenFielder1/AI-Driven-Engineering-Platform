@@ -8,7 +8,6 @@ import { ErrorState, LoadingState } from '../../components/ui/states'
 import { TextField } from '../../components/ui/text-field'
 import { connectionLabel, credentialStatusLabels } from '../connections/connection-format'
 import { useVercelConnections } from '../connections/vercel-connections-api'
-import { usePresets } from '../presets/presets-api'
 import type { WizardValues } from './schemas'
 import { deploymentFieldIds } from './wizard-deployment-ids'
 
@@ -23,13 +22,12 @@ export function WizardDeploymentStep({
 }: {
   register: UseFormRegister<WizardValues>
   errors: FieldErrors<WizardValues>
-  values: Pick<WizardValues, 'gitMode' | 'presetId' | 'deploymentMode' | 'vercelProjectMode' | 'vercelConnectionId'>
+  values: Pick<WizardValues, 'gitMode' | 'stackKind' | 'stackFrontendHost' | 'deploymentMode' | 'vercelProjectMode' | 'vercelConnectionId'>
 }) {
   const vercel = values.deploymentMode === 'vercel'
   const connections = useVercelConnections(vercel)
-  const presets = usePresets(Boolean(values.presetId))
-  const preset = presets.data?.find((p) => p.id === values.presetId)
-  const deployingPreset = preset?.deployTargets.includes('vercel') ? preset : undefined
+  // FR-114: the composed stack's frontend host is Vercel.
+  const stackDeploysToVercel = values.stackKind === 'compose' && values.stackFrontendHost === 'deploy-vercel'
 
   const own = connections.data ?? []
   const selected = own.find((c) => c.id === values.vercelConnectionId)
@@ -45,8 +43,8 @@ export function WizardDeploymentStep({
           {
             value: 'vercel',
             label: 'Vercel',
-            description: deployingPreset
-              ? `The ${deployingPreset.name} preset deploys to Vercel: a preview of every run and production on every release.`
+            description: stackDeploysToVercel
+              ? 'The stack you chose deploys the frontend to Vercel: a preview of every run and production on every release.'
               : 'A preview of every run and production on every release (for a Next.js app).',
           },
         ]}

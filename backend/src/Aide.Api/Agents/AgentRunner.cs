@@ -11,7 +11,6 @@ using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
-using Aide.Infrastructure.Presets;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aide.Api.Agents;
@@ -63,13 +62,17 @@ public sealed record AgentRunRequest
     public IReadOnlyList<string> Warnings { get; init; } = [];
 
     /// <summary>
-    /// FR-76: the plan step's agent (a code generator run). With a preset whose catalogue has it, the run is that specialist:
-    /// its prompt is <see cref="Domain.Presets.SpecialistPrompt.Compose"/> of the base template, and <c>agent_key</c> records it.
+    /// FR-121: the plan step's agent (a code generator run). With a composition that has it, the run is that specialist (its
+    /// prompt is <see cref="Domain.Stack.StackPrompt.Compose"/> of the base template); <c>agent_key</c> records it, and a
+    /// <c>generalist</c> step of a composed project (an optimisation plan) records <c>generalist</c>.
     /// </summary>
     public string? SpecialistAgentKey { get; init; }
 
+    /// <summary>§4.23: the v2 agent key the step was planned with (its <c>legacy_agent_key</c>), recorded in <c>RUN_STARTED</c>.</summary>
+    public string? LegacyAgentKey { get; init; }
+
     /// <summary>
-    /// FR-120, FR-121: the version's resolved composition (resolved once by the job, <see cref="Features.Presets.VersionPresetReader"/>).
+    /// FR-120, FR-121: the version's resolved composition (resolved once by the job, <see cref="Features.Stack.VersionStackLoader"/>).
     /// The run records its catalog version and the packs it loaded (<c>[]</c> for agents that load no pack skills); a
     /// specialist step (<see cref="SpecialistAgentKey"/> in play) gets <see cref="Domain.Stack.StackPrompt.Compose"/> of the base template.
     /// </summary>
@@ -109,9 +112,9 @@ public sealed record AgentRunOutcome(Guid RunId, string Text, string StopReason,
 /// left <c>running</c> (e.g. after its lease expired on the last attempt).
 /// Failures surface as <see cref="JobFailedException"/> carrying the error code. Every log entry carries <c>RunId</c>.
 /// <para>
-/// FR-74, FR-76: a run of a release version with a preset records <c>preset_id</c>/<c>preset_version</c> (the preset as
-/// shipped when the run starts, <see cref="PresetCatalogExtensions.StampRun"/>); a code generator run of a specialist step
-/// also records <c>agent_key</c> and gets the specialist prompt (base contract → conventions → role → skills).
+/// FR-121: a run of a composed project records the catalog version and the packs it loaded; a code generator run of a
+/// specialist step also records <c>agent_key</c> and gets the specialist prompt (base → summary → role → skills). FR-129:
+/// new runs never record a preset (<c>preset_id</c>/<c>preset_version</c> are history of runs before the upgrade).
 /// </para>
 /// </summary>
 public sealed partial class AgentRunner(
@@ -119,7 +122,6 @@ public sealed partial class AgentRunner(
     ILlmResolver llm,
     IPromptLibrary prompts,
     ILlmProviderCatalog catalog,
-    IPresetCatalog presets,
     AgentRepoContext repoContext,
     ILlmOutputLimits outputLimits,
     TimeProvider time,
@@ -208,12 +210,7 @@ public sealed partial class AgentRunner(
             throw new JobFailedException(rendered.Error.Message, transient: false, rendered.Error.Code);
         }
 
-        // FR-76: a specialist step's prompt (the preset the run recorded, so a redelivery renders the same one).
-        if (run.AgentKey is { } agentKey && presets.Find(run.PresetId) is { } preset && preset.Agent(agentKey) is not null)
-        {
-            rendered = Domain.Presets.SpecialistPrompt.Compose(rendered.Value, preset, agentKey);
-        }
-        else if (run.AgentKey is { } stackKey && request.Stack is { } stack && stack.Specialist(stackKey) is not null)
+        if (run.AgentKey is { } stackKey && request.Stack is { } stack && stack.Specialist(stackKey) is not null)
         {
             // FR-121: base code_generator.md → composition summary → role → skills → step input.
             rendered = Domain.Stack.StackPrompt.Compose(rendered.Value, stack, stackKey);
@@ -455,11 +452,6 @@ public sealed partial class AgentRunner(
 
         var resolved = await llm.ResolveAsync(project.Id, request.Agent, cancellationToken);
 
-        // FR-74: the preset of the run's release version, as shipped now (null without one or when no longer shipped).
-        var version = project.CurrentReleaseVersionId is { } versionId
-            ? await db.ReleaseVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == versionId, cancellationToken)
-            : null;
-        var preset = version is null ? null : presets.ForVersion(version);
         var run = new AgentRun
         {
             Id = runId,
@@ -477,13 +469,12 @@ public sealed partial class AgentRunner(
             Status = AgentRunStatus.Running,
             CreatedAt = now,
         };
-        PresetCatalogExtensions.StampRun(run, preset, preset is not null && request.SpecialistAgentKey is { } key ? key : null);
         StampStack(run, request);
         db.AgentRuns.Add(run);
         db.AddEvent(
             EventTypes.RunStarted,
             project.Id,
-            new { runId, jobId = request.Job.Id, agent = request.Agent.ToWire(), provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, preset = preset?.RunLabel, stack = request.Stack?.CatalogLabel, agentKey = run.AgentKey },
+            new { runId, jobId = request.Job.Id, agent = request.Agent.ToWire(), provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, stack = request.Stack?.CatalogLabel, agentKey = run.AgentKey, legacyAgentKey = request.LegacyAgentKey },
             SystemActor.Name,
             now);
         await db.SaveChangesAsync(cancellationToken);
@@ -493,7 +484,8 @@ public sealed partial class AgentRunner(
 
     /// <summary>
     /// FR-121: a run of a composed project records the catalog version it resolved against and the packs it loaded
-    /// (<c>[{id, version, sections[]}]</c>; <c>[]</c> when the agent loads none); a specialist step also records its <c>agent_key</c>.
+    /// (<c>[{id, version, sections[]}]</c>; <c>[]</c> when the agent loads none); a plan step also records its <c>agent_key</c>:
+    /// the specialist, or <c>generalist</c> for a generalist step (an optimisation plan's fix steps, base prompt).
     /// </summary>
     internal static void StampStack(AgentRun run, AgentRunRequest request)
     {
@@ -507,6 +499,10 @@ public sealed partial class AgentRunner(
         if (specialist is not null)
         {
             run.AgentKey = specialist.Key;
+        }
+        else if (request.SpecialistAgentKey == Domain.Execution.PlanAgents.Generalist)
+        {
+            run.AgentKey = Domain.Execution.PlanAgents.Generalist;
         }
 
         run.Packs = JsonSerializer.Serialize(

@@ -2,9 +2,6 @@ import { useDocumentTitle } from '../../lib/use-document-title'
 import { phaseLabels } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
 import { useProjectState } from '../projects/projects-api'
-import { usePreset } from '../presets/presets-api'
-import { useReleaseVersions } from '../versions/versions-api'
-import type { Schemas } from '../../api/client'
 import { PlanPanel } from './plan-panel'
 import { SpecPanel } from './spec-panel'
 import { StageArtifact } from './stage-artifact'
@@ -62,14 +59,6 @@ export function SpecificationPage({ version, onVersionChange }: ArtifactStagePro
   )
 }
 
-/** FR-76: the plan with its specialist agents named from the preset pinned on the plan's release version. */
-function PlanWithAgents({ artifact, projectId }: { artifact: Schemas['ArtifactDto']; projectId: string }) {
-  const versions = useReleaseVersions(projectId)
-  const presetId = versions.data?.find((v) => v.id === artifact.releaseVersionId)?.presetId ?? null
-  const preset = usePreset(presetId)
-  return <PlanPanel content={artifact.content} warnings={artifact.warnings} agents={preset.data?.agents} />
-}
-
 /**
  * /projects/:id/planning (FR-55, FR-76): the implementation plan in full with its step table (specialist, files,
  * dependencies, covered requirements), the dependency waves and coverage warnings; the plan gate and the Plan
@@ -91,7 +80,7 @@ export function PlanningPage({ version, onVersionChange }: ArtifactStageProps) {
         awaitingDraft={drafting}
         notStarted="The Plan Generator writes the implementation plan from the approved specification. The specification has to be approved and the project advanced to Planning first."
       >
-        {(artifact) => <PlanWithAgents artifact={artifact} projectId={project.id} />}
+        {(artifact) => <PlanPanel content={artifact.content} warnings={artifact.warnings} />}
       </StageArtifact>
       <StageGates types={stageGates.planning} />
       <StageRuns agent="plan_generator" />

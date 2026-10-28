@@ -68,14 +68,14 @@ public class PlanScopeTests
     }
 
     [Fact]
-    public void FR76_Without_a_preset_any_other_agent_or_a_bad_requirement_id_is_INVALID_PLAN()
+    public void FR76_Without_a_stack_any_other_agent_or_a_bad_requirement_id_is_INVALID_PLAN()
     {
         var result = PlanValidator.Validate([Step(1, "a.ts", agent: "ml-engineer", covers: ["login"])]);
 
         Assert.Equal(ErrorCodes.InvalidPlan, result.Error!.Code);
         Assert.Equal(
             [
-                "Step 1 names the agent 'ml-engineer'; without a preset every step is \"generalist\".",
+                "Step 1 names the agent 'ml-engineer'; without a stack every step is \"generalist\".",
                 "Step 1 covers 'login', which is not a requirement ID (FR-n).",
             ],
             result.Error.Details);
@@ -83,16 +83,17 @@ public class PlanScopeTests
     }
 
     [Fact]
-    public void FR76_A_preset_catalogue_is_the_extension_point_for_agent_keys()
+    public void FR124_A_compositions_specialists_are_the_agent_keys_a_step_may_name()
     {
-        var catalogue = new PlanAgents(["db-engineer", "ui-engineer"], "nextjs-supabase");
+        var catalogue = PlanAgents.ForStack(Stack.StackResolverTests.Resolve(Stack.StackResolverTests.AspnetSpa()));
 
-        Assert.True(PlanValidator.Validate([Step(1, "a.sql", agent: "db-engineer")], agents: catalogue).IsSuccess);
-        Assert.Equal(
-            ["Step 1 has no \"agent\"; use one of db-engineer, ui-engineer."],
-            PlanValidator.Validate([Step(1, "a.sql")], agents: catalogue).Error!.Details);
+        Assert.True(PlanValidator.Validate([Step(1, "backend/src/App.Api/Program.cs", agent: "backend-engineer")], agents: catalogue).IsSuccess);
+        Assert.StartsWith(
+            "Step 1 has no \"agent\"; use one of ",
+            PlanValidator.Validate([Step(1, "backend/src/App.Api/Program.cs")], agents: catalogue).Error!.Details[0],
+            StringComparison.Ordinal);
         Assert.Contains(
-            "unknown agent 'ml-engineer'; the nextjs-supabase preset has db-engineer, ui-engineer",
+            "unknown agent 'ml-engineer'; this stack's specialists are ",
             PlanValidator.Validate([Step(1, "a.sql", agent: "ml-engineer")], agents: catalogue).Error!.Details[0],
             StringComparison.Ordinal);
     }

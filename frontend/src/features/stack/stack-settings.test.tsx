@@ -46,7 +46,7 @@ describe('Settings → Stack (FR-117)', () => {
     expect(screen.getByRole('radio', { name: 'ASP.NET Core' })).toBeChecked()
     await user.click(screen.getByRole('button', { name: 'Next layer' }))
     await user.click(screen.getByRole('button', { name: 'Next layer' }))
-    await screen.findByRole('heading', { level: 3, name: 'VCS' })
+    await screen.findByRole('heading', { level: 3, name: 'Version control' })
     // R5: the GitHub repository fixes the VCS layer.
     expect(screen.getByText(/It can only be the repository’s host/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Next layer' }))
@@ -82,14 +82,42 @@ describe('Settings → Stack (FR-117)', () => {
         composition: null,
         baseHasCode: true,
         layersChanged: ['backend', 'data'],
-        legacyPreset: { presetId: 'nextjs-frontend', presetName: 'Next.js frontend', presetVersion: '1.0.0' },
+        legacyPreset: {
+          presetId: 'nextjs-frontend',
+          presetName: 'nextjs-frontend',
+          presetVersion: '1.0.0',
+          label: 'Preset nextjs-frontend@1.0.0 (retired, migrated)',
+        },
       },
     })
     await openSettings('stack', project)
 
     expect(await screen.findByText('This version builds on existing code')).toBeInTheDocument()
     expect(screen.getByText('Changed from the base code: Backend, Data.')).toBeInTheDocument()
-    expect(screen.getByTestId('legacy-preset')).toHaveTextContent('Preset Next.js frontend@1.0.0 (retired, migrated)')
+    expect(screen.getByTestId('legacy-preset')).toHaveTextContent('Preset nextjs-frontend@1.0.0 (retired, migrated)')
+  })
+
+  it('FR129_migrated_version_shows_the_server_legacy_label_and_an_unpinned_catalog_hash', async () => {
+    signInAsOwner()
+    // The FR-129 migration writes the equivalent composition with no catalog hash until the stack is re-pinned.
+    const project = seedProject({
+      stack: {
+        composition: { ...sampleComposition(), catalogHash: null },
+        catalogHash: null,
+        legacyPreset: {
+          presetId: 'nextjs-supabase',
+          presetName: 'nextjs-supabase',
+          presetVersion: '1.0.1',
+          label: 'Preset nextjs-supabase@1.0.1 (retired, migrated)',
+        },
+      },
+    })
+    await openSettings('stack', project)
+
+    expect(await screen.findByRole('region', { name: 'Current stack' })).toBeInTheDocument()
+    // The label is the server's, as sent (not rebuilt from the name).
+    expect(screen.getByTestId('legacy-preset')).toHaveTextContent('Preset nextjs-supabase@1.0.1 (retired, migrated)')
+    expect(screen.getByTestId('catalog-hash-unpinned')).toHaveTextContent('no hash yet')
   })
 
   it('FR117_Contributors_and_Viewers_read_the_stack_without_changing_it', async () => {
@@ -134,7 +162,7 @@ describe('Start new version → Change stack (FR-117)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Use this stack' }))
 
     expect(await within(dialog).findByTestId('start-version-stack')).toHaveTextContent('React + Vite · FastAPI · SQLAlchemy (changed)')
-    // A stack and a preset can't both be sent: the preset select is gone.
+    // FR-129: presets are retired, so the dialog has no preset select.
     expect(within(dialog).queryByLabelText('Tech stack preset')).not.toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Start development' }))
 

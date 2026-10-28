@@ -64,22 +64,32 @@ public sealed class Fr93CommandTests : IDisposable
         var post = Assert.Single(_cli.Requests);
         Assert.Equal((HttpMethod.Post, $"/api/projects/{Samples.ProjectId}/versions"), (post.Method, post.Uri.AbsolutePath));
         AssertJson("""{"version":"1.3.0","request":"# 1.3.0\n\nAdd tags to todos.\n"}""", post.Body);
-        Assert.Contains("Started version 1.3.0 (from v1.2.0): phase refinement, checkpoint 1, preset none.", run.Out, StringComparison.Ordinal);
+        Assert.Contains("Started version 1.3.0 (from v1.2.0): phase refinement, checkpoint 1.", run.Out, StringComparison.Ordinal);
         Assert.Empty(run.Error);
     }
 
     [Fact]
-    public async Task FR93_version_start_takes_inline_text_and_a_preset_or_none()
+    public async Task FR93_version_start_takes_inline_text()
     {
-        _cli.Respond(_ => FakeHttpHandler.Json(HttpStatusCode.Created, Started("nextjs-supabase")));
+        _cli.Respond(_ => FakeHttpHandler.Json(HttpStatusCode.Created, Started()));
 
-        var withPreset = await _cli.RunAsync("version", "start", Samples.ProjectId, "v1.3.0", "--request", "Add tags", "--preset", "nextjs-supabase");
-        var withoutPreset = await _cli.RunAsync("version", "start", Samples.ProjectId, "1.3.0", "-r", "Add tags", "--preset", "none");
+        var run = await _cli.RunAsync("version", "start", Samples.ProjectId, "v1.3.0", "--request", "Add tags");
 
-        Assert.Equal((ExitCodes.Success, ExitCodes.Success), (withPreset.ExitCode, withoutPreset.ExitCode));
-        AssertJson("""{"version":"v1.3.0","request":"Add tags","presetId":"nextjs-supabase"}""", _cli.Requests[0].Body);
-        AssertJson("""{"version":"1.3.0","request":"Add tags","presetId":null}""", _cli.Requests[1].Body);
-        Assert.Contains("preset Next.js + Supabase 1.0.0", withPreset.Out, StringComparison.Ordinal);
+        Assert.Equal(ExitCodes.Success, run.ExitCode);
+        AssertJson("""{"version":"v1.3.0","request":"Add tags"}""", Assert.Single(_cli.Requests).Body);
+    }
+
+    [Theory]
+    [InlineData("nextjs-supabase")]
+    [InlineData("none")]
+    public async Task FR156_FR129_version_start_with_preset_exits_2_saying_presets_were_removed_and_sends_nothing(string preset)
+    {
+        var run = await _cli.RunAsync("version", "start", Samples.ProjectId, "1.3.0", "-r", "Add tags", "--preset", preset);
+
+        Assert.Equal(ExitCodes.Usage, run.ExitCode);
+        Assert.Equal(2, run.ExitCode);
+        Assert.Contains("presets were removed in v4; use --frontend", run.Error, StringComparison.Ordinal);
+        Assert.Empty(_cli.Requests);
     }
 
     [Fact]
@@ -165,7 +175,6 @@ public sealed class Fr93CommandTests : IDisposable
 
     [Theory]
     [InlineData(HttpStatusCode.BadRequest, "VALIDATION", ExitCodes.Error)]
-    [InlineData(HttpStatusCode.BadRequest, "PRESET_NOT_FOUND", ExitCodes.Error)]
     [InlineData(HttpStatusCode.Forbidden, "FORBIDDEN", ExitCodes.Auth)]
     [InlineData(HttpStatusCode.BadGateway, "UPSTREAM_ERROR", ExitCodes.Error)]
     public async Task FR93_other_errors_keep_the_v1_mapping(HttpStatusCode status, string errorCode, int expected)
@@ -191,7 +200,7 @@ public sealed class Fr93CommandTests : IDisposable
         Assert.StartsWith("VERSION", lines[0], StringComparison.Ordinal);
         Assert.Contains("1.3.0", lines[1], StringComparison.Ordinal);
         Assert.Contains("in_development", lines[1], StringComparison.Ordinal);
-        Assert.Contains("Next.js + Supabase 1.0.0", lines[1], StringComparison.Ordinal);
+        Assert.Contains("Next.js + Supabase@1.0.0 (retired, migrated)", lines[1], StringComparison.Ordinal);
         Assert.Contains("v1.2.0", lines[2], StringComparison.Ordinal);
         Assert.Contains("released", lines[2], StringComparison.Ordinal);
     }
@@ -266,7 +275,7 @@ public sealed class Fr93CommandTests : IDisposable
         Assert.Matches(@"Released:\s+1\.2\.0", run.Out);
         Assert.Matches(@"In development:\s+1\.3\.0 \(checkpoint 1\)", run.Out);
         Assert.Matches(@"Checkpoint:\s+1", run.Out);
-        Assert.Matches(@"Preset:\s+Next\.js \+ Supabase 1\.0\.0", run.Out);
+        Assert.Matches(@"Preset:\s+Next\.js \+ Supabase@1\.0\.0 \(retired, migrated\)", run.Out);
         Assert.Matches(@"Latest deployment:\s+production 1\.2\.0 ready https://todo\.vercel\.app", run.Out);
     }
 
@@ -297,7 +306,7 @@ public sealed class Fr93CommandTests : IDisposable
 
         Assert.Contains("TAG_EXISTS", root.Out, StringComparison.Ordinal);
         Assert.Contains("--request", start.Out, StringComparison.Ordinal);
-        Assert.Contains("--preset", start.Out, StringComparison.Ordinal);
+        Assert.DoesNotContain("--preset", start.Out, StringComparison.Ordinal); // FR-156: hidden, only kept to explain its removal
         Assert.Contains("@path", start.Out, StringComparison.Ordinal);
     }
 }

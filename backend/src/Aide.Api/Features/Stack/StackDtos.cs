@@ -147,11 +147,12 @@ public sealed record StackReasonDto(string Rule, string Text);
 
 /// <summary>
 /// The normalised composition (§4.18) returned by <c>POST /api/stack/validate</c>: None is <c>null</c>;
-/// <c>originModel</c> is <c>null</c> without a frontend (API only).
+/// <c>originModel</c> is <c>null</c> without a frontend (API only). <c>catalogHash</c> is <c>null</c> for a composition
+/// written by the FR-129 preset migration until it is re-pinned.
 /// </summary>
 public sealed record StackCompositionDto(
     string CatalogVersion,
-    string CatalogHash,
+    string? CatalogHash,
     StackComponentDto? Frontend,
     StackComponentDto? Backend,
     StackDataDto? Data,

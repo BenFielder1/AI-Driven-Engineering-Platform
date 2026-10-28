@@ -9,7 +9,6 @@ import { resetVercelDb } from '../mocks/handlers/deployments'
 import { resetGitHubDb } from '../mocks/handlers/github'
 import { resetLlmDb } from '../mocks/handlers/llm'
 import { resetNotificationsDb } from '../mocks/handlers/notifications'
-import { resetPresetCatalog } from '../mocks/handlers/preset-catalog'
 import { resetProjectsDb } from '../mocks/handlers/projects'
 import { resetStackDb } from '../mocks/handlers/stack'
 import { server } from '../mocks/server'
@@ -77,7 +76,6 @@ afterEach(() => {
   resetLlmDb()
   resetVercelDb()
   resetGitHubDb()
-  resetPresetCatalog()
   resetStackDb()
   localStorage.clear()
   sessionStorage.clear()

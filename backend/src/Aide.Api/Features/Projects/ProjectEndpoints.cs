@@ -30,8 +30,6 @@ namespace Aide.Api.Features.Projects;
 /// </summary>
 public static partial class ProjectEndpoints
 {
-    /// <summary>FR-74, §7.2: the projects-list <c>preset</c> filter value for "no preset".</summary>
-    public const string NoPresetFilter = "none";
 
     public static IEndpointRouteBuilder MapProjectEndpoints(this IEndpointRouteBuilder app)
     {
@@ -42,19 +40,19 @@ public static partial class ProjectEndpoints
 
         group.MapGet("/", ListProjects)
             .WithName("ListProjects")
-            .WithSummary("The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development, preset (FR-74: the current version's preset id, or none for projects without a preset) and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and the preset chip.")
+            .WithSummary("The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and, as history, the retired preset a migrated version was pinned to (FR-129).")
             .Produces<PagedResult<ProjectSummaryDto>>()
             .ProducesValidationProblem();
 
         group.MapGet("/kpis", GetProjectKpis)
             .WithName("GetProjectKpis")
-            .WithSummary("§7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion, preset and pack filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released).")
+            .WithSummary("§7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion and pack filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released).")
             .Produces<ProjectKpisDto>()
             .ProducesValidationProblem();
 
         group.MapPost("/", CreateProject)
             .WithName("CreateProject")
-            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. stack (FR-114–FR-117, optional, instead of presetId: both is 400 VALIDATION) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE.")
+            .WithSummary("Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE.")
             .Produces<ProjectDto>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -65,7 +63,7 @@ public static partial class ProjectEndpoints
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithRetryAfterOn429()
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), PRESET_NOT_FOUND, STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH or LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller)"),
+                (StatusCodes.Status400BadRequest, "VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH or LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller)"),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) or CREDENTIAL_NOT_OWNER (deployment: another user's Vercel connection; llm: another user's LLM connection)"),
                 (StatusCodes.Status404NotFound, "NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it; deployment: unknown Vercel connection or project; llm: unknown LLM connection)"),
                 (StatusCodes.Status409Conflict, "GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists); deployment: VERCEL_GIT_NOT_CONNECTED (extension installUrl) or VERCEL_PLAN_LIMIT"),
@@ -107,7 +105,7 @@ public static partial class ProjectEndpoints
         ICurrentUser currentUser,
         SystemRoleLookup roles,
         AideDbContext db,
-        Infrastructure.Presets.IPresetCatalog presets,
+        Infrastructure.Stack.IStackCatalog catalog,
         CancellationToken cancellationToken,
         [Range(1, int.MaxValue)] int page = 1,
         [Range(1, ProjectLimits.MaxPageLimit)] int limit = 20,
@@ -115,13 +113,12 @@ public static partial class ProjectEndpoints
         [WireEnum(typeof(Phase))] string? phase = null,
         [WireEnum(typeof(ProjectStatus))] string? status = null,
         bool? hasDevelopmentVersion = null,
-        [MaxLength(Domain.Presets.PresetRules.IdMaxLength)] string? preset = null,
         [MaxLength(ProjectLimits.PackMaxLength)] string? pack = null,
         [WireEnum(typeof(ProjectSortBy))] string sortBy = "updated",
         [WireEnum(typeof(SortOrder))] string sortOrder = "desc")
     {
         var userId = currentUser.RequiredUserId;
-        var query = await FilteredAsync(db, roles, userId, search, phase, status, hasDevelopmentVersion, preset, pack, cancellationToken);
+        var query = await FilteredAsync(db, roles, userId, search, phase, status, hasDevelopmentVersion, pack, cancellationToken);
 
         var total = await query.CountAsync(cancellationToken);
         var skip = (long)(page - 1) * limit;
@@ -168,7 +165,7 @@ public static partial class ProjectEndpoints
             .ToListAsync(cancellationToken);
         var items = rows.Select(r =>
         {
-            var pinned = Presets.PresetService.Describe(presets, r.Preset?.PresetId, r.Preset?.PresetVersion);
+            var pinned = Stack.RetiredPresets.Describe(catalog, r.Preset?.PresetId, r.Preset?.PresetVersion);
             return new ProjectSummaryDto(
                 r.Id,
                 r.Name,
@@ -199,10 +196,9 @@ public static partial class ProjectEndpoints
         [WireEnum(typeof(Phase))] string? phase = null,
         [WireEnum(typeof(ProjectStatus))] string? status = null,
         bool? hasDevelopmentVersion = null,
-        [MaxLength(Domain.Presets.PresetRules.IdMaxLength)] string? preset = null,
         [MaxLength(ProjectLimits.PackMaxLength)] string? pack = null)
     {
-        var query = await FilteredAsync(db, roles, currentUser.RequiredUserId, search, phase, status, hasDevelopmentVersion, preset, pack, cancellationToken);
+        var query = await FilteredAsync(db, roles, currentUser.RequiredUserId, search, phase, status, hasDevelopmentVersion, pack, cancellationToken);
 
         // One aggregate query over the filtered projects; the gate count is a correlated subquery per project row in SQL.
         var counts = await query
@@ -233,7 +229,6 @@ public static partial class ProjectEndpoints
         string? phase,
         string? status,
         bool? hasDevelopmentVersion,
-        string? preset,
         string? pack,
         CancellationToken cancellationToken)
     {
@@ -269,20 +264,6 @@ public static partial class ProjectEndpoints
             query = hasDevelopment ? query.Where(p => p.DevelopmentVersion != null) : query.Where(p => p.DevelopmentVersion == null);
         }
 
-        // FR-74, §7.2: the preset of the current release version (in development, else the latest).
-        if (!string.IsNullOrWhiteSpace(preset))
-        {
-            // "none": projects whose current version has no preset.
-            var wanted = preset.Trim() == NoPresetFilter ? null : preset.Trim();
-            query = query.Where(p => db.ReleaseVersions
-                .Where(v => v.ProjectId == p.Id)
-                .OrderByDescending(v => v.Id == p.CurrentReleaseVersionId)
-                .ThenByDescending(v => v.CreatedAt)
-                .ThenByDescending(v => v.Id)
-                .Select(v => v.PresetId)
-                .FirstOrDefault() == wanted);
-        }
-
         // FR-117, §5: projects whose current version's composition uses the pack (the denormalised, GIN-indexed stack_packs).
         if (!string.IsNullOrWhiteSpace(pack))
         {
@@ -297,7 +278,7 @@ public static partial class ProjectEndpoints
         CreateProjectRequest request,
         ICurrentUser currentUser,
         ProjectCreator creator,
-        Presets.PresetService presets,
+        Stack.RetiredPresets presets,
         Infrastructure.GitHub.IGitHubAppStore apps,
         AideDbContext db,
         Deployments.DeploymentAccess deploymentAccess,
@@ -375,7 +356,7 @@ public static partial class ProjectEndpoints
         Guid id,
         IProjectAccess access,
         AideDbContext db,
-        Presets.PresetService presets,
+        Stack.RetiredPresets presets,
         CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
@@ -396,7 +377,7 @@ public static partial class ProjectEndpoints
         IProjectAccess access,
         ICurrentUser currentUser,
         AideDbContext db,
-        Presets.PresetService presets,
+        Stack.RetiredPresets presets,
         TimeProvider time,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)

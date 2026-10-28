@@ -103,7 +103,8 @@ public sealed class ExecutionRunReader(AideDbContext db)
                             [.. s.DeclaredFiles.Select(f => new DeclaredFileDto(f.Path, f.Action, PathRules.IsProtected(f.Path)))],
                             [.. (s.FileManifest ?? []).Select(f => new FileManifestEntryDto(f.Path, f.Action, f.ContentHash))],
                             s.CommitSha,
-                            git is null ? null : ExecutionQueries.CommitUrl(git.Provider, git.RepoUrl, s.CommitSha))),
+                            git is null ? null : ExecutionQueries.CommitUrl(git.Provider, git.RepoUrl, s.CommitSha),
+                            s.LegacyAgentKey)),
                     ],
                     owners[plan.Id]?.Id);
             }),

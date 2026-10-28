@@ -65,6 +65,10 @@ public sealed class DevSeederTests(AideApiFactory factory)
             var release = await db.Releases.SingleAsync(r => r.ProjectId == project.Id, Ct);
             Assert.Equal((ReleaseStatus.Succeeded, "v0.1.0", version.Id), (release.Status, release.Tag, release.ReleaseVersionId));
 
+            // §9 (v4): the released demo shows a composition.
+            Assert.Equal("be-aspnet", Domain.Stack.StackCompositionJson.Deserialize(version.StackComposition)!.Backend!.Pack);
+            Assert.Equal(["fe-react-vite", "be-aspnet", "data-efcore-postgres", "vcs-github"], project.StackPacks.Take(4));
+
             // The tag exists in the Local repository, so starting 0.1.0 again would be TAG_EXISTS and 0.2.0 is possible.
             var git = app.Services.GetRequiredService<IWorkingCopies>();
             var tag = await git.TagAsync(project.Id, "v0.1.0", Ct);
@@ -177,7 +181,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task S9_A_second_demo_project_on_nextjs_frontend_is_seeded_in_planning_once_and_the_Fake_plans_it()
+    public async Task S9_FR129_The_second_demo_is_seeded_migrated_from_nextjs_frontend_in_planning_once_and_the_Fake_plans_it()
     {
         await using var app = await AppAsync();
         await SeedAsync(app);
@@ -190,13 +194,15 @@ public sealed class DevSeederTests(AideApiFactory factory)
             projectId = project.Id;
             Assert.Equal((Phase.Planning, 3), (project.CurrentPhase, project.Checkpoint));
             var version = await db.ReleaseVersions.SingleAsync(v => v.ProjectId == project.Id, Ct);
-            Assert.Equal((DevSeeder.DemoPresetId, ReleaseVersionStatus.InDevelopment), (version.PresetId, version.Status));
+            Assert.Equal((DevSeeder.DemoPresetId, DevSeeder.DemoPresetVersion, ReleaseVersionStatus.InDevelopment), (version.PresetId, version.PresetVersion, version.Status));
+            var composition = Domain.Stack.StackCompositionJson.Deserialize(version.StackComposition)!;
+            Assert.Equal(("fe-nextjs", ".", (Domain.Stack.StackComponent?)null, (Domain.Stack.StackDataLayer?)null), (composition.Frontend!.Pack, composition.Frontend.Path, composition.Backend, composition.Data));
             Assert.Equal(LlmProvider.Fake, (await db.ProjectLlmSettings.SingleAsync(s => s.ProjectId == project.Id, Ct)).Provider);
             var artifacts = await db.Artifacts.Where(a => a.ProjectId == project.Id).OrderBy(a => a.Type).ToListAsync(Ct);
             Assert.All(artifacts, a => Assert.Equal(Domain.Artifacts.ArtifactStatus.Locked, a.Status));
             Assert.Contains("## Routes & Rendering Strategy", artifacts.Single(a => a.Type == Domain.Artifacts.ArtifactType.TechnicalSpecification).Content, StringComparison.Ordinal);
             Assert.Single(await db.Events.Where(e => e.Type == EventTypes.DemoPresetProjectSeeded).ToListAsync(Ct));
-            Assert.Equal(2, await db.Projects.CountAsync(Ct));
+            Assert.Equal(3, await db.Projects.CountAsync(Ct));
         });
 
         var jobs = await Support.AgentJobs.RunQueuedAsync(app, projectId);
@@ -205,8 +211,35 @@ public sealed class DevSeederTests(AideApiFactory factory)
         await WithDbAsync(app, async db =>
         {
             var plan = await db.Artifacts.SingleAsync(a => a.ProjectId == projectId && a.Type == Domain.Artifacts.ArtifactType.ImplementationPlan, Ct);
-            Assert.Contains("**Agent:** project-scaffolder", plan.Content, StringComparison.Ordinal);
+            Assert.Contains("**Agent:** scaffolder", plan.Content, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public async Task S9_A_third_demo_on_fe_vue_and_Supabase_BaaS_is_seeded_in_specification_once_and_the_Fake_writes_its_spec()
+    {
+        await using var app = await AppAsync();
+        await SeedAsync(app);
+        await SeedAsync(app);
+
+        var projectId = Guid.Empty;
+        await WithDbAsync(app, async db =>
+        {
+            var project = await db.Projects.SingleAsync(p => p.Name == DevSeeder.DemoBaasProjectName, Ct);
+            projectId = project.Id;
+            Assert.Equal((Phase.Specification, 2), (project.CurrentPhase, project.Checkpoint));
+            Assert.Contains("fe-vue", project.StackPacks);
+            Assert.Contains("data-supabase", project.StackPacks);
+            var version = await db.ReleaseVersions.SingleAsync(v => v.ProjectId == project.Id, Ct);
+            Assert.Equal("baas", Domain.Stack.StackCompositionJson.Deserialize(version.StackComposition)!.Data!.Mode);
+            Assert.Null(version.PresetId);
+            Assert.Equal(Domain.Artifacts.ArtifactStatus.Locked, (await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id, Ct)).Status);
+            Assert.Single(await db.Events.Where(e => e.Type == EventTypes.DemoStackProjectSeeded).ToListAsync(Ct));
+        });
+
+        var jobs = await Support.AgentJobs.RunQueuedAsync(app, projectId);
+
+        Assert.Equal((Domain.Jobs.JobTypes.SpecGeneration, Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
     }
 
     [Fact]
@@ -255,7 +288,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
         await using var app = await AppAsync();
         await SeedAsync(app);
 
-        await WithDbAsync(app, async db => Assert.Equal(2, await db.Projects.ExecuteDeleteAsync(Ct)));
+        await WithDbAsync(app, async db => Assert.Equal(3, await db.Projects.ExecuteDeleteAsync(Ct)));
         await SeedAsync(app);
 
         await WithDbAsync(app, async db =>
@@ -263,6 +296,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
             Assert.False(await db.Projects.AnyAsync(Ct));
             Assert.Equal(1, await db.Events.CountAsync(e => e.Type == EventTypes.DemoProjectSeeded, Ct));
             Assert.Equal(1, await db.Events.CountAsync(e => e.Type == EventTypes.DemoPresetProjectSeeded, Ct));
+            Assert.Equal(1, await db.Events.CountAsync(e => e.Type == EventTypes.DemoStackProjectSeeded, Ct));
         });
     }
 
@@ -310,7 +344,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
         await WithDbAsync(app, async db =>
         {
             Assert.True(await db.Users.AnyAsync(u => u.Email == DevSeeder.AdminEmail, Ct));
-            Assert.Equal([DevSeeder.DemoPresetProjectName, DevSeeder.DemoProjectName], await db.Projects.OrderBy(p => p.Name).Select(p => p.Name).ToListAsync(Ct));
+            Assert.Equal([DevSeeder.DemoPresetProjectName, DevSeeder.DemoProjectName, DevSeeder.DemoBaasProjectName], await db.Projects.OrderBy(p => p.Name).Select(p => p.Name).ToListAsync(Ct));
         });
     }
 

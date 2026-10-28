@@ -148,7 +148,6 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
         await Problems.AssertAsync(await StartAsync(fixture.Owner.Client, id, "1.1.0"), HttpStatusCode.Conflict, ErrorCodes.VersionNotGreater);
         await Problems.AssertAsync(await StartAsync(fixture.Owner.Client, id, "01.2.0"), HttpStatusCode.BadRequest, ErrorCodes.VersionInvalid);
         await Problems.AssertAsync(await StartAsync(fixture.Owner.Client, id, "1.2.0+build"), HttpStatusCode.BadRequest, ErrorCodes.VersionInvalid);
-        await Problems.AssertAsync(await StartAsync(fixture.Owner.Client, id, "1.2.0", presetId: "no-such-preset"), HttpStatusCode.BadRequest, ErrorCodes.PresetNotFound);
         await Problems.AssertAsync(await StartAsync(fixture.Owner.Client, id, "1.2.0", request: "   "), HttpStatusCode.BadRequest, ErrorCodes.Validation);
         await Problems.AssertAsync(await StartAsync(fixture.Contributor.Client, id, "1.2.0"), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
         await Problems.AssertAsync(await StartAsync(fixture.Outsider.Client, id, "1.2.0"), HttpStatusCode.NotFound, ErrorCodes.NotFound);
@@ -327,31 +326,27 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
         Assert.Equal(1, notInDevelopment.Total);
     }
 
-    // ---------- FR-74: the preset of a new version ----------
+    // ---------- FR-129: a migrated version's retired preset ----------
 
     [Fact]
-    public async Task FR74_A_new_version_keeps_the_base_versions_preset_unless_another_or_none_is_sent()
+    public async Task FR129_A_new_version_of_a_migrated_project_keeps_its_composition_and_no_preset_is_pinned()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory, initialVersion: "1.1.0");
         var id = fixture.Project.Id;
-        await ProjectApi.ReadAsync<ProjectDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/preset", new { presetId = TestPresetId.Id }));
+        await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.Where(v => v.ProjectId == id).ExecuteUpdateAsync(
+            s => s.SetProperty(v => v.PresetId, "nextjs-frontend").SetProperty(v => v.PresetVersion, "1.0.0"), Ct));
         await MarkReleasedAsync(id);
 
-        // Omitted: the base version's preset, re-pinned at its shipped version and hash.
-        var kept = await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(
-            await fixture.Owner.Client.PostAsJsonAsync($"/api/projects/{id}/versions", new { version = "1.2.0", request = "More" }, Ct), HttpStatusCode.Created);
-        Assert.Equal((TestPresetId.Id, TestPresetId.Version, "Test stack"), (kept.ReleaseVersion.PresetId, kept.ReleaseVersion.PresetVersion, kept.ReleaseVersion.PresetName));
-        var started = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.VersionStarted)).Payload);
-        Assert.Equal((TestPresetId.Id, TestPresetId.Version), (started.GetProperty("presetId").GetString(), started.GetProperty("presetVersion").GetString()));
-        var hashes = await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.Where(v => v.ProjectId == id).Select(v => v.PresetHash).Distinct().ToListAsync(Ct));
-        Assert.Matches("^[0-9a-f]{64}$", Assert.Single(hashes));
+        // A presetId from an old client is ignored (D-V4-4: the field was removed).
+        var started = await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(
+            await fixture.Owner.Client.PostAsJsonAsync($"/api/projects/{id}/versions", new { version = "1.2.0", request = "More", presetId = "nextjs-supabase" }, Ct), HttpStatusCode.Created);
 
-        // Explicit null: no preset for the next version.
-        using var other = await ProjectApi.FixtureAsync(factory, initialVersion: "1.1.0");
-        await ProjectApi.ReadAsync<ProjectDto>(await ProjectApi.PatchAsync(other.Owner.Client, $"{other.Path}/preset", new { presetId = TestPresetId.Id }));
-        await MarkReleasedAsync(other.Project.Id);
-        var none = await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(await StartAsync(other.Owner.Client, other.Project.Id, "1.2.0", presetId: null), HttpStatusCode.Created);
-        Assert.Equal(((string?)null, (string?)null, (string?)null), (none.ReleaseVersion.PresetId, none.ReleaseVersion.PresetVersion, none.ReleaseVersion.PresetName));
+        Assert.Equal(((string?)null, (string?)null, (string?)null), (started.ReleaseVersion.PresetId, started.ReleaseVersion.PresetVersion, started.ReleaseVersion.PresetName));
+        var payload = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.VersionStarted)).Payload);
+        Assert.False(payload.TryGetProperty("presetId", out _));
+        var versions = await ProjectApi.ReadAsync<List<ReleaseVersionDto>>(await fixture.Viewer.Client.GetAsync($"/api/projects/{id}/versions", Ct), HttpStatusCode.OK);
+        var released = versions.Single(v => v.Version == "1.1.0");
+        Assert.Equal(("nextjs-frontend", "1.0.0", "Next.js frontend"), (released.PresetId, released.PresetVersion, released.PresetName));
     }
 
     // ---------- helpers ----------

@@ -12,9 +12,9 @@ internal static class ProjectMapping
 {
     /// <param name="p">The project.</param>
     /// <param name="myRole">The caller's project role.</param>
-    /// <param name="preset">The preset pinned on the current release version.</param>
+    /// <param name="preset">The retired preset the current release version was migrated from (history, FR-129).</param>
     /// <param name="deploymentsEnabled">FR-88: the project has deployment settings.</param>
-    public static ProjectDto ToDto(Project p, ProjectRole? myRole, Presets.ProjectPresetRef preset, bool deploymentsEnabled) => new(
+    public static ProjectDto ToDto(Project p, ProjectRole? myRole, Stack.ProjectPresetRef preset, bool deploymentsEnabled) => new(
         p.Id,
         p.Name,
         p.Slug,

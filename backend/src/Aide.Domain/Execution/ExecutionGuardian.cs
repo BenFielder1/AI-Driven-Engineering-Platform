@@ -1,5 +1,4 @@
 using Aide.Domain.Common;
-using Aide.Domain.Presets;
 using Aide.Domain.Stack;
 
 namespace Aide.Domain.Execution;
@@ -8,10 +7,9 @@ namespace Aide.Domain.Execution;
 public sealed record ProducedFile(string Path, string Content);
 
 /// <summary>
-/// Everything the Guardian checks a step's output against. With a <see cref="Preset"/> (§4.11) its protected paths join
-/// v1's; <see cref="ExistsOnBase"/> answers "does this file exist on the version's base commit" for its
-/// <c>existingOnBase</c> entries (unknown: <c>false</c>). FR-125: with a composition (<see cref="Stack"/>) its packs' protected
-/// paths join v1's the same way, and migrations that exist on the base commit are immutable for every data pack.
+/// Everything the Guardian checks a step's output against. FR-125: with a composition (<see cref="Stack"/>) its packs'
+/// protected paths join v1's; <see cref="ExistsOnBase"/> answers "does this file exist on the version's base commit" for
+/// their <c>existingOnBase</c> entries (unknown: <c>false</c>), so migrations on the base commit are immutable for every data pack.
 /// </summary>
 public sealed record GuardianInput(
     int RequestedStep,
@@ -19,7 +17,6 @@ public sealed record GuardianInput(
     IReadOnlyList<StepState> PlanSteps,
     IReadOnlyList<ProducedFile> Files,
     int MaxFilesPerStep,
-    Preset? Preset = null,
     Func<string, bool>? ExistsOnBase = null,
     StackResolution? Stack = null);
 
@@ -38,8 +35,8 @@ public sealed record GuardianResult(IReadOnlyList<GuardianViolation> Violations)
 
 /// <summary>
 /// The Execution Guardian (§4.6, FR-32, D18): runs all six checks and reports every violation.
-/// Paths are normalised and compared exactly. FR-76, §4.11: a preset adds its protected paths to scope creep; FR-125: so
-/// does a composition (the union of v1's and the packs' protected paths, with the "declared in this step" exception).
+/// Paths are normalised and compared exactly. FR-125: a composition adds its packs' protected paths to scope creep (the
+/// union of v1's and the packs' protected paths, with the "declared in this step" exception).
 /// </summary>
 public static class ExecutionGuardian
 {
@@ -159,14 +156,6 @@ public static class ExecutionGuardian
                 continue;
             }
 
-            // §4.11: a preset's immutable files (existingOnBase, e.g. committed migrations) can't be written even when declared.
-            if (input.Preset is { } immutablePreset && input.ExistsOnBase is { } existsOnBase
-                && immutablePreset.ProtectedPaths.FirstOrDefault(p => p.ExistingOnBase && p.Protects(path, existsOnBase)) is { } immutable)
-            {
-                yield return Error(GuardianCheck.ScopeCreep, ErrorCodes.Guardian.ProtectedPath, $"'{path}' already exists on the version's base commit and is immutable ({immutable.Reason ?? immutable.Glob.Pattern}); write a new file instead.", path);
-                continue;
-            }
-
             // FR-125: with a composition, every data pack's migrations on the base commit are immutable, declared or not.
             if (input.Stack is { } immutableStack && input.ExistsOnBase is { } existsOnBaseStack
                 && immutableStack.ProtectedPaths.FirstOrDefault(p => p.ExistingOnBase && p.Protects(path, existsOnBaseStack)) is { } immutableMigration)
@@ -188,11 +177,6 @@ public static class ExecutionGuardian
             if (PathRules.IsProtected(path))
             {
                 yield return Error(GuardianCheck.ScopeCreep, ErrorCodes.Guardian.ProtectedPath, $"'{path}' is a protected path and isn't declared for this step.", path);
-            }
-            else if (input.Preset is { } preset && preset.IsProtected(path, input.ExistsOnBase ?? (_ => false)))
-            {
-                // §4.11: the preset's protected paths, with the same "unless declared in this step" exception.
-                yield return Error(GuardianCheck.ScopeCreep, ErrorCodes.Guardian.ProtectedPath, $"'{path}' is protected by the {preset.Id} preset and isn't declared for this step.", path);
             }
             else if (input.Stack is { } stack && stack.ProtectedPaths.FirstOrDefault(p => p.Protects(path, input.ExistsOnBase ?? (_ => false))) is { } packProtected)
             {

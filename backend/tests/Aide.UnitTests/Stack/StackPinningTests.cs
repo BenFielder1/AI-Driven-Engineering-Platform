@@ -143,7 +143,7 @@ public sealed class StackPinningTests
 
         Assert.NotNull(stored);
         Assert.Equal(json, StackCompositionJson.Serialize(stored));
-        Assert.Contains("\"catalogVersion\":\"1.0.0\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"catalogVersion\":\"1.1.0\"", json, StringComparison.Ordinal);
         Assert.Contains("\"frontend\":{\"pack\":\"fe-react-vite\",\"path\":\"frontend\"}", json, StringComparison.Ordinal);
         Assert.Equal(json, StackCompositionJson.Serialize(Valid(StackPinning.ToSelection(stored))));
 

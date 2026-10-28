@@ -264,7 +264,7 @@ public class StackResolverTests
         Assert.Single(resolution.SpecSectionTitles, t => t == "Environments & Configuration");
 
         var spec = "# Spec\n\n## Overview\n\nNothing else.\n";
-        var validation = SpecValidator.Validate(spec, new SpecValidationContext { PresetSections = resolution.SpecSectionTitles });
+        var validation = SpecValidator.Validate(spec, new SpecValidationContext { StackSections = resolution.SpecSectionTitles });
         Assert.Contains("API Contract & Error Codes", validation.MissingSections);
         Assert.Contains("Origin Model (CORS, Cookies, Auth)", validation.MissingSections);
         Assert.Equal(ErrorCodes.MissingSections, validation.Error?.Code);

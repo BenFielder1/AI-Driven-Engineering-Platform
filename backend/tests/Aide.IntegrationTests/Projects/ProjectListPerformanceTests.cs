@@ -119,7 +119,7 @@ public sealed class ProjectListPerformanceTests(AideApiFactory factory)
         Assert.InRange(manyKpiQueries, 1, 2);
 
         // §8: p95 over sequential requests, for the default page (20) and the largest (100), sorted and filtered as the list page does.
-        foreach (var path in new[] { "/api/projects", "/api/projects?limit=100", "/api/projects?sortBy=name&sortOrder=asc&hasDevelopmentVersion=true", "/api/projects?preset=nextjs-supabase", "/api/projects/kpis" })
+        foreach (var path in new[] { "/api/projects", "/api/projects?limit=100", "/api/projects?sortBy=name&sortOrder=asc&hasDevelopmentVersion=true", "/api/projects?pack=fe-nextjs", "/api/projects/kpis" })
         {
             var samples = await Latency.SampleAsync(Samples, async () =>
                 Assert.Equal(HttpStatusCode.OK, (await many.Client.GetAsync(new Uri(path, UriKind.Relative), Ct)).StatusCode));

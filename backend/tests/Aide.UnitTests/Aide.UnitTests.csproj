@@ -19,9 +19,4 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Test-only preset fixtures (FR-74, FR-76), embedded like the shipped presets but under their own prefix. -->
-    <EmbeddedResource Include="..\Fixtures\Presets\**\*" LogicalName="Aide.Tests.Presets/%(RecursiveDir)%(Filename)%(Extension)" />
-  </ItemGroup>
-
 </Project>

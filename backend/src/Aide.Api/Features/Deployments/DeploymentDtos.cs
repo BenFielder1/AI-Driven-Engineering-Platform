@@ -65,7 +65,7 @@ public sealed record DeploymentBindingDto(
 public sealed record VercelProjectDto(string Id, string Name, string? Url, string? ProductionUrl);
 
 /// <summary>
-/// An environment variable the project's preset requires (FR-88, §4.11 preset env): its key, targets, whether it is
+/// An environment variable the project's stack requires (FR-88, §4.22: the resolved composition's env): its key, targets, whether it is
 /// sensitive, what it is for, and whether the project has it (<c>present</c>; missing ones are flagged).
 /// </summary>
 public sealed record RequiredEnvVarDto(
@@ -77,11 +77,11 @@ public sealed record RequiredEnvVarDto(
 
 /// <summary>
 /// Settings → Deployment (FR-88), for any member. <c>provider</c> is <c>vercel</c> (or <c>fake</c> in test environments)
-/// once deployment is set, else <c>null</c>. <c>supported</c>: the preset supports Vercel, or an Owner opted in by setting
+/// once deployment is set, else <c>null</c>. <c>supported</c>: the stack deploys to Vercel, or an Owner opted in by setting
 /// a provider. <c>binding</c> is the bound connection ("connected by &lt;name&gt;"; <c>null</c>: none) and <c>canBind</c>
 /// whether the caller may bind one of their own (Owners). <c>vercelProject</c> is the linked Vercel project (<c>null</c>:
 /// none yet). <c>rootDirectory</c> and <c>framework</c> are what the Vercel project builds. <c>requiredEnv</c> lists the
-/// preset's required env vars with <c>present</c>. <c>gitConnected</c> is whether Vercel's GitHub App can access the repo
+/// stack's required env vars with <c>present</c>. <c>gitConnected</c> is whether Vercel's GitHub App can access the repo
 /// (<c>null</c>: not checked), with Vercel's <c>installUrl</c> when it can't.
 /// </summary>
 public sealed record DeploymentSettingsDto(

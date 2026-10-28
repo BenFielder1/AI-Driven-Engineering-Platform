@@ -29,7 +29,7 @@ import { EnvVarsSection } from './env-vars-section'
 import { VercelGitAlert } from './vercel-git-alert'
 import { checkRootDirectory, checkVercelProjectName, suggestVercelProjectName } from './vercel-project-rules'
 
-/** FR-88: the preset's required env vars, each flagged present or missing. */
+/** FR-88, §4.22: the stack's required env vars, each flagged present or missing. */
 function RequiredEnvList({ required }: { required: readonly RequiredEnvVar[] }) {
   if (required.length === 0) {
     return null
@@ -38,7 +38,7 @@ function RequiredEnvList({ required }: { required: readonly RequiredEnvVar[] }) 
   return (
     <section aria-labelledby="required-env-title" className="flex flex-col gap-2">
       <h3 id="required-env-title" className="text-lg">
-        Required by the preset
+        Required by the stack
       </h3>
       {missing > 0 && (
         <Alert tone="warning" title={`${String(missing)} required variable${missing === 1 ? ' is' : 's are'} missing`}>
@@ -257,8 +257,8 @@ function DeploymentSetupForm({ project, settings }: { project: Project; settings
       {!enabled && (
         <p className="text-sm text-muted-foreground">
           {settings.supported
-            ? "This project's preset deploys to Vercel. Bind one of your Vercel connections and create or link the Vercel project."
-            : "This project's preset doesn't deploy anywhere by default. You can still opt in to Vercel for a Next.js app."}
+            ? "This project's stack deploys to Vercel. Bind one of your Vercel connections and create or link the Vercel project."
+            : "This project's stack doesn't deploy to Vercel by default. You can still opt in to Vercel for a Next.js app."}
         </p>
       )}
       <ErrorSummary title="We couldn't save the deployment settings" errors={isSubmitted ? fieldErrorSummary(errors, setupIds) : []} />
@@ -415,7 +415,7 @@ function DeploymentSetupForm({ project, settings }: { project: Project; settings
 
 /**
  * Settings → Deployment (FR-88). Every member reads it: the provider, "Vercel · connected by <name>", the linked
- * project and the preset's required env vars (missing ones flagged). Owners set Vercel up (bind an own connection,
+ * project and the stack's required env vars (missing ones flagged). Owners set Vercel up (bind an own connection,
  * create or link the Vercel project) and edit the env vars. A Local Git project can't deploy.
  */
 export function DeploymentSettingsTab({ project, canEdit }: { project: Project; canEdit: boolean }) {

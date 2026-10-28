@@ -67,6 +67,9 @@ public static class EventTypes
     /// <summary>§9 seed marker: the dev seed created its preset demo project (<c>{projectId, presetId}</c>, project_id null).</summary>
     public const string DemoPresetProjectSeeded = "DEMO_PRESET_PROJECT_SEEDED";
 
+    /// <summary>§9 (v4) seed marker: the dev seed created its BaaS stack demo project (<c>{projectId, packs}</c>, project_id null).</summary>
+    public const string DemoStackProjectSeeded = "DEMO_STACK_PROJECT_SEEDED";
+
     /// <summary>
     /// DEP-V2 (§9) seed marker: the one-off upgrade of a v1-seeded demo project to released 0.1.0 ran
     /// (<c>{projectId, outcome}</c>, project_id null; <c>outcome</c> <c>released</c>, or why it was skipped).
@@ -188,13 +191,14 @@ public static class EventTypes
 
     /// <summary>
     /// FR-60: an Owner started a new release version: <c>{releaseVersionId, version, baseTag, baseCommitSha, branchName,
-    /// presetId, request}</c> (the request is truncated). The project is then in refinement at checkpoint 1.
+    /// stackPacks, catalogVersion, request}</c> (<c>presetId</c> in events before FR-129) (the request is truncated). The project is then in refinement at checkpoint 1.
     /// </summary>
     public const string VersionStarted = "VERSION_STARTED";
 
     /// <summary>
-    /// FR-74, FR-92: an Owner changed the preset of the version in development: <c>{releaseVersionId, version,
-    /// fromPresetId, fromPresetVersion, presetId, presetVersion, presetHash}</c> (ids <c>null</c> = no preset).
+    /// FR-74, FR-92 (history only): an Owner changed the preset of the version in development: <c>{releaseVersionId, version,
+    /// fromPresetId, fromPresetVersion, presetId, presetVersion, presetHash}</c> (ids <c>null</c> = no preset). FR-129: no
+    /// longer written (presets were retired); events recorded before the upgrade stay readable.
     /// </summary>
     public const string PresetChanged = "PRESET_CHANGED";
 

@@ -16,7 +16,7 @@ import {
   phaseLabels,
 } from '../projects/labels'
 import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
-import { presetRef } from '../presets/presets-api'
+import { legacyPresetLabel, specialistText } from '../stack/legacy-preset'
 import { RunStatusBadge } from './run-badges'
 import { describeRunError, formatPromptVersion, isUnfinished, runWarningText } from './run-format'
 import { useRun, type AgentRun } from './runs-api'
@@ -53,16 +53,14 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
           <RunStatusBadge status={run.status} />
         </Row>
         <Row term="Agent">{agentKindLabels[run.agent]}</Row>
-        {run.agentKey && <Row term="Specialist">{run.agentKey}</Row>}
+        {run.agentKey && <Row term="Specialist">{specialistText(run.agentKey, run.legacyAgentKey)}</Row>}
         <Row term="Phase">{phaseLabels[run.phase]}</Row>
         {run.checkpoint !== null ? (
           <Row term="Release version">{checkpointLabel(versionName, run.checkpoint)}</Row>
         ) : (
           versionName && <Row term="Release version">{versionName}</Row>
         )}
-        {run.presetId && (
-          <Row term="Preset">{presetRef(run.presetId, run.presetVersion)}</Row>
-        )}
+        {run.presetId && <Row term="Preset">{legacyPresetLabel(run.presetId, run.presetVersion)}</Row>}
         {run.stepId && (
           <Row term="Execution step">
             <code className="text-xs">{run.stepId}</code>

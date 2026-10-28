@@ -9,7 +9,6 @@ import { bindCredential, connectionsDb } from './connections'
 import { applyVercelSetup } from './deployments'
 import { githubDb } from './github'
 import { checkCreateLlm, isLlmProviderEnabled } from './llm'
-import { findPreset, presetNameOf } from './preset-catalog'
 import { problem } from './problem'
 import { packsOf, validateComposition } from './stack-catalog'
 
@@ -131,7 +130,8 @@ export interface StoredProject extends Omit<
 export interface StoredStack {
   composition?: Schemas['StackCompositionDto'] | null
   catalogVersion?: string
-  catalogHash?: string
+  /** `null`: a composition written by the FR-129 preset migration, not re-pinned yet. */
+  catalogHash?: string | null
   planLocked?: boolean
   baseHasCode?: boolean
   layersChanged?: string[]
@@ -169,6 +169,8 @@ export type StoredRefinementRound = Schemas['RefinementRoundDto'] & {
 export type StoredExecutionStep = Schemas['ExecutionStepDto'] & {
   planArtifactId: string
   agentKey?: string | null
+  /** FR-121, FR-129: the retired v2 preset agent the step was planned for (it ran as `agentKey`). */
+  legacyAgentKey?: string | null
 }
 
 /** A compliance report plus the v2 detail fields (FR-56) that the v1 DTO lacks. */
@@ -267,7 +269,8 @@ export function makeReleaseVersion(overrides: Partial<ReleaseVersion> & Pick<Rel
     checkpoints: { current: 1, max: 1 },
     presetId: null,
     presetVersion: null,
-    presetName: presetNameOf(overrides.presetId),
+    // FR-129: the retired preset's name is its id (no preset ships any more).
+    presetName: overrides.presetId ?? null,
     request: 'Track stock levels across warehouses.',
     startedBy: { id: null, name: 'Ada Owner', isSystem: false },
     createdAt: '2026-09-01T10:00:00Z',
@@ -387,10 +390,10 @@ export function roleOf(project: StoredProject, userId: string): ProjectRole | nu
   return project.members.find((m) => m.userId === userId)?.role ?? null
 }
 
-/** FR-74: the preset chip of a project: the current release version's pinned preset (all null: none). */
+/** FR-129: the retired preset the current release version was migrated from (history; all null: none). */
 function presetFields(p: StoredProject): Pick<Project, 'presetId' | 'presetName' | 'presetVersion'> {
   const v = currentVersionOf(p)
-  return { presetId: v?.presetId ?? null, presetName: presetNameOf(v?.presetId), presetVersion: v?.presetVersion ?? null }
+  return { presetId: v?.presetId ?? null, presetName: v?.presetId ?? null, presetVersion: v?.presetVersion ?? null }
 }
 
 export function projectDto(project: StoredProject, userId: string): Project {
@@ -737,20 +740,18 @@ function importVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[]
   ]
 }
 
-/** GET /projects and /projects/kpis: the caller's projects (all for Admins) matching search, phase, status, preset and dev version. */
+/** GET /projects and /projects/kpis: the caller's projects (all for Admins) matching search, phase, status, pack and dev version. */
 function listFiltered(user: { id: string; systemRole: string }, q: URLSearchParams) {
   const search = q.get('search')?.toLowerCase()
   const phase = q.get('phase')
   const status = q.get('status')
   const hasDevelopment = q.get('hasDevelopmentVersion')
-  const preset = q.get('preset')
   const pack = q.get('pack')
   return projectsDb.projects
     .filter((p) => user.systemRole === 'admin' || roleOf(p, user.id))
     .filter((p) => !search || p.name.toLowerCase().includes(search))
     .filter((p) => !phase || p.currentPhase === phase)
     .filter((p) => !status || p.status === status)
-    .filter((p) => !preset || (currentVersionOf(p)?.presetId ?? 'none') === preset)
     .filter((p) => !pack || p.stackPacks.includes(pack))
     .filter((p) => hasDevelopment === null || (developmentVersionOf(p) !== undefined) === (hasDevelopment === 'true'))
 }
@@ -839,10 +840,7 @@ export const projectHandlers = [
     if (versions instanceof Response) {
       return versions
     }
-    // FR-114–FR-117: a stack composition instead of a preset, validated (STACK_INCOMPATIBLE, VCS_MISMATCH, paths).
-    if (body.presetId && body.stack) {
-      return validation({ stack: ['Send a stack or a preset, not both.'] })
-    }
+    // FR-114–FR-117: the stack composition, validated (STACK_INCOMPATIBLE, VCS_MISMATCH, paths).
     let composition: Schemas['StackCompositionDto'] | null = null
     if (body.stack) {
       const repoVcs = mode === 'local' ? null : 'vcs-github'
@@ -856,17 +854,6 @@ export const projectHandlers = [
           : problem(400, 'STACK_INCOMPATIBLE', "These stack choices don't work together.", { violations: result.violations })
       }
       composition = result.composition
-    }
-    // FR-74: the preset is pinned on the version to develop.
-    const preset = body.presetId ? findPreset(body.presetId) : undefined
-    if (body.presetId && !preset) {
-      return problem(400, 'PRESET_NOT_FOUND', `The preset '${body.presetId}' was not found.`)
-    }
-    const developing = versions.at(-1)
-    if (preset && developing) {
-      developing.presetId = preset.id
-      developing.presetVersion = preset.version
-      developing.presetName = preset.name
     }
     const now = new Date().toISOString()
     const project = seedProject({

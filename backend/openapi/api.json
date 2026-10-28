@@ -2509,7 +2509,7 @@
         "tags": [
           "Projects"
         ],
-        "summary": "The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development, preset (FR-74: the current version's preset id, or none for projects without a preset) and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and the preset chip.",
+        "summary": "The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and, as history, the retired preset a migrated version was pinned to (FR-129).",
         "operationId": "ListProjects",
         "parameters": [
           {
@@ -2578,14 +2578,6 @@
             "in": "query",
             "schema": {
               "type": "boolean"
-            }
-          },
-          {
-            "name": "preset",
-            "in": "query",
-            "schema": {
-              "maxLength": 100,
-              "type": "string"
             }
           },
           {
@@ -2659,7 +2651,7 @@
         "tags": [
           "Projects"
         ],
-        "summary": "Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. stack (FR-114–FR-117, optional, instead of presetId: both is 400 VALIDATION) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE.",
+        "summary": "Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE.",
         "operationId": "CreateProject",
         "requestBody": {
           "content": {
@@ -2693,7 +2685,7 @@
             }
           },
           "400": {
-            "description": "VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), PRESET_NOT_FOUND, STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH or LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller)",
+            "description": "VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH or LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2769,7 +2761,7 @@
         "tags": [
           "Projects"
         ],
-        "summary": "§7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion, preset and pack filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released).",
+        "summary": "§7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion and pack filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released).",
         "operationId": "GetProjectKpis",
         "parameters": [
           {
@@ -2816,14 +2808,6 @@
             "in": "query",
             "schema": {
               "type": "boolean"
-            }
-          },
-          {
-            "name": "preset",
-            "in": "query",
-            "schema": {
-              "maxLength": 100,
-              "type": "string"
             }
           },
           {
@@ -3980,7 +3964,7 @@
         "tags": [
           "Deployments"
         ],
-        "summary": "Settings → Deployment for any member (FR-88): provider, supported, the binding (\"connected by <name>\", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the preset's required env vars with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not).",
+        "summary": "Settings → Deployment for any member (FR-88): provider, supported, the binding (\"connected by <name>\", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the stack's required env vars (§4.22) with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not).",
         "operationId": "GetDeploymentSettings",
         "parameters": [
           {
@@ -7875,7 +7859,7 @@
         "tags": [
           "Versions"
         ],
-        "summary": "The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, preset and dates.",
+        "summary": "The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, the retired preset of a migrated version (history, FR-129) and dates.",
         "operationId": "ListReleaseVersions",
         "parameters": [
           {
@@ -7973,7 +7957,7 @@
             }
           },
           "400": {
-            "description": "VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), PRESET_NOT_FOUND, STACK_INCOMPATIBLE (violations extension) or VCS_MISMATCH.",
+            "description": "VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension) or VCS_MISMATCH.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8077,224 +8061,6 @@
           },
           "404": {
             "description": "NOT_FOUND: the project, or a releaseVersionId of another project.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/presets": {
-      "get": {
-        "tags": [
-          "Presets"
-        ],
-        "summary": "The tech stack presets (FR-74), ordered by id: name, version, description, stack chips, deployment targets and content hash. For the wizard's Stack step and the admin presets list. No preset (general) is the absence of one.",
-        "operationId": "ListPresets",
-        "responses": {
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PresetSummaryDto"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/presets/{presetId}": {
-      "get": {
-        "tags": [
-          "Presets"
-        ],
-        "summary": "A preset in full (FR-74): specialist agents (owned paths, skills), extra spec sections with guidance, required environment variables, review checklist and deterministic rules, protected paths.",
-        "operationId": "GetPreset",
-        "parameters": [
-          {
-            "name": "presetId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PresetDetailDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NOT_FOUND: no preset with that id.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{id}/preset": {
-      "patch": {
-        "tags": [
-          "Projects"
-        ],
-        "summary": "Change the preset of the version in development (Owner, FR-74): pins the preset id, version and content hash on it and records PRESET_CHANGED. presetId null means no preset. Allowed until the version's first implementation plan is locked; a new version can pick another preset.",
-        "operationId": "UpdateProjectPreset",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProjectPresetRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProjectDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "PRESET_NOT_FOUND: no preset with that id.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "FORBIDDEN: only Owners change the preset.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NOT_FOUND: the project.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "PRESET_LOCKED (the version's implementation plan is locked, or no version is in development) or CONFLICT (a concurrent edit).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/admin/stack": {
-      "get": {
-        "tags": [
-          "Admin"
-        ],
-        "summary": "Admin → Stack catalog (§6): the catalog version, content hash and load status, every load error, and each pack with its stack-packs source, version, content hash and load status.",
-        "operationId": "GetAdminStackCatalog",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AdminStackCatalogDto"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8554,7 +8320,7 @@
         "tags": [
           "Projects"
         ],
-        "summary": "Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the legacy preset when the version is pinned to one, and the VCS option fixed by the repository host (repoVcs).",
+        "summary": "Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the retired v2 preset of a migrated version (legacyPreset, history: Preset <id>@<version> (retired, migrated)), and the VCS option fixed by the repository host (repoVcs).",
         "operationId": "GetProjectStack",
         "parameters": [
           {
@@ -8604,7 +8370,7 @@
         "tags": [
           "Projects"
         ],
-        "summary": "Change the stack of the version in development (Owner, FR-117): validates the composition like POST /api/stack/validate plus R5 (the VCS layer is the repository's host; omitted, it is set from it), pins it with the current catalog version and hash (replacing a legacy preset), updates the project's stack packs and records STACK_CHANGED {from, to, layersChanged}. The pinned composition again changes nothing. Allowed until the version's first implementation plan is locked.",
+        "summary": "Change the stack of the version in development (Owner, FR-117): validates the composition like POST /api/stack/validate plus R5 (the VCS layer is the repository's host; omitted, it is set from it), pins it with the current catalog version and hash (a migrated version keeps its retired preset as history), updates the project's stack packs and records STACK_CHANGED {from, to, layersChanged}. The pinned composition again changes nothing. Allowed until the version's first implementation plan is locked.",
         "operationId": "UpdateProjectStack",
         "parameters": [
           {
@@ -8680,6 +8446,47 @@
           },
           "409": {
             "description": "STACK_LOCKED (the version's implementation plan is locked, or no version is in development) or CONFLICT (a concurrent edit).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/stack": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Admin → Stack catalog (§6): the catalog version, content hash and load status, every load error, and each pack with its stack-packs source, version, content hash and load status.",
+        "operationId": "GetAdminStackCatalog",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStackCatalogDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9928,6 +9735,12 @@
               "integer"
             ],
             "format": "int32"
+          },
+          "legacyAgentKey": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "An agent run with the provider's output text (FR-23). `output` is `null` until the run succeeds and is cut\nto the first 200,000 characters (`outputTruncated`). The v2 fields are as on AgentRunDto.\n`toolCalls` is the run's repo tool log (FR-71: tool, arguments, bytes, truncated, error code) and `warnings`\nwhat was recorded on it (FR-70, FR-71): `tools_unsupported`, `snapshot_unavailable`,\n`summary_wait_timeout`, `summary_unavailable`, and `output_truncated` (FR-162). `continuations` is how\nmany continuations the answer took (0–5, FR-162) and `maxOutputTokens` the output token limit its calls used\n(FR-160); both are `null` for runs stored before v4 and for runs that haven't succeeded."
@@ -10081,9 +9894,15 @@
               "null",
               "string"
             ]
+          },
+          "legacyAgentKey": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
-        "description": "An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt\ntemplate version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in\nUSD, duration and error. `userFeedback` is the feedback or answers given to the agent. `releaseVersionId` is the\nrelease version it ran for (§4.10). `checkpoint` is the checkpoint it ran at (null until recorded). `agentKey`,\n`presetId` and `presetVersion` name the preset specialist (FR-76; null for base agents). `toolCallCount` is\nthe number of repo tool calls (FR-71). `credentialLabel` names the LLM connection that paid for the run,\n`Label (••••a1b2)` (FR-79, D-V2-5; null for a system key, a provider without a key, or a deleted connection)."
+        "description": "An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt\ntemplate version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in\nUSD, duration and error. `userFeedback` is the feedback or answers given to the agent. `releaseVersionId` is the\nrelease version it ran for (§4.10). `checkpoint` is the checkpoint it ran at (null until recorded). `agentKey`\nis the specialist that ran a plan step (FR-121; `generalist` for a generalist step of a composed project; null for\nbase agents); `presetId`/`presetVersion` are history (FR-129: the retired preset of runs before the upgrade).\n`legacyAgentKey` (§4.23) is the v2 agent key the run's step was planned with when it ran as its mapped v4\nspecialist (e.g. `db-engineer` for `data-engineer`); null otherwise. `toolCallCount` is\nthe number of repo tool calls (FR-71). `credentialLabel` names the LLM connection that paid for the run,\n`Label (••••a1b2)` (FR-79, D-V2-5; null for a system key, a provider without a key, or a deleted connection)."
       },
       "AgentRunStatus": {
         "enum": [
@@ -11494,21 +11313,13 @@
               }
             ]
           },
-          "presetId": {
-            "maxLength": 100,
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "FR-74 (wizard Stack step): a preset id from `GET /api/presets`, pinned (with its version and content hash) on\nthe version to develop; omitted or `null` = no preset (general). Unknown: 400 `PRESET_NOT_FOUND`."
-          },
           "stack": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
-                "description": "FR-114, FR-115, FR-117 (wizard Stack step): the stack composition, validated like `POST /api/stack/validate`\n(400 `STACK_INCOMPATIBLE` with `violations`; `VALIDATION` on `stack.*` fields) plus R5: the VCS\nlayer is the repository's host (GitHub for `github_app`/`github_pat`; omitted, it is set from it; another\none is 400 `VCS_MISMATCH`). It is pinned with the catalog version and hash on the version to develop. Omitted or\n`null`: no stack (\"No stack (general)\") or a `presetId`; sending both is 400 `VALIDATION`.",
+                "description": "FR-114, FR-115, FR-117 (wizard Stack step): the stack composition, validated like `POST /api/stack/validate`\n(400 `STACK_INCOMPATIBLE` with `violations`; `VALIDATION` on `stack.*` fields) plus R5: the VCS\nlayer is the repository's host (GitHub for `github_app`/`github_pat`; omitted, it is set from it; another\none is 400 `VCS_MISMATCH`). It is pinned with the catalog version and hash on the version to develop. Omitted or\n`null`: no stack (\"No stack (general)\"). FR-129: the v2 `presetId` was removed (D-V4-4).",
                 "$ref": "#/components/schemas/StackCompositionRequest"
               }
             ]
@@ -12024,7 +11835,7 @@
             ]
           }
         },
-        "description": "Settings → Deployment (FR-88), for any member. `provider` is `vercel` (or `fake` in test environments)\nonce deployment is set, else `null`. `supported`: the preset supports Vercel, or an Owner opted in by setting\na provider. `binding` is the bound connection (\"connected by &lt;name&gt;\"; `null`: none) and `canBind`\nwhether the caller may bind one of their own (Owners). `vercelProject` is the linked Vercel project (`null`:\nnone yet). `rootDirectory` and `framework` are what the Vercel project builds. `requiredEnv` lists the\npreset's required env vars with `present`. `gitConnected` is whether Vercel's GitHub App can access the repo\n(`null`: not checked), with Vercel's `installUrl` when it can't."
+        "description": "Settings → Deployment (FR-88), for any member. `provider` is `vercel` (or `fake` in test environments)\nonce deployment is set, else `null`. `supported`: the stack deploys to Vercel, or an Owner opted in by setting\na provider. `binding` is the bound connection (\"connected by &lt;name&gt;\"; `null`: none) and `canBind`\nwhether the caller may bind one of their own (Owners). `vercelProject` is the linked Vercel project (`null`:\nnone yet). `rootDirectory` and `framework` are what the Vercel project builds. `requiredEnv` lists the\nstack's required env vars with `present`. `gitConnected` is whether Vercel's GitHub App can access the repo\n(`null`: not checked), with Vercel's `installUrl` when it can't."
       },
       "DeploymentStatus": {
         "enum": [
@@ -12638,9 +12449,15 @@
               "null",
               "string"
             ]
+          },
+          "legacyAgentKey": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
-        "description": "One step of an execution run (FR-57): number, title, the preset specialist that runs it (`agentKey`, null for the\nbase Code Generator), status, attempt count, declared vs produced files, and the commit once accepted\n(`commitUrl` is null for the Local provider)."
+        "description": "One step of an execution run (FR-57): number, title, the specialist that runs it (`agentKey`, FR-121; null for the\nbase Code Generator), status, attempt count, declared vs produced files, and the commit once accepted\n(`commitUrl` is null for the Local provider). `legacyAgentKey` (§4.23): the v2 agent key a plan locked before\nthe upgrade named, which now runs as `agentKey`; null otherwise."
       },
       "ExecutionStepsDto": {
         "required": [
@@ -13715,7 +13532,8 @@
         "required": [
           "presetId",
           "presetName",
-          "presetVersion"
+          "presetVersion",
+          "label"
         ],
         "type": "object",
         "properties": {
@@ -13730,9 +13548,12 @@
               "null",
               "string"
             ]
+          },
+          "label": {
+            "type": "string"
           }
         },
-        "description": "The legacy preset (FR-74) the version is pinned to; `presetName` is the id when it is no longer shipped."
+        "description": "FR-129: the retired v2 preset a migrated version was pinned to, kept as history: its id, name (the id when unknown),\nversion and `label`, \"Preset nextjs-supabase@1.0.1 (retired, migrated)\"."
       },
       "LlmBindingDto": {
         "required": [
@@ -14646,271 +14467,6 @@
         ],
         "description": "The state of one execution run (FR-57): the steps of one plan version. `pending` (no step started),\n`running`, `paused`, `completed` (every step completed), `blocked` (a step awaits an escalation\ndecision) or `superseded` (the plan was invalidated; its run stays listed under \"Superseded\")."
       },
-      "PresetAgentDto": {
-        "required": [
-          "key",
-          "name",
-          "description",
-          "owns",
-          "skills"
-        ],
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "owns": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "skills": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "description": "A specialist agent of a preset (FR-76): the paths it owns (globs; `!` excludes) and its skills."
-      },
-      "PresetChecklistItemDto": {
-        "required": [
-          "category",
-          "item",
-          "severity"
-        ],
-        "type": "object",
-        "properties": {
-          "category": {
-            "$ref": "#/components/schemas/ReviewCategory"
-          },
-          "item": {
-            "type": "string"
-          },
-          "severity": {
-            "$ref": "#/components/schemas/Severity"
-          }
-        },
-        "description": "A review checklist item (FR-77), mapped to a v1 compliance category."
-      },
-      "PresetDetailDto": {
-        "required": [
-          "id",
-          "name",
-          "version",
-          "description",
-          "stack",
-          "deployTargets",
-          "contentHash",
-          "agents",
-          "specSections",
-          "requiredEnv",
-          "review",
-          "protectedPaths"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "version": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "stack": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "deployTargets": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "contentHash": {
-            "type": "string"
-          },
-          "agents": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PresetAgentDto"
-            }
-          },
-          "specSections": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PresetSpecSectionDto"
-            }
-          },
-          "requiredEnv": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PresetEnvVarDto"
-            }
-          },
-          "review": {
-            "$ref": "#/components/schemas/PresetReviewDto"
-          },
-          "protectedPaths": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PresetProtectedPathDto"
-            }
-          }
-        },
-        "description": "A preset in full (FR-74): the summary plus agents, spec sections, environment, review and protected paths. No prompt bodies."
-      },
-      "PresetEnvVarDto": {
-        "required": [
-          "key",
-          "targets",
-          "sensitive",
-          "description"
-        ],
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "targets": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "sensitive": {
-            "type": "boolean"
-          },
-          "description": {
-            "type": "string"
-          }
-        },
-        "description": "A required environment variable (FR-88): `targets` ⊆ production/preview/development."
-      },
-      "PresetProtectedPathDto": {
-        "required": [
-          "glob",
-          "existingOnBase",
-          "except",
-          "reason"
-        ],
-        "type": "object",
-        "properties": {
-          "glob": {
-            "type": "string"
-          },
-          "existingOnBase": {
-            "type": "boolean"
-          },
-          "except": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "reason": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "description": "A protected path (§4.11): `existingOnBase` protects only files already on the version's base commit;\n`except` globs stay writable."
-      },
-      "PresetReviewDto": {
-        "required": [
-          "checklist",
-          "deterministic"
-        ],
-        "type": "object",
-        "properties": {
-          "checklist": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PresetChecklistItemDto"
-            }
-          },
-          "deterministic": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "description": "The preset's review additions (FR-77): its checklist and deterministic rule ids."
-      },
-      "PresetSpecSectionDto": {
-        "required": [
-          "title",
-          "guidance"
-        ],
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string"
-          },
-          "guidance": {
-            "type": "string"
-          }
-        },
-        "description": "An extra spec section the preset requires (FR-75) with its guidance."
-      },
-      "PresetSummaryDto": {
-        "required": [
-          "id",
-          "name",
-          "version",
-          "description",
-          "stack",
-          "deployTargets",
-          "contentHash"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "version": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "stack": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "deployTargets": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "contentHash": {
-            "type": "string"
-          }
-        },
-        "description": "A tech stack preset card (FR-74, §7.2 wizard Stack step and admin presets list): `stack` are the chips,\n`deployTargets` the supported deployment targets (`vercel`). `contentHash` is the SHA-256 of the\npreset's files (D-V2-12)."
-      },
       "PreviewCheckDto": {
         "required": [
           "deploymentId",
@@ -15191,7 +14747,7 @@
             }
           }
         },
-        "description": "A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null`\nfor an Admin who isn't a member); a `null` `tokenBudget` means unlimited. `checkpoint` is the lifecycle\ncheckpoint within the current release version `releaseVersionId` (§4.10, D-V2-11: was `projectVersion`);\n`releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the\nversion in development (`null`: none) (FR-62). `idea` is the request of the version in development.\n`presetId`, `presetName` and `presetVersion` are the tech stack preset pinned on the current release\nversion (FR-74; all `null`: no preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so\nthe Deployments page is in its navigation (§7.2). `stackPacks` are the pack ids of the current release version's\nstack composition (FR-117, §5; empty: no stack), e.g. `[\"fe-react-vite\", \"be-aspnet\", \"vcs-github\"]`."
+        "description": "A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null`\nfor an Admin who isn't a member); a `null` `tokenBudget` means unlimited. `checkpoint` is the lifecycle\ncheckpoint within the current release version `releaseVersionId` (§4.10, D-V2-11: was `projectVersion`);\n`releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the\nversion in development (`null`: none) (FR-62). `idea` is the request of the version in development.\n`presetId`, `presetName` and `presetVersion` are history (FR-129): the retired v2 preset the current release\nversion was pinned to before it was migrated to a composition (all `null`: never pinned to a preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so\nthe Deployments page is in its navigation (§7.2). `stackPacks` are the pack ids of the current release version's\nstack composition (FR-117, §5; empty: no stack), e.g. `[\"fe-react-vite\", \"be-aspnet\", \"vcs-github\"]`."
       },
       "ProjectEventMessage": {
         "required": [
@@ -15398,7 +14954,7 @@
             ]
           }
         },
-        "description": "    Settings → Stack (FR-117, FR-119): the stack of the project's current release version.\n    * composition: the pinned normalised composition with its derived fields (§4.18), null for \"No stack\n    (general)\" or a version pinned to a legacy preset (legacyPreset). catalogVersion/catalogHash are\n    what it was pinned against; currentCatalogVersion/currentCatalogHash the catalog shipped now (a new\n    version re-pins to it).\n* locked with lockedReason (plan_locked, not_in_development): PUT is\n    STACK_LOCKED then.\n* stackChange: the layers that differ from the stack the version's base code was built with, and whether\n    that is a stack change (the base commit has code: an iteration or an import), for the stack-change warning.\n* repoVcs: the VCS option fixed by the project's repository host (R5; null: a Local repository, any\n    VCS)."
+        "description": "    Settings → Stack (FR-117, FR-119): the stack of the project's current release version.\n    * composition: the pinned normalised composition with its derived fields (§4.18), null for \"No stack\n    (general)\" and, for a version migrated from a retired v2 preset, that preset as history (legacyPreset). catalogVersion/catalogHash are\n    what it was pinned against; currentCatalogVersion/currentCatalogHash the catalog shipped now (a new\n    version re-pins to it).\n* locked with lockedReason (plan_locked, not_in_development): PUT is\n    STACK_LOCKED then.\n* stackChange: the layers that differ from the stack the version's base code was built with, and whether\n    that is a stack change (the base commit has code: an iteration or an import), for the stack-change warning.\n* repoVcs: the VCS option fixed by the project's repository host (R5; null: a Local repository, any\n    VCS)."
       },
       "ProjectStateDto": {
         "required": [
@@ -15639,7 +15195,7 @@
             }
           }
         },
-        "description": "A row of the projects list (FR-6, FR-62). `myRole` is `null` for an Admin who isn't a member;\n`releasedVersion` / `developmentVersion` are the two version badges (`null` when not released / nothing in\ndevelopment); `checkpoint` was `projectVersion` (D-V2-11); `presetId`/`presetName`/`presetVersion`\nare the preset chip (FR-74, §7.2; `null`: no preset); `stackPacks` the pack ids of the current version's\nstack composition (FR-117, the `pack` filter; empty: no stack)."
+        "description": "A row of the projects list (FR-6, FR-62). `myRole` is `null` for an Admin who isn't a member;\n`releasedVersion` / `developmentVersion` are the two version badges (`null` when not released / nothing in\ndevelopment); `checkpoint` was `projectVersion` (D-V2-11); `presetId`/`presetName`/`presetVersion`\nare history (FR-129: the retired preset the current version was migrated from; `null`: none); `stackPacks` the pack ids of the current version's\nstack composition (FR-117, the `pack` filter; empty: no stack)."
       },
       "PullRequestCommitDto": {
         "required": [
@@ -16537,7 +16093,7 @@
             "format": "date-time"
           }
         },
-        "description": "A release version of a project (§4.10, FR-60–FR-62). `version` is the normalised semver (no leading `v`);\n`tag` is the release tag once released (or the imported/migrated tag, e.g. v1's `v7-aide`); `baseTag` and\n`baseCommitSha` are the released tag and merge commit the version started from (null for a first version);\n`branchName` and `pullRequestUrl` are the version's working branch and PR once they exist; `request` is\nwhat the version was started with (the project idea for a first version); `startedBy` is null for versions created\nby migration or import. `presetId`/`presetVersion` are the pinned preset (FR-74) and `presetName` its\nname (the id when the preset is no longer shipped); all `null` without a preset."
+        "description": "A release version of a project (§4.10, FR-60–FR-62). `version` is the normalised semver (no leading `v`);\n`tag` is the release tag once released (or the imported/migrated tag, e.g. v1's `v7-aide`); `baseTag` and\n`baseCommitSha` are the released tag and merge commit the version started from (null for a first version);\n`branchName` and `pullRequestUrl` are the version's working branch and PR once they exist; `request` is\nwhat the version was started with (the project idea for a first version); `startedBy` is null for versions created\nby migration or import. `presetId`/`presetVersion`/`presetName` are history (FR-129): the retired v2 preset\nthe version was pinned to before its migration to a composition, shown as \"Preset &lt;id&gt;@&lt;version&gt; (retired,\nmigrated)\"; all `null` for versions never pinned to a preset."
       },
       "ReleaseVersionStatus": {
         "enum": [
@@ -16599,7 +16155,7 @@
             "type": "boolean"
           }
         },
-        "description": "An environment variable the project's preset requires (FR-88, §4.11 preset env): its key, targets, whether it is\nsensitive, what it is for, and whether the project has it (`present`; missing ones are flagged)."
+        "description": "An environment variable the project's stack requires (FR-88, §4.22: the resolved composition's env): its key, targets, whether it is\nsensitive, what it is for, and whether the project has it (`present`; missing ones are flagged)."
       },
       "ReviewCategory": {
         "enum": [
@@ -17039,7 +16595,10 @@
             "type": "string"
           },
           "catalogHash": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "frontend": {
             "oneOf": [
@@ -17093,7 +16652,7 @@
             }
           }
         },
-        "description": "The normalised composition (§4.18) returned by `POST /api/stack/validate`: None is `null`;\n`originModel` is `null` without a frontend (API only)."
+        "description": "The normalised composition (§4.18) returned by `POST /api/stack/validate`: None is `null`;\n`originModel` is `null` without a frontend (API only). `catalogHash` is `null` for a composition\nwritten by the FR-129 preset migration until it is re-pinned."
       },
       "StackCompositionRequest": {
         "type": "object",
@@ -17760,13 +17319,6 @@
             "minLength": 1,
             "type": "string"
           },
-          "presetId": {
-            "maxLength": 100,
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "stack": {
             "oneOf": [
               {
@@ -17779,7 +17331,7 @@
             ]
           }
         },
-        "description": "FR-60: start a new release version. `version` is semver (a leading `v` is stripped, e.g. `v1.2.0` →\n`1.2.0`); `request` describes the new features, improvements or fixes and becomes the project idea for this\nversion; `presetId` picks the tech stack preset of the new version (FR-74): omit it to keep the preset of the\nversion it builds on, send `null` for no preset; an unknown id is `PRESET_NOT_FOUND`. `stack` (FR-117,\n\"Change stack\") is the new version's stack composition, validated like project create (`STACK_INCOMPATIBLE`,\n`VCS_MISMATCH`, `VALIDATION` on `stack.*`); omitted or `null`, the base version's composition is kept,\nre-pinned to the current catalog (`STACK_INCOMPATIBLE` if the catalog no longer allows it). A `presetId` and a\n`stack` together are `VALIDATION`."
+        "description": "FR-60: start a new release version. `version` is semver (a leading `v` is stripped, e.g. `v1.2.0` →\n`1.2.0`); `request` describes the new features, improvements or fixes and becomes the project idea for this\nversion. `stack` (FR-117,\n\"Change stack\") is the new version's stack composition, validated like project create (`STACK_INCOMPATIBLE`,\n`VCS_MISMATCH`, `VALIDATION` on `stack.*`); omitted or `null`, the base version's composition is kept,\nre-pinned to the current catalog (`STACK_INCOMPATIBLE` if the catalog no longer allows it). FR-129: the v2\n`presetId` was removed (D-V4-4)."
       },
       "StartReleaseVersionResultDto": {
         "required": [
@@ -18209,19 +17761,6 @@
         },
         "description": "Replaces the project's notification channels (FR-47)."
       },
-      "UpdateProjectPresetRequest": {
-        "type": "object",
-        "properties": {
-          "presetId": {
-            "maxLength": 100,
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "description": "FR-74: change the preset of the version in development (Owner), until its first implementation plan is locked.\n`presetId` is a preset id from `GET /api/presets`, or `null` for no preset (general)."
-      },
       "UpdateProjectRequest": {
         "type": "object",
         "properties": {
@@ -18591,9 +18130,6 @@
     },
     {
       "name": "Versions"
-    },
-    {
-      "name": "Presets"
     },
     {
       "name": "Stack"

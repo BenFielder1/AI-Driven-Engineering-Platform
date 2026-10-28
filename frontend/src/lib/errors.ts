@@ -55,16 +55,12 @@ export const errorMessages = {
   VERSION_IN_PROGRESS: "A version is already in development. Release it before starting another.",
   RELEASE_NOT_MERGED: "The latest release is waiting for its pull request to be merged. Merge it first.",
   NOT_RELEASED: "Release the current version before starting a new one.",
-  // External services and presets
+  // External services
   UPSTREAM_ERROR: "An external service (such as GitHub) failed or couldn't be reached. Try again in a moment.",
   // LLM connections (FR-78, FR-79)
   CREDENTIAL_INVALID:
     "The provider rejected this key. Check that you copied the whole key and that it is active, then try again.",
   CREDENTIAL_NOT_OWNER: "You can only bind one of your own connections. Add your own key under Connections.",
-  // Tech stack presets (FR-74)
-  PRESET_NOT_FOUND: "That tech stack preset doesn't exist.",
-  PRESET_LOCKED:
-    "The implementation plan for this version is locked. Change the preset when you start the next version.",
   // GitHub App and connections (FR-80–FR-86, §4.14)
   GITHUB_NOT_CONNECTED:
     "Connect your GitHub account first, under Connections → GitHub.",
@@ -109,7 +105,7 @@ export const errorMessages = {
   AGENT_SCOPE:
     "Some plan steps declare files outside the paths their specialist agent owns. This is a warning: the plan can still be approved.",
   PLAN_ORDER:
-    "Some plan steps break the preset's recommended order. This is a warning: the plan can still be approved.",
+    "Some plan steps break the stack's recommended order. This is a warning: the plan can still be approved.",
   MISSING_VERCEL_CONFIG:
     "This plan doesn't create vercel.json, so Vercel would deploy AIDE branches automatically, on top of the deployments AIDE makes. Add vercel.json to a step with git.deploymentEnabled set to { \"aide/**\": false }. This is a warning: the plan can still be approved.",
   TOOL_LIMIT:
@@ -254,7 +250,6 @@ export const contextualErrorMessages = {
   },
   /** POST /api/projects/:id/versions — Start new version (FR-60, FR-61). */
   startVersion: {
-    PRESET_NOT_FOUND: "That preset is no longer available. Pick another one, keep the current preset, or choose No preset.",
     VERSION_INVALID:
       "Enter a version as MAJOR.MINOR.PATCH with an optional -prerelease, for example 1.2.0 or 2.0.0-beta.1.",
     TAG_EXISTS:
@@ -382,15 +377,8 @@ export const contextualErrorMessages = {
     GITHUB_APP_NOT_INSTALLED:
       "The AIDE GitHub App can't access this repository. Install it on the repository, then try again.",
   },
-  /** PATCH /api/projects/:id/preset (FR-74). */
-  changePreset: {
-    PRESET_NOT_FOUND: "That preset is no longer available. Pick another one, or No preset (general).",
-    FORBIDDEN: "Only project Owners can change the preset.",
-    CONFLICT: "Someone else changed the project at the same time. Reload to see the latest, then try again.",
-  },
   /** POST /api/projects (FR-86): a github_app repo needs push access for the caller; FR-73 import versions. */
   createProject: {
-    PRESET_NOT_FOUND: "That preset is no longer available. Pick another one, or No preset (general).",
     FORBIDDEN: "You need write access to this repository on GitHub to create a project on it. Pick another repository.",
     VERSION_INVALID:
       "Enter a version as MAJOR.MINOR.PATCH with an optional -prerelease, for example 1.2.0 or 2.0.0-beta.1.",

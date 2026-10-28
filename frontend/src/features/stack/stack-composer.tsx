@@ -6,7 +6,7 @@ import { Badge } from '../../components/ui/badge'
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import { TextField } from '../../components/ui/text-field'
 import { cn } from '../../lib/utils'
-import { TagList } from '../presets/preset-chip'
+import { TagList } from './tag-list'
 import { useStackOptions, type StackCatalog, type StackChoiceState, type StackDetection, type StackOptionState } from './stack-api'
 import {
   applyOptions,

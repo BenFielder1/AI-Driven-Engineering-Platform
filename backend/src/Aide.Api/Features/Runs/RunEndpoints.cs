@@ -121,8 +121,9 @@ public static class RunEndpoints
             .ToListAsync(cancellationToken);
         var checkpoints = await CheckpointsAsync(db, [.. runs.Select(r => r.Id)], cancellationToken);
         var labels = await CredentialLabelsAsync(db, [.. runs.Select(r => r.CredentialId).OfType<Guid>()], cancellationToken);
+        var legacy = await LegacyAgentKeysAsync(db, [.. runs.Select(r => r.StepId).OfType<Guid>()], cancellationToken);
         return TypedResults.Ok(new PagedResult<AgentRunDto>(
-            [.. runs.Select(r => ToDto(r, checkpoints.GetValueOrDefault(r.Id), r.CredentialId is { } c ? labels.GetValueOrDefault(c) : null))],
+            [.. runs.Select(r => ToDto(r, checkpoints.GetValueOrDefault(r.Id), r.CredentialId is { } c ? labels.GetValueOrDefault(c) : null, r.StepId is { } s ? legacy.GetValueOrDefault(s) : null))],
             page,
             limit,
             total));
@@ -153,7 +154,8 @@ public static class RunEndpoints
         var label = run.CredentialId is { } credentialId
             ? (await CredentialLabelsAsync(db, [credentialId], cancellationToken)).GetValueOrDefault(credentialId)
             : null;
-        var r = ToDto(run, (await CheckpointsAsync(db, [run.Id], cancellationToken)).GetValueOrDefault(run.Id), label);
+        var legacyKey = run.StepId is { } stepId ? (await LegacyAgentKeysAsync(db, [stepId], cancellationToken)).GetValueOrDefault(stepId) : null;
+        var r = ToDto(run, (await CheckpointsAsync(db, [run.Id], cancellationToken)).GetValueOrDefault(run.Id), label, legacyKey);
         return TypedResults.Ok(new AgentRunDetailDto(
             r.Id, r.ReleaseVersionId, r.Agent, r.Phase, r.StepId, r.Provider, r.Model, r.PromptVersion, r.InputArtifacts, r.UserFeedback, r.Status,
             r.Attempts, r.InputTokens, r.OutputTokens, r.CostEstimate, r.DurationMs, r.Error, r.CreatedAt, r.CompletedAt,
@@ -168,7 +170,8 @@ public static class RunEndpoints
             Execution.ExecutionRunReader.ToolCalls(run.ToolCalls),
             stored?.Warnings ?? [],
             stored?.Continuations,
-            stored?.MaxOutputTokens));
+            stored?.MaxOutputTokens,
+            r.LegacyAgentKey));
     }
 
     /// <summary>
@@ -225,7 +228,28 @@ public static class RunEndpoints
         return rows.ToDictionary(c => c.Id, c => LlmConnectionRules.DisplayName(c.Label, c.Last4));
     }
 
-    private static AgentRunDto ToDto(AgentRun r, int? checkpoint, string? credentialLabel) => new(
+    /// <summary>
+    /// §4.23, FR-129: the v2 agent key each step was planned with (<c>legacy_agent_key</c>), for the runs of those steps
+    /// (derived on read, no run column). Steps without one are left out.
+    /// </summary>
+    public static async Task<Dictionary<Guid, string>> LegacyAgentKeysAsync(AideDbContext db, IReadOnlyList<Guid> stepIds, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(stepIds);
+        if (stepIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = stepIds.Distinct().ToList();
+        var rows = await db.ExecutionSteps.AsNoTracking()
+            .Where(s => ids.Contains(s.Id) && s.LegacyAgentKey != null)
+            .Select(s => new { s.Id, s.LegacyAgentKey })
+            .ToListAsync(cancellationToken);
+        return rows.ToDictionary(s => s.Id, s => s.LegacyAgentKey!);
+    }
+
+    private static AgentRunDto ToDto(AgentRun r, int? checkpoint, string? credentialLabel, string? legacyAgentKey) => new(
         r.Id,
         r.ReleaseVersionId,
         r.Agent,
@@ -250,7 +274,8 @@ public static class RunEndpoints
         r.PresetId,
         r.PresetVersion,
         ToolCallCount(r.ToolCalls),
-        credentialLabel);
+        credentialLabel,
+        legacyAgentKey);
 
     /// <summary>FR-71: the number of entries in the run's tool-call JSON array (0 when it isn't one).</summary>
     public static int ToolCallCount(string? toolCalls)

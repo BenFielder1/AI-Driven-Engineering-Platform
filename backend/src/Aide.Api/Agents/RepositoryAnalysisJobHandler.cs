@@ -1,5 +1,5 @@
 using Aide.Api.Features.Artifacts;
-using Aide.Api.Features.Presets;
+using Aide.Api.Features.Stack;
 using Aide.Api.Features.Versions;
 using Aide.Api.Jobs;
 using Aide.Domain.Agents;
@@ -37,7 +37,7 @@ public sealed partial class RepositoryAnalysisJobHandler(
     AgentDraftWriter writer,
     AgentJobInputs inputs,
     AideDbContext db,
-    VersionPresetReader presets,
+    VersionStackLoader stacks,
     ILogger<RepositoryAnalysisJobHandler> logger) : IJobHandler
 {
     public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
@@ -78,7 +78,7 @@ public sealed partial class RepositoryAnalysisJobHandler(
         }
 
         var baseText = version.BaseTag is { } tag ? $"{tag} ({version.BaseCommitSha})" : $"commit {version.BaseCommitSha}";
-        var stack = (await presets.ForVersionAsync(version, cancellationToken, detect: true)).ThrowIfUnresolvable();
+        var stack = (await stacks.ForVersionAsync(version, cancellationToken, detect: true)).ThrowIfUnresolvable();
         var expectation = stack.Stack is { } composed && stack.Detection is { } detection ? StackAnalysis.Expectation(detection, composed.Composition) : null;
         Result<string> Check(string text) => StackAnalysis.Check(AgentOutput.UnwrapFence(text), expectation);
         AgentRunRequest Request(string? feedback) => new()

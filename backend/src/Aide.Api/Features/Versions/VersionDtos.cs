@@ -20,8 +20,9 @@ public sealed record ReleaseVersionCheckpointsDto(int Current, int Max);
 /// <c>baseCommitSha</c> are the released tag and merge commit the version started from (null for a first version);
 /// <c>branchName</c> and <c>pullRequestUrl</c> are the version's working branch and PR once they exist; <c>request</c> is
 /// what the version was started with (the project idea for a first version); <c>startedBy</c> is null for versions created
-/// by migration or import. <c>presetId</c>/<c>presetVersion</c> are the pinned preset (FR-74) and <c>presetName</c> its
-/// name (the id when the preset is no longer shipped); all <c>null</c> without a preset.
+/// by migration or import. <c>presetId</c>/<c>presetVersion</c>/<c>presetName</c> are history (FR-129): the retired v2 preset
+/// the version was pinned to before its migration to a composition, shown as "Preset &lt;id&gt;@&lt;version&gt; (retired,
+/// migrated)"; all <c>null</c> for versions never pinned to a preset.
 /// </summary>
 public sealed record ReleaseVersionDto(
     Guid Id,
@@ -46,17 +47,14 @@ public sealed record ReleaseVersionDto(
 /// <summary>
 /// FR-60: start a new release version. <c>version</c> is semver (a leading <c>v</c> is stripped, e.g. <c>v1.2.0</c> →
 /// <c>1.2.0</c>); <c>request</c> describes the new features, improvements or fixes and becomes the project idea for this
-/// version; <c>presetId</c> picks the tech stack preset of the new version (FR-74): omit it to keep the preset of the
-/// version it builds on, send <c>null</c> for no preset; an unknown id is <c>PRESET_NOT_FOUND</c>. <c>stack</c> (FR-117,
+/// version. <c>stack</c> (FR-117,
 /// "Change stack") is the new version's stack composition, validated like project create (<c>STACK_INCOMPATIBLE</c>,
 /// <c>VCS_MISMATCH</c>, <c>VALIDATION</c> on <c>stack.*</c>); omitted or <c>null</c>, the base version's composition is kept,
-/// re-pinned to the current catalog (<c>STACK_INCOMPATIBLE</c> if the catalog no longer allows it). A <c>presetId</c> and a
-/// <c>stack</c> together are <c>VALIDATION</c>.
+/// re-pinned to the current catalog (<c>STACK_INCOMPATIBLE</c> if the catalog no longer allows it). FR-129: the v2
+/// <c>presetId</c> was removed (D-V4-4).
 /// </summary>
 public sealed record StartReleaseVersionRequest
 {
-    private readonly string? _presetId;
-
     [Required]
     [StringLength(VersionLimits.VersionMaxLength, MinimumLength = 1)]
     public required string Version { get; init; }
@@ -64,21 +62,6 @@ public sealed record StartReleaseVersionRequest
     [Required]
     [StringLength(ProjectLimits.IdeaMaxLength, MinimumLength = 1)]
     public required string Request { get; init; }
-
-    [MaxLength(VersionLimits.PresetIdMaxLength)]
-    public string? PresetId
-    {
-        get => _presetId;
-        init
-        {
-            _presetId = value;
-            PresetIdSent = true;
-        }
-    }
-
-    /// <summary>Whether <c>presetId</c> was in the request (JSON setters run only for sent properties).</summary>
-    [System.Text.Json.Serialization.JsonIgnore]
-    public bool PresetIdSent { get; private init; }
 
     /// <summary>FR-117: the new version's stack composition (omitted: the base version's, re-pinned).</summary>
     public Stack.StackCompositionRequest? Stack { get; init; }
@@ -122,6 +105,4 @@ public static class VersionLimits
 {
     /// <summary>The version text, with room for a leading <c>v</c> and whitespace.</summary>
     public const int VersionMaxLength = SemVer.MaxLength + 8;
-
-    public const int PresetIdMaxLength = 100;
 }

@@ -125,7 +125,8 @@ public static class StackAnalysis
                 problems.Add($"flag the mismatch with the composition ({string.Join(", ", expectation.Mismatches.Select(m => $"{m.Layer}: `{m.Detected}` vs `{m.Chosen}`"))})");
             }
 
-            foreach (var m in expectation.Mismatches.Where(m => !section.Contains(m.Chosen, StringComparison.OrdinalIgnoreCase)))
+            // A layer the composition leaves at None has no pack to name ("none" would match any text); the mismatch flag covers it.
+            foreach (var m in expectation.Mismatches.Where(m => m.Chosen != StackIds.None && !section.Contains(m.Chosen, StringComparison.OrdinalIgnoreCase)))
             {
                 problems.Add($"name the composition's {m.Layer} pack `{m.Chosen}`");
             }

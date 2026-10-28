@@ -23,7 +23,8 @@ export async function createVercelConnection(context: BrowserContext, label = 'F
 export interface LocalProjectOptions {
   name: string
   idea?: string
-  presetId?: string | null
+  /** FR-114: a stack composition request (omitted: No stack (general)). */
+  stack?: Record<string, unknown>
   /** A Vercel connection id: the project deploys with the Fake provider (FR-88, Local + Fake). */
   vercelConnectionId?: string
   approvalMode?: 'strict' | 'advisory' | 'autonomous'
@@ -31,7 +32,7 @@ export interface LocalProjectOptions {
   initialVersion?: string
 }
 
-/** POST /api/projects from scratch with Local Git (FR-66), optionally with a preset (FR-74) and Fake deployments (FR-88). */
+/** POST /api/projects from scratch with Local Git (FR-66), optionally with a stack composition (FR-114) and Fake deployments (FR-88). */
 export async function createLocalProject(context: BrowserContext, o: LocalProjectOptions) {
   return apiJson<{ id: string; name: string; slug: string; deploymentsEnabled: boolean }>(context, 'POST', '/api/projects', {
     name: o.name,
@@ -43,7 +44,7 @@ export async function createLocalProject(context: BrowserContext, o: LocalProjec
     tokenBudget: null,
     source: 'scratch',
     initialVersion: o.initialVersion ?? '0.1.0',
-    ...(o.presetId ? { presetId: o.presetId } : {}),
+    ...(o.stack ? { stack: o.stack } : {}),
     git: { mode: 'local', defaultBranch: 'main' },
     ...(o.vercelConnectionId
       ? {

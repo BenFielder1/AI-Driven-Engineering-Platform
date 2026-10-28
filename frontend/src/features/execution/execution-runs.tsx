@@ -15,6 +15,7 @@ import {
   stepStatusLabels,
 } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
+import { specialistText } from '../stack/legacy-preset'
 import { Commit, ViolationList } from './execution-steps'
 import {
   useStepAttempts,
@@ -185,7 +186,7 @@ export function StepRunExtras({ step }: { step: ExecutionStepSummary }) {
     <div className="flex flex-col gap-2 border-t border-border/60 pt-2">
       <p className="text-sm">
         <span className="text-muted-foreground">Specialist </span>
-        {step.agentKey ?? 'Code Generator'}
+        {specialistText(step.agentKey, step.legacyAgentKey) ?? 'Code Generator'}
       </p>
       <Files step={step} />
       <AttemptHistory stepId={step.id} stepNumber={step.number} attempts={step.attempt} />
@@ -208,7 +209,7 @@ function RunStepItem({ step, headingLevel }: { step: ExecutionStepSummary; headi
       <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
         <div className="flex gap-1">
           <dt className="text-muted-foreground">Specialist</dt>
-          <dd>{step.agentKey ?? 'Code Generator'}</dd>
+          <dd>{specialistText(step.agentKey, step.legacyAgentKey) ?? 'Code Generator'}</dd>
         </div>
         <div className="flex gap-1">
           <dt className="text-muted-foreground">Attempts</dt>

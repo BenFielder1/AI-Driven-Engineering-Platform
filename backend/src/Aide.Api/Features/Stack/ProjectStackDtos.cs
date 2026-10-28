@@ -10,7 +10,7 @@ namespace Aide.Api.Features.Stack;
 /// Settings → Stack (FR-117, FR-119): the stack of the project's current release version.
 /// <list type="bullet">
 /// <item><c>composition</c>: the pinned normalised composition with its derived fields (§4.18), <c>null</c> for "No stack
-/// (general)" or a version pinned to a legacy preset (<c>legacyPreset</c>). <c>catalogVersion</c>/<c>catalogHash</c> are
+/// (general)" and, for a version migrated from a retired v2 preset, that preset as history (<c>legacyPreset</c>). <c>catalogVersion</c>/<c>catalogHash</c> are
 /// what it was pinned against; <c>currentCatalogVersion</c>/<c>currentCatalogHash</c> the catalog shipped now (a new
 /// version re-pins to it).</item>
 /// <item><c>locked</c> with <c>lockedReason</c> (<c>plan_locked</c>, <c>not_in_development</c>): <c>PUT</c> is
@@ -43,8 +43,11 @@ public sealed record ProjectStackDto(
 /// </summary>
 public sealed record StackChangeDto(bool BaseHasCode, IReadOnlyList<string> LayersChanged, bool IsStackChange);
 
-/// <summary>The legacy preset (FR-74) the version is pinned to; <c>presetName</c> is the id when it is no longer shipped.</summary>
-public sealed record LegacyPresetDto(string PresetId, string PresetName, string? PresetVersion);
+/// <summary>
+/// FR-129: the retired v2 preset a migrated version was pinned to, kept as history: its id, name (the id when unknown),
+/// version and <c>label</c>, "Preset nextjs-supabase@1.0.1 (retired, migrated)".
+/// </summary>
+public sealed record LegacyPresetDto(string PresetId, string PresetName, string? PresetVersion, string Label);
 
 // ---------- POST /api/stack/detect ----------
 

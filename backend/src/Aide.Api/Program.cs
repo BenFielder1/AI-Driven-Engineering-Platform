@@ -17,7 +17,6 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Live;
 using Aide.Api.Features.Llm;
 using Aide.Api.Features.Notifications;
-using Aide.Api.Features.Presets;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Refinement;
 using Aide.Api.Features.Release;
@@ -173,8 +172,6 @@ builder.Services.AddReleaseVersions();
 // Vercel deployments (FR-87–FR-91, §4.15): settings, env sync, previews, production and the poll job.
 builder.Services.AddDeployments();
 
-// Tech stack presets (FR-74): pinning and the preset API; the catalogue is loaded by the infrastructure.
-builder.Services.AddPresets();
 
 // Stack compositions on projects and versions, Settings → Stack and import detection (FR-114–FR-119).
 builder.Services.AddProjectStacks();
@@ -189,7 +186,6 @@ builder.Services.AddOptions<SeedOptions>().BindConfiguration(SeedOptions.Section
 builder.Services.AddHostedService<DevSeeder>();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseReadyHealthCheck>("database", tags: [HealthEndpoints.ReadyTag])
-    .AddCheck<PresetsHealthCheck>("presets", tags: [HealthEndpoints.ReadyTag])
     .AddCheck<StackCatalogHealthCheck>("stack-catalog", tags: [HealthEndpoints.ReadyTag]);
 
 var app = builder.Build();
@@ -232,7 +228,6 @@ app.MapReviewEndpoints();
 app.MapReleaseEndpoints();
 app.MapRollbackEndpoints();
 app.MapVersionEndpoints();
-app.MapPresetEndpoints();
 app.MapStackEndpoints();
 app.MapNotificationEndpoints();
 app.MapApprovalEndpoints();

@@ -354,7 +354,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
     }
 
     /// <summary>Wraps a responder and records every request it answers (system prompt included).</summary>
-    private sealed class CapturingResponder(IFakeAgentResponder inner) : IFakeAgentResponder
+    internal sealed class CapturingResponder(IFakeAgentResponder inner) : IFakeAgentResponder
     {
         private readonly System.Collections.Concurrent.ConcurrentQueue<LlmRequest> _requests = new();
 

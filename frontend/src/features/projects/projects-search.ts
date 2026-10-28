@@ -8,8 +8,6 @@ export interface ProjectsSearch {
   status?: ProjectStatus
   /** FR-62: only projects with (true) or without (false) a version in development. */
   hasDevelopmentVersion?: boolean
-  /** FR-74: only projects whose current version uses this preset id. */
-  preset?: string
   /** FR-117: only projects whose current version's stack composition uses this pack id (e.g. be-aspnet). */
   pack?: string
   sortBy?: ProjectSortBy
@@ -17,8 +15,8 @@ export interface ProjectsSearch {
   page?: number
 }
 
-/** A preset or pack id as the API accepts it (folder names: lowercase letters, digits and dashes). */
-const PRESET_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
+/** A pack id as the API accepts it (lowercase letters, digits and dashes). */
+const PACK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export const oneOf = <T extends string>(values: readonly T[], v: unknown): T | undefined =>
   typeof v === 'string' && (values as readonly string[]).includes(v) ? (v as T) : undefined
@@ -37,8 +35,7 @@ export function parseProjectsSearch(search: Record<string, unknown>): ProjectsSe
         : search.hasDevelopmentVersion === false || search.hasDevelopmentVersion === 'false'
           ? false
           : undefined,
-    preset: typeof search.preset === 'string' && PRESET_ID.test(search.preset) ? search.preset : undefined,
-    pack: typeof search.pack === 'string' && PRESET_ID.test(search.pack) ? search.pack : undefined,
+    pack: typeof search.pack === 'string' && PACK_ID.test(search.pack) ? search.pack : undefined,
     sortBy: oneOf(['created', 'updated', 'name'] as const, search.sortBy),
     sortOrder: oneOf(['asc', 'desc'] as const, search.sortOrder),
     page: Number.isInteger(page) && page > 1 ? page : undefined,

@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Aide.Domain.Common;
-using Aide.Domain.Presets;
 using Aide.Domain.Review;
 
 namespace Aide.Domain.Stack;
@@ -57,6 +56,7 @@ public static partial class StackCatalogLoader
     public const string StackApiContractFile = "core/stack-api-contract.md";
     public const string CompositionSummaryFile = "core/composition-summary.md";
     public const string AgentsFolder = "agents/";
+    public const string LegacyFile = "legacy/presets.json";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -123,6 +123,9 @@ public static partial class StackCatalogLoader
             agentPrompts[key] = Text(text);
         }
 
+        // §4.23: the frozen v2 preset data (optional; validated when present).
+        var legacy = ReadLegacy(normalised, Error);
+
         // catalog.json.
         if (!normalised.TryGetValue(CatalogFile, out var catalogText))
         {
@@ -175,12 +178,13 @@ public static partial class StackCatalogLoader
             StackApiContract = apiContract!,
             CompositionSummaryTemplate = summary!,
             AgentPrompts = agentPrompts,
+            Legacy = legacy,
         };
         return new StackCatalogLoadResult(catalog, version, hash, errors, statuses);
     }
 
     /// <summary>
-    /// §4.16 (v2's preset hash, D-V2-12): SHA-256 (lowercase hex) over the files sorted by path (ordinal), each contributing
+    /// §4.16 (the v2 preset hash algorithm, D-V2-12): SHA-256 (lowercase hex) over the files sorted by path (ordinal), each contributing
     /// <c>path \0 content \0</c> as UTF-8 with <c>\n</c> line endings and any BOM stripped.
     /// </summary>
     public static string ContentHash(IReadOnlyDictionary<string, string> files)
@@ -1098,6 +1102,125 @@ public static partial class StackCatalogLoader
         return list;
     }
 
+    // ---------- legacy (§4.23) ----------
+
+    /// <summary>
+    /// <c>legacy/presets.json</c>: <c>{agentKeys: [{from, to, byFiles?: [{glob, to}]}], presets: [{id, name, version, owns: {v2Key: [globs]}}]}</c>.
+    /// Every <c>to</c> is a v4 specialist key; every v2 key a preset's <c>owns</c> names has an <c>agentKeys</c> row.
+    /// </summary>
+    private static LegacyPresets ReadLegacy(Dictionary<string, string> files, Action<string> error)
+    {
+        if (!files.TryGetValue(LegacyFile, out var text))
+        {
+            return LegacyPresets.Empty;
+        }
+
+        RawLegacy? raw;
+        try
+        {
+            raw = JsonSerializer.Deserialize<RawLegacy>(text, Json);
+        }
+        catch (JsonException ex)
+        {
+            error($"{LegacyFile} is not valid: {ex.Message}");
+            return LegacyPresets.Empty;
+        }
+
+        var reasons = new List<string>();
+        string? Specialist(string? key, string field)
+        {
+            if (key is null || !StackAgents.All.Contains(key.Trim(), StringComparer.Ordinal))
+            {
+                reasons.Add($"{field}: '{key}' isn't a specialist key ({string.Join(", ", StackAgents.All)}).");
+                return null;
+            }
+
+            return key.Trim();
+        }
+
+        var rules = new List<LegacyAgentKeyRule>();
+        foreach (var (row, i) in (raw?.AgentKeys ?? []).Select((r, i) => (r, i)))
+        {
+            var field = $"{LegacyFile} agentKeys[{i}]";
+            var from = row.From?.Trim();
+            if (from is null || !KebabId().IsMatch(from))
+            {
+                reasons.Add($"{field}.from: '{row.From}' must be a lowercase kebab-case v2 agent key.");
+                continue;
+            }
+
+            if (rules.Any(r => r.From == from))
+            {
+                reasons.Add($"{field}.from: '{from}' is listed twice.");
+            }
+
+            var to = Specialist(row.To, $"{field}.to");
+            var byFiles = new List<LegacyAgentByFiles>();
+            foreach (var (by, j) in (row.ByFiles ?? []).Select((b, j) => (b, j)))
+            {
+                var glob = PathGlob.TryCreate(by.Glob?.Trim(), out var reason);
+                if (glob is null)
+                {
+                    reasons.Add($"{field}.byFiles[{j}].glob: {reason}");
+                }
+
+                var byTo = Specialist(by.To, $"{field}.byFiles[{j}].to");
+                if (glob is not null && byTo is not null)
+                {
+                    byFiles.Add(new LegacyAgentByFiles(glob, byTo));
+                }
+            }
+
+            if (to is not null)
+            {
+                rules.Add(new LegacyAgentKeyRule(from, to, byFiles));
+            }
+        }
+
+        var presets = new Dictionary<string, LegacyPreset>(StringComparer.Ordinal);
+        foreach (var (preset, i) in (raw?.Presets ?? []).Select((p, i) => (p, i)))
+        {
+            var field = $"{LegacyFile} presets[{i}]";
+            var id = preset.Id?.Trim();
+            if (id is null || !KebabId().IsMatch(id) || presets.ContainsKey(id))
+            {
+                reasons.Add($"{field}.id: '{preset.Id}' must be a unique lowercase kebab-case preset id.");
+                continue;
+            }
+
+            var version = preset.Version?.Trim();
+            if (version is null || !SemVer().IsMatch(version))
+            {
+                reasons.Add($"{field}.version: '{preset.Version}' must be a semantic version.");
+            }
+
+            var owns = new Dictionary<string, GlobSet>(StringComparer.Ordinal);
+            foreach (var (key, globs) in preset.Owns ?? new Dictionary<string, IReadOnlyList<string>?>())
+            {
+                if (rules.All(r => r.From != key))
+                {
+                    reasons.Add($"{field}.owns: '{key}' has no agentKeys row.");
+                }
+
+                owns[key] = GlobSet.Compile(globs, $"{field}.owns.{key}", reasons);
+            }
+
+            if (string.IsNullOrWhiteSpace(preset.Name))
+            {
+                reasons.Add($"{field}.name is required.");
+            }
+
+            presets[id] = new LegacyPreset(id, preset.Name?.Trim() ?? id, version ?? string.Empty, owns);
+        }
+
+        foreach (var reason in reasons)
+        {
+            error(reason);
+        }
+
+        return reasons.Count == 0 ? new LegacyPresets(rules, presets) : LegacyPresets.Empty;
+    }
+
     // ---------- helpers ----------
 
     private static string? RequiredText(Dictionary<string, string> files, string path, Action<string> error)
@@ -1496,6 +1619,40 @@ public static partial class StackCatalogLoader
         public string? Category { get; init; }
 
         public string? Severity { get; init; }
+    }
+
+    private sealed class RawLegacy
+    {
+        public IReadOnlyList<RawLegacyAgentKey>? AgentKeys { get; init; }
+
+        public IReadOnlyList<RawLegacyPreset>? Presets { get; init; }
+    }
+
+    private sealed class RawLegacyAgentKey
+    {
+        public string? From { get; init; }
+
+        public string? To { get; init; }
+
+        public IReadOnlyList<RawLegacyByFiles>? ByFiles { get; init; }
+    }
+
+    private sealed class RawLegacyByFiles
+    {
+        public string? Glob { get; init; }
+
+        public string? To { get; init; }
+    }
+
+    private sealed class RawLegacyPreset
+    {
+        public string? Id { get; init; }
+
+        public string? Name { get; init; }
+
+        public string? Version { get; init; }
+
+        public IReadOnlyDictionary<string, IReadOnlyList<string>?>? Owns { get; init; }
     }
 
     private sealed class RawMigrate

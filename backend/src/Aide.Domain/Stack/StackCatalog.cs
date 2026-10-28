@@ -32,6 +32,9 @@ public sealed record StackCatalog
     /// <summary>Adapted specialist prompts (<c>agents/&lt;key&gt;.md</c>), by agent key; may be empty.</summary>
     public required IReadOnlyDictionary<string, string> AgentPrompts { get; init; }
 
+    /// <summary>§4.23: the frozen v2 preset globs and agent-key map (<c>legacy/presets.json</c>); empty without one.</summary>
+    public LegacyPresets Legacy { get; init; } = LegacyPresets.Empty;
+
     /// <summary>§4.16: <c>stack@&lt;version&gt;</c>, as recorded on agent runs.</summary>
     public string Label => $"stack@{Version}";
 

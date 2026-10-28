@@ -49,7 +49,7 @@ describe('Settings → Deployment (FR-88)', () => {
       const grace = seedUser({ email: 'grace@example.com', name: 'Grace Hopper' })
       seedVercelConnection({ userId: grace.id, label: 'Not mine' })
     })
-    expect(screen.getByText(/preset deploys to Vercel/)).toBeInTheDocument()
+    expect(screen.getByText(/stack deploys to Vercel/)).toBeInTheDocument()
     const picker = await screen.findByLabelText('Vercel connection')
     expect(within(picker).getAllByRole('option').map((o) => o.textContent)).toEqual(['Pick a connection', 'Acme team (••••ab12) · team acme'])
     expect(screen.getByLabelText('Project name')).toHaveValue('inventory-tracker')

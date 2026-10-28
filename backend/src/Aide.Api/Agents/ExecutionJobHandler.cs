@@ -1,7 +1,7 @@
 using System.Globalization;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
-using Aide.Api.Features.Presets;
+using Aide.Api.Features.Stack;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
@@ -12,9 +12,11 @@ using Aide.Domain.Execution;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
+using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
+using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aide.Api.Agents;
@@ -49,13 +51,12 @@ public interface IExecutionCompletionHook
 /// <c>EXECUTION_COMPLETED</c> and calls <see cref="IExecutionCompletionHook"/>. Rejected: <c>STEP_REJECTED</c> with every
 /// violation; the fourth rejection blocks the step (<c>STEP_BLOCKED</c>) and raises an escalation gate (FR-33).</item>
 /// </list>
-/// FR-76: with a preset each step runs as its specialist (<see cref="AgentRunRequest.SpecialistAgentKey"/>: the run is
-/// <c>code_generator</c> with <c>agent_key</c> = the step's agent and the specialist prompt), and the Guardian adds the
-/// preset's protected paths (existing-on-base ones checked against the version's base commit). FR-121, FR-125: with a
-/// stack composition each step runs as its specialist with its resolved pack skills (<see cref="Domain.Stack.StackPrompt"/>;
-/// the run records <c>agent_key</c>, <c>packs</c> and <c>catalog_version</c>), and the Guardian adds the packs' protected
-/// paths, every data pack's base-commit migrations being immutable. A <c>generalist</c> step (an optimisation plan) runs the
-/// base prompt.
+/// FR-121, FR-125: with a stack composition each step runs as its specialist (<see cref="AgentRunRequest.SpecialistAgentKey"/>)
+/// with its resolved pack skills (<see cref="StackPrompt"/>; the run records <c>agent_key</c>, <c>packs</c> and
+/// <c>catalog_version</c>), and the Guardian adds the packs' protected paths, every data pack's base-commit migrations being
+/// immutable. A <c>generalist</c> step (an optimisation plan) runs the base prompt. §4.23, FR-129: a step of a plan locked
+/// before the upgrade that still names a v2 agent key runs as its mapped specialist (<see cref="LegacyPresets.MapInPlay"/>);
+/// the step keeps the v2 key in <c>legacy_agent_key</c>, which its runs report as <c>legacyAgentKey</c>.
 /// </summary>
 public sealed partial class ExecutionJobHandler(
     AideDbContext db,
@@ -65,7 +66,8 @@ public sealed partial class ExecutionJobHandler(
     IWorkingCopies workingCopies,
     LifecycleWriter writer,
     IExecutionCompletionHook completion,
-    VersionPresetReader presets,
+    VersionStackLoader stacks,
+    IStackCatalog catalog,
     TimeProvider time,
     ILogger<ExecutionJobHandler> logger) : IJobHandler
 {
@@ -107,7 +109,8 @@ public sealed partial class ExecutionJobHandler(
         }
 
         var working = prepared.Value;
-        var preset = (await presets.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
+        var version = (await stacks.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
+        var legacyWarning = MapLegacyAgent(step, version);
         var existing = await Git(() => workingCopies.FindStepCommitAsync(project.Id, working.Branch, step.Id, cancellationToken));
         if (!resuming && !await BeginAttemptAsync(project, step, cancellationToken))
         {
@@ -119,16 +122,24 @@ public sealed partial class ExecutionJobHandler(
             // D17 redelivery: the warnings are those of the committed files, not of an earlier rejected attempt.
             LogAlreadyCommitted(logger, existing.Sha);
             var committed = existing.Files.Select(f => new ProducedFile(f.Path, f.Content)).ToList();
-            var check = ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, step.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], committed, project.MaxFilesPerStep, preset.Preset, preset.ExistsOnBase, preset.Stack));
+            var check = ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, step.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], committed, project.MaxFilesPerStep, version.ExistsOnBase, version.Stack));
             var runId = await StepAttemptRecorder.AttemptRunIdAsync(db, job.Id, step, cancellationToken);
             await CompleteAsync(project.Id, planId, step, steps, existing, [.. check.Warnings], working, runId, cancellationToken);
             return;
         }
 
-        var outcome = await runner.RunAsync(await RequestAsync(job, project, planId, step, steps, cancellationToken) with { Stack = preset.Stack }, cancellationToken);
+        var request = await RequestAsync(job, project, planId, step, steps, cancellationToken);
+        var outcome = await runner.RunAsync(
+            request with
+            {
+                Stack = version.Stack,
+                LegacyAgentKey = step.LegacyAgentKey,
+                Warnings = legacyWarning is null ? request.Warnings : [.. request.Warnings, AgentRunWarnings.LegacyAgentMapped],
+            },
+            cancellationToken);
         var reply = CodeGeneration.Parse(outcome.Text);
         var result = reply.IsSuccess
-            ? ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, reply.Value.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], reply.Value.Files, project.MaxFilesPerStep, preset.Preset, preset.ExistsOnBase, preset.Stack))
+            ? ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, reply.Value.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], reply.Value.Files, project.MaxFilesPerStep, version.ExistsOnBase, version.Stack))
             : new GuardianResult([CodeGeneration.UnreadableViolation(reply.Error!)]);
         if (!result.Accepted)
         {
@@ -140,6 +151,41 @@ public sealed partial class ExecutionJobHandler(
         var normalised = reply.Value.Files.Select(f => new ProducedFile(PathRules.Normalize(f.Path), f.Content)).ToList();
         var commit = await Git(() => workingCopies.CommitStepAsync(project.Id, working.Branch, step.Id, normalised, message, cancellationToken));
         await CompleteAsync(project.Id, planId, step, steps, commit!, [.. result.Warnings], working, outcome.RunId, cancellationToken);
+    }
+
+    /// <summary>
+    /// §4.23: a step whose agent isn't a specialist of the version's stack but is (or was, <c>legacy_agent_key</c>) a v2 agent
+    /// key is pointed at its mapped specialist: <c>agent_key</c> becomes the v4 key and <c>legacy_agent_key</c> keeps the v2
+    /// one (saved with the step's attempt). The mapping's warning (ambiguous or not in the stack), or <c>null</c>.
+    /// </summary>
+    private string? MapLegacyAgent(ExecutionStep step, VersionStackContext version)
+    {
+        if (version.Stack is not { } stack || step.AgentKey is null || step.AgentKey == PlanAgents.Generalist)
+        {
+            return null;
+        }
+
+        var map = version.Legacy?.Map ?? catalog.Catalog?.Legacy;
+        if (stack.Specialist(step.AgentKey) is not null)
+        {
+            // Migrated by RetirePresets (agent_key already v4): re-derive the "devops step with mixed files" warning.
+            return step.LegacyAgentKey is { } migrated ? map?.Map(migrated, step.DeclaredFiles.Select(f => f.Path))?.Warning : null;
+        }
+
+        if (map?.MapInPlay(step.LegacyAgentKey ?? step.AgentKey, step.DeclaredFiles.Select(f => f.Path), stack.AgentKeys) is not { } mapped)
+        {
+            return null;
+        }
+
+        LogLegacyAgentMapped(logger, step.StepNumber, mapped.LegacyAgentKey, mapped.AgentKey);
+        step.LegacyAgentKey = mapped.LegacyAgentKey;
+        step.AgentKey = mapped.AgentKey;
+        if (mapped.Warning is { } warning)
+        {
+            LogLegacyAgentWarning(logger, step.StepNumber, warning);
+        }
+
+        return mapped.Warning;
     }
 
     /// <summary>The next step to start, or <c>null</c> when paused, blocked, out of budget or nothing is runnable.</summary>
@@ -242,7 +288,7 @@ public sealed partial class ExecutionJobHandler(
             StepId = step.Id,
             RunKey = StepAttemptRecorder.RunKey(step.Id, step.Attempt),
 
-            // FR-76: the step runs as its specialist (with a preset whose catalogue has the step's agent).
+            // FR-121: the step runs as its specialist (with a composition that has the step's agent).
             SpecialistAgentKey = step.AgentKey,
             Inputs = new Dictionary<string, string?>
             {
@@ -438,6 +484,12 @@ public sealed partial class ExecutionJobHandler(
             throw new JobFailedException($"The execution job payload can't be read: {ex.Message}", transient: false, ErrorCodes.Validation);
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Step {StepNumber} names the v2 agent {LegacyAgentKey}; it runs as {AgentKey} (SPEC 4.23)")]
+    private static partial void LogLegacyAgentMapped(ILogger logger, int stepNumber, string legacyAgentKey, string agentKey);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Step {StepNumber}: {Warning}")]
+    private static partial void LogLegacyAgentWarning(ILogger logger, int stepNumber, string warning);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Execution job did nothing: {Reason}")]
     private static partial void LogSkipped(ILogger logger, string reason);

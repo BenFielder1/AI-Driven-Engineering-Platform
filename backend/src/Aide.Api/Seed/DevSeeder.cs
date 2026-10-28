@@ -3,6 +3,7 @@ using Aide.Api.Auth;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Release;
+using Aide.Api.Features.Stack;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
@@ -13,11 +14,12 @@ using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
+using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Identity;
-using Aide.Infrastructure.Presets;
+using Aide.Infrastructure.Stack;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,15 +38,24 @@ public sealed class SeedOptions
 /// DEP-2, DEP-V2 (§9): when <c>Seed:Enabled</c>, after the migrations have been applied (skipped while any are pending),
 /// idempotently creates the Admin <c>admin@aide.local</c> with a generated password, logged once at Warning (the
 /// only secret ever logged, so the operator can sign in), and a demo project using the Fake LLM provider and Local Git,
-/// owned by that Admin and <b>released at <see cref="DemoReleasedVersion"/></b> (its Local repository tagged
+/// on the stack <c>fe-react-vite</c> + <c>be-aspnet</c> + <c>data-efcore-postgres</c> + <c>vcs-github</c> (§9 v4), owned by
+/// that Admin and <b>released at <see cref="DemoReleasedVersion"/></b> (its Local repository tagged
 /// <c>v0.1.0</c>), so "Start new version" (FR-60) can be tried at once. An existing account with the seed email is left untouched (its
 /// password is never reset); other Admins don't matter. The demo project is created once per database: a
 /// <see cref="EventTypes.DemoProjectSeeded"/> marker event records it, so deleting the demo doesn't bring it back.
 /// <para>
-/// §9 (v2): a second demo project, <see cref="DemoPresetProjectName"/>, uses the <see cref="DemoPresetId"/> preset (Fake +
-/// Local) and starts in <b>planning</b>: its project request and specification (with the preset's sections) are seeded
-/// locked, and the plan generation job is queued, so the Fake's scripted specialist plan appears as a draft. It has its own
-/// marker (<see cref="EventTypes.DemoPresetProjectSeeded"/>), so databases seeded before it get it on the next start.
+/// §9 (v2, migrated in v4): a second demo project, <see cref="DemoPresetProjectName"/>, seeded as the RetirePresets migration
+/// converts a <see cref="DemoPresetId"/> project (FR-129, §4.23): <c>fe-nextjs</c> at <c>.</c> + <c>vcs-github</c>, with the
+/// retired preset kept as history (the "retired, migrated" note). It starts in <b>planning</b>: its project request and
+/// specification (with the composition's sections) are seeded locked, and the plan generation job is queued, so the Fake's
+/// scripted specialist plan appears as a draft. Its own marker (<see cref="EventTypes.DemoPresetProjectSeeded"/>) means
+/// databases seeded before it get it on the next start (and a database that had it is converted by the migration).
+/// </para>
+/// <para>
+/// §9 (v4): a third demo project, <see cref="DemoBaasProjectName"/>, on <c>fe-vue</c> + <c>data-supabase</c> (BaaS), starts in
+/// <b>specification</b>: its project request is locked and the spec generation job is queued. Marker:
+/// <see cref="EventTypes.DemoStackProjectSeeded"/>. No database is provisioned (the Fake database provider arrives with the
+/// database milestone).
 /// </para>
 /// <para>
 /// DEP-V2: on a database seeded under v1, the demo project (still in refinement) is upgraded once to released 0.1.0 when
@@ -73,14 +84,26 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     /// <summary>The reason recorded on the demo's seeded transition into release.</summary>
     public const string DemoReleasedReason = "Demo project seeded as released 0.1.0";
 
-    /// <summary>§9: the second demo project, on a preset, in planning.</summary>
+    /// <summary>§9: the second demo project, migrated from a retired preset, in planning.</summary>
     public const string DemoPresetProjectName = "Demo: Recipe Finder";
 
-    /// <summary>§9: the preset of the second demo project.</summary>
+    /// <summary>§9, FR-129: the retired preset the second demo project was migrated from (kept as history).</summary>
     public const string DemoPresetId = "nextjs-frontend";
 
+    /// <summary>The last shipped version of <see cref="DemoPresetId"/>.</summary>
+    public const string DemoPresetVersion = "1.0.0";
+
     /// <summary>The reason recorded on the preset demo's seeded transition into planning.</summary>
-    public const string DemoPresetReason = "Demo project seeded in planning on the nextjs-frontend preset";
+    public const string DemoPresetReason = "Demo project seeded in planning, migrated from the retired nextjs-frontend preset";
+
+    /// <summary>§9 (v4): the third demo project, Vue with Supabase as a backend-as-a-service, in specification.</summary>
+    public const string DemoBaasProjectName = "Demo: Vue Notes";
+
+    /// <summary>The reason recorded on the BaaS demo's seeded transition into specification.</summary>
+    public const string DemoBaasReason = "Demo project seeded in specification on fe-vue + data-supabase (BaaS)";
+
+    public const string DemoBaasIdea =
+        "A Vue single-page app for personal notes backed by Supabase: users sign in with email, create, edit, tag and delete their own notes, and search them. Row level security keeps every user's notes private.";
 
     public const string DemoPresetIdea =
         "A Next.js web app to search recipes from a public recipe API, view a recipe's ingredients and steps, and keep a list of favourites in the browser. There is no database of its own: the app calls the recipe API through backend-for-frontend route handlers, and tests use mocked API responses.";
@@ -131,6 +154,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         string? newPassword = null;
         Guid? demoProjectId = null;
         Guid? presetProjectId = null;
+        Guid? baasProjectId = null;
         Guid? upgradedProjectId = null;
 
         await using (var transaction = await db.Database.BeginTransactionAsync(cancellationToken))
@@ -162,6 +186,11 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
                 presetProjectId = await CreatePresetDemoProjectAsync(services, db, admin, cancellationToken);
             }
 
+            if (!await db.Events.AnyAsync(e => e.Type == EventTypes.DemoStackProjectSeeded, cancellationToken))
+            {
+                baasProjectId = await CreateBaasDemoProjectAsync(services, db, admin, cancellationToken);
+            }
+
             await transaction.CommitAsync(cancellationToken);
         }
 
@@ -178,6 +207,11 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         if (presetProjectId is { } presetProject)
         {
             LogDemoProject(logger, presetProject);
+        }
+
+        if (baasProjectId is { } baasProject)
+        {
+            LogDemoProject(logger, baasProject);
         }
 
         if (upgradedProjectId is { } upgraded)
@@ -339,6 +373,15 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
                 Idea = DemoIdea,
                 ApprovalMode = ApprovalMode.Advisory,
                 Git = new CreateProjectGitRequest { Provider = GitProvider.Local },
+
+                // §9 (v4): the released demo shows a composition.
+                Stack = new StackCompositionRequest
+                {
+                    Frontend = new StackComponentSelection { Pack = "fe-react-vite" },
+                    Backend = new StackComponentSelection { Pack = "be-aspnet" },
+                    Data = new StackDataSelection { Pack = "data-efcore-postgres" },
+                    Vcs = new StackVcsSelection { Pack = "vcs-github" },
+                },
             },
             admin.Id,
             SystemActor.Name,
@@ -369,18 +412,19 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     }
 
     /// <summary>
-    /// §9: the preset demo, created once (its marker is written even when the preset isn't shipped, so a broken preset
-    /// doesn't retry on every start). The project request (checkpoint 1) and the specification (checkpoint 2, the eleven
-    /// sections plus the preset's) are locked, the project is put in planning at checkpoint 3 with one seeded transition,
-    /// and the plan generation job is queued in the same transaction (a seed shortcut, like the released demo).
+    /// §9, FR-129: the preset demo, created once as the RetirePresets migration converts a <see cref="DemoPresetId"/>
+    /// project: the equivalent composition (<c>fe-nextjs</c> at <c>.</c>, no backend or data, <c>vcs-github</c>, no hosts) and
+    /// the retired preset id and version kept as history. The project request (checkpoint 1) and the specification
+    /// (checkpoint 2, the eleven sections plus the composition's) are locked, the project is put in planning at checkpoint 3
+    /// with one seeded transition, and the plan generation job is queued in the same transaction (a seed shortcut, like the
+    /// released demo). The marker is written even when the stack catalog didn't load (no retry on every start).
     /// </summary>
     private static async Task<Guid?> CreatePresetDemoProjectAsync(IServiceProvider services, AideDbContext db, AppUser admin, CancellationToken cancellationToken)
     {
         var now = services.GetRequiredService<TimeProvider>().GetUtcNow();
-        var preset = services.GetRequiredService<IPresetCatalog>().Find(DemoPresetId);
-        if (preset is null)
+        if (services.GetRequiredService<IStackCatalog>().Catalog is null)
         {
-            db.AddEvent(EventTypes.DemoPresetProjectSeeded, projectId: null, new { projectId = (Guid?)null, presetId = DemoPresetId, skipped = "preset not loaded" }, SystemActor.Name, now);
+            db.AddEvent(EventTypes.DemoPresetProjectSeeded, projectId: null, new { projectId = (Guid?)null, presetId = DemoPresetId, skipped = "stack catalog not loaded" }, SystemActor.Name, now);
             await db.SaveChangesAsync(cancellationToken);
             return null;
         }
@@ -391,8 +435,15 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
                 Name = DemoPresetProjectName,
                 Idea = DemoPresetIdea,
                 ApprovalMode = ApprovalMode.Advisory,
-                PresetId = DemoPresetId,
                 Git = new CreateProjectGitRequest { Provider = GitProvider.Local },
+                Stack = new StackCompositionRequest
+                {
+                    Frontend = new StackComponentSelection { Pack = "fe-nextjs", Path = "." },
+                    Backend = new StackComponentSelection { Pack = StackIds.None },
+                    Data = new StackDataSelection { Pack = StackIds.None },
+                    Vcs = new StackVcsSelection { Pack = "vcs-github" },
+                    Deploy = new StackDeploySelection { FrontendHost = StackIds.None, Local = StackIds.None },
+                },
             },
             admin.Id,
             SystemActor.Name,
@@ -406,25 +457,15 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         await UseFakeLlmAsync(services, db, projectId, cancellationToken);
         var project = await db.Projects.FirstAsync(p => p.Id == projectId, cancellationToken);
         var versionId = project.CurrentReleaseVersionId!.Value;
+        var version = await db.ReleaseVersions.FirstAsync(v => v.Id == versionId, cancellationToken);
+
+        // FR-129: the retired preset stays on the version as history ("Preset nextjs-frontend@1.0.0 (retired, migrated)").
+        version.PresetId = DemoPresetId;
+        version.PresetVersion = DemoPresetVersion;
         const int planningCheckpoint = 3;
         AddLockedArtifact(db, project, versionId, ArtifactType.ProjectRequest, 1, PresetDemoRequest(), admin.Id, now);
-        AddLockedArtifact(db, project, versionId, ArtifactType.TechnicalSpecification, 2, PresetDemoSpecification(preset.SpecSectionTitles), admin.Id, now);
-
-        project.CurrentPhase = Phase.Planning;
-        project.Status = PhaseOrder.StatusFor(Phase.Planning);
-        project.Checkpoint = planningCheckpoint;
-        project.UpdatedAt = now;
-        db.StateTransitions.Add(new StateTransition
-        {
-            ProjectId = projectId,
-            ReleaseVersionId = versionId,
-            FromPhase = Phase.Refinement,
-            ToPhase = Phase.Planning,
-            Actor = SystemActor.Name,
-            Reason = DemoPresetReason,
-            Checkpoint = planningCheckpoint,
-            CreatedAt = now,
-        });
+        AddLockedArtifact(db, project, versionId, ArtifactType.TechnicalSpecification, 2, PresetDemoSpecification(await SpecSectionsAsync(services, version, cancellationToken)), admin.Id, now);
+        EnterPhase(db, project, versionId, Phase.Planning, planningCheckpoint, DemoPresetReason, now);
         await services.GetRequiredService<JobEnqueuer>().EnqueueAsync(
             JobTypes.PlanGeneration,
             new LifecycleJobPayload(projectId, planningCheckpoint, LifecycleJobPayload.PhaseEntered),
@@ -434,6 +475,89 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         db.AddEvent(EventTypes.DemoPresetProjectSeeded, projectId: null, new { projectId, presetId = DemoPresetId }, SystemActor.Name, now);
         await db.SaveChangesAsync(cancellationToken);
         return projectId;
+    }
+
+    /// <summary>
+    /// §9 (v4): the BaaS demo, created once: <c>fe-vue</c> + <c>data-supabase</c> (BaaS) on Local Git, the project request
+    /// locked (checkpoint 1), the project put in specification at checkpoint 2 with one seeded transition and the spec
+    /// generation job queued (a seed shortcut). The marker is written even when the catalog didn't load.
+    /// </summary>
+    private static async Task<Guid?> CreateBaasDemoProjectAsync(IServiceProvider services, AideDbContext db, AppUser admin, CancellationToken cancellationToken)
+    {
+        var now = services.GetRequiredService<TimeProvider>().GetUtcNow();
+        if (services.GetRequiredService<IStackCatalog>().Catalog is null)
+        {
+            db.AddEvent(EventTypes.DemoStackProjectSeeded, projectId: null, new { projectId = (Guid?)null, skipped = "stack catalog not loaded" }, SystemActor.Name, now);
+            await db.SaveChangesAsync(cancellationToken);
+            return null;
+        }
+
+        var created = await services.GetRequiredService<ProjectCreator>().CreateAsync(
+            new CreateProjectRequest
+            {
+                Name = DemoBaasProjectName,
+                Idea = DemoBaasIdea,
+                ApprovalMode = ApprovalMode.Advisory,
+                Git = new CreateProjectGitRequest { Provider = GitProvider.Local },
+                Stack = new StackCompositionRequest
+                {
+                    Frontend = new StackComponentSelection { Pack = "fe-vue" },
+                    Backend = new StackComponentSelection { Pack = StackIds.None },
+                    Data = new StackDataSelection { Pack = "data-supabase", Mode = "baas" },
+                    Vcs = new StackVcsSelection { Pack = "vcs-github" },
+                },
+            },
+            admin.Id,
+            SystemActor.Name,
+            cancellationToken);
+        if (created.IsFailure)
+        {
+            throw new InvalidOperationException($"The BaaS demo project is invalid: {created.Error!.Message}");
+        }
+
+        var projectId = created.Value.Id;
+        await UseFakeLlmAsync(services, db, projectId, cancellationToken);
+        var project = await db.Projects.FirstAsync(p => p.Id == projectId, cancellationToken);
+        var versionId = project.CurrentReleaseVersionId!.Value;
+        const int specificationCheckpoint = 2;
+        AddLockedArtifact(db, project, versionId, ArtifactType.ProjectRequest, 1, BaasDemoRequest(), admin.Id, now);
+        EnterPhase(db, project, versionId, Phase.Specification, specificationCheckpoint, DemoBaasReason, now);
+        await services.GetRequiredService<JobEnqueuer>().EnqueueAsync(
+            JobTypes.SpecGeneration,
+            new LifecycleJobPayload(projectId, specificationCheckpoint, LifecycleJobPayload.PhaseEntered),
+            projectId,
+            cancellationToken,
+            now);
+        db.AddEvent(EventTypes.DemoStackProjectSeeded, projectId: null, new { projectId, packs = project.StackPacks }, SystemActor.Name, now);
+        await db.SaveChangesAsync(cancellationToken);
+        return projectId;
+    }
+
+    /// <summary>The seed shortcut into <paramref name="phase"/> at <paramref name="checkpoint"/>: one seeded transition from refinement.</summary>
+    private static void EnterPhase(AideDbContext db, Project project, Guid versionId, Phase phase, int checkpoint, string reason, DateTimeOffset now)
+    {
+        project.CurrentPhase = phase;
+        project.Status = PhaseOrder.StatusFor(phase);
+        project.Checkpoint = checkpoint;
+        project.UpdatedAt = now;
+        db.StateTransitions.Add(new StateTransition
+        {
+            ProjectId = project.Id,
+            ReleaseVersionId = versionId,
+            FromPhase = Phase.Refinement,
+            ToPhase = phase,
+            Actor = SystemActor.Name,
+            Reason = reason,
+            Checkpoint = checkpoint,
+            CreatedAt = now,
+        });
+    }
+
+    /// <summary>FR-123: the required extra spec section titles of <paramref name="version"/>'s composition.</summary>
+    private static async Task<IReadOnlyList<string>> SpecSectionsAsync(IServiceProvider services, ReleaseVersion version, CancellationToken cancellationToken)
+    {
+        var resolved = await services.GetRequiredService<VersionStackLoader>().ForVersionAsync(version, cancellationToken, readBase: false);
+        return resolved.Stack is { } stack ? [.. StackGuidance.SpecSections(stack).Select(t => t.Title)] : [];
     }
 
     private static void AddLockedArtifact(AideDbContext db, Project project, Guid versionId, ArtifactType type, int checkpoint, string content, Guid authorId, DateTimeOffset now) =>
@@ -456,8 +580,11 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     private static string PresetDemoRequest() =>
         $"# {DemoPresetProjectName}\n\n## Summary\n{DemoPresetIdea}\n\n## Users and roles\n- **Visitor**: searches recipes and keeps favourites in this browser.\n\n## Core features\n**Must**\n- Search recipes by name and list the results.\n- View a recipe's ingredients and steps.\n- Save and remove favourites (kept in the browser).\n- Show clear loading, empty and error states.\n\n## Out of scope\n- Accounts and a database of its own.\n";
 
-    /// <summary>A valid specification (FR-75): the eleven sections, FR-1–FR-4 with criteria, and the preset's sections.</summary>
-    private static string PresetDemoSpecification(IReadOnlyList<string> presetSections)
+    private static string BaasDemoRequest() =>
+        $"# {DemoBaasProjectName}\n\n## Summary\n{DemoBaasIdea}\n\n## Users and roles\n- **User**: signs in and manages their own notes.\n\n## Core features\n**Must**\n- Sign in with email.\n- Create, edit, tag and delete notes.\n- Search notes by text and tag.\n- Nobody else can read a user's notes.\n\n## Out of scope\n- Sharing notes.\n";
+
+    /// <summary>A valid specification (FR-123): the eleven sections, FR-1–FR-4 with criteria, and the composition's sections.</summary>
+    private static string PresetDemoSpecification(IReadOnlyList<string> stackSections)
     {
         var bodies = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -474,7 +601,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
             ["Open Questions"] = "- Which recipe API to use: default to a free public API with a server-side key.",
         };
         var sections = SpecSections.Required.Select((title, i) => $"## {i + 1}. {title}\n{bodies.GetValueOrDefault(title, title)}");
-        var extra = presetSections.Select(title => $"## {title}\n{title} of {DemoPresetProjectName}: see the requirements and API contracts above.");
+        var extra = stackSections.Select(title => $"## {title}\n{title} of {DemoPresetProjectName}: see the requirements and API contracts above.");
         return string.Join("\n\n", sections.Concat(extra)) + "\n";
     }
 

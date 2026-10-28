@@ -67,7 +67,6 @@ describe('Agent runs page (FR-23)', () => {
     expect(headers).toEqual([
       'Agent',
       'Specialist',
-      'Preset',
       'Model',
       'Provider',
       'Credential',
@@ -99,8 +98,8 @@ describe('Agent runs page (FR-23)', () => {
     const running = rowFor('Plan generator')
     expect(within(running).getAllByText('Running…')).toHaveLength(2)
     expect(within(running).getByText('Fake (testing)')).toBeInTheDocument()
-    // Tokens and cost, plus the empty specialist, preset and credential cells of a base-agent run with no recorded key.
-    expect(within(running).getAllByText('—')).toHaveLength(5)
+    // Tokens and cost, plus the empty specialist and credential cells of a base-agent run with no recorded key.
+    expect(within(running).getAllByText('—')).toHaveLength(4)
   })
 
   it('FR23_ filter: the agent filter shows only that agent and is kept in the URL', async () => {
@@ -372,15 +371,32 @@ describe('Agent runs page (FR-23)', () => {
 })
 
 describe('Agent runs page (SPEC §7.2, v2 columns)', () => {
-  it('FR74_runs_table_shows_the_preset_as_id_at_version', async () => {
+  it('FR129_FR121_run_shows_the_legacy_agent_key_the_retired_preset_label_and_the_mapping_warning', async () => {
     const project = seedProjectAs('viewer', (p) => {
-      seedRun(p, { agent: 'code_generator', agentKey: 'ui-engineer', presetId: 'nextjs-frontend', presetVersion: '1.0.0' })
+      seedRun(p, {
+        agent: 'code_generator',
+        agentKey: 'data-engineer',
+        legacyAgentKey: 'db-engineer',
+        presetId: 'nextjs-supabase',
+        presetVersion: '1.0.1',
+        warnings: ['legacy_agent_mapped'],
+      })
       seedRun(p, { agent: 'plan_generator' })
     })
-    await openRuns(project)
+    const { user } = await openRuns(project)
 
-    expect(within(rowFor('Code generator')).getByTestId('run-preset')).toHaveTextContent('nextjs-frontend@1.0.0')
-    expect(within(rowFor('Plan generator')).getByTestId('run-preset')).toHaveTextContent('—')
+    // FR-129: no preset column any more; the specialist names the v2 key it was planned as.
+    expect(within(table()).queryByRole('columnheader', { name: 'Preset' })).not.toBeInTheDocument()
+    const row = rowFor('Code generator')
+    expect(row).toHaveTextContent('data-engineer (was db-engineer)')
+
+    await user.click(within(row).getByRole('button', { name: /^Code generator run/ }))
+    const sheet = await screen.findByRole('dialog', { name: 'Code generator run' })
+    expect(within(sheet).getByText('Specialist').nextElementSibling).toHaveTextContent('data-engineer (was db-engineer)')
+    expect(within(sheet).getByText('Preset').nextElementSibling).toHaveTextContent('Preset nextjs-supabase@1.0.1 (retired, migrated)')
+    expect(
+      await within(sheet).findByText('This step was planned for a retired preset agent, so it ran as the matching stack specialist.'),
+    ).toBeInTheDocument()
   })
 
   it('FR63_FR71_runs_table_shows_specialist_credential_tool_calls_and_version_checkpoint', async () => {

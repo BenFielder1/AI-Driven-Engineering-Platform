@@ -1,5 +1,5 @@
 using Aide.Api.Errors;
-using Aide.Api.Features.Presets;
+using Aide.Api.Features.Stack;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
@@ -29,7 +29,7 @@ public sealed partial class DeploymentSettingsService(
     AideDbContext db,
     DeploymentAccess access,
     DeploymentEnvSync envSync,
-    VersionPresetReader presets,
+    VersionStackLoader stacks,
     TimeProvider time,
     ILogger<DeploymentSettingsService> logger)
 {
@@ -39,15 +39,21 @@ public sealed partial class DeploymentSettingsService(
     public async Task<DeploymentSettingsDto> GetAsync(Guid projectId, ProjectRole? callerRole, CancellationToken cancellationToken)
     {
         var settings = await db.ProjectDeploymentSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ProjectId == projectId, cancellationToken);
-        var preset = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken) is { } versionId
-            ? (await presets.ForVersionAsync(versionId, cancellationToken, readBase: false)).Preset
+        // §4.22: the required variables and deploy hosts come from the version's resolved composition.
+        var stack = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken) is { } versionId
+            ? (await stacks.ForVersionAsync(versionId, cancellationToken, readBase: false)).Stack
             : null;
+        IReadOnlyList<string> deployProviders = stack is null
+            ? []
+            : [.. new[] { stack.Composition.Deploy.FrontendHost, stack.Composition.Deploy.BackendHost }
+                .OfType<string>()
+                .Select(h => h.StartsWith("deploy-", StringComparison.Ordinal) ? h["deploy-".Length..] : h)];
         var vars = await db.DeploymentEnvVars.AsNoTracking()
             .Where(v => v.ProjectId == projectId)
             .Select(v => new { v.Key, v.Targets })
             .ToListAsync(cancellationToken);
         var present = vars.ToDictionary(v => v.Key, v => (IReadOnlyList<DeploymentTarget>)[.. Targets(v.Targets)], StringComparer.Ordinal);
-        var required = (preset?.RequiredEnv ?? [])
+        var required = (stack?.Env ?? [])
             .Select(e =>
             {
                 IReadOnlyList<DeploymentTarget> targets = [.. Targets(e.Targets)];
@@ -81,7 +87,7 @@ public sealed partial class DeploymentSettingsService(
             : null;
         return new DeploymentSettingsDto(
             settings?.Provider,
-            DeploymentSettingsRules.Supported(preset?.DeployTargets, settings is not null),
+            DeploymentSettingsRules.Supported(deployProviders, settings is not null),
             binding,
             callerRole == ProjectRole.Owner,
             project,

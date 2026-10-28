@@ -2,7 +2,7 @@ import type { Schemas } from '../../api/client'
 import { Alert } from '../../components/ui/alert'
 import { copyForCode } from '../../lib/errors'
 import { PLAN_BLOCK_LANGUAGE, readPlanDocument } from '../artifacts/plan-block'
-import { agentLabel, type PresetAgent } from '../presets/presets-api'
+import { specialistLabels } from '../stack/stack-summary'
 import { dependencyWaves } from './plan-waves'
 
 /**
@@ -18,8 +18,9 @@ const warningTitles: Readonly<Record<string, { title: string; idsLabel: string }
 }
 
 /**
- * FR-76, §4.11, §4.13: the API's non-blocking findings about this plan version (UNCOVERED_REQUIREMENTS, and with a
- * preset AGENT_SCOPE and PLAN_ORDER, and for a Vercel preset MISSING_VERCEL_CONFIG, FR-89), each with its copy, the server's specifics and its ids.
+ * FR-76, FR-124, §4.13: the API's non-blocking findings about this plan version (UNCOVERED_REQUIREMENTS, and with a
+ * stack composition AGENT_SCOPE, PLAN_ORDER and the other composed-plan warnings), each with its copy, the server's
+ * specifics and its ids.
  */
 function PlanWarnings({ warnings }: { warnings: readonly Schemas['ArtifactWarningDto'][] }) {
   if (warnings.length === 0) {
@@ -52,31 +53,28 @@ function PlanWarnings({ warnings }: { warnings: readonly Schemas['ArtifactWarnin
   )
 }
 
-/** FR-76: the step's specialist: the catalogue agent's display name with its key, or v1's Code Generator. */
-function Specialist({ agent, agents }: { agent: string | null; agents: readonly PresetAgent[] | undefined }) {
+/** FR-120: the step's specialist: the generic specialist's display name with its key, or v1's Code Generator. */
+function Specialist({ agent }: { agent: string | null }) {
   if (!agent) {
     return <>Code Generator</>
   }
-  const label = agentLabel(agent, agents)
-  return label.name ? (
+  const name = specialistLabels[agent]
+  return name ? (
     <span className="flex flex-col">
-      <span>{label.name}</span>
-      <code className="text-xs text-muted-foreground">{label.key}</code>
+      <span>{name}</span>
+      <code className="text-xs text-muted-foreground">{agent}</code>
     </span>
   ) : (
-    <code className="text-xs">{label.key}</code>
+    <code className="text-xs">{agent}</code>
   )
 }
 
 export function PlanPanel({
   content,
   warnings = [],
-  agents,
 }: {
   content: string
   warnings?: readonly Schemas['ArtifactWarningDto'][]
-  /** FR-76: the plan's preset agent catalogue, for display names (undefined without a preset or while loading). */
-  agents?: readonly PresetAgent[]
 }) {
   const doc = readPlanDocument(content)
   if (!doc) {
@@ -122,7 +120,7 @@ export function PlanPanel({
                 </th>
                 <td className="px-3 py-2 break-words">{s.title}</td>
                 <td className="px-3 py-2">
-                  <Specialist agent={s.agent} agents={agents} />
+                  <Specialist agent={s.agent} />
                 </td>
                 <td className="px-3 py-2">
                   <ul className="flex flex-col gap-0.5">

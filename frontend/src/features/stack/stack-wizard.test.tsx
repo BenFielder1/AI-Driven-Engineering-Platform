@@ -59,7 +59,7 @@ describe('Wizard → Stack sub-steps (FR-114, FR-115, FR-119)', () => {
       '1. Frontend',
       '2. Backend',
       '3. Data',
-      '4. VCS',
+      '4. Version control',
       '5. Deployment',
     ])
     // A sub-step can't be skipped: the frontend (or None) must be chosen first.
@@ -80,7 +80,7 @@ describe('Wizard → Stack sub-steps (FR-114, FR-115, FR-119)', () => {
     await layerHeading('Data')
     await pick(user, 'EF Core + PostgreSQL')
     await next(user)
-    await layerHeading('VCS')
+    await layerHeading('Version control')
     await pick(user, 'GitHub')
     await next(user)
     await layerHeading('Deployment')
@@ -88,7 +88,7 @@ describe('Wizard → Stack sub-steps (FR-114, FR-115, FR-119)', () => {
 
     // Back walks the sub-steps before leaving the step.
     await back(user)
-    await layerHeading('VCS')
+    await layerHeading('Version control')
   })
 
   it('FR114_forbidden_options_are_listed_with_their_reasons_and_never_selected', async () => {
@@ -132,7 +132,7 @@ describe('Wizard → Stack sub-steps (FR-114, FR-115, FR-119)', () => {
     await next(user)
     await pick(user, 'SQLAlchemy')
     await next(user)
-    await layerHeading('VCS')
+    await layerHeading('Version control')
 
     // Back to Backend through the sub-step list, then FastAPI → ASP.NET Core.
     await user.click(screen.getByRole('button', { name: '2. Backend' }))
@@ -222,7 +222,7 @@ describe('Wizard → Stack sub-steps (FR-114, FR-115, FR-119)', () => {
     await next(user)
     await pick(user, 'None')
     await next(user)
-    await layerHeading('VCS')
+    await layerHeading('Version control')
 
     // R5: fixed to the repository's host, nothing to choose.
     expect(screen.queryByRole('radio', { name: 'GitLab' })).not.toBeInTheDocument()

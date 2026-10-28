@@ -1,10 +1,10 @@
 using Aide.Api.Features.Activity;
-using Aide.Api.Features.Presets;
+using Aide.Api.Features.Stack;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
+using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Presets;
 using Aide.Domain.Specs;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
@@ -16,7 +16,7 @@ namespace Aide.Api.Features.Artifacts;
 /// FR-16, FR-20, FR-21: artifact reads. Every read goes through <see cref="ArtifactIntegrityGuard"/>, so each returned
 /// version carries the integrity found by re-hashing it now.
 /// </summary>
-public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard integrity, VersionPresetReader presets)
+public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard integrity, VersionStackLoader stacks)
 {
     /// <summary>The highest version of each type that exists in release version <paramref name="releaseVersionId"/>, in type order.</summary>
     public async Task<IReadOnlyList<ArtifactSummaryDto>> ListLatestAsync(Guid projectId, Guid? releaseVersionId, CancellationToken cancellationToken)
@@ -134,12 +134,11 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     }
 
     /// <summary>
-    /// FR-76, §4.13: an implementation plan's warnings, computed on read (<see cref="PresetPlanValidator.AllWarnings"/>):
+    /// FR-124, §4.13: an implementation plan's warnings, computed on read (<see cref="CompositionPlanValidator.AllWarnings"/>):
     /// coverage (<c>UNCOVERED_REQUIREMENTS</c>, against the latest locked specification of its release version, so it follows
-    /// the spec it is checked against) and, with the version's preset, <c>AGENT_SCOPE</c>, <c>PLAN_ORDER</c> and (FR-89)
-    /// <c>MISSING_VERCEL_CONFIG</c>. The base commit isn't listed on read, so the Vercel warning applies to versions without
-    /// a base commit (a new repository); with existing code its base files are unknown and it is skipped. It looks for
-    /// <c>vercel.json</c> in the project's deployment root directory (the repository root without deployment settings).
+    /// the spec it is checked against) and, with the version's composition, <c>AGENT_SCOPE</c>, <c>PLAN_ORDER</c> and
+    /// <c>UNDECLARED_GENERATED_FILE</c>. §4.23: steps of a migrated v2 plan are checked against the frozen v2 globs.
+    /// Without a composition only coverage applies.
     /// </summary>
     private async Task<IReadOnlyList<ArtifactWarningDto>> WarningsAsync(Artifact artifact, CancellationToken cancellationToken)
     {
@@ -148,8 +147,8 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             return [];
         }
 
-        var preset = await presets.ForVersionAsync(artifact.ReleaseVersionId, cancellationToken, readBase: false);
-        var plan = PlanDocument.ParseMarkdown(artifact.Content, maxFilesPerStep: null, preset.PlanAgents(artifact.Type));
+        var version = await stacks.ForVersionAsync(artifact.ReleaseVersionId, cancellationToken, readBase: false);
+        var plan = PlanDocument.ParseMarkdown(artifact.Content, maxFilesPerStep: null, version.PlanAgents(artifact.Type));
         if (plan.IsFailure)
         {
             return [];
@@ -162,14 +161,24 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             .Select(a => a.Content)
             .FirstOrDefaultAsync(cancellationToken);
         var requirements = spec is null ? null : RequirementParser.Parse(spec).Requirements;
-        var rootDirectory = await db.ProjectDeploymentSettings.AsNoTracking()
-            .Where(s => s.ProjectId == artifact.ProjectId)
-            .Select(s => s.RootDirectory)
-            .FirstOrDefaultAsync(cancellationToken);
         // FR-124, FR-127: a composed plan's warnings come from the composition (AGENT_SCOPE, PLAN_ORDER, UNDECLARED_GENERATED_FILE).
-        var warnings = preset.Stack is { } stack
-            ? CompositionPlanValidator.AllWarnings(plan.Value, requirements, stack)
-            : PresetPlanValidator.AllWarnings(plan.Value, requirements, preset.Preset, preset.BaseFiles, rootDirectory);
+        IReadOnlyList<ValidationWarning> warnings = version.Stack is { } stack
+            ? CompositionPlanValidator.AllWarnings(plan.Value, requirements, stack, version.Legacy?.Preset)
+            : requirements is not null && PlanScope.Check(plan.Value, requirements) is { } uncovered ? [uncovered] : [];
+
+        // FR-89: a stack deploying the frontend to Vercel on a new repository needs vercel.json in the Vercel root directory
+        // (the base isn't listed on read, so with existing code its files are unknown and the warning is skipped).
+        if (version.Stack?.Composition.Deploy.FrontendHost == "deploy-vercel")
+        {
+            var rootDirectory = await db.ProjectDeploymentSettings.AsNoTracking()
+                .Where(s => s.ProjectId == artifact.ProjectId)
+                .Select(s => s.RootDirectory)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (VercelConfigRules.PlanWarning(plan.Value, deploysToVercel: true, version.BaseFiles, rootDirectory) is { } vercel)
+            {
+                warnings = [.. warnings, vercel];
+            }
+        }
         return [.. warnings.Select(w => new ArtifactWarningDto(w.Code, w.Message, w.Details))];
     }
 

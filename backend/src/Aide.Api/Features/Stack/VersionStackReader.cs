@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Aide.Api.Features.Stack;
 
 /// <summary>
-/// FR-117: the stack a release version runs with — its pinned composition (<c>null</c>: no stack, or a legacy preset) —
+/// FR-117: the stack a release version runs with — its pinned composition (<c>null</c>: no stack) —
 /// and its <see cref="StackChange"/> against the stack its base code was built with. The spec and plan generators read
 /// <see cref="StackChange.IsStackChange"/> (FR-123, FR-124, M26).
 /// </summary>

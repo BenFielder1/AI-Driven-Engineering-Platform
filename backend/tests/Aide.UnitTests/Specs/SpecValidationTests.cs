@@ -59,7 +59,7 @@ public class SpecValidationTests
     [Fact]
     public void FR75_A_preset_section_is_required_and_named_in_the_corrective_feedback()
     {
-        var context = new SpecValidationContext { PresetSections = ["Data Model & RLS Policies"] };
+        var context = new SpecValidationContext { StackSections = ["Data Model & RLS Policies"] };
 
         var result = SpecValidator.Validate(Spec(Login), context);
 

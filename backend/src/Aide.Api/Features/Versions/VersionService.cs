@@ -1,6 +1,5 @@
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Lifecycle;
-using Aide.Api.Features.Presets;
 using Aide.Api.Features.Stack;
 using Aide.Api.Jobs;
 using Aide.Domain.Common;
@@ -12,7 +11,7 @@ using Aide.Domain.Rollback;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Presets;
+using Aide.Infrastructure.Stack;
 using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,7 +31,7 @@ public sealed partial class VersionService(
     JobEnqueuer jobs,
     IGitProviderResolver providers,
     ISecretProtector secrets,
-    IPresetCatalog presets,
+    IStackCatalog catalog,
     ProjectStackService stacks,
     TimeProvider time,
     ILogger<VersionService> logger)
@@ -41,32 +40,16 @@ public sealed partial class VersionService(
     public const int EventRequestMaxLength = 500;
 
     /// <summary>
-    /// FR-60, FR-61, FR-74: starts <paramref name="request"/>'s version. Checks, in order: <c>PRESET_NOT_FOUND</c> (a sent, unknown preset id),
-    /// <c>VERSION_INVALID</c>, <c>VERSION_IN_PROGRESS</c>, <c>RELEASE_NOT_MERGED</c>, <c>NOT_RELEASED</c>,
+    /// FR-60, FR-61, FR-117: starts <paramref name="request"/>'s version. Checks, in order: <c>VERSION_INVALID</c>, <c>VERSION_IN_PROGRESS</c>, <c>RELEASE_NOT_MERGED</c>, <c>NOT_RELEASED</c>,
     /// <c>VERSION_NOT_GREATER</c>, then <c>TAG_EXISTS</c> through the Git provider (<c>UPSTREAM_ERROR</c> when the repository
     /// can't be read). On success: the version is <c>in_development</c> (base = the released tag and merge commit, branch
     /// <c>aide/&lt;slug&gt;/v&lt;version&gt;</c>), the project is in refinement / active at checkpoint 1 with the request as its idea,
-    /// <c>VERSION_STARTED</c> is recorded and the Repository Analyst job is queued. The preset (FR-74) is the sent one
-    /// (<c>null</c>: none) or, when <c>presetId</c> is omitted, the base version's preset at its shipped version; it is
-    /// pinned with its version and content hash.
+    /// <c>VERSION_STARTED</c> is recorded and the Repository Analyst job is queued. The stack is the sent composition or the
+    /// base version's re-pinned to the current catalog (FR-129: no preset is ever pinned).
     /// </summary>
     public async Task<Result<ReleaseVersion>> StartAsync(Guid projectId, StartReleaseVersionRequest request, Guid userId, string actor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var sentPreset = PresetService.Resolve(presets, request.PresetIdSent ? request.PresetId : null);
-        if (sentPreset.IsFailure)
-        {
-            return Result.Failure<ReleaseVersion>(sentPreset.Error!);
-        }
-
-        if (request.Stack is not null && sentPreset.Value is not null)
-        {
-            return Result.Failure<ReleaseVersion>(new DomainError(ErrorCodes.Validation, "The stack choices are invalid.")
-            {
-                Details = ["stack: Send a presetId or a stack, not both."],
-            });
-        }
-
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
         if (project is null)
         {
@@ -139,10 +122,10 @@ public sealed partial class VersionService(
             StartedBy = userId,
             CreatedAt = now,
         };
-        // FR-117: the sent stack, else (unless a preset was picked) the base version's composition re-pinned to the
-        // current catalog; a version with a stack has no preset.
+        // FR-117: the sent stack, else the base version's composition re-pinned to the current catalog (FR-129: a version
+        // migrated from a preset has its equivalent composition, so it is inherited like any other).
         var stack = sentStack;
-        if (stack is null && sentPreset.Value is null && StackCompositionJson.Deserialize(baseVersion?.StackComposition) is { } inheritedStack)
+        if (stack is null && StackCompositionJson.Deserialize(baseVersion?.StackComposition) is { } inheritedStack)
         {
             var repinned = stacks.Repin(inheritedStack, repoVcs);
             if (repinned.IsFailure)
@@ -153,13 +136,6 @@ public sealed partial class VersionService(
             stack = repinned.Value;
         }
 
-        var preset = stack is not null ? null : request.PresetIdSent ? sentPreset.Value : presets.Find(baseVersion?.PresetId);
-        if (stack is null && !request.PresetIdSent && baseVersion?.PresetId is { } inherited && preset is null)
-        {
-            LogInheritedPresetMissing(logger, project.Id, inherited);
-        }
-
-        PresetService.Pin(started, preset);
         ProjectStackService.Pin(started, stack);
         stacks.SyncPacks(project, stack);
         db.ReleaseVersions.Add(started);
@@ -180,8 +156,6 @@ public sealed partial class VersionService(
                 baseTag = started.BaseTag,
                 baseCommitSha = started.BaseCommitSha,
                 branchName = ReleaseVersionRules.BranchName(project.Slug, project.Id, version),
-                presetId = started.PresetId,
-                presetVersion = started.PresetVersion,
                 stackPacks = project.StackPacks,
                 catalogVersion = started.CatalogVersion,
                 request = cleanRequest.Length > EventRequestMaxLength ? cleanRequest[..EventRequestMaxLength] : cleanRequest,
@@ -220,7 +194,7 @@ public sealed partial class VersionService(
             .. versions
                 .OrderByDescending(v => SemVer.TryParse(v.Version, out var parsed) ? parsed : null)
                 .ThenByDescending(v => v.CreatedAt)
-                .Select(v => ToDto(v, Checkpoints(v.Id, project.CurrentReleaseVersionId, project.Checkpoint, checkpoints), actors, presets)),
+                .Select(v => ToDto(v, Checkpoints(v.Id, project.CurrentReleaseVersionId, project.Checkpoint, checkpoints), actors, catalog)),
         ];
     }
 
@@ -327,7 +301,7 @@ public sealed partial class VersionService(
         return new ReleaseVersionCheckpointsDto(current, Math.Max(max, current));
     }
 
-    internal static ReleaseVersionDto ToDto(ReleaseVersion v, ReleaseVersionCheckpointsDto checkpoints, Func<string, ActorDto> actors, IPresetCatalog presets) => new(
+    internal static ReleaseVersionDto ToDto(ReleaseVersion v, ReleaseVersionCheckpointsDto checkpoints, Func<string, ActorDto> actors, IStackCatalog catalog) => new(
         v.Id,
         v.Version,
         v.Status,
@@ -341,7 +315,7 @@ public sealed partial class VersionService(
         checkpoints,
         v.PresetId,
         v.PresetVersion,
-        PresetService.Describe(presets, v.PresetId, v.PresetVersion).PresetName,
+        Stack.RetiredPresets.Describe(catalog, v.PresetId, v.PresetVersion).PresetName,
         v.Request,
         v.StartedBy is { } startedBy ? actors(startedBy.ToString()) : null,
         v.CreatedAt,
@@ -352,8 +326,6 @@ public sealed partial class VersionService(
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} started version {Version} (base {BaseTag})")]
     private static partial void LogStarted(ILogger logger, Guid projectId, string version, string? baseTag);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId}: the base version's preset {PresetId} is no longer shipped; the new version has no preset")]
-    private static partial void LogInheritedPresetMissing(ILogger logger, Guid projectId, string presetId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Checking the release tags of project {ProjectId} ({Provider}) failed")]
     private static partial void LogTagLookupFailed(ILogger logger, Guid projectId, GitProvider provider);

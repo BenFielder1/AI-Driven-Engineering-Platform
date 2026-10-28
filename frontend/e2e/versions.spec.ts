@@ -37,7 +37,7 @@ test('NFR-TEST2, FR-55–FR-66, FR-90, FR-91: 0.1.0 is released live on Vercel, 
   await registerViaApi(context, 'versions', 'Versions Owner')
   await createVercelConnection(context, 'Fake Vercel')
 
-  // FR-5/FR-66/FR-88: the eight-step wizard, from scratch, Local, 0.1.0, no preset, strict, Vercel (Fake) deployment.
+  // FR-5/FR-66/FR-88: the eight-step wizard, from scratch, Local, 0.1.0, no stack (general), strict, Vercel (Fake) deployment.
   await page.goto('/projects/new')
   await expect(page.getByRole('heading', { name: 'Step 1 of 8: Source' })).toBeVisible()
   await page.getByRole('button', { name: 'Next' }).click()

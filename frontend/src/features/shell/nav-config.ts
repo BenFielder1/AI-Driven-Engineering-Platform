@@ -93,7 +93,7 @@ const ADMIN: NavSection = {
     { key: 'admin-events', label: 'Events', to: '/admin/events', icon: ScrollText, keywords: ['admin', 'audit', 'log'] },
     { key: 'admin-runs', label: 'Agent runs', to: '/admin/runs', icon: Bot, keywords: ['admin', 'tokens', 'cost'] },
     { key: 'admin-dead-letters', label: 'Dead letters', to: '/admin/dead-letters', icon: Inbox, keywords: ['admin', 'jobs', 'retry'] },
-    { key: 'admin-integrations', label: 'Integrations', to: '/admin/integrations', icon: Workflow, keywords: ['admin', 'github app', 'presets'] },
+    { key: 'admin-integrations', label: 'Integrations', to: '/admin/integrations', icon: Workflow, keywords: ['admin', 'github app', 'stack catalog'] },
   ],
 }
 

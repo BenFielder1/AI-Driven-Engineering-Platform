@@ -16,9 +16,9 @@ public class StackCatalogLoaderTests
 
         Assert.Empty(result.Errors);
         Assert.NotNull(result.Catalog);
-        Assert.Equal("1.0.0", result.Catalog.Version);
+        Assert.Equal("1.1.0", result.Catalog.Version);
         Assert.Matches("^[0-9a-f]{64}$", result.Catalog.ContentHash);
-        Assert.Equal("stack@1.0.0", result.Catalog.Label);
+        Assert.Equal("stack@1.1.0", result.Catalog.Label);
         Assert.All(result.Packs, p => Assert.True(p.Loaded, string.Join(" | ", p.Errors)));
     }
 
@@ -246,7 +246,7 @@ public class StackCatalogLoaderTests
         var b = new Dictionary<string, string> { ["a.json"] = "one\n", ["b.md"] = "two\n" };
 
         Assert.Equal(StackCatalogLoader.ContentHash(a), StackCatalogLoader.ContentHash(b));
-        Assert.Equal(Domain.Presets.PresetLoader.ContentHash(b), StackCatalogLoader.ContentHash(b));
+        Assert.Equal("5b403d1f0ab433eb3f92e0684d6595b349ecacf8e9c126bc2d82cbd20da5c5da", StackCatalogLoader.ContentHash(b)); // the v2 preset hash of these files
         Assert.NotEqual(StackCatalogLoader.ContentHash(b), StackCatalogLoader.ContentHash(new Dictionary<string, string> { ["a.json"] = "one\n", ["b.md"] = "three\n" }));
 
         var files = ShippedFiles();

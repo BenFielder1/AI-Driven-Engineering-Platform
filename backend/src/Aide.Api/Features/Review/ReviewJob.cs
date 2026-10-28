@@ -4,7 +4,7 @@ using Aide.Api.Agents;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
-using Aide.Api.Features.Presets;
+using Aide.Api.Features.Stack;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
@@ -14,7 +14,6 @@ using Aide.Domain.Entities;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
-using Aide.Domain.Presets;
 using Aide.Domain.Review;
 using Aide.Domain.Specs;
 using Aide.Domain.Stack;
@@ -41,8 +40,8 @@ internal sealed record ReviewMaterial(
     /// <summary>FR-70: the version's codebase summary, an input of the review.</summary>
     public Artifact? CodebaseSummary { get; init; }
 
-    /// <summary>FR-77: the version's preset (checklist, deterministic rules, optimisation plan agents).</summary>
-    public VersionPreset Preset { get; init; } = VersionPreset.None;
+    /// <summary>FR-126: the version's stack (checklist, deterministic checks, optimisation plan agents).</summary>
+    public VersionStackContext Stack { get; init; } = VersionStackContext.None;
 }
 
 /// <summary>The succeeded run whose reply was accepted, and the reply as read.</summary>
@@ -71,10 +70,6 @@ internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult 
 /// §4.13: in iterations (a spec with tagged requirements) the reply is scoped by <see cref="IterationReviewScope"/> before
 /// scoring: feature coverage is over <c>[new]</c>/<c>[changed]</c> requirements, and broken <c>[unchanged]</c> ones become
 /// regressions (stored in <c>compliance_report.regressions</c>). The agent has the repo tools on the project branch (FR-71).
-/// FR-77: with a preset the agent also scores against its review checklist (<see cref="PresetGuidance.Review"/>; failed items
-/// are agent violations mapped to the item's category and severity, without penalty, <see cref="PresetReviewChecklist"/>),
-/// the deterministic checks gain the preset's rules (<see cref="PresetReviewChecks"/>, penalised like v1's), and
-/// optimisation steps may name the preset's specialists (<see cref="Domain.Execution.PlanAgents.ForOptimization"/>).
 /// FR-126, FR-127: with a stack composition the agent scores against the composed checklist (<see cref="StackGuidance.Review"/>,
 /// mapped by <see cref="StackReviewChecklist"/>, no penalty), the deterministic checks gain the packs' registered checks
 /// (<see cref="StackReviewFindings"/>, with the base commit's files, the branch tree and the backend's source for
@@ -98,7 +93,7 @@ public sealed partial class ReviewJobHandler(
     LifecycleWriter writer,
     ExternalChecksCollector externalChecks,
     PreviewCollector previews,
-    VersionPresetReader presets,
+    VersionStackLoader stacks,
     IDeploymentProviderResolver deploymentProviders,
     TimeProvider time,
     ILogger<ReviewJobHandler> logger) : IJobHandler
@@ -265,19 +260,18 @@ public sealed partial class ReviewJobHandler(
         var specText = spec?.Content ?? string.Empty;
         var allowlist = SpecReading.AllowedDependencies(specText);
         var endpoints = SpecReading.EndpointPaths(specText);
-        var preset = (await presets.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
+        var version = (await stacks.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
         var secrets = DeterministicChecks.SecretScan(contents);
-        var stackFindings = preset.Stack is { } stack
+        var stackFindings = version.Stack is { } stack
             ? StackReviewFindings.Run(
                 stack,
-                new StackReviewInput([.. contents, .. await BackendSourceAsync(project.Id, working.Branch, stack, tree, contents, cancellationToken)], preset.BaseFiles, [.. tree.Select(f => f.Path)]),
+                new StackReviewInput([.. contents, .. await BackendSourceAsync(project.Id, working.Branch, stack, tree, contents, cancellationToken)], version.BaseFiles, [.. tree.Select(f => f.Path)]),
                 secrets)
             : [];
-        var vercelChecked = preset.Stack?.ReviewChecks.Contains(StackReviewChecks.DeployBranchControl, StringComparer.Ordinal) ?? false;
+        var vercelChecked = version.Stack?.ReviewChecks.Contains(StackReviewChecks.DeployBranchControl, StringComparer.Ordinal) ?? false;
         var findings = secrets
             .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents)))
             .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents))
-            .Concat(PresetReviewChecks.Run(preset.Preset, contents))
             .Concat(stackFindings)
             .Concat(vercelChecked ? [] : await VercelConfigFindingsAsync(project.Id, working.Branch, contents, cancellationToken))
             .Concat(externalFindings ?? [])
@@ -295,7 +289,7 @@ public sealed partial class ReviewJobHandler(
         {
             Requirements = RequirementParser.Parse(specText).Requirements,
             CodebaseSummary = iteration.CodebaseSummary,
-            Preset = preset,
+            Stack = version,
         };
     }
 
@@ -314,9 +308,8 @@ public sealed partial class ReviewJobHandler(
         CancellationToken cancellationToken)
     {
         var maxFiles = project.MaxFilesPerStep;
-        var preset = material.Preset.Preset;
-        var stack = material.Preset.Stack;
-        var agents = material.Preset.PlanAgents(ArtifactType.OptimizationPlan);
+        var stack = material.Stack.Stack;
+        var agents = material.Stack.PlanAgents(ArtifactType.OptimizationPlan);
         var plans = material.CurrentOptimizationPlan is { } optimization
             ? $"{material.ImplementationPlan?.Content}\n\n---\n\n# Optimization plan v{optimization.Version.ToString(CultureInfo.InvariantCulture)} (the latest cycle's steps)\n\n{optimization.Content}"
             : material.ImplementationPlan?.Content;
@@ -335,7 +328,7 @@ public sealed partial class ReviewJobHandler(
                 ["PREVIOUS_REVIEW"] = previousReview,
                 ["CODE"] = material.Code,
                 ["MAX_FILES_PER_STEP"] = maxFiles.ToString(CultureInfo.InvariantCulture),
-                ["PRESET_GUIDANCE"] = stack is null ? PresetGuidance.Review(preset) : StackGuidance.Review(stack),
+                ["STACK_GUIDANCE"] = stack is null ? null : StackGuidance.Review(stack),
             },
             Stack = stack,
             InputArtifacts = [.. new[] { material.Specification, material.ImplementationPlan, material.CurrentOptimizationPlan, material.CodebaseSummary }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
@@ -343,14 +336,14 @@ public sealed partial class ReviewJobHandler(
             Repo = RepoScope.WorkingTree,
         };
 
-        // FR-77: checklist violations take their item's category and severity (still agent violations: no penalty).
+        // FR-126: checklist violations take their item's category and severity (still agent violations: no penalty).
         Result<CodeReviewResult> Parse(string text)
         {
             var read = CodeReviewOutput.Parse(text, maxFiles, agents);
             return read.IsSuccess
                 ? Result.Success(read.Value with
                 {
-                    Violations = stack is null ? PresetReviewChecklist.Apply(read.Value.Violations, preset) : StackReviewChecklist.Apply(read.Value.Violations, stack),
+                    Violations = stack is null ? read.Value.Violations : StackReviewChecklist.Apply(read.Value.Violations, stack),
                 })
                 : read;
         }

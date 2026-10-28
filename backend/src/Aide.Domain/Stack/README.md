@@ -14,7 +14,7 @@ Stack/
     stack-api-contract.md   adapted stack-core skill
     composition-summary.md  template rendering the STACK.md equivalent for prompts
   agents/<key>.md           adapted stack-core agent prompts (FR-120); README.md is ignored
-  legacy/                   frozen v2 preset globs and agent-key map (§4.23); not read yet
+  legacy/presets.json       frozen v2 preset globs and agent-key map (§4.23, FR-129); optional, validated when present
 ```
 
 Every adapted file starts with a provenance comment. For `skill.md` it must be
@@ -61,3 +61,15 @@ dropped. What the manifests can't express (PROGRESS "M26 inputs") is in `StackRe
 - `CompositionPlanValidator` checks the composed plan rules (`INVALID_PLAN`, `STACK_CHANGE_UNPLANNED`) and warnings
   (`AGENT_SCOPE`, `PLAN_ORDER`, `UNDECLARED_GENERATED_FILE`); `StackPathRules` the protected-path exceptions.
 - `StackReviewChecks.Run` runs the registered deterministic checks; `StackReviewChecklist` maps `[Cn]` violations.
+
+## Legacy presets (SPEC §4.23, FR-129)
+
+`legacy/presets.json` (JSON with `//` comments allowed) is the frozen v2 data: `agentKeys[] {from, to, byFiles?[] {glob, to}}`
+(the §4.23 table; every `to` is a specialist key) and `presets[] {id, name, version, owns {v2Key: [globs]}}`. It is loaded
+into `StackCatalog.Legacy` (`LegacyPresets`) and never edited again:
+
+- `PlanValidator` (with `PlanAgents.Legacy`, set for a version whose `preset_id` is kept as history) maps a migrated plan's
+  v2 keys to v4 specialists (`PlanStep.LegacyAgent` keeps the v2 key); `CompositionPlanValidator.Warnings` checks those
+  steps' files against the frozen globs, so a locked plan doesn't suddenly get `AGENT_SCOPE` warnings.
+- At run time `LegacyPresets.MapInPlay` picks the specialist a step still naming a v2 key runs as (falling back to the
+  rule's other specialist, else `generalist`, with the `legacy_agent_mapped` run warning).

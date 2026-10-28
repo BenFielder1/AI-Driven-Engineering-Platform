@@ -30,15 +30,15 @@ public static partial class SpecSections
     public const string ChangesInThisVersion = "Changes in this version";
 
     /// <summary>
-    /// §4.13 required sections: v1's eleven (<see cref="Required"/>); then a preset's extra sections
-    /// (<paramref name="presetSections"/>, phase 8; empty without a preset); then <see cref="ChangesInThisVersion"/> for an
+    /// §4.13 required sections: v1's eleven (<see cref="Required"/>); then the composition's extra sections
+    /// (<paramref name="stackSections"/>, FR-123; empty without a stack); then <see cref="ChangesInThisVersion"/> for an
     /// iteration. Duplicates (ignoring case and formatting) are listed once.
     /// </summary>
-    public static IReadOnlyList<string> RequiredFor(bool isIteration, IEnumerable<string>? presetSections = null)
+    public static IReadOnlyList<string> RequiredFor(bool isIteration, IEnumerable<string>? stackSections = null)
     {
         var result = new List<string>(Required);
         var seen = new HashSet<string>(Required.Select(Normalise), StringComparer.OrdinalIgnoreCase);
-        foreach (var extra in presetSections ?? [])
+        foreach (var extra in stackSections ?? [])
         {
             if (!string.IsNullOrWhiteSpace(extra) && seen.Add(Normalise(extra)))
             {

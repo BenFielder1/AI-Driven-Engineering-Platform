@@ -98,6 +98,11 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 - 2026-10-28 — M25: the wizard keeps the v2 preset cards under "Legacy presets (retiring in v4)" until M26 removes presets (keeps the v2 preset E2E flow working) — SPEC updated: no
 - 2026-10-28 — M25: the wizard keeps its v3 step order (Repository and Version before Stack) instead of SPEC §7's Source → Idea → Stack → Repository; the repo then fixes VCS before the Stack step. Revisit in M27/M28 when the Repository step lists repos of the chosen VCS — SPEC updated: no
 - 2026-10-28 — M25: the wizard maps GitHub repo modes to `vcs-github` client-side (R5) because no project exists yet; the server re-applies R5 on create (`VCS_MISMATCH`). Move to a server hint with GitLab/Bitbucket (M27/M28) — SPEC updated: no
+- 2026-10-28 — M26: the RetirePresets migration writes 4 composition documents (preset × Vercel or not) with catalog 1.1.0 and a null catalog hash, re-pinned on the version's next stack write; `StackComposition.CatalogHash` is nullable — SPEC updated: no
+- 2026-10-28 — M26: a run's `legacyAgentKey` is derived from `execution_steps.legacy_agent_key` (no new agent_runs column); a v2 key whose mapped specialist isn't in the stack falls back to the other mapping, then `generalist`, with run warning `legacy_agent_mapped` — SPEC updated: no
+- 2026-10-28 — M26: a stack catalog that failed to load makes agent jobs fail transiently (retry, then dead-letter) instead of VALIDATION — SPEC updated: no
+- 2026-10-28 — M26: FR-89's MISSING_VERCEL_CONFIG plan warning is kept, driven by the `deploy-vercel` host; preset types renamed (`VersionStackLoader`, `VersionStackContext`); prompts bumped (spec/plan v5, review v7) — SPEC updated: no
+- 2026-10-28 — M26: seeds: released demo fe-react-vite + be-aspnet + data-efcore-postgres; preset demo kept as fe-nextjs at "." with its legacy preset id; new "Demo: Vue Notes" (fe-vue + data-supabase BaaS) in specification, no fake database — SPEC updated: no
 - 2026-10-28 — FR-129 (preset retirement) moves from M25 to the end of M26: migrated in-flight plans must run as the new specialists, which M26 builds — SPEC updated: no
 - 2026-10-25 — M24: `legacy/` is created in M26 together with a catalog version bump, so the pinned hash only changes with a version — SPEC updated: no
 - 2026-10-25 — M24: pack skills are 70–115% of the source length (not 40–60%): hand-writing generated files and CI checks needs the room — SPEC updated: no
@@ -113,6 +118,106 @@ The catalog schema can't express these, so the M26 resolver must implement them:
 - Composition summary template (`core/composition-summary.md`): `{{UPPER_SNAKE}}` placeholders, rendered separately from the base prompt template; strip leading provenance comments from agent prompts and the summary; mirror `SpecialistPrompt.ComposeSystem`.
 - Plan rules: scaffolder exemption from the deploy/ci exclusivity entries (v2 decision); `planRules.exclusive` has no `soft` flag.
 - SPEC follow-ups: §4.22 should name `API_ORIGIN` for the Railway same-origin SPA proxy; §4.20 should say who sets `VITE_API_BASE_URL` for GitHub Pages (repo variable via the GitHub App).
+
+## M26 preset migration SQL
+Migration `20261028141435_RetirePresets` (FR-129, §4.23): data only, no DDL; row updates in one transaction (no table rewrites, no long locks). Reviewed SQL from `dotnet ef migrations script`:
+- Release versions pinned to `nextjs-supabase` / `nextjs-frontend` without a composition get one of four documents (preset x Vercel deployment settings or not). VCS is `vcs-github` for every Git provider (github_app, github_pat, local or none), so it isn't branched on. Each document is exactly what `StackCompositionJson.Serialize` writes for the equivalent choices validated against the shipped catalog (`PresetMigrationCompositionTests`), pinned to catalog `1.1.0` with `catalogHash` NULL (column and document). The app re-pins the hash on the version's next stack write. `preset_id`, `preset_version` and `preset_hash` are kept as history.
+- `projects.stack_packs` is set (`StackPinning.PackIds`) for projects whose current version (`current_release_version_id`, else the latest) was converted.
+- Steps of open (in development, awaiting merge) converted versions: the v2 key moves to `legacy_agent_key` and `agent_key` gets the §4.23 specialist. `test-engineer` is the same key in v4 and is left alone. `devops-engineer` becomes `ci-engineer` when every declared file (normalised like `PathRules.Normalize`) is under `.github/`, else `deploy-engineer`. The mixed-files warning is a run-time concern. Released versions' steps keep their v2 keys for history.
+- Converted rows are recognised by preset id + catalog `1.1.0` + NULL hash, because the app never pins a NULL hash. Down undoes only those rows: it restores the v2 agent keys, empties the packs and clears the compositions.
+
+Up:
+```sql
+START TRANSACTION;
+UPDATE release_versions AS v
+SET stack_composition = (CASE
+        WHEN v.preset_id = 'nextjs-supabase' AND x.vercel THEN '{"catalogVersion":"1.1.0","catalogHash":null,"frontend":{"pack":"fe-nextjs","path":"."},"backend":null,"data":{"pack":"data-supabase","mode":"baas"},"vcs":{"pack":"vcs-github","instanceId":null,"selfManaged":false},"deploy":{"frontendHost":"deploy-vercel","backendHost":null,"databaseHost":"supabase","local":"none"},"originModel":"same-origin","derived":{"nextjsMode":"full-stack","agents":["scaffolder","data-engineer","frontend-engineer","test-engineer","ci-engineer","deploy-engineer","docs-writer"],"originModelOptions":["same-origin"],"specSections":["Routes \u0026 Rendering Strategy","Data Model \u0026 RLS Policies","Auth Flows","Environments \u0026 Configuration"],"envNames":["NEXT_PUBLIC_SUPABASE_URL","NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY","SUPABASE_URL","SUPABASE_PUBLISHABLE_KEY","SUPABASE_SECRET_KEY"],"gates":["cd {fe} \u0026\u0026 npm ci \u0026\u0026 npm run typecheck \u0026\u0026 npm run lint \u0026\u0026 npm test \u0026\u0026 npm run build"]},"caveats":[]}'
+        WHEN v.preset_id = 'nextjs-supabase' THEN '{"catalogVersion":"1.1.0","catalogHash":null,"frontend":{"pack":"fe-nextjs","path":"."},"backend":null,"data":{"pack":"data-supabase","mode":"baas"},"vcs":{"pack":"vcs-github","instanceId":null,"selfManaged":false},"deploy":{"frontendHost":null,"backendHost":null,"databaseHost":"supabase","local":"none"},"originModel":"same-origin","derived":{"nextjsMode":"full-stack","agents":["scaffolder","data-engineer","frontend-engineer","test-engineer","ci-engineer","deploy-engineer","docs-writer"],"originModelOptions":["same-origin"],"specSections":["Routes \u0026 Rendering Strategy","Data Model \u0026 RLS Policies","Auth Flows"],"envNames":["NEXT_PUBLIC_SUPABASE_URL","NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY","SUPABASE_URL","SUPABASE_PUBLISHABLE_KEY","SUPABASE_SECRET_KEY"],"gates":["cd {fe} \u0026\u0026 npm ci \u0026\u0026 npm run typecheck \u0026\u0026 npm run lint \u0026\u0026 npm test \u0026\u0026 npm run build"]},"caveats":[{"layer":"databaseHost","option":"supabase","rule":"R11","text":"Database only used by the local dev loop"}]}'
+        WHEN x.vercel THEN '{"catalogVersion":"1.1.0","catalogHash":null,"frontend":{"pack":"fe-nextjs","path":"."},"backend":null,"data":null,"vcs":{"pack":"vcs-github","instanceId":null,"selfManaged":false},"deploy":{"frontendHost":"deploy-vercel","backendHost":null,"databaseHost":null,"local":"none"},"originModel":"same-origin","derived":{"nextjsMode":"full-stack","agents":["scaffolder","frontend-engineer","test-engineer","ci-engineer","deploy-engineer","docs-writer"],"originModelOptions":["same-origin"],"specSections":["Routes \u0026 Rendering Strategy","Data Sources \u0026 Consumed APIs","Environments \u0026 Configuration"],"envNames":[],"gates":["cd {fe} \u0026\u0026 npm ci \u0026\u0026 npm run typecheck \u0026\u0026 npm run lint \u0026\u0026 npm test \u0026\u0026 npm run build"]},"caveats":[]}'
+        ELSE '{"catalogVersion":"1.1.0","catalogHash":null,"frontend":{"pack":"fe-nextjs","path":"."},"backend":null,"data":null,"vcs":{"pack":"vcs-github","instanceId":null,"selfManaged":false},"deploy":{"frontendHost":null,"backendHost":null,"databaseHost":null,"local":"none"},"originModel":"same-origin","derived":{"nextjsMode":"full-stack","agents":["scaffolder","frontend-engineer","test-engineer","ci-engineer","docs-writer"],"originModelOptions":["same-origin"],"specSections":["Routes \u0026 Rendering Strategy","Data Sources \u0026 Consumed APIs"],"envNames":[],"gates":["cd {fe} \u0026\u0026 npm ci \u0026\u0026 npm run typecheck \u0026\u0026 npm run lint \u0026\u0026 npm test \u0026\u0026 npm run build"]},"caveats":[]}'
+    END)::jsonb,
+    catalog_version = '1.1.0',
+    catalog_hash = NULL
+FROM (
+    SELECT p.id AS project_id,
+           EXISTS (SELECT 1 FROM project_deployment_settings AS d
+                   WHERE d.project_id = p.id AND d.provider = 'vercel') AS vercel
+    FROM projects AS p) AS x
+WHERE x.project_id = v.project_id
+  AND v.preset_id IN ('nextjs-supabase', 'nextjs-frontend')
+  AND v.stack_composition IS NULL;
+
+UPDATE projects AS p
+SET stack_packs = (CASE
+        WHEN v.preset_id = 'nextjs-supabase' AND v.stack_composition -> 'deploy' ->> 'frontendHost' = 'deploy-vercel' THEN '{fe-nextjs,data-supabase,vcs-github,deploy-vercel}'
+        WHEN v.preset_id = 'nextjs-supabase' THEN '{fe-nextjs,data-supabase,vcs-github}'
+        WHEN v.stack_composition -> 'deploy' ->> 'frontendHost' = 'deploy-vercel' THEN '{fe-nextjs,vcs-github,deploy-vercel}'
+        ELSE '{fe-nextjs,vcs-github}'
+    END)::text[]
+FROM release_versions AS v
+WHERE v.id = COALESCE(p.current_release_version_id, (SELECT l.id FROM release_versions AS l WHERE l.project_id = p.id ORDER BY l.created_at DESC, l.id DESC LIMIT 1))
+  AND v.preset_id IN ('nextjs-supabase', 'nextjs-frontend') AND v.stack_composition IS NOT NULL AND v.catalog_version = '1.1.0' AND v.catalog_hash IS NULL;
+
+UPDATE execution_steps AS s
+SET legacy_agent_key = s.agent_key,
+    agent_key = CASE s.agent_key
+        WHEN 'project-scaffolder' THEN 'scaffolder'
+        WHEN 'db-engineer' THEN 'data-engineer'
+        WHEN 'domain-logic-engineer' THEN 'frontend-engineer'
+        WHEN 'api-engineer' THEN 'frontend-engineer'
+        WHEN 'ui-engineer' THEN 'frontend-engineer'
+        WHEN 'devops-engineer' THEN CASE
+            WHEN jsonb_typeof(s.declared_files) = 'array' AND jsonb_array_length(s.declared_files) > 0
+                 AND NOT EXISTS (
+                     SELECT 1 FROM jsonb_array_elements(s.declared_files) AS f(file)
+                     WHERE NOT starts_with(
+                         rtrim(regexp_replace(regexp_replace(replace(btrim(COALESCE(f.file ->> 'path', '')), '\', '/'),
+                             '/{2,}', '/', 'g'), '^(\./)+', ''), '/'),
+                         '.github/'))
+            THEN 'ci-engineer'
+            ELSE 'deploy-engineer'
+        END
+    END
+FROM release_versions AS v
+WHERE v.id = s.release_version_id
+  AND v.preset_id IN ('nextjs-supabase', 'nextjs-frontend') AND v.stack_composition IS NOT NULL AND v.catalog_version = '1.1.0' AND v.catalog_hash IS NULL
+  AND v.status IN ('in_development', 'awaiting_merge')
+  AND s.legacy_agent_key IS NULL
+  AND s.agent_key IN ('project-scaffolder', 'db-engineer', 'domain-logic-engineer', 'api-engineer', 'ui-engineer', 'devops-engineer');
+
+INSERT INTO __ef_migrations_history (migration_id, product_version)
+VALUES ('20261028141435_RetirePresets', '10.0.13');
+
+COMMIT;
+```
+
+Down:
+```sql
+START TRANSACTION;
+UPDATE execution_steps AS s
+SET agent_key = s.legacy_agent_key,
+    legacy_agent_key = NULL
+FROM release_versions AS v
+WHERE v.id = s.release_version_id
+  AND v.preset_id IN ('nextjs-supabase', 'nextjs-frontend') AND v.stack_composition IS NOT NULL AND v.catalog_version = '1.1.0' AND v.catalog_hash IS NULL
+  AND s.legacy_agent_key IN ('project-scaffolder', 'db-engineer', 'domain-logic-engineer', 'api-engineer', 'ui-engineer', 'devops-engineer');
+
+UPDATE projects AS p
+SET stack_packs = '{}'::text[]
+FROM release_versions AS v
+WHERE v.id = COALESCE(p.current_release_version_id, (SELECT l.id FROM release_versions AS l WHERE l.project_id = p.id ORDER BY l.created_at DESC, l.id DESC LIMIT 1))
+  AND v.preset_id IN ('nextjs-supabase', 'nextjs-frontend') AND v.stack_composition IS NOT NULL AND v.catalog_version = '1.1.0' AND v.catalog_hash IS NULL;
+
+UPDATE release_versions AS v
+SET stack_composition = NULL,
+    catalog_version = NULL
+WHERE v.preset_id IN ('nextjs-supabase', 'nextjs-frontend') AND v.stack_composition IS NOT NULL AND v.catalog_version = '1.1.0' AND v.catalog_hash IS NULL;
+
+DELETE FROM __ef_migrations_history
+WHERE migration_id = '20261028141435_RetirePresets';
+
+COMMIT;
+```
 
 ## Known issues
 - Integration test memory (found 2026-10-27): every derived test host (`WithWebHostBuilder`, e.g. `LlmStubs.App`, harnesses) stays alive on the shared `AideApiFactory` until the run ends (~37 MB each). With v4's extra tests one process outgrew a 16 GB runner (heap dump: 50 live hosts after 150 s; RSS ~14.7 GB). Fixed for CI by running integration tests in 3 shards (`backend-integration` job, ci.yml); the stack catalog is also loaded once per process now. Follow-up (test-engineer): dispose derived factories per test so a single process stays small.

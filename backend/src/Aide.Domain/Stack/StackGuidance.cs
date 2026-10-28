@@ -1,17 +1,15 @@
 using System.Globalization;
 using System.Text;
 using Aide.Domain.Common;
-using Aide.Domain.Presets;
-using Aide.Domain.Review;
 
 namespace Aide.Domain.Stack;
 
 /// <summary>
 /// FR-123, FR-124, FR-126, FR-128: the composition text the Spec Generator, Plan Generator, Code Review, Repository Analyst
-/// and refinement agents get (the composition equivalent of v2's <see cref="PresetGuidance"/>), as the value of their
+/// and refinement agents get (the composition equivalent of v2's preset guidance), as the value of their
 /// templates' stack placeholder in the system prompt (the composition is the platform's trusted content, not input data).
 /// Every block starts with the rendered composition summary (<see cref="StackResolution.Summary"/>, whose heading is
-/// <see cref="Heading"/>). The sub-headings reuse <see cref="PresetGuidance"/>'s, so one reader (the Fake provider's) finds
+/// <see cref="Heading"/>). The sub-headings are v2's preset ones, so one reader (the Fake provider's) finds
 /// the required sections, the agent catalogue and the checklist in either.
 /// </summary>
 public static class StackGuidance
@@ -20,13 +18,13 @@ public static class StackGuidance
     public const string Heading = "## Stack composition";
 
     /// <summary>The subheading of the required extra spec sections (one <c>####</c> heading per section below it).</summary>
-    public const string SpecSectionsHeading = PresetGuidance.SpecSectionsHeading;
+    public const string SpecSectionsHeading = "### Required extra sections";
 
     /// <summary>The subheading of the specialist catalogue (one line per agent: <c>- `key` (Name): description. Owns: …</c>).</summary>
-    public const string AgentCatalogueHeading = PresetGuidance.AgentCatalogueHeading;
+    public const string AgentCatalogueHeading = "### Agent catalogue";
 
     /// <summary>The subheading of the review checklist (one line per item: <c>- [C1] (category, severity) item</c>).</summary>
-    public const string ChecklistHeading = PresetGuidance.ChecklistHeading;
+    public const string ChecklistHeading = "### Review checklist";
 
     /// <summary>The subheading of the contract files a step changing the API must declare (one <c>- `path`</c> line each).</summary>
     public const string ContractFilesHeading = "### Contract files";
@@ -183,7 +181,7 @@ public static class StackGuidance
             for (var i = 0; i < checklist.Count; i++)
             {
                 var item = checklist[i];
-                sb.Append("\n- ").Append(PresetReviewChecklist.Marker(i + 1)).Append(" (").Append(item.Category.ToWire()).Append(", ")
+                sb.Append("\n- ").Append(StackReviewChecklist.Marker(i + 1)).Append(" (").Append(item.Category.ToWire()).Append(", ")
                     .Append(item.Severity.ToWire()).Append(") `").Append(item.Pack).Append("`: ").Append(item.Item);
             }
         }

@@ -20,8 +20,8 @@ namespace Aide.Api.Features.Projects;
 /// checkpoint within the current release version <c>releaseVersionId</c> (§4.10, D-V2-11: was <c>projectVersion</c>);
 /// <c>releasedVersion</c> is the highest released version (<c>null</c>: not released) and <c>developmentVersion</c> the
 /// version in development (<c>null</c>: none) (FR-62). <c>idea</c> is the request of the version in development.
-/// <c>presetId</c>, <c>presetName</c> and <c>presetVersion</c> are the tech stack preset pinned on the current release
-/// version (FR-74; all <c>null</c>: no preset). <c>deploymentsEnabled</c>: the project has deployment settings (FR-88), so
+/// <c>presetId</c>, <c>presetName</c> and <c>presetVersion</c> are history (FR-129): the retired v2 preset the current release
+/// version was pinned to before it was migrated to a composition (all <c>null</c>: never pinned to a preset). <c>deploymentsEnabled</c>: the project has deployment settings (FR-88), so
 /// the Deployments page is in its navigation (§7.2). <c>stackPacks</c> are the pack ids of the current release version's
 /// stack composition (FR-117, §5; empty: no stack), e.g. <c>["fe-react-vite", "be-aspnet", "vcs-github"]</c>.
 /// </summary>
@@ -63,7 +63,7 @@ public sealed record ProjectKpisDto(int Total, int Active, int InReview, int Awa
 /// A row of the projects list (FR-6, FR-62). <c>myRole</c> is <c>null</c> for an Admin who isn't a member;
 /// <c>releasedVersion</c> / <c>developmentVersion</c> are the two version badges (<c>null</c> when not released / nothing in
 /// development); <c>checkpoint</c> was <c>projectVersion</c> (D-V2-11); <c>presetId</c>/<c>presetName</c>/<c>presetVersion</c>
-/// are the preset chip (FR-74, §7.2; <c>null</c>: no preset); <c>stackPacks</c> the pack ids of the current version's
+/// are history (FR-129: the retired preset the current version was migrated from; <c>null</c>: none); <c>stackPacks</c> the pack ids of the current version's
 /// stack composition (FR-117, the <c>pack</c> filter; empty: no stack).
 /// </summary>
 public sealed record ProjectSummaryDto(
@@ -231,18 +231,11 @@ public sealed record CreateProjectRequest
     public CreateProjectImportRequest? Import { get; init; }
 
     /// <summary>
-    /// FR-74 (wizard Stack step): a preset id from <c>GET /api/presets</c>, pinned (with its version and content hash) on
-    /// the version to develop; omitted or <c>null</c> = no preset (general). Unknown: 400 <c>PRESET_NOT_FOUND</c>.
-    /// </summary>
-    [MaxLength(Aide.Domain.Presets.PresetRules.IdMaxLength)]
-    public string? PresetId { get; init; }
-
-    /// <summary>
     /// FR-114, FR-115, FR-117 (wizard Stack step): the stack composition, validated like <c>POST /api/stack/validate</c>
     /// (400 <c>STACK_INCOMPATIBLE</c> with <c>violations</c>; <c>VALIDATION</c> on <c>stack.*</c> fields) plus R5: the VCS
     /// layer is the repository's host (GitHub for <c>github_app</c>/<c>github_pat</c>; omitted, it is set from it; another
     /// one is 400 <c>VCS_MISMATCH</c>). It is pinned with the catalog version and hash on the version to develop. Omitted or
-    /// <c>null</c>: no stack ("No stack (general)") or a <c>presetId</c>; sending both is 400 <c>VALIDATION</c>.
+    /// <c>null</c>: no stack ("No stack (general)"). FR-129: the v2 <c>presetId</c> was removed (D-V4-4).
     /// </summary>
     public Stack.StackCompositionRequest? Stack { get; init; }
 

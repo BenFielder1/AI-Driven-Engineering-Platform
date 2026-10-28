@@ -67,14 +67,14 @@ public static class StackEndpoints
 
         projectStack.MapGet("/", GetProjectStack)
             .WithName("GetProjectStack")
-            .WithSummary("Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the legacy preset when the version is pinned to one, and the VCS option fixed by the repository host (repoVcs).")
+            .WithSummary("Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the retired v2 preset of a migrated version (legacyPreset, history: Preset <id>@<version> (retired, migrated)), and the VCS option fixed by the repository host (repoVcs).")
             .Produces<ProjectStackDto>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project."));
 
         projectStack.MapPut("/", UpdateProjectStack)
             .WithName("UpdateProjectStack")
-            .WithSummary("Change the stack of the version in development (Owner, FR-117): validates the composition like POST /api/stack/validate plus R5 (the VCS layer is the repository's host; omitted, it is set from it), pins it with the current catalog version and hash (replacing a legacy preset), updates the project's stack packs and records STACK_CHANGED {from, to, layersChanged}. The pinned composition again changes nothing. Allowed until the version's first implementation plan is locked.")
+            .WithSummary("Change the stack of the version in development (Owner, FR-117): validates the composition like POST /api/stack/validate plus R5 (the VCS layer is the repository's host; omitted, it is set from it), pins it with the current catalog version and hash (a migrated version keeps its retired preset as history), updates the project's stack packs and records STACK_CHANGED {from, to, layersChanged}. The pinned composition again changes nothing. Allowed until the version's first implementation plan is locked.")
             .Produces<ProjectStackDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status400BadRequest)

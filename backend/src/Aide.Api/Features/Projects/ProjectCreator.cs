@@ -7,7 +7,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
-using Aide.Domain.Presets;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
 using Aide.Domain.Stack;
@@ -15,7 +14,6 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Presets;
 using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -51,7 +49,6 @@ public sealed partial class ProjectCreator(
     IWorkingCopies workingCopies,
     IWorkspaceStore workspaces,
     JobEnqueuer jobs,
-    IPresetCatalog presets,
     ProjectStackService stacks,
     IOptions<LocalGitOptions> localGit,
     TimeProvider time,
@@ -95,25 +92,11 @@ public sealed partial class ProjectCreator(
             return Result.Failure<Project>(llmPlan.Error!);
         }
 
-        // FR-74: the wizard's Stack step, pinned on the version to develop.
-        var preset = Presets.PresetService.Resolve(presets, request.PresetId);
-        if (preset.IsFailure)
-        {
-            return Result.Failure<Project>(preset.Error!);
-        }
-
-        // FR-114–FR-117: or a stack composition (one or the other), validated with R5 for the repository's host.
+        // FR-114–FR-117: the wizard's Stack step, a stack composition validated with R5 for the repository's host and
+        // pinned on the version to develop (none: "No stack (general)").
         StackComposition? stack = null;
         if (request.Stack is { } stackRequest)
         {
-            if (preset.Value is not null)
-            {
-                return Result.Failure<Project>(new DomainError(ErrorCodes.Validation, "The stack choices are invalid.")
-                {
-                    Details = ["stack: Send a presetId or a stack, not both."],
-                });
-            }
-
             var resolved = stacks.Resolve(stackRequest, StackPinning.RepoVcs(gitProvider), "stack.");
             if (resolved.IsFailure)
             {
@@ -150,7 +133,7 @@ public sealed partial class ProjectCreator(
 
         try
         {
-            return await SaveAsync(request, project, start.Value, preset.Value, stack, llmPlan.Value, gitProvider, ownerId, actor, now, cancellationToken);
+            return await SaveAsync(request, project, start.Value, stack, llmPlan.Value, gitProvider, ownerId, actor, now, cancellationToken);
         }
         catch
         {
@@ -464,7 +447,6 @@ public sealed partial class ProjectCreator(
         CreateProjectRequest request,
         Project project,
         RepositoryStart start,
-        Preset? preset,
         StackComposition? stack,
         LlmPlan llmPlan,
         GitProvider gitProvider,
@@ -511,7 +493,6 @@ public sealed partial class ProjectCreator(
             BaseTag = start.ReleasedTag,
             BaseCommitSha = start.ReleasedCommit ?? start.HeadCommit,
         };
-        Presets.PresetService.Pin(version, preset);
         ProjectStackService.Pin(version, stack);
         stacks.SyncPacks(project, stack);
         versions.Add(version);
@@ -574,8 +555,6 @@ public sealed partial class ProjectCreator(
                 repoHasCode = appRepo?.HasCode,
                 importedTag = start.Imported ? start.ReleasedTag : null,
                 developmentVersion = version.Version,
-                presetId = version.PresetId,
-                presetVersion = version.PresetVersion,
                 stackPacks = project.StackPacks,
                 catalogVersion = version.CatalogVersion,
             },

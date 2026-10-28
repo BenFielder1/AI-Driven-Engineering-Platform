@@ -113,15 +113,15 @@ public sealed class ProjectStackTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR117_A_presetId_and_a_stack_together_are_VALIDATION()
+    public async Task FR129_A_presetId_from_an_old_client_is_ignored_and_never_pinned()
     {
         using var owner = await ApiSession.RegisterAsync(factory);
-        var name = ProjectApi.UniqueName("both");
 
-        var body = await Problems.AssertAsync(await CreateAsync(owner.Client, name, stack: Example1(), presetId: TestPresetId.Id), HttpStatusCode.BadRequest, ErrorCodes.Validation);
+        var project = await ProjectApi.ReadAsync<ProjectDto>(await CreateAsync(owner.Client, ProjectApi.UniqueName("old-client"), stack: Example1(), presetId: "nextjs-supabase"), HttpStatusCode.Created);
 
-        Assert.True(body.GetProperty("errors").TryGetProperty("stack", out _), body.ToString());
-        Assert.Empty((await PageAsync(owner.Client, $"search={name}")).Items);
+        Assert.Equal(((string?)null, Example1Packs), (project.PresetId, (IReadOnlyList<string>)project.StackPacks));
+        var version = await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == project.Id, Ct));
+        Assert.Null(version.PresetId);
     }
 
     [Fact]
@@ -225,29 +225,26 @@ public sealed class ProjectStackTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR117_A_stack_replaces_the_legacy_preset_of_the_version()
+    public async Task FR129_Changing_the_stack_of_a_migrated_version_keeps_its_retired_preset_as_history()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        await ProjectApi.ReadAsync<ProjectDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"/api/projects/{id}/preset", new { presetId = TestPresetId.Id }));
+        await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.Where(v => v.ProjectId == id).ExecuteUpdateAsync(
+            s => s.SetProperty(v => v.PresetId, "nextjs-supabase").SetProperty(v => v.PresetVersion, "1.0.1").SetProperty(v => v.PresetHash, "abc"), Ct));
 
         var legacy = await GetStackAsync(fixture.Viewer.Client, id);
         Assert.Null(legacy.Composition);
-        Assert.Equal((TestPresetId.Id, "Test stack", (string?)TestPresetId.Version), (legacy.LegacyPreset!.PresetId, legacy.LegacyPreset.PresetName, legacy.LegacyPreset.PresetVersion));
+        Assert.Equal(("nextjs-supabase", "Next.js + Supabase", (string?)"1.0.1"), (legacy.LegacyPreset!.PresetId, legacy.LegacyPreset.PresetName, legacy.LegacyPreset.PresetVersion));
+        Assert.Equal("Preset nextjs-supabase@1.0.1 (retired, migrated)", legacy.LegacyPreset.Label);
 
         var stack = await ProjectApi.ReadAsync<ProjectStackDto>(await PutStackAsync(fixture.Owner.Client, id, Example1()));
 
-        Assert.Null(stack.LegacyPreset);
+        Assert.Equal("nextjs-supabase", stack.LegacyPreset?.PresetId);
         var version = await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == id, Ct));
-        Assert.Equal(((string?)null, (string?)null, (string?)null), (version.PresetId, version.PresetVersion, version.PresetHash));
+        Assert.Equal(("nextjs-supabase", "1.0.1", "abc"), (version.PresetId, version.PresetVersion, version.PresetHash));
         var changed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.StackChanged)).Payload);
-        Assert.Equal(TestPresetId.Id, changed.GetProperty("fromPresetId").GetString());
-
-        // Picking a preset again clears the stack (one or the other).
-        await ProjectApi.ReadAsync<ProjectDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"/api/projects/{id}/preset", new { presetId = TestPresetId.Id }));
-        var back = await GetStackAsync(fixture.Viewer.Client, id);
-        Assert.Equal(((StackCompositionDto?)null, TestPresetId.Id), (back.Composition, back.LegacyPreset!.PresetId));
-        Assert.Empty((await ProjectApi.ReadAsync<ProjectDto>(await fixture.Viewer.Client.GetAsync(new Uri(fixture.Path, UriKind.Relative), Ct))).StackPacks);
+        Assert.Equal("nextjs-supabase", changed.GetProperty("fromPresetId").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await ProjectApi.PatchAsync(fixture.Owner.Client, $"/api/projects/{id}/preset", new { presetId = "nextjs-supabase" })).StatusCode);
     }
 
     // ---------- POST /api/projects/:id/versions with and without a stack ----------
@@ -287,7 +284,6 @@ public sealed class ProjectStackTests(AideApiFactory factory)
             await StartAsync(owner.Client, project.Id, "1.1.0", new { frontend = new { pack = "fe-vue" }, backend = new { pack = "be-aspnet" }, data = new { pack = "data-prisma" } }),
             HttpStatusCode.BadRequest,
             ErrorCodes.StackIncompatible);
-        await Problems.AssertAsync(await StartAsync(owner.Client, project.Id, "1.1.0", Example1(), TestPresetId.Id), HttpStatusCode.BadRequest, ErrorCodes.Validation);
 
         var started = await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(
             await StartAsync(owner.Client, project.Id, "1.1.0", Example1("be-express", "server", "data-prisma")),

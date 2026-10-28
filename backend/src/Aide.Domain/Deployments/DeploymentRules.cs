@@ -166,11 +166,11 @@ public static partial class DeploymentSettingsRules
     }
 
     /// <summary>
-    /// FR-88: deployment is offered when the version's preset lists <c>vercel</c> in its deploy targets, or an Owner opted in
+    /// FR-88, §4.22: deployment is offered when the version's stack lists <c>vercel</c> among its deploy providers, or an Owner opted in
     /// by setting a provider.
     /// </summary>
-    public static bool Supported(IReadOnlyCollection<string>? presetDeployTargets, bool providerSet) =>
-        providerSet || (presetDeployTargets?.Contains("vercel", StringComparer.OrdinalIgnoreCase) ?? false);
+    public static bool Supported(IReadOnlyCollection<string>? deployProviders, bool providerSet) =>
+        providerSet || (deployProviders?.Contains("vercel", StringComparer.OrdinalIgnoreCase) ?? false);
 
     /// <summary>FR-88: a binding Owner who stops being an Owner takes their connection with them (as FR-79).</summary>
     public static bool RoleChangeClearsBinding(Guid? boundByUserId, Guid memberUserId, ProjectRole newRole) =>
@@ -284,7 +284,7 @@ public static partial class DeploymentEnvRules
     }
 
     /// <summary>
-    /// FR-88: whether a required variable is present: the project has the key, for every target the preset requires it in
+    /// FR-88: whether a required variable is present: the project has the key, for every target the stack requires it in
     /// (<paramref name="requiredTargets"/>; none listed: any target).
     /// </summary>
     public static bool IsPresent(

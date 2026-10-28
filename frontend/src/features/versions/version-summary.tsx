@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { panelClass } from '../../components/shared/panel-class'
 import { cn } from '../../lib/utils'
 import { formatDateTime, releaseVersionStatusLabels } from '../projects/labels'
+import { legacyPresetLabel } from '../stack/legacy-preset'
 import type { ReleaseVersion } from './versions-api'
 
 function Row({ term, children }: { term: string; children: ReactNode }) {
@@ -30,9 +31,11 @@ export function VersionSummary({ version, className }: { version: ReleaseVersion
           </Row>
         )}
         <Row term="Checkpoints">{version.checkpoints.max}</Row>
-        <Row term="Preset">
-          {version.presetName ? `${version.presetName}${version.presetVersion ? ` ${version.presetVersion}` : ''}` : 'No preset'}
-        </Row>
+        {version.presetId && (
+          <Row term="Legacy preset">
+            <span data-testid="version-legacy-preset">{legacyPresetLabel(version.presetId, version.presetVersion)}</span>
+          </Row>
+        )}
         {version.branchName && (
           <Row term="Branch">
             <code className="font-mono">{version.branchName}</code>

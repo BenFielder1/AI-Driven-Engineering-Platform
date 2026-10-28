@@ -30,6 +30,8 @@ export const runWarningLabels: Readonly<Record<string, string>> = {
   summary_unavailable: 'There was no codebase summary for this version, so the run continued without it.',
   output_truncated:
     'The model hit its output limit and was still writing after 5 continuations, so this output may be incomplete.',
+  legacy_agent_mapped:
+    'This step was planned for a retired preset agent, so it ran as the matching stack specialist.',
 }
 
 export const runWarningText = (code: string) => runWarningLabels[code] ?? code

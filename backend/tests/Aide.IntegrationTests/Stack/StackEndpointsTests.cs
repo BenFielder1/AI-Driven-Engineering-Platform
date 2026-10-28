@@ -29,7 +29,7 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
 
         var catalog = await ProjectApi.ReadAsync<StackCatalogDto>(await user.Client.GetAsync(Route("/api/stack/catalog"), Ct));
 
-        Assert.Equal("1.0.0", catalog.Version);
+        Assert.Equal("1.1.0", catalog.Version);
         Assert.Matches("^[0-9a-f]{64}$", catalog.ContentHash);
         Assert.Equal(["frontend", "backend", "data", "vcs", "deploy"], catalog.Layers.Select(l => l.Id));
         Assert.Equal(StackChoices.Order, catalog.Choices.Select(c => c.Id));
@@ -131,7 +131,7 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
             deploy = new { frontendHost = "deploy-netlify", backendHost = "deploy-render", databaseHost = "render-postgres" },
         }, Ct));
 
-        Assert.Equal("1.0.0", composition.CatalogVersion);
+        Assert.Equal("1.1.0", composition.CatalogVersion);
         Assert.Equal(new StackComponentDto("fe-react-vite", "frontend"), composition.Frontend);
         Assert.Equal(new StackComponentDto("be-aspnet", "backend"), composition.Backend);
         Assert.Equal(new StackDeployDto("deploy-netlify", "deploy-render", "render-postgres", "compose"), composition.Deploy);
@@ -172,7 +172,7 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
 
         var catalog = await ProjectApi.ReadAsync<AdminStackCatalogDto>(await admin.Client.GetAsync(Route("/api/admin/stack"), Ct));
 
-        Assert.Equal(("1.0.0", "loaded"), (catalog.Version, catalog.Status));
+        Assert.Equal(("1.1.0", "loaded"), (catalog.Version, catalog.Status));
         Assert.Empty(catalog.Errors);
         Assert.Equal(27, catalog.Packs.Count);
         var aspnet = catalog.Packs.Single(p => p.Id == "be-aspnet");

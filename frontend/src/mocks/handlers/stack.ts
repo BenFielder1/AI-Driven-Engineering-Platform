@@ -89,7 +89,7 @@ export function projectStackDto(p: StoredProject): Schemas['ProjectStackDto'] {
     versionStatus: version?.status ?? 'in_development',
     composition,
     catalogVersion: composition ? (p.stack?.catalogVersion ?? STACK_CATALOG_VERSION) : null,
-    catalogHash: composition ? (p.stack?.catalogHash ?? STACK_CATALOG_HASH) : null,
+    catalogHash: composition ? (p.stack?.catalogHash === undefined ? STACK_CATALOG_HASH : p.stack.catalogHash) : null,
     currentCatalogVersion: STACK_CATALOG_VERSION,
     currentCatalogHash: STACK_CATALOG_HASH,
     locked: locked !== null,
@@ -176,7 +176,8 @@ export const stackHandlers = [
         : problem(400, 'STACK_INCOMPATIBLE', "These stack choices don't work together.", { violations: result.violations })
     }
     const from = p.stack?.composition ?? null
-    p.stack = { ...p.stack, composition: result.composition, legacyPreset: null }
+    // Re-pinned to the current catalog; a migrated version keeps its retired preset as history (FR-129).
+    p.stack = { ...p.stack, composition: result.composition, catalogVersion: STACK_CATALOG_VERSION, catalogHash: STACK_CATALOG_HASH }
     p.stackPacks = packsOf(result.composition)
     addEvent(p, {
       type: 'STACK_CHANGED',

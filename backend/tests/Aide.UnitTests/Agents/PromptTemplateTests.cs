@@ -91,10 +91,10 @@ public class PromptTemplateTests
 
     [Theory]
     [InlineData(AgentKind.IdeaRefinement, "4", new[] { "PROJECT_NAME", "IDEA" })]
-    [InlineData(AgentKind.SpecGenerator, "4", new[] { "PROJECT_REQUEST" })]
-    [InlineData(AgentKind.PlanGenerator, "4", new[] { "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "MAX_FILES_PER_STEP" })]
+    [InlineData(AgentKind.SpecGenerator, "5", new[] { "PROJECT_REQUEST" })]
+    [InlineData(AgentKind.PlanGenerator, "5", new[] { "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "MAX_FILES_PER_STEP" })]
     [InlineData(AgentKind.CodeGenerator, "4", new[] { "MAX_FILES_PER_STEP", "STEP_NUMBER", "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "STEP_TITLE", "STEP_TASK", "DECLARED_FILES" })]
-    [InlineData(AgentKind.CodeReview, "6", new[] { "REVIEW_CYCLE", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "CODE", "MAX_FILES_PER_STEP" })]
+    [InlineData(AgentKind.CodeReview, "7", new[] { "REVIEW_CYCLE", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "CODE", "MAX_FILES_PER_STEP" })]
     [InlineData(AgentKind.RepositoryAnalyst, "2", new[] { "PROJECT_NAME" })]
     public void FR24_Every_agent_has_a_versioned_embedded_template_with_its_required_inputs(AgentKind agent, string version, string[] required)
     {

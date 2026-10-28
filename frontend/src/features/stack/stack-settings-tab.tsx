@@ -155,8 +155,7 @@ export function StackSettingsTab({ project, canChange }: { project: Project; can
 
       {s.legacyPreset && (
         <p className="text-sm" data-testid="legacy-preset">
-          Preset {s.legacyPreset.presetName}
-          {s.legacyPreset.presetVersion ? `@${s.legacyPreset.presetVersion}` : ''} (retired, migrated)
+          {s.legacyPreset.label}
         </p>
       )}
 
@@ -190,13 +189,20 @@ export function StackSettingsTab({ project, canChange }: { project: Project; can
               </>
             ) : (
               <p className="text-sm">
-                {s.legacyPreset ? 'This version uses a legacy preset instead of a stack composition.' : 'No stack (general): the generalist agent writes every plan step.'}
+                {s.legacyPreset
+                  ? 'This version was migrated from a retired preset and has no stack composition yet.'
+                  : 'No stack (general): the generalist agent writes every plan step.'}
               </p>
             )}
             <p className="mt-3 text-xs text-muted-foreground">
               {s.catalogVersion ? (
                 <>
-                  Catalog {s.catalogVersion} <code className="font-mono">{shortHash(s.catalogHash)}</code>
+                  Catalog {s.catalogVersion}{' '}
+                  {s.catalogHash ? (
+                    <code className="font-mono">{shortHash(s.catalogHash)}</code>
+                  ) : (
+                    <span data-testid="catalog-hash-unpinned">(no hash yet: migrated from a retired preset, pinned on the next stack change)</span>
+                  )}
                   {s.catalogVersion !== s.currentCatalogVersion && ` · the current catalog is ${s.currentCatalogVersion}; a new version re-pins to it`}
                 </>
               ) : (

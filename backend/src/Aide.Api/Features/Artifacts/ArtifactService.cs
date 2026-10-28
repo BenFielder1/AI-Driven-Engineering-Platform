@@ -1,6 +1,6 @@
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
-using Aide.Api.Features.Presets;
+using Aide.Api.Features.Stack;
 using Aide.Api.Jobs;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
@@ -26,7 +26,7 @@ public sealed partial class ArtifactService(
     LifecycleSnapshotLoader snapshots,
     LifecycleWriter writer,
     JobEnqueuer jobs,
-    VersionPresetReader presets,
+    VersionStackLoader stacks,
     TimeProvider time,
     ILogger<ArtifactService> logger)
 {
@@ -52,11 +52,11 @@ public sealed partial class ArtifactService(
 
         // FR-18, FR-29: an edited plan is validated from its aide-plan block like a generated one, and stored re-rendered
         // from it, so the readable step list always matches the steps that will run. An Owner's edit may declare protected
-        // paths (§4.6); the re-rendered document must read back to the same steps before it is stored. FR-76: with a preset,
-        // its agents and plan rules apply as to a generated plan.
+        // paths (§4.6); the re-rendered document must read back to the same steps before it is stored. FR-124: with a composition,
+        // its specialists and plan rules apply as to a generated plan.
         if (IsPlan(type))
         {
-            var agents = (await presets.CurrentAsync(projectId, cancellationToken)).PlanAgents(type);
+            var agents = (await stacks.CurrentAsync(projectId, cancellationToken)).PlanAgents(type);
             var plan = PlanDocument.ParseMarkdown(content, project.MaxFilesPerStep, agents);
             var rendered = plan.IsSuccess ? PlanDocument.RenderChecked(type, plan.Value, project.MaxFilesPerStep, agents) : Result.Failure<string>(plan.Error!);
             if (rendered.IsFailure)
@@ -285,7 +285,7 @@ public sealed partial class ArtifactService(
         IReadOnlyList<PlanStep> planSteps = [];
         if (IsPlan(artifact.Type) && !steps.Any(s => s.PlanArtifactId == artifact.Id))
         {
-            var agents = (await presets.ForVersionAsync(versionId, cancellationToken)).PlanAgents(artifact.Type);
+            var agents = (await stacks.ForVersionAsync(versionId, cancellationToken)).PlanAgents(artifact.Type);
             var parsed = PlanDocument.ParseMarkdown(artifact.Content, project.MaxFilesPerStep, agents);
             if (parsed.IsFailure)
             {
@@ -576,8 +576,10 @@ public sealed partial class ArtifactService(
         Dependencies = step.Dependencies,
         UserInstructions = step.UserInstructions,
 
-        // FR-76: the agent that runs the step (generalist without a preset) and the requirements it covers.
+        // FR-76, FR-124: the agent that runs the step (generalist without a stack) and the requirements it covers; §4.23:
+        // a migrated v2 plan's steps run as their mapped specialist and keep the v2 key as history.
         AgentKey = step.Agent,
+        LegacyAgentKey = step.LegacyAgent,
         Covers = step.Covers,
         Status = StepStatus.Pending,
         Attempt = 0,

@@ -18,7 +18,7 @@ public sealed record StackReviewInput(IReadOnlyList<SourceFile> Files, IReadOnly
 /// <summary>
 /// FR-126, §4.18 "Review checks": the deterministic, language-independent text checks the selected packs register
 /// (<see cref="StackResolution.ReviewChecks"/>), with v1 §4.7 categories and severities; every finding is
-/// <see cref="FindingSource.Deterministic"/>, so it carries the §4.7 penalty. Mirrors v2's <see cref="PresetReviewChecks"/>.
+/// <see cref="FindingSource.Deterministic"/>, so it carries the §4.7 penalty. Mirrors v2's deterministic preset rules.
 /// </summary>
 public static partial class StackReviewChecks
 {
@@ -34,6 +34,9 @@ public static partial class StackReviewChecks
     public const string ContainerNonRoot = "container_non_root";
     public const string DeployBranchControl = "deploy_branch_control";
     public const string HealthEndpoints = "health_endpoints";
+
+    /// <summary>Where Supabase migrations live (§4.12, the data-supabase pack).</summary>
+    public const string MigrationsFolder = "supabase/migrations/";
 
     /// <summary>The public env prefixes the browser sees (§4.18 <c>no_secret_in_client</c>).</summary>
     public static IReadOnlyList<string> PublicPrefixes { get; } = ["NEXT_PUBLIC_", "VITE_"];
@@ -51,7 +54,7 @@ public static partial class StackReviewChecks
         {
             findings.AddRange(id switch
             {
-                RlsOnEveryTable => PresetReviewChecks.RlsOnEveryTable(files),
+                RlsOnEveryTable => RlsOnEveryTableFindings(files),
                 GrantsForExposedTables => GrantsForExposed(files),
                 NoSecretInClient => SecretInClient(files, resolution.Paths.Frontend, frontendPrefix),
                 NoCommittedSecrets => CommittedSecrets(files),
@@ -72,13 +75,84 @@ public static partial class StackReviewChecks
 
     // ---------- Supabase ----------
 
+    /// <summary>
+    /// <c>rls_on_every_table</c> (FR-77, FR-126): one critical security finding per table created in
+    /// <c>supabase/migrations/**</c> without a matching <c>alter table [public.]&lt;name&gt; enable row level security</c> in
+    /// some migration (case-insensitive; SQL comments are ignored; temporary tables are not tables of the schema).
+    /// </summary>
+    public static IReadOnlyList<ReviewFinding> RlsOnEveryTableFindings(IEnumerable<SourceFile> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+        var migrations = files
+            .Select(f => f with { Path = PathRules.Normalize(f.Path) })
+            .Where(f => f.Path.StartsWith(MigrationsFolder, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(f => f.Path, StringComparer.Ordinal)
+            .Select(f => (f.Path, Sql: StripSqlComments(f.Content)))
+            .ToList();
+
+        var enabled = migrations
+            .SelectMany(m => EnableRlsPattern().Matches(m.Sql).Select(x => TableName(x.Groups["name"].Value)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var findings = new List<ReviewFinding>();
+        var reported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (path, sql) in migrations)
+        {
+            foreach (Match created in CreateTablePattern().Matches(sql))
+            {
+                var name = TableName(created.Groups["name"].Value);
+                if (!enabled.Contains(name) && reported.Add(name))
+                {
+                    findings.Add(new ReviewFinding(
+                        ReviewCategory.Security,
+                        Severity.Critical,
+                        $"Table '{name}' is created without enabling row level security (add `alter table {name} enable row level security;` and its policies).",
+                        path));
+                }
+            }
+        }
+
+        return findings;
+    }
+
+    /// <summary>Whether the file's first statement (after whitespace, a BOM and comments) is the <c>"use client"</c> directive.</summary>
+    public static bool IsClientFile(string content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        var text = content.TrimStart('﻿');
+        var i = 0;
+        while (i < text.Length)
+        {
+            if (char.IsWhiteSpace(text[i]))
+            {
+                i++;
+            }
+            else if (string.CompareOrdinal(text, i, "//", 0, 2) == 0)
+            {
+                var end = text.IndexOf('\n', i);
+                i = end < 0 ? text.Length : end + 1;
+            }
+            else if (string.CompareOrdinal(text, i, "/*", 0, 2) == 0)
+            {
+                var end = text.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                i = end < 0 ? text.Length : end + 2;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        var rest = text[i..];
+        return rest.StartsWith("\"use client\"", StringComparison.Ordinal) || rest.StartsWith("'use client'", StringComparison.Ordinal);
+    }
+
     /// <summary><c>grants_for_exposed_tables</c>: a new <c>public</c> table in <c>supabase/migrations/</c> without a grant to <c>authenticated</c> or <c>anon</c> (major api_contracts).</summary>
     public static IReadOnlyList<ReviewFinding> GrantsForExposed(IEnumerable<SourceFile> files)
     {
         ArgumentNullException.ThrowIfNull(files);
         var migrations = files
             .Select(f => f with { Path = PathRules.Normalize(f.Path) })
-            .Where(f => f.Path.StartsWith(PresetReviewChecks.MigrationsFolder, StringComparison.OrdinalIgnoreCase))
+            .Where(f => f.Path.StartsWith(MigrationsFolder, StringComparison.OrdinalIgnoreCase))
             .OrderBy(f => f.Path, StringComparer.Ordinal)
             .Select(f => (f.Path, Sql: StripSqlComments(f.Content)))
             .ToList();
@@ -191,7 +265,7 @@ public static partial class StackReviewChecks
                 }
             }
 
-            if (publicPrefix is not null && PresetReviewChecks.IsClientFile(file.Content))
+            if (publicPrefix is not null && IsClientFile(file.Content))
             {
                 foreach (Match match in EnvReadPattern().Matches(file.Content))
                 {
@@ -677,6 +751,9 @@ public static partial class StackReviewChecks
     [GeneratedRegex(@"\bcreate\s+(?:unlogged\s+)?table\s+(?:if\s+not\s+exists\s+)?(?<name>" + Name + @"(?:\s*\.\s*" + Name + @")?)", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
     private static partial Regex CreateTablePattern();
 
+    [GeneratedRegex(@"\balter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(?<name>" + Name + @"(?:\s*\.\s*" + Name + @")?)\s+enable\s+row\s+level\s+security\b", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex EnableRlsPattern();
+
     [GeneratedRegex(@"\bgrant\b[^;]*?\bon\s+(?<target>[^;]*?)\bto\b(?<roles>[^;]*)", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Singleline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex GrantPattern();
 
@@ -779,12 +856,15 @@ public static partial class StackReviewChecks
 
 /// <summary>
 /// FR-126: the composed review checklist in the Code Review agent's reply (the composition equivalent of v2's
-/// <see cref="PresetReviewChecklist"/>). A failed item is reported as an agent violation whose message starts with the
+/// preset checklist). A failed item is reported as an agent violation whose message starts with the
 /// item's marker (<c>[C1]</c>, …, in <see cref="StackResolution.Checklist"/> order); such violations take the item's
 /// category and severity and stay agent findings without penalties.
 /// </summary>
 public static class StackReviewChecklist
 {
+    /// <summary>The marker of checklist item <paramref name="number"/> (1-based): <c>[C1]</c>.</summary>
+    public static string Marker(int number) => $"[C{number.ToString(CultureInfo.InvariantCulture)}]";
+
     /// <summary>The checklist item a violation message refers to (by its leading <c>[Cn]</c> marker), or <c>null</c>.</summary>
     public static StackChecklistItem? ItemOf(string message, StackResolution resolution)
     {

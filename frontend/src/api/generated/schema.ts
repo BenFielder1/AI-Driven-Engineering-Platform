@@ -613,10 +613,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development, preset (FR-74: the current version's preset id, or none for projects without a preset) and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and the preset chip. */
+        /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and, as history, the retired preset a migrated version was pinned to (FR-129). */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. stack (FR-114–FR-117, optional, instead of presetId: both is 400 VALIDATION) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -631,7 +631,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** §7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion, preset and pack filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released). */
+        /** §7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion and pack filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released). */
         get: operations["GetProjectKpis"];
         put?: never;
         post?: never;
@@ -823,7 +823,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Settings → Deployment for any member (FR-88): provider, supported, the binding ("connected by <name>", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the preset's required env vars with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not). */
+        /** Settings → Deployment for any member (FR-88): provider, supported, the binding ("connected by <name>", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the stack's required env vars (§4.22) with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not). */
         get: operations["GetDeploymentSettings"];
         put?: never;
         post?: never;
@@ -1574,7 +1574,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, preset and dates. */
+        /** The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, the retired preset of a migrated version (history, FR-129) and dates. */
         get: operations["ListReleaseVersions"];
         put?: never;
         /** Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. stack (FR-117, optional) is the new version's stack composition (validated like project create); omitted, the base version's composition is kept, re-pinned to the current catalog. */
@@ -1594,74 +1594,6 @@ export interface paths {
         };
         /** The lifecycle checkpoints of a release version (default: the version in development, else the latest released), newest first (members, FR-44, FR-63): the phase recorded at each, when it was entered, and whether it is a rollback target now. Replaces v1's GET /versions (D-V2-11). */
         get: operations["ListCheckpoints"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/presets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The tech stack presets (FR-74), ordered by id: name, version, description, stack chips, deployment targets and content hash. For the wizard's Stack step and the admin presets list. No preset (general) is the absence of one. */
-        get: operations["ListPresets"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/presets/{presetId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** A preset in full (FR-74): specialist agents (owned paths, skills), extra spec sections with guidance, required environment variables, review checklist and deterministic rules, protected paths. */
-        get: operations["GetPreset"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{id}/preset": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Change the preset of the version in development (Owner, FR-74): pins the preset id, version and content hash on it and records PRESET_CHANGED. presetId null means no preset. Allowed until the version's first implementation plan is locked; a new version can pick another preset. */
-        patch: operations["UpdateProjectPreset"];
-        trace?: never;
-    };
-    "/api/admin/stack": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Admin → Stack catalog (§6): the catalog version, content hash and load status, every load error, and each pack with its stack-packs source, version, content hash and load status. */
-        get: operations["GetAdminStackCatalog"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1745,10 +1677,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the legacy preset when the version is pinned to one, and the VCS option fixed by the repository host (repoVcs). */
+        /** Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the retired v2 preset of a migrated version (legacyPreset, history: Preset <id>@<version> (retired, migrated)), and the VCS option fixed by the repository host (repoVcs). */
         get: operations["GetProjectStack"];
-        /** Change the stack of the version in development (Owner, FR-117): validates the composition like POST /api/stack/validate plus R5 (the VCS layer is the repository's host; omitted, it is set from it), pins it with the current catalog version and hash (replacing a legacy preset), updates the project's stack packs and records STACK_CHANGED {from, to, layersChanged}. The pinned composition again changes nothing. Allowed until the version's first implementation plan is locked. */
+        /** Change the stack of the version in development (Owner, FR-117): validates the composition like POST /api/stack/validate plus R5 (the VCS layer is the repository's host; omitted, it is set from it), pins it with the current catalog version and hash (a migrated version keeps its retired preset as history), updates the project's stack packs and records STACK_CHANGED {from, to, layersChanged}. The pinned composition again changes nothing. Allowed until the version's first implementation plan is locked. */
         put: operations["UpdateProjectStack"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/stack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin → Stack catalog (§6): the catalog version, content hash and load status, every load error, and each pack with its stack-packs source, version, content hash and load status. */
+        get: operations["GetAdminStackCatalog"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2105,13 +2054,17 @@ export interface components {
             continuations: null | number;
             /** Format: int32 */
             maxOutputTokens: null | number;
+            legacyAgentKey?: null | string;
         };
         /**
          * @description An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt
          *     template version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in
          *     USD, duration and error. `userFeedback` is the feedback or answers given to the agent. `releaseVersionId` is the
-         *     release version it ran for (§4.10). `checkpoint` is the checkpoint it ran at (null until recorded). `agentKey`,
-         *     `presetId` and `presetVersion` name the preset specialist (FR-76; null for base agents). `toolCallCount` is
+         *     release version it ran for (§4.10). `checkpoint` is the checkpoint it ran at (null until recorded). `agentKey`
+         *     is the specialist that ran a plan step (FR-121; `generalist` for a generalist step of a composed project; null for
+         *     base agents); `presetId`/`presetVersion` are history (FR-129: the retired preset of runs before the upgrade).
+         *     `legacyAgentKey` (§4.23) is the v2 agent key the run's step was planned with when it ran as its mapped v4
+         *     specialist (e.g. `db-engineer` for `data-engineer`); null otherwise. `toolCallCount` is
          *     the number of repo tool calls (FR-71). `credentialLabel` names the LLM connection that paid for the run,
          *     `Label (••••a1b2)` (FR-79, D-V2-5; null for a system key, a provider without a key, or a deleted connection).
          */
@@ -2153,6 +2106,7 @@ export interface components {
             /** Format: int32 */
             toolCallCount: number;
             credentialLabel: null | string;
+            legacyAgentKey?: null | string;
         };
         /**
          * @description Status of an agent run (FR-23, FR-25).
@@ -2691,11 +2645,6 @@ export interface components {
              */
             source?: components["schemas"]["ProjectSource"];
             import?: null | components["schemas"]["CreateProjectImportRequest"];
-            /**
-             * @description FR-74 (wizard Stack step): a preset id from `GET /api/presets`, pinned (with its version and content hash) on
-             *     the version to develop; omitted or `null` = no preset (general). Unknown: 400 `PRESET_NOT_FOUND`.
-             */
-            presetId?: null | string;
             stack?: null | components["schemas"]["StackCompositionRequest"];
             deployment?: null | components["schemas"]["CreateProjectDeploymentRequest"];
             llm?: null | components["schemas"]["CreateProjectLlmRequest"];
@@ -2842,11 +2791,11 @@ export interface components {
         DeploymentProvider: "vercel" | "fake";
         /**
          * @description Settings → Deployment (FR-88), for any member. `provider` is `vercel` (or `fake` in test environments)
-         *     once deployment is set, else `null`. `supported`: the preset supports Vercel, or an Owner opted in by setting
+         *     once deployment is set, else `null`. `supported`: the stack deploys to Vercel, or an Owner opted in by setting
          *     a provider. `binding` is the bound connection ("connected by &lt;name&gt;"; `null`: none) and `canBind`
          *     whether the caller may bind one of their own (Owners). `vercelProject` is the linked Vercel project (`null`:
          *     none yet). `rootDirectory` and `framework` are what the Vercel project builds. `requiredEnv` lists the
-         *     preset's required env vars with `present`. `gitConnected` is whether Vercel's GitHub App can access the repo
+         *     stack's required env vars with `present`. `gitConnected` is whether Vercel's GitHub App can access the repo
          *     (`null`: not checked), with Vercel's `installUrl` when it can't.
          */
         DeploymentSettingsDto: {
@@ -3060,9 +3009,10 @@ export interface components {
             commitUrl: null | string;
         };
         /**
-         * @description One step of an execution run (FR-57): number, title, the preset specialist that runs it (`agentKey`, null for the
+         * @description One step of an execution run (FR-57): number, title, the specialist that runs it (`agentKey`, FR-121; null for the
          *     base Code Generator), status, attempt count, declared vs produced files, and the commit once accepted
-         *     (`commitUrl` is null for the Local provider).
+         *     (`commitUrl` is null for the Local provider). `legacyAgentKey` (§4.23): the v2 agent key a plan locked before
+         *     the upgrade named, which now runs as `agentKey`; null otherwise.
          */
         ExecutionStepSummaryDto: {
             /** Format: uuid */
@@ -3078,6 +3028,7 @@ export interface components {
             producedFiles: components["schemas"]["FileManifestEntryDto"][];
             commitSha: null | string;
             commitUrl: null | string;
+            legacyAgentKey?: null | string;
         };
         /** @description A plan version's execution steps in step order (FR-30); `plan` is `null` (and no steps) before any plan is approved. */
         ExecutionStepsDto: {
@@ -3445,11 +3396,15 @@ export interface components {
         JsonObject: {
             [key: string]: unknown;
         };
-        /** @description The legacy preset (FR-74) the version is pinned to; `presetName` is the id when it is no longer shipped. */
+        /**
+         * @description FR-129: the retired v2 preset a migrated version was pinned to, kept as history: its id, name (the id when unknown),
+         *     version and `label`, "Preset nextjs-supabase@1.0.1 (retired, migrated)".
+         */
         LegacyPresetDto: {
             presetId: string;
             presetName: string;
             presetVersion: null | string;
+            label: string;
         };
         /**
          * @description The connection bound to a project (FR-79), shown to every member as e.g. "Anthropic · connected by Ana (••••a1b2)".
@@ -3802,76 +3757,6 @@ export interface components {
          * @enum {unknown}
          */
         PlanRunStatus: "pending" | "running" | "paused" | "completed" | "blocked" | "superseded";
-        /** @description A specialist agent of a preset (FR-76): the paths it owns (globs; `!` excludes) and its skills. */
-        PresetAgentDto: {
-            key: string;
-            name: string;
-            description: string;
-            owns: string[];
-            skills: string[];
-        };
-        /** @description A review checklist item (FR-77), mapped to a v1 compliance category. */
-        PresetChecklistItemDto: {
-            category: components["schemas"]["ReviewCategory"];
-            item: string;
-            severity: components["schemas"]["Severity"];
-        };
-        /** @description A preset in full (FR-74): the summary plus agents, spec sections, environment, review and protected paths. No prompt bodies. */
-        PresetDetailDto: {
-            id: string;
-            name: string;
-            version: string;
-            description: string;
-            stack: string[];
-            deployTargets: string[];
-            contentHash: string;
-            agents: components["schemas"]["PresetAgentDto"][];
-            specSections: components["schemas"]["PresetSpecSectionDto"][];
-            requiredEnv: components["schemas"]["PresetEnvVarDto"][];
-            review: components["schemas"]["PresetReviewDto"];
-            protectedPaths: components["schemas"]["PresetProtectedPathDto"][];
-        };
-        /** @description A required environment variable (FR-88): `targets` ⊆ production/preview/development. */
-        PresetEnvVarDto: {
-            key: string;
-            targets: string[];
-            sensitive: boolean;
-            description: string;
-        };
-        /**
-         * @description A protected path (§4.11): `existingOnBase` protects only files already on the version's base commit;
-         *     `except` globs stay writable.
-         */
-        PresetProtectedPathDto: {
-            glob: string;
-            existingOnBase: boolean;
-            except: string[];
-            reason: null | string;
-        };
-        /** @description The preset's review additions (FR-77): its checklist and deterministic rule ids. */
-        PresetReviewDto: {
-            checklist: components["schemas"]["PresetChecklistItemDto"][];
-            deterministic: string[];
-        };
-        /** @description An extra spec section the preset requires (FR-75) with its guidance. */
-        PresetSpecSectionDto: {
-            title: string;
-            guidance: string;
-        };
-        /**
-         * @description A tech stack preset card (FR-74, §7.2 wizard Stack step and admin presets list): `stack` are the chips,
-         *     `deployTargets` the supported deployment targets (`vercel`). `contentHash` is the SHA-256 of the
-         *     preset's files (D-V2-12).
-         */
-        PresetSummaryDto: {
-            id: string;
-            name: string;
-            version: string;
-            description: string;
-            stack: string[];
-            deployTargets: string[];
-            contentHash: string;
-        };
         /**
          * @description FR-90: the preview deployment a review cycle waited for (`compliance_report.external_checks.preview`): its id, final
          *     (or last seen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 20
@@ -3922,8 +3807,8 @@ export interface components {
          *     checkpoint within the current release version `releaseVersionId` (§4.10, D-V2-11: was `projectVersion`);
          *     `releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the
          *     version in development (`null`: none) (FR-62). `idea` is the request of the version in development.
-         *     `presetId`, `presetName` and `presetVersion` are the tech stack preset pinned on the current release
-         *     version (FR-74; all `null`: no preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so
+         *     `presetId`, `presetName` and `presetVersion` are history (FR-129): the retired v2 preset the current release
+         *     version was pinned to before it was migrated to a composition (all `null`: never pinned to a preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so
          *     the Deployments page is in its navigation (§7.2). `stackPacks` are the pack ids of the current release version's
          *     stack composition (FR-117, §5; empty: no stack), e.g. `["fe-react-vite", "be-aspnet", "vcs-github"]`.
          */
@@ -4020,7 +3905,7 @@ export interface components {
         /**
          * @description Settings → Stack (FR-117, FR-119): the stack of the project's current release version.
          *         * composition: the pinned normalised composition with its derived fields (§4.18), null for "No stack
-         *         (general)" or a version pinned to a legacy preset (legacyPreset). catalogVersion/catalogHash are
+         *         (general)" and, for a version migrated from a retired v2 preset, that preset as history (legacyPreset). catalogVersion/catalogHash are
          *         what it was pinned against; currentCatalogVersion/currentCatalogHash the catalog shipped now (a new
          *         version re-pins to it).
          *     * locked with lockedReason (plan_locked, not_in_development): PUT is
@@ -4092,7 +3977,7 @@ export interface components {
          * @description A row of the projects list (FR-6, FR-62). `myRole` is `null` for an Admin who isn't a member;
          *     `releasedVersion` / `developmentVersion` are the two version badges (`null` when not released / nothing in
          *     development); `checkpoint` was `projectVersion` (D-V2-11); `presetId`/`presetName`/`presetVersion`
-         *     are the preset chip (FR-74, §7.2; `null`: no preset); `stackPacks` the pack ids of the current version's
+         *     are history (FR-129: the retired preset the current version was migrated from; `null`: none); `stackPacks` the pack ids of the current version's
          *     stack composition (FR-117, the `pack` filter; empty: no stack).
          */
         ProjectSummaryDto: {
@@ -4385,8 +4270,9 @@ export interface components {
          *     `baseCommitSha` are the released tag and merge commit the version started from (null for a first version);
          *     `branchName` and `pullRequestUrl` are the version's working branch and PR once they exist; `request` is
          *     what the version was started with (the project idea for a first version); `startedBy` is null for versions created
-         *     by migration or import. `presetId`/`presetVersion` are the pinned preset (FR-74) and `presetName` its
-         *     name (the id when the preset is no longer shipped); all `null` without a preset.
+         *     by migration or import. `presetId`/`presetVersion`/`presetName` are history (FR-129): the retired v2 preset
+         *     the version was pinned to before its migration to a composition, shown as "Preset &lt;id&gt;@&lt;version&gt; (retired,
+         *     migrated)"; all `null` for versions never pinned to a preset.
          */
         ReleaseVersionDto: {
             /** Format: uuid */
@@ -4425,7 +4311,7 @@ export interface components {
             status: components["schemas"]["ArtifactStatus"];
         };
         /**
-         * @description An environment variable the project's preset requires (FR-88, §4.11 preset env): its key, targets, whether it is
+         * @description An environment variable the project's stack requires (FR-88, §4.22: the resolved composition's env): its key, targets, whether it is
          *     sensitive, what it is for, and whether the project has it (`present`; missing ones are flagged).
          */
         RequiredEnvVarDto: {
@@ -4574,11 +4460,12 @@ export interface components {
         };
         /**
          * @description The normalised composition (§4.18) returned by `POST /api/stack/validate`: None is `null`;
-         *     `originModel` is `null` without a frontend (API only).
+         *     `originModel` is `null` without a frontend (API only). `catalogHash` is `null` for a composition
+         *     written by the FR-129 preset migration until it is re-pinned.
          */
         StackCompositionDto: {
             catalogVersion: string;
-            catalogHash: string;
+            catalogHash: null | string;
             frontend: null | components["schemas"]["StackComponentDto"];
             backend: null | components["schemas"]["StackComponentDto"];
             data: null | components["schemas"]["StackDataDto"];
@@ -4764,17 +4651,15 @@ export interface components {
         /**
          * @description FR-60: start a new release version. `version` is semver (a leading `v` is stripped, e.g. `v1.2.0` →
          *     `1.2.0`); `request` describes the new features, improvements or fixes and becomes the project idea for this
-         *     version; `presetId` picks the tech stack preset of the new version (FR-74): omit it to keep the preset of the
-         *     version it builds on, send `null` for no preset; an unknown id is `PRESET_NOT_FOUND`. `stack` (FR-117,
+         *     version. `stack` (FR-117,
          *     "Change stack") is the new version's stack composition, validated like project create (`STACK_INCOMPATIBLE`,
          *     `VCS_MISMATCH`, `VALIDATION` on `stack.*`); omitted or `null`, the base version's composition is kept,
-         *     re-pinned to the current catalog (`STACK_INCOMPATIBLE` if the catalog no longer allows it). A `presetId` and a
-         *     `stack` together are `VALIDATION`.
+         *     re-pinned to the current catalog (`STACK_INCOMPATIBLE` if the catalog no longer allows it). FR-129: the v2
+         *     `presetId` was removed (D-V4-4).
          */
         StartReleaseVersionRequest: {
             version: string;
             request: string;
-            presetId?: null | string;
             stack?: null | components["schemas"]["StackCompositionRequest"];
         };
         /** @description FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1). */
@@ -4908,13 +4793,6 @@ export interface components {
         /** @description Replaces the project's notification channels (FR-47). */
         UpdateNotificationSettingsRequest: {
             channels: components["schemas"]["NotificationChannelInput"][];
-        };
-        /**
-         * @description FR-74: change the preset of the version in development (Owner), until its first implementation plan is locked.
-         *     `presetId` is a preset id from `GET /api/presets`, or `null` for no preset (general).
-         */
-        UpdateProjectPresetRequest: {
-            presetId?: null | string;
         };
         /** @description Partial update of a project (FR-7). Omitted fields are unchanged. */
         UpdateProjectRequest: {
@@ -6967,7 +6845,6 @@ export interface operations {
                 phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
-                preset?: string;
                 pack?: string;
                 sortBy?: "created" | "updated" | "name";
                 sortOrder?: "asc" | "desc";
@@ -7029,7 +6906,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectDto"];
                 };
             };
-            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), PRESET_NOT_FOUND, STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH or LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller) */
+            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH or LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7103,7 +6980,6 @@ export interface operations {
                 phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
-                preset?: string;
                 pack?: string;
             };
             header?: never;
@@ -10746,7 +10622,7 @@ export interface operations {
                     "application/json": components["schemas"]["StartReleaseVersionResultDto"];
                 };
             };
-            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), PRESET_NOT_FOUND, STACK_INCOMPATIBLE (violations extension) or VCS_MISMATCH. */
+            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension) or VCS_MISMATCH. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10835,184 +10711,6 @@ export interface operations {
             };
             /** @description NOT_FOUND: the project, or a releaseVersionId of another project. */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    ListPresets: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresetSummaryDto"][];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    GetPreset: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                presetId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresetDetailDto"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description NOT_FOUND: no preset with that id. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    UpdateProjectPreset: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateProjectPresetRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectDto"];
-                };
-            };
-            /** @description PRESET_NOT_FOUND: no preset with that id. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description FORBIDDEN: only Owners change the preset. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description NOT_FOUND: the project. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description PRESET_LOCKED (the version's implementation plan is locked, or no version is in development) or CONFLICT (a concurrent edit). */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    GetAdminStackCatalog: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminStackCatalogDto"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11326,6 +11024,44 @@ export interface operations {
             };
             /** @description STACK_LOCKED (the version's implementation plan is locked, or no version is in development) or CONFLICT (a concurrent edit). */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAdminStackCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStackCatalogDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -21,6 +21,8 @@ public sealed class DeploymentSettingsTests(AideApiFactory factory)
     private static readonly object PatGit = new { mode = "github_pat", repoUrl = "https://github.com/acme/todo", token = "ghp_deploySettingsToken" };
 
     private static readonly string[] PreviewOnly = ["preview"];
+
+    private static readonly string[] AllTargets = ["production", "preview", "development"];
     private static readonly string[] ProductionOnly = ["production"];
     private static readonly string[] Both = ["preview", "production"];
     private static readonly string[] BothReversed = ["production", "preview"];
@@ -149,28 +151,43 @@ public sealed class DeploymentSettingsTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR88_A_nextjs_supabase_project_lists_the_three_Supabase_vars_as_required_and_flags_missing_ones()
+    public async Task FR88_S4_22_A_Next_js_Supabase_BaaS_stack_on_Vercel_lists_its_derived_vars_as_required_and_flags_missing_ones()
     {
         using var owner = await ApiSession.RegisterAsync(factory);
         var created = await owner.Client.PostAsJsonAsync(
-            "/api/projects", new { name = ProjectApi.UniqueName("supa"), idea = "A recipe app.", git = PatGit, presetId = "nextjs-supabase" }, Ct);
+            "/api/projects",
+            new
+            {
+                name = ProjectApi.UniqueName("supa"),
+                idea = "A recipe app.",
+                git = PatGit,
+                stack = new
+                {
+                    frontend = new { pack = "fe-nextjs", path = "." },
+                    backend = new { pack = "none" },
+                    data = new { pack = "data-supabase" },
+                    deploy = new { frontendHost = "deploy-vercel", databaseHost = "supabase", local = "none" },
+                },
+            },
+            Ct);
         var project = await ProjectApi.ReadAsync<ProjectDto>(created, HttpStatusCode.Created);
         await ProjectApi.ReadAsync<DeploymentEnvVarDto>(await owner.Client.PutAsJsonAsync(
-            $"{Settings(project.Id)}/env/NEXT_PUBLIC_SUPABASE_URL", new { value = "https://abc.supabase.co", targets = Both }, Ct));
+            $"{Settings(project.Id)}/env/NEXT_PUBLIC_SUPABASE_URL", new { value = "https://abc.supabase.co", targets = AllTargets }, Ct));
 
         var settings = await ProjectApi.ReadAsync<DeploymentSettingsDto>(await owner.Client.GetAsync(new Uri(Settings(project.Id), UriKind.Relative), Ct));
 
+        // FR-129, §4.22: the stack's resolved env replaces the v2 preset's requiredEnv; Vercel as the frontend host makes deployment supported.
         Assert.True(settings.Supported);
         Assert.Null(settings.Provider);
         Assert.Equal(
-            ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"],
+            ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY"],
             settings.RequiredEnv.Select(e => e.Key).ToArray());
-        Assert.Equal([true, false, false], settings.RequiredEnv.Select(e => e.Present).ToArray());
-        Assert.True(settings.RequiredEnv.Single(e => e.Key == "SUPABASE_SERVICE_ROLE_KEY").Sensitive);
+        Assert.Equal([true, false, false, false, false], settings.RequiredEnv.Select(e => e.Present).ToArray());
+        Assert.True(settings.RequiredEnv.Single(e => e.Key == "SUPABASE_SECRET_KEY").Sensitive);
     }
 
     [Fact]
-    public async Task FR88_A_project_without_a_vercel_preset_is_not_supported_until_an_Owner_opts_in()
+    public async Task FR88_A_project_without_a_Vercel_host_is_not_supported_until_an_Owner_opts_in()
     {
         using var owner = await ApiSession.RegisterAsync(factory);
         var project = await ProjectApi.CreateAsync(owner.Client, git: PatGit);

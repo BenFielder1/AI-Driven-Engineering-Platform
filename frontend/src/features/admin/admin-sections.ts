@@ -7,7 +7,7 @@ const descriptions: Record<string, string> = {
   'admin-events': 'Every project’s audit events in one log. Filter by project, type, category, outcome and date.',
   'admin-runs': 'Every agent run across projects, with model, tokens, cost, duration and status.',
   'admin-dead-letters': 'Background jobs that failed every attempt, with their last error. Retry re-queues the job.',
-  'admin-integrations': 'GitHub App registration and status, presets and the system-key policy.',
+  'admin-integrations': 'GitHub App registration and status, the stack catalog and the system-key policy.',
 }
 
 export interface AdminSection {

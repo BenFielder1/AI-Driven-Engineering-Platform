@@ -23,7 +23,7 @@ public static class VersionEndpoints
 
         group.MapGet("/versions", ListReleaseVersions)
             .WithName("ListReleaseVersions")
-            .WithSummary("The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, preset and dates.")
+            .WithSummary("The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, the retired preset of a migrated version (history, FR-129) and dates.")
             .Produces<IReadOnlyList<ReleaseVersionDto>>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project."));
@@ -39,7 +39,7 @@ public static class VersionEndpoints
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithResponseDescriptions(
                 (StatusCodes.Status201Created, "The release version (in_development) and the project state."),
-                (StatusCodes.Status400BadRequest, "VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), PRESET_NOT_FOUND, STACK_INCOMPATIBLE (violations extension) or VCS_MISMATCH."),
+                (StatusCodes.Status400BadRequest, "VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension) or VCS_MISMATCH."),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN: only Owners start versions."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project."),
                 (StatusCodes.Status409Conflict, "VERSION_IN_PROGRESS, RELEASE_NOT_MERGED (the latest release is awaiting merge), NOT_RELEASED, VERSION_NOT_GREATER (not above the released version), TAG_EXISTS (the tag is already in the repository) or CONFLICT."),

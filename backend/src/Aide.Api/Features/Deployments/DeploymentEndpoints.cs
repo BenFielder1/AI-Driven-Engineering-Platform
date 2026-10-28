@@ -34,7 +34,7 @@ public static class DeploymentEndpoints
 
         settings.MapGet("/", GetDeploymentSettings)
             .WithName("GetDeploymentSettings")
-            .WithSummary("Settings → Deployment for any member (FR-88): provider, supported, the binding (\"connected by <name>\", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the preset's required env vars with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not).")
+            .WithSummary("Settings → Deployment for any member (FR-88): provider, supported, the binding (\"connected by <name>\", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the stack's required env vars (§4.22) with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not).")
             .Produces<DeploymentSettingsDto>();
 
         settings.MapPatch("/", UpdateDeploymentSettings)

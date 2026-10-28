@@ -19,7 +19,7 @@ import {
 import { useProjectAccess } from '../projects/project-context'
 import { oneOf } from '../projects/projects-search'
 import { RelativeTime } from '../projects/relative-time'
-import { presetRef } from '../presets/presets-api'
+import { specialistText } from '../stack/legacy-preset'
 import { RunStatusBadge } from './run-badges'
 import { RunDetails } from './run-details'
 import { isUnfinished } from './run-format'
@@ -47,8 +47,6 @@ function runVersion(run: AgentRun, versionName: string | undefined): string {
 
 function RunRow({ run, onOpen, versionName }: { run: AgentRun; onOpen: () => void; versionName: string | undefined }) {
   const unfinished = isUnfinished(run)
-  // FR-74: the preset the run used, "nextjs-frontend@1.0.0".
-  const preset = presetRef(run.presetId, run.presetVersion)
   return (
     <tr className="border-b border-border last:border-b-0">
       <th scope="row" className="px-3 py-2 text-left font-medium">
@@ -61,10 +59,7 @@ function RunRow({ run, onOpen, versionName }: { run: AgentRun; onOpen: () => voi
           {agentKindLabels[run.agent]}
         </button>
       </th>
-      <td className="px-3 py-2">{run.agentKey ?? '—'}</td>
-      <td className="px-3 py-2" data-testid="run-preset">
-        {preset ? <code className="text-xs">{preset}</code> : '—'}
-      </td>
+      <td className="px-3 py-2">{specialistText(run.agentKey, run.legacyAgentKey) ?? '—'}</td>
       <td className="px-3 py-2">
         <code className="text-xs">{run.model}</code>
       </td>
@@ -103,9 +98,6 @@ function RunsTable({ projectId, runs, onOpen }: { projectId: string; runs: Agent
             </th>
             <th scope="col" className={head}>
               Specialist
-            </th>
-            <th scope="col" className={head}>
-              Preset
             </th>
             <th scope="col" className={head}>
               Model

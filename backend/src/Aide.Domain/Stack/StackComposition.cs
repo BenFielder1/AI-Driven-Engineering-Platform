@@ -41,7 +41,8 @@ public sealed record StackComposition
 {
     public required string CatalogVersion { get; init; }
 
-    public required string CatalogHash { get; init; }
+    /// <summary>The catalog hash the composition was validated against; <c>null</c> for compositions written by the FR-129 preset migration (re-pinned on the next write).</summary>
+    public required string? CatalogHash { get; init; }
 
     public StackComponent? Frontend { get; init; }
 
