@@ -29,6 +29,7 @@ export type ProjectCapability =
   | 'rollback'
   | 'startVersion'
   | 'changePreset'
+  | 'changeStack'
   | 'changeSettings'
   | 'deployPreview'
   | 'manageDeployment'
@@ -56,6 +57,8 @@ const owner: readonly ProjectCapability[] = [
   'startVersion',
   // FR-74 (SPEC §2 v2): only Owners choose the preset; Contributors and Viewers see it.
   'changePreset',
+  // FR-117 (SPEC §2 v4): only Owners compose or change the stack, until the version's plan is locked.
+  'changeStack',
   'changeSettings',
   // FR-88, FR-91 (SPEC §2 v2): bind a Vercel connection, edit env vars, promote and redeploy production.
   'manageDeployment',

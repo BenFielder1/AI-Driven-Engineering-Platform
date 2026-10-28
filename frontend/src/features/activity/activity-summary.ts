@@ -16,6 +16,7 @@ import {
   phases,
   reviewDecisions,
 } from "../projects/labels";
+import { stackLayerLabels } from "../stack/stack-model";
 import type { ActivityItem } from "./activity-api";
 
 type Payload = ActivityItem["payload"];
@@ -113,6 +114,16 @@ function describePresetChanged(payload: Payload): string {
   const from = presetAt(payload, "fromPresetId", "fromPresetVersion");
   const to = presetAt(payload, "presetId", "presetVersion");
   return `Preset${v ? ` of ${v}` : ""} changed from ${from} to ${to}`;
+}
+
+/** FR-117, FR-155 STACK_CHANGED: "Stack changed: Backend, Data" (the catalog layers that changed). */
+function describeStackChanged(payload: Payload): string {
+  const layers = Array.isArray(payload.layersChanged)
+    ? payload.layersChanged.filter((l): l is string => typeof l === "string")
+    : [];
+  return layers.length > 0
+    ? `Stack changed: ${layers.map((l) => stackLayerLabels[l] ?? l).join(", ")}`
+    : "Stack changed";
 }
 
 function describeGate(type: string, payload: Payload, names: VersionNameLookup | undefined): string | null {
@@ -566,6 +577,9 @@ export function describeActivity(
       break;
     case "PRESET_CHANGED":
       text = describePresetChanged(payload);
+      break;
+    case "STACK_CHANGED":
+      text = describeStackChanged(payload);
       break;
     case "ARTIFACT_RESTORED":
       text = describeRestored(payload);

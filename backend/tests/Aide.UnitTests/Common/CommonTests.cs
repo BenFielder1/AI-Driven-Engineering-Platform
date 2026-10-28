@@ -142,6 +142,10 @@ public class ErrorCodesTests
             ["VERCEL_PLAN_LIMIT"] = 409,
             ["DEPLOYMENT_NOT_CONFIGURED"] = 409,
             ["INVALID_DEPLOYMENT"] = 409,
+            ["STACK_INCOMPATIBLE"] = 400,
+            ["STACK_LOCKED"] = 409,
+            ["VCS_MISMATCH"] = 400,
+            ["GIT_NOT_CONNECTED"] = 409,
         };
 
         foreach (var (code, status) in expected)

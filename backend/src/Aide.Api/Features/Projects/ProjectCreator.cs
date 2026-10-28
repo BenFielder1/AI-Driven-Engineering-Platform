@@ -1,4 +1,5 @@
 using Aide.Api.Features.GitHub;
+using Aide.Api.Features.Stack;
 using Aide.Api.Features.Versions;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
@@ -9,6 +10,7 @@ using Aide.Domain.Lifecycle;
 using Aide.Domain.Presets;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
+using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
@@ -50,6 +52,7 @@ public sealed partial class ProjectCreator(
     IWorkspaceStore workspaces,
     JobEnqueuer jobs,
     IPresetCatalog presets,
+    ProjectStackService stacks,
     IOptions<LocalGitOptions> localGit,
     TimeProvider time,
     ILogger<ProjectCreator> logger)
@@ -99,6 +102,27 @@ public sealed partial class ProjectCreator(
             return Result.Failure<Project>(preset.Error!);
         }
 
+        // FR-114–FR-117: or a stack composition (one or the other), validated with R5 for the repository's host.
+        StackComposition? stack = null;
+        if (request.Stack is { } stackRequest)
+        {
+            if (preset.Value is not null)
+            {
+                return Result.Failure<Project>(new DomainError(ErrorCodes.Validation, "The stack choices are invalid.")
+                {
+                    Details = ["stack: Send a presetId or a stack, not both."],
+                });
+            }
+
+            var resolved = stacks.Resolve(stackRequest, StackPinning.RepoVcs(gitProvider), "stack.");
+            if (resolved.IsFailure)
+            {
+                return Result.Failure<Project>(resolved.Error!);
+            }
+
+            stack = resolved.Value;
+        }
+
         var now = time.GetUtcNow();
         var project = new Project
         {
@@ -126,7 +150,7 @@ public sealed partial class ProjectCreator(
 
         try
         {
-            return await SaveAsync(request, project, start.Value, preset.Value, llmPlan.Value, gitProvider, ownerId, actor, now, cancellationToken);
+            return await SaveAsync(request, project, start.Value, preset.Value, stack, llmPlan.Value, gitProvider, ownerId, actor, now, cancellationToken);
         }
         catch
         {
@@ -441,6 +465,7 @@ public sealed partial class ProjectCreator(
         Project project,
         RepositoryStart start,
         Preset? preset,
+        StackComposition? stack,
         LlmPlan llmPlan,
         GitProvider gitProvider,
         Guid ownerId,
@@ -487,6 +512,8 @@ public sealed partial class ProjectCreator(
             BaseCommitSha = start.ReleasedCommit ?? start.HeadCommit,
         };
         Presets.PresetService.Pin(version, preset);
+        ProjectStackService.Pin(version, stack);
+        stacks.SyncPacks(project, stack);
         versions.Add(version);
         project.CurrentReleaseVersionId = version.Id;
         ReleaseVersionScope.Refresh(project, versions);
@@ -549,6 +576,8 @@ public sealed partial class ProjectCreator(
                 developmentVersion = version.Version,
                 presetId = version.PresetId,
                 presetVersion = version.PresetVersion,
+                stackPacks = project.StackPacks,
+                catalogVersion = version.CatalogVersion,
             },
             actor,
             now);

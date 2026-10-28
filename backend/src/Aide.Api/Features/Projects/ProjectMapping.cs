@@ -38,7 +38,8 @@ internal static class ProjectMapping
         preset.PresetId,
         preset.PresetName,
         preset.PresetVersion,
-        deploymentsEnabled);
+        deploymentsEnabled,
+        [.. p.StackPacks]);
 
     /// <param name="s">The project's Git settings.</param>
     /// <param name="branchName">The working branch of the project's current release version (§4.10), if recorded.</param>

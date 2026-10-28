@@ -14,6 +14,8 @@ export function problem(
     reason?: string
     /** GITHUB_APP_NOT_INSTALLED extension (FR-81, FR-83). */
     installUrl?: string
+    /** STACK_INCOMPATIBLE extension (FR-116). */
+    violations?: Schemas['HttpValidationProblemDetails']['violations']
     headers?: Record<string, string>
   } = {},
 ): Response {
@@ -28,6 +30,7 @@ export function problem(
       ...(init.details ? { details: init.details } : {}),
       ...(init.reason ? { reason: init.reason } : {}),
       ...(init.installUrl ? { installUrl: init.installUrl } : {}),
+      ...(init.violations ? { violations: init.violations } : {}),
     },
     { status, headers: { 'Content-Type': 'application/problem+json', ...init.headers } },
   )

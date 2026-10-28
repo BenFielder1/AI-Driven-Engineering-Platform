@@ -110,6 +110,13 @@ public sealed partial class PresetService(AideDbContext db, IPresetCatalog catal
 
         var from = (target.PresetId, target.PresetVersion);
         Pin(target, preset);
+        if (preset is not null)
+        {
+            // FR-117: a version has a preset or a stack composition, not both.
+            Stack.ProjectStackService.Pin(target, null);
+            project.StackPacks = [];
+        }
+
         var now = time.GetUtcNow();
         project.UpdatedAt = now;
         db.AddEvent(

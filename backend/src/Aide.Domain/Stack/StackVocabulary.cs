@@ -114,6 +114,12 @@ public static class StackIds
     /// <summary>The Supabase pack's host mode (§4.18).</summary>
     public const string HostMode = "host";
 
+    /// <summary>The Supabase pack's BaaS mode: Supabase in the Data layer (§4.17 R3).</summary>
+    public const string BaasMode = "baas";
+
+    /// <summary>The Supabase database host option (§4.17 R8).</summary>
+    public const string SupabaseHost = "supabase";
+
     /// <summary>The Compose dev loop (<c>local-docker-desktop</c>).</summary>
     public const string Compose = "compose";
 }

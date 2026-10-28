@@ -17,7 +17,7 @@ import { TextField } from '../../components/ui/text-field'
 import { errorMessage, isApiError } from '../../lib/errors'
 import { normalizeVersion, suggestNextVersion } from '../versions/semver'
 import { buttonClasses } from '../../components/ui/button-classes'
-import { LoadingState } from '../../components/ui/states'
+import { ErrorState, LoadingState } from '../../components/ui/states'
 import { useAuthProviders } from '../auth/auth-api'
 import { connectGitHubHref, useGitHubConnection, useGitHubRepoRefs, type GitHubRepo } from '../github/github-api'
 import { GitHubErrorAlert } from '../github/github-error-alert'
@@ -58,6 +58,24 @@ import {
   toLlmRequest,
 } from './wizard-llm'
 import { WizardLlmSection } from './wizard-llm-section'
+import { useStackCatalog, useStackDetection } from '../stack/stack-api'
+import { StackComposer, stackLayers, type StackFieldErrors } from '../stack/stack-composer'
+import { detectedAnything, emptyStackSelection, selectionFromDetection, stackFieldOfKey, type StackSelection } from '../stack/stack-model'
+import { CompositionRows, StackSummary } from '../stack/stack-summary'
+import {
+  detectRequestOf,
+  repoVcsOf,
+  selectionOfValues,
+  toWizardStackRequest,
+  WIZARD_STACK_PREFIX,
+  wizardStackFieldIds,
+  wizardStackFieldList,
+  wizardStackFields,
+  detectionIdOf,
+  stackSnapshot,
+  wizardStackLayerFields,
+  type WizardStackField,
+} from './wizard-stack'
 
 type Field = Path<WizardValues>
 type Source = WizardValues['source']
@@ -84,6 +102,8 @@ const fieldIds: Record<Field, string> = {
   developmentVersion: 'project-development-version',
   localSourcePath: 'project-local-source-path',
   presetId: 'project-preset',
+  stackDetection: 'project-stack-kind',
+  ...wizardStackFieldIds,
   ...deploymentFieldIds,
   ...llmFieldIds,
 }
@@ -100,7 +120,7 @@ const stepFields: Record<StepKey, readonly Field[]> = {
   idea: ['name', 'idea'],
   repository: ['gitMode', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken', 'releasedTag', 'localSourcePath'],
   version: ['initialVersion', 'developmentVersion'],
-  stack: ['presetId'],
+  stack: ['stackKind', ...wizardStackFieldList, 'presetId'],
   configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget', ...llmFields],
   deployment: ['deploymentMode', 'vercelConnectionId', 'vercelProjectMode', 'vercelProjectName', 'vercelRootDirectory', 'vercelProjectId'],
   review: [],
@@ -130,6 +150,17 @@ function stepTitle(key: StepKey, source: Source): string {
 const stepIndex = (key: StepKey) => stepKeys.indexOf(key)
 const LAST_STEP = stepKeys.length - 1
 
+/** A server VALIDATION key → wizard field: the map below, or a `stack.*` key of the composition (FR-114, FR-119). */
+function wizardFieldOfKey(key: string): Field | undefined {
+  const lower = key.toLowerCase()
+  const mapped = serverFieldMap[lower]
+  if (mapped) {
+    return mapped
+  }
+  const stackField = lower.startsWith('stack.') ? stackFieldOfKey(lower) : undefined
+  return stackField ? wizardStackFields[stackField] : undefined
+}
+
 /** Server VALIDATION keys (camelCase, possibly `git.`/`import.`-prefixed) → wizard fields. */
 const serverFieldMap: Record<string, Field> = {
   source: 'source',
@@ -155,6 +186,8 @@ const serverFieldMap: Record<string, Field> = {
   'import.developmentversion': 'developmentVersion',
   'import.releasedtag': 'releasedTag',
   presetid: 'presetId',
+  // FR-114: `stack.*` keys map through stackFieldOfKey; `stack` itself (e.g. presetId and stack together) is the kind.
+  stack: 'stackKind',
   deployment: 'deploymentMode',
   // A Local project without the Fake provider: VALIDATION on the deployment (FR-88).
   provider: 'deploymentMode',
@@ -234,13 +267,14 @@ function toDeploymentRequest(v: WizardValues): Schemas['CreateProjectDeploymentR
 
 /**
  * FR-5, FR-66, FR-73: scratch sends `initialVersion`; import sends `import`, and `idea` is the version's request.
- * FR-74: `presetId` only when a preset is picked ("No preset (general)" omits it).
+ * FR-114: `stack` for a composition; FR-74: `presetId` only for a legacy preset ("No stack (general)" sends neither).
  */
 function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
   const deployment = toDeploymentRequest(v)
   const llm = toLlmRequest(v)
   const base = {
-    ...(v.presetId ? { presetId: v.presetId } : {}),
+    ...(v.stackKind === 'preset' && v.presetId ? { presetId: v.presetId } : {}),
+    ...(v.stackKind === 'compose' ? { stack: toWizardStackRequest(v) } : {}),
     name: v.name.trim(),
     idea: v.idea.trim(),
     approvalMode: v.approvalMode,
@@ -412,12 +446,15 @@ export function NewProjectWizard() {
     mode: 'onTouched',
   })
 
+  /** FR-114: the Stack step's sub-step (Frontend → Backend → Data → VCS → Deployment). */
+  const [stackSubStep, setStackSubStep] = useState(0)
+
   // Focus the new step's heading so keyboard and screen-reader users start at the top of it.
   useEffect(() => {
     if (moveFocus) {
       headingRef.current?.focus()
     }
-  }, [step, moveFocus])
+  }, [step, stackSubStep, moveFocus])
 
   const goTo = (next: number) => {
     setMoveFocus(true)
@@ -438,6 +475,13 @@ export function NewProjectWizard() {
   const vercelProjectMode = useWatch({ control, name: 'vercelProjectMode' })
   const vercelConnectionId = useWatch({ control, name: 'vercelConnectionId' })
   const llmProvider = useWatch({ control, name: 'llmProvider' })
+  const stackKind = useWatch({ control, name: 'stackKind' })
+  const stackValues: readonly string[] = useWatch({ control, name: wizardStackFieldList })
+  const stackSelection = Object.fromEntries(
+    Object.keys(wizardStackFields).map((k, i) => [k, stackValues[i] ?? '']),
+  ) as unknown as StackSelection
+  // Watched so detection re-reads the repository fields (FR-118).
+  useWatch({ control, name: ['repoUrl', 'localSourcePath', 'defaultBranch', 'gitToken'] })
 
   // FR-88: suggest the new Vercel project's name from the project name when the step opens.
   useEffect(() => {
@@ -579,10 +623,87 @@ export function NewProjectWizard() {
     )
   }
 
+  // FR-114: the stack catalog (option cards) and the composition fields, set from the five sub-steps.
+  const stackCatalog = useStackCatalog(step >= stepIndex('stack'))
+  const [liveStackErrors, setLiveStackErrors] = useState<StackFieldErrors>({})
+  const setStack = useCallback(
+    (sel: StackSelection) => {
+      for (const [k, field] of Object.entries(wizardStackFields) as [keyof StackSelection, WizardStackField][]) {
+        if (getValues(field) !== sel[k]) {
+          setValue(field, sel[k], { shouldDirty: true, shouldValidate: getFieldState(field).invalid })
+        }
+      }
+    },
+    [getValues, setValue, getFieldState],
+  )
+  const stackErrors: StackFieldErrors = { ...liveStackErrors }
+  for (const [k, field] of Object.entries(wizardStackFields) as [keyof StackSelection, WizardStackField][]) {
+    const message = errors[field]?.message
+    if (message) {
+      stackErrors[k] = message
+    }
+  }
+
+  // FR-118: an import pre-fills the Stack step from the repository's files (never blocking). Detection runs only while
+  // the Stack step is shown, and a result is applied only while the stack is untouched since the last applied one, so
+  // a late answer or a new repository never overwrites the user's own choices.
+  const detectRequest = importing && key === 'stack' ? detectRequestOf(getValues()) : null
+  const detection = useStackDetection(detectRequest)
+  const detectionKey = detection.data && detectRequest ? detectionIdOf(detectRequest, detection.data) : null
+  const appliedDetection = useWatch({ control, name: 'stackDetection' })
+  const lastApplied = useRef<string | null>(null)
+  useEffect(() => {
+    if (key !== 'stack' || !detection.data || !detectionKey || getValues('stackDetection') === detectionKey) {
+      return
+    }
+    const values = getValues()
+    lastApplied.current ??= stackSnapshot(draft?.values ?? wizardDefaults)
+    if (stackSnapshot(values) !== lastApplied.current) {
+      return
+    }
+    const found = detectedAnything(detection.data)
+    setStack(found ? selectionFromDetection(detection.data, emptyStackSelection) : emptyStackSelection)
+    setValue('presetId', '')
+    setValue('stackKind', found ? 'compose' : 'general', { shouldDirty: true })
+    setValue('stackDetection', detectionKey)
+    lastApplied.current = stackSnapshot(getValues())
+  }, [key, detection.data, detectionKey, draft, getValues, setStack, setValue])
+
   async function next() {
+    if (key === 'stack' && getValues('stackKind') === 'compose') {
+      const layers = stackLayers(stackCatalog.data)
+      if (stackSubStep < layers.length - 1) {
+        const fields = wizardStackLayerFields[layers[stackSubStep]?.id ?? ''] ?? []
+        const valid = fields.length === 0 || (await trigger([...fields], { shouldFocus: true }))
+        if (valid) {
+          setMoveFocus(true)
+          setServerError(null)
+          setStackSubStep(stackSubStep + 1)
+        }
+        return
+      }
+    }
     const valid = await trigger(stepFields[key], { shouldFocus: true })
     if (valid) {
       goTo(step + 1)
+    }
+  }
+
+  function back() {
+    if (key === 'stack' && stackKind === 'compose' && stackSubStep > 0) {
+      setMoveFocus(true)
+      setStackSubStep(stackSubStep - 1)
+      return
+    }
+    goTo(step - 1)
+  }
+
+  /** The sub-step of the first stack field with a server error (create's VALIDATION on `stack.*`). */
+  const showStackField = (fields: readonly Field[]) => {
+    const layers = stackLayers(stackCatalog.data)
+    const index = layers.findIndex((l) => (wizardStackLayerFields[l.id] ?? []).some((f) => fields.includes(f)))
+    if (index >= 0) {
+      setStackSubStep(index)
     }
   }
 
@@ -604,7 +725,7 @@ export function NewProjectWizard() {
             const unmatched: string[] = []
             const matched: Partial<Record<Field, string>> = {}
             for (const [field, messages] of Object.entries(error.fieldErrors)) {
-              const target = serverFieldMap[field.toLowerCase()]
+              const target = wizardFieldOfKey(field)
               if (target) {
                 matched[target] = messages.join(' ')
                 setError(target, { type: 'server', message: messages.join(' ') })
@@ -615,6 +736,9 @@ export function NewProjectWizard() {
             const target = firstStepWithError(matched)
             if (target !== LAST_STEP) {
               goTo(target)
+            }
+            if (target === stepIndex('stack')) {
+              showStackField(Object.keys(matched) as Field[])
             }
             setServerError({ message: unmatched.length > 0 ? unmatched.join(' ') : errorMessage(error) })
           } else if (isApiError(error, 'VERSION_INVALID')) {
@@ -637,6 +761,10 @@ export function NewProjectWizard() {
             // FR-74: the preset was withdrawn since the list loaded; pick again from the fresh list.
             setError('presetId', { type: 'server', message: errorMessage(error, 'createProject') })
             goTo(stepIndex('stack'))
+          } else if (isApiError(error, 'STACK_INCOMPATIBLE') || isApiError(error, 'VCS_MISMATCH')) {
+            // FR-116, FR-117: the composition breaks a rule (the reasons are listed), or the VCS isn't the repo's host.
+            goTo(stepIndex('stack'))
+            setServerError({ message: errorMessage(error, 'createProject'), error })
           } else if (isApiError(error, 'LLM_PROVIDER_UNAVAILABLE')) {
             // FR-157, FR-159: the provider was turned off, or the user can no longer use it. Choose again.
             void llmProviders.refetch()
@@ -935,12 +1063,78 @@ export function NewProjectWizard() {
             ))}
 
           {key === 'stack' && (
-            <PresetPicker
-              id={fieldIds.presetId}
-              selected={presetId}
-              inputProps={register('presetId')}
-              error={errors.presetId?.message}
-            />
+            <>
+              <RadioGroup
+                id={fieldIds.stackKind}
+                legend="How should the agents build it?"
+                inputProps={register('stackKind', {
+                  onChange: () => {
+                    setValue('presetId', '')
+                  },
+                })}
+                error={errors.stackKind?.message}
+                options={[
+                  {
+                    value: 'general',
+                    label: 'No stack (general)',
+                    description:
+                      'Any stack: the generalist agent writes every plan step, and the specification has the standard sections.',
+                  },
+                  {
+                    value: 'compose',
+                    label: 'Choose the stack',
+                    description:
+                      'Pick the frontend, backend, data, version control and deployment layers. A specialist agent works on each layer.',
+                  },
+                ]}
+              />
+              {importing && <DetectionNotice detection={detection} />}
+              {stackKind === 'compose' &&
+                (stackCatalog.isPending ? (
+                  <LoadingState label="Loading the stack catalog…" />
+                ) : stackCatalog.isError ? (
+                  <ErrorState
+                    error={stackCatalog.error}
+                    title="The stack catalog couldn't load"
+                    onRetry={() => void stackCatalog.refetch()}
+                  />
+                ) : (
+                  <>
+                    <StackComposer
+                      catalog={stackCatalog.data}
+                      value={stackSelection}
+                      onChange={setStack}
+                      subStep={stackSubStep}
+                      onSubStepChange={setStackSubStep}
+                      idPrefix={WIZARD_STACK_PREFIX}
+                      vcsFixed={repoVcsOf(gitMode)}
+                      vcsFixedReason="Set from the repository you chose (GitHub). It can only be the repository's host."
+                      detection={importing && detectionKey !== null && detectionKey === appliedDetection ? detection.data : null}
+                      errors={stackErrors}
+                    />
+                    <StackSummary catalog={stackCatalog.data} value={stackSelection} onFieldErrors={setLiveStackErrors} />
+                  </>
+                ))}
+              <details
+                className="rounded-lg border border-border/60 bg-background/40 p-3"
+                open={stackKind === 'preset' ? true : undefined}
+              >
+                <summary className="min-h-6 cursor-pointer font-medium">Legacy presets (retiring in v4)</summary>
+                <div className="mt-3">
+                  <PresetPicker
+                    id={fieldIds.presetId}
+                    selected={presetId}
+                    hideNone
+                    inputProps={register('presetId', {
+                      onChange: (e: { target: { value: string } }) => {
+                        setValue('stackKind', e.target.value ? 'preset' : 'general')
+                      },
+                    })}
+                    error={errors.presetId?.message}
+                  />
+                </div>
+              </details>
+            </>
           )}
 
           {key === 'configuration' && (
@@ -1030,12 +1224,7 @@ export function NewProjectWizard() {
 
         <div className="mt-6 flex flex-wrap justify-between gap-2">
           {step > 0 ? (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                goTo(step - 1)
-              }}
-            >
+            <Button variant="secondary" onClick={back}>
               Back
             </Button>
           ) : (
@@ -1139,6 +1328,50 @@ function PresetName({ presetId }: { presetId: string }) {
   return <>{preset ? `${preset.name} ${preset.version}` : presetId}</>
 }
 
+/** FR-114: the composition in the summary, layer by layer (names from the catalog). */
+function StackReview({ values }: { values: WizardValues }) {
+  const catalog = useStackCatalog()
+  return <CompositionRows catalog={catalog.data} value={selectionOfValues(values)} />
+}
+
+/** FR-118: what import detection found (or that it couldn't run); it never blocks the step. */
+function DetectionNotice({ detection }: { detection: ReturnType<typeof useStackDetection> }) {
+  if (detection.isPending && detection.fetchStatus === 'idle') {
+    return null
+  }
+  if (detection.isPending) {
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Detecting the repository&apos;s stack…
+      </p>
+    )
+  }
+  if (detection.isError) {
+    return (
+      <Alert tone="info" role="status" title="We couldn't detect the stack">
+        <p>{errorMessage(detection.error, 'detectStack')}</p>
+      </Alert>
+    )
+  }
+  const d = detection.data
+  if (!detectedAnything(d)) {
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Nothing was detected in the repository. Choose each layer yourself, or keep No stack (general).
+      </p>
+    )
+  }
+  return (
+    <Alert tone="success" role="status" title="Stack detected">
+      <p>
+        The layers detected in <code className="font-mono">{d.ref}</code> are pre-filled and marked Detected. You can
+        change any of them.
+      </p>
+      {d.truncated && <p className="mt-1">The repository has more files than AIDE listed, so some layers may be missing.</p>}
+    </Alert>
+  )
+}
+
 /** FR-88: the Deployment step in the summary ("Vercel", the connection, and the new or existing Vercel project). */
 function DeploymentSummary({ values }: { values: WizardValues }) {
   const request = toDeploymentRequest(values)
@@ -1236,9 +1469,15 @@ function ReviewSummary({
         )}
       </SummarySection>
       <SummarySection title="Stack" step="stack" onEdit={onEdit}>
-        <SummaryRow term="Preset">
-          <PresetName presetId={values.presetId} />
-        </SummaryRow>
+        {values.stackKind === 'compose' ? (
+          <StackReview values={values} />
+        ) : values.stackKind === 'preset' ? (
+          <SummaryRow term="Legacy preset">
+            <PresetName presetId={values.presetId} />
+          </SummaryRow>
+        ) : (
+          <SummaryRow term="Stack">No stack (general)</SummaryRow>
+        )}
       </SummarySection>
       <SummarySection title="Configuration" step="configuration" onEdit={onEdit}>
         <SummaryRow term="Approval mode">{approvalModeLabels[values.approvalMode]}</SummaryRow>

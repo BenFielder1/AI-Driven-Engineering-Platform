@@ -124,6 +124,13 @@ export const errorMessages = {
   // FR-116: a stack composition breaks a compatibility rule. The map doesn't interpolate, so callers append the
   // ProblemDetails `violations[].reason` list themselves (M25 Stack UI).
   STACK_INCOMPATIBLE: "These stack choices don't work together.",
+  // FR-117: the stack is pinned once the version's implementation plan is locked; the VCS layer is the repo's host.
+  STACK_LOCKED:
+    "The stack can't change after the implementation plan is locked. Start a new version to change it.",
+  VCS_MISMATCH: "The version control choice must match the project's repository host.",
+  // FR-118 and Git hosts (§6): no usable Git connection for the project or request.
+  GIT_NOT_CONNECTED:
+    "Connect your Git host account (or ask an Owner to re-bind the project) to continue.",
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;
@@ -398,6 +405,21 @@ export const contextualErrorMessages = {
     NOT_FOUND: "That connection no longer exists. Pick another, or add a key under Connections.",
     VALIDATION: "Enter the model id, and pick a connection for the chosen provider.",
   },
+  /** POST /api/stack/detect (FR-118): detection never blocks, so the copy says what to do instead. */
+  detectStack: {
+    GIT_NOT_CONNECTED:
+      "Connect your GitHub account under Connections to detect the stack, or choose each layer yourself.",
+    NOT_FOUND: "We couldn't read that repository or ref, so nothing was detected. Choose each layer yourself.",
+    VALIDATION: "We couldn't read that repository, so nothing was detected. Choose each layer yourself.",
+    FORBIDDEN: "GitHub refused to list the repository's files, so nothing was detected. Choose each layer yourself.",
+  },
+  /** PUT /api/projects/:id/stack and the start-version stack change (FR-117). */
+  changeStack: {
+    FORBIDDEN: "Only project Owners can change the stack.",
+    CONFLICT: "Someone else changed the project at the same time. Reload to see the latest, then try again.",
+    STACK_LOCKED:
+      "The stack can't change after the implementation plan is locked. Start a new version to change it.",
+  },
   /** PATCH /api/admin/users/:id/role (FR-3). */
   changeSystemRole: {
     CONFLICT:
@@ -478,8 +500,17 @@ const statusFallback: Partial<Record<number, ErrorCode>> = {
   429: "RATE_LIMITED",
 };
 
+/** STACK_INCOMPATIBLE `violations[]` (FR-116): the choice (`layer`), the option, the rule id and its reason. */
+export interface StackViolation {
+  layer: string;
+  option: string;
+  rule: string;
+  reason: string;
+}
+
 interface ProblemBody {
   title?: string | null;
+  violations?: unknown;
   errorCode?: string;
   reason?: string;
   installUrl?: string;
@@ -501,6 +532,8 @@ export class ApiError extends Error {
   readonly reason: string | null;
   /** ProblemDetails `installUrl` (GITHUB_APP_NOT_INSTALLED, FR-81/FR-83): the AIDE GitHub App's install link. */
   readonly installUrl: string | null;
+  /** ProblemDetails `violations` (STACK_INCOMPATIBLE, FR-116): each broken compatibility rule. */
+  readonly violations: readonly StackViolation[];
 
   constructor(init: {
     status: number;
@@ -512,6 +545,7 @@ export class ApiError extends Error {
     traceId?: string;
     reason?: string | null;
     installUrl?: string | null;
+    violations?: readonly StackViolation[];
   }) {
     super(init.title ?? `Request failed with HTTP ${String(init.status)}`);
     this.name = "ApiError";
@@ -523,6 +557,7 @@ export class ApiError extends Error {
     this.traceId = init.traceId;
     this.reason = init.reason ?? null;
     this.installUrl = init.installUrl ?? null;
+    this.violations = init.violations ?? [];
   }
 }
 
@@ -550,7 +585,31 @@ export function toApiError(error: unknown, response: Response): ApiError {
     traceId: body.traceId,
     reason: typeof body.reason === "string" ? body.reason : null,
     installUrl: typeof body.installUrl === "string" && body.installUrl.startsWith("https://") ? body.installUrl : null,
+    violations: parseViolations(body.violations),
   });
+}
+
+function isViolation(value: unknown): value is StackViolation {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const v = value as Record<string, unknown>;
+  return ["layer", "option", "rule", "reason"].every((k) => typeof v[k] === "string");
+}
+
+function parseViolations(value: unknown): StackViolation[] {
+  return Array.isArray(value) ? value.filter(isViolation) : [];
+}
+
+/**
+ * SPEC §6 STACK_INCOMPATIBLE: "These stack choices don't work together: {reasons}." The reasons are the violations'
+ * reason texts (each once), or the generic copy when the server sent none.
+ */
+export function stackIncompatibleMessage(violations: readonly StackViolation[]): string {
+  const reasons = [...new Set(violations.map((v) => v.reason.trim().replace(/\.$/, "")).filter(Boolean))];
+  return reasons.length === 0
+    ? errorMessages.STACK_INCOMPATIBLE
+    : `These stack choices don't work together: ${reasons.join("; ")}.`;
 }
 
 /** The value of a `key: value` entry in ProblemDetails `details` (e.g. `latestVersion: 5`), if present. */
@@ -653,6 +712,9 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
       if (latest && /^\d+$/.test(latest)) {
         return `Someone saved a newer version (v${latest}) while you were editing. Your text is kept here: copy it, then cancel and edit again to start from v${latest}.`;
       }
+    }
+    if (error.errorCode === "STACK_INCOMPATIBLE") {
+      return stackIncompatibleMessage(error.violations);
     }
     if (error.errorCode === "ROLLBACK_BLOCKED") {
       const blocked = rollbackBlockedMessage(error);

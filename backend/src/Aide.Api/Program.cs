@@ -176,6 +176,9 @@ builder.Services.AddDeployments();
 // Tech stack presets (FR-74): pinning and the preset API; the catalogue is loaded by the infrastructure.
 builder.Services.AddPresets();
 
+// Stack compositions on projects and versions, Settings → Stack and import detection (FR-114–FR-119).
+builder.Services.AddProjectStacks();
+
 // Notifications (FR-47–FR-49, FR-15): fan-out job, channels, delivery retries, gate reminders, one-click approval links.
 builder.Services.AddNotifications();
 

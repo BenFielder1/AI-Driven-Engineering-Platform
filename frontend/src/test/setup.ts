@@ -11,6 +11,7 @@ import { resetLlmDb } from '../mocks/handlers/llm'
 import { resetNotificationsDb } from '../mocks/handlers/notifications'
 import { resetPresetCatalog } from '../mocks/handlers/preset-catalog'
 import { resetProjectsDb } from '../mocks/handlers/projects'
+import { resetStackDb } from '../mocks/handlers/stack'
 import { server } from '../mocks/server'
 import { router } from './memory-router'
 
@@ -77,6 +78,7 @@ afterEach(() => {
   resetVercelDb()
   resetGitHubDb()
   resetPresetCatalog()
+  resetStackDb()
   localStorage.clear()
   sessionStorage.clear()
   router.reset('/')

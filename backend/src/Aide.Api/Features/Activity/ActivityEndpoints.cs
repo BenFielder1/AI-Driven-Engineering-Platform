@@ -186,6 +186,7 @@ internal static class ActivitySummary
             EventTypes.RollbackCompleted => $"Rolled back from checkpoint {Get("fromCheckpoint") ?? Get("fromVersion") ?? "?"} to checkpoint {Get("targetCheckpoint") ?? Get("targetVersion") ?? "?"}",
             EventTypes.VersionStarted => $"Version {Get("version") ?? "?"} started",
             EventTypes.PresetChanged => $"Preset of version {Get("version") ?? "?"} changed from {Get("fromPresetId") ?? "none"} to {Get("presetId") ?? "none"}",
+            EventTypes.StackChanged => $"Stack of version {Get("version") ?? "?"} changed ({LayerList(payload)})",
             EventTypes.ArtifactRestored => $"{Get("type") ?? "Artifact"} v{Get("restoredFromVersion") ?? "?"} restored as draft v{Get("version") ?? "?"}",
             EventTypes.CodebaseSummaryCreated => $"Codebase summary v{Get("version") ?? "?"} created by the Repository Analyst",
             EventTypes.ReleaseAwaitingMerge => $"Release {Get("tag") ?? Get("version") ?? "?"} awaits a merge on GitHub",
@@ -237,6 +238,12 @@ internal static class ActivitySummary
             _ => Humanize(type),
         };
     }
+
+    /// <summary>FR-117: <c>STACK_CHANGED.layersChanged</c> as "backend, data" ("no layers" when only re-pinned).</summary>
+    private static string LayerList(JsonObject payload) =>
+        payload.TryGetPropertyValue("layersChanged", out var node) && node is JsonArray layers && layers.Count > 0
+            ? string.Join(", ", layers.Select(l => l?.ToString() ?? "?"))
+            : "no layers";
 
     /// <summary><c>ARTIFACT_APPROVED</c> → "Artifact approved".</summary>
     private static string Humanize(string type)

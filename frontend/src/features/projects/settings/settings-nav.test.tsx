@@ -18,6 +18,7 @@ describe('Settings secondary nav (SPEC §7.2)', () => {
       'General',
       'Members',
       'Git',
+      'Stack',
       'LLM',
       'Deployment',
       'Notifications',

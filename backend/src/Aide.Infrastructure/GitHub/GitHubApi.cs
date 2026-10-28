@@ -84,6 +84,12 @@ public sealed class GitHubApiException : Exception
     public int? Status { get; }
 }
 
+/// <summary>FR-118: a commit's files (blobs) as GitHub lists them recursively; <c>Truncated</c>: not every file is listed.</summary>
+public sealed record GitHubTree(string CommitSha, IReadOnlyList<GitHubTreeFile> Files, bool Truncated);
+
+/// <summary>A file of a <see cref="GitHubTree"/>: its path, blob sha and size in bytes (when given).</summary>
+public sealed record GitHubTreeFile(string Path, string BlobSha, long? Size);
+
 public sealed record GitHubUser(long Id, string Login, GitHubOwnerType Type);
 
 /// <summary>A repository; <see cref="CanPush"/> is the token's <c>permissions</c> (push, maintain or admin), <c>false</c>
@@ -403,6 +409,93 @@ public sealed partial class GitHubApi(IHttpClientFactory clients, TimeProvider t
         }
 
         return type == "commit" ? sha : null;
+    }
+
+    /// <summary>The most tree entries read for stack detection (GitHub truncates recursive trees around 100,000 entries itself).</summary>
+    public const int MaxTreeEntries = 100_000;
+
+    /// <summary>
+    /// FR-118: the commit <paramref name="gitRef"/> (a branch, tag or commit) names and the files (blobs) of its tree,
+    /// recursively (<c>GET /repos/{o}/{r}/commits/{ref}</c>, then <c>/git/trees/{tree}?recursive=1</c>): each with its blob sha
+    /// and size. <c>Truncated</c> when GitHub cut the listing short. <c>null</c> when the repository or the ref doesn't exist
+    /// (or the token can't see it).
+    /// </summary>
+    public async Task<GitHubTree?> ReadTreeAsync(string? token, string owner, string repo, string gitRef, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(gitRef);
+        var path = $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repo)}";
+        string? commitSha;
+        string? treeSha;
+        try
+        {
+            using var commit = await GetOrNullAsync($"{path}/commits/{Uri.EscapeDataString(gitRef)}", token, cancellationToken, emptyIsMissing: true);
+            if (commit is null)
+            {
+                return null;
+            }
+
+            commitSha = Text(commit.RootElement, "sha");
+            treeSha = commit.RootElement.TryGetProperty("commit", out var c) && c.TryGetProperty("tree", out var t) ? Text(t, "sha") : null;
+        }
+        catch (GitHubApiException ex) when (ex.Kind == GitHubFailureKind.Unprocessable)
+        {
+            // "No commit found for SHA": an unknown ref.
+            return null;
+        }
+
+        if (commitSha is null || treeSha is null)
+        {
+            return null;
+        }
+
+        using var tree = await GetOrNullAsync($"{path}/git/trees/{Uri.EscapeDataString(treeSha)}?recursive=1", token, cancellationToken, emptyIsMissing: true);
+        if (tree is null)
+        {
+            return null;
+        }
+
+        var files = new List<GitHubTreeFile>();
+        if (tree.RootElement.TryGetProperty("tree", out var items) && items.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in items.EnumerateArray())
+            {
+                if (Text(item, "type") == "blob" && Text(item, "path") is { } filePath && Text(item, "sha") is { } blob)
+                {
+                    long? size = item.TryGetProperty("size", out var s) && s.ValueKind == JsonValueKind.Number && s.TryGetInt64(out var n) ? n : null;
+                    files.Add(new GitHubTreeFile(filePath, blob, size));
+                    if (files.Count >= MaxTreeEntries)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+
+        var truncated = files.Count >= MaxTreeEntries
+            || (tree.RootElement.TryGetProperty("truncated", out var cut) && cut.ValueKind == JsonValueKind.True);
+        return new GitHubTree(commitSha, files, truncated);
+    }
+
+    /// <summary>FR-118: a blob's text (<c>GET /repos/{o}/{r}/git/blobs/{sha}</c>, base64), or <c>null</c> when it is missing or not text.</summary>
+    public async Task<string?> ReadBlobTextAsync(string? token, string owner, string repo, string blobSha, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(blobSha);
+        using var json = await GetOrNullAsync(
+            $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repo)}/git/blobs/{Uri.EscapeDataString(blobSha)}", token, cancellationToken);
+        if (json is null || Text(json.RootElement, "encoding") != "base64" || Text(json.RootElement, "content") is not { } content)
+        {
+            return null;
+        }
+
+        try
+        {
+            var text = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(content.Replace("\n", string.Empty, StringComparison.Ordinal)));
+            return text.Contains('\0', StringComparison.Ordinal) ? null : text;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

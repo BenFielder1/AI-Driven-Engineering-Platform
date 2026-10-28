@@ -173,8 +173,26 @@ export const wizardShape = z.object({
   developmentVersion: str,
   /** FR-73 import with `local` (development only): the server path of the repository to import. */
   localSourcePath: str,
-  /** FR-74 Stack step: a preset id from GET /api/presets, or '' for "No preset (general)". */
+  /** FR-74 legacy presets (retiring in v4): a preset id from GET /api/presets, or '' for none. */
   presetId: str,
+  /**
+   * FR-114 Stack step: "No stack (general)", a composition from the five sub-steps, or a legacy preset (`presetId`).
+   * The composition is one option id per choice ('' = not chosen yet) and the layer paths (FR-119).
+   */
+  stackKind: z.enum(['general', 'compose', 'preset']),
+  stackFrontend: str,
+  stackBackend: str,
+  stackData: str,
+  stackVcs: str,
+  stackFrontendHost: str,
+  stackBackendHost: str,
+  stackDatabaseHost: str,
+  stackLocal: str,
+  stackOriginModel: str,
+  stackFrontendPath: str,
+  stackBackendPath: str,
+  /** FR-118: the identity of the import detection last applied to the stack fields ('' = none). */
+  stackDetection: str,
   /** FR-88 Deployment step (optional): skip, or Vercel with one of the caller's own connections. */
   deploymentMode: z.enum(['none', 'vercel']),
   vercelConnectionId: str,
@@ -249,6 +267,16 @@ export const wizardSchema = wizardShape.superRefine((v, ctx) => {
   if (v.gitMode === 'github_app' && (!v.repoFullName || !v.installationId)) {
     addCheck(ctx, 'repoFullName', 'Pick a repository, or create one.')
   }
+  // FR-114: a composition needs a choice (or None) for each layer up to VCS; compatibility is the server's (D-V4-19).
+  if (v.stackKind === 'compose') {
+    addCheck(ctx, 'stackFrontend', v.stackFrontend ? null : 'Choose the frontend, or None.')
+    addCheck(ctx, 'stackBackend', v.stackBackend ? null : 'Choose the backend, or None.')
+    addCheck(ctx, 'stackData', v.stackData ? null : 'Choose the data layer, or None.')
+    addCheck(ctx, 'stackVcs', v.stackVcs ? null : 'Choose the version control host.')
+  }
+  if (v.stackKind === 'preset') {
+    addCheck(ctx, 'presetId', v.presetId ? null : 'Pick a legacy preset, or choose No stack (general).')
+  }
   // FR-88: the server decides whether a Local project can deploy (VALIDATION unless it runs the Fake provider).
   if (v.deploymentMode === 'vercel') {
     addCheck(ctx, 'vercelConnectionId', v.vercelConnectionId ? null : 'Pick one of your Vercel connections, or skip deployment.')
@@ -292,6 +320,19 @@ export const wizardDefaults: WizardValues = {
   developmentVersion: DEFAULT_INITIAL_VERSION,
   localSourcePath: '',
   presetId: '',
+  stackKind: 'general',
+  stackFrontend: '',
+  stackBackend: '',
+  stackData: '',
+  stackVcs: '',
+  stackFrontendHost: '',
+  stackBackendHost: '',
+  stackDatabaseHost: '',
+  stackLocal: '',
+  stackOriginModel: '',
+  stackFrontendPath: 'frontend',
+  stackBackendPath: 'backend',
+  stackDetection: '',
   deploymentMode: 'none',
   vercelConnectionId: '',
   vercelProjectMode: 'create',

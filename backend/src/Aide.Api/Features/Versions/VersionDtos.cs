@@ -47,7 +47,11 @@ public sealed record ReleaseVersionDto(
 /// FR-60: start a new release version. <c>version</c> is semver (a leading <c>v</c> is stripped, e.g. <c>v1.2.0</c> →
 /// <c>1.2.0</c>); <c>request</c> describes the new features, improvements or fixes and becomes the project idea for this
 /// version; <c>presetId</c> picks the tech stack preset of the new version (FR-74): omit it to keep the preset of the
-/// version it builds on, send <c>null</c> for no preset; an unknown id is <c>PRESET_NOT_FOUND</c>.
+/// version it builds on, send <c>null</c> for no preset; an unknown id is <c>PRESET_NOT_FOUND</c>. <c>stack</c> (FR-117,
+/// "Change stack") is the new version's stack composition, validated like project create (<c>STACK_INCOMPATIBLE</c>,
+/// <c>VCS_MISMATCH</c>, <c>VALIDATION</c> on <c>stack.*</c>); omitted or <c>null</c>, the base version's composition is kept,
+/// re-pinned to the current catalog (<c>STACK_INCOMPATIBLE</c> if the catalog no longer allows it). A <c>presetId</c> and a
+/// <c>stack</c> together are <c>VALIDATION</c>.
 /// </summary>
 public sealed record StartReleaseVersionRequest
 {
@@ -75,6 +79,9 @@ public sealed record StartReleaseVersionRequest
     /// <summary>Whether <c>presetId</c> was in the request (JSON setters run only for sent properties).</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public bool PresetIdSent { get; private init; }
+
+    /// <summary>FR-117: the new version's stack composition (omitted: the base version's, re-pinned).</summary>
+    public Stack.StackCompositionRequest? Stack { get; init; }
 }
 
 /// <summary>FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1).</summary>

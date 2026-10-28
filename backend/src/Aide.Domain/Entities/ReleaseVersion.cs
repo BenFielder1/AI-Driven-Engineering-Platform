@@ -42,6 +42,20 @@ public sealed class ReleaseVersion
     /// <summary>The request the version was started with (FR-60); the project idea for a first version.</summary>
     public string Request { get; set; } = string.Empty;
 
+    /// <summary>
+    /// FR-117, FR-119, §4.18: the normalised stack composition pinned on the version (a serialised
+    /// <see cref="Aide.Domain.Stack.StackComposition"/>, stored as <c>jsonb</c>), validated by the Domain on write.
+    /// Null for versions pinned to a legacy preset or with no stack chosen.
+    /// </summary>
+    public string? StackComposition { get; set; }
+
+    /// <summary>FR-117: the stack catalog version the composition was validated against.</summary>
+    public string? CatalogVersion { get; set; }
+
+    /// <summary>FR-117: the content hash of the stack catalog the composition was validated against.</summary>
+    public string? CatalogHash { get; set; }
+
+    /// <summary>Legacy (§5, read-only since v4): the preset the version was pinned to (FR-74), replaced by the composition.</summary>
     public string? PresetId { get; set; }
 
     public string? PresetVersion { get; set; }

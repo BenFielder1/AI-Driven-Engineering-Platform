@@ -199,6 +199,14 @@ public static class EventTypes
     public const string PresetChanged = "PRESET_CHANGED";
 
     /// <summary>
+    /// FR-117, FR-155: an Owner changed the stack composition of the version in development: <c>{releaseVersionId, version,
+    /// from, to, layersChanged, catalogVersion, catalogHash, fromPresetId}</c>. <c>from</c>/<c>to</c> are the normalised
+    /// compositions (§4.18; <c>from</c> <c>null</c>: no stack before, or the legacy preset <c>fromPresetId</c>);
+    /// <c>layersChanged</c> lists the catalog layers that differ. Replaces <see cref="PresetChanged"/>.
+    /// </summary>
+    public const string StackChanged = "STACK_CHANGED";
+
+    /// <summary>
     /// FR-70: the Repository Analyst stored a locked <c>codebase_summary</c>: <c>{artifactId, type, version,
     /// releaseVersionId, agentRunId}</c>. No gate: the summary is auto-locked.
     /// </summary>
@@ -258,7 +266,7 @@ public static class EventTypes
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady],
         [EventCategory.Rollback] = [RollbackCompleted],
-        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, PresetChanged],
+        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, PresetChanged, StackChanged],
         [EventCategory.Integrity] = [IntegrityAlert],
     };
 

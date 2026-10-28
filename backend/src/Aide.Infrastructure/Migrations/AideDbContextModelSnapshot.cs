@@ -1512,6 +1512,13 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("slug");
 
+                    b.PrimitiveCollection<string[]>("StackPacks")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("stack_packs")
+                        .HasDefaultValueSql("'{}'::text[]");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1542,6 +1549,11 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasIndex("CurrentReleaseVersionId")
                         .HasDatabaseName("ix_projects_current_release_version_id");
+
+                    b.HasIndex("StackPacks")
+                        .HasDatabaseName("ix_projects_stack_packs");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("StackPacks"), "gin");
 
                     b.HasIndex("Status", "CurrentPhase")
                         .HasDatabaseName("ix_projects_status_current_phase");
@@ -1874,6 +1886,14 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("branch_name");
 
+                    b.Property<string>("CatalogHash")
+                        .HasColumnType("text")
+                        .HasColumnName("catalog_hash");
+
+                    b.Property<string>("CatalogVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("catalog_version");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1925,6 +1945,10 @@ namespace Aide.Infrastructure.Migrations
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
+
+                    b.Property<string>("StackComposition")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("stack_composition");
 
                     b.Property<Guid?>("StartedBy")
                         .HasColumnType("uuid")

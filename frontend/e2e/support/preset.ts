@@ -59,6 +59,8 @@ export async function createPresetProjectInWizard(page: Page, name: string, idea
 
   // FR-74: the Stack step's preset cards (name, version, description, stack chips, deploy targets).
   await expect(page.getByRole('heading', { name: 'Step 5 of 8: Stack' })).toBeVisible()
+  // FR-114 (M25): the v2 presets moved under a collapsed "Legacy presets (retiring in v4)" section until M26.
+  await page.getByText('Legacy presets (retiring in v4)').click()
   const card = page.getByRole('radio', { name: new RegExp(`^${PRESET_NAME.replace('.', '\\.')} \\d+\\.\\d+\\.\\d+$`) })
   await expect(page.getByRole('list', { name: `${PRESET_NAME} stack` })).toContainText('Vercel')
   await card.check()

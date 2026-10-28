@@ -11,6 +11,7 @@ import { githubDb } from './github'
 import { checkCreateLlm, isLlmProviderEnabled } from './llm'
 import { findPreset, presetNameOf } from './preset-catalog'
 import { problem } from './problem'
+import { packsOf, validateComposition } from './stack-catalog'
 
 type Project = Schemas['ProjectDto']
 type Summary = Schemas['ProjectSummaryDto']
@@ -53,6 +54,11 @@ export interface StoredProject extends Omit<
     | 'deploymentsEnabled'
   > {
   members: StoredMember[]
+  /**
+   * FR-117 Settings → Stack: the composition pinned on the current release version (unset or null: none), and the seed
+   * knobs for its lock and stack change; see mocks/handlers/stack.ts.
+   */
+  stack?: StoredStack
   /**
    * Release versions in any order (FR-62); the project's released, development and current versions are derived from
    * them (§4.10). Seeded with one version (0.1.0: in development, or released for a released project).
@@ -120,6 +126,21 @@ export interface StoredProject extends Omit<
   deploymentEnv?: StoredEnvVar[]
   /** FR-90, FR-91: deployments, any order (the API lists newest first); see mocks/handlers/deployments.ts. */
   deployments?: Schemas['DeploymentDto'][]
+}
+
+export interface StoredStack {
+  composition?: Schemas['StackCompositionDto'] | null
+  catalogVersion?: string
+  catalogHash?: string
+  planLocked?: boolean
+  baseHasCode?: boolean
+  layersChanged?: string[]
+  legacyPreset?: Schemas['LegacyPresetDto'] | null
+}
+
+/** §4.17 R5: the VCS option of the project's repository host (Local: none, any VCS). */
+export function repoVcsOfProject(p: StoredProject): string | null {
+  return p.git.mode === 'local' ? null : 'vcs-github'
 }
 
 /** FR-88: the stored deployment settings; `present` on required env and `canBind` are derived per request. */
@@ -334,6 +355,7 @@ export function seedProject(
     executionSteps: [],
     phaseAtVersion: {},
     releaseVersions: [],
+    stackPacks: [],
     ...rest,
     members: (members ?? (owner ? [{ userId: owner, role: 'owner' as const }] : [])).map((m) => ({
       ...m,
@@ -396,6 +418,7 @@ export function projectDto(project: StoredProject, userId: string): Project {
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     deploymentsEnabled: p.deployment?.provider != null,
+    stackPacks: p.stackPacks,
   }
 }
 
@@ -415,6 +438,7 @@ function toSummary(project: StoredProject, userId: string): Summary {
     updatedAt,
     myRole: roleOf(project, userId),
     ...presetFields(project),
+    stackPacks: project.stackPacks,
   }
 }
 
@@ -720,12 +744,14 @@ function listFiltered(user: { id: string; systemRole: string }, q: URLSearchPara
   const status = q.get('status')
   const hasDevelopment = q.get('hasDevelopmentVersion')
   const preset = q.get('preset')
+  const pack = q.get('pack')
   return projectsDb.projects
     .filter((p) => user.systemRole === 'admin' || roleOf(p, user.id))
     .filter((p) => !search || p.name.toLowerCase().includes(search))
     .filter((p) => !phase || p.currentPhase === phase)
     .filter((p) => !status || p.status === status)
     .filter((p) => !preset || (currentVersionOf(p)?.presetId ?? 'none') === preset)
+    .filter((p) => !pack || p.stackPacks.includes(pack))
     .filter((p) => hasDevelopment === null || (developmentVersionOf(p) !== undefined) === (hasDevelopment === 'true'))
 }
 
@@ -813,6 +839,24 @@ export const projectHandlers = [
     if (versions instanceof Response) {
       return versions
     }
+    // FR-114–FR-117: a stack composition instead of a preset, validated (STACK_INCOMPATIBLE, VCS_MISMATCH, paths).
+    if (body.presetId && body.stack) {
+      return validation({ stack: ['Send a stack or a preset, not both.'] })
+    }
+    let composition: Schemas['StackCompositionDto'] | null = null
+    if (body.stack) {
+      const repoVcs = mode === 'local' ? null : 'vcs-github'
+      if (repoVcs && body.stack.vcs && body.stack.vcs.pack !== repoVcs) {
+        return problem(400, 'VCS_MISMATCH', "The VCS layer isn't the repository's host.")
+      }
+      const result = validateComposition({ ...body.stack, vcs: body.stack.vcs ?? (repoVcs ? { pack: repoVcs } : null) })
+      if (!result.ok) {
+        return 'errors' in result
+          ? validation(Object.fromEntries(Object.entries(result.errors).map(([k, v]) => [`stack.${k}`, v])))
+          : problem(400, 'STACK_INCOMPATIBLE', "These stack choices don't work together.", { violations: result.violations })
+      }
+      composition = result.composition
+    }
     // FR-74: the preset is pinned on the version to develop.
     const preset = body.presetId ? findPreset(body.presetId) : undefined
     if (body.presetId && !preset) {
@@ -847,6 +891,7 @@ export const projectHandlers = [
       }),
       members: [{ userId: user.id, role: 'owner' }],
       releaseVersions: versions,
+      ...(composition ? { stack: { composition }, stackPacks: packsOf(composition) } : {}),
     })
     // FR-88: the optional Deployment step (one of the caller's own Vercel connections; Local can't deploy).
     if (body.deployment) {

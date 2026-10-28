@@ -91,6 +91,13 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 - 2026-10-25 — M24: Supabase in the Data layer is always BaaS; host mode is the database host `supabase` with another ORM (`data.mode = "host"` → VALIDATION) — SPEC updated: no
 - 2026-10-25 — M24: R10 gaps filled: a static SPA on Railway with the backend elsewhere → proxy or cross-origin; Next.js ui mode on GitHub Pages → cross-origin only. R12: Compose forbidden with no backend and no data — SPEC updated: no
 - 2026-10-25 — M24: the Admin → Stack catalog page moves to M25 (with the other Stack UI); M24 ships `GET /api/admin/stack` only — SPEC updated: no
+- 2026-10-28 — M25: `POST /api/stack/detect` takes an optional `token` for `github_pat`; `STACK_DETECTED` isn't emitted (detect runs before the project exists) — SPEC updated: no
+- 2026-10-28 — M25: layer paths: `.` only when the other layer is None; one layer path inside the other is refused — SPEC updated: no
+- 2026-10-28 — M25: until M26, a version has a preset OR a composition: PUT stack clears a legacy preset, PATCH preset clears the stack; PUT can't go back to "No stack" — SPEC updated: no
+- 2026-10-28 — M25: stack-change baseline is the base version's composition; for a first version on a repo with code, the `from` of its first STACK_CHANGED — SPEC updated: no
+- 2026-10-28 — M25: the wizard keeps the v2 preset cards under "Legacy presets (retiring in v4)" until M26 removes presets (keeps the v2 preset E2E flow working) — SPEC updated: no
+- 2026-10-28 — M25: the wizard keeps its v3 step order (Repository and Version before Stack) instead of SPEC §7's Source → Idea → Stack → Repository; the repo then fixes VCS before the Stack step. Revisit in M27/M28 when the Repository step lists repos of the chosen VCS — SPEC updated: no
+- 2026-10-28 — M25: the wizard maps GitHub repo modes to `vcs-github` client-side (R5) because no project exists yet; the server re-applies R5 on create (`VCS_MISMATCH`). Move to a server hint with GitLab/Bitbucket (M27/M28) — SPEC updated: no
 - 2026-10-28 — FR-129 (preset retirement) moves from M25 to the end of M26: migrated in-flight plans must run as the new specialists, which M26 builds — SPEC updated: no
 - 2026-10-25 — M24: `legacy/` is created in M26 together with a catalog version bump, so the pinned hash only changes with a version — SPEC updated: no
 - 2026-10-25 — M24: pack skills are 70–115% of the source length (not 40–60%): hand-writing generated files and CI checks needs the room — SPEC updated: no

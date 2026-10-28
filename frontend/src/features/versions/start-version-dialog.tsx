@@ -12,6 +12,9 @@ import { TextAreaField } from '../../components/ui/textarea-field'
 import { TextField } from '../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, isApiError, messageFor } from '../../lib/errors'
 import { usePresets } from '../presets/presets-api'
+import { useProjectStack, useStackCatalog } from '../stack/stack-api'
+import { StackEditor } from '../stack/stack-editor'
+import { optionName, selectionFromComposition, toStackRequest, type StackSelection } from '../stack/stack-model'
 import { checkNewVersion, normalizeVersion } from './semver'
 import { KEEP_PRESET, NO_PRESET, presetIdFor, VERSION_REQUEST_MAX } from './start-version-rules'
 import { useStartReleaseVersion, type ReleaseVersion } from './versions-api'
@@ -41,7 +44,8 @@ const versionCodes = ['VERSION_INVALID', 'VERSION_NOT_GREATER', 'TAG_EXISTS'] as
  * FR-60, FR-61 "Start new version" (SPEC §7.2 dialog, Owner): the version (prefilled with the suggested next minor,
  * validated live: semver with a leading `v` stripped, greater than the released version), the request, and a summary
  * of what happens. Server errors go through the one error map; version errors land on the version field. FR-74: an
- * optional different preset (default: keep the released version's preset).
+ * optional different preset (default: keep the released version's preset). FR-117: "Change stack" opens the same five
+ * sub-steps, pre-filled with the current composition, and the new version is started with that `stack` (no preset).
  */
 export function StartVersionDialog({
   projectId,
@@ -83,13 +87,30 @@ export function StartVersionDialog({
     ? `${lastReleased.presetName}${lastReleased.presetVersion ? ` ${lastReleased.presetVersion}` : ''}`
     : 'No preset (general)'
 
+  // FR-117: the stack of the new version (null: keep the base version's composition, re-pinned to the current catalog).
+  const projectStack = useProjectStack(projectId)
+  const [editingStack, setEditingStack] = useState(false)
+  const catalog = useStackCatalog(editingStack || projectStack.data?.composition != null)
+  const [stackChange, setStackChange] = useState<StackSelection | null>(null)
+  const stackLabel = (sel: StackSelection) =>
+    [
+      ['frontend', sel.frontend],
+      ['backend', sel.backend],
+      ['data', sel.data],
+    ]
+      .filter(([, option]) => option && option !== 'none')
+      .map(([choice = '', option = '']) => optionName(catalog.data, choice, option))
+      .join(' · ') || 'No frontend, backend or data layer'
+
   const onSubmit = handleSubmit((values) => {
     setServerError(null)
     start.mutate(
       {
         version: normalizeVersion(values.version) ?? values.version.trim(),
         request: values.request.trim(),
-        ...presetIdFor(presetChoice, currentPresetId),
+        ...(stackChange
+          ? { stack: toStackRequest(stackChange, { omitVcs: (projectStack.data?.repoVcs ?? null) !== null }) }
+          : presetIdFor(presetChoice, currentPresetId)),
       },
       {
         onSuccess: (result) => {
@@ -118,7 +139,28 @@ export function StartVersionDialog({
       busy={start.isPending}
       onClose={onClose}
     >
-      <form noValidate onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-4">
+      {editingStack && catalog.data && projectStack.data && (
+        <section aria-label="Change stack" className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            The stack of the new version. Changing a layer of code that already exists is a stack change: the specification
+            gets a Stack Migration section.
+          </p>
+          <StackEditor
+            catalog={catalog.data}
+            initial={stackChange ?? selectionFromComposition(projectStack.data.composition)}
+            vcsFixed={projectStack.data.repoVcs}
+            submitLabel="Use this stack"
+            onSubmit={(sel) => {
+              setStackChange(sel)
+              setEditingStack(false)
+            }}
+            onCancel={() => {
+              setEditingStack(false)
+            }}
+          />
+        </section>
+      )}
+      <form noValidate hidden={editingStack} onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-4">
         <ErrorSummary
           title="We couldn't start the version"
           errors={[...(serverError ? [{ message: serverError }] : []), ...(isSubmitted ? fieldErrorSummary(errors, ids) : [])]}
@@ -142,25 +184,59 @@ export function StartVersionDialog({
           error={errors.request?.message}
           {...register('request')}
         />
-        <SelectField
-          id={`${base}-preset`}
-          label="Tech stack preset"
-          hint="The specialist agents, specification sections and review checklist of the new version."
-          value={presetChoice}
-          onChange={(e) => {
-            setPresetChoice(e.target.value)
-          }}
-        >
-          <option value={KEEP_PRESET}>Keep the current preset ({currentPresetLabel})</option>
-          {presets.data
-            ?.filter((p) => p.id !== currentPresetId)
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} {p.version}
-              </option>
-            ))}
-          {currentPresetId !== null && <option value={NO_PRESET}>No preset (general)</option>}
-        </SelectField>
+        {projectStack.data && (
+          <div className="flex flex-col gap-1 text-sm" data-testid="start-version-stack">
+            <p>
+              <span className="font-medium">Stack: </span>
+              {stackChange
+                ? `${stackLabel(stackChange)} (changed)`
+                : projectStack.data.composition
+                  ? `${stackLabel(selectionFromComposition(projectStack.data.composition))} (kept)`
+                  : 'No stack composition (kept)'}
+            </p>
+            <p className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setEditingStack(true)
+                }}
+              >
+                Change stack
+              </Button>
+              {stackChange && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setStackChange(null)
+                  }}
+                >
+                  Keep the current stack
+                </Button>
+              )}
+            </p>
+          </div>
+        )}
+        {!stackChange && (
+          <SelectField
+            id={`${base}-preset`}
+            label="Tech stack preset"
+            hint="The specialist agents, specification sections and review checklist of the new version."
+            value={presetChoice}
+            onChange={(e) => {
+              setPresetChoice(e.target.value)
+            }}
+          >
+            <option value={KEEP_PRESET}>Keep the current preset ({currentPresetLabel})</option>
+            {presets.data
+              ?.filter((p) => p.id !== currentPresetId)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.version}
+                </option>
+              ))}
+            {currentPresetId !== null && <option value={NO_PRESET}>No preset (general)</option>}
+          </SelectField>
+        )}
         <section aria-labelledby={`${base}-summary`} className="rounded-lg border border-border/60 p-3 text-sm">
           <h3 id={`${base}-summary`} className="font-semibold">
             What happens

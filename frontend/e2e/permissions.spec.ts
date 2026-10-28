@@ -88,7 +88,7 @@ test('§2: the Owner sees gate decisions, artifact approval and every settings t
 
   await page.goto(`/projects/${projectId}/settings`)
   // FR-88 (amends v1 FR-9): Owners also get Settings → Deployment.
-  await expect(settingsSections(page)).toHaveText(['General', 'Members', 'Git', 'LLM', 'Deployment', 'Notifications', 'Danger zone'])
+  await expect(settingsSections(page)).toHaveText(['General', 'Members', 'Git', 'Stack', 'LLM', 'Deployment', 'Notifications', 'Danger zone'])
 })
 
 test('§2: a Contributor can edit drafts but gate, approval and settings controls are hidden — and the API says 403', async () => {
@@ -105,7 +105,7 @@ test('§2: a Contributor can edit drafts but gate, approval and settings control
 
   await page.goto(`/projects/${projectId}/settings`)
   // FR-79, FR-88 (v2): every member also reads Settings → LLM and Deployment (read-only); owner-only sections stay hidden.
-  await expect(settingsSections(page)).toHaveText(['General', 'Members', 'LLM', 'Deployment'])
+  await expect(settingsSections(page)).toHaveText(['General', 'Members', 'Stack', 'LLM', 'Deployment'])
   // Not an Owner: the Danger zone section sends them back to General.
   await page.goto(`/projects/${projectId}/settings/danger`)
   await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/settings/general$`))

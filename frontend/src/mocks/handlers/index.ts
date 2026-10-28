@@ -15,12 +15,14 @@ import { presetHandlers } from './presets'
 import { projectHandlers } from './projects'
 import { reviewHandlers } from './review'
 import { runHandlers } from './runs'
+import { stackHandlers } from './stack'
 import { versionHandlers } from './versions'
 
 export const handlers = [
   ...healthHandlers,
   ...authHandlers,
   ...presetHandlers,
+  ...stackHandlers,
   ...projectHandlers,
   ...connectionHandlers,
   ...llmHandlers,

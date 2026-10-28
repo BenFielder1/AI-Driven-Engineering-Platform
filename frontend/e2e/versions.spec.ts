@@ -49,7 +49,7 @@ test('NFR-TEST2, FR-55–FR-66, FR-90, FR-91: 0.1.0 is released live on Vercel, 
   await page.getByRole('button', { name: 'Next' }).click()
   await expect(page.getByLabel('Initial version')).toHaveValue('0.1.0')
   await page.getByRole('button', { name: 'Next' }).click()
-  await expect(page.getByRole('radio', { name: /^No preset \(general\)/ })).toBeChecked()
+  await expect(page.getByRole('radio', { name: /^No stack \(general\)/ })).toBeChecked()
   await page.getByRole('button', { name: 'Next' }).click()
   await page.getByRole('radio', { name: /^Strict/ }).check()
   await page.getByRole('button', { name: 'Next' }).click()

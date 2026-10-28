@@ -37,6 +37,12 @@ public sealed class Project
     /// <summary>Tag prefix for release tags (§4.10, default <c>v</c>).</summary>
     public string TagPrefix { get; set; } = ReleaseVersion.DefaultTagPrefix;
 
+    /// <summary>
+    /// Denormalised (FR-117, §5 <c>project (changed)</c>): the pack ids of the current release version's stack composition,
+    /// for the project list filter <c>?pack=</c> (GIN-indexed). Empty when the version has no composition.
+    /// </summary>
+    public IReadOnlyList<string> StackPacks { get; set; } = [];
+
     public ApprovalMode ApprovalMode { get; set; } = ProjectDefaults.Mode;
 
     public decimal ComplianceThreshold { get; set; } = ProjectDefaults.ComplianceThreshold;

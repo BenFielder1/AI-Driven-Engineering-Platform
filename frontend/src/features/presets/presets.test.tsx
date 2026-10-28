@@ -73,8 +73,10 @@ describe('Wizard → Stack step (FR-74)', () => {
   it('FR74_wizard_stack_step_shows_preset_cards_and_sends_presetId', async () => {
     const user = await wizardToStack()
 
-    // "No preset (general)" is the default; each card shows name, version, description, stack chips and targets.
-    expect(screen.getByRole('radio', { name: 'No preset (general)' })).toBeChecked()
+    // FR-114: "No stack (general)" is the default; the v2 presets stay under "Legacy presets (retiring in v4)", each card
+    // with name, version, description, stack chips and targets.
+    expect(screen.getByRole('radio', { name: 'No stack (general)' })).toBeChecked()
+    expect(screen.getByText('Legacy presets (retiring in v4)')).toBeInTheDocument()
     const card = await screen.findByRole('radio', { name: /Next\.js frontend/ })
     expect(card).toHaveAccessibleName('Next.js frontend 1.0.0')
     expect(card).toHaveAccessibleDescription(/Frontend web app on Next\.js/)
@@ -104,8 +106,9 @@ describe('Wizard → Stack step (FR-74)', () => {
 
     const summary = await finishWizard(user)
 
-    expect(summary).toHaveTextContent('No preset (general)')
+    expect(summary).toHaveTextContent('No stack (general)')
     expect(bodiesOf('POST', '/api/projects')[0]).not.toHaveProperty('presetId')
+    expect(bodiesOf('POST', '/api/projects')[0]).not.toHaveProperty('stack')
   })
 
   it('FR74_wizard_preset_not_found_returns_to_the_stack_step', async () => {

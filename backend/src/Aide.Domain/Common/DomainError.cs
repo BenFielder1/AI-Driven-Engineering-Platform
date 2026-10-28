@@ -14,4 +14,7 @@ public sealed record DomainError(string Code, string Message)
 
     /// <summary>A machine-readable sub-reason (e.g. <see cref="RestoreReasons"/> for <see cref="ErrorCodes.RestoreNotAllowed"/>), returned as the ProblemDetails <c>reason</c>.</summary>
     public string? Reason { get; init; }
+
+    /// <summary>For <see cref="ErrorCodes.StackIncompatible"/> (FR-116): the broken rules, returned as the ProblemDetails <c>violations</c>.</summary>
+    public IReadOnlyList<Stack.StackViolation> Violations { get; init; } = [];
 }

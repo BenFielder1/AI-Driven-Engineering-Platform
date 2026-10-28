@@ -7,6 +7,7 @@ import { useAdminLlmPolicy } from '../connections/connections-api'
 import { llmProviderLabels } from '../projects/labels'
 import { GitHubAppPanel } from './admin-github-app-panel'
 import { AdminPresetsPanel } from './admin-presets-panel'
+import { AdminStackCatalogPanel } from './admin-stack-catalog-panel'
 
 /**
  * Admin → Integrations → LLM system keys (FR-79): read-only. The policy comes from configuration
@@ -58,7 +59,8 @@ function LlmSystemKeysPanel() {
 }
 
 /**
- * /admin/integrations (SPEC §7.2): the GitHub App (FR-80), the system-key policy and the presets (FR-74). `callback` is
+ * /admin/integrations (SPEC §7.2): the GitHub App (FR-80), the system-key policy, the stack catalog (FR-113) and the
+ * legacy presets (FR-74, until M26 retires them). `callback` is
  * the manifest flow's outcome from `?github=configured` / `?error=GITHUB_AUTH_FAILED`.
  */
 export function AdminIntegrationsPage({ callback }: { callback?: 'configured' | 'failed' }) {
@@ -70,6 +72,7 @@ export function AdminIntegrationsPage({ callback }: { callback?: 'configured' | 
       </h2>
       <GitHubAppPanel callback={callback} />
       <LlmSystemKeysPanel />
+      <AdminStackCatalogPanel />
       <AdminPresetsPanel />
     </section>
   )

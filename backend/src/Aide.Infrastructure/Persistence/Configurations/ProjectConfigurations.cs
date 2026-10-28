@@ -31,6 +31,7 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(p => p.DevelopmentVersion).HasColumnType("text");
         builder.Property(p => p.MergeStrategy).HasDefaultValue(MergeStrategy.AideMerges).IsRequired();
         builder.Property(p => p.TagPrefix).HasColumnType("text").HasDefaultValue(ReleaseVersion.DefaultTagPrefix).IsRequired();
+        builder.PrimitiveCollection(p => p.StackPacks).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]").IsRequired();
         builder.Property(p => p.RowVersion).IsXminRowVersion();
 
         // current_release_version_id points at the version the lifecycle state belongs to. Its FK (ON DELETE SET NULL) is
@@ -39,6 +40,9 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 
         builder.HasIndex(p => new { p.Status, p.CurrentPhase });
         builder.HasIndex(p => p.CurrentReleaseVersionId);
+
+        // §5: the project list filter ?pack= (stack_packs @> ARRAY[pack]).
+        builder.HasIndex(p => p.StackPacks).HasMethod("gin").HasDatabaseName("ix_projects_stack_packs");
     }
 }
 
@@ -58,6 +62,9 @@ internal sealed class ReleaseVersionConfiguration : IEntityTypeConfiguration<Rel
         builder.Property(v => v.BranchName).HasMaxLength(255);
         builder.Property(v => v.PullRequestUrl).HasMaxLength(500);
         builder.Property(v => v.Request).HasColumnType("text").IsRequired();
+        builder.Property(v => v.StackComposition).HasColumnType("jsonb");
+        builder.Property(v => v.CatalogVersion).HasColumnType("text");
+        builder.Property(v => v.CatalogHash).HasColumnType("text");
         builder.Property(v => v.PresetId).HasMaxLength(100);
         builder.Property(v => v.PresetVersion).HasMaxLength(50);
         builder.Property(v => v.PresetHash).HasMaxLength(64);

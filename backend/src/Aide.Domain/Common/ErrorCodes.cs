@@ -247,6 +247,24 @@ public static class ErrorCodes
     /// </summary>
     public const string StackIncompatible = "STACK_INCOMPATIBLE";
 
+    /// <summary>
+    /// FR-117 (409 on <c>PUT /api/projects/:id/stack</c>): the version's first implementation plan is locked (or nothing is
+    /// in development), so its stack can't change; a new version can change it.
+    /// </summary>
+    public const string StackLocked = "STACK_LOCKED";
+
+    /// <summary>
+    /// FR-117, §4.17 R5 (400 on project create and <c>PUT /api/projects/:id/stack</c>): the composition's VCS layer isn't
+    /// the host of the project's repository.
+    /// </summary>
+    public const string VcsMismatch = "VCS_MISMATCH";
+
+    /// <summary>
+    /// §6 (409, e.g. <c>POST /api/stack/detect</c>): no usable Git connection for the request (for GitHub: the caller has no
+    /// valid GitHub connection).
+    /// </summary>
+    public const string GitNotConnected = "GIT_NOT_CONNECTED";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {
@@ -308,6 +326,9 @@ public static class ErrorCodes
         [CredentialNotOwner] = 403,
         [LlmProviderUnavailable] = 400,
         [StackIncompatible] = 400,
+        [StackLocked] = 409,
+        [VcsMismatch] = 400,
+        [GitNotConnected] = 409,
         [UpstreamError] = 502,
         [GitHubNotConnected] = 409,
         [GitHubAppNotInstalled] = 409,

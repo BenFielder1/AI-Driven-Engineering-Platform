@@ -1,6 +1,7 @@
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Presets;
+using Aide.Api.Features.Stack;
 using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -8,6 +9,7 @@ using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Rollback;
+using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Presets;
@@ -31,6 +33,7 @@ public sealed partial class VersionService(
     IGitProviderResolver providers,
     ISecretProtector secrets,
     IPresetCatalog presets,
+    ProjectStackService stacks,
     TimeProvider time,
     ILogger<VersionService> logger)
 {
@@ -56,10 +59,32 @@ public sealed partial class VersionService(
             return Result.Failure<ReleaseVersion>(sentPreset.Error!);
         }
 
+        if (request.Stack is not null && sentPreset.Value is not null)
+        {
+            return Result.Failure<ReleaseVersion>(new DomainError(ErrorCodes.Validation, "The stack choices are invalid.")
+            {
+                Details = ["stack: Send a presetId or a stack, not both."],
+            });
+        }
+
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
         if (project is null)
         {
             return Fail(ErrorCodes.NotFound, "The project was not found.");
+        }
+
+        // FR-117: a sent stack is validated (R5 against the repository's host) before anything else about the version.
+        var repoVcs = await stacks.RepoVcsAsync(projectId, cancellationToken);
+        StackComposition? sentStack = null;
+        if (request.Stack is { } stackRequest)
+        {
+            var resolved = stacks.Resolve(stackRequest, repoVcs, "stack.");
+            if (resolved.IsFailure)
+            {
+                return Result.Failure<ReleaseVersion>(resolved.Error!);
+            }
+
+            sentStack = resolved.Value;
         }
 
         var versions = await db.ReleaseVersions.Where(v => v.ProjectId == projectId).ToListAsync(cancellationToken);
@@ -114,13 +139,29 @@ public sealed partial class VersionService(
             StartedBy = userId,
             CreatedAt = now,
         };
-        var preset = request.PresetIdSent ? sentPreset.Value : presets.Find(baseVersion?.PresetId);
-        if (!request.PresetIdSent && baseVersion?.PresetId is { } inherited && preset is null)
+        // FR-117: the sent stack, else (unless a preset was picked) the base version's composition re-pinned to the
+        // current catalog; a version with a stack has no preset.
+        var stack = sentStack;
+        if (stack is null && sentPreset.Value is null && StackCompositionJson.Deserialize(baseVersion?.StackComposition) is { } inheritedStack)
+        {
+            var repinned = stacks.Repin(inheritedStack, repoVcs);
+            if (repinned.IsFailure)
+            {
+                return Result.Failure<ReleaseVersion>(repinned.Error!);
+            }
+
+            stack = repinned.Value;
+        }
+
+        var preset = stack is not null ? null : request.PresetIdSent ? sentPreset.Value : presets.Find(baseVersion?.PresetId);
+        if (stack is null && !request.PresetIdSent && baseVersion?.PresetId is { } inherited && preset is null)
         {
             LogInheritedPresetMissing(logger, project.Id, inherited);
         }
 
         PresetService.Pin(started, preset);
+        ProjectStackService.Pin(started, stack);
+        stacks.SyncPacks(project, stack);
         db.ReleaseVersions.Add(started);
         versions.Add(started);
 
@@ -141,6 +182,8 @@ public sealed partial class VersionService(
                 branchName = ReleaseVersionRules.BranchName(project.Slug, project.Id, version),
                 presetId = started.PresetId,
                 presetVersion = started.PresetVersion,
+                stackPacks = project.StackPacks,
+                catalogVersion = started.CatalogVersion,
                 request = cleanRequest.Length > EventRequestMaxLength ? cleanRequest[..EventRequestMaxLength] : cleanRequest,
             },
             actor,

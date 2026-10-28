@@ -43,6 +43,11 @@ public static class ApiProblems
             extensions[ReasonKey] = error.Reason;
         }
 
+        if (error.Violations.Count > 0)
+        {
+            extensions[ViolationsKey] = error.Violations.Select(v => new Features.Stack.StackViolationDto(v.Layer, v.Option, v.Rule, v.Reason)).ToList();
+        }
+
         return TypedResults.Problem(
             title: error.Message,
             statusCode: StatusFor(error.Code),
@@ -86,16 +91,7 @@ public static class ApiProblems
     public static ProblemHttpResult StackIncompatible(IReadOnlyList<Domain.Stack.StackViolation> violations)
     {
         ArgumentNullException.ThrowIfNull(violations);
-        var error = Domain.Stack.StackCompatibility.IncompatibleError(violations);
-        return TypedResults.Problem(
-            title: error.Message,
-            statusCode: StatusFor(ErrorCodes.StackIncompatible),
-            extensions: new Dictionary<string, object?>
-            {
-                [ErrorCodeKey] = ErrorCodes.StackIncompatible,
-                [DetailsKey] = error.Details,
-                [ViolationsKey] = violations.Select(v => new Features.Stack.StackViolationDto(v.Layer, v.Option, v.Rule, v.Reason)).ToList(),
-            });
+        return FromError(Domain.Stack.StackCompatibility.IncompatibleError(violations));
     }
 
     public static ProblemHttpResult NotFound(string title = "The resource was not found.") => Of(ErrorCodes.NotFound, title);

@@ -613,10 +613,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and preset (FR-74: the current version's preset id, or none for projects without a preset) filters and sorting. Rows carry the released and in-development version badges (FR-62) and the preset chip. */
+        /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development, preset (FR-74: the current version's preset id, or none for projects without a preset) and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and the preset chip. */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. stack (FR-114–FR-117, optional, instead of presetId: both is 400 VALIDATION) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -631,7 +631,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** §7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion and preset filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released). */
+        /** §7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion, preset and pack filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released). */
         get: operations["GetProjectKpis"];
         put?: never;
         post?: never;
@@ -1577,7 +1577,7 @@ export interface paths {
         /** The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, preset and dates. */
         get: operations["ListReleaseVersions"];
         put?: never;
-        /** Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. */
+        /** Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. stack (FR-117, optional) is the new version's stack composition (validated like project create); omitted, the base version's composition is kept, re-pinned to the current catalog. */
         post: operations["StartReleaseVersion"];
         delete?: never;
         options?: never;
@@ -1715,6 +1715,41 @@ export interface paths {
         put?: never;
         /** Validate a composition (FR-116): the normalised composition with its derived fields (Next.js mode, specialists, origin model options, spec sections, env names, gates) and caveats. Left-out layers are None; the local dev loop and origin model take their defaults; vcs is required. */
         post: operations["ValidateStack"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stack/detect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import detection (FR-118): reads the repository's file list and manifests at ref (default: the default branch) through the Git provider (github_app with the caller's GitHub connection, github_pat with an optional token, local under Git:Local:ImportRoot) and returns the suggested choices with their layer paths and evidence, and the conflicting ones (left empty, every candidate shown). The VCS layer is fixed to the repository's host. Nothing is stored. */
+        post: operations["DetectStack"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/stack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the legacy preset when the version is pinned to one, and the VCS option fixed by the repository host (repoVcs). */
+        get: operations["GetProjectStack"];
+        /** Change the stack of the version in development (Owner, FR-117): validates the composition like POST /api/stack/validate plus R5 (the VCS layer is the repository's host; omitted, it is set from it), pins it with the current catalog version and hash (replacing a legacy preset), updates the project's stack packs and records STACK_CHANGED {from, to, layersChanged}. The pinned composition again changes nothing. Allowed until the version's first implementation plan is locked. */
+        put: operations["UpdateProjectStack"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2661,6 +2696,7 @@ export interface components {
              *     the version to develop; omitted or `null` = no preset (general). Unknown: 400 `PRESET_NOT_FOUND`.
              */
             presetId?: null | string;
+            stack?: null | components["schemas"]["StackCompositionRequest"];
             deployment?: null | components["schemas"]["CreateProjectDeploymentRequest"];
             llm?: null | components["schemas"]["CreateProjectLlmRequest"];
         };
@@ -2846,6 +2882,27 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+        };
+        /**
+         * @description FR-118: where the repository is. `provider`: `github_app` (`repo` = `owner/name`, read with the
+         *     caller's GitHub connection: 409 `GIT_NOT_CONNECTED` without one), `github_pat` (`repo` = `owner/name`
+         *     or `https://github.com/owner/name`, with the optional `token`; public repositories need none) or `local`
+         *     (`repo` = the directory under `Git:Local:ImportRoot`, Development and E2E only). `ref` is the branch, tag
+         *     or commit to read (default: the default branch). `instanceId` is for GitLab instances (not used by these providers:
+         *     400 `VALIDATION` when sent).
+         */
+        DetectStackGitRequest: {
+            provider: components["schemas"]["GitProvider"];
+            /** Format: uuid */
+            instanceId?: null | string;
+            repo: string;
+            ref?: null | string;
+            /** @description `github_pat` only: the GitHub token to read a private repository. Used for this request only, never stored. */
+            token?: null | string;
+        };
+        /** @description FR-118: the repository to detect the stack of. */
+        DetectStackRequest: {
+            git: components["schemas"]["DetectStackGitRequest"];
         };
         /**
          * @description One line of a diff between two versions (FR-21). `oldLine` is the 1-based line number in the `from` version
@@ -3388,6 +3445,12 @@ export interface components {
         JsonObject: {
             [key: string]: unknown;
         };
+        /** @description The legacy preset (FR-74) the version is pinned to; `presetName` is the id when it is no longer shipped. */
+        LegacyPresetDto: {
+            presetId: string;
+            presetName: string;
+            presetVersion: null | string;
+        };
         /**
          * @description The connection bound to a project (FR-79), shown to every member as e.g. "Anthropic · connected by Ana (••••a1b2)".
          *     Never contains the key. `credentialId` only lets the binding Owner recognise their own connection; nobody else can
@@ -3861,7 +3924,8 @@ export interface components {
          *     version in development (`null`: none) (FR-62). `idea` is the request of the version in development.
          *     `presetId`, `presetName` and `presetVersion` are the tech stack preset pinned on the current release
          *     version (FR-74; all `null`: no preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so
-         *     the Deployments page is in its navigation (§7.2).
+         *     the Deployments page is in its navigation (§7.2). `stackPacks` are the pack ids of the current release version's
+         *     stack composition (FR-117, §5; empty: no stack), e.g. `["fe-react-vite", "be-aspnet", "vcs-github"]`.
          */
         ProjectDto: {
             /** Format: uuid */
@@ -3898,6 +3962,7 @@ export interface components {
             presetName: null | string;
             presetVersion: null | string;
             deploymentsEnabled: boolean;
+            stackPacks: string[];
         };
         /**
          * @description A project event pushed live to everyone viewing the project (FR-46): the SignalR `projectEvent` message.
@@ -3953,6 +4018,35 @@ export interface components {
          */
         ProjectSource: "scratch" | "import";
         /**
+         * @description Settings → Stack (FR-117, FR-119): the stack of the project's current release version.
+         *         * composition: the pinned normalised composition with its derived fields (§4.18), null for "No stack
+         *         (general)" or a version pinned to a legacy preset (legacyPreset). catalogVersion/catalogHash are
+         *         what it was pinned against; currentCatalogVersion/currentCatalogHash the catalog shipped now (a new
+         *         version re-pins to it).
+         *     * locked with lockedReason (plan_locked, not_in_development): PUT is
+         *         STACK_LOCKED then.
+         *     * stackChange: the layers that differ from the stack the version's base code was built with, and whether
+         *         that is a stack change (the base commit has code: an iteration or an import), for the stack-change warning.
+         *     * repoVcs: the VCS option fixed by the project's repository host (R5; null: a Local repository, any
+         *         VCS).
+         */
+        ProjectStackDto: {
+            /** Format: uuid */
+            releaseVersionId: string;
+            version: string;
+            versionStatus: components["schemas"]["ReleaseVersionStatus"];
+            composition: null | components["schemas"]["StackCompositionDto"];
+            catalogVersion: null | string;
+            catalogHash: null | string;
+            currentCatalogVersion: string;
+            currentCatalogHash: string;
+            locked: boolean;
+            lockedReason: null | components["schemas"]["StackLockReason"];
+            stackChange: components["schemas"]["StackChangeDto"];
+            legacyPreset: null | components["schemas"]["LegacyPresetDto"];
+            repoVcs: null | string;
+        };
+        /**
          * @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`
          *     counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the
          *     execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened
@@ -3998,7 +4092,8 @@ export interface components {
          * @description A row of the projects list (FR-6, FR-62). `myRole` is `null` for an Admin who isn't a member;
          *     `releasedVersion` / `developmentVersion` are the two version badges (`null` when not released / nothing in
          *     development); `checkpoint` was `projectVersion` (D-V2-11); `presetId`/`presetName`/`presetVersion`
-         *     are the preset chip (FR-74, §7.2; `null`: no preset).
+         *     are the preset chip (FR-74, §7.2; `null`: no preset); `stackPacks` the pack ids of the current version's
+         *     stack composition (FR-117, the `pack` filter; empty: no stack).
          */
         ProjectSummaryDto: {
             /** Format: uuid */
@@ -4020,6 +4115,7 @@ export interface components {
             presetId: null | string;
             presetName: null | string;
             presetVersion: null | string;
+            stackPacks: string[];
         };
         /** @description A commit on the project branch that isn't on the default branch; `url` links it on GitHub (`null` for Local). */
         PullRequestCommitDto: {
@@ -4439,6 +4535,16 @@ export interface components {
             rule: string;
             text: string;
         };
+        /**
+         * @description FR-117: `layersChanged` (catalog layers: `frontend`, `backend`, `data`, `vcs`, `deploy`)
+         *     against the stack the version's base code was built with; `isStackChange` when `baseHasCode` and a layer
+         *     changed (the spec then needs a "Stack Migration" section).
+         */
+        StackChangeDto: {
+            baseHasCode: boolean;
+            layersChanged: string[];
+            isStackChange: boolean;
+        };
         /** @description A choice of the Stack step; `layer` is the layer it belongs to (the deployment choices share `deploy`). */
         StackChoiceDto: {
             id: string;
@@ -4531,12 +4637,46 @@ export interface components {
             envNames: string[];
             gates: string[];
         };
+        /** @description A detected choice: the option id, the layer path (frontend, backend), the data mode and the evidence (e.g. "`next` 16.1 in `package.json`"). */
+        StackDetectedChoiceDto: {
+            choice: string;
+            option: string;
+            path: null | string;
+            mode: null | string;
+            evidence: string[];
+        };
+        StackDetectionCandidateDto: {
+            option: string;
+            path: null | string;
+            evidence: string[];
+        };
+        /** @description A choice whose matches disagree: left empty, with each candidate. */
+        StackDetectionConflictDto: {
+            choice: string;
+            candidates: components["schemas"]["StackDetectionCandidateDto"][];
+        };
+        /**
+         * @description FR-118: the detected stack, to pre-fill the wizard's Stack step. `suggestions` are the detected choices (one per
+         *     choice id: `frontend`, `backend`, `data`, `vcs` — fixed to the repo's host —, `frontendHost`,
+         *     `backendHost`, `databaseHost`) with the layer path, the data mode and the evidence; `conflicts` are
+         *     choices left empty because matches disagree, with every candidate. Choices in neither list weren't detected.
+         *     `ref` and `commit` are what was read; `truncated`: the repository has more files than were listed.
+         */
+        StackDetectionDto: {
+            ref: string;
+            commit: string;
+            suggestions: components["schemas"]["StackDetectedChoiceDto"][];
+            conflicts: components["schemas"]["StackDetectionConflictDto"][];
+            truncated: boolean;
+        };
         /** @description One of the five layers (Frontend, Backend, Data, VCS, Deployment). */
         StackLayerDto: {
             id: string;
             name: string;
             description: string;
         };
+        /** @enum {unknown} */
+        StackLockReason: "plan_locked" | "not_in_development" | null;
         StackModeDto: {
             id: string;
             name: string;
@@ -4625,12 +4765,17 @@ export interface components {
          * @description FR-60: start a new release version. `version` is semver (a leading `v` is stripped, e.g. `v1.2.0` →
          *     `1.2.0`); `request` describes the new features, improvements or fixes and becomes the project idea for this
          *     version; `presetId` picks the tech stack preset of the new version (FR-74): omit it to keep the preset of the
-         *     version it builds on, send `null` for no preset; an unknown id is `PRESET_NOT_FOUND`.
+         *     version it builds on, send `null` for no preset; an unknown id is `PRESET_NOT_FOUND`. `stack` (FR-117,
+         *     "Change stack") is the new version's stack composition, validated like project create (`STACK_INCOMPATIBLE`,
+         *     `VCS_MISMATCH`, `VALIDATION` on `stack.*`); omitted or `null`, the base version's composition is kept,
+         *     re-pinned to the current catalog (`STACK_INCOMPATIBLE` if the catalog no longer allows it). A `presetId` and a
+         *     `stack` together are `VALIDATION`.
          */
         StartReleaseVersionRequest: {
             version: string;
             request: string;
             presetId?: null | string;
+            stack?: null | components["schemas"]["StackCompositionRequest"];
         };
         /** @description FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1). */
         StartReleaseVersionResultDto: {
@@ -6823,6 +6968,7 @@ export interface operations {
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
                 preset?: string;
+                pack?: string;
                 sortBy?: "created" | "updated" | "name";
                 sortOrder?: "asc" | "desc";
             };
@@ -6883,7 +7029,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectDto"];
                 };
             };
-            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), PRESET_NOT_FOUND or LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller) */
+            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), PRESET_NOT_FOUND, STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH or LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6958,6 +7104,7 @@ export interface operations {
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
                 preset?: string;
+                pack?: string;
             };
             header?: never;
             path?: never;
@@ -10599,7 +10746,7 @@ export interface operations {
                     "application/json": components["schemas"]["StartReleaseVersionResultDto"];
                 };
             };
-            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]) or PRESET_NOT_FOUND. */
+            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), PRESET_NOT_FOUND, STACK_INCOMPATIBLE (violations extension) or VCS_MISMATCH. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10979,6 +11126,206 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DetectStack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DetectStackRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StackDetectionDto"];
+                };
+            };
+            /** @description VALIDATION: a malformed repo, ref or token, an instanceId, or (local) a directory outside the import root or local import not enabled. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: GitHub refused the request. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: no such repository or ref, or the caller can't see it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED: github_app without a valid GitHub connection. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR: GitHub failed or couldn't be reached, or the local repository couldn't be read. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetProjectStack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectStackDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateProjectStack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StackCompositionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectStackDto"];
+                };
+            };
+            /** @description STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH (vcs isn't the repository's host) or VALIDATION (an unknown id or a malformed or overlapping path). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners change the stack. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description STACK_LOCKED (the version's implementation plan is locked, or no version is in development) or CONFLICT (a concurrent edit). */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -89,6 +89,7 @@ public static class StackCompatibility
         return new DomainError(ErrorCodes.StackIncompatible, $"These stack choices don't work together: {string.Join("; ", violations.Select(v => v.Reason).Distinct(StringComparer.Ordinal))}.")
         {
             Details = reasons,
+            Violations = violations,
         };
     }
 
@@ -201,10 +202,7 @@ public static class StackCompatibility
 
         var frontendPath = LayerPath(selection.Frontend, StackChoices.Frontend, "frontend.path");
         var backendPath = LayerPath(selection.Backend, StackChoices.Backend, "backend.path");
-        if (frontendPath is not null && frontendPath == backendPath)
-        {
-            errors.Add(new StackInputError("backend.path", $"must differ from the frontend path ('{frontendPath}')."));
-        }
+        errors.AddRange(StackPaths.Check(frontendPath, backendPath));
 
         if (selection.Data is { Mode: { } mode } && picks[StackChoices.Data] is { } dataId)
         {

@@ -10,6 +10,7 @@ import { useProjectAccess } from '../project-context'
 import { useProjectSettings, type ProjectSettings } from '../projects-api'
 import { PresetSettingsSection } from '../../presets/preset-settings'
 import { DeploymentSettingsTab } from '../../deployments/deployment-settings-tab'
+import { StackSettingsTab } from '../../stack/stack-settings-tab'
 import { DangerZoneTab } from './danger-zone-tab'
 import { GeneralForm, GeneralReadOnly } from './general-tab'
 import { GitTab } from './git-tab'
@@ -68,7 +69,7 @@ function SettingsNav({
 
 /**
  * /projects/:id/settings/{section} (FR-7–FR-10). Owners (and Admins) see every section; other members see General
- * read-only, Members, LLM (FR-79) and Deployment (FR-88) read-only, and any other section sends them to General. The settings GET is Owner-only, so it isn't
+ * read-only, Members, Stack (FR-117), LLM (FR-79) and Deployment (FR-88) read-only, and any other section sends them to General. The settings GET is Owner-only, so it isn't
  * requested for anyone else.
  */
 export function ProjectSettingsPage({ section }: { section: SettingsTab | undefined }) {
@@ -77,8 +78,9 @@ export function ProjectSettingsPage({ section }: { section: SettingsTab | undefi
   const isOwner = canInProject(user, role, 'changeSettings')
   const settings = useProjectSettings(project.id, isOwner)
 
-  // FR-79, FR-88: every member reads Settings → LLM and Deployment ("connected by <name>"); their GETs aren't Owner-only.
-  const visible: readonly SettingsTab[] = isOwner ? settingsTabs : ['general', 'members', 'llm', 'deployment']
+  // FR-79, FR-88, FR-117: every member reads Settings → Stack, LLM and Deployment ("connected by <name>"); their GETs
+  // aren't Owner-only.
+  const visible: readonly SettingsTab[] = isOwner ? settingsTabs : ['general', 'members', 'stack', 'llm', 'deployment']
   if (!section || !visible.includes(section)) {
     return (
       <Navigate to="/projects/$projectId/settings/$section" params={{ projectId: project.id, section: 'general' }} replace />
@@ -110,6 +112,9 @@ export function ProjectSettingsPage({ section }: { section: SettingsTab | undefi
       break
     case 'git':
       panel = withSettings((s) => <GitTab projectId={project.id} git={s.git} />)
+      break
+    case 'stack':
+      panel = <StackSettingsTab project={project} canChange={canInProject(user, role, 'changeStack')} />
       break
     case 'llm':
       panel = <LlmTab projectId={project.id} canEdit={isOwner} />

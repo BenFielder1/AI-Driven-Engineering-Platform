@@ -22,7 +22,8 @@ namespace Aide.Api.Features.Projects;
 /// version in development (<c>null</c>: none) (FR-62). <c>idea</c> is the request of the version in development.
 /// <c>presetId</c>, <c>presetName</c> and <c>presetVersion</c> are the tech stack preset pinned on the current release
 /// version (FR-74; all <c>null</c>: no preset). <c>deploymentsEnabled</c>: the project has deployment settings (FR-88), so
-/// the Deployments page is in its navigation (§7.2).
+/// the Deployments page is in its navigation (§7.2). <c>stackPacks</c> are the pack ids of the current release version's
+/// stack composition (FR-117, §5; empty: no stack), e.g. <c>["fe-react-vite", "be-aspnet", "vcs-github"]</c>.
 /// </summary>
 public sealed record ProjectDto(
     Guid Id,
@@ -48,7 +49,8 @@ public sealed record ProjectDto(
     string? PresetId,
     string? PresetName,
     string? PresetVersion,
-    bool DeploymentsEnabled);
+    bool DeploymentsEnabled,
+    IReadOnlyList<string> StackPacks);
 
 /// <summary>
 /// §7.2: the projects-list KPI row, over the projects matching the list's filters. <c>active</c>: not <c>released</c> (any
@@ -61,7 +63,8 @@ public sealed record ProjectKpisDto(int Total, int Active, int InReview, int Awa
 /// A row of the projects list (FR-6, FR-62). <c>myRole</c> is <c>null</c> for an Admin who isn't a member;
 /// <c>releasedVersion</c> / <c>developmentVersion</c> are the two version badges (<c>null</c> when not released / nothing in
 /// development); <c>checkpoint</c> was <c>projectVersion</c> (D-V2-11); <c>presetId</c>/<c>presetName</c>/<c>presetVersion</c>
-/// are the preset chip (FR-74, §7.2; <c>null</c>: no preset).
+/// are the preset chip (FR-74, §7.2; <c>null</c>: no preset); <c>stackPacks</c> the pack ids of the current version's
+/// stack composition (FR-117, the <c>pack</c> filter; empty: no stack).
 /// </summary>
 public sealed record ProjectSummaryDto(
     Guid Id,
@@ -78,7 +81,8 @@ public sealed record ProjectSummaryDto(
     DateTimeOffset UpdatedAt,
     string? PresetId,
     string? PresetName,
-    string? PresetVersion);
+    string? PresetVersion,
+    IReadOnlyList<string> StackPacks);
 
 /// <summary>Sort keys of the projects list (FR-6).</summary>
 public enum ProjectSortBy
@@ -232,6 +236,15 @@ public sealed record CreateProjectRequest
     /// </summary>
     [MaxLength(Aide.Domain.Presets.PresetRules.IdMaxLength)]
     public string? PresetId { get; init; }
+
+    /// <summary>
+    /// FR-114, FR-115, FR-117 (wizard Stack step): the stack composition, validated like <c>POST /api/stack/validate</c>
+    /// (400 <c>STACK_INCOMPATIBLE</c> with <c>violations</c>; <c>VALIDATION</c> on <c>stack.*</c> fields) plus R5: the VCS
+    /// layer is the repository's host (GitHub for <c>github_app</c>/<c>github_pat</c>; omitted, it is set from it; another
+    /// one is 400 <c>VCS_MISMATCH</c>). It is pinned with the catalog version and hash on the version to develop. Omitted or
+    /// <c>null</c>: no stack ("No stack (general)") or a <c>presetId</c>; sending both is 400 <c>VALIDATION</c>.
+    /// </summary>
+    public Stack.StackCompositionRequest? Stack { get; init; }
 
     /// <summary>
     /// FR-88 (wizard Deployment step): deploy to Vercel with one of the caller's own Vercel connections, linking an existing
@@ -572,6 +585,9 @@ public sealed record GitTestResultDto(bool Ok, bool Reachable, bool Writable, bo
 /// <summary>Request limits of the projects feature (FR-5, FR-7, FR-9).</summary>
 public static class ProjectLimits
 {
+    /// <summary>FR-117: the longest pack id the projects list <c>pack</c> filter accepts.</summary>
+    public const int PackMaxLength = 100;
+
     public const int NameMaxLength = 100;
     public const int IdeaMaxLength = 10_000;
     public const double MinComplianceThreshold = 0.50;
