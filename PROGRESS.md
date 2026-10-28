@@ -220,6 +220,7 @@ COMMIT;
 ```
 
 ## Known issues
+- §4.22 gap (2026-10-28): a Supabase BaaS stack in Next.js full-stack declares `SUPABASE_SECRET_KEY` but not the server-side unprefixed `SUPABASE_URL` (a pack can't list a key twice; the public `SUPABASE_URL` becomes `NEXT_PUBLIC_SUPABASE_URL`). Fix in M30 with the derived Supabase variables (FR-145, FR-153).
 - Integration test memory (found 2026-10-27): every derived test host (`WithWebHostBuilder`, e.g. `LlmStubs.App`, harnesses) stays alive on the shared `AideApiFactory` until the run ends (~37 MB each). With v4's extra tests one process outgrew a 16 GB runner (heap dump: 50 live hosts after 150 s; RSS ~14.7 GB). Fixed for CI by running integration tests in 3 shards (`backend-integration` job, ci.yml); the stack catalog is also loaded once per process now. Follow-up (test-engineer): dispose derived factories per test so a single process stays small.
 - Railway `preview` deploy of 83d8fa5 (run 40130552891): the deploy succeeded, but the smoke test's sign-in returned 401. The `SMOKE_EMAIL` account is missing on `preview` or its password differs. Operator fix (Ben): create the smoke user on preview, or correct the `SMOKE_PASSWORD` secret.
 

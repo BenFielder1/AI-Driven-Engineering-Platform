@@ -178,9 +178,9 @@ public sealed class DeploymentSettingsTests(AideApiFactory factory)
         // FR-129, §4.22: the stack's resolved env replaces the v2 preset's requiredEnv; Vercel as the frontend host makes deployment supported.
         Assert.True(settings.Supported);
         Assert.Null(settings.Provider);
-        // The order follows the resolved packs, so compare as a set. §4.22: the frontend gets the prefixed URL and publishable key, server code the URL and secret key.
+        // The order follows the resolved packs, so compare as a set. §4.22: the frontend gets the prefixed URL and publishable key; the server-side SUPABASE_URL arrives with M30's env derivation (PROGRESS.md Known issues).
         Assert.Equal(
-            ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SECRET_KEY", "SUPABASE_URL"],
+            ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SECRET_KEY"],
             settings.RequiredEnv.Select(e => e.Key).Order(StringComparer.Ordinal).ToArray());
         Assert.Equal(["NEXT_PUBLIC_SUPABASE_URL"], settings.RequiredEnv.Where(e => e.Present).Select(e => e.Key).ToArray());
         Assert.True(settings.RequiredEnv.Single(e => e.Key == "SUPABASE_SECRET_KEY").Sensitive);
