@@ -185,7 +185,7 @@ public static partial class PlanDocument
     {
         ArgumentNullException.ThrowIfNull(error);
         var reasons = error.Details.Count > 0 ? error.Details : [error.Message];
-        return "Your previous plan was rejected with INVALID_PLAN for these reasons:\n"
+        return $"Your previous plan was rejected with {error.Code} for these reasons:\n"
             + string.Join("\n", reasons.Select(r => "- " + r))
             + "\nReturn the complete corrected plan as one JSON object.";
     }

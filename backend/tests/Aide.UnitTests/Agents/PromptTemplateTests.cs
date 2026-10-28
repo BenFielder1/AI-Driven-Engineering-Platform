@@ -90,12 +90,12 @@ public class PromptTemplateTests
         Assert.True(PromptTemplate.Parse(AgentKind.SpecGenerator, Source.ReplaceLineEndings("\r\n")).IsSuccess);
 
     [Theory]
-    [InlineData(AgentKind.IdeaRefinement, "3", new[] { "PROJECT_NAME", "IDEA" })]
-    [InlineData(AgentKind.SpecGenerator, "3", new[] { "PROJECT_REQUEST" })]
-    [InlineData(AgentKind.PlanGenerator, "3", new[] { "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "MAX_FILES_PER_STEP" })]
+    [InlineData(AgentKind.IdeaRefinement, "4", new[] { "PROJECT_NAME", "IDEA" })]
+    [InlineData(AgentKind.SpecGenerator, "4", new[] { "PROJECT_REQUEST" })]
+    [InlineData(AgentKind.PlanGenerator, "4", new[] { "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "MAX_FILES_PER_STEP" })]
     [InlineData(AgentKind.CodeGenerator, "4", new[] { "MAX_FILES_PER_STEP", "STEP_NUMBER", "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "STEP_TITLE", "STEP_TASK", "DECLARED_FILES" })]
-    [InlineData(AgentKind.CodeReview, "5", new[] { "REVIEW_CYCLE", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "CODE", "MAX_FILES_PER_STEP" })]
-    [InlineData(AgentKind.RepositoryAnalyst, "1", new[] { "PROJECT_NAME" })]
+    [InlineData(AgentKind.CodeReview, "6", new[] { "REVIEW_CYCLE", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "CODE", "MAX_FILES_PER_STEP" })]
+    [InlineData(AgentKind.RepositoryAnalyst, "2", new[] { "PROJECT_NAME" })]
     public void FR24_Every_agent_has_a_versioned_embedded_template_with_its_required_inputs(AgentKind agent, string version, string[] required)
     {
         var template = new EmbeddedPromptLibrary().Template(agent);

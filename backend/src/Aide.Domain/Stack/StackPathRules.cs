@@ -44,7 +44,7 @@ public static class StackPathRules
             return null;
         }
 
-        if (v1 && !PresetPathRules.IsOwnableV1Protected(normalisedPath))
+        if (v1 && !IsOwnableV1Protected(normalisedPath))
         {
             return $"declares the protected path '{normalisedPath}'; no plan step may declare .git/, .aide/, lockfiles or .env files other than .env.example.";
         }
@@ -53,6 +53,19 @@ public static class StackPathRules
         return owners.Contains(agentKey ?? string.Empty, StringComparer.Ordinal)
             ? null
             : $"declares the protected path '{normalisedPath}', which only a specialist that owns it may declare ({(owners.Count == 0 ? "no specialist owns it" : string.Join(", ", owners))}).";
+    }
+
+    /// <summary>
+    /// The v1-protected paths a specialist that owns them may declare: v2's (<see cref="PresetPathRules.IsOwnableV1Protected"/>:
+    /// GitHub workflows, <c>.env.example</c>) plus the root CI files of the other VCS packs (<c>.gitlab-ci.yml</c>,
+    /// <c>bitbucket-pipelines.yml</c>), which the ci-engineer owns (§4.18).
+    /// </summary>
+    public static bool IsOwnableV1Protected(string normalisedPath)
+    {
+        ArgumentNullException.ThrowIfNull(normalisedPath);
+        return PresetPathRules.IsOwnableV1Protected(normalisedPath)
+            || normalisedPath.Equals(".gitlab-ci.yml", StringComparison.OrdinalIgnoreCase)
+            || normalisedPath.Equals("bitbucket-pipelines.yml", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

@@ -9,6 +9,7 @@ using Aide.Domain.Execution;
 using Aide.Domain.Jobs;
 using Aide.Domain.Presets;
 using Aide.Domain.Specs;
+using Aide.Domain.Stack;
 
 namespace Aide.Api.Agents;
 
@@ -29,6 +30,7 @@ public sealed class IdeaRefinementJobHandler(
     ArtifactAgentJob agentJob,
     AgentJobInputs inputs,
     IterationContextReader iterations,
+    VersionPresetReader presets,
     TimeProvider time,
     ILogger<IdeaRefinementJobHandler> logger) : IJobHandler
 {
@@ -48,6 +50,9 @@ public sealed class IdeaRefinementJobHandler(
         var draft = await inputs.PreviousAsync(payload, ArtifactType.ProjectRequest, cancellationToken)
             ?? await inputs.LatestIntactAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
         var answers = RefinementRules.FormatAnswers(payload.Answers);
+
+        // FR-128: the composition and, for a version with existing code, the detector's evidence and mismatches.
+        var stack = (await presets.CurrentAsync(project.Id, cancellationToken, detect: iteration.HasExistingCode)).ThrowIfUnresolvable();
         AgentRunRequest Request(string? feedback) => new()
         {
             ProjectId = project.Id,
@@ -62,8 +67,11 @@ public sealed class IdeaRefinementJobHandler(
                 ["CODEBASE_SUMMARY"] = iteration.CodebaseSummary?.Content,
                 ["PREVIOUS_PROJECT_REQUEST"] = iteration.BaselineProjectRequest?.Content,
                 ["PREVIOUS_SPECIFICATION"] = iteration.BaselineSpecification?.Content,
+                ["STACK_GUIDANCE"] = stack.Stack is { } resolution ? StackGuidance.Refinement(resolution, stack.Detection) : null,
+                ["STACK_DETECTION"] = StackGuidance.DetectionInput(stack.Detection),
                 [AgentRunner.FeedbackInput] = feedback,
             },
+            Stack = stack.Stack,
             InputArtifacts = [.. new[] { draft }.OfType<Artifact>().Concat(iteration.Artifacts).Select(AgentJobInputs.Ref)],
             UserFeedback = RefinementRules.RunFeedback(payload.Answers, feedback),
             Repo = RepoScope.BaseCommit,
@@ -97,7 +105,12 @@ public sealed class IdeaRefinementJobHandler(
 /// the prompt gets its stack description, extra sections with guidance and conventions (<see cref="PresetGuidance.Spec"/>),
 /// and validation requires those sections (a missing one is named in the corrective re-run).
 /// </summary>
-public sealed class SpecGenerationJobHandler(ArtifactAgentJob agentJob, AgentJobInputs inputs, IterationContextReader iterations, ILogger<SpecGenerationJobHandler> logger) : IJobHandler
+public sealed class SpecGenerationJobHandler(
+    ArtifactAgentJob agentJob,
+    AgentJobInputs inputs,
+    IterationContextReader iterations,
+    VersionPresetReader presets,
+    ILogger<SpecGenerationJobHandler> logger) : IJobHandler
 {
     public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
     {
@@ -113,7 +126,18 @@ public sealed class SpecGenerationJobHandler(ArtifactAgentJob agentJob, AgentJob
         var projectRequest = await inputs.CurrentAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
         var previous = await inputs.PreviousAsync(payload, ArtifactType.TechnicalSpecification, cancellationToken);
         var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
+
+        // FR-123, FR-128: with a composition its required sections (with "Stack Migration" for a stack change, or when the
+        // imported code doesn't match it) replace the preset's.
+        var stack = (await presets.CurrentAsync(project.Id, cancellationToken, detect: iteration.HasExistingCode)).ThrowIfUnresolvable();
+        var mismatches = stack.Detection?.Mismatches;
+        if (stack.Stack is { } composed)
+        {
+            iteration = iteration with { StackSections = [.. StackGuidance.SpecSections(composed, mismatches).Select(s => s.Title)] };
+        }
+
         var context = iteration.SpecContext;
+        var guidance = stack.Stack is { } resolution ? StackGuidance.Spec(resolution, mismatches) : PresetGuidance.Spec(iteration.Preset);
         AgentRunRequest Request(string? previousSpec, string? feedback) => new()
         {
             ProjectId = project.Id,
@@ -126,8 +150,9 @@ public sealed class SpecGenerationJobHandler(ArtifactAgentJob agentJob, AgentJob
                 ["BASELINE_SPECIFICATION"] = iteration.BaselineSpecification?.Content,
                 ["CODEBASE_SUMMARY"] = iteration.CodebaseSummary?.Content,
                 ["PREVIOUS_SPECIFICATION"] = previousSpec,
-                ["PRESET_GUIDANCE"] = PresetGuidance.Spec(iteration.Preset),
+                ["PRESET_GUIDANCE"] = guidance,
             },
+            Stack = stack.Stack,
             InputArtifacts = [.. new[] { projectRequest, previous, iteration.CodebaseSummary, iteration.BaselineSpecification }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = feedback,
             Repo = RepoScope.BaseCommit,
@@ -181,8 +206,11 @@ public sealed class PlanGenerationJobHandler(
         var previous = await inputs.PreviousAsync(payload, ArtifactType.ImplementationPlan, cancellationToken);
         var summary = (await iterations.ReadAsync(project.Id, cancellationToken)).CodebaseSummary;
         var maxFiles = project.MaxFilesPerStep;
-        var preset = await presets.CurrentAsync(project.Id, cancellationToken);
+        var preset = (await presets.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
         var agents = preset.PlanAgents(ArtifactType.ImplementationPlan);
+
+        // FR-124: the composition's specialists and composed rules, else the preset's (FR-76), else none (generalist).
+        var guidance = preset.Stack is { } stack ? StackGuidance.Plan(stack, preset.RepoEmpty) : PresetGuidance.Plan(preset.Preset, preset.RepoEmpty);
         AgentRunRequest Request(string? previousPlan, string? feedback) => new()
         {
             ProjectId = project.Id,
@@ -195,8 +223,9 @@ public sealed class PlanGenerationJobHandler(
                 ["CODEBASE_SUMMARY"] = summary?.Content,
                 ["PREVIOUS_PLAN"] = previousPlan,
                 ["MAX_FILES_PER_STEP"] = maxFiles.ToString(CultureInfo.InvariantCulture),
-                ["PRESET_GUIDANCE"] = PresetGuidance.Plan(preset.Preset, preset.RepoEmpty),
+                ["PRESET_GUIDANCE"] = guidance,
             },
+            Stack = preset.Stack,
             InputArtifacts = [.. new[] { projectRequest, spec, previous, summary }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = feedback,
             Repo = RepoScope.BaseCommit,

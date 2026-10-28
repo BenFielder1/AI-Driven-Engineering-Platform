@@ -72,7 +72,7 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
         Assert.Contains("Add rate limits.", _spec.LastRequest!.System + _spec.LastRequest.Messages[0].Content, StringComparison.Ordinal);
         var run = await ProjectApi.ReadAsync<AgentRunDetailDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/runs/{outcome.RunId}", UriKind.Relative), Ct));
         Assert.Equal(job.Id, run.Id); // one run row per job
-        Assert.Equal((AgentKind.SpecGenerator, Aide.Domain.Lifecycle.Phase.Refinement, LlmProvider.Fake, "fake-1", "3"), (run.Agent, run.Phase, run.Provider, run.Model, run.PromptVersion));
+        Assert.Equal((AgentKind.SpecGenerator, Aide.Domain.Lifecycle.Phase.Refinement, LlmProvider.Fake, "fake-1", "4"), (run.Agent, run.Phase, run.Provider, run.Model, run.PromptVersion));
         Assert.Equal([new RunInputArtifactDto(ArtifactType.ProjectRequest, 2)], run.InputArtifacts);
         Assert.Equal((AgentRunStatus.Succeeded, 1, (string?)null), (run.Status, run.Attempts, run.Error));
         Assert.True(run.InputTokens > 0 && run.OutputTokens > 0);

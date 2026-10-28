@@ -73,6 +73,7 @@ public static class StackResolver
         var resolution = new StackResolution
         {
             CatalogLabel = catalog.Label,
+            CatalogVersion = catalog.Version,
             Composition = composition,
             Paths = paths,
             NextjsMode = nextjsMode,

@@ -171,6 +171,13 @@ public interface IWorkingCopies
     Task<IReadOnlyList<string>?> ListPathsAtCommitAsync(Guid projectId, string commit, int maxEntries, CancellationToken cancellationToken);
 
     /// <summary>
+    /// FR-118, FR-128: the text of <paramref name="paths"/> in commit <paramref name="commit"/> (e.g. the manifests the stack
+    /// detector reads at a version's base commit). Missing, binary (a NUL byte) and unsafe paths, and files longer than
+    /// <paramref name="maxBytes"/>, are left out; empty when there is no repository or the commit isn't in it.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> ReadTextAtCommitAsync(Guid projectId, string commit, IReadOnlyList<string> paths, long maxBytes, CancellationToken cancellationToken);
+
+    /// <summary>
     /// FR-38: the committed content of <paramref name="paths"/> on <paramref name="branch"/> (not the working tree, so
     /// uncommitted leftovers are never reviewed). Missing and binary files (a NUL byte) are left out.
     /// </summary>
@@ -610,6 +617,49 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
                     .Where(p => !PathRules.IsUnsafe(PathRules.Normalize(p)))
                     .Take(maxEntries),
             ];
+        });
+    }
+
+    public Task<IReadOnlyDictionary<string, string>> ReadTextAtCommitAsync(Guid projectId, string commit, IReadOnlyList<string> paths, long maxBytes, CancellationToken cancellationToken)
+    {
+        RequireRevision(commit);
+        ArgumentNullException.ThrowIfNull(paths);
+        if (!IsRepository(projectId))
+        {
+            return Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>(StringComparer.Ordinal));
+        }
+
+        return WithLockAsync<IReadOnlyDictionary<string, string>>(projectId, async () =>
+        {
+            var root = PathFor(projectId);
+            var files = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (await ResolveCoreAsync(root, commit, cancellationToken) is not { } resolved)
+            {
+                return files;
+            }
+
+            foreach (var path in paths.Distinct(StringComparer.Ordinal))
+            {
+                if (PathRules.IsUnsafe(PathRules.Normalize(path)))
+                {
+                    continue;
+                }
+
+                // The size first, so a huge file is never read into memory.
+                var size = await RunAsync(root, ["cat-file", "-s", $"{resolved}:{path}"], cancellationToken, allowFailure: true);
+                if (!size.Succeeded || !long.TryParse(size.StandardOutput.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var bytes) || bytes > maxBytes)
+                {
+                    continue;
+                }
+
+                var shown = await RunAsync(root, ["cat-file", "blob", $"{resolved}:{path}"], cancellationToken, allowFailure: true);
+                if (shown.Succeeded && shown.StandardOutput.IndexOf('\0', StringComparison.Ordinal) < 0)
+                {
+                    files[path] = shown.StandardOutput;
+                }
+            }
+
+            return files;
         });
     }
 

@@ -67,6 +67,13 @@ public sealed record AgentRunRequest
     /// its prompt is <see cref="Domain.Presets.SpecialistPrompt.Compose"/> of the base template, and <c>agent_key</c> records it.
     /// </summary>
     public string? SpecialistAgentKey { get; init; }
+
+    /// <summary>
+    /// FR-120, FR-121: the version's resolved composition (resolved once by the job, <see cref="Features.Presets.VersionPresetReader"/>).
+    /// The run records its catalog version and the packs it loaded (<c>[]</c> for agents that load no pack skills); a
+    /// specialist step (<see cref="SpecialistAgentKey"/> in play) gets <see cref="Domain.Stack.StackPrompt.Compose"/> of the base template.
+    /// </summary>
+    public Domain.Stack.StackResolution? Stack { get; init; }
 }
 
 /// <summary>A succeeded run: its id, the provider's text, what it cost and when it completed.</summary>
@@ -205,6 +212,11 @@ public sealed partial class AgentRunner(
         if (run.AgentKey is { } agentKey && presets.Find(run.PresetId) is { } preset && preset.Agent(agentKey) is not null)
         {
             rendered = Domain.Presets.SpecialistPrompt.Compose(rendered.Value, preset, agentKey);
+        }
+        else if (run.AgentKey is { } stackKey && request.Stack is { } stack && stack.Specialist(stackKey) is not null)
+        {
+            // FR-121: base code_generator.md → composition summary → role → skills → step input.
+            rendered = Domain.Stack.StackPrompt.Compose(rendered.Value, stack, stackKey);
         }
 
         // FR-157: a project still set to a provider this deployment disabled fails without calling it.
@@ -466,17 +478,43 @@ public sealed partial class AgentRunner(
             CreatedAt = now,
         };
         PresetCatalogExtensions.StampRun(run, preset, preset is not null && request.SpecialistAgentKey is { } key ? key : null);
+        StampStack(run, request);
         db.AgentRuns.Add(run);
         db.AddEvent(
             EventTypes.RunStarted,
             project.Id,
-            new { runId, jobId = request.Job.Id, agent = request.Agent.ToWire(), provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, preset = preset?.RunLabel, agentKey = run.AgentKey },
+            new { runId, jobId = request.Job.Id, agent = request.Agent.ToWire(), provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, preset = preset?.RunLabel, stack = request.Stack?.CatalogLabel, agentKey = run.AgentKey },
             SystemActor.Name,
             now);
         await db.SaveChangesAsync(cancellationToken);
         LogStarted(logger, resolved.Provider, resolved.Model, template.Version);
         return run;
     }
+
+    /// <summary>
+    /// FR-121: a run of a composed project records the catalog version it resolved against and the packs it loaded
+    /// (<c>[{id, version, sections[]}]</c>; <c>[]</c> when the agent loads none); a specialist step also records its <c>agent_key</c>.
+    /// </summary>
+    internal static void StampStack(AgentRun run, AgentRunRequest request)
+    {
+        if (request.Stack is not { } stack)
+        {
+            return;
+        }
+
+        run.CatalogVersion = stack.CatalogVersion;
+        var specialist = request.SpecialistAgentKey is { } key ? stack.Specialist(key) : null;
+        if (specialist is not null)
+        {
+            run.AgentKey = specialist.Key;
+        }
+
+        run.Packs = JsonSerializer.Serialize(
+            (specialist?.Packs ?? []).Select(p => new { id = p.Id, version = p.Version, sections = p.Sections }),
+            PacksJson);
+    }
+
+    private static readonly JsonSerializerOptions PacksJson = new(JsonSerializerDefaults.Web);
 
     private async Task CompleteAsync(AgentRun run, LlmCompletion completion, long elapsedMs, Func<string, Result>? check, IReadOnlyList<string> warnings, int maxOutputTokens, int continuations)
     {

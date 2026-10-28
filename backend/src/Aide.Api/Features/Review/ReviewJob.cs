@@ -17,6 +17,7 @@ using Aide.Domain.Lifecycle;
 using Aide.Domain.Presets;
 using Aide.Domain.Review;
 using Aide.Domain.Specs;
+using Aide.Domain.Stack;
 using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
@@ -74,6 +75,12 @@ internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult 
 /// are agent violations mapped to the item's category and severity, without penalty, <see cref="PresetReviewChecklist"/>),
 /// the deterministic checks gain the preset's rules (<see cref="PresetReviewChecks"/>, penalised like v1's), and
 /// optimisation steps may name the preset's specialists (<see cref="Domain.Execution.PlanAgents.ForOptimization"/>).
+/// FR-126, FR-127: with a stack composition the agent scores against the composed checklist (<see cref="StackGuidance.Review"/>,
+/// mapped by <see cref="StackReviewChecklist"/>, no penalty), the deterministic checks gain the packs' registered checks
+/// (<see cref="StackReviewFindings"/>, with the base commit's files, the branch tree and the backend's source for
+/// <c>health_endpoints</c>; a committed secret v1's scan already found is penalised once), <c>deploy_branch_control</c>
+/// replaces the v2 Vercel check, and optimisation steps may name the specialists. Failed CI freshness checks stay CI-status
+/// findings (FR-85).
 /// FR-90: the version's latest Vercel preview is waited for first (<see cref="PreviewCollector"/>); a failed build is a
 /// critical <c>architecture</c> finding and the preview is stored in <c>external_checks.preview</c>.
 /// Redelivery is idempotent: run ids derive from the job, a succeeded run is reused, the cycle is read back from the job's
@@ -258,12 +265,21 @@ public sealed partial class ReviewJobHandler(
         var specText = spec?.Content ?? string.Empty;
         var allowlist = SpecReading.AllowedDependencies(specText);
         var endpoints = SpecReading.EndpointPaths(specText);
-        var preset = await presets.CurrentAsync(project.Id, cancellationToken);
-        var findings = DeterministicChecks.SecretScan(contents)
+        var preset = (await presets.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
+        var secrets = DeterministicChecks.SecretScan(contents);
+        var stackFindings = preset.Stack is { } stack
+            ? StackReviewFindings.Run(
+                stack,
+                new StackReviewInput([.. contents, .. await BackendSourceAsync(project.Id, working.Branch, stack, tree, contents, cancellationToken)], preset.BaseFiles, [.. tree.Select(f => f.Path)]),
+                secrets)
+            : [];
+        var vercelChecked = preset.Stack?.ReviewChecks.Contains(StackReviewChecks.DeployBranchControl, StringComparer.Ordinal) ?? false;
+        var findings = secrets
             .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents)))
             .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents))
             .Concat(PresetReviewChecks.Run(preset.Preset, contents))
-            .Concat(await VercelConfigFindingsAsync(project.Id, working.Branch, contents, cancellationToken))
+            .Concat(stackFindings)
+            .Concat(vercelChecked ? [] : await VercelConfigFindingsAsync(project.Id, working.Branch, contents, cancellationToken))
             .Concat(externalFindings ?? [])
             .ToList();
         LogGathered(logger, tree.Count, contents.Count, findings.Count);
@@ -299,6 +315,7 @@ public sealed partial class ReviewJobHandler(
     {
         var maxFiles = project.MaxFilesPerStep;
         var preset = material.Preset.Preset;
+        var stack = material.Preset.Stack;
         var agents = material.Preset.PlanAgents(ArtifactType.OptimizationPlan);
         var plans = material.CurrentOptimizationPlan is { } optimization
             ? $"{material.ImplementationPlan?.Content}\n\n---\n\n# Optimization plan v{optimization.Version.ToString(CultureInfo.InvariantCulture)} (the latest cycle's steps)\n\n{optimization.Content}"
@@ -318,8 +335,9 @@ public sealed partial class ReviewJobHandler(
                 ["PREVIOUS_REVIEW"] = previousReview,
                 ["CODE"] = material.Code,
                 ["MAX_FILES_PER_STEP"] = maxFiles.ToString(CultureInfo.InvariantCulture),
-                ["PRESET_GUIDANCE"] = PresetGuidance.Review(preset),
+                ["PRESET_GUIDANCE"] = stack is null ? PresetGuidance.Review(preset) : StackGuidance.Review(stack),
             },
+            Stack = stack,
             InputArtifacts = [.. new[] { material.Specification, material.ImplementationPlan, material.CurrentOptimizationPlan, material.CodebaseSummary }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = runFeedback,
             Repo = RepoScope.WorkingTree,
@@ -329,7 +347,12 @@ public sealed partial class ReviewJobHandler(
         Result<CodeReviewResult> Parse(string text)
         {
             var read = CodeReviewOutput.Parse(text, maxFiles, agents);
-            return read.IsSuccess ? Result.Success(read.Value with { Violations = PresetReviewChecklist.Apply(read.Value.Violations, preset) }) : read;
+            return read.IsSuccess
+                ? Result.Success(read.Value with
+                {
+                    Violations = stack is null ? PresetReviewChecklist.Apply(read.Value.Violations, preset) : StackReviewChecklist.Apply(read.Value.Violations, stack),
+                })
+                : read;
         }
 
         var first = await runner.RunAsync(Request(feedback) with { RunKey = null, Check = null }, cancellationToken);
@@ -535,6 +558,45 @@ public sealed partial class ReviewJobHandler(
             // A rollback, settings change or concurrent writer changed the project: retry, which re-checks everything.
             throw new JobFailedException($"{char.ToUpperInvariant(what[0])}{what[1..]} collided with a concurrent change: {ex.GetType().Name}.", transient: true, ErrorCodes.Conflict);
         }
+    }
+
+    /// <summary>The most backend source files read for <c>health_endpoints</c> beyond the review's own selection.</summary>
+    public const int MaxBackendSourceFiles = 300;
+
+    private static readonly string[] SourceExtensions = [".cs", ".java", ".kt", ".py", ".ts", ".js", ".mjs", ".cjs"];
+
+    /// <summary>
+    /// FR-126 <c>health_endpoints</c>: the backend's source files the review's selection left out (non-test, by extension,
+    /// path order, at most <see cref="MaxBackendSourceFiles"/> within the review's size limits), so a health endpoint in an
+    /// unread file isn't reported missing. Read only for the deterministic checks, never sent to the agent.
+    /// </summary>
+    private async Task<IReadOnlyList<SourceFile>> BackendSourceAsync(
+        Guid projectId, string branch, Domain.Stack.StackResolution stack, IReadOnlyList<RepositoryFile> tree, IReadOnlyList<SourceFile> contents, CancellationToken cancellationToken)
+    {
+        if (stack.Paths.Backend is not { } backend || !stack.ReviewChecks.Contains(StackReviewChecks.HealthEndpoints, StringComparer.Ordinal))
+        {
+            return [];
+        }
+
+        var limits = ReviewLimits.Default;
+        var read = contents.Select(c => c.Path).ToHashSet(StringComparer.Ordinal);
+        var prefix = backend == Domain.Stack.StackPaths.Root ? string.Empty : backend + "/";
+        long total = 0;
+        var wanted = new List<string>();
+        foreach (var file in tree.OrderBy(f => f.Path, StringComparer.Ordinal))
+        {
+            if (wanted.Count >= MaxBackendSourceFiles || read.Contains(file.Path) || !file.Path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                || !SourceExtensions.Any(e => file.Path.EndsWith(e, StringComparison.OrdinalIgnoreCase))
+                || StackReviewChecks.IsTestPath(file.Path) || file.Size > limits.MaxFileBytes || total + file.Size > limits.MaxTotalBytes)
+            {
+                continue;
+            }
+
+            total += file.Size;
+            wanted.Add(file.Path);
+        }
+
+        return wanted.Count == 0 ? [] : await Git(() => workingCopies.ReadCommittedAsync(projectId, branch, wanted, cancellationToken)) ?? [];
     }
 
     /// <summary>

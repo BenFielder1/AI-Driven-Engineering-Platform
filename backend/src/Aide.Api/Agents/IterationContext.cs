@@ -32,8 +32,11 @@ public sealed record IterationContext(
     /// <summary>FR-74: the version's preset, or <c>null</c>.</summary>
     public Preset? Preset { get; init; }
 
-    /// <summary>§4.13, FR-75: the spec validation context of this version, with the preset's extra sections.</summary>
-    public SpecValidationContext SpecContext => SpecValidationContext.ForVersion(IsIteration, BaselineSpecification?.Content, Preset?.SpecSectionTitles);
+    /// <summary>FR-123: the composition's required spec section titles (set by the spec job), replacing the preset's.</summary>
+    public IReadOnlyList<string>? StackSections { get; init; }
+
+    /// <summary>§4.13, FR-75, FR-123: the spec validation context of this version, with the composition's (or preset's) extra sections.</summary>
+    public SpecValidationContext SpecContext => SpecValidationContext.ForVersion(IsIteration, BaselineSpecification?.Content, StackSections ?? Preset?.SpecSectionTitles);
 
     /// <summary>The input artifacts these contribute to a run (summary and baselines that exist).</summary>
     public IEnumerable<Artifact> Artifacts => new[] { CodebaseSummary, BaselineProjectRequest, BaselineSpecification }.OfType<Artifact>();

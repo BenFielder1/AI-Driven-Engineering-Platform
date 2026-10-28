@@ -13,6 +13,9 @@ public sealed record StackResolution
     /// <summary><c>stack@&lt;catalog version&gt;</c>, as recorded on agent runs.</summary>
     public required string CatalogLabel { get; init; }
 
+    /// <summary>The catalog version the composition was resolved against (FR-121: <c>agent_runs.catalog_version</c>).</summary>
+    public required string CatalogVersion { get; init; }
+
     public required StackComposition Composition { get; init; }
 
     public required StackLayerPaths Paths { get; init; }

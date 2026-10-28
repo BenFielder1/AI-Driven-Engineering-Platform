@@ -1,6 +1,7 @@
 using Aide.Domain.Common;
 using Aide.Domain.Presets;
 using Aide.Domain.Specs;
+using Aide.Domain.Stack;
 
 namespace Aide.Domain.Execution;
 
@@ -26,9 +27,16 @@ public sealed record PlanStep(
 }
 
 /// <summary>
-/// FR-76: the agents a plan step may name. Without a preset only <see cref="Generalist"/> (the default when a step names
-/// none, so v1 plans stay valid). With a preset (<see cref="For"/>) the catalogue keys, the preset id and the preset
-/// itself, whose plan rules <see cref="PlanValidator.Validate"/> then checks too (<see cref="PresetPlanValidator"/>);
+/// FR-76, FR-124: the agents a plan step may name. Three modes:
+/// <list type="bullet">
+/// <item>No stack ("No stack (general)", v1): only <see cref="Generalist"/> (the default when a step names none, so v1
+/// plans stay valid).</item>
+/// <item>A v2 preset (<see cref="For"/>): the catalogue keys, the preset id and the preset itself, whose plan rules
+/// <see cref="PlanValidator.Validate"/> then checks too (<see cref="PresetPlanValidator"/>).</item>
+/// <item>A stack composition (<see cref="ForStack"/>): the composition's specialists (FR-120) and its resolution, whose
+/// composed plan rules <see cref="PlanValidator.Validate"/> checks (<see cref="CompositionPlanValidator"/>); never
+/// <see cref="Generalist"/> except in optimisation plans.</item>
+/// </list>
 /// <see cref="RepoEmpty"/> feeds the scaffold-first rule.
 /// </summary>
 public sealed record PlanAgents(IReadOnlyCollection<string> Keys, string? PresetId = null)
@@ -41,6 +49,9 @@ public sealed record PlanAgents(IReadOnlyCollection<string> Keys, string? Preset
 
     /// <summary>The preset whose plan rules apply (§4.11), or <c>null</c>.</summary>
     public Preset? Preset { get; init; }
+
+    /// <summary>FR-124: the resolved composition whose plan rules apply (§4.18), or <c>null</c>.</summary>
+    public StackResolution? Stack { get; init; }
 
     /// <summary>Whether the repository has no files yet (an empty base): <c>planRules.scaffoldFirstWhenEmpty</c> applies.</summary>
     public bool RepoEmpty { get; init; }
@@ -72,14 +83,35 @@ public sealed record PlanAgents(IReadOnlyCollection<string> Keys, string? Preset
             ? None
             : new PlanAgents([.. preset.AgentKeys, Generalist], preset.Id) { Preset = preset, BaseFiles = IgnoringCase(baseFiles), ApplyPlanRules = false, GeneralistAllowed = true };
 
+    /// <summary>FR-124: the specialists of a resolved composition (never <see cref="Generalist"/>) and its plan rules.</summary>
+    public static PlanAgents ForStack(StackResolution stack, bool repoEmpty = false, IReadOnlySet<string>? baseFiles = null)
+    {
+        ArgumentNullException.ThrowIfNull(stack);
+        return new PlanAgents(stack.AgentKeys) { Stack = stack, RepoEmpty = repoEmpty, BaseFiles = IgnoringCase(baseFiles) };
+    }
+
+    /// <summary>
+    /// FR-38, FR-124: the agents of a composed project's optimisation plan: its specialists or <see cref="Generalist"/> (the
+    /// default). The composed plan rules don't apply (fix steps follow the review); its protected paths and the ownership
+    /// exception do.
+    /// </summary>
+    public static PlanAgents ForStackOptimization(StackResolution stack, IReadOnlySet<string>? baseFiles = null)
+    {
+        ArgumentNullException.ThrowIfNull(stack);
+        return new PlanAgents([.. stack.AgentKeys, Generalist]) { Stack = stack, BaseFiles = IgnoringCase(baseFiles), ApplyPlanRules = false, GeneralistAllowed = true };
+    }
+
     private static HashSet<string>? IgnoringCase(IReadOnlySet<string>? files) =>
         files is null ? null : new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Whether <paramref name="key"/> is allowed (ordinal; keys are lowercase kebab-case).</summary>
     public bool Allows(string key) => Keys.Contains(key, StringComparer.Ordinal);
 
-    /// <summary>The agent of a step that names none: <see cref="Generalist"/> without a preset (or when allowed); with one, none (an error).</summary>
-    public string? DefaultAgent => PresetId is null || GeneralistAllowed ? Generalist : null;
+    /// <summary>
+    /// The agent of a step that names none: <see cref="Generalist"/> without a preset or composition (or when allowed); with
+    /// one, none (an error).
+    /// </summary>
+    public string? DefaultAgent => (PresetId is null && Stack is null) || GeneralistAllowed ? Generalist : null;
 }
 
 /// <summary>
@@ -195,11 +227,17 @@ public static class PlanValidator
                     continue;
                 }
 
-                // §4.6, §4.11: a generated plan declares no protected path, except a preset specialist's own (PresetPathRules);
-                // an Owner-edited one may declare v1-protected paths, but never an immutable file that exists on the base commit.
-                var refusal = allowProtectedPaths
-                    ? PresetPathRules.ImmutableRefusal(agents.Preset, path, agents.BaseFiles?.Contains(path) ?? false)
-                    : PresetPathRules.GeneratedPlanRefusal(agents.Preset, agent, path, agents.BaseFiles?.Contains(path));
+                // §4.6, §4.11, FR-125: a generated plan declares no protected path, except a specialist's own (PresetPathRules,
+                // StackPathRules); an Owner-edited one may declare v1-protected paths, but never an immutable file that exists
+                // on the base commit (a preset's or, with a composition, every data pack's migrations).
+                var existsOnBase = agents.BaseFiles?.Contains(path);
+                var refusal = agents.Stack is { } stack
+                    ? allowProtectedPaths
+                        ? StackPathRules.ImmutableRefusal(stack, path, existsOnBase ?? false)
+                        : StackPathRules.GeneratedPlanRefusal(stack, agent, path, existsOnBase)
+                    : allowProtectedPaths
+                        ? PresetPathRules.ImmutableRefusal(agents.Preset, path, existsOnBase ?? false)
+                        : PresetPathRules.GeneratedPlanRefusal(agents.Preset, agent, path, existsOnBase);
                 if (refusal is not null)
                 {
                     reasons.Add($"Step {step.Number} {refusal}");
@@ -239,9 +277,11 @@ public static class PlanValidator
             }
             else if (!agents.Allows(agent))
             {
-                reasons.Add(agents.PresetId is null
-                    ? $"Step {step.Number} names the agent '{agent}'; without a preset every step is \"{PlanAgents.Generalist}\"."
-                    : $"Step {step.Number} names the unknown agent '{agent}'; the {agents.PresetId} preset has {string.Join(", ", agents.Keys)}.");
+                reasons.Add(agents.Stack is not null
+                    ? $"Step {step.Number} names the unknown agent '{agent}'; this stack's specialists are {string.Join(", ", agents.Keys)}."
+                    : agents.PresetId is null
+                        ? $"Step {step.Number} names the agent '{agent}'; without a preset every step is \"{PlanAgents.Generalist}\"."
+                        : $"Step {step.Number} names the unknown agent '{agent}'; the {agents.PresetId} preset has {string.Join(", ", agents.Keys)}.");
             }
 
             var covers = new List<string>(step.Covers.Count);
@@ -266,6 +306,16 @@ public static class PlanValidator
             reasons.AddRange(PresetPlanValidator.Errors(normalised, preset, agents.RepoEmpty));
         }
 
+        // FR-124: the composed plan rules. A plan whose only problem is a missing step for a changed layer is STACK_CHANGE_UNPLANNED.
+        IReadOnlyList<PlanIssue> issues = agents.Stack is { } composed && agents.ApplyPlanRules
+            ? CompositionPlanValidator.Errors(normalised, composed, agents.RepoEmpty)
+            : [];
+        if (reasons.Count == 0 && issues.Count > 0)
+        {
+            return Result.Failure<IReadOnlyList<PlanStep>>(CompositionPlanValidator.ToError(issues)!);
+        }
+
+        reasons.AddRange(issues.Select(i => i.Message));
         return reasons.Count == 0
             ? Result.Success<IReadOnlyList<PlanStep>>(normalised)
             : Result.Failure<IReadOnlyList<PlanStep>>(new DomainError(ErrorCodes.InvalidPlan, $"The plan is invalid: {reasons[0]}") { Details = reasons });

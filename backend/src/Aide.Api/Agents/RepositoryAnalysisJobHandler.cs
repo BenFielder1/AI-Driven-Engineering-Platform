@@ -1,10 +1,12 @@
 using Aide.Api.Features.Artifacts;
+using Aide.Api.Features.Presets;
 using Aide.Api.Features.Versions;
 using Aide.Api.Jobs;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Releases;
+using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
@@ -23,12 +25,19 @@ namespace Aide.Api.Agents;
 /// already has a summary. Redelivery is idempotent like the other agent jobs (run ids from the job id; the writer returns
 /// the summary a run already stored).
 /// </para>
+/// <para>
+/// FR-128: with a stack composition the analyst gets its summary and the stack detector's evidence at the base commit
+/// (<see cref="StackGuidance.Analysis"/>, <see cref="StackGuidance.DetectionInput"/>), and "Stack &amp; Dependencies" must name the
+/// detected packs and any mismatch with the composition (<see cref="StackAnalysis.Check"/>, validated and re-run like the
+/// sections).
+/// </para>
 /// </summary>
 public sealed partial class RepositoryAnalysisJobHandler(
     AgentRunner runner,
     AgentDraftWriter writer,
     AgentJobInputs inputs,
     AideDbContext db,
+    VersionPresetReader presets,
     ILogger<RepositoryAnalysisJobHandler> logger) : IJobHandler
 {
     public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
@@ -69,6 +78,9 @@ public sealed partial class RepositoryAnalysisJobHandler(
         }
 
         var baseText = version.BaseTag is { } tag ? $"{tag} ({version.BaseCommitSha})" : $"commit {version.BaseCommitSha}";
+        var stack = (await presets.ForVersionAsync(version, cancellationToken, detect: true)).ThrowIfUnresolvable();
+        var expectation = stack.Stack is { } composed && stack.Detection is { } detection ? StackAnalysis.Expectation(detection, composed.Composition) : null;
+        Result<string> Check(string text) => StackAnalysis.Check(AgentOutput.UnwrapFence(text), expectation);
         AgentRunRequest Request(string? feedback) => new()
         {
             ProjectId = project.Id,
@@ -79,26 +91,29 @@ public sealed partial class RepositoryAnalysisJobHandler(
                 ["PROJECT_NAME"] = project.Name,
                 ["VERSION_REQUEST"] = version.Request,
                 ["BASE"] = baseText,
+                ["STACK_GUIDANCE"] = stack.Stack is { } resolution ? StackGuidance.Analysis(resolution, stack.Detection) : null,
+                ["STACK_DETECTION"] = StackGuidance.DetectionInput(stack.Detection),
                 [AgentRunner.FeedbackInput] = feedback,
             },
+            Stack = stack.Stack,
             UserFeedback = feedback,
             Repo = RepoScope.BaseCommit,
         };
 
         var first = await runner.RunAsync(Request(null), cancellationToken);
-        var content = CodebaseSummaryRules.Check(AgentOutput.UnwrapFence(first.Text));
+        var content = Check(first.Text);
         var produced = first;
         if (content.IsFailure)
         {
             LogRejected(logger, content.Error!.Code, content.Error.Message);
             produced = await runner.RunAsync(
-                Request(CodebaseSummaryRules.CorrectiveFeedback(content.Error.Details)) with
+                Request(StackAnalysis.CorrectiveFeedback(content.Error)) with
                 {
                     RunKey = AgentOutput.CorrectiveRunKey,
-                    Check = text => CodebaseSummaryRules.Check(AgentOutput.UnwrapFence(text)) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
+                    Check = text => Check(text) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
                 },
                 cancellationToken);
-            content = CodebaseSummaryRules.Check(AgentOutput.UnwrapFence(produced.Text));
+            content = Check(produced.Text);
             if (content.IsFailure)
             {
                 throw new JobFailedException(content.Error!.Message, transient: false, content.Error.Code);

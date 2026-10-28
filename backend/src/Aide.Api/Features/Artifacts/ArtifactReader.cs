@@ -6,6 +6,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Presets;
 using Aide.Domain.Specs;
+using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -165,11 +166,11 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             .Where(s => s.ProjectId == artifact.ProjectId)
             .Select(s => s.RootDirectory)
             .FirstOrDefaultAsync(cancellationToken);
-        return
-        [
-            .. PresetPlanValidator.AllWarnings(plan.Value, requirements, preset.Preset, preset.BaseFiles, rootDirectory)
-                .Select(w => new ArtifactWarningDto(w.Code, w.Message, w.Details)),
-        ];
+        // FR-124, FR-127: a composed plan's warnings come from the composition (AGENT_SCOPE, PLAN_ORDER, UNDECLARED_GENERATED_FILE).
+        var warnings = preset.Stack is { } stack
+            ? CompositionPlanValidator.AllWarnings(plan.Value, requirements, stack)
+            : PresetPlanValidator.AllWarnings(plan.Value, requirements, preset.Preset, preset.BaseFiles, rootDirectory);
+        return [.. warnings.Select(w => new ArtifactWarningDto(w.Code, w.Message, w.Details))];
     }
 
     private Task<Artifact?> FindAsync(Guid projectId, ArtifactType type, int version, CancellationToken cancellationToken) =>

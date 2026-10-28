@@ -1,5 +1,6 @@
 using Aide.Domain.Common;
 using Aide.Domain.Presets;
+using Aide.Domain.Stack;
 
 namespace Aide.Domain.Execution;
 
@@ -9,7 +10,8 @@ public sealed record ProducedFile(string Path, string Content);
 /// <summary>
 /// Everything the Guardian checks a step's output against. With a <see cref="Preset"/> (§4.11) its protected paths join
 /// v1's; <see cref="ExistsOnBase"/> answers "does this file exist on the version's base commit" for its
-/// <c>existingOnBase</c> entries (unknown: <c>false</c>).
+/// <c>existingOnBase</c> entries (unknown: <c>false</c>). FR-125: with a composition (<see cref="Stack"/>) its packs' protected
+/// paths join v1's the same way, and migrations that exist on the base commit are immutable for every data pack.
 /// </summary>
 public sealed record GuardianInput(
     int RequestedStep,
@@ -18,7 +20,8 @@ public sealed record GuardianInput(
     IReadOnlyList<ProducedFile> Files,
     int MaxFilesPerStep,
     Preset? Preset = null,
-    Func<string, bool>? ExistsOnBase = null);
+    Func<string, bool>? ExistsOnBase = null,
+    StackResolution? Stack = null);
 
 /// <summary>One violation (§4.6). Messages never include secret values.</summary>
 public sealed record GuardianViolation(GuardianCheck Check, string Code, ViolationSeverity Severity, string Message, string? Path = null);
@@ -35,7 +38,8 @@ public sealed record GuardianResult(IReadOnlyList<GuardianViolation> Violations)
 
 /// <summary>
 /// The Execution Guardian (§4.6, FR-32, D18): runs all six checks and reports every violation.
-/// Paths are normalised and compared exactly. FR-76, §4.11: a preset adds its protected paths to scope creep.
+/// Paths are normalised and compared exactly. FR-76, §4.11: a preset adds its protected paths to scope creep; FR-125: so
+/// does a composition (the union of v1's and the packs' protected paths, with the "declared in this step" exception).
 /// </summary>
 public static class ExecutionGuardian
 {
@@ -163,6 +167,14 @@ public static class ExecutionGuardian
                 continue;
             }
 
+            // FR-125: with a composition, every data pack's migrations on the base commit are immutable, declared or not.
+            if (input.Stack is { } immutableStack && input.ExistsOnBase is { } existsOnBaseStack
+                && immutableStack.ProtectedPaths.FirstOrDefault(p => p.ExistingOnBase && p.Protects(path, existsOnBaseStack)) is { } immutableMigration)
+            {
+                yield return Error(GuardianCheck.ScopeCreep, ErrorCodes.Guardian.ProtectedPath, $"'{path}' already exists on the version's base commit and is immutable ({immutableMigration.Reason}); write a new file instead.", path);
+                continue;
+            }
+
             if (declared.Contains(path))
             {
                 continue;
@@ -181,6 +193,11 @@ public static class ExecutionGuardian
             {
                 // §4.11: the preset's protected paths, with the same "unless declared in this step" exception.
                 yield return Error(GuardianCheck.ScopeCreep, ErrorCodes.Guardian.ProtectedPath, $"'{path}' is protected by the {preset.Id} preset and isn't declared for this step.", path);
+            }
+            else if (input.Stack is { } stack && stack.ProtectedPaths.FirstOrDefault(p => p.Protects(path, input.ExistsOnBase ?? (_ => false))) is { } packProtected)
+            {
+                // FR-125: the packs' protected paths, with the same "unless declared in this step" exception.
+                yield return Error(GuardianCheck.ScopeCreep, ErrorCodes.Guardian.ProtectedPath, $"'{path}' is protected by the {packProtected.Pack} pack and isn't declared for this step.", path);
             }
         }
     }

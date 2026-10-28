@@ -51,7 +51,11 @@ public interface IExecutionCompletionHook
 /// </list>
 /// FR-76: with a preset each step runs as its specialist (<see cref="AgentRunRequest.SpecialistAgentKey"/>: the run is
 /// <c>code_generator</c> with <c>agent_key</c> = the step's agent and the specialist prompt), and the Guardian adds the
-/// preset's protected paths (existing-on-base ones checked against the version's base commit).
+/// preset's protected paths (existing-on-base ones checked against the version's base commit). FR-121, FR-125: with a
+/// stack composition each step runs as its specialist with its resolved pack skills (<see cref="Domain.Stack.StackPrompt"/>;
+/// the run records <c>agent_key</c>, <c>packs</c> and <c>catalog_version</c>), and the Guardian adds the packs' protected
+/// paths, every data pack's base-commit migrations being immutable. A <c>generalist</c> step (an optimisation plan) runs the
+/// base prompt.
 /// </summary>
 public sealed partial class ExecutionJobHandler(
     AideDbContext db,
@@ -103,7 +107,7 @@ public sealed partial class ExecutionJobHandler(
         }
 
         var working = prepared.Value;
-        var preset = await presets.CurrentAsync(project.Id, cancellationToken);
+        var preset = (await presets.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
         var existing = await Git(() => workingCopies.FindStepCommitAsync(project.Id, working.Branch, step.Id, cancellationToken));
         if (!resuming && !await BeginAttemptAsync(project, step, cancellationToken))
         {
@@ -115,16 +119,16 @@ public sealed partial class ExecutionJobHandler(
             // D17 redelivery: the warnings are those of the committed files, not of an earlier rejected attempt.
             LogAlreadyCommitted(logger, existing.Sha);
             var committed = existing.Files.Select(f => new ProducedFile(f.Path, f.Content)).ToList();
-            var check = ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, step.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], committed, project.MaxFilesPerStep, preset.Preset, preset.ExistsOnBase));
+            var check = ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, step.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], committed, project.MaxFilesPerStep, preset.Preset, preset.ExistsOnBase, preset.Stack));
             var runId = await StepAttemptRecorder.AttemptRunIdAsync(db, job.Id, step, cancellationToken);
             await CompleteAsync(project.Id, planId, step, steps, existing, [.. check.Warnings], working, runId, cancellationToken);
             return;
         }
 
-        var outcome = await runner.RunAsync(await RequestAsync(job, project, planId, step, steps, cancellationToken), cancellationToken);
+        var outcome = await runner.RunAsync(await RequestAsync(job, project, planId, step, steps, cancellationToken) with { Stack = preset.Stack }, cancellationToken);
         var reply = CodeGeneration.Parse(outcome.Text);
         var result = reply.IsSuccess
-            ? ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, reply.Value.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], reply.Value.Files, project.MaxFilesPerStep, preset.Preset, preset.ExistsOnBase))
+            ? ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, reply.Value.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], reply.Value.Files, project.MaxFilesPerStep, preset.Preset, preset.ExistsOnBase, preset.Stack))
             : new GuardianResult([CodeGeneration.UnreadableViolation(reply.Error!)]);
         if (!result.Accepted)
         {

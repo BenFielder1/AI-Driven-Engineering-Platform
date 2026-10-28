@@ -324,6 +324,12 @@ public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
             return JsonSerializer.Serialize(new { steps = presetSteps });
         }
 
+        // FR-124: with a stack composition, its specialists' scripted plan (FakeStackScripts.Plan).
+        if (FakeComposition.Read(request.System) is { } composition)
+        {
+            return JsonSerializer.Serialize(new { steps = FakeStackScripts.Plan(composition, r, rs, [.. scope], FakePrompt.RepoHasCode(request)) });
+        }
+
         var steps = new object[]
         {
             Step(1, "Project skeleton and configuration", $"Create the Node.js project for {name}: package.json with start and test scripts, a README and an Express server entry point listening on PORT.", [], [], ("package.json", "create"), ("README.md", "create"), ("src/server.js", "create")),
@@ -369,12 +375,15 @@ public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
         var title = FakePrompt.Tag(request, "step_title") is { Length: > 0 } t ? t : $"Step {number}";
         var name = FakePrompt.Title(FakePrompt.Tag(request, "project_request"), "project");
         var specialist = FakePrompt.SpecialistKey(request);
+        var composed = FakeComposition.Read(request.System) is not null;
         var files = FilePattern().Matches(FakePrompt.Tag(request, "declared_files"))
             .Select(f => (Path: f.Groups["path"].Value.Trim(), Action: f.Groups["action"].Value))
             .Select(f => new
             {
                 path = f.Path,
-                content = (specialist is null ? null : FakePresetScripts.Content(specialist, f.Path, name, number, title)) ?? Content(f.Path, f.Action, name, number, title),
+                content = (specialist is null ? null
+                    : composed ? FakeStackScripts.Content(specialist, f.Path, name, number, title)
+                    : FakePresetScripts.Content(specialist, f.Path, name, number, title)) ?? Content(f.Path, f.Action, name, number, title),
             })
             .ToList();
         return JsonSerializer.Serialize(new
@@ -525,12 +534,24 @@ public sealed class FakeRepositoryAnalystResponder : IFakeAgentResponder
         var name = FakePrompt.Tag(request, "project_name") is { Length: > 0 } n ? n : "the project";
         var baseText = FakePrompt.Tag(request, "base") is { Length: > 0 } b ? b : "the default branch";
         var versionRequest = FakePrompt.Tag(request, "version_request") is { Length: > 0 } v ? FakePrompt.FirstSentence(v) : "No request given.";
+
+        // FR-128: name the packs the detector found and flag each mismatch with the composition.
+        var detection = FakePrompt.Tag(request, "stack_detection").ReplaceLineEndings("\n").Split('\n');
+        var detected = detection
+            .Where(l => l.StartsWith("- frontend:", StringComparison.Ordinal) || l.StartsWith("- backend:", StringComparison.Ordinal) || l.StartsWith("- data:", StringComparison.Ordinal))
+            .Select(l => l.Split('`') is { Length: > 2 } parts ? parts[1] : null)
+            .OfType<string>()
+            .ToList();
+        var mismatches = detection.Where(l => l.StartsWith("- mismatch on ", StringComparison.Ordinal)).Select(l => l[2..]).ToList();
+        var stack = "Determined from the repository manifests; see the README at the repository root."
+            + (detected.Count > 0 ? $" Detected packs: {string.Join(", ", detected)}." : string.Empty)
+            + string.Concat(mismatches.Select(m => $" Mismatch: {m}."));
         return $"""
             ## Overview
             {name} is an existing codebase analysed at {baseText}. This version's request: {versionRequest}
 
             ## Stack & Dependencies
-            Determined from the repository manifests; see the README at the repository root.
+            {stack}
 
             ## Structure
             Source code, tests and documentation live in top-level folders of the repository.
