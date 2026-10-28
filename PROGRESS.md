@@ -14,12 +14,12 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | ID | Summary | Spec § | Layer(s) | Phase | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | FR-113 | Stack catalog (versioned data, `GET /api/stack/catalog`) | 3.1 | backend + data | M24 | done | CI 40579534195 |
-| FR-114 | Wizard Stack step: five ordered sub-steps | 3.1 | frontend + backend | M25 | todo | — |
-| FR-115 | Deployment sub-step: per-component hosts, origin model | 3.1 | frontend + backend | M25 | todo | — |
+| FR-114 | Wizard Stack step: five ordered sub-steps | 3.1 | frontend + backend | M25 | done | CI 40679856465 |
+| FR-115 | Deployment sub-step: per-component hosts, origin model | 3.1 | frontend + backend | M25 | done | CI 40679856465 |
 | FR-116 | Server-side composition validation | 3.1 | backend | M24 | done | CI 40579534195 |
-| FR-117 | Composition pinned on release version; stack change; `STACK_LOCKED` | 3.1 | backend + frontend + data | M25 | todo | — |
-| FR-118 | Import stack detection | 3.1 | backend + frontend | M25 | todo | — |
-| FR-119 | Layer paths | 3.1 | backend | M25 | todo | — |
+| FR-117 | Composition pinned on release version; stack change; `STACK_LOCKED` | 3.1 | backend + frontend + data | M25 | done | CI 40679856465 |
+| FR-118 | Import stack detection | 3.1 | backend + frontend | M25 | done | CI 40679856465 |
+| FR-119 | Layer paths | 3.1 | backend | M25 | done | CI 40679856465 |
 | FR-120 | Generic specialists catalogue | 3.2 | backend | M26 | todo | — |
 | FR-121 | Specialists load pack skills | 3.2 | backend | M26 | todo | — |
 | FR-122 | Adapted pack content; strict catalog loading | 3.2 | backend | M24 | done | CI 40579534195 |
@@ -70,7 +70,7 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 - [x] M0 Baseline (base: 83d8fa5): CI green on 83d8fa5 (`main`): https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40129842995. The v4 prep commit f8a6dfc only touches docs (CI skips it).
 - [x] M23 LLM providers and long outputs — FR-157–FR-162 (+ FR-156 LLM flags). Commits df8f119 + fixes; CI green on 7fcb9b9: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40579534195
 - [x] M24 Stack catalog + compatibility — FR-113, FR-116, FR-122. Commit 24eaf5b + fixes; CI green on 7fcb9b9 (same run)
-- [ ] M25 Composition in projects — FR-114, FR-115, FR-117–FR-119, Admin → Stack catalog page
+- [x] M25 Composition in projects — FR-114, FR-115, FR-117–FR-119, Admin → Stack catalog page. Commit b49f789; CI green: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40679856465
 - [ ] M26 Specialists across the lifecycle + preset retirement — FR-120, FR-121, FR-123–FR-128, FR-129
 - [ ] M27 GitLab — FR-130–FR-132, FR-136–FR-141 (GitLab)
 - [ ] M28 Bitbucket — FR-133–FR-135, FR-136–FR-141 (Bitbucket)
