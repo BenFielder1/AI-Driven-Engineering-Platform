@@ -119,7 +119,8 @@ public sealed class ProjectStackTests(AideApiFactory factory)
 
         var project = await ProjectApi.ReadAsync<ProjectDto>(await CreateAsync(owner.Client, ProjectApi.UniqueName("old-client"), stack: Example1(), presetId: "nextjs-supabase"), HttpStatusCode.Created);
 
-        Assert.Equal(((string?)null, Example1Packs), (project.PresetId, (IReadOnlyList<string>)project.StackPacks));
+        Assert.Null(project.PresetId);
+        Assert.Equal(Example1Packs, project.StackPacks);
         var version = await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == project.Id, Ct));
         Assert.Null(version.PresetId);
     }

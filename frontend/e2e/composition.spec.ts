@@ -112,13 +112,14 @@ test('FR129_FR120_FR121_FR124: a composed project runs its specialist plan from 
   // FR-121, FR-125: execution runs each step as its specialist.
   await drivePlanToExecutionStarted(context, projectId)
   await waitForPhase(context, projectId, 'review', 3 * AGENT_TIMEOUT)
-  const executed = await apiJson<{ steps: { agentKey: string | null; legacyAgentKey?: string | null }[] }>(
-    context,
-    'GET',
-    `/api/projects/${projectId}/execution/steps`,
-  )
-  expect(executed.steps.map((s) => s.agentKey)).toEqual(agents)
-  expect(executed.steps.every((s) => !s.legacyAgentKey)).toBe(true)
+  // GET /execution/runs (ExecutionRunDto.steps are ExecutionStepSummaryDto, which carry agentKey and legacyAgentKey;
+  // GET /execution/steps' ExecutionStepDto has neither).
+  const executionRuns = await apiJson<
+    { planType: string; steps: { number: number; agentKey: string | null; legacyAgentKey?: string | null }[] }[]
+  >(context, 'GET', `/api/projects/${projectId}/execution/runs`)
+  const devSteps = executionRuns.find((r) => r.planType === 'implementation_plan')?.steps ?? []
+  expect([...devSteps].sort((a, b) => a.number - b.number).map((s) => s.agentKey)).toEqual(agents)
+  expect(devSteps.every((s) => !s.legacyAgentKey)).toBe(true)
 
   await page.goto(`/projects/${projectId}/execution`)
   await expect(page.getByRole('heading', { level: 2, name: 'Execution', exact: true })).toBeVisible()

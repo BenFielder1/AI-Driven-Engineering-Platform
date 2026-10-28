@@ -22,7 +22,6 @@ public sealed class DeploymentSettingsTests(AideApiFactory factory)
 
     private static readonly string[] PreviewOnly = ["preview"];
 
-    private static readonly string[] AllTargets = ["production", "preview", "development"];
     private static readonly string[] ProductionOnly = ["production"];
     private static readonly string[] Both = ["preview", "production"];
     private static readonly string[] BothReversed = ["production", "preview"];
@@ -172,7 +171,7 @@ public sealed class DeploymentSettingsTests(AideApiFactory factory)
             Ct);
         var project = await ProjectApi.ReadAsync<ProjectDto>(created, HttpStatusCode.Created);
         await ProjectApi.ReadAsync<DeploymentEnvVarDto>(await owner.Client.PutAsJsonAsync(
-            $"{Settings(project.Id)}/env/NEXT_PUBLIC_SUPABASE_URL", new { value = "https://abc.supabase.co", targets = AllTargets }, Ct));
+            $"{Settings(project.Id)}/env/NEXT_PUBLIC_SUPABASE_URL", new { value = "https://abc.supabase.co", targets = Both }, Ct));
 
         var settings = await ProjectApi.ReadAsync<DeploymentSettingsDto>(await owner.Client.GetAsync(new Uri(Settings(project.Id), UriKind.Relative), Ct));
 

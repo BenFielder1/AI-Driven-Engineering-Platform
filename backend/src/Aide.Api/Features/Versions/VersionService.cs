@@ -11,8 +11,8 @@ using Aide.Domain.Rollback;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Stack;
 using Aide.Infrastructure.Security;
+using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aide.Api.Features.Versions;
