@@ -128,6 +128,9 @@ export const errorMessages = {
   STACK_LOCKED:
     "The stack can't change after the implementation plan is locked. Start a new version to change it.",
   VCS_MISMATCH: "The version control choice must match the project's repository host.",
+  // FR-124, FR-127: composed plan rules (a plan error, and a plan warning).
+  STACK_CHANGE_UNPLANNED: "The plan must include work for the stack change.",
+  UNDECLARED_GENERATED_FILE: "A file generated from this change isn't declared by any step.",
   // FR-118 and Git hosts (§6): no usable Git connection for the project or request.
   GIT_NOT_CONNECTED:
     "Connect your Git host account (or ask an Owner to re-bind the project) to continue.",
