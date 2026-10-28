@@ -20,16 +20,16 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-117 | Composition pinned on release version; stack change; `STACK_LOCKED` | 3.1 | backend + frontend + data | M25 | done | CI 40679856465 |
 | FR-118 | Import stack detection | 3.1 | backend + frontend | M25 | done | CI 40679856465 |
 | FR-119 | Layer paths | 3.1 | backend | M25 | done | CI 40679856465 |
-| FR-120 | Generic specialists catalogue | 3.2 | backend | M26 | todo | — |
-| FR-121 | Specialists load pack skills | 3.2 | backend | M26 | todo | — |
+| FR-120 | Generic specialists catalogue | 3.2 | backend | M26 | done | CI 40743533120 |
+| FR-121 | Specialists load pack skills | 3.2 | backend | M26 | done | CI 40743533120 |
 | FR-122 | Adapted pack content; strict catalog loading | 3.2 | backend | M24 | done | CI 40579534195 |
-| FR-123 | Spec Generator: composed spec sections | 3.3 | backend | M26 | todo | — |
-| FR-124 | Plan Generator: composed plan rules | 3.3 | backend | M26 | todo | — |
-| FR-125 | Execution: Guardian protected paths from packs | 3.3 | backend | M26 | todo | — |
-| FR-126 | Code Review: composed checklist + deterministic checks | 3.3 | backend | M26 | todo | — |
-| FR-127 | Generated-files policy | 3.3 | backend | M26 | todo | — |
-| FR-128 | Repository Analyst + refinement get the composition | 3.3 | backend | M26 | todo | — |
-| FR-129 | Retire v2 presets (migration + removal) | 3.4 | backend + frontend + data | M26 | todo | — |
+| FR-123 | Spec Generator: composed spec sections | 3.3 | backend | M26 | done | CI 40743533120 |
+| FR-124 | Plan Generator: composed plan rules | 3.3 | backend | M26 | done | CI 40743533120 |
+| FR-125 | Execution: Guardian protected paths from packs | 3.3 | backend | M26 | done | CI 40743533120 |
+| FR-126 | Code Review: composed checklist + deterministic checks | 3.3 | backend | M26 | done | CI 40743533120 |
+| FR-127 | Generated-files policy | 3.3 | backend | M26 | done | CI 40743533120 |
+| FR-128 | Repository Analyst + refinement get the composition | 3.3 | backend | M26 | done | CI 40743533120 |
+| FR-129 | Retire v2 presets (migration + removal) | 3.4 | backend + frontend + data | M26 | done | CI 40743533120 |
 | FR-130 | GitLab instances (Admin) | 3.5 | backend + frontend + data | M27 | todo | — |
 | FR-131 | GitLab connections + sign-in | 3.5 | backend + frontend + data | M27 | todo | — |
 | FR-132 | GitLab repo picker + create | 3.5 | backend + frontend | M27 | todo | — |
@@ -71,7 +71,7 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 - [x] M23 LLM providers and long outputs — FR-157–FR-162 (+ FR-156 LLM flags). Commits df8f119 + fixes; CI green on 7fcb9b9: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40579534195
 - [x] M24 Stack catalog + compatibility — FR-113, FR-116, FR-122. Commit 24eaf5b + fixes; CI green on 7fcb9b9 (same run)
 - [x] M25 Composition in projects — FR-114, FR-115, FR-117–FR-119, Admin → Stack catalog page. Commit b49f789; CI green: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40679856465
-- [ ] M26 Specialists across the lifecycle + preset retirement — FR-120, FR-121, FR-123–FR-128, FR-129
+- [x] M26 Specialists across the lifecycle + preset retirement — FR-120, FR-121, FR-123–FR-128, FR-129. Commits 245b3d6, 0b88937, c5629e2 + fixes; CI green on b36e643: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40743533120
 - [ ] M27 GitLab — FR-130–FR-132, FR-136–FR-141 (GitLab)
 - [ ] M28 Bitbucket — FR-133–FR-135, FR-136–FR-141 (Bitbucket)
 - [ ] M29 Platforms I — FR-142–FR-146, FR-150/151 (frontend parts)
