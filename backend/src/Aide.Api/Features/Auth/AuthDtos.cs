@@ -58,5 +58,7 @@ public sealed record UserDto(
 /// with PKCE), <c>oauth</c> (the v1 OAuth App, only while no App is registered) or <c>none</c>; <c>github</c> is
 /// <c>githubMode != none</c>. <c>gitlab</c> (FR-131) lists the enabled GitLab instances with an OAuth application: one
 /// "Continue with GitLab" button each (<c>GET /api/auth/gitlab/start</c> with <c>instanceId</c> and <c>mode=signin</c>).
+/// <c>bitbucket</c> (FR-134) is true when a Bitbucket OAuth consumer is configured: "Continue with Bitbucket"
+/// (<c>GET /api/auth/bitbucket/start?mode=signin</c>) and OAuth connect are offered.
 /// </summary>
-public sealed record AuthProvidersDto(bool Github, GitHubSignInMode GithubMode, IReadOnlyList<GitLab.GitLabInstanceSummaryDto> Gitlab);
+public sealed record AuthProvidersDto(bool Github, GitHubSignInMode GithubMode, IReadOnlyList<GitLab.GitLabInstanceSummaryDto> Gitlab, bool Bitbucket);

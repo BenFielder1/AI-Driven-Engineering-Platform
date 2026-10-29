@@ -664,6 +664,165 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/integrations/bitbucket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-133: the Bitbucket OAuth consumer (secret as a flag), where it comes from (database or Bitbucket__OAuth__* configuration), the callback URL and the consumer permissions to tick, and the number of Bitbucket connections. Admins only. */
+        get: operations["GetAdminBitbucketIntegration"];
+        /** FR-133: save the Bitbucket OAuth consumer's key and secret (encrypted; an omitted secret keeps the saved one). Admins with a browser session only. */
+        put: operations["UpdateAdminBitbucketIntegration"];
+        post?: never;
+        /** FR-133: remove the saved Bitbucket OAuth consumer. Sign-in and OAuth connect stop being offered and OAuth connections become invalid at their next refresh; API-token connections keep working. Admins with a browser session only. */
+        delete: operations["DeleteAdminBitbucketIntegration"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/bitbucket/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-134: redirects to Bitbucket's OAuth authorize page (authorization code; scopes fixed on the consumer; signed single-use state bound to this browser). mode=signin ("Continue with Bitbucket", anonymous) or connect (Account → Connections; signed-in browser session). returnUrl is a same-origin path. 404 when no consumer is configured. */
+        get: operations["StartBitbucketOAuth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/bitbucket/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-134: Bitbucket's redirect: checks the state, exchanges the code (client Basic auth), reads the identity (GET /2.0/user) and confirmed email (GET /2.0/user/emails), then signs in (account matched by bitbucket + account uuid, or created for a new confirmed email; the first account becomes Admin), or links to the signed-in user, and stores the connection. Redirects to returnUrl; on failure to /login (sign-in) or returnUrl (connect) with error=GIT_AUTH_FAILED&reason=…&provider=bitbucket; when the confirmed email belongs to an existing unlinked account, to /login?link=bitbucket&returnUrl=… (confirm with POST /api/auth/bitbucket/link). */
+        get: operations["BitbucketOAuthCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/bitbucket/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-134: the Bitbucket sign-in waiting in this browser to be linked to the existing account with the same confirmed email (10 minutes). 404 when there is none. */
+        get: operations["GetBitbucketPendingLink"];
+        put?: never;
+        /** FR-134, D-V4-18: the signed-in owner of the matching account confirms: the Bitbucket identity is linked (later sign-ins match it) and connected. Never done silently. Browser session only. */
+        post: operations["ConfirmBitbucketLink"];
+        /** FR-134: discard this browser's pending Bitbucket link. */
+        delete: operations["CancelBitbucketLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/bitbucket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-134: the caller's Bitbucket connections, newest first (login, account uuid, auth kind, scopes, status; never a token or an API token's email). */
+        get: operations["ListBitbucketConnections"];
+        put?: never;
+        /** FR-134 token fallback: save an Atlassian API token with the Bitbucket scopes read:user, read:workspace, read:project, read:repository, write:repository, admin:repository, read:pullrequest, write:pullrequest and read:pipeline, with its account email (Basic email:token). Checked with GET /2.0/user and a harmless call per scope first; nothing is saved on failure. App passwords aren't supported. Browser session only. */
+        post: operations["CreateBitbucketTokenConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/bitbucket/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** FR-134, FR-136: delete one of the caller's Bitbucket connections (its tokens). Projects bound to it lose the binding until an Owner re-binds. Sign-in with Bitbucket keeps working and reconnects. Browser session only. */
+        delete: operations["DeleteBitbucketConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/bitbucket/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-134: check the connection with Bitbucket again (refreshing an OAuth token first when due; re-checking an API token's scopes) and record valid, invalid or insufficient_scope. Browser session only. */
+        post: operations["TestBitbucketConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/git/bitbucket/repos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-135: the Bitbucket repositories the caller can write to (role=contributor), across their workspaces one workspace at a time, searchable by name, 30 per page most recently updated first; pass nextCursor (workspace:page) as cursor for the next page. The workspace list is reused for five minutes. */
+        get: operations["ListBitbucketRepos"];
+        put?: never;
+        /** FR-135: create a Bitbucket repository in a workspace (owner = its slug) and project (its key), then push an initial commit with a README to main, so the default branch exists. The slug is Bitbucket's slug of the name. */
+        post: operations["CreateBitbucketRepo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/git/bitbucket/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-135: where the caller can create a repository: their first 50 workspaces, each with its first 100 projects (Bitbucket requires a project); truncated and projectsTruncated say more exist. */
+        get: operations["ListBitbucketOwners"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/users": {
         parameters: {
             query?: never;
@@ -2110,6 +2269,27 @@ export interface components {
             completedAt: null | string;
         };
         /**
+         * @description Admin → Integrations → Bitbucket (FR-133): the OAuth consumer and its registration help. `callbackUrl` is the exact
+         *     callback to enter on the consumer (`App:PublicBaseUrl` + `/api/auth/bitbucket/callback`); `permissions` are
+         *     the consumer permissions to tick (`account email repository:write repository:admin pullrequest:write project
+         *     webhook`; Bitbucket fixes scopes on the consumer). `source` is `configuration` when
+         *     `Bitbucket__OAuth__*` sets the consumer (then it can't be changed or removed here). The secret is a flag only
+         *     (`hasClientSecret`). `oauthConfigured`: key and secret are set, so "Continue with Bitbucket" and OAuth
+         *     connections work (API-token connections work without). `connectionCount` counts users' Bitbucket connections.
+         */
+        AdminBitbucketIntegrationDto: {
+            callbackUrl: string;
+            permissions: string[];
+            source: components["schemas"]["GitHostInstanceSource"];
+            clientId: null | string;
+            hasClientSecret: boolean;
+            oauthConfigured: boolean;
+            /** Format: int32 */
+            connectionCount: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /**
          * @description One entry of the cross-project admin event log (FR-51). `projectId`/`projectName` are `null` for events
          *     without a project (e.g. `PROJECT_DELETED`, whose project id is in the payload). `type` is the stored event
          *     type, `category` its activity-feed category (`null` for operations markers such as
@@ -2561,11 +2741,97 @@ export interface components {
          *     with PKCE), `oauth` (the v1 OAuth App, only while no App is registered) or `none`; `github` is
          *     `githubMode != none`. `gitlab` (FR-131) lists the enabled GitLab instances with an OAuth application: one
          *     "Continue with GitLab" button each (`GET /api/auth/gitlab/start` with `instanceId` and `mode=signin`).
+         *     `bitbucket` (FR-134) is true when a Bitbucket OAuth consumer is configured: "Continue with Bitbucket"
+         *     (`GET /api/auth/bitbucket/start?mode=signin`) and OAuth connect are offered.
          */
         AuthProvidersDto: {
             github: boolean;
             githubMode: components["schemas"]["GitHubSignInMode"];
             gitlab: components["schemas"]["GitLabInstanceSummaryDto"][];
+            bitbucket: boolean;
+        };
+        /**
+         * @description A Bitbucket connection of the caller (FR-134); never a token or the API token's email. `externalUserId` is the
+         *     Bitbucket account UUID. `authKind` is `oauth` or `token` (Atlassian API token); `scopes` as granted
+         *     (OAuth) or as checked (API token). `status`: `valid`, `invalid` (Bitbucket rejected it; reconnect) or
+         *     `insufficient_scope`.
+         */
+        BitbucketConnectionDto: {
+            /** Format: uuid */
+            id: string;
+            login: string;
+            externalUserId: string;
+            authKind: components["schemas"]["GitConnectionAuthKind"];
+            scopes: string[];
+            status: components["schemas"]["GitConnectionStatus"];
+            /** Format: date-time */
+            lastValidatedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /**
+         * @description Where the caller can create a Bitbucket repository (FR-135): their first 50 workspaces with their projects;
+         *     `truncated` says the caller has more workspaces than are listed.
+         */
+        BitbucketOwnersDto: {
+            workspaces: components["schemas"]["BitbucketWorkspaceDto"][];
+            truncated: boolean;
+        };
+        /**
+         * @description FR-134 sign-in: Bitbucket's verified email belongs to an existing AIDE account that isn't linked to this Bitbucket
+         *     identity. AIDE never links silently (D-V4-18): the user signs in to that account (any method) and confirms with
+         *     `POST /api/auth/bitbucket/link`, or cancels with `DELETE /api/auth/bitbucket/link`. Expires after 10 minutes.
+         */
+        BitbucketPendingLinkDto: {
+            login: string;
+            email: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        /** @description A project in a workspace (FR-135); pass `key` as `project` when creating a repository. */
+        BitbucketProjectDto: {
+            key: string;
+            name: string;
+            isPrivate: null | boolean;
+        };
+        /**
+         * @description A Bitbucket repository for the repo picker (FR-135). `id` is Bitbucket's repository UUID; `fullName` is
+         *     `workspace/slug`; `mainBranch` is `null` for an empty repository.
+         */
+        BitbucketRepoDto: {
+            id: string;
+            fullName: string;
+            name: string;
+            slug: string;
+            workspace: null | string;
+            projectKey: null | string;
+            mainBranch: null | string;
+            isPrivate: boolean;
+            webUrl: null | string;
+            /** Format: date-time */
+            updatedOn: null | string;
+        };
+        /**
+         * @description One page of repositories (one workspace at a time, most recently updated first); pass `nextCursor` as
+         *         `cursor` for the next (`null` = last page).
+         */
+        BitbucketRepoPageDto: {
+            items: components["schemas"]["BitbucketRepoDto"][];
+            nextCursor: null | string;
+        };
+        /**
+         * @description A workspace the caller can access (FR-135) with the first 100 of its projects (`projectsTruncated`: it has more).
+         *     Pass `slug` as `owner` when creating. `isAdmin` is whether the caller administers the workspace, when
+         *     Bitbucket says.
+         */
+        BitbucketWorkspaceDto: {
+            slug: string;
+            name: string;
+            isAdmin: null | boolean;
+            projects: components["schemas"]["BitbucketProjectDto"][];
+            projectsTruncated: boolean;
         };
         /**
          * @description One compliance category (§4.7): its weight, the agent's score (0–1), the deterministic penalty (sum of the fixed
@@ -2795,6 +3061,30 @@ export interface components {
              *     never silently superseded. Omit it to always save (CLI uploads).
              */
             baseVersion?: null | number;
+        };
+        /**
+         * @description Create a Bitbucket repository (FR-135) with the caller's connection `connectionId` in workspace `owner` and
+         *     project `project` (its key; Bitbucket requires one). The slug is Bitbucket's slug of `name`. AIDE then pushes an
+         *     initial commit with a README to `main`, so the default branch exists. `private` defaults to true.
+         */
+        CreateBitbucketRepoRequest: {
+            /** Format: uuid */
+            connectionId: string;
+            owner: string;
+            project: string;
+            name: string;
+            description?: null | string;
+            private?: boolean;
+        };
+        /**
+         * @description FR-134 token fallback: an Atlassian API token with the scopes `read:user`, `read:workspace`,
+         *     `read:project`, `read:repository`, `write:repository`, `admin:repository`, `read:pullrequest`,
+         *     `write:pullrequest` and `read:pipeline` (all `:bitbucket`), and the Atlassian account `email` it
+         *     belongs to. App passwords aren't supported. Nothing is saved unless the token passes the checks.
+         */
+        CreateBitbucketTokenConnectionRequest: {
+            token: string;
+            email: string;
         };
         /**
          * @description Start the GitHub App manifest flow (FR-80): the App is owned by the Admin's personal account (`user`) or by the
@@ -5263,6 +5553,14 @@ export interface components {
         UnreadNotificationCountDto: {
             /** Format: int32 */
             unreadCount: number;
+        };
+        /**
+         * @description Save the Bitbucket OAuth consumer (FR-133): its key (`clientId`) and secret. An omitted `clientSecret` keeps the
+         *     stored one (so the key can be corrected without re-entering the secret).
+         */
+        UpdateBitbucketConsumerRequest: {
+            clientId: string;
+            clientSecret?: null | string;
         };
         /**
          * @description Settings → Deployment (FR-88, Owner). `provider` (required) is `vercel`, or `null` to turn deployment
@@ -7989,6 +8287,792 @@ export interface operations {
                 };
             };
             /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAdminBitbucketIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBitbucketIntegrationDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateAdminBitbucketIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBitbucketConsumerRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBitbucketIntegrationDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (the consumer is configured in the environment, Bitbucket__OAuth__*) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteAdminBitbucketIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (the consumer is configured in the environment, Bitbucket__OAuth__*) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StartBitbucketOAuth: {
+        parameters: {
+            query?: {
+                mode?: "signin" | "connect";
+                returnUrl?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description UNAUTHENTICATED (mode=connect without a session) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (mode=connect with an API token) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    BitbucketOAuthCallback: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetBitbucketPendingLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketPendingLinkDto"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ConfirmBitbucketLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (signed in as a different account than the one with that email) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (no pending link, or it expired) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (the Bitbucket identity was linked to another account meanwhile) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CancelBitbucketLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListBitbucketConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketConnectionDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateBitbucketTokenConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBitbucketTokenConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketConnectionDto"];
+                };
+            };
+            /** @description VALIDATION; CREDENTIAL_INVALID (Bitbucket rejected the token and email); CONNECTION_SCOPE_INSUFFICIENT (missing scopes in details, scopes AIDE couldn't confirm in unverifiableScopes; both in the title). A token is saved only when all nine scopes are verified */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (connected concurrently; retry) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the caller's budget of 900 Bitbucket requests an hour for token checks; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteBitbucketConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestBitbucketConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketConnectionDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the connection's budget of 900 requests an hour; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached); the status is unchanged */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListBitbucketRepos: {
+        parameters: {
+            query: {
+                connectionId: string;
+                search?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketRepoPageDto"];
+                };
+            };
+            /** @description VALIDATION */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's Bitbucket connections) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the connection's budget of 900 requests an hour; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateBitbucketRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBitbucketRepoRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketRepoDto"];
+                };
+            };
+            /** @description VALIDATION */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (Bitbucket doesn't let the caller create repositories there) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's connections, or no such workspace or project) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description REPO_NAME_TAKEN, or GIT_NOT_CONNECTED (the connection is invalid) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the connection's budget of 900 requests an hour; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached), or UPSTREAM_ERROR after the repository was created: its README commit couldn't be made or pushed (git failed or is missing, or the server couldn't write the temp folder); the empty repository stays */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListBitbucketOwners: {
+        parameters: {
+            query: {
+                connectionId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketOwnersDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's Bitbucket connections) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the connection's budget of 900 requests an hour; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;

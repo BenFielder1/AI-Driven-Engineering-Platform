@@ -167,6 +167,13 @@ public static class GitHostPollBudget
     public static TokenBucketDecision OnBitbucketRateLimited(DateTimeOffset now, string? retryAfter) =>
         new(false, new TokenBucketState(0, now), ResetAt(retryAfter, null, now) ?? now + BitbucketRateLimitWait);
 
+    /// <summary>
+    /// §4.19: the bucket to keep after a Bitbucket 429: empty until the wait of <see cref="OnBitbucketRateLimited"/> ends, so
+    /// <see cref="TryTake"/> refuses every request (background and request paths alike) until then and refills from there.
+    /// </summary>
+    public static TokenBucketState BucketAfterBitbucketRateLimited(DateTimeOffset now, string? retryAfter) =>
+        new(0, OnBitbucketRateLimited(now, retryAfter).RetryAt!.Value);
+
     /// <summary>§4.19: the earliest a Bitbucket PR may be polled again (at most once a minute).</summary>
     public static DateTimeOffset NextBitbucketPullRequestPollAt(DateTimeOffset? lastPollAt, DateTimeOffset now) =>
         lastPollAt is { } last && last + BitbucketPullRequestPollInterval > now ? last + BitbucketPullRequestPollInterval : now;

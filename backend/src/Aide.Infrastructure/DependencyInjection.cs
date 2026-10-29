@@ -1,4 +1,5 @@
 using Aide.Infrastructure.Agents;
+using Aide.Infrastructure.Bitbucket;
 using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
@@ -180,6 +181,29 @@ public static class DependencyInjection
 
         // FR-136, FR-137: the gitlab provider (the binding Owner's connection, per-command extraHeader for git).
         services.AddScoped<IGitProvider, GitLabGitProvider>();
+
+        // Bitbucket Cloud (FR-133–FR-135, §4.19): fixed hosts (no SSRF surface), redirects never followed, the consumer row
+        // (git_host_instances, kind bitbucket) with Bitbucket__OAuth__* on top, and the shared per-connection limiter
+        // (900 requests an hour, in memory: one API replica).
+        services.AddOptions<BitbucketOptions>()
+            .BindConfiguration(BitbucketOptions.SectionName)
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<BitbucketOptions>, BitbucketOptionsValidator>();
+        services.AddHttpClient(BitbucketClients.HttpClientName, client =>
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                AutomaticDecompression = System.Net.DecompressionMethods.All,
+            });
+        services.AddSingleton<BitbucketRateLimiter>();
+        services.AddSingleton<IBitbucketClients, BitbucketClients>();
+        services.AddScoped<IBitbucketConsumer, BitbucketConsumer>();
+        services.AddSingleton<IBitbucketRepoInitializer, BitbucketRepoInitializer>();
 
         // Deployments (FR-87–FR-91, §4.15, D-V2-10): Vercel's REST API on the fixed host api.vercel.com (§8: never
         // configurable, so no SSRF), the deterministic Fake (Deployments:Provider=Fake) and the env write limiter.

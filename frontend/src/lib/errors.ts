@@ -2,6 +2,22 @@ import type { FieldValues, Path, UseFormSetError } from "react-hook-form";
 
 import { withGitHost, type GitHostTerms } from "./git-host";
 
+/** SPEC §6 GITLAB_RATE_LIMITED / BITBUCKET_RATE_LIMITED: "{host} is rate limiting requests. AIDE will retry." */
+function hostJobRateLimited(host: string): string {
+  return `${host} is rate limiting requests. AIDE will retry.`;
+}
+
+/**
+ * SPEC §6 UPSTREAM_RATE_LIMITED for a Git host ("{provider} is rate limiting requests. Try again in a few minutes."),
+ * optionally saying what didn't happen ("Nothing was created"). errorMessage() swaps "in a few minutes" for the
+ * Retry-After wait in the contexts listed in `retryAfterContexts`.
+ */
+function hostRateLimited(host: string, outcome?: string): string {
+  return outcome
+    ? `${host} is rate limiting requests. ${outcome}; try again in a few minutes.`
+    : `${host} is rate limiting requests. Try again in a few minutes.`;
+}
+
 /**
  * The ONE place that maps API `errorCode`s to user copy (CLAUDE.md rule 4). Mirrors
  * backend/src/Aide.Domain/Common/ErrorCodes.cs (endpoint codes and agent-run codes; Guardian codes are separate).
@@ -139,8 +155,9 @@ export const errorMessages = {
   GIT_AUTH_FAILED: "Signing in with your Git host didn't complete. Try again.",
   CONNECTION_SCOPE_INSUFFICIENT: "This token is missing permissions AIDE needs, or it is the wrong type of token.",
   UPSTREAM_RATE_LIMITED: "The service is rate limiting requests. Try again in a few minutes.",
-  // FR-136 job code (§6): GitLab rate limited a background job; it is re-queued for the reset.
-  GITLAB_RATE_LIMITED: "GitLab is rate limiting requests. AIDE will retry.",
+  // FR-136 job codes (§6): the Git host rate limited a background job; it is re-queued for the reset.
+  GITLAB_RATE_LIMITED: hostJobRateLimited("GitLab"),
+  BITBUCKET_RATE_LIMITED: hostJobRateLimited("Bitbucket"),
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;
@@ -412,7 +429,7 @@ export const contextualErrorMessages = {
     NOT_FOUND:
       "That GitLab project or connection no longer exists, or your GitLab account can't see it. Pick another project.",
     UPSTREAM_ERROR: "We couldn't reach GitLab to check the project. Nothing was created; try again in a moment.",
-    UPSTREAM_RATE_LIMITED: "GitLab is rate limiting requests. Nothing was created; try again in a few minutes.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("GitLab", "Nothing was created"),
   },
   /** PATCH /api/projects/:id/settings/git `connectionId`: Rebind (FR-136). */
   gitBinding: {
@@ -424,7 +441,7 @@ export const contextualErrorMessages = {
     NOT_FOUND: "That GitLab connection no longer exists. Pick another, or connect GitLab under Connections.",
     VALIDATION: "That connection is for a different GitLab instance than the project's repository. Pick another.",
     UPSTREAM_ERROR: "We couldn't reach GitLab to check your access. Nothing changed; try again in a moment.",
-    UPSTREAM_RATE_LIMITED: "GitLab is rate limiting requests. Nothing changed; try again in a few minutes.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("GitLab", "Nothing changed"),
   },
   /** POST /api/projects `llm` (FR-159): the AI model section's connection. */
   createProjectLlm: {
@@ -477,7 +494,7 @@ export const contextualErrorMessages = {
       "GitLab rejected this token, so it wasn't saved. Check that you copied the whole token and that it hasn't expired or been revoked.",
     NOT_FOUND: "That GitLab instance or connection no longer exists. The page now shows the latest.",
     UPSTREAM_ERROR: "We couldn't reach GitLab to check the token. Nothing changed; try again in a moment.",
-    UPSTREAM_RATE_LIMITED: "GitLab is rate limiting requests. Try again in a few minutes.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("GitLab"),
     FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
   },
   /** GET/POST /api/auth/gitlab/link: confirm linking a GitLab sign-in to the account with its email (FR-131). */
@@ -490,7 +507,7 @@ export const contextualErrorMessages = {
   /** GET /api/me/git/gitlab/repos · /owners (FR-132). */
   gitlabRepos: {
     UPSTREAM_ERROR: "We couldn't load your projects from GitLab. Try again in a moment.",
-    UPSTREAM_RATE_LIMITED: "GitLab is rate limiting requests. Try again in a few minutes.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("GitLab"),
     GIT_NOT_CONNECTED:
       "This GitLab connection no longer works: GitLab rejected it, or an administrator disabled its instance. Reconnect it under Connections.",
     NOT_FOUND: "That GitLab connection no longer exists. Pick another, or connect GitLab under Connections.",
@@ -506,6 +523,47 @@ export const contextualErrorMessages = {
       "This GitLab connection no longer works: GitLab rejected it, or an administrator disabled its instance. Reconnect it under Connections.",
     NOT_FOUND: "That GitLab connection or group no longer exists. Pick another namespace.",
   },
+  /** PUT/DELETE /api/admin/integrations/bitbucket (FR-133). */
+  bitbucketConsumer: {
+    CONFLICT:
+      "The Bitbucket consumer is set in the server's configuration (Bitbucket__OAuth__*), so it can't be changed or removed here. Change it there and restart AIDE.",
+    FORBIDDEN: "Only administrators can change the Bitbucket consumer, and only from a browser session.",
+  },
+  /** POST/DELETE /api/me/connections/bitbucket · /:id/test (FR-134). */
+  bitbucketConnection: {
+    CREDENTIAL_INVALID:
+      "Bitbucket rejected this email and token, so nothing was saved. Check the email of your Atlassian account, that you copied the whole token, and that it hasn't expired or been revoked. App passwords don't work.",
+    NOT_FOUND: "That Bitbucket connection no longer exists. The page now shows the latest.",
+    CONFLICT: "Bitbucket was connected at the same time elsewhere. Reload the page, then try again.",
+    UPSTREAM_ERROR: "We couldn't reach Bitbucket to check the token. Nothing changed; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket"),
+    FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
+  },
+  /** GET/POST /api/auth/bitbucket/link: confirm linking a Bitbucket sign-in to the account with its email (FR-134). */
+  bitbucketLink: {
+    FORBIDDEN:
+      "You're signed in to a different AIDE account. Sign out, then sign in to the account with this Bitbucket email to link it.",
+    NOT_FOUND:
+      "This Bitbucket sign-in is no longer waiting to be linked (links last 10 minutes). Continue with Bitbucket again.",
+    CONFLICT: "This Bitbucket account is already linked to another AIDE account.",
+  },
+  /** GET /api/me/git/bitbucket/repos · /owners (FR-135). */
+  bitbucketRepos: {
+    UPSTREAM_ERROR: "We couldn't load your repositories from Bitbucket. Try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket"),
+    GIT_NOT_CONNECTED: "This Bitbucket connection no longer works: Bitbucket rejected it. Reconnect it under Connections.",
+    NOT_FOUND: "That Bitbucket connection no longer exists. Pick another, or connect Bitbucket under Connections.",
+  },
+  /** POST /api/me/git/bitbucket/repos (FR-135). */
+  createBitbucketRepo: {
+    REPO_NAME_TAKEN: "A repository with this name already exists in that workspace. Choose another name.",
+    FORBIDDEN: "Bitbucket doesn't let you create repositories there. Pick another workspace or project.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket", "Nothing was created"),
+    UPSTREAM_ERROR:
+      "Bitbucket couldn't create the repository, or AIDE couldn't push its first commit (the README on main). Check the workspace on Bitbucket: if the repository exists but is empty, delete it there, then try again.",
+    GIT_NOT_CONNECTED: "This Bitbucket connection no longer works: Bitbucket rejected it. Reconnect it under Connections.",
+    NOT_FOUND: "That Bitbucket connection, workspace or project no longer exists. Pick another.",
+  },
   /** PATCH /api/admin/users/:id/role (FR-3). */
   changeSystemRole: {
     CONFLICT:
@@ -516,6 +574,16 @@ export const contextualErrorMessages = {
 } as const satisfies Record<string, Partial<Record<ErrorCode, string>>>;
 
 export type ErrorContext = keyof typeof contextualErrorMessages;
+
+/**
+ * Contexts whose UPSTREAM_RATE_LIMITED copy names the Retry-After wait instead of "a few minutes" (Bitbucket's hourly
+ * budget can hold requests back for longer, FR-135).
+ */
+const retryAfterContexts: ReadonlySet<ErrorContext> = new Set<ErrorContext>([
+  "bitbucketConnection",
+  "bitbucketRepos",
+  "createBitbucketRepo",
+]);
 
 /** Copy for a code, preferring the context's override. */
 export function messageFor(code: ErrorCode, context?: ErrorContext): string {
@@ -572,7 +640,8 @@ export function githubFailureMessage(reason: string | undefined): string {
 const gitHostNames: Readonly<Record<string, string>> = { gitlab: "GitLab", bitbucket: "Bitbucket" };
 
 /**
- * FR-131: `reason` on `?error=GIT_AUTH_FAILED&reason=…&provider=gitlab` (backend GitLab/GitLabSignIn.cs,
+ * FR-131, FR-134: `reason` on `?error=GIT_AUTH_FAILED&reason=…&provider=gitlab|bitbucket` (backend GitLab/GitLabSignIn.cs,
+ * Bitbucket/BitbucketSignIn.cs,
  * Aide.Domain/GitHosts/GitSignInRules.cs). `{host}` is the Git host's name.
  */
 export const gitHostFailureMessages: Readonly<Record<string, string>> = {
@@ -590,20 +659,48 @@ export const gitHostFailureMessages: Readonly<Record<string, string>> = {
   busy: "Too many sign-ins are in progress. Try again in a minute.",
 };
 
+/** Reasons whose copy differs per host (Bitbucket Cloud has one OAuth consumer, not instances; FR-134). */
+const gitHostFailureOverrides: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  bitbucket: {
+    instance_unavailable:
+      "Bitbucket sign-in isn't set up here any more (the OAuth consumer was removed). Ask an administrator, or sign in another way.",
+  },
+};
+
 /** SPEC §6 GIT_AUTH_FAILED: "Signing in with {host} didn't complete. Try again.", or the reason's specific copy. */
 export function gitHostFailureMessage(provider: string | undefined, reason: string | undefined): string {
   const host = (provider ? gitHostNames[provider] : undefined) ?? "your Git host";
-  const copy = (reason ? gitHostFailureMessages[reason] : undefined) ?? "Signing in with {host} didn't complete. Try again.";
+  const override = provider && reason ? gitHostFailureOverrides[provider]?.[reason] : undefined;
+  const copy =
+    override ?? (reason ? gitHostFailureMessages[reason] : undefined) ?? "Signing in with {host} didn't complete. Try again.";
   const text = copy.replaceAll("{host}", host);
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** SPEC §6 CONNECTION_SCOPE_INSUFFICIENT: "This token is missing permissions: {missing}." (`details` lists them). */
-export function connectionScopeMessage(missing: readonly string[]): string {
+/**
+ * SPEC §6 CONNECTION_SCOPE_INSUFFICIENT: "This token is missing permissions: {missing}." (`details` lists them). FR-134:
+ * Bitbucket may also name scopes AIDE couldn't confirm (`unverifiableScopes`; a token is saved only when all are
+ * verified), with what to do instead.
+ */
+export function connectionScopeMessage(
+  missing: readonly string[],
+  unverifiable: readonly string[] = [],
+  oauthAvailable = true,
+): string {
   const scopes = missing.map((m) => m.trim()).filter(Boolean);
-  return scopes.length === 0
-    ? errorMessages.CONNECTION_SCOPE_INSUFFICIENT
-    : `This token is missing permissions: ${scopes.join(", ")}.`;
+  const unconfirmed = unverifiable.map((m) => m.trim()).filter(Boolean);
+  const parts: string[] = [];
+  if (scopes.length > 0) {
+    parts.push(`This token is missing permissions: ${scopes.join(", ")}.`);
+  }
+  if (unconfirmed.length > 0) {
+    parts.push(
+      oauthAvailable
+        ? `AIDE couldn't confirm these permissions: ${unconfirmed.join(", ")}. Connect with Bitbucket (OAuth) instead, or create a repository in your workspace first so AIDE can check them, then try again.`
+        : `AIDE couldn't confirm these permissions: ${unconfirmed.join(", ")}. Create a repository in the workspace first so AIDE can check them, then try again.`,
+    );
+  }
+  return parts.length === 0 ? errorMessages.CONNECTION_SCOPE_INSUFFICIENT : parts.join(" ");
 }
 
 function isErrorCode(code: unknown): code is ErrorCode {
@@ -653,6 +750,7 @@ interface ProblemBody {
   installUrl?: string;
   errors?: Record<string, string[]>;
   details?: string[];
+  unverifiableScopes?: unknown;
   traceId?: string;
 }
 
@@ -671,6 +769,8 @@ export class ApiError extends Error {
   readonly installUrl: string | null;
   /** ProblemDetails `violations` (STACK_INCOMPATIBLE, FR-116): each broken compatibility rule. */
   readonly violations: readonly StackViolation[];
+  /** ProblemDetails `unverifiableScopes` (CONNECTION_SCOPE_INSUFFICIENT on a Bitbucket token, FR-134). */
+  readonly unverifiableScopes: readonly string[];
 
   constructor(init: {
     status: number;
@@ -683,6 +783,7 @@ export class ApiError extends Error {
     reason?: string | null;
     installUrl?: string | null;
     violations?: readonly StackViolation[];
+    unverifiableScopes?: readonly string[];
   }) {
     super(init.title ?? `Request failed with HTTP ${String(init.status)}`);
     this.name = "ApiError";
@@ -695,6 +796,7 @@ export class ApiError extends Error {
     this.reason = init.reason ?? null;
     this.installUrl = init.installUrl ?? null;
     this.violations = init.violations ?? [];
+    this.unverifiableScopes = init.unverifiableScopes ?? [];
   }
 }
 
@@ -723,6 +825,9 @@ export function toApiError(error: unknown, response: Response): ApiError {
     reason: typeof body.reason === "string" ? body.reason : null,
     installUrl: typeof body.installUrl === "string" && body.installUrl.startsWith("https://") ? body.installUrl : null,
     violations: parseViolations(body.violations),
+    unverifiableScopes: Array.isArray(body.unverifiableScopes)
+      ? body.unverifiableScopes.filter((d): d is string => typeof d === "string")
+      : [],
   });
 }
 
@@ -858,8 +963,19 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
         return `Someone saved a newer version (v${latest}) while you were editing. Your text is kept here: copy it, then cancel and edit again to start from v${latest}.`;
       }
     }
+    if (
+      error.errorCode === "UPSTREAM_RATE_LIMITED" &&
+      error.retryAfterSeconds &&
+      context &&
+      retryAfterContexts.has(context)
+    ) {
+      return messageFor("UPSTREAM_RATE_LIMITED", context).replace(
+        "in a few minutes",
+        `in ${waitCopy(error.retryAfterSeconds)}`,
+      );
+    }
     if (error.errorCode === "CONNECTION_SCOPE_INSUFFICIENT") {
-      return connectionScopeMessage(error.details);
+      return connectionScopeMessage(error.details, error.unverifiableScopes);
     }
     if (error.errorCode === "STACK_INCOMPATIBLE") {
       return stackIncompatibleMessage(error.violations);

@@ -2,6 +2,7 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHosts;
+using Aide.Infrastructure.Bitbucket;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
@@ -37,12 +38,18 @@ public sealed record GitAccessToken(
     /// <summary>FR-136: the Basic user name (<c>oauth2</c> for GitLab).</summary>
     public string BasicUser => GitTokenRules.GitBasicUser(CredentialKind);
 
+    /// <summary>
+    /// FR-134: the Atlassian account email of a Bitbucket API token (REST calls authenticate with Basic
+    /// <c>email:token</c>); <c>null</c> for OAuth and GitLab tokens. Never logged.
+    /// </summary>
+    public string? Email { get; init; }
+
     /// <summary>Redacted: the token never reaches a log.</summary>
     public override string ToString() => $"GitAccessToken {{ ConnectionId = {ConnectionId}, Provider = {Provider}, Login = {Login}, Refreshed = {Refreshed} }}";
 }
 
 /// <summary>
-/// FR-131, FR-136: valid access tokens for GitLab (and later Bitbucket) connections, for the repo picker and for background
+/// FR-131, FR-134, FR-136: valid access tokens for GitLab and Bitbucket connections, for the repo picker and for background
 /// Git work (push, MR, merge, release, import, polling), which uses the project's binding Owner's connection.
 /// <list type="bullet">
 /// <item><see cref="GetAccessTokenAsync"/>: the stored token, refreshed first when it expires within 5 minutes
@@ -75,19 +82,32 @@ public interface IGitConnectionTokens
 internal sealed partial class GitConnectionTokens(
     IServiceScopeFactory scopes,
     IGitLabClients clients,
+    IBitbucketClients bitbucketClients,
     ISecretProtectors protectors,
     TimeProvider time,
     ILogger<GitConnectionTokens> logger) : IGitConnectionTokens
 {
     private ISecretProtector Protector => protectors.ForPurpose(SecretPurposes.GitHostUserToken);
 
+    private ISecretProtector EmailProtector => protectors.ForPurpose(SecretPurposes.GitHostTokenEmail);
+
+    /// <summary>
+    /// The host a connection's token is bound to: a GitLab instance (with its view, for the OAuth application) or Bitbucket
+    /// Cloud (the consumer; its API base is fixed).
+    /// </summary>
+    private sealed record TokenHost(GitHostKind Provider, Guid InstanceId, Uri BaseUrl, string Name, GitLabInstance? GitLab);
+
+    /// <summary>A token endpoint's answer, whichever host sent it.</summary>
+    private sealed record RefreshedTokens(string AccessToken, string? RefreshToken, long? ExpiresIn, IReadOnlyList<string> Scopes);
+
+    private static string HostName(GitHostKind provider) => provider == GitHostKind.Bitbucket ? "Bitbucket" : "GitLab";
+
     public async Task<Result<GitAccessToken>> GetAccessTokenAsync(Guid connectionId, CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
-        var instances = scope.ServiceProvider.GetRequiredService<IGitLabInstances>();
         var connection = await db.GitConnections.AsNoTracking().FirstOrDefaultAsync(c => c.Id == connectionId, cancellationToken);
-        var usable = await UsableAsync(instances, connection, cancellationToken);
+        var usable = await UsableAsync(scope.ServiceProvider, connection, cancellationToken);
         if (usable.IsFailure)
         {
             return Result.Failure<GitAccessToken>(usable.Error!);
@@ -111,7 +131,8 @@ internal sealed partial class GitConnectionTokens(
         }
 
         await MarkInvalidAsync(rejected.ConnectionId, "rejected", projectId, cancellationToken);
-        return NotConnected("GitLab rejected the connection. Connect GitLab again under Account → Connections → GitLab.");
+        var host = HostName(rejected.Provider);
+        return NotConnected($"{host} rejected the connection. Connect {host} again under Account → Connections → {host}.");
     }
 
     public async Task MarkInvalidAsync(Guid connectionId, string reason, Guid? projectId, CancellationToken cancellationToken)
@@ -136,13 +157,12 @@ internal sealed partial class GitConnectionTokens(
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
-        var instances = scope.ServiceProvider.GetRequiredService<IGitLabInstances>();
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var connection = await db.GitConnections
             .FromSql($"SELECT *, xmin FROM git_connections WHERE id = {connectionId} FOR UPDATE")
             .AsTracking()
             .FirstOrDefaultAsync(cancellationToken);
-        var usable = await UsableAsync(instances, connection, cancellationToken);
+        var usable = await UsableAsync(scope.ServiceProvider, connection, cancellationToken);
         if (usable.IsFailure)
         {
             await transaction.CommitAsync(cancellationToken);
@@ -158,44 +178,45 @@ internal sealed partial class GitConnectionTokens(
         }
 
         var instance = usable.Value;
-        if (connection.AuthKind != GitConnectionAuthKind.Oauth || connection.Provider != GitHostKind.Gitlab)
+        var hostName = HostName(connection.Provider);
+        if (connection.AuthKind != GitConnectionAuthKind.Oauth)
         {
-            // Tokens can't be refreshed (Bitbucket OAuth refresh comes with FR-134).
+            // Access and API tokens can't be refreshed.
             await transaction.CommitAsync(cancellationToken);
             return await ToTokenAsync(db, connection, instance, refreshed: true, cancellationToken);
         }
 
-        var row = await db.GitHostInstances.AsNoTracking().FirstAsync(i => i.Id == connection.InstanceId, cancellationToken);
-        var clientSecret = instances.GetClientSecret(row, instance);
+        var (clientId, clientSecret, oauthConfigured) = await ClientCredentialsAsync(scope.ServiceProvider, db, instance, cancellationToken);
         if (connection.RefreshTokenEncrypted is not { } encrypted || !Protector.TryUnprotect(encrypted, out var refreshToken)
-            || instance.ClientId is not { } clientId || clientSecret is null)
+            || clientId is null || clientSecret is null)
         {
-            await InvalidateAsync(db, connection, instance.OAuthConfigured ? "refresh_unavailable" : "oauth_not_configured", projectId, cancellationToken);
+            await InvalidateAsync(db, connection, oauthConfigured ? "refresh_unavailable" : "oauth_not_configured", projectId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return NotConnected("Your GitLab connection can't be refreshed. Connect GitLab again under Account → Connections → GitLab.");
+            return NotConnected($"Your {hostName} connection can't be refreshed. Connect {hostName} again under Account → Connections → {hostName}.");
         }
 
-        // Once the refresh request is sent GitLab may rotate the pair (invalidating the old one), so from here on the caller's
-        // cancellation is ignored: the request (bounded by the client timeout), reading its answer, saving the rotated pair
-        // and committing all run to completion. Otherwise a cancelled request would lose the only valid pair.
+        // Once the refresh request is sent the host may rotate the pair (GitLab invalidates the old one), so from here on the
+        // caller's cancellation is ignored: the request (bounded by the client timeout), reading its answer, saving the
+        // rotated pair and committing all run to completion. Otherwise a cancelled request would lose the only valid pair.
         cancellationToken.ThrowIfCancellationRequested();
         var uncancellable = CancellationToken.None;
-        GitLabOAuthTokens tokens;
+        RefreshedTokens tokens;
         try
         {
-            tokens = await clients.ForInstance(instance.BaseUrl).RefreshAsync(clientId, clientSecret, refreshToken, instances.RedirectUri, uncancellable);
+            tokens = await RefreshWithHostAsync(scope.ServiceProvider, instance, clientId, clientSecret, refreshToken, uncancellable);
         }
-        catch (GitLabApiException ex)
+        catch (Exception ex) when (ex is GitLabApiException or BitbucketApiException)
         {
-            if (GitTokenRules.OnRefreshFailed(ex.Status, ex.OauthError) == GitTokenFailureAction.MarkInvalid)
+            var (status, oauthError) = ex is GitLabApiException g ? (g.Status, g.OauthError) : (((BitbucketApiException)ex).Status, ((BitbucketApiException)ex).OauthError);
+            if (GitTokenRules.OnRefreshFailed(status, oauthError) == GitTokenFailureAction.MarkInvalid)
             {
                 await InvalidateAsync(db, connection, "refresh_failed", projectId, uncancellable);
                 await transaction.CommitAsync(uncancellable);
-                return NotConnected("GitLab refused to refresh your connection. Connect GitLab again under Account → Connections → GitLab.");
+                return NotConnected($"{hostName} refused to refresh your connection. Connect {hostName} again under Account → Connections → {hostName}.");
             }
 
-            LogRefreshTransient(logger, connectionId, ex.Status);
-            return Result.Failure<GitAccessToken>(new DomainError(ErrorCodes.UpstreamError, "GitLab couldn't be reached to refresh the connection. Try again."));
+            LogRefreshTransient(logger, connectionId, status);
+            return Result.Failure<GitAccessToken>(new DomainError(ErrorCodes.UpstreamError, $"{hostName} couldn't be reached to refresh the connection. Try again."));
         }
         catch (GitHostBlockedException ex)
         {
@@ -231,7 +252,7 @@ internal sealed partial class GitConnectionTokens(
             db.ChangeTracker.Clear();
             var stored = await db.GitConnections.AsNoTracking().FirstOrDefaultAsync(c => c.Id == connectionId, uncancellable);
             return stored is null
-                ? NotConnected("The GitLab connection no longer exists.")
+                ? NotConnected($"The {hostName} connection no longer exists.")
                 : await ToTokenAsync(db, stored, instance, refreshed: true, uncancellable);
         }
 
@@ -241,30 +262,79 @@ internal sealed partial class GitConnectionTokens(
             connection.Login, tokens.AccessToken, connection.RowVersion, Refreshed: true));
     }
 
-    private static async Task<Result<GitLabInstance>> UsableAsync(IGitLabInstances instances, GitConnection? connection, CancellationToken cancellationToken)
+    /// <summary>
+    /// The OAuth client of the connection's host: the GitLab instance's application, or the Bitbucket consumer
+    /// (configuration first, FR-130, FR-133), and whether one is configured: a configured client whose secret can't be read
+    /// gives <c>refresh_unavailable</c> (as in M27), an unconfigured one <c>oauth_not_configured</c>.
+    /// </summary>
+    private static async Task<(string? ClientId, string? ClientSecret, bool OAuthConfigured)> ClientCredentialsAsync(IServiceProvider services, AideDbContext db, TokenHost host, CancellationToken cancellationToken)
+    {
+        if (host.Provider == GitHostKind.Bitbucket)
+        {
+            var consumer = services.GetRequiredService<IBitbucketConsumer>();
+            var info = await consumer.GetAsync(cancellationToken);
+            return info.OAuthConfigured ? (info.ClientId, await consumer.GetClientSecretAsync(cancellationToken), true) : (null, null, false);
+        }
+
+        var instances = services.GetRequiredService<IGitLabInstances>();
+        var row = await db.GitHostInstances.AsNoTracking().FirstAsync(i => i.Id == host.InstanceId, cancellationToken);
+        return (host.GitLab!.ClientId, instances.GetClientSecret(row, host.GitLab), host.GitLab.OAuthConfigured);
+    }
+
+    /// <summary>FR-131, FR-134: the refresh grant on the host that issued the token.</summary>
+    private async Task<RefreshedTokens> RefreshWithHostAsync(
+        IServiceProvider services, TokenHost host, string clientId, string clientSecret, string refreshToken, CancellationToken cancellationToken)
+    {
+        if (host.Provider == GitHostKind.Bitbucket)
+        {
+            var b = await bitbucketClients.Create().RefreshAsync(clientId, clientSecret, refreshToken, cancellationToken);
+            return new RefreshedTokens(b.AccessToken, b.RefreshToken, b.ExpiresIn, b.Scopes);
+        }
+
+        var redirectUri = services.GetRequiredService<IGitLabInstances>().RedirectUri;
+        var g = await clients.ForInstance(host.BaseUrl).RefreshAsync(clientId, clientSecret, refreshToken, redirectUri, cancellationToken);
+        return new RefreshedTokens(g.AccessToken, g.RefreshToken, g.ExpiresIn, g.Scopes);
+    }
+
+    private static async Task<Result<TokenHost>> UsableAsync(IServiceProvider services, GitConnection? connection, CancellationToken cancellationToken)
     {
         if (connection is null)
         {
-            return Result.Failure<GitLabInstance>(new DomainError(ErrorCodes.GitNotConnected, "The GitLab connection no longer exists. Connect GitLab under Account → Connections → GitLab."));
+            return Result.Failure<TokenHost>(new DomainError(ErrorCodes.GitNotConnected, "The Git connection no longer exists. Connect it again under Account → Connections."));
         }
 
+        var hostName = HostName(connection.Provider);
         if (connection.Status != GitConnectionStatus.Valid)
         {
-            return Result.Failure<GitLabInstance>(new DomainError(ErrorCodes.GitNotConnected, "The GitLab connection is no longer valid. Connect GitLab again under Account → Connections → GitLab."));
+            return Result.Failure<TokenHost>(new DomainError(ErrorCodes.GitNotConnected, $"The {hostName} connection is no longer valid. Connect {hostName} again under Account → Connections → {hostName}."));
         }
 
-        var instance = await instances.GetAsync(connection.InstanceId, cancellationToken);
+        if (connection.Provider == GitHostKind.Bitbucket)
+        {
+            // FR-133: Bitbucket Cloud is one fixed host; its consumer row can't be disabled.
+            var consumer = await services.GetRequiredService<IBitbucketConsumer>().GetAsync(cancellationToken);
+            return consumer.InstanceId == connection.InstanceId
+                ? Result.Success(new TokenHost(GitHostKind.Bitbucket, consumer.InstanceId, new Uri(BitbucketRules.ApiBaseUrl, UriKind.Absolute), BitbucketRules.CloudName, null))
+                : Result.Failure<TokenHost>(new DomainError(ErrorCodes.GitNotConnected, "The Bitbucket connection no longer exists. Connect Bitbucket again under Account → Connections → Bitbucket."));
+        }
+
+        var instance = await services.GetRequiredService<IGitLabInstances>().GetAsync(connection.InstanceId, cancellationToken);
         if (instance is null || !instance.Enabled)
         {
-            return Result.Failure<GitLabInstance>(new DomainError(ErrorCodes.GitNotConnected, $"The GitLab instance {instance?.Name ?? string.Empty} is disabled.".Replace("  ", " ", StringComparison.Ordinal)));
+            return Result.Failure<TokenHost>(new DomainError(ErrorCodes.GitNotConnected, $"The GitLab instance {instance?.Name ?? string.Empty} is disabled.".Replace("  ", " ", StringComparison.Ordinal)));
         }
 
-        return Result.Success(instance);
+        return Result.Success(new TokenHost(GitHostKind.Gitlab, instance.Id, instance.BaseUrl, instance.Name, instance));
     }
 
-    private async Task<Result<GitAccessToken>> ToTokenAsync(AideDbContext db, GitConnection connection, GitLabInstance instance, bool refreshed, CancellationToken cancellationToken)
+    private async Task<Result<GitAccessToken>> ToTokenAsync(AideDbContext db, GitConnection connection, TokenHost instance, bool refreshed, CancellationToken cancellationToken)
     {
-        if (!Protector.TryUnprotect(connection.AccessTokenEncrypted, out var token))
+        // FR-134: a Bitbucket API token also needs its account email (REST calls use Basic email:token).
+        var needsEmail = connection.Provider == GitHostKind.Bitbucket && connection.AuthKind == GitConnectionAuthKind.Token;
+        string? email = null;
+        var emailReadable = !needsEmail
+            || (connection.TokenEmailEncrypted is { } encryptedEmail && EmailProtector.TryUnprotect(encryptedEmail, out email) && !string.IsNullOrEmpty(email));
+        if (!Protector.TryUnprotect(connection.AccessTokenEncrypted, out var token) || !emailReadable)
         {
             var tracked = await db.GitConnections.FirstOrDefaultAsync(c => c.Id == connection.Id, cancellationToken);
             if (tracked is not null)
@@ -272,12 +342,16 @@ internal sealed partial class GitConnectionTokens(
                 await InvalidateAsync(db, tracked, "unreadable", null, cancellationToken);
             }
 
-            return NotConnected("Your GitLab connection can't be read any more. Connect GitLab again.");
+            var hostName = HostName(connection.Provider);
+            return NotConnected($"Your {hostName} connection can't be read any more. Connect {hostName} again.");
         }
 
         return Result.Success(new GitAccessToken(
             connection.Id, connection.UserId, connection.Provider, connection.InstanceId, instance.BaseUrl, connection.AuthKind,
-            connection.Login, token, connection.RowVersion, refreshed));
+            connection.Login, token, connection.RowVersion, refreshed)
+        {
+            Email = needsEmail ? email : null,
+        });
     }
 
     /// <summary>Marks <paramref name="connection"/> (tracked by <paramref name="db"/>) invalid with a <c>CONNECTION_INVALID</c> event.</summary>

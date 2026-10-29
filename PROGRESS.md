@@ -33,9 +33,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-130 | GitLab instances (Admin) | 3.5 | backend + frontend + data | M27 | done | CI 40883397083 |
 | FR-131 | GitLab connections + sign-in | 3.5 | backend + frontend + data | M27 | done | CI 40883397083 |
 | FR-132 | GitLab repo picker + create | 3.5 | backend + frontend | M27 | done | CI 40883397083 |
-| FR-133 | Bitbucket OAuth consumer (Admin) | 3.6 | backend + frontend + data | M28 | todo | — |
-| FR-134 | Bitbucket connections + sign-in | 3.6 | backend + frontend + data | M28 | todo | — |
-| FR-135 | Bitbucket repo picker + create | 3.6 | backend + frontend | M28 | todo | — |
+| FR-133 | Bitbucket OAuth consumer (Admin) | 3.6 | backend + frontend + data | M28 | in progress (slice 1; FR-135 binding in slice 2) | — |
+| FR-134 | Bitbucket connections + sign-in | 3.6 | backend + frontend + data | M28 | in progress (slice 1; FR-135 binding in slice 2) | — |
+| FR-135 | Bitbucket repo picker + create | 3.6 | backend + frontend | M28 | in progress (slice 1; FR-135 binding in slice 2) | — |
 | FR-136 | Git provider set; binding Owner's connection | 3.7 | backend + data | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40883397083 |
 | FR-137 | MRs/PRs on GitLab and Bitbucket | 3.7 | backend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40883397083 |
 | FR-138 | Merge readiness on GitLab and Bitbucket | 3.7 | backend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40897233970 |
@@ -115,6 +115,10 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 - 2026-10-29 — M27: GitLab squash follows the GitLab project's `squash_option` and the merge method its `merge_method`; AIDE's `mergeStrategy` stays `aide_merges`/`manual`. `fast_forward` (§6) is Bitbucket's `merge_strategy` and is added with M28 — SPEC updated: no
 - 2026-10-29 — M27: no stored reviewed-head SHA: a head that moved before the merge call is re-fetched and retried (v2), and a GitLab 409 fails the release for a new review — SPEC updated: no
 - 2026-10-29 — M27: the GitLab Release URL is stored in the existing `githubReleaseUrl` field (no schema change); CI status polls back off on 429 only, the <10 % `RateLimit-Remaining` back-off applies to merge polls — SPEC updated: no
+- 2026-10-29 — M28: Bitbucket Cloud is a `git_host_instances` row (kind `bitbucket`, base URL NULL) created on first use, like gitlab.com; no migration — SPEC updated: no
+- 2026-10-29 — M28: one in-memory 900/h token bucket per Bitbucket connection covers request paths and background jobs; a 429 empties it until Retry-After (else 5 min); pre-connection calls (code exchange, token validation) aren't counted — SPEC updated: no
+- 2026-10-29 — M28: API-token scopes are read from Bitbucket's granted-scopes signals when present, else probed with harmless calls (GETs; write scopes via empty POSTs that 400 without creating anything); a token is saved only when all 9 scopes are verified (unverifiable ones are refused and listed separately). Needs a real-Bitbucket check — SPEC updated: yes (FR-134, §6)
+- 2026-10-29 — M28: email-link flow mirrors M27 (`/login?link=bitbucket`, `/api/auth/bitbucket/link`); Admin DELETE of the consumer invalidates OAuth connections at their next refresh (API-token connections keep working); `Bitbucket__OAuth__ClientId`/`ClientSecret` must be set together or not at all (start-up check) — SPEC updated: no
 - 2026-10-28 — FR-129 (preset retirement) moves from M25 to the end of M26: migrated in-flight plans must run as the new specialists, which M26 builds — SPEC updated: no
 - 2026-10-25 — M24: `legacy/` is created in M26 together with a catalog version bump, so the pinned hash only changes with a version — SPEC updated: no
 - 2026-10-25 — M24: pack skills are 70–115% of the source length (not 40–60%): hand-writing generated files and CI checks needs the room — SPEC updated: no

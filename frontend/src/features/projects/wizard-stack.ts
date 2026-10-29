@@ -55,9 +55,18 @@ export function selectionOfValues(v: Pick<WizardValues, WizardStackField>): Stac
   ) as unknown as StackSelection
 }
 
-/** The repository host's name for copy (GitHub for both GitHub modes, GitLab), or `null` for Local. */
+/** The repository host's name for copy (GitHub for both GitHub modes, GitLab, Bitbucket), or `null` for Local. */
 export function repoHostLabelOf(gitMode: WizardValues['gitMode']): string | null {
-  return gitMode === 'local' ? null : gitMode === 'gitlab' ? 'GitLab' : 'GitHub'
+  switch (gitMode) {
+    case 'local':
+      return null
+    case 'gitlab':
+      return 'GitLab'
+    case 'bitbucket':
+      return 'Bitbucket'
+    default:
+      return 'GitHub'
+  }
 }
 
 /** §4.17 R5: the VCS option id fixed by the repository's host, or `null` for Local (any). */
@@ -67,6 +76,8 @@ export function repoVcsOf(gitMode: WizardValues['gitMode']): string | null {
       return null
     case 'gitlab':
       return 'vcs-gitlab'
+    case 'bitbucket':
+      return 'vcs-bitbucket'
     default:
       return 'vcs-github'
   }
@@ -105,6 +116,10 @@ export function detectRequestOf(v: WizardValues): DetectStackRequest | null {
             },
           }
         : null
+    case 'bitbucket':
+      // TODO(M28 slice 2, FR-141): DetectStackGitRequest has no Bitbucket connection yet, so a Bitbucket import isn't
+      // detected (the wizard can't create Bitbucket projects until then either).
+      return null
   }
 }
 

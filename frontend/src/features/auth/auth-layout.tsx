@@ -4,6 +4,8 @@ import { BrandLockup } from '../../components/brand'
 import { panelClass } from '../../components/shared/panel-class'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { cn } from '../../lib/utils'
+import { bitbucketStartHref } from '../bitbucket/bitbucket-api'
+import { BitbucketLogo } from '../bitbucket/bitbucket-logo'
 import { GitLabLogo } from '../gitlab/gitlab-logo'
 import { gitlabStartHref } from '../gitlab/gitlab-api'
 import { githubSignInHref, useAuthProviders } from './auth-api'
@@ -37,14 +39,15 @@ const socialButtonClass =
 
 /**
  * "Continue with GitHub" (FR-2, FR-80) and "Continue with GitLab" per enabled instance with an OAuth application
- * (FR-131): full-page links to the API's sign-in flows, which come back to `returnUrl`. GitHub is hidden when
+ * (FR-131), and "Continue with Bitbucket" when the OAuth consumer is configured (FR-134): full-page links to the API's sign-in flows, which come back to `returnUrl`. GitHub is hidden when
  * `githubMode` is `none`; the "or" divider shows only when there is at least one button.
  */
 export function SocialSignIn({ returnUrl }: { returnUrl: string }) {
   const providers = useAuthProviders()
   const githubMode = providers.data?.githubMode ?? 'none'
   const gitlab = providers.data?.gitlab ?? []
-  if (githubMode === 'none' && gitlab.length === 0) {
+  const bitbucket = providers.data?.bitbucket === true
+  if (githubMode === 'none' && gitlab.length === 0 && !bitbucket) {
     return null
   }
   const single = gitlab.length === 1
@@ -70,6 +73,12 @@ export function SocialSignIn({ returnUrl }: { returnUrl: string }) {
             {single && i.isGitLabCom ? 'Continue with GitLab' : `Continue with ${i.name}`}
           </a>
         ))}
+        {bitbucket && (
+          <a href={bitbucketStartHref('signin', returnUrl)} className={socialButtonClass}>
+            <BitbucketLogo />
+            Continue with Bitbucket
+          </a>
+        )}
       </div>
     </>
   )

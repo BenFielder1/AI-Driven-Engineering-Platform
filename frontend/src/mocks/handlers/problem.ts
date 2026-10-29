@@ -16,6 +16,8 @@ export function problem(
     installUrl?: string
     /** STACK_INCOMPATIBLE extension (FR-116). */
     violations?: Schemas['HttpValidationProblemDetails']['violations']
+    /** CONNECTION_SCOPE_INSUFFICIENT extension for Bitbucket tokens (FR-134). */
+    unverifiableScopes?: string[]
     headers?: Record<string, string>
   } = {},
 ): Response {
@@ -31,6 +33,7 @@ export function problem(
       ...(init.reason ? { reason: init.reason } : {}),
       ...(init.installUrl ? { installUrl: init.installUrl } : {}),
       ...(init.violations ? { violations: init.violations } : {}),
+      ...(init.unverifiableScopes ? { unverifiableScopes: init.unverifiableScopes } : {}),
     },
     { status, headers: { 'Content-Type': 'application/problem+json', ...init.headers } },
   )

@@ -244,6 +244,9 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `GitLab:Instances:<n>:Name`, `BaseUrl`, `ClientId`, `AllowInsecureHttp` | Config-defined GitLab instance (FR-130), e.g. `GitLab__Instances__0__BaseUrl`. `BaseUrl` empty = `https://gitlab.com`. Overrides a DB-registered instance (Admin → Integrations → Git hosts) with the same host. Validated at start-up. `AllowInsecureHttp` permits a plain-`http` self-managed instance | none: the DB-registered instances only (`AllowInsecureHttp` `false`) | no |
 | `GitLab:Instances:<n>:ClientSecret` | That instance's GitLab OAuth application secret | none | yes |
 | `GitLab:RequestTimeout` | One GitLab API request | `00:00:20` | no |
+| `Bitbucket:OAuth:ClientId` | Bitbucket Cloud OAuth consumer key (FR-133), e.g. `Bitbucket__OAuth__ClientId`. Overrides the consumer saved in Admin → Integrations → Bitbucket. Set together with the secret (validated at start-up) | none: the DB-saved consumer only | no |
+| `Bitbucket:OAuth:ClientSecret` | That consumer's secret | none | yes |
+| `Bitbucket:RequestTimeout` | One Bitbucket API request | `00:00:20` | no |
 | `Git:Local:ImportRoot` | Folder under which a Local import (`git.localSourcePath`) must live. Empty disables Local import. E2E and dev only | unset (`/data/import` in the E2E overlay) | no |
 | `Deployments:Provider` | `Vercel` or `Fake`. Fake makes every deployment check deterministic and lets Local Git projects use deployments | `Vercel` (`Fake` in the E2E overlay) | no |
 | `Deployments:AllowFake` | Allows `Fake` outside Development and Testing. Without it the API refuses to start with Fake | `false` (`true` in the E2E overlay) | no |
@@ -313,6 +316,13 @@ Once an App exists, "Continue with GitHub" uses its user authorization (PKCE) an
 - Register an OAuth application on gitlab.com (User or Group settings → Applications) or on the self-managed instance, with the redirect URI `<App:PublicBaseUrl>/api/auth/gitlab/callback` (`http://localhost:3000/...` in the dev loop, `http://localhost:8080/...` on Docker Desktop, the environment's web URL on Railway) and the scopes Admin → Integrations → Git hosts shows (SPEC §4.19). GitLab labels `http://localhost` URIs "development" but accepts them.
 - Then add the instance in Admin → Integrations → Git hosts (stored encrypted), or set `GitLab:Instances:<n>:*` (dev: user-secrets; k8s: the commented `GitLab__Instances__0__*` lines in `secrets.env`, then re-run `deploy-local.sh`; Railway: [deploy/railway/variables.md](deploy/railway/variables.md)). Config wins over a DB row with the same host, and a bad instance stops the API at start-up.
 - Hosts on private networks are allowed locally (`GitLab:AllowPrivateNetworks=true`) and refused on Railway (`false`), where those addresses are AIDE's own services.
+
+### b3. Bitbucket Cloud (FR-133)
+
+- Add an OAuth consumer in Bitbucket (Workspace settings → OAuth consumers) with the callback URL `<App:PublicBaseUrl>/api/auth/bitbucket/callback` and the permissions Admin → Integrations → Bitbucket lists: Account, Email, Repositories write and admin, Pull requests write, Projects, Webhooks. Tick "This is a private consumer".
+- Save its key and secret in Admin → Integrations → Bitbucket (stored encrypted), or set `Bitbucket:OAuth:ClientId` and `ClientSecret` (dev: user-secrets; k8s: the commented `Bitbucket__OAuth__*` lines in `secrets.env`; Railway: [deploy/railway/variables.md](deploy/railway/variables.md)). Config wins.
+- Without a consumer, users can still connect with an Atlassian API token with Bitbucket scopes and their account email (Account → Connections → Bitbucket). App passwords aren't supported.
+- AIDE spends at most 900 Bitbucket requests an hour per connection (Bitbucket allows 1,000 per user), held in memory on the single API replica.
 
 ### c. Real LLM providers
 

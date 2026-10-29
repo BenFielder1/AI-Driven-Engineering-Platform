@@ -1,4 +1,5 @@
 using Aide.Api.Auth;
+using Aide.Api.Features.Git;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHosts;
@@ -34,7 +35,7 @@ public sealed partial class GitLabSignIn(
     TimeProvider time,
     ILogger<GitLabSignIn> logger)
 {
-    public const string LoginPath = "/login";
+    public const string LoginPath = GitOAuthRedirects.LoginPath;
 
     /// <summary>The <c>reason</c> when too many OAuth flows are in progress to start another.</summary>
     public const string Busy = "busy";
@@ -197,7 +198,7 @@ public sealed partial class GitLabSignIn(
                     var (cookie, link) = pendingLinks.Add(instance, decision.UserId!.Value, verifiedEmail!, gitlabUser, tokens);
                     http.Response.Cookies.Append(GitLabPendingLinks.CookieName, cookie, CookieOptions(http, GitLabPendingLinks.Lifetime));
                     LogLinkPending(logger, link.Id, instance.Id);
-                    return $"{LoginPath}?link=gitlab&returnUrl={Uri.EscapeDataString(flow.ReturnUrl)}";
+                    return GitOAuthRedirects.LinkUrl("gitlab", flow.ReturnUrl);
                 }
 
             default:
@@ -320,33 +321,11 @@ public sealed partial class GitLabSignIn(
     private static string FailureUrl(GitLabOAuthFlow? flow, string reason) =>
         flow is null ? FailureUrl(GitOAuthMode.Signin, LoginPath, reason) : FailureUrl(flow.Mode, flow.ReturnUrl, reason);
 
-    private static string FailureUrl(GitOAuthMode mode, string returnUrl, string reason)
-    {
-        var query = $"error={ErrorCodes.GitAuthFailed}&reason={Uri.EscapeDataString(reason)}&provider=gitlab";
-        if (mode == GitOAuthMode.Connect)
-        {
-            var separator = returnUrl.Contains('?', StringComparison.Ordinal) ? '&' : '?';
-            return $"{returnUrl}{separator}{query}";
-        }
+    private static string FailureUrl(GitOAuthMode mode, string returnUrl, string reason) =>
+        GitOAuthRedirects.FailureUrl("gitlab", mode, returnUrl, reason);
 
-        return $"{LoginPath}?{query}";
-    }
-
-    private CookieOptions CookieOptions(HttpContext http, TimeSpan lifetime) => new()
-    {
-        HttpOnly = true,
-        // The GitLab → callback hop is a cross-site top-level GET, which Lax cookies survive.
-        SameSite = SameSiteMode.Lax,
-        Path = CookiePath,
-        IsEssential = true,
-        MaxAge = lifetime > TimeSpan.Zero ? lifetime : null,
-        Secure = authOptions.Value.Cookie.SecurePolicy switch
-        {
-            CookieSecurePolicy.Always => true,
-            CookieSecurePolicy.None => false,
-            _ => http.Request.IsHttps,
-        },
-    };
+    // The GitLab → callback hop is a cross-site top-level GET, which Lax cookies survive.
+    private CookieOptions CookieOptions(HttpContext http, TimeSpan lifetime) => GitOAuthRedirects.Cookie(http, authOptions.Value, CookiePath, lifetime);
 
     private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max];
 

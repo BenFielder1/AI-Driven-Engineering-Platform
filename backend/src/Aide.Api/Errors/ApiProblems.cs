@@ -31,6 +31,9 @@ public static class ApiProblems
     /// <summary>FR-116: the broken rules on a <c>STACK_INCOMPATIBLE</c> problem, each <c>{layer, option, rule, reason}</c>.</summary>
     public const string ViolationsKey = "violations";
 
+    /// <summary>FR-134: the scopes AIDE couldn't confirm on a <c>CONNECTION_SCOPE_INSUFFICIENT</c> problem (missing ones are in <c>details</c>).</summary>
+    public const string UnverifiableScopesKey = "unverifiableScopes";
+
     /// <summary>A ProblemDetails result for a domain error (status from the domain's HTTP status map).</summary>
     public static ProblemHttpResult FromError(DomainError error)
     {
@@ -49,6 +52,11 @@ public static class ApiProblems
         if (error.Field is { Length: > 0 } field)
         {
             extensions[ErrorsKey] = new Dictionary<string, string[]>(StringComparer.Ordinal) { [field] = [error.Message] };
+        }
+
+        if (error.UnverifiableScopes.Count > 0)
+        {
+            extensions[UnverifiableScopesKey] = error.UnverifiableScopes;
         }
 
         if (error.Violations.Count > 0)

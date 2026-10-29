@@ -279,6 +279,7 @@ Each FR names its layer in italics. Acceptance criteria follow the requirement, 
     - AIDE validates with `GET /2.0/user` and checks each scope with a harmless call. Missing scopes are listed (`CONNECTION_SCOPE_INSUFFICIENT → 400`).
   - **Sign-in:** "Continue with Bitbucket" signs in through the consumer (identity from `GET /2.0/user`, email from `GET /2.0/user/emails`).
   - Given a user saves an API token without `write:pullrequest`, then `CONNECTION_SCOPE_INSUFFICIENT` lists it and nothing is saved.
+  - A scope that can't be verified (e.g. no repository to probe) is refused too, listed as unverifiable, with the advice to use OAuth or create a repository first *(build decision 2026-10-29)*.
 - **FR-135** *(backend + frontend)* With a Bitbucket connection:
   - **Repo picker:** lists repos across the user's workspaces where they have write access (`GET /user/workspaces`, then `GET /repositories/{workspace}?role=contributor&q=name~"…"`).
   - **Create repository:**
@@ -1082,6 +1083,8 @@ The web app and CLI ship together (D-V2-11 precedent). Record the `oasdiff` resu
 | GET | /api/auth/{gitlab,bitbucket}/callback | code, state | redirect | `GIT_AUTH_FAILED` redirect | — |
 | POST | /api/admin/integrations/gitlab/:instanceId/check *(build, 2026-10-28)* | — | instance with version and reachability | `GIT_HOST_NOT_ALLOWED → 400`, `UPSTREAM_ERROR → 502` | admin |
 | GET / POST / DELETE | /api/auth/gitlab/link *(build, 2026-10-28)* | — | the pending email link (GET), confirm (POST, 204) or cancel (DELETE) after the user signs in to the matching account (D-V4-18) | `FORBIDDEN → 403`, `NOT_FOUND → 404`, `CONFLICT → 409` | anonymous / user |
+| GET / POST / DELETE | /api/auth/bitbucket/link *(build, 2026-10-29)* | — | as `/api/auth/gitlab/link` (D-V4-18) | `FORBIDDEN → 403`, `NOT_FOUND → 404`, `CONFLICT → 409` | anonymous / user |
+| GET | /api/auth/providers (changed, build 2026-10-28/29) | — | + `gitlab[]` (sign-in instances), + `bitbucket` (consumer configured) | — | anonymous |
 | GET | /api/me/connections/gitlab/instances *(build, 2026-10-28)* | — | enabled instances for the connect dialog | — | user |
 | GET/POST/DELETE | /api/me/connections/{gitlab,bitbucket}[/:id] · /:id/test | POST: token fallback {instanceId?, token, email?} | connections (login, instance, auth kind, scopes, expiry, status) | `CREDENTIAL_INVALID → 400`, `CONNECTION_SCOPE_INSUFFICIENT → 400` | user (browser session) |
 | GET | /api/me/git/:provider/repos · /owners · /repos/:repoId/refs | connectionId, search, cursor | repos / namespaces, groups, workspaces+projects / tags, releases, default branch | `GIT_NOT_CONNECTED → 409` | user |

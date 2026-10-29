@@ -297,6 +297,13 @@ public static class ErrorCodes
     /// </summary>
     public const string GitLabRateLimited = "GITLAB_RATE_LIMITED";
 
+    /// <summary>
+    /// §6 job code (FR-136, §4.19): Bitbucket (429), or AIDE's per-connection budget of 900 requests an hour, held back a
+    /// background job's request. The job is re-queued for the wait (<c>Retry-After</c>, else five minutes, or the bucket's
+    /// refill) without counting an attempt.
+    /// </summary>
+    public const string BitbucketRateLimited = "BITBUCKET_RATE_LIMITED";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {

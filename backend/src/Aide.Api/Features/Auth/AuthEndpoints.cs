@@ -162,11 +162,15 @@ public static partial class AuthEndpoints
     }
 
     private static async Task<Ok<AuthProvidersDto>> GetProviders(
-        GitHubSignInResolver github, Infrastructure.GitLab.IGitLabInstances gitlab, CancellationToken cancellationToken)
+        GitHubSignInResolver github,
+        Infrastructure.GitLab.IGitLabInstances gitlab,
+        Infrastructure.Bitbucket.IBitbucketConsumer bitbucket,
+        CancellationToken cancellationToken)
     {
         var mode = await github.ModeAsync(cancellationToken);
         var gitlabInstances = GitLab.GitLabEndpoints.SignInInstances(await gitlab.ListAsync(cancellationToken));
-        return TypedResults.Ok(new AuthProvidersDto(mode != GitHubSignInMode.None, mode, gitlabInstances));
+        var bitbucketConsumer = await bitbucket.GetAsync(cancellationToken);
+        return TypedResults.Ok(new AuthProvidersDto(mode != GitHubSignInMode.None, mode, gitlabInstances, bitbucketConsumer.OAuthConfigured));
     }
 
     private static NoContent GetAntiforgeryToken(HttpContext httpContext)

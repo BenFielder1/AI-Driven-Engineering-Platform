@@ -290,6 +290,14 @@ public sealed partial class JobWorker : BackgroundService
             spanError = ErrorCodes.GitLabRateLimited;
             LogHostRateLimited(_logger, "GitLab", deferredUntil.Value);
         }
+        catch (Infrastructure.Bitbucket.BitbucketRateLimitedException ex)
+        {
+            // FR-136, §4.19: Bitbucket's 429 or the connection's 900-an-hour budget re-queues the job without counting the attempt.
+            deferredUntil = JobPolicy.DeferUntil(_time.GetUtcNow(), ex.ResetAt);
+            error = $"{ErrorCodes.BitbucketRateLimited}: Bitbucket is rate limiting requests; the job waits until {deferredUntil:u}.";
+            spanError = ErrorCodes.BitbucketRateLimited;
+            LogHostRateLimited(_logger, "Bitbucket", deferredUntil.Value);
+        }
         catch (JobDeferredException ex)
         {
             // FR-70: the handler waits for something (e.g. the codebase summary): run again later, attempt not counted.

@@ -1,7 +1,4 @@
-using System.Globalization;
 using System.Net;
-using System.Net.Sockets;
-using System.Text;
 using Aide.Domain.GitHosts;
 using Aide.Infrastructure.Git;
 
@@ -29,72 +26,21 @@ public static class GitLabRemotes
         Uri instanceBaseUrl, bool allowInsecureHttp, string fullPath, string token, GitLabOptions options, IReadOnlyList<IPAddress>? pinnedAddresses = null)
     {
         ArgumentNullException.ThrowIfNull(instanceBaseUrl);
-        ArgumentException.ThrowIfNullOrEmpty(fullPath);
-        ArgumentException.ThrowIfNullOrEmpty(token);
         ArgumentNullException.ThrowIfNull(options);
-
-        var overridden = !string.IsNullOrWhiteSpace(options.GitBaseUrlOverride);
-        var baseUrl = overridden ? options.GitBaseUrlOverride!.Trim() : instanceBaseUrl.AbsoluteUri;
-        baseUrl = baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/";
-        var url = $"{baseUrl}{fullPath.Trim('/')}.git";
-        var credential = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{GitTokenRules.GitBasicUser(GitCredentialKind.Gitlab)}:{token}"));
-        var header = $"Authorization: Basic {credential}";
-        var http = baseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || baseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-
-        // The header is scoped to the instance's base URL; only https (or http for a lab instance that allows it).
-        List<(string Key, string Value)> settings =
-        [
-            (http ? $"http.{baseUrl}.extraHeader" : "http.extraHeader", header),
-            ("protocol.allow", "never"),
-            ("protocol.https.allow", "always"),
-            ("http.followRedirects", "false"),
-        ];
-        if (!overridden)
+        var transport = new GitTransportOverride(options.GitBaseUrlOverride, options.AllowInsecureGitBaseUrl);
+        if (!transport.IsSet && pinnedAddresses is not { Count: > 0 })
         {
-            if (pinnedAddresses is not { Count: > 0 })
-            {
-                throw new ArgumentException("The instance's vetted addresses are required.", nameof(pinnedAddresses));
-            }
-
-            settings.Add(("http.curloptResolve", CurlResolve(instanceBaseUrl, pinnedAddresses)));
-            settings.Add(("http.proxy", string.Empty));
-        }
-        if (allowInsecureHttp && !overridden)
-        {
-            settings.Add(("protocol.http.allow", "always"));
+            throw new ArgumentException("The instance's vetted addresses are required.", nameof(pinnedAddresses));
         }
 
-        if (overridden && options.AllowInsecureGitBaseUrl)
-        {
-            settings.Add(("protocol.file.allow", "always"));
-            settings.Add(("protocol.http.allow", "always"));
-        }
-
-        var environment = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["GIT_CONFIG_COUNT"] = settings.Count.ToString(CultureInfo.InvariantCulture),
-        };
-        for (var i = 0; i < settings.Count; i++)
-        {
-            var n = i.ToString(CultureInfo.InvariantCulture);
-            environment[$"GIT_CONFIG_KEY_{n}"] = settings[i].Key;
-            environment[$"GIT_CONFIG_VALUE_{n}"] = settings[i].Value;
-        }
-
-        return new GitRemote(url, environment, [header, credential, token]);
+        return GitHostRemotes.Create(instanceBaseUrl, fullPath, GitCredentialKind.Gitlab, token, transport, allowInsecureHttp, pinnedAddresses);
     }
 
     /// <summary>
     /// The <c>CURLOPT_RESOLVE</c> entry pinning the instance's host and port to the vetted addresses:
     /// <c>host:port:addr[,addr]</c>, IPv6 addresses in brackets.
     /// </summary>
-    public static string CurlResolve(Uri instanceBaseUrl, IReadOnlyList<IPAddress> addresses)
-    {
-        ArgumentNullException.ThrowIfNull(instanceBaseUrl);
-        ArgumentNullException.ThrowIfNull(addresses);
-        var list = string.Join(',', addresses.Select(a => a.AddressFamily == AddressFamily.InterNetworkV6 ? $"[{a}]" : a.ToString()));
-        return $"{instanceBaseUrl.IdnHost}:{instanceBaseUrl.Port.ToString(CultureInfo.InvariantCulture)}:{list}";
-    }
+    public static string CurlResolve(Uri instanceBaseUrl, IReadOnlyList<IPAddress> addresses) => GitHostRemotes.CurlResolve(instanceBaseUrl, addresses);
 }
 
 /// <summary>

@@ -143,6 +143,16 @@ export const wizardAgentModelFields = {
 
 const modelTooLong = `Model ids are at most ${String(limits.modelMax)} characters.`
 
+/**
+ * TODO(M28 slice 2, FR-136): POST /api/projects doesn't accept a Bitbucket binding yet (`mode: bitbucket` is 400
+ * VALIDATION, and `CreateProjectGitRequest` has no Bitbucket connection or repository id). Until it does, the wizard lets
+ * users pick a Bitbucket repository but blocks the Repository step, and hides Create so no orphan repositories are made.
+ * Flip this once the contract has the fields, and send them in toGitRequest.
+ */
+export function bitbucketProjectCreationAvailable(): boolean {
+  return false
+}
+
 /** The wizard's fields, without the cross-field refinement (also used to check a restored session-storage draft). */
 export const wizardShape = z.object({
   /** FR-73: start from scratch, or import an existing repository. */
@@ -154,14 +164,17 @@ export const wizardShape = z.object({
   maxFilesPerStep: str,
   maxReviewCycles: str,
   tokenBudget: str,
-  /** FR-82, FR-86, FR-132: `github_app` (picker / create), `github_pat` (URL + token), `gitlab` (picker / create) or `local`. */
-  gitMode: z.enum(['github_app', 'github_pat', 'gitlab', 'local']),
+  /**
+   * FR-82, FR-86, FR-132, FR-135: `github_app` (picker / create), `github_pat` (URL + token), `gitlab` (picker / create),
+   * `bitbucket` (picker; create once projects can bind it) or `local`.
+   */
+  gitMode: z.enum(['github_app', 'github_pat', 'gitlab', 'bitbucket', 'local']),
   repoUrl: str,
   defaultBranch: str,
   gitToken: str,
   /**
    * `github_app`: the picked repository (`owner/name`) and the installation that grants it (a number, as text).
-   * `gitlab`: the picked project's full path (`group/sub/project`).
+   * `gitlab`: the picked project's full path (`group/sub/project`). `bitbucket`: the repository's `workspace/slug`.
    */
   repoFullName: str,
   installationId: str,
@@ -172,6 +185,9 @@ export const wizardShape = z.object({
   gitlabConnectionId: str,
   gitlabInstanceId: str,
   gitlabRepoId: str,
+  /** FR-135 `bitbucket`: the caller's Bitbucket connection, and the picked repository's Bitbucket UUID. */
+  bitbucketConnectionId: str,
+  bitbucketRepoId: str,
   /** `github_app`: the picked repository already has commits (FR-86 warning). */
   repoHasCode: z.boolean(),
   initialVersion: str,
@@ -287,6 +303,26 @@ export const wizardSchema = wizardShape.superRefine((v, ctx) => {
         : null,
     )
   }
+  if (v.gitMode === 'bitbucket') {
+    addCheck(ctx, 'bitbucketConnectionId', v.bitbucketConnectionId ? null : 'Connect Bitbucket, or choose another option.')
+    addCheck(
+      ctx,
+      'repoFullName',
+      v.bitbucketConnectionId && (!v.repoFullName || !v.bitbucketRepoId)
+        ? importing
+          ? 'Pick the Bitbucket repository to import.'
+          : 'Pick a Bitbucket repository.'
+        : null,
+    )
+    // TODO(M28 slice 2, FR-136): remove once POST /api/projects accepts the Bitbucket binding.
+    addCheck(
+      ctx,
+      'gitMode',
+      bitbucketProjectCreationAvailable()
+        ? null
+        : "AIDE can't create projects on Bitbucket yet. Choose another option to continue.",
+    )
+  }
   // FR-114: a composition needs a choice (or None) for each layer up to VCS; compatibility is the server's (D-V4-19).
   if (v.stackKind === 'compose') {
     addCheck(ctx, 'stackFrontend', v.stackFrontend ? null : 'Choose the frontend, or None.')
@@ -333,6 +369,8 @@ export const wizardDefaults: WizardValues = {
   gitlabConnectionId: '',
   gitlabInstanceId: '',
   gitlabRepoId: '',
+  bitbucketConnectionId: '',
+  bitbucketRepoId: '',
   repoHasCode: false,
   initialVersion: DEFAULT_INITIAL_VERSION,
   releasedTag: '',

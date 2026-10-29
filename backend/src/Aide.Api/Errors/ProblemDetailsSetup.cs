@@ -80,10 +80,18 @@ public sealed partial class GlobalExceptionHandler(IProblemDetailsService proble
             ResponseDocs.SetRetryAfter(httpContext, TimeSpan.FromSeconds(Domain.GitHub.GitHubRules.RetryAfterSeconds(gitLabLimited.ResetAt, now)));
         }
 
+        if (exception is Infrastructure.Bitbucket.BitbucketRateLimitedException bitbucketLimited)
+        {
+            var now = httpContext.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
+            ResponseDocs.SetRetryAfter(httpContext, TimeSpan.FromSeconds(Domain.GitHub.GitHubRules.RetryAfterSeconds(bitbucketLimited.ResetAt, now)));
+        }
+
         var (status, code, title) = exception switch
         {
             Infrastructure.GitLab.GitLabRateLimitedException => (StatusCodes.Status429TooManyRequests, ErrorCodes.UpstreamRateLimited,
                 "GitLab is rate limiting requests. Try again after the time in Retry-After."),
+            Infrastructure.Bitbucket.BitbucketRateLimitedException => (StatusCodes.Status429TooManyRequests, ErrorCodes.UpstreamRateLimited,
+                "Bitbucket is rate limiting requests. Try again after the time in Retry-After."),
             Infrastructure.GitHub.GitHubRateLimitedException => (StatusCodes.Status429TooManyRequests, ErrorCodes.GitHubRateLimited,
                 "GitHub's API rate limit is exhausted. Try again after the time in Retry-After."),
             DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, ErrorCodes.Conflict,

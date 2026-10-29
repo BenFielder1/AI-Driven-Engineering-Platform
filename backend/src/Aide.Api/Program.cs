@@ -7,6 +7,7 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Approvals;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
+using Aide.Api.Features.Bitbucket;
 using Aide.Api.Features.Connections;
 using Aide.Api.Features.Deployments;
 using Aide.Api.Features.Execution;
@@ -138,6 +139,9 @@ builder.Services.AddScoped<DeadLetterService>();
 // GitLab instances, sign-in and connect, connections and the repo picker (FR-130–FR-132).
 builder.Services.AddGitLab();
 
+// Bitbucket consumer, sign-in and connect, connections and the repo picker (FR-133–FR-135).
+builder.Services.AddBitbucket();
+
 // Lifecycle, gates and background work (FR-11–FR-14, §4.9).
 builder.Services.AddScoped<LifecycleSnapshotLoader>();
 builder.Services.AddScoped<LifecycleWriter>();
@@ -214,6 +218,7 @@ app.MapLlmProviderEndpoints();
 app.MapVercelConnectionEndpoints();
 app.MapGitHubEndpoints();
 app.MapGitLabEndpoints();
+app.MapBitbucketEndpoints();
 app.MapAdminUserEndpoints();
 app.MapAdminOperationsEndpoints();
 app.MapAdminIntegrationEndpoints();

@@ -1,11 +1,13 @@
 /**
  * Search params of /connections and its /account/connections alias: Connect GitHub comes back with
  * `?error=GITHUB_AUTH_FAILED&reason=…` (FR-81), the GitHub App's setup URL with `?github=installed`, and Connect GitLab
- * with `?gitlab=connected` or `?error=GIT_AUTH_FAILED&reason=…&provider=gitlab` (FR-131).
+ * with `?gitlab=connected` or `?error=GIT_AUTH_FAILED&reason=…&provider=gitlab` (FR-131), and Connect Bitbucket with
+ * `?bitbucket=connected` or `provider=bitbucket` (FR-134).
  */
 export interface ConnectionsSearch {
   github?: 'installed'
   gitlab?: 'connected'
+  bitbucket?: 'connected'
   error?: string
   reason?: string
   provider?: string
@@ -17,6 +19,7 @@ export function parseConnectionsSearch(search: Record<string, unknown>): Connect
   return {
     github: search.github === 'installed' ? 'installed' : undefined,
     gitlab: search.gitlab === 'connected' ? 'connected' : undefined,
+    bitbucket: search.bitbucket === 'connected' ? 'connected' : undefined,
     error: str(search.error),
     reason: str(search.reason),
     provider: str(search.provider),

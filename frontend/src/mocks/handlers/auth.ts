@@ -18,6 +18,8 @@ export const authDb = {
   githubMode: 'none' as Schemas['GitHubSignInMode'],
   /** FR-131: "Continue with GitLab" instances (kept in sync by mocks/handlers/gitlab.ts). */
   gitlabSignIn: [] as Schemas['GitLabInstanceSummaryDto'][],
+  /** FR-134: "Continue with Bitbucket" (the consumer is configured; kept in sync by mocks/handlers/bitbucket.ts). */
+  bitbucketSignIn: false,
   tokens: [] as Token[],
   xsrfCounter: 0,
   /** XSRF values the "server" accepts (the latest issued one). */
@@ -35,6 +37,7 @@ export function resetAuthDb() {
   authDb.currentUserId = null
   authDb.githubMode = 'none'
   authDb.gitlabSignIn = []
+  authDb.bitbucketSignIn = false
   authDb.tokens = []
   authDb.xsrfCounter = 0
   authDb.validXsrf = null
@@ -113,6 +116,7 @@ export const authHandlers = [
       github: authDb.githubMode !== 'none',
       githubMode: authDb.githubMode,
       gitlab: authDb.gitlabSignIn,
+      bitbucket: authDb.bitbucketSignIn,
     })),
 
   http.get('*/api/auth/me', () => {

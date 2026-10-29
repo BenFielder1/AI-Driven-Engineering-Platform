@@ -1,6 +1,7 @@
 import { adminHandlers } from './admin'
 import { artifactHandlers } from './artifacts'
 import { authHandlers } from './auth'
+import { bitbucketHandlers } from './bitbucket'
 import { connectionHandlers } from './connections'
 import { deploymentHandlers } from './deployments'
 import { executionHandlers } from './execution'
@@ -28,6 +29,7 @@ export const handlers = [
   ...deploymentHandlers,
   ...githubHandlers,
   ...gitlabHandlers,
+  ...bitbucketHandlers,
   ...lifecycleHandlers,
   ...artifactHandlers,
   ...runHandlers,

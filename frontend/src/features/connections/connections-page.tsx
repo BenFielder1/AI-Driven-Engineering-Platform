@@ -18,6 +18,7 @@ import { RelativeTime } from '../projects/relative-time'
 import { credentialStatusLabels, maskedKey } from './connection-format'
 import { useDeleteLlmConnection, useLlmConnections, useTestLlmConnection, type LlmCredential } from './connections-api'
 import { CredentialStatusBadge } from './credential-status-badge'
+import { BitbucketConnectionSection } from './bitbucket-connection-section'
 import { GitHubConnectionSection } from './github-connection-section'
 import { GitLabConnectionSection } from './gitlab-connection-section'
 import { AddLlmKeyDialog, RenameLlmKeyDialog } from './llm-connection-dialogs'
@@ -319,6 +320,8 @@ export function ConnectionsPage({
   githubInstalled = false,
   gitlabError,
   gitlabConnected = false,
+  bitbucketError,
+  bitbucketConnected = false,
 }: {
   githubError?: { reason?: string }
   /** `?github=installed`: back from installing the GitHub App (its setup URL). */
@@ -327,14 +330,19 @@ export function ConnectionsPage({
   gitlabError?: { reason?: string }
   /** FR-131: `?gitlab=connected`, back from a successful Connect GitLab. */
   gitlabConnected?: boolean
+  /** FR-134: a failed Connect Bitbucket (`?error=GIT_AUTH_FAILED&provider=bitbucket`). */
+  bitbucketError?: { reason?: string }
+  /** FR-134: `?bitbucket=connected`, back from a successful Connect Bitbucket. */
+  bitbucketConnected?: boolean
 }) {
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Connections" description="LLM providers, source control (GitHub, GitLab) and Vercel, connected to your account." />
+      <PageHeader title="Connections" description="LLM providers, source control (GitHub, GitLab, Bitbucket) and Vercel, connected to your account." />
       <WizardReturnNotice />
       <LlmProvidersSection />
       <GitHubConnectionSection callbackError={githubError} installed={githubInstalled} />
       <GitLabConnectionSection callbackError={gitlabError} connected={gitlabConnected} />
+      <BitbucketConnectionSection callbackError={bitbucketError} connected={bitbucketConnected} />
       <VercelConnectionSection />
     </div>
   )

@@ -11,8 +11,8 @@ import { Link, useAppRouter } from '../../lib/navigation'
 import { safeReturnUrl } from '../../lib/return-url'
 import { useLogin, useMe } from './auth-api'
 import { AuthCard, SocialSignIn } from './auth-layout'
-import { GitLabLinkPanel } from './gitlab-link-panel'
-import { useGitLabPendingLink } from '../gitlab/gitlab-api'
+import type { GitHostLinkProvider } from './auth-search'
+import { GitHostLinkPanel, useGitHostPendingLink } from './git-host-link-panel'
 import { loginSchema, type LoginValues } from './schemas'
 
 const fieldIds = { email: 'login-email', password: 'login-password' } as const
@@ -21,20 +21,23 @@ interface LoginPageProps {
   returnUrl?: string
   /** `error=GITHUB_AUTH_FAILED` came back from the OAuth flow, with its `reason`. */
   githubError?: { reason?: string }
-  /** FR-131: `error=GIT_AUTH_FAILED` from a Git host's sign-in (GitLab), with its `reason` and `provider`. */
+  /** FR-131, FR-134: `error=GIT_AUTH_FAILED` from a Git host's sign-in (GitLab, Bitbucket), with its `reason` and `provider`. */
   gitHostError?: { reason?: string; provider?: string }
-  /** FR-131: `link=gitlab`: a GitLab sign-in is waiting to be linked to an existing account (confirm or cancel). */
-  linkGitLab?: boolean
+  /**
+   * FR-131, FR-134: `link=gitlab|bitbucket`: that host's sign-in is waiting to be linked to an existing account (confirm
+   * or cancel).
+   */
+  linkProvider?: GitHostLinkProvider | undefined
 }
 
-/** /login (FR-1, FR-2, FR-131). */
-export function LoginPage({ returnUrl, githubError, gitHostError, linkGitLab = false }: LoginPageProps) {
+/** /login (FR-1, FR-2, FR-131, FR-134). */
+export function LoginPage({ returnUrl, githubError, gitHostError, linkProvider }: LoginPageProps) {
   const router = useAppRouter()
   const login = useLogin()
   const me = useMe().data ?? null
-  /** While a GitLab sign-in waits to be linked, signing in here stays on the page to confirm it. */
-  const [linking, setLinking] = useState(linkGitLab)
-  const pendingLink = useGitLabPendingLink(linking)
+  /** While a Git host sign-in waits to be linked, signing in here stays on the page to confirm it. */
+  const [linking, setLinking] = useState(linkProvider !== undefined)
+  const pendingLink = useGitHostPendingLink(linkProvider ?? 'gitlab', linking)
   const destination = safeReturnUrl(returnUrl)
   const [serverErrors, setServerErrors] = useState<string[]>([])
   const {
@@ -84,8 +87,10 @@ export function LoginPage({ returnUrl, githubError, gitHostError, linkGitLab = f
           <p>{gitHostFailureMessage(gitHostError.provider, gitHostError.reason)}</p>
         </Alert>
       )}
-      {linking && (
-        <GitLabLinkPanel
+      {linking && linkProvider && (
+        <GitHostLinkPanel
+          key={linkProvider}
+          provider={linkProvider}
           user={me}
           onDone={() => {
             setLinking(false)

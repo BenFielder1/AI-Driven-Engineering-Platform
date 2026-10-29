@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { toast } from 'sonner'
+import { describe, expect, it, vi } from 'vitest'
 
 import { signInAs } from '../../mocks/handlers/auth'
 import {
@@ -157,5 +158,13 @@ describe('Connections → GitLab (FR-131)', () => {
     signInAs()
     const { section } = await openSection('/connections?error=GIT_AUTH_FAILED&reason=access_denied&provider=gitlab')
     expect(within(section).getByRole('alert')).toHaveTextContent('GitLab authorization was cancelled.')
+  })
+  it('FR131_connect_failed_real_url: a failure appended to the connected returnUrl shows only the error', async () => {
+    signInAs()
+    const success = vi.spyOn(toast, 'success')
+    await renderRoute('/connections?gitlab=connected&error=GIT_AUTH_FAILED&reason=access_denied&provider=gitlab')
+
+    expect(await screen.findByText('GitLab authorization was cancelled.')).toBeInTheDocument()
+    expect(success).not.toHaveBeenCalledWith('GitLab connected.')
   })
 })
