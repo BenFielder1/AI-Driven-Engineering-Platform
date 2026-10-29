@@ -21,6 +21,11 @@ public sealed class BitbucketOptions
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(20);
 
     /// <summary>
+    /// FR-140: the pause between <c>merge/task-status</c> reads after a 202 merge (default 2 s; tests set it to zero).
+    /// </summary>
+    public TimeSpan MergeTaskPollDelay { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>
     /// Tests only: clone and push go to <c>{GitBaseUrlOverride}{workspace/slug}.git</c> instead of bitbucket.org (a
     /// <c>file://</c> folder of bare repositories). Needs <see cref="AllowInsecureGitBaseUrl"/>. Never set in a deployment.
     /// </summary>
@@ -51,6 +56,11 @@ public sealed class BitbucketOptionsValidator : IValidateOptions<BitbucketOption
         if (options.RequestTimeout <= TimeSpan.Zero)
         {
             failures.Add("Bitbucket:RequestTimeout must be positive.");
+        }
+
+        if (options.MergeTaskPollDelay < TimeSpan.Zero || options.MergeTaskPollDelay > TimeSpan.FromMinutes(1))
+        {
+            failures.Add("Bitbucket:MergeTaskPollDelay must be between 0 and 1 minute.");
         }
 
         if (!string.IsNullOrWhiteSpace(options.GitBaseUrlOverride)

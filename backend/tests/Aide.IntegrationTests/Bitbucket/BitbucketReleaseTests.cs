@@ -204,11 +204,12 @@ public sealed class BitbucketReleaseTests(AideApiFactory factory)
             await fixture.Owner.Client.PostAsJsonAsync($"{fixture.Path}/rollback", new { targetCheckpoint = 1, reason = "Back" }, Ct), HttpStatusCode.Conflict, ErrorCodes.RollbackBlocked);
         Assert.Equal(["reason: release_partially_applied"], blocked.GetProperty("details").EnumerateArray().Select(d => d.GetString()));
 
-        // The retry finds the pull request merged: AIDE's own merge (not RELEASE_MERGED_EXTERNALLY), tagged and released.
+        // The PR still reads OPEN (Bitbucket is merging), so the retry submits again and follows the task to the merge:
+        // AIDE's own merge (not RELEASE_MERGED_EXTERNALLY), tagged and released.
         await AgentJobs.RunCoreAsync(app, await ReleaseJobAsync(app, id));
         var released = await LatestAsync(fixture.Viewer.Client, id);
         Assert.Equal((ReleaseStatus.Succeeded, bitbucket.MergeSha), (released.Status, released.MergeCommitSha));
-        Assert.Equal(1, bitbucket.Api.Count(HttpMethod.Post, PullRequest + "/merge"));
+        Assert.Equal(2, bitbucket.Api.Count(HttpMethod.Post, PullRequest + "/merge"));
         Assert.Empty(await LifecycleSeed.EventsAsync(app, id, EventTypes.ReleaseMergedExternally));
         var completed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.ReleaseCompleted)).Payload);
         Assert.False(completed.GetProperty("mergedExternally").GetBoolean());
@@ -238,12 +239,13 @@ public sealed class BitbucketReleaseTests(AideApiFactory factory)
         Assert.Contains(MergeReadinessReasonCode.ChecksPending, awaiting.MergeReasons!.Select(r => r.Code));
         Assert.Equal(JobStatus.Succeeded, (await ReleaseJobAsync(app, id)).Status);
 
-        // The merge poll sees the pull request merged: AIDE's own merge, tagged and released.
+        // Bitbucket finishes the merge; the merge poll sees the pull request merged: AIDE's own merge, tagged and released.
+        bitbucket.MergedExternally(bitbucket.MergeSha!);
         await AgentJobs.RunCoreAsync(app, await PollJobAsync(app, id));
         var released = await LatestAsync(fixture.Viewer.Client, id);
         Assert.Equal((ReleaseStatus.Succeeded, bitbucket.MergeSha), (released.Status, released.MergeCommitSha));
         Assert.Empty(await LifecycleSeed.EventsAsync(app, id, EventTypes.ReleaseMergedExternally));
-        Assert.Equal(1, bitbucket.Api.Count(HttpMethod.Post, PullRequest + "/merge"));
+        Assert.Equal(2, bitbucket.Api.Count(HttpMethod.Post, PullRequest + "/merge"));
     }
 
     [Fact]
@@ -408,6 +410,7 @@ public sealed class BitbucketReleaseTests(AideApiFactory factory)
             {
                 ["Bitbucket:GitBaseUrlOverride"] = remote.BaseUrl,
                 ["Bitbucket:AllowInsecureGitBaseUrl"] = "true",
+                ["Bitbucket:MergeTaskPollDelay"] = "00:00:00",
             });
         var owner = await ApiSession.RegisterAsync(app);
         var connection = await BitbucketHarness.SeedConnectionAsync(app, owner.User!.Id, Token);
@@ -481,9 +484,17 @@ public sealed class BitbucketReleaseTests(AideApiFactory factory)
                 })
                 .On(HttpMethod.Get, PullRequest + "/mergeability/checks", _ => (HttpStatusCode.OK, Garbled ? """{"nothing":1}""" : JsonSerializer.Serialize(new { values = Checks })))
                 .OnWithHeaders(HttpMethod.Post, PullRequest + "/merge", r => MergeResponse!(r))
-                .On(HttpMethod.Get, TaskStatus, _ => PendingPolls-- > 0
-                    ? (HttpStatusCode.OK, """{"task_status":"PENDING"}""")
-                    : (HttpStatusCode.OK, $$"""{"task_status":"SUCCESS","merge_result":{{PullRequestJson()}}}"""))
+                .On(HttpMethod.Get, TaskStatus, _ =>
+                {
+                    if (PendingPolls-- > 0)
+                    {
+                        return (HttpStatusCode.OK, """{"task_status":"PENDING"}""");
+                    }
+
+                    // The asynchronous merge finishes: only now does the pull request read as merged.
+                    State = "MERGED";
+                    return (HttpStatusCode.OK, $$"""{"task_status":"SUCCESS","merge_result":{{PullRequestJson()}}}""");
+                })
                 .On(HttpMethod.Get, Repo + "/refs/tags/" + Tag, _ => TagCommit is { } commit
                     ? (HttpStatusCode.OK, TagJson(commit))
                     : (HttpStatusCode.NotFound, """{"type":"error","error":{"message":"Tag not found"}}"""))
@@ -507,7 +518,9 @@ public sealed class BitbucketReleaseTests(AideApiFactory factory)
                 }
 
                 MergeSha = ReleaseFlowTests.MergeInBare(_remote, Branch!);
-                State = "MERGED";
+
+                // Bitbucket answers 202 while it merges: the pull request stays OPEN until the task succeeds.
+                State = Asynchronous ? State : "MERGED";
                 return Asynchronous
                     ? (HttpStatusCode.Accepted, "{}", new Dictionary<string, string> { ["Location"] = "https://api.bitbucket.org" + TaskStatus })
                     : (HttpStatusCode.OK, PullRequestJson(), null);

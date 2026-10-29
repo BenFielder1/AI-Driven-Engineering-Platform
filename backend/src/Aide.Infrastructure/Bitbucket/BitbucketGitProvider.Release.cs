@@ -16,9 +16,6 @@ internal sealed partial class BitbucketGitProvider
     /// <summary>FR-140: how often <c>merge/task-status</c> is read after a 202 before the attempt retries later.</summary>
     internal const int MergeTaskPolls = 10;
 
-    /// <summary>FR-140: the pause between those reads.</summary>
-    internal static readonly TimeSpan MergeTaskPollDelay = TimeSpan.FromSeconds(2);
-
     /// <summary>FR-140: merge calls made in one attempt when Bitbucket answers 555 (its merge timeout) and the pull request is still open.</summary>
     internal const int MergeTimeoutAttempts = 3;
 
@@ -404,7 +401,7 @@ internal sealed partial class BitbucketGitProvider
 
     /// <summary>
     /// FR-140: follows a 202 merge through <c>merge/task-status</c> (<see cref="MergeTaskPolls"/> reads,
-    /// <see cref="MergeTaskPollDelay"/> apart); without a usable <c>Location</c>, the pull request itself is read. Still
+    /// <see cref="BitbucketOptions.MergeTaskPollDelay"/> apart); without a usable <c>Location</c>, the pull request itself is read. Still
     /// pending afterwards: the attempt retries (a transient failure), and the retry finds the pull request merged.
     /// </summary>
     private async Task<(BitbucketPullRequest? PullRequest, ReleaseOutcome? Outcome)> FollowMergeTaskAsync(
@@ -413,9 +410,9 @@ internal sealed partial class BitbucketGitProvider
         var repo = settings.RepoFullName!;
         for (var poll = 0; poll < MergeTaskPolls; poll++)
         {
-            if (poll > 0)
+            if (poll > 0 && options.CurrentValue.MergeTaskPollDelay > TimeSpan.Zero)
             {
-                await Task.Delay(MergeTaskPollDelay, time, cancellationToken);
+                await Task.Delay(options.CurrentValue.MergeTaskPollDelay, time, cancellationToken);
             }
 
             if (taskPath is null)
