@@ -48,5 +48,5 @@ public static class NotificationLimits
     public const int DefaultLimit = 50;
     public const int MaxLimit = 100;
     public const int CursorMaxLength = 200;
-    public const int MaxMutedTypes = 16;
+    public const int MaxMutedTypes = 32;
 }

@@ -20006,7 +20006,7 @@
         "type": "object",
         "properties": {
           "mutedTypes": {
-            "maxItems": 16,
+            "maxItems": 32,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NotificationType"
