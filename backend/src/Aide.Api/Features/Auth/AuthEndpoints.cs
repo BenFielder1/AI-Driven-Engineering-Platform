@@ -56,7 +56,7 @@ public static partial class AuthEndpoints
 
         group.MapGet("/providers", GetProviders)
             .WithName("GetAuthProviders")
-            .WithSummary("Which sign-in providers are configured, and how GitHub sign-in works (githubMode: app, oauth or none; D-V2-7).")
+            .WithSummary("Which sign-in providers are configured, how GitHub sign-in works (githubMode: app, oauth or none; D-V2-7), and the GitLab instances offering \"Continue with GitLab\" (FR-131).")
             .AllowAnonymous();
 
         group.MapGet("/antiforgery", GetAntiforgeryToken)
@@ -161,10 +161,12 @@ public static partial class AuthEndpoints
             : TypedResults.Ok(UserDto.From(user));
     }
 
-    private static async Task<Ok<AuthProvidersDto>> GetProviders(GitHubSignInResolver github, CancellationToken cancellationToken)
+    private static async Task<Ok<AuthProvidersDto>> GetProviders(
+        GitHubSignInResolver github, Infrastructure.GitLab.IGitLabInstances gitlab, CancellationToken cancellationToken)
     {
         var mode = await github.ModeAsync(cancellationToken);
-        return TypedResults.Ok(new AuthProvidersDto(mode != GitHubSignInMode.None, mode));
+        var gitlabInstances = GitLab.GitLabEndpoints.SignInInstances(await gitlab.ListAsync(cancellationToken));
+        return TypedResults.Ok(new AuthProvidersDto(mode != GitHubSignInMode.None, mode, gitlabInstances));
     }
 
     private static NoContent GetAntiforgeryToken(HttpContext httpContext)

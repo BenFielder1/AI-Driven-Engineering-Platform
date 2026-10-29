@@ -99,10 +99,17 @@ internal sealed class ProjectGitSettingsConfiguration : IEntityTypeConfiguration
 {
     public void Configure(EntityTypeBuilder<ProjectGitSettings> builder)
     {
-        // FR-82: a github_app project always names its installation and repo.
-        builder.ToTable("project_git_settings", t => t.HasCheckConstraint(
-            "ck_project_git_settings_github_app_repo",
-            "provider <> 'github_app' OR (installation_id IS NOT NULL AND repo_id IS NOT NULL AND repo_full_name IS NOT NULL)"));
+        // FR-82: a github_app project always names its installation and repo. FR-136: a GitLab or Bitbucket project
+        // always names its instance and repo.
+        builder.ToTable("project_git_settings", t =>
+        {
+            t.HasCheckConstraint(
+                "ck_project_git_settings_github_app_repo",
+                "provider <> 'github_app' OR (installation_id IS NOT NULL AND repo_id IS NOT NULL AND repo_full_name IS NOT NULL)");
+            t.HasCheckConstraint(
+                "ck_project_git_settings_git_host_repo",
+                "provider NOT IN ('gitlab', 'bitbucket') OR (instance_id IS NOT NULL AND external_repo_id IS NOT NULL AND repo_full_name IS NOT NULL)");
+        });
         builder.HasKey(s => s.ProjectId);
         builder.Property(s => s.RepoUrl).HasMaxLength(500);
         builder.Property(s => s.DefaultBranch).HasMaxLength(255).IsRequired();
@@ -111,6 +118,16 @@ internal sealed class ProjectGitSettingsConfiguration : IEntityTypeConfiguration
 
         // Lookups by installation (installation removed / repositories changed).
         builder.HasIndex(s => s.InstallationId);
+
+        // FR-136: the instance (an instance in use can't be removed, FR-130), the binding Owner's connection and the Owner
+        // who bound it; deleting the connection or the user clears the binding (the lost-binding flow takes over).
+        builder.Property(s => s.ExternalRepoId).HasMaxLength(100);
+        builder.HasOne<GitHostInstance>().WithMany().HasForeignKey(s => s.InstanceId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<GitConnection>().WithMany().HasForeignKey(s => s.GitConnectionId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(s => s.BoundByUserId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(s => s.InstanceId);
+        builder.HasIndex(s => s.GitConnectionId);
+        builder.HasIndex(s => s.BoundByUserId);
     }
 }
 

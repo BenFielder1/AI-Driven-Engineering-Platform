@@ -23,7 +23,7 @@ import { SecretField, type SecretAction } from './secret-field'
 
 const gitSchema = z
   .object({
-    provider: z.enum(['github_app', 'github_pat', 'local']),
+    provider: z.enum(['github_app', 'github_pat', 'gitlab', 'bitbucket', 'local']),
     repoUrl: z.string(),
     defaultBranch: z.string(),
     token: z.string(),
@@ -209,6 +209,8 @@ function GitForm({ projectId, git }: { projectId: string; git: GitSettings }) {
 
   const provider = useWatch({ control, name: 'provider' })
   const isApp = git.mode === 'github_app'
+  /** GitLab/Bitbucket projects (FR-136) keep their host here; their binding and Rebind come with M27/M28 settings. */
+  const hostMode = git.mode === 'gitlab' || git.mode === 'bitbucket' ? git.mode : null
 
   const onSubmit = handleSubmit((v) => {
     setServerErrors([])
@@ -258,6 +260,7 @@ function GitForm({ projectId, git }: { projectId: string; git: GitSettings }) {
           {...register('provider')}
         >
           {isApp && <option value="github_app">{gitProviderLabels.github_app}</option>}
+          {hostMode && <option value={hostMode}>{gitProviderLabels[hostMode]}</option>}
           <option value="github_pat">{gitProviderLabels.github_pat}</option>
           <option value="local">{gitProviderLabels.local}</option>
         </SelectField>
@@ -266,6 +269,14 @@ function GitForm({ projectId, git }: { projectId: string; git: GitSettings }) {
             <p>
               The repository is <strong>{git.repoFullName}</strong>, picked when the project was created. AIDE accesses it
               through the GitHub App.
+            </p>
+          </Alert>
+        )}
+        {(provider === 'gitlab' || provider === 'bitbucket') && (
+          <Alert tone="info">
+            <p>
+              The repository is <strong>{git.repoFullName}</strong> on {gitProviderLabels[provider]}, picked when the project
+              was created.
             </p>
           </Alert>
         )}

@@ -151,6 +151,8 @@ public static class NotificationMessages
     private static string ConnectionName(string? provider) => provider switch
     {
         "github" => "GitHub",
+        "gitlab" => "GitLab",
+        "bitbucket" => "Bitbucket",
         "vercel" => "Vercel",
         null or "" => "LLM",
         _ => $"LLM ({ProviderName(provider)})",
@@ -161,6 +163,8 @@ public static class NotificationMessages
         "anthropic" => "Anthropic",
         "openai" => "OpenAI",
         "github" => "GitHub",
+        "gitlab" => "GitLab",
+        "bitbucket" => "Bitbucket",
         "vercel" => "Vercel",
         null or "" => "The provider",
         _ => OneLine(provider, 40),

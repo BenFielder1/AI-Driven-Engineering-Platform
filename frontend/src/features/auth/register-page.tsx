@@ -9,8 +9,8 @@ import { TextField } from '../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, errorMessages, isApiError } from '../../lib/errors'
 import { Link, useAppRouter } from '../../lib/navigation'
 import { safeReturnUrl } from '../../lib/return-url'
-import { githubSignInHref, useRegister } from './auth-api'
-import { AuthCard, GitHubButton } from './auth-layout'
+import { useRegister } from './auth-api'
+import { AuthCard, SocialSignIn } from './auth-layout'
 import { registerSchema, type RegisterValues } from './schemas'
 
 const fieldIds = { email: 'register-email', name: 'register-name', password: 'register-password' } as const
@@ -89,7 +89,7 @@ export function RegisterPage({ returnUrl }: { returnUrl?: string }) {
           Create account
         </Button>
       </form>
-      <GitHubButton href={githubSignInHref(destination)} />
+      <SocialSignIn returnUrl={destination} />
       <p className="mt-6 text-sm text-muted-foreground">
         Already have an account?{' '}
         <Link to="/login" search={returnUrl ? { returnUrl } : {}} className="font-medium text-primary underline">

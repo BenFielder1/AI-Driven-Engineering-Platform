@@ -41,6 +41,18 @@ const operatorSetApiVariables = [
   'GitHub__App__Slug',
   'GitHub__OAuth__ClientId',
   'GitHub__OAuth__ClientSecret',
+  // Optional: one config-defined GitLab instance (FR-130; overrides a DB-registered instance with the same host) and
+  // the GitLab request timeout. More instances (`GitLab__Instances__1__*`, ...) are added here by exact name.
+  // GitLab__AllowPrivateNetworks is a literal on `api` below, not operator-set.
+  'GitLab__Instances__0__Name',
+  'GitLab__Instances__0__BaseUrl',
+  'GitLab__Instances__0__ClientId',
+  'GitLab__Instances__0__ClientSecret',
+  'GitLab__Instances__0__AllowInsecureHttp',
+  'GitLab__RequestTimeout',
+  // Optional: Bitbucket Cloud OAuth consumer override (M28).
+  'Bitbucket__OAuth__ClientId',
+  'Bitbucket__OAuth__ClientSecret',
   // Optional: email channel (FR-47).
   'Smtp__Host',
   'Smtp__Port',

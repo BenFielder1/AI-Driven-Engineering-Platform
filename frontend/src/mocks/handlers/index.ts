@@ -5,6 +5,7 @@ import { connectionHandlers } from './connections'
 import { deploymentHandlers } from './deployments'
 import { executionHandlers } from './execution'
 import { githubHandlers } from './github'
+import { gitlabHandlers } from './gitlab'
 import { refinementHandlers } from './refinement'
 import { releaseHandlers } from './release'
 import { healthHandlers } from './health'
@@ -26,6 +27,7 @@ export const handlers = [
   ...llmHandlers,
   ...deploymentHandlers,
   ...githubHandlers,
+  ...gitlabHandlers,
   ...lifecycleHandlers,
   ...artifactHandlers,
   ...runHandlers,

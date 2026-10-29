@@ -30,9 +30,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-127 | Generated-files policy | 3.3 | backend | M26 | done | CI 40743533120 |
 | FR-128 | Repository Analyst + refinement get the composition | 3.3 | backend | M26 | done | CI 40743533120 |
 | FR-129 | Retire v2 presets (migration + removal) | 3.4 | backend + frontend + data | M26 | done | CI 40743533120 |
-| FR-130 | GitLab instances (Admin) | 3.5 | backend + frontend + data | M27 | todo | — |
-| FR-131 | GitLab connections + sign-in | 3.5 | backend + frontend + data | M27 | todo | — |
-| FR-132 | GitLab repo picker + create | 3.5 | backend + frontend | M27 | todo | — |
+| FR-130 | GitLab instances (Admin) | 3.5 | backend + frontend + data | M27 | in progress (slice 1) | — |
+| FR-131 | GitLab connections + sign-in | 3.5 | backend + frontend + data | M27 | in progress (slice 1) | — |
+| FR-132 | GitLab repo picker + create | 3.5 | backend + frontend | M27 | in progress (slice 1; project binding in slice 2) | — |
 | FR-133 | Bitbucket OAuth consumer (Admin) | 3.6 | backend + frontend + data | M28 | todo | — |
 | FR-134 | Bitbucket connections + sign-in | 3.6 | backend + frontend + data | M28 | todo | — |
 | FR-135 | Bitbucket repo picker + create | 3.6 | backend + frontend | M28 | todo | — |
@@ -103,6 +103,10 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 - 2026-10-28 — M26: a stack catalog that failed to load makes agent jobs fail transiently (retry, then dead-letter) instead of VALIDATION — SPEC updated: no
 - 2026-10-28 — M26: FR-89's MISSING_VERCEL_CONFIG plan warning is kept, driven by the `deploy-vercel` host; preset types renamed (`VersionStackLoader`, `VersionStackContext`); prompts bumped (spec/plan v5, review v7) — SPEC updated: no
 - 2026-10-28 — M26: seeds: released demo fe-react-vite + be-aspnet + data-efcore-postgres; preset demo kept as fe-nextjs at "." with its legacy preset id; new "Demo: Vue Notes" (fe-vue + data-supabase BaaS) in specification, no fake database — SPEC updated: no
+- 2026-10-28 — M27: gitlab.com is a real instance row created on first use (can be disabled, not deleted); configured instances (GitLab__Instances__*) get rows whose secrets stay in config; deleting an instance removes its connections and external logins first — SPEC updated: no
+- 2026-10-28 — M27: sign-in email linking goes through `/login?link=gitlab` and `/api/auth/gitlab/link` (held 10 minutes); OAuth state and pending links are in memory (one API replica, like the v2 manifest state) — SPEC updated: yes (§6 rows)
+- 2026-10-28 — M27: unique indexes on git_host_instances and user_external_logins use NULLS NOT DISTINCT (PostgreSQL 15+) — SPEC updated: no
+- 2026-10-28 — M27: merge readiness reason codes keep the v2 wire names (`merge_conflict`, `no_permission`) — SPEC updated: yes (FR-138)
 - 2026-10-28 — FR-129 (preset retirement) moves from M25 to the end of M26: migrated in-flight plans must run as the new specialists, which M26 builds — SPEC updated: no
 - 2026-10-25 — M24: `legacy/` is created in M26 together with a catalog version bump, so the pinned hash only changes with a version — SPEC updated: no
 - 2026-10-25 — M24: pack skills are 70–115% of the source length (not 40–60%): hand-writing generated files and CI checks needs the room — SPEC updated: no

@@ -199,6 +199,8 @@ internal static class ActivitySummary
             {
                 "vercel" => "Vercel rejected the connection's token; it is marked invalid",
                 "github" => "GitHub rejected the user's connection; it is marked invalid",
+                "gitlab" => "GitLab rejected the user's connection; it is marked invalid",
+                "bitbucket" => "Bitbucket rejected the user's connection; it is marked invalid",
                 var provider => $"{provider ?? "LLM"} rejected the bound connection's key; it is marked invalid",
             },
             EventTypes.LlmBindingCleared => $"LLM binding cleared ({Get("reason") ?? "?"})",

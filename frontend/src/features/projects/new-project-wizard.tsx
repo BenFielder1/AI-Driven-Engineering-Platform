@@ -22,6 +22,7 @@ import { useAuthProviders } from '../auth/auth-api'
 import { connectGitHubHref, useGitHubConnection, useGitHubRepoRefs, type GitHubRepo } from '../github/github-api'
 import { GitHubErrorAlert } from '../github/github-error-alert'
 import { RepoPicker } from '../github/repo-picker'
+import { useGitLabInstances, type GitLabRepo } from '../gitlab/gitlab-api'
 import { connectionLabel } from '../connections/connection-format'
 import { useLlmProviders, type LlmProviderOption } from '../connections/connections-api'
 import { useVercelConnections } from '../connections/vercel-connections-api'
@@ -56,6 +57,7 @@ import {
   toLlmRequest,
 } from './wizard-llm'
 import { WizardLlmSection } from './wizard-llm-section'
+import { WizardGitLabRepository } from './wizard-gitlab-repository'
 import { useStackCatalog, useStackDetection } from '../stack/stack-api'
 import { StackComposer, stackLayers, type StackFieldErrors } from '../stack/stack-composer'
 import { detectedAnything, emptyStackSelection, selectionFromDetection, stackFieldOfKey, type StackSelection } from '../stack/stack-model'
@@ -93,6 +95,8 @@ const fieldIds: Record<Field, string> = {
   gitToken: 'project-git-token',
   repoFullName: 'project-repo-search',
   installationId: 'project-repo-search',
+  gitlabConnectionId: 'project-gitlab-connection',
+  gitlabRepoId: 'project-repo-search',
   repoHasCode: 'project-repo-search',
   initialVersion: 'project-initial-version',
   releasedTag: 'project-released-tag',
@@ -115,7 +119,7 @@ type StepKey = (typeof stepKeys)[number]
 const stepFields: Record<StepKey, readonly Field[]> = {
   source: ['source'],
   idea: ['name', 'idea'],
-  repository: ['gitMode', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken', 'releasedTag', 'localSourcePath'],
+  repository: ['gitMode', 'gitlabConnectionId', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken', 'releasedTag', 'localSourcePath'],
   version: ['initialVersion', 'developmentVersion'],
   stack: ['stackKind', ...wizardStackFieldList],
   configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget', ...llmFields],
@@ -237,6 +241,10 @@ function toGitRequest(v: WizardValues): Schemas['CreateProjectGitRequest'] {
       return { mode: 'github_app', installationId: Number(v.installationId), repoFullName: v.repoFullName, defaultBranch }
     case 'github_pat':
       return { mode: 'github_pat', repoUrl: v.repoUrl.trim(), defaultBranch, token: v.gitToken ? v.gitToken : null }
+    case 'gitlab':
+      // TODO(M27 slice 2, FR-136): add instanceId, connectionId and the GitLab repo id once CreateProjectGitRequest has
+      // them. Unreachable until then: the schema blocks the Repository step (gitlabProjectCreationAvailable).
+      return { mode: 'gitlab', repoFullName: v.repoFullName, defaultBranch }
     case 'local':
       // FR-73: a Local import names the existing repository on the server (development and E2E only).
       return v.source === 'import'
@@ -316,6 +324,7 @@ const sourceLabels: Record<Source, string> = {
 const gitModeOptionLabels: Record<WizardValues['gitMode'], string> = {
   github_app: 'GitHub (AIDE GitHub App)',
   github_pat: 'Repository URL and access token',
+  gitlab: 'GitLab',
   local: 'Local repository',
 }
 
@@ -529,10 +538,41 @@ export function NewProjectWizard() {
   const previousMode = useRef(gitMode)
   useEffect(() => {
     if (previousMode.current !== gitMode) {
+      // A repository picked on one host doesn't carry over to another (FR-132).
+      if (previousMode.current === 'gitlab' || gitMode === 'gitlab') {
+        setValue('repoFullName', '')
+        setValue('installationId', '')
+        setValue('gitlabRepoId', '')
+      }
       previousMode.current = gitMode
       resetReleased()
     }
-  }, [gitMode, resetReleased])
+  }, [gitMode, resetReleased, setValue])
+
+  // FR-132: the GitLab option exists while any GitLab instance is enabled.
+  const gitlabInstances = useGitLabInstances()
+  const gitlabAvailable = (gitlabInstances.data?.length ?? 0) > 0 || gitMode === 'gitlab'
+  const gitlabConnectionId = useWatch({ control, name: 'gitlabConnectionId' })
+  const chooseGitLabConnection = useCallback(
+    (id: string) => {
+      if (id !== getValues('gitlabConnectionId')) {
+        setValue('gitlabConnectionId', id, { shouldValidate: getFieldState('gitlabConnectionId').invalid })
+        setValue('repoFullName', '')
+        setValue('gitlabRepoId', '')
+      }
+    },
+    [getValues, setValue, getFieldState],
+  )
+  const pickGitLabRepo = (repo: GitLabRepo) => {
+    setValue('repoFullName', repo.fullPath, { shouldValidate: getFieldState('repoFullName').invalid })
+    setValue('gitlabRepoId', repo.id)
+    setValue('repoHasCode', false)
+    setValue('defaultBranch', repo.defaultBranch ?? 'main', { shouldValidate: true })
+  }
+  /** "Connect GitLab under Connections": saves the wizard (FR-159 draft) before Connections opens. */
+  const addGitLabConnection = () => {
+    saveWizardDraft(getValues(), step)
+  }
 
   // Keep the released tag's semver in sync, and prefill the version to develop with its next minor (FR-73).
   useEffect(() => {
@@ -919,6 +959,17 @@ export function NewProjectWizard() {
                         },
                       ]
                     : []),
+                  ...(gitlabAvailable
+                    ? [
+                        {
+                          value: 'gitlab',
+                          label: gitModeOptionLabels.gitlab,
+                          description: importing
+                            ? 'Pick a GitLab project with one of your GitLab connections.'
+                            : 'Pick or create a project on gitlab.com or your GitLab instance.',
+                        },
+                      ]
+                    : []),
                   {
                     value: 'github_pat',
                     label: gitModeOptionLabels.github_pat,
@@ -945,6 +996,19 @@ export function NewProjectWizard() {
                   error={errors.repoFullName?.message}
                   onSelect={pickRepo}
                   onImportInstead={importInstead}
+                />
+              )}
+              {gitMode === 'gitlab' && (
+                <WizardGitLabRepository
+                  connectionFieldId={fieldIds.gitlabConnectionId}
+                  searchId={fieldIds.repoFullName}
+                  connectionId={gitlabConnectionId}
+                  selected={repoFullName}
+                  connectionError={errors.gitlabConnectionId?.message}
+                  repoError={errors.repoFullName?.message}
+                  onConnection={chooseGitLabConnection}
+                  onSelect={pickGitLabRepo}
+                  onAddConnection={addGitLabConnection}
                 />
               )}
               {gitMode === 'github_pat' && (
@@ -994,7 +1058,7 @@ export function NewProjectWizard() {
               <TextField
                 id={fieldIds.defaultBranch}
                 label="Default branch"
-                hint={gitMode === 'github_app' && repoFullName ? 'Prefilled from the repository.' : undefined}
+                hint={(gitMode === 'github_app' || gitMode === 'gitlab') && repoFullName ? 'Prefilled from the repository.' : undefined}
                 maxLength={limits.branchMax}
                 autoComplete="off"
                 error={errors.defaultBranch?.message}
@@ -1405,7 +1469,7 @@ function ReviewSummary({
       </SummarySection>
       <SummarySection title="Repository" step="repository" onEdit={onEdit}>
         <SummaryRow term="Mode">{gitModeOptionLabels[values.gitMode]}</SummaryRow>
-        {app && <SummaryRow term="Repository">{values.repoFullName}</SummaryRow>}
+        {(app || values.gitMode === 'gitlab') && <SummaryRow term="Repository">{values.repoFullName}</SummaryRow>}
         {app && values.repoHasCode && !importing && (
           <SummaryRow term="Existing code">AIDE builds on it (treated as an import that was never released)</SummaryRow>
         )}

@@ -55,9 +55,16 @@ export function selectionOfValues(v: Pick<WizardValues, WizardStackField>): Stac
   ) as unknown as StackSelection
 }
 
-/** §4.17 R5: the VCS option fixed by the repository's host (GitHub for both GitHub modes; Local: any). */
+/** §4.17 R5: the VCS option fixed by the repository's host (GitHub for both GitHub modes, GitLab; Local: any). */
 export function repoVcsOf(gitMode: WizardValues['gitMode']): string | null {
-  return gitMode === 'local' ? null : 'vcs-github'
+  switch (gitMode) {
+    case 'local':
+      return null
+    case 'gitlab':
+      return 'vcs-gitlab'
+    default:
+      return 'vcs-github'
+  }
 }
 
 /** FR-114/FR-117: `stack` for CreateProject; the VCS is omitted when the repository sets it (R5). */
@@ -80,6 +87,9 @@ export function detectRequestOf(v: WizardValues): DetectStackRequest | null {
         : null
     case 'local':
       return v.localSourcePath.trim() ? { git: { provider: 'local', repo: v.localSourcePath.trim(), ref } } : null
+    case 'gitlab':
+      // TODO(FR-141): GitLab import detection, once the detect endpoint takes the caller's GitLab connection.
+      return null
   }
 }
 

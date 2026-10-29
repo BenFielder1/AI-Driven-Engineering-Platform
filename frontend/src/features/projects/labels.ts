@@ -226,6 +226,8 @@ export const guardianCheckLabels: Record<Schemas['GuardianCheck'], string> = {
 export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {
   github_app: 'GitHub App',
   github_pat: 'Personal access token',
+  gitlab: 'GitLab',
+  bitbucket: 'Bitbucket Cloud',
   local: 'Local repository',
 }
 
@@ -233,6 +235,8 @@ export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {
 export const gitHostLabels: Record<Schemas['GitProvider'], string> = {
   github_app: 'GitHub',
   github_pat: 'GitHub',
+  gitlab: 'GitLab',
+  bitbucket: 'Bitbucket Cloud',
   local: 'Local repository',
 }
 
@@ -575,6 +579,9 @@ export const mergeReasonLabels: Record<Schemas['MergeReadinessReasonCode'], stri
   merge_method_not_allowed: "The repository doesn't allow AIDE's merge method",
   pr_not_open: "The pull request isn't open",
   manual_strategy: 'The project merges manually',
+  draft: 'The merge request is still a draft',
+  discussions_unresolved: 'Unresolved discussions block the merge',
+  rebase_required: 'The branch must be rebased before it can merge',
 }
 
 /** FR-84, FR-85: a check run's state while it hasn't completed. */

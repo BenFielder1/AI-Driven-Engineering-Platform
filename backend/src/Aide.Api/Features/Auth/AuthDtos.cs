@@ -56,6 +56,7 @@ public sealed record UserDto(
 /// Which sign-in providers are available (the frontend hides "Continue with GitHub" when <c>github</c> is false).
 /// <c>githubMode</c> (D-V2-7) says how GitHub sign-in works: <c>app</c> (the AIDE GitHub App's user authorization flow
 /// with PKCE), <c>oauth</c> (the v1 OAuth App, only while no App is registered) or <c>none</c>; <c>github</c> is
-/// <c>githubMode != none</c>.
+/// <c>githubMode != none</c>. <c>gitlab</c> (FR-131) lists the enabled GitLab instances with an OAuth application: one
+/// "Continue with GitLab" button each (<c>GET /api/auth/gitlab/start</c> with <c>instanceId</c> and <c>mode=signin</c>).
 /// </summary>
-public sealed record AuthProvidersDto(bool Github, GitHubSignInMode GithubMode);
+public sealed record AuthProvidersDto(bool Github, GitHubSignInMode GithubMode, IReadOnlyList<GitLab.GitLabInstanceSummaryDto> Gitlab);

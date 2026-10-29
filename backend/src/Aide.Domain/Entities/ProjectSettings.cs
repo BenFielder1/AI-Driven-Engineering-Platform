@@ -20,8 +20,23 @@ public sealed class ProjectGitSettings
     /// <summary>FR-82, <see cref="GitProvider.GithubApp"/>: GitHub's numeric repository id (stable across renames).</summary>
     public long? RepoId { get; set; }
 
-    /// <summary>FR-82, <see cref="GitProvider.GithubApp"/>: <c>owner/name</c>.</summary>
+    /// <summary>FR-82, <see cref="GitProvider.GithubApp"/>: <c>owner/name</c>. FR-136: GitLab <c>group/sub/project</c>, or
+    /// Bitbucket <c>workspace/slug</c>.</summary>
     public string? RepoFullName { get; set; }
+
+    /// <summary>FR-136, <see cref="GitProvider.Gitlab"/>/<see cref="GitProvider.Bitbucket"/>: the
+    /// <see cref="GitHostInstance"/> hosting the repo (ON DELETE RESTRICT: an instance in use can't be removed, FR-130).</summary>
+    public Guid? InstanceId { get; set; }
+
+    /// <summary>FR-136: the binding Owner's <see cref="GitConnection"/> that background Git work uses; cleared (ON DELETE
+    /// SET NULL) when the connection is deleted.</summary>
+    public Guid? GitConnectionId { get; set; }
+
+    /// <summary>FR-136: the Owner who bound <see cref="GitConnectionId"/> (the connection's owner).</summary>
+    public Guid? BoundByUserId { get; set; }
+
+    /// <summary>FR-136: the host's stable repo id (GitLab numeric project id, Bitbucket repository UUID), as text.</summary>
+    public string? ExternalRepoId { get; set; }
 
     // The working branch and pull request belong to the release version (ReleaseVersion.BranchName, PullRequestUrl/Number).
 }

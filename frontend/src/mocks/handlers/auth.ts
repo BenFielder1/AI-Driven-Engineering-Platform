@@ -16,6 +16,8 @@ export const authDb = {
   currentUserId: null as string | null,
   /** FR-2, FR-80: how "Continue with GitHub" signs in (`none` hides it). */
   githubMode: 'none' as Schemas['GitHubSignInMode'],
+  /** FR-131: "Continue with GitLab" instances (kept in sync by mocks/handlers/gitlab.ts). */
+  gitlabSignIn: [] as Schemas['GitLabInstanceSummaryDto'][],
   tokens: [] as Token[],
   xsrfCounter: 0,
   /** XSRF values the "server" accepts (the latest issued one). */
@@ -32,6 +34,7 @@ export function resetAuthDb() {
   authDb.users = []
   authDb.currentUserId = null
   authDb.githubMode = 'none'
+  authDb.gitlabSignIn = []
   authDb.tokens = []
   authDb.xsrfCounter = 0
   authDb.validXsrf = null
@@ -109,6 +112,7 @@ export const authHandlers = [
   http.get('*/api/auth/providers', () => HttpResponse.json<Schemas['AuthProvidersDto']>({
       github: authDb.githubMode !== 'none',
       githubMode: authDb.githubMode,
+      gitlab: authDb.gitlabSignIn,
     })),
 
   http.get('*/api/auth/me', () => {

@@ -2,6 +2,7 @@ using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
+using Aide.Infrastructure.GitLab;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.RepoTools;
@@ -158,6 +159,24 @@ public static class DependencyInjection
         services.AddSingleton<GitHubAppInfoCache>();
         services.AddScoped<IGitProvider, GitHubAppGitProvider>();
         services.AddScoped<IGitProviderResolver, GitProviderResolver>();
+
+        // GitLab instances, connections and API (FR-130–FR-132, §4.19, §8): one HttpClient per instance from the "gitlab"
+        // handler, whose ConnectCallback is the SSRF guard (resolved addresses checked on every connection, no redirects,
+        // no proxy). Tokens come from IGitConnectionTokens (refresh before expiry, rotated pair stored atomically).
+        services.AddOptions<GitLabOptions>()
+            .BindConfiguration(GitLabOptions.SectionName)
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<GitLabOptions>, GitLabOptionsValidator>();
+        services.TryAddSingleton<IGitHostDns, SystemGitHostDns>();
+        services.AddSingleton<GitHostConnector>();
+        services.AddHttpClient(GitLabClients.HttpClientName, client =>
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            })
+            .ConfigurePrimaryHttpMessageHandler(sp => sp.GetRequiredService<GitHostConnector>().CreateHandler());
+        services.AddSingleton<IGitLabClients, GitLabClients>();
+        services.AddScoped<IGitLabInstances, GitLabInstances>();
+        services.AddSingleton<IGitConnectionTokens, GitConnectionTokens>();
 
         // Deployments (FR-87–FR-91, §4.15, D-V2-10): Vercel's REST API on the fixed host api.vercel.com (§8: never
         // configurable, so no SSRF), the deterministic Fake (Deployments:Provider=Fake) and the env write limiter.

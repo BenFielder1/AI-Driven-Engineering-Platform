@@ -43,6 +43,12 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<GitHubConnection> GitHubConnections => Set<GitHubConnection>();
 
+    public DbSet<GitHostInstance> GitHostInstances => Set<GitHostInstance>();
+
+    public DbSet<UserExternalLogin> UserExternalLogins => Set<UserExternalLogin>();
+
+    public DbSet<GitConnection> GitConnections => Set<GitConnection>();
+
     public DbSet<VercelConnection> VercelConnections => Set<VercelConnection>();
 
     public DbSet<ProjectDeploymentSettings> ProjectDeploymentSettings => Set<ProjectDeploymentSettings>();
@@ -106,6 +112,10 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<GitProvider>(configurationBuilder);
         MapEnum<GitHubOwnerType>(configurationBuilder);
         MapEnum<GitHubConnectionStatus>(configurationBuilder);
+        MapEnum<GitHostKind>(configurationBuilder);
+        MapEnum<ExternalLoginProvider>(configurationBuilder);
+        MapEnum<GitConnectionAuthKind>(configurationBuilder);
+        MapEnum<GitConnectionStatus>(configurationBuilder);
         MapEnum<VercelTokenScope>(configurationBuilder);
         MapEnum<VercelConnectionStatus>(configurationBuilder);
         MapEnum<DeploymentProvider>(configurationBuilder);

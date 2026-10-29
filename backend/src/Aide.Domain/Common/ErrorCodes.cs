@@ -268,6 +268,29 @@ public static class ErrorCodes
     /// </summary>
     public const string GitNotConnected = "GIT_NOT_CONNECTED";
 
+    /// <summary>
+    /// FR-130, §8 (400 when an Admin adds or changes a GitLab instance): the base URL fails the SSRF guard (not https without
+    /// <c>allow_insecure_http</c>, or a loopback, link-local, metadata, unspecified or — with
+    /// <c>GitLab:AllowPrivateNetworks=false</c> — private address).
+    /// </summary>
+    public const string GitHostNotAllowed = "GIT_HOST_NOT_ALLOWED";
+
+    /// <summary>
+    /// FR-131, FR-134 (a redirect, <c>?error=GIT_AUTH_FAILED&amp;reason=…</c>): a GitLab or Bitbucket OAuth flow failed or was
+    /// denied (state, token exchange, identity, or account rules).
+    /// </summary>
+    public const string GitAuthFailed = "GIT_AUTH_FAILED";
+
+    /// <summary>
+    /// FR-131, FR-134, §3.8 (400): a pasted token is missing scopes (listed in <c>details</c>) or is the wrong token type.
+    /// Nothing is saved.
+    /// </summary>
+    public const string ConnectionScopeInsufficient = "CONNECTION_SCOPE_INSUFFICIENT";
+
+    /// <summary>§6 (429, with <c>Retry-After</c> when known): a Git host or platform is rate limiting AIDE's requests (e.g. the
+    /// GitLab.com project-creation limit, FR-132).</summary>
+    public const string UpstreamRateLimited = "UPSTREAM_RATE_LIMITED";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {
@@ -330,6 +353,10 @@ public static class ErrorCodes
         [StackLocked] = 409,
         [VcsMismatch] = 400,
         [GitNotConnected] = 409,
+        [GitHostNotAllowed] = 400,
+        [GitAuthFailed] = 400,
+        [ConnectionScopeInsufficient] = 400,
+        [UpstreamRateLimited] = 429,
         [UpstreamError] = 502,
         [GitHubNotConnected] = 409,
         [GitHubAppNotInstalled] = 409,

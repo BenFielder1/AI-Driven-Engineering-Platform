@@ -47,6 +47,14 @@ of every API key are in the [README configuration reference](../../README.md#con
 | `GitHub__App__ClientSecret`, `GitHub__App__PrivateKey` | **secret** (ignored in IaC) | | no | Same as above. PEM with `\n` escapes |
 | `GitHub__OAuth__ClientId` | operator-set (ignored in IaC) | | no | v1 GitHub sign-in, used only while no GitHub App exists |
 | `GitHub__OAuth__ClientSecret` | **secret** (ignored in IaC) | | no | Same as above |
+| `GitLab__Instances__0__Name` | operator-set (ignored in IaC) | e.g. `gitlab.com` | no | FR-130. Optional config-defined GitLab instance. Overrides a DB-registered instance (Admin → Integrations → Git hosts) with the same host. Validated at start-up: a bad instance stops `api` from starting. Set Name, ClientId and ClientSecret together. More instances (`__1__*`, ...) must be added to `operatorSetApiVariables` by exact name first |
+| `GitLab__Instances__0__BaseUrl` | operator-set (ignored in IaC) | empty or `https://gitlab.example.com` | no | Empty or unset = `https://gitlab.com`. A host resolving to a private address is refused on Railway (`GitLab__AllowPrivateNetworks=false`), as are loopback, link-local and metadata addresses everywhere |
+| `GitLab__Instances__0__ClientId` | operator-set (ignored in IaC) | | no | GitLab OAuth application id. Register the application with the redirect URI `https://<web-domain>/api/auth/gitlab/callback` for **this** environment (see README step 7) |
+| `GitLab__Instances__0__ClientSecret` | **secret** (ignored in IaC) | | no | GitLab OAuth application secret. Set with `--stdin` |
+| `GitLab__Instances__0__AllowInsecureHttp` | operator-set (ignored in IaC) | `false` | no | Default `false`. Only for a self-managed instance on plain `http`. Leave unset on Railway |
+| `GitLab__RequestTimeout` | operator-set (ignored in IaC) | `00:00:20` | no | One GitLab API request. Default `00:00:20` |
+| `Bitbucket__OAuth__ClientId` | operator-set (ignored in IaC) | | no | M28. Optional Bitbucket Cloud OAuth consumer, overriding the one registered in Admin → Integrations. Callback `https://<web-domain>/api/auth/bitbucket/callback` |
+| `Bitbucket__OAuth__ClientSecret` | **secret** (ignored in IaC) | | no | Same as above. Set with `--stdin` |
 | `Smtp__Host`, `Smtp__Username`, `Smtp__From`, `Smtp__Port`, `Smtp__EnableSsl`, `Smtp__Timeout` | operator-set (ignored in IaC) | | no | Email channel (FR-47). Leave a key out rather than blank: a blank number fails binding |
 | `Smtp__Password` | **secret** (ignored in IaC) | | no | |
 | `Deployments__AllowFake`, `Deployments__Provider=Fake`, `Git__Local__ImportRoot` | — | **unset** | — | Never on Railway (FR-108) |

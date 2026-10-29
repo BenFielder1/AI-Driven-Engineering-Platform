@@ -13,6 +13,7 @@ using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Git;
 using Aide.Api.Features.GitHub;
+using Aide.Api.Features.GitLab;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Live;
 using Aide.Api.Features.Llm;
@@ -134,6 +135,9 @@ builder.Services.AddSingleton<GitHubManifestStates>();
 builder.Services.AddScoped<GitHubAppAdmin>();
 builder.Services.AddScoped<DeadLetterService>();
 
+// GitLab instances, sign-in and connect, connections and the repo picker (FR-130–FR-132).
+builder.Services.AddGitLab();
+
 // Lifecycle, gates and background work (FR-11–FR-14, §4.9).
 builder.Services.AddScoped<LifecycleSnapshotLoader>();
 builder.Services.AddScoped<LifecycleWriter>();
@@ -209,6 +213,7 @@ app.MapLlmConnectionEndpoints();
 app.MapLlmProviderEndpoints();
 app.MapVercelConnectionEndpoints();
 app.MapGitHubEndpoints();
+app.MapGitLabEndpoints();
 app.MapAdminUserEndpoints();
 app.MapAdminOperationsEndpoints();
 app.MapAdminIntegrationEndpoints();

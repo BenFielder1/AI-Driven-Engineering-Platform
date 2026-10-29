@@ -146,6 +146,10 @@ public class ErrorCodesTests
             ["STACK_LOCKED"] = 409,
             ["VCS_MISMATCH"] = 400,
             ["GIT_NOT_CONNECTED"] = 409,
+            ["GIT_HOST_NOT_ALLOWED"] = 400,
+            ["GIT_AUTH_FAILED"] = 400,
+            ["CONNECTION_SCOPE_INSUFFICIENT"] = 400,
+            ["UPSTREAM_RATE_LIMITED"] = 429,
         };
 
         foreach (var (code, status) in expected)

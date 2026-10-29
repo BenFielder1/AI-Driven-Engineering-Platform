@@ -103,7 +103,8 @@ where exit 2 means drift and stops the deploy.
 **Operator-set variables and `variables.ignore`.** IaC owns every variable on a service, so a variable that exists in
 Railway but not in `railway.ts` is planned for **deletion**, which would also make CI's drift check fail. To keep one
 file for both environments, `railway.ts` lists `Approvals__SigningKey` and the **full optional set** from
-[variables.md](variables.md) (`Llm__*`, `GitHub__App__*`, `GitHub__OAuth__*`, `Smtp__*`, 21 names) in
+[variables.md](variables.md) (`Llm__*`, `GitHub__App__*`, `GitHub__OAuth__*`, `GitLab__Instances__0__*`, `GitLab__RequestTimeout`,
+`Bitbucket__OAuth__*`, `Smtp__*`, 29 names) in
 `operatorSetApiVariables`, which is the project-level `variables.ignore`. IaC never touches an ignored name, whether it
 is set or not, so setting any of them in either environment needs no code change. An ignored name may be set or unset,
 which is why it is used instead of `preserve()`. `variables.ignore` is a CLI 5.71 feature that the `railway` 3.16 package doesn't type yet, hence a cast in `railway.ts`.
@@ -115,8 +116,8 @@ neither declared in `railway.ts` nor in the ignore list is still planned for del
 **First-plan checklist** (each environment, before the first apply):
 
 - [ ] The plan creates `postgres`, volume `api-data`, and services `api` and `web`, and destroys nothing.
-- [ ] The plan shows no add, change or error for the ignored `Approvals__SigningKey`, `Llm__*`, `GitHub__*` and `Smtp__*`
-      names. Only the "matches no variable" warnings for names you haven't set are expected.
+- [ ] The plan shows no add, change or error for the ignored `Approvals__SigningKey`, `Llm__*`, `GitHub__*`, `GitLab__Instances__0__*`,
+      `GitLab__RequestTimeout`, `Bitbucket__OAuth__*` and `Smtp__*` names. Only the "matches no variable" warnings for names you haven't set are expected.
 - [ ] `api` shows the pre-deploy command, `preDeployTimeoutSeconds: 600`, healthcheck `/api/health/ready`, and no
       domain or TCP proxy.
 - [ ] After the apply and the step 3 secrets, `railway config plan --detailed-exit-code` exits 0.
@@ -138,7 +139,7 @@ Do these per environment, with that environment linked:
 | **Generate the web domain** | `railway domain --service web --port 8080` (or `web` → Settings → Networking → Generate Domain, port 8080). Note the URL. Generated domains are not part of IaC |
 | **No api domain** | Check `api` → Settings → Networking shows no public domain and no TCP proxy. Never generate one. Every deploy fails if one exists (FR-111) |
 | **Signing key** | `openssl rand -hex 32 \| railway variable set Approvals__SigningKey --stdin --service api --environment <env> --skip-deploys` (64 characters, read from stdin so it never appears in argv or shell history). Use a new value for each environment. Don't echo it anywhere else |
-| **Optional secrets** | LLM, GitHub App/OAuth and SMTP values: see [variables.md](variables.md). Set them the same way (`--stdin` for secrets). Their names are already in `operatorSetApiVariables` (`variables.ignore`) in `railway.ts`. A name not in that list must be added there first, or the next plan deletes it |
+| **Optional secrets** | LLM, GitHub App/OAuth, GitLab instance, Bitbucket OAuth and SMTP values: see [variables.md](variables.md). Set them the same way (`--stdin` for secrets). Their names are already in `operatorSetApiVariables` (`variables.ignore`) in `railway.ts`. A name not in that list must be added there first, or the next plan deletes it |
 | **Postgres backups** | `postgres` → Backups → schedule **Daily + Weekly** in `production`. Optional in `preview` |
 | **Volume backups** | `api` → Backups (the `api-data` volume) → **Daily + Weekly** in `production`. See [Backups](#backups) |
 | **Volume size** | 500 MB, the current plan's maximum. SPEC Q2 wants 5 GB: upgrade the plan, raise `sizeMB` in `railway.ts` and apply. Shrinking is destructive |
@@ -208,6 +209,27 @@ URLs are per environment, so register a separate GitHub App (or OAuth App) for `
   - Set `GitHub__OAuth__ClientId` and the `GitHub__OAuth__ClientSecret` secret in Railway for that environment (both
     are in `operatorSetApiVariables` in `railway.ts`).
 - **A custom domain later:** re-register the App, or edit its URLs, after changing `App__PublicBaseUrl`.
+
+### 7a. GitLab against the Railway URL (FR-130)
+
+GitLab has no manifest flow, so register an OAuth application yourself, once per environment (the redirect URI is
+per environment):
+
+- **Where:** on gitlab.com (User or Group settings → Applications), or on the self-managed instance (Admin area →
+  Applications, or a group's Applications).
+- **Redirect URI:** `https://<web-domain>/api/auth/gitlab/callback`, where `<web-domain>` is that environment's `web`
+  domain (`App__PublicBaseUrl` + `/api/auth/gitlab/callback`). Admin → Integrations → Git hosts shows the exact URL and
+  the scopes to tick (SPEC §4.19).
+- **Then either** add the instance in Admin → Integrations → Git hosts (stored encrypted in the DB), **or** set
+  `GitLab__Instances__0__Name`, `__BaseUrl` (empty = gitlab.com), `__ClientId` and the `__ClientSecret` secret in
+  Railway for `api` ([variables.md](variables.md); all are in `operatorSetApiVariables`). Config-defined instances
+  override a DB-registered instance with the same host and are validated at start-up, so a bad value stops `api`.
+- **Private-network GitLab hosts are refused on Railway.** `GitLab__AllowPrivateNetworks=false` (literal in
+  `railway.ts`, SPEC §8): a host resolving to 10/8, 172.16/12, 192.168/16, fc00::/7 or `*.railway.internal` is
+  rejected, because those addresses are AIDE's own services. Loopback, link-local and metadata addresses are refused
+  everywhere. A self-managed GitLab used from Railway must be reachable on a public address.
+- **Bitbucket Cloud (M28):** the same pattern with callback `https://<web-domain>/api/auth/bitbucket/callback` and
+  `Bitbucket__OAuth__ClientId` / the `Bitbucket__OAuth__ClientSecret` secret.
 
 ## Deploys and the smoke test
 
@@ -304,6 +326,7 @@ Each rollback is a deployment, so run `deploy/scripts/smoke-remote.sh` afterward
 | Cookies not `Secure`, or the live WebSocket refused (403) | `TRUST_EDGE_FORWARDED=true` missing on `web`, or `ForwardedHeaders__ForwardLimit` not 2 on `api` |
 | Every user shares one login rate-limit bucket | `ForwardedHeaders__ForwardLimit` is not 2 |
 | `railway config apply` fails: `Apply finished with status failed; failed changes: change ×N` | One rejected change fails the whole batch. Run `railway config apply --json --yes` and read `applyResult.diagnostics`. Seen: "Max size of 500 MB on current plan" for the `api-data` volume. Set `sizeMB: 500`, or upgrade the plan first |
+| GitLab instance refused ("private network") or `api` won't start after setting `GitLab__Instances__*` | Railway refuses GitLab hosts on private addresses (`GitLab__AllowPrivateNetworks=false`, SPEC §8). Use a publicly reachable host. A start-up validation error names the bad `GitLab:Instances:<n>` key: fix or unset it |
 | Plan warns `variables.ignore pattern "<name>" matches no variable` | Expected and harmless: that operator-set variable isn't set in this environment yet |
 | Plan wants to delete a variable (CI: "Railway config drift") | It exists in Railway but not in `railway.ts`. Add its name to `operatorSetApiVariables` (`variables.ignore`) in `railway.ts`, then plan again. Never apply a plan that deletes secrets, and don't pass `--confirm-destructive` |
 | Deploy fails "api is publicly reachable" | `api` has a service domain, custom domain or TCP proxy. Remove it in `api` → Settings → Networking |

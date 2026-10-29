@@ -143,6 +143,15 @@ export const wizardAgentModelFields = {
 
 const modelTooLong = `Model ids are at most ${String(limits.modelMax)} characters.`
 
+/**
+ * TODO(M27 slice 2, FR-136): POST /api/projects doesn't accept a GitLab binding yet (`CreateProjectGitRequest` has no
+ * `instanceId`, `connectionId` or `repoId`). Until it does, the wizard lets users pick or create a GitLab project but
+ * blocks the Repository step. Flip this once the contract has the fields, and send them in toGitRequest.
+ */
+export function gitlabProjectCreationAvailable(): boolean {
+  return false
+}
+
 /** The wizard's fields, without the cross-field refinement (also used to check a restored session-storage draft). */
 export const wizardShape = z.object({
   /** FR-73: start from scratch, or import an existing repository. */
@@ -154,14 +163,20 @@ export const wizardShape = z.object({
   maxFilesPerStep: str,
   maxReviewCycles: str,
   tokenBudget: str,
-  /** FR-82, FR-86: `github_app` (picker / create), `github_pat` (URL + token) or `local`. */
-  gitMode: z.enum(['github_app', 'github_pat', 'local']),
+  /** FR-82, FR-86, FR-132: `github_app` (picker / create), `github_pat` (URL + token), `gitlab` (picker / create) or `local`. */
+  gitMode: z.enum(['github_app', 'github_pat', 'gitlab', 'local']),
   repoUrl: str,
   defaultBranch: str,
   gitToken: str,
-  /** `github_app`: the picked repository (`owner/name`) and the installation that grants it (a number, as text). */
+  /**
+   * `github_app`: the picked repository (`owner/name`) and the installation that grants it (a number, as text).
+   * `gitlab`: the picked project's full path (`group/sub/project`).
+   */
   repoFullName: str,
   installationId: str,
+  /** FR-132 `gitlab`: the caller's GitLab connection (its instance), and the picked project's GitLab id. */
+  gitlabConnectionId: str,
+  gitlabRepoId: str,
   /** `github_app`: the picked repository already has commits (FR-86 warning). */
   repoHasCode: z.boolean(),
   initialVersion: str,
@@ -265,6 +280,12 @@ export const wizardSchema = wizardShape.superRefine((v, ctx) => {
   if (v.gitMode === 'github_app' && (!v.repoFullName || !v.installationId)) {
     addCheck(ctx, 'repoFullName', 'Pick a repository, or create one.')
   }
+  if (v.gitMode === 'gitlab') {
+    addCheck(ctx, 'gitlabConnectionId', v.gitlabConnectionId ? null : 'Connect GitLab, or choose another option.')
+    addCheck(ctx, 'repoFullName', v.gitlabConnectionId && (!v.repoFullName || !v.gitlabRepoId) ? 'Pick a GitLab project, or create one.' : null)
+    // TODO(M27 slice 2, FR-136): remove once POST /api/projects accepts the GitLab binding (wizard-gitlab-repository.tsx).
+    addCheck(ctx, 'gitMode', gitlabProjectCreationAvailable() ? null : "AIDE can't create projects on GitLab yet. Choose another option to continue.")
+  }
   // FR-114: a composition needs a choice (or None) for each layer up to VCS; compatibility is the server's (D-V4-19).
   if (v.stackKind === 'compose') {
     addCheck(ctx, 'stackFrontend', v.stackFrontend ? null : 'Choose the frontend, or None.')
@@ -308,6 +329,8 @@ export const wizardDefaults: WizardValues = {
   gitToken: '',
   repoFullName: '',
   installationId: '',
+  gitlabConnectionId: '',
+  gitlabRepoId: '',
   repoHasCode: false,
   initialVersion: DEFAULT_INITIAL_VERSION,
   releasedTag: '',

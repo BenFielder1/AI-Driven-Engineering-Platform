@@ -18,12 +18,16 @@ public sealed class AccountService(
     /// "the first account becomes Admin" (FR-3) and "the last Admin stays" hold under concurrency.</summary>
     public const long AccountsLockKey = 0x41_49_44_45_00_01; // "AIDE" 0001
 
-    /// <summary>Creates an account. Its system role is Admin if it is the first account (FR-3), otherwise User.</summary>
+    /// <summary>
+    /// Creates an account. Its system role is Admin if it is the first account (FR-3), otherwise User. Inside a caller's
+    /// transaction (e.g. a Git sign-in that creates, links and connects at once) it joins it and the caller commits or rolls
+    /// back; otherwise it runs in its own.
+    /// </summary>
     public async Task<IdentityResult> CreateAsync(AppUser user, string? password, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(user);
 
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
         await LockAccountsAsync(cancellationToken);
 
         user.SystemRole = SystemRoleRules.ForNewAccount(await db.Users.AnyAsync(cancellationToken));
@@ -31,11 +35,19 @@ public sealed class AccountService(
         var result = password is null ? await users.CreateAsync(user) : await users.CreateAsync(user, password);
         if (!result.Succeeded)
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
+
             return result;
         }
 
-        await transaction.CommitAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
         return result;
     }
 

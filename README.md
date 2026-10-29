@@ -240,6 +240,10 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `GitHub:GitBaseUrl` | Where repos are cloned from and pushed to | `https://github.com/` | no |
 | `GitHub:ApiBaseUrl` | GitHub REST API | `https://api.github.com/` | no |
 | `GitHub:ReleaseMergeMethod` | PR merge at release: `merge`, `squash`, `rebase` | `merge` | no |
+| `GitLab:AllowPrivateNetworks` | Allow GitLab hosts that resolve to private ranges (10/8, 172.16/12, 192.168/16, fc00::/7, `*.railway.internal`). Loopback, link-local and metadata addresses are always refused (SPEC §8). `false` on Railway | `true` (dev loop and the local k8s overlay) | no |
+| `GitLab:Instances:<n>:Name`, `BaseUrl`, `ClientId`, `AllowInsecureHttp` | Config-defined GitLab instance (FR-130), e.g. `GitLab__Instances__0__BaseUrl`. `BaseUrl` empty = `https://gitlab.com`. Overrides a DB-registered instance (Admin → Integrations → Git hosts) with the same host. Validated at start-up. `AllowInsecureHttp` permits a plain-`http` self-managed instance | none: the DB-registered instances only (`AllowInsecureHttp` `false`) | no |
+| `GitLab:Instances:<n>:ClientSecret` | That instance's GitLab OAuth application secret | none | yes |
+| `GitLab:RequestTimeout` | One GitLab API request | `00:00:20` | no |
 | `Git:Local:ImportRoot` | Folder under which a Local import (`git.localSourcePath`) must live. Empty disables Local import. E2E and dev only | unset (`/data/import` in the E2E overlay) | no |
 | `Deployments:Provider` | `Vercel` or `Fake`. Fake makes every deployment check deterministic and lets Local Git projects use deployments | `Vercel` (`Fake` in the E2E overlay) | no |
 | `Deployments:AllowFake` | Allows `Fake` outside Development and Testing. Without it the API refuses to start with Fake | `false` (`true` in the E2E overlay) | no |
@@ -303,6 +307,12 @@ Once an App exists, "Continue with GitHub" uses its user authorization (PKCE) an
 - Fine-grained token, on that repository: Contents read and write (clone, push, tag), Pull requests read and write (open, update, merge). Classic token: `repo`.
 - Branch protection that blocks the merge will make a release fail. The test reports reachable, writable and default branch present.
 - `GitHub:GitBaseUrl`, `GitHub:ApiBaseUrl` and `GitHub:ReleaseMergeMethod` are system settings. A project only supplies owner and repo. Repo URLs must start with `https://github.com/` in v1.
+
+### b2. GitLab (gitlab.com or self-managed, FR-130)
+
+- Register an OAuth application on gitlab.com (User or Group settings → Applications) or on the self-managed instance, with the redirect URI `<App:PublicBaseUrl>/api/auth/gitlab/callback` (`http://localhost:3000/...` in the dev loop, `http://localhost:8080/...` on Docker Desktop, the environment's web URL on Railway) and the scopes Admin → Integrations → Git hosts shows (SPEC §4.19). GitLab labels `http://localhost` URIs "development" but accepts them.
+- Then add the instance in Admin → Integrations → Git hosts (stored encrypted), or set `GitLab:Instances:<n>:*` (dev: user-secrets; k8s: the commented `GitLab__Instances__0__*` lines in `secrets.env`, then re-run `deploy-local.sh`; Railway: [deploy/railway/variables.md](deploy/railway/variables.md)). Config wins over a DB row with the same host, and a bad instance stops the API at start-up.
+- Hosts on private networks are allowed locally (`GitLab:AllowPrivateNetworks=true`) and refused on Railway (`false`), where those addresses are AIDE's own services.
 
 ### c. Real LLM providers
 

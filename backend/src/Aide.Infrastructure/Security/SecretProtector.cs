@@ -42,6 +42,17 @@ public static class SecretPurposes
 
     /// <summary>Deployment environment variable values (<c>deployment_env_vars.value_encrypted</c>, FR-88).</summary>
     public const string DeploymentEnvValue = "Aide.Secrets.DeploymentEnvValue";
+
+    /// <summary>GitLab OAuth application secrets and the Bitbucket consumer secret
+    /// (<c>git_host_instances.oauth_client_secret_encrypted</c>, FR-130, FR-133).</summary>
+    public const string GitHostClientSecret = "Aide.Secrets.GitHostClientSecret";
+
+    /// <summary>GitLab and Bitbucket user tokens: OAuth access and refresh tokens and pasted access/API tokens
+    /// (<c>git_connections.access_token_encrypted</c>, <c>refresh_token_encrypted</c>, FR-131, FR-134).</summary>
+    public const string GitHostUserToken = "Aide.Secrets.GitHostUserToken";
+
+    /// <summary>The Atlassian account email that goes with a Bitbucket API token (<c>git_connections.token_email_encrypted</c>, FR-134).</summary>
+    public const string GitHostTokenEmail = "Aide.Secrets.GitHostTokenEmail";
 }
 
 /// <summary>§8: a <see cref="ISecretProtector"/> per secret kind (purpose), e.g. <see cref="SecretPurposes.GitHubUserToken"/>.</summary>

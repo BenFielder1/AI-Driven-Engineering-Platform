@@ -312,7 +312,7 @@ Each FR names its layer in italics. Acceptance criteria follow the requirement, 
 - **FR-138** *(backend)* **Merge readiness** *(amends FR-84)*:
   - **GitLab:** reads the MR's `detailed_merge_status`, the approvals endpoint, the protected branch merge levels and the head pipeline. The status is re-polled while it is `unchecked`, `checking`, `preparing` or `approvals_syncing`.
   - **Bitbucket:** reads `GET …/pullrequests/{id}/mergeability/checks`. Ready means no check has `blocking: true`.
-  - Reasons map to the v2 reason codes: `review_required`, `checks_failing`, `checks_pending`, `conflicts`, `insufficient_permission`, `draft`, `discussions_unresolved`, `rebase_required`.
+  - Reasons map to the v2 reason codes: `review_required`, `checks_failing`, `checks_pending`, `merge_conflict`, `no_permission`, `draft`, `discussions_unresolved`, `rebase_required` *(v2 wire names, build decision 2026-10-28)*.
   - Given a GitLab MR with `detailed_merge_status = not_approved`, when readiness is checked, then `canMerge: false` with reason `review_required`.
   - Given a Bitbucket PR whose `standard_merge_check` for "require passing builds" is blocking and failed, then reason `checks_failing`.
 - **FR-139** *(backend)* **CI status** *(amends FR-85)* is a deterministic review input on every host.
@@ -817,7 +817,7 @@ Worked examples:
 
   More GitLab rules:
   - The status values `unchecked`, `checking`, `preparing` and `approvals_syncing` are transient.
-  - **Roles:** Developer for push, MR and tags. **Maintainer** for merging into the protected default branch and for releases (a 403 maps to `insufficient_permission`).
+  - **Roles:** Developer for push, MR and tags. **Maintainer** for merging into the protected default branch and for releases (a 403 maps to `no_permission`).
   - **Minimum version:** GitLab 17.11. It's checked when an instance is added, and an older version shows a warning.
 - **Bitbucket Cloud** (`https://api.bitbucket.org/2.0`, OAuth Bearer or API-token Basic `email:token`):
 
@@ -1080,6 +1080,9 @@ The web app and CLI ship together (D-V2-11 precedent). Record the `oasdiff` resu
 | GET/PUT/DELETE | /api/admin/integrations/bitbucket | clientId, clientSecret | consumer status | `CONFLICT → 409` | admin (browser session) |
 | GET | /api/auth/{gitlab,bitbucket}/start | instanceId?, mode (`signin`/`connect`), returnUrl | redirect | `NOT_FOUND → 404` | anonymous / user |
 | GET | /api/auth/{gitlab,bitbucket}/callback | code, state | redirect | `GIT_AUTH_FAILED` redirect | — |
+| POST | /api/admin/integrations/gitlab/:instanceId/check *(build, 2026-10-28)* | — | instance with version and reachability | `GIT_HOST_NOT_ALLOWED → 400`, `UPSTREAM_ERROR → 502` | admin |
+| GET / POST / DELETE | /api/auth/gitlab/link *(build, 2026-10-28)* | — | the pending email link (GET), confirm (POST, 204) or cancel (DELETE) after the user signs in to the matching account (D-V4-18) | `FORBIDDEN → 403`, `NOT_FOUND → 404`, `CONFLICT → 409` | anonymous / user |
+| GET | /api/me/connections/gitlab/instances *(build, 2026-10-28)* | — | enabled instances for the connect dialog | — | user |
 | GET/POST/DELETE | /api/me/connections/{gitlab,bitbucket}[/:id] · /:id/test | POST: token fallback {instanceId?, token, email?} | connections (login, instance, auth kind, scopes, expiry, status) | `CREDENTIAL_INVALID → 400`, `CONNECTION_SCOPE_INSUFFICIENT → 400` | user (browser session) |
 | GET | /api/me/git/:provider/repos · /owners · /repos/:repoId/refs | connectionId, search, cursor | repos / namespaces, groups, workspaces+projects / tags, releases, default branch | `GIT_NOT_CONNECTED → 409` | user |
 | POST | /api/me/git/:provider/repos | connectionId, owner, project? (Bitbucket), name, description, private | 201 repo | `REPO_NAME_TAKEN → 409`, `FORBIDDEN → 403`, `UPSTREAM_RATE_LIMITED → 429` | user |

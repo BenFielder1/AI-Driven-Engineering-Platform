@@ -130,6 +130,12 @@ export const errorMessages = {
   // FR-118 and Git hosts (§6): no usable Git connection for the project or request.
   GIT_NOT_CONNECTED:
     "Connect your Git host account (or ask an Owner to re-bind the project) to continue.",
+  // GitLab instances and connections (FR-130, FR-131, §6). Copy with a {host}, {missing} or {provider} is completed by
+  // gitHostFailureMessage(), connectionScopeMessage() and the per-context overrides below.
+  GIT_HOST_NOT_ALLOWED: "That address isn't allowed for a GitLab instance.",
+  GIT_AUTH_FAILED: "Signing in with your Git host didn't complete. Try again.",
+  CONNECTION_SCOPE_INSUFFICIENT: "This token is missing permissions AIDE needs, or it is the wrong type of token.",
+  UPSTREAM_RATE_LIMITED: "The service is rate limiting requests. Try again in a few minutes.",
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;
@@ -411,6 +417,57 @@ export const contextualErrorMessages = {
     STACK_LOCKED:
       "The stack can't change after the implementation plan is locked. Start a new version to change it.",
   },
+  /** POST/PATCH /api/admin/integrations/gitlab[/:id] · /:id/check (FR-130). */
+  gitlabInstance: {
+    CONFLICT:
+      "A GitLab instance with this base URL already exists, or this instance can't change that way: gitlab.com keeps its address, an instance in use keeps its base URL, and an instance configured in the server's environment only changes Enabled here.",
+    UPSTREAM_ERROR:
+      "AIDE couldn't reach a GitLab at that address (GET /api/v4/version didn't answer like GitLab). Check the base URL and try again.",
+    NOT_FOUND: "That GitLab instance no longer exists. The list now shows the latest.",
+    FORBIDDEN: "Only administrators can change GitLab instances, and only from a browser session.",
+  },
+  /** DELETE /api/admin/integrations/gitlab/:id (FR-130). */
+  deleteGitLabInstance: {
+    CONFLICT:
+      "This GitLab instance can't be removed: projects use it, or it is gitlab.com or configured in the server's environment. Disable it instead.",
+    NOT_FOUND: "That GitLab instance was already removed. The list now shows the latest.",
+    FORBIDDEN: "Only administrators can remove GitLab instances, and only from a browser session.",
+  },
+  /** POST/DELETE /api/me/connections/gitlab · /:id/test (FR-131). */
+  gitlabConnection: {
+    CREDENTIAL_INVALID:
+      "GitLab rejected this token, so it wasn't saved. Check that you copied the whole token and that it hasn't expired or been revoked.",
+    NOT_FOUND: "That GitLab instance or connection no longer exists. The page now shows the latest.",
+    UPSTREAM_ERROR: "We couldn't reach GitLab to check the token. Nothing changed; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: "GitLab is rate limiting requests. Try again in a few minutes.",
+    FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
+  },
+  /** GET/POST /api/auth/gitlab/link: confirm linking a GitLab sign-in to the account with its email (FR-131). */
+  gitlabLink: {
+    FORBIDDEN:
+      "You're signed in to a different AIDE account. Sign out, then sign in to the account with this GitLab email to link it.",
+    NOT_FOUND: "This GitLab sign-in is no longer waiting to be linked (links last 10 minutes). Continue with GitLab again.",
+    CONFLICT: "This GitLab account is already linked to another AIDE account.",
+  },
+  /** GET /api/me/git/gitlab/repos · /owners (FR-132). */
+  gitlabRepos: {
+    UPSTREAM_ERROR: "We couldn't load your projects from GitLab. Try again in a moment.",
+    UPSTREAM_RATE_LIMITED: "GitLab is rate limiting requests. Try again in a few minutes.",
+    GIT_NOT_CONNECTED:
+      "This GitLab connection no longer works: GitLab rejected it, or an administrator disabled its instance. Reconnect it under Connections.",
+    NOT_FOUND: "That GitLab connection no longer exists. Pick another, or connect GitLab under Connections.",
+  },
+  /** POST /api/me/git/gitlab/repos (FR-132). */
+  createGitLabRepo: {
+    REPO_NAME_TAKEN: "A project with this name or path already exists in that namespace. Choose another name or path.",
+    FORBIDDEN: "GitLab doesn't let you create projects there. Pick your personal namespace or another group.",
+    UPSTREAM_RATE_LIMITED:
+      "GitLab's project-creation limit was reached, so nothing was created. Try again later.",
+    UPSTREAM_ERROR: "GitLab couldn't create the project right now. Nothing was created; try again in a moment.",
+    GIT_NOT_CONNECTED:
+      "This GitLab connection no longer works: GitLab rejected it, or an administrator disabled its instance. Reconnect it under Connections.",
+    NOT_FOUND: "That GitLab connection or group no longer exists. Pick another namespace.",
+  },
   /** PATCH /api/admin/users/:id/role (FR-3). */
   changeSystemRole: {
     CONFLICT:
@@ -471,6 +528,44 @@ export function githubFailureMessage(reason: string | undefined): string {
     (reason ? githubFailureMessages[reason] : undefined) ??
     errorMessages.GITHUB_AUTH_FAILED
   );
+}
+
+/** Git host names for GIT_AUTH_FAILED's `provider` (FR-131, FR-134). */
+const gitHostNames: Readonly<Record<string, string>> = { gitlab: "GitLab", bitbucket: "Bitbucket" };
+
+/**
+ * FR-131: `reason` on `?error=GIT_AUTH_FAILED&reason=…&provider=gitlab` (backend GitLab/GitLabSignIn.cs,
+ * Aide.Domain/GitHosts/GitSignInRules.cs). `{host}` is the Git host's name.
+ */
+export const gitHostFailureMessages: Readonly<Record<string, string>> = {
+  access_denied: "{host} authorization was cancelled.",
+  state: "The {host} sign-in expired or was started in another browser. Try again.",
+  instance_unavailable: "That {host} instance is disabled or no longer set up for sign-in. Ask an administrator.",
+  token_exchange: "{host} didn't accept the sign-in. Try again.",
+  host_not_allowed: "That {host} address isn't allowed. Ask an administrator to check the instance.",
+  email_required:
+    "{host} didn't share a verified email address. Verify an email on your {host} account, or register with email first.",
+  already_linked: "This {host} account is already linked to another AIDE user.",
+  link_session: "Your session ended while connecting {host}. Sign in and try again.",
+  account_create_failed: "We couldn't create an account from your {host} profile. Try again, or register with email.",
+  connection_failed: "Signed in, but we couldn't save your {host} connection. Connect it again from Connections.",
+  busy: "Too many sign-ins are in progress. Try again in a minute.",
+};
+
+/** SPEC §6 GIT_AUTH_FAILED: "Signing in with {host} didn't complete. Try again.", or the reason's specific copy. */
+export function gitHostFailureMessage(provider: string | undefined, reason: string | undefined): string {
+  const host = (provider ? gitHostNames[provider] : undefined) ?? "your Git host";
+  const copy = (reason ? gitHostFailureMessages[reason] : undefined) ?? "Signing in with {host} didn't complete. Try again.";
+  const text = copy.replaceAll("{host}", host);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** SPEC §6 CONNECTION_SCOPE_INSUFFICIENT: "This token is missing permissions: {missing}." (`details` lists them). */
+export function connectionScopeMessage(missing: readonly string[]): string {
+  const scopes = missing.map((m) => m.trim()).filter(Boolean);
+  return scopes.length === 0
+    ? errorMessages.CONNECTION_SCOPE_INSUFFICIENT
+    : `This token is missing permissions: ${scopes.join(", ")}.`;
 }
 
 function isErrorCode(code: unknown): code is ErrorCode {
@@ -703,6 +798,9 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
       if (latest && /^\d+$/.test(latest)) {
         return `Someone saved a newer version (v${latest}) while you were editing. Your text is kept here: copy it, then cancel and edit again to start from v${latest}.`;
       }
+    }
+    if (error.errorCode === "CONNECTION_SCOPE_INSUFFICIENT") {
+      return connectionScopeMessage(error.details);
     }
     if (error.errorCode === "STACK_INCOMPATIBLE") {
       return stackIncompatibleMessage(error.violations);

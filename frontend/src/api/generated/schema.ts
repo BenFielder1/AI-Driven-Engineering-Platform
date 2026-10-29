@@ -113,7 +113,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Which sign-in providers are configured, and how GitHub sign-in works (githubMode: app, oauth or none; D-V2-7). */
+        /** Which sign-in providers are configured, how GitHub sign-in works (githubMode: app, oauth or none; D-V2-7), and the GitLab instances offering "Continue with GitLab" (FR-131). */
         get: operations["GetAuthProviders"];
         put?: never;
         post?: never;
@@ -428,6 +428,217 @@ export interface paths {
         };
         /** FR-73, FR-86: a picked repository's default branch, whether it is empty, its releases and its tags (with their semantic versions). */
         get: operations["GetGitHubRepoRefs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/gitlab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-130: the GitLab instances (gitlab.com first; secrets as flags), the callback URL and scopes to register on each OAuth application, the minimum version and GitLab:AllowPrivateNetworks. Admins only. */
+        get: operations["GetAdminGitLabIntegration"];
+        put?: never;
+        /** FR-130: add a self-managed GitLab instance. The base URL is normalised and checked by the SSRF guard (§8: https only unless allowInsecureHttp; loopback, link-local, metadata and 0.0.0.0 always refused; private ranges only with GitLab:AllowPrivateNetworks) and GET /api/v4/version must answer like GitLab (401 counts as reachable; a version below 17.11 warns). Admins with a browser session only. */
+        post: operations["CreateAdminGitLabInstance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/gitlab/{instanceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-130: one GitLab instance. Admins only. */
+        get: operations["GetAdminGitLabInstance"];
+        put?: never;
+        post?: never;
+        /** FR-130: remove a GitLab instance no project uses, with its users' connections and sign-in links. gitlab.com and configured instances can't be removed (disable them). Admins with a browser session only. */
+        delete: operations["DeleteAdminGitLabInstance"];
+        options?: never;
+        head?: never;
+        /** FR-130: change a GitLab instance (name, base URL, OAuth application, allowInsecureHttp, enabled). A new base URL runs the SSRF guard and the reachability check. Configured instances only accept enabled. Admins with a browser session only. */
+        patch: operations["UpdateAdminGitLabInstance"];
+        trace?: never;
+    };
+    "/api/admin/integrations/gitlab/{instanceId}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-130: run the SSRF guard and the reachability check again and record the GitLab version. Admins with a browser session only. */
+        post: operations["CheckAdminGitLabInstance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/gitlab/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-131: redirects to the GitLab instance's OAuth authorize page (code + PKCE S256, scopes api write_repository openid profile email, signed single-use state bound to this browser). mode=signin ("Continue with GitLab", anonymous) or connect (Account → Connections; signed-in browser session). instanceId omitted = gitlab.com. returnUrl is a same-origin path. 404 when the instance doesn't exist, is disabled, or has no OAuth application. */
+        get: operations["StartGitLabOAuth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/gitlab/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-131: GitLab's redirect: checks the state, exchanges the code (with the PKCE verifier), reads the identity, then signs in (account matched by gitlab + instance + user id, or created for a new verified email; the first account becomes Admin), or links to the signed-in user, and stores the connection. Redirects to returnUrl; on failure to /login (sign-in) or returnUrl (connect) with error=GIT_AUTH_FAILED&reason=…&provider=gitlab; when the verified email belongs to an existing unlinked account, to /login?link=gitlab&returnUrl=… (confirm with POST /api/auth/gitlab/link). */
+        get: operations["GitLabOAuthCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/gitlab/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-131: the GitLab sign-in waiting in this browser to be linked to the existing account with the same verified email (10 minutes). 404 when there is none. */
+        get: operations["GetGitLabPendingLink"];
+        put?: never;
+        /** FR-131: the signed-in owner of the matching account confirms: the GitLab identity is linked (later sign-ins match it) and connected. Never done silently. Browser session only. */
+        post: operations["ConfirmGitLabLink"];
+        /** FR-131: discard this browser's pending GitLab link. */
+        delete: operations["CancelGitLabLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/gitlab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-131: the caller's GitLab connections, newest first (login, instance, auth kind, scopes, expiry and its 14-day warning, status; never a token). */
+        get: operations["ListGitLabConnections"];
+        put?: never;
+        /** FR-131 token fallback: save a personal, project or group access token with api and write_repository. Checked with GET /api/v4/user and GET /api/v4/personal_access_tokens/self first; nothing is saved on failure. instanceId omitted = gitlab.com. Browser session only. */
+        post: operations["CreateGitLabTokenConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/gitlab/instances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-131: the enabled GitLab instances the caller can connect to (oauthConfigured: OAuth connect offered; otherwise the token fallback only). */
+        get: operations["ListGitLabInstances"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/gitlab/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** FR-131, FR-136: delete one of the caller's GitLab connections (its tokens). Projects bound to it lose the binding until an Owner re-binds. Sign-in with GitLab keeps working and reconnects. Browser session only. */
+        delete: operations["DeleteGitLabConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/gitlab/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-131: check the connection with GitLab again (refreshing an OAuth token first when due) and record valid, invalid or insufficient_scope, scopes and expiry. Browser session only. */
+        post: operations["TestGitLabConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/git/gitlab/repos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-132: the GitLab projects the caller can develop in (membership, Developer or above), searchable by name, 30 per page newest first; pass nextCursor as cursor for the next page. */
+        get: operations["ListGitLabRepos"];
+        put?: never;
+        /** FR-132: create a GitLab project in the personal namespace or a group (owner = its full path), with initialize_with_readme and default_branch main, so main exists with a README. */
+        post: operations["CreateGitLabRepo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/git/gitlab/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-132: where the caller can create a project: their personal namespace and the groups where they are Developer or above, with whether the group's project_creation_level allows them. */
+        get: operations["ListGitLabOwners"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1927,6 +2138,54 @@ export interface components {
             canCreateRepositories: boolean;
         };
         /**
+         * @description A GitLab instance for Admins (FR-130). Secrets are flags only (`hasClientSecret`). `baseUrl` is the effective
+         *     base URL (`https://gitlab.com` for gitlab.com). `source` is `configuration` when
+         *     `GitLab__Instances__&lt;n&gt;__*` sets it (then only `enabled` can be changed here, and it can't be removed).
+         *     `oauthConfigured`: client id and secret are set, so "Continue with GitLab" and OAuth connections work (token connections
+         *     work without). `version` is from the last reachability check (`null` when GitLab answered 401 unauthenticated);
+         *     `versionStatus` is `supported` (17.11+), `old` (with `versionWarning`) or `unknown`.
+         *     `connectionCount`/`projectCount` are the users' connections and the projects using it (removal is refused
+         *     while `projectCount` &gt; 0).
+         */
+        AdminGitLabInstanceDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            baseUrl: string;
+            isGitLabCom: boolean;
+            source: components["schemas"]["GitHostInstanceSource"];
+            clientId: null | string;
+            hasClientSecret: boolean;
+            oauthConfigured: boolean;
+            allowInsecureHttp: boolean;
+            enabled: boolean;
+            version: null | string;
+            versionStatus: components["schemas"]["GitLabVersionVerdict"];
+            versionWarning: null | string;
+            /** Format: int32 */
+            connectionCount: number;
+            /** Format: int32 */
+            projectCount: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /**
+         * @description Admin → Integrations → GitLab (FR-130): the registration help and the instances. `callbackUrl` is the exact redirect
+         *     URI to register on every GitLab OAuth application (`App:PublicBaseUrl` + `/api/auth/gitlab/callback`);
+         *     `scopes` are the scopes to tick (`api write_repository openid profile email`); `minimumVersion` is
+         *     `17.11`; `allowPrivateNetworks` is `GitLab:AllowPrivateNetworks` (read-only configuration). gitlab.com is
+         *     always listed first.
+         */
+        AdminGitLabIntegrationDto: {
+            callbackUrl: string;
+            scopes: string[];
+            minimumVersion: string;
+            allowPrivateNetworks: boolean;
+            instances: components["schemas"]["AdminGitLabInstanceDto"][];
+        };
+        /**
          * @description §2 Admin: the system LLM key policy (D-V2-5). `allowSystemKeys` is `Llm:AllowSystemKeys` (configuration,
          *     read-only here: set `Llm__AllowSystemKeys` in `secrets.env` / user-secrets and restart). When it is on,
          *     projects with no bound connection use the system key of their provider; `systemKeyProviders` lists the
@@ -2283,11 +2542,13 @@ export interface components {
          * @description Which sign-in providers are available (the frontend hides "Continue with GitHub" when `github` is false).
          *     `githubMode` (D-V2-7) says how GitHub sign-in works: `app` (the AIDE GitHub App's user authorization flow
          *     with PKCE), `oauth` (the v1 OAuth App, only while no App is registered) or `none`; `github` is
-         *     `githubMode != none`.
+         *     `githubMode != none`. `gitlab` (FR-131) lists the enabled GitLab instances with an OAuth application: one
+         *     "Continue with GitLab" button each (`GET /api/auth/gitlab/start` with `instanceId` and `mode=signin`).
          */
         AuthProvidersDto: {
             github: boolean;
             githubMode: components["schemas"]["GitHubSignInMode"];
+            gitlab: components["schemas"]["GitLabInstanceSummaryDto"][];
         };
         /**
          * @description One compliance category (§4.7): its weight, the agent's score (0–1), the deterministic penalty (sum of the fixed
@@ -2536,6 +2797,44 @@ export interface components {
             name: string;
             description?: null | string;
             private: boolean;
+        };
+        /**
+         * @description Add a self-managed GitLab instance (FR-130). `baseUrl` must be `https://` (or `http://` with
+         *     `allowInsecureHttp`); it is normalised, checked by the SSRF guard (§8) and probed with `GET /api/v4/version`.
+         *     gitlab.com is always listed already (edit it to add its OAuth application). `clientId`/`clientSecret` are the
+         *     GitLab OAuth application's id and secret (optional: token connections work without).
+         */
+        CreateGitLabInstanceRequest: {
+            name: string;
+            baseUrl: string;
+            clientId?: null | string;
+            clientSecret?: null | string;
+            allowInsecureHttp?: boolean;
+            enabled?: boolean;
+        };
+        /**
+         * @description Create a GitLab project (FR-132) with the caller's connection `connectionId`, in namespace `owner` (a
+         *     `fullPath` from the owners list), initialised with a README so `main` exists and is the default branch.
+         *     `path` defaults to GitLab's slug of `name`. `private` (default true) sets visibility private, else public.
+         */
+        CreateGitLabRepoRequest: {
+            /** Format: uuid */
+            connectionId: string;
+            owner: string;
+            name: string;
+            path?: null | string;
+            description?: null | string;
+            private?: boolean;
+        };
+        /**
+         * @description FR-131 token fallback: a personal, project or group access token with `api` and `write_repository` for the
+         *     instance (`instanceId` omitted = gitlab.com). Validated with `GET /api/v4/user` and
+         *     `GET /api/v4/personal_access_tokens/self`; nothing is saved unless it passes.
+         */
+        CreateGitLabTokenConnectionRequest: {
+            /** Format: uuid */
+            instanceId?: null | string;
+            token: string;
         };
         /**
          * @description Add an LLM connection (FR-78): `anthropic` or `openai`, a label and the key. The key is checked with
@@ -3127,6 +3426,22 @@ export interface components {
         };
         /** @enum {unknown} */
         GateType: "spec_approval" | "plan_approval" | "pre_release" | "escalation";
+        /**
+         * @description How a GitConnection authenticates (FR-131, FR-134). Wire values: `oauth`, `token`.
+         * @enum {unknown}
+         */
+        GitConnectionAuthKind: "oauth" | "token";
+        /**
+         * @description State of a GitConnection (FR-131, FR-134). Wire values: `valid`, `invalid`,
+         *                 `insufficient_scope`.
+         * @enum {unknown}
+         */
+        GitConnectionStatus: "valid" | "invalid" | "insufficient_scope";
+        /**
+         * @description Where a GitLab instance's settings come from (FR-130). Wire values: `database`, `configuration`.
+         * @enum {unknown}
+         */
+        GitHostInstanceSource: "database" | "configuration";
         /** @description A GitHub user or organisation (FR-81). */
         GitHubAccountDto: {
             login: string;
@@ -3289,10 +3604,111 @@ export interface components {
             semver: null | string;
         };
         /**
-         * @description Git provider of a project (FR-35, FR-82). Wire values: `github_pat` (v1 `github`), `local`, `github_app`.
+         * @description A GitLab connection of the caller (FR-131); never a token. `authKind` is `oauth` or `token` (access token
+         *     fallback); `scopes` as granted or validated; `expiresAt` is an access token's own expiry, and
+         *     `expiryWarning` is true from 14 days before it. `status`: `valid`, `invalid` (GitLab rejected it; reconnect)
+         *     or `insufficient_scope`. `instanceEnabled: false` means an Admin disabled the instance ("GitLab instance disabled").
+         */
+        GitLabConnectionDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            instanceId: string;
+            instanceName: string;
+            instanceBaseUrl: string;
+            instanceEnabled: boolean;
+            login: string;
+            externalUserId: string;
+            authKind: components["schemas"]["GitConnectionAuthKind"];
+            scopes: string[];
+            /** Format: date-time */
+            expiresAt: null | string;
+            expiryWarning: boolean;
+            status: components["schemas"]["GitConnectionStatus"];
+            /** Format: date-time */
+            lastValidatedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /**
+         * @description An enabled GitLab instance for users (sign-in, connections). `oauthConfigured`: "Continue with GitLab" and
+         *         "Connect with GitLab" are offered; otherwise only the token fallback.
+         */
+        GitLabInstanceSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            baseUrl: string;
+            isGitLabCom: boolean;
+            oauthConfigured: boolean;
+        };
+        /**
+         * @description Where the caller can create a GitLab project (FR-132): their personal namespace (`kind: user`) and the groups where
+         *     they are at least Developer (`kind: group`). `canCreateProjects` follows the group's
+         *     `project_creation_level`; `reason` says why not. Pass `fullPath` as `owner` when creating.
+         */
+        GitLabOwnerDto: {
+            /** Format: int64 */
+            id: number;
+            kind: components["schemas"]["GitLabOwnerKind"];
+            fullPath: string;
+            name: string;
+            canCreateProjects: boolean;
+            reason: null | string;
+        };
+        /**
+         * @description A place a GitLab project can be created (FR-132). Wire values: `user`, `group`.
          * @enum {unknown}
          */
-        GitProvider: "github_pat" | "local" | "github_app";
+        GitLabOwnerKind: "user" | "group";
+        /**
+         * @description FR-131 sign-in: GitLab's verified email belongs to an existing AIDE account that isn't linked to this GitLab identity.
+         *     AIDE never links silently: the user signs in to that account (any method) and confirms with
+         *     `POST /api/auth/gitlab/link`, or cancels with `DELETE /api/auth/gitlab/link`. Expires after 10 minutes.
+         */
+        GitLabPendingLinkDto: {
+            /** Format: uuid */
+            instanceId: string;
+            instanceName: string;
+            login: string;
+            email: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        /**
+         * @description A GitLab project for the repo picker (FR-132). `id` is GitLab's numeric project id as text; `fullPath`
+         *         is `group/sub/project`.
+         */
+        GitLabRepoDto: {
+            id: string;
+            fullPath: string;
+            name: string;
+            path: string;
+            defaultBranch: null | string;
+            webUrl: null | string;
+            namespaceFullPath: null | string;
+            visibility: null | string;
+            /** Format: date-time */
+            lastActivityAt: null | string;
+        };
+        /** @description One page of projects (30, newest first); pass `nextCursor` as `cursor` for the next (`null` = last page). */
+        GitLabRepoPageDto: {
+            items: components["schemas"]["GitLabRepoDto"][];
+            nextCursor: null | string;
+        };
+        /**
+         * @description The outcome of a GitLab `GET /api/v4/version` reachability check (FR-130).
+         * @enum {unknown}
+         */
+        GitLabVersionVerdict: "supported" | "old" | "unknown";
+        /**
+         * @description Git provider of a project (FR-35, FR-82, FR-136). Wire values: `github_pat` (v1 `github`), `local`,
+         *                 `github_app`, `gitlab`, `bitbucket`.
+         * @enum {unknown}
+         */
+        GitProvider: "github_pat" | "local" | "github_app" | "gitlab" | "bitbucket";
         /**
          * @description Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the
          *     project branch, once the working copy has been prepared. `mode` is the v2 name of `provider` (always equal).
@@ -3572,11 +3988,12 @@ export interface components {
         /**
          * @description FR-84: why AIDE can't merge the version's PR itself (wire values `review_required`, `changes_requested`,
          *     `checks_failing`, `checks_pending`, `branch_protected`, `merge_conflict`, `no_permission`,
-         *     `merge_method_not_allowed`, `pr_not_open`, `manual_strategy`). Also recorded on an `awaiting_merge`
+         *     `merge_method_not_allowed`, `pr_not_open`, `manual_strategy`), plus FR-138's GitLab/Bitbucket reasons
+         *     `draft`, `discussions_unresolved` and `rebase_required`. Also recorded on an `awaiting_merge`
          *     release attempt (FR-65).
          * @enum {unknown}
          */
-        MergeReadinessReasonCode: "review_required" | "changes_requested" | "checks_failing" | "checks_pending" | "branch_protected" | "merge_conflict" | "no_permission" | "merge_method_not_allowed" | "pr_not_open" | "manual_strategy";
+        MergeReadinessReasonCode: "review_required" | "changes_requested" | "checks_failing" | "checks_pending" | "branch_protected" | "merge_conflict" | "no_permission" | "merge_method_not_allowed" | "pr_not_open" | "manual_strategy" | "draft" | "discussions_unresolved" | "rebase_required";
         /** @description FR-84: one reason AIDE can't merge the version's PR itself, with copy for the Release page and the gate. */
         MergeReadinessReasonDto: {
             code: components["schemas"]["MergeReadinessReasonCode"];
@@ -4745,6 +5162,19 @@ export interface components {
             connectionId?: null | string;
             vercelProjectId?: null | string;
             create?: null | components["schemas"]["CreateVercelProjectRequest"];
+        };
+        /**
+         * @description Change a GitLab instance (FR-130); omitted fields are unchanged. An empty `clientId` or `clientSecret` clears it.
+         *     Changing `baseUrl` or `allowInsecureHttp` runs the SSRF guard and the reachability check again. gitlab.com's
+         *     base URL can't change. `enabled: false` disables the instance: its connections stop working and sign-in hides it.
+         */
+        UpdateGitLabInstanceRequest: {
+            name?: null | string;
+            baseUrl?: null | string;
+            clientId?: null | string;
+            clientSecret?: null | string;
+            allowInsecureHttp?: null | boolean;
+            enabled?: null | boolean;
         };
         /** @description Partial update of the Git settings. Omitted fields are unchanged. */
         UpdateGitSettingsRequest: {
@@ -6298,6 +6728,1065 @@ export interface operations {
                 };
             };
             /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAdminGitLabIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitLabIntegrationDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateAdminGitLabInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGitLabInstanceRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitLabInstanceDto"];
+                };
+            };
+            /** @description VALIDATION, or GIT_HOST_NOT_ALLOWED (the base URL fails the SSRF guard) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (the base URL is gitlab.com, already registered, or configured in the environment) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the host didn't resolve, couldn't be reached, or didn't answer like GitLab) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAdminGitLabInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitLabInstanceDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteAdminGitLabInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (projects use it, or it is gitlab.com or configured) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateAdminGitLabInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGitLabInstanceRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitLabInstanceDto"];
+                };
+            };
+            /** @description VALIDATION, or GIT_HOST_NOT_ALLOWED (the base URL fails the SSRF guard) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (configured instance, duplicate base URL, or a base URL change while connections or projects use it) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the new base URL didn't answer like GitLab) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CheckAdminGitLabInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitLabInstanceDto"];
+                };
+            };
+            /** @description GIT_HOST_NOT_ALLOWED (the host now resolves to a refused address) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StartGitLabOAuth: {
+        parameters: {
+            query?: {
+                instanceId?: string;
+                mode?: "signin" | "connect";
+                returnUrl?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description UNAUTHENTICATED (mode=connect without a session) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (mode=connect with an API token) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GitLabOAuthCallback: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetGitLabPendingLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabPendingLinkDto"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ConfirmGitLabLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (signed in as a different account than the one with that email) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (no pending link, or it expired) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (the GitLab identity was linked to another account meanwhile) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CancelGitLabLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListGitLabConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabConnectionDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateGitLabTokenConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGitLabTokenConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabConnectionDto"];
+                };
+            };
+            /** @description VALIDATION; CREDENTIAL_INVALID (GitLab rejected the token, or it is expired or revoked); CONNECTION_SCOPE_INSUFFICIENT (missing scopes in details and the title); GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (no such enabled instance) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (connected concurrently; retry) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Retry-After when GitLab sent one) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListGitLabInstances: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabInstanceSummaryDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteGitLabConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestGitLabConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabConnectionDto"];
+                };
+            };
+            /** @description GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Retry-After when GitLab sent one) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached); the status is unchanged */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListGitLabRepos: {
+        parameters: {
+            query: {
+                connectionId: string;
+                search?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabRepoPageDto"];
+                };
+            };
+            /** @description VALIDATION or GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's GitLab connections) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid, or its instance is disabled) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Retry-After when GitLab sent one) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateGitLabRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGitLabRepoRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabRepoDto"];
+                };
+            };
+            /** @description VALIDATION or GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (GitLab doesn't let the caller create projects there) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's connections, or no such group) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description REPO_NAME_TAKEN, or GIT_NOT_CONNECTED (the connection is invalid, or its instance is disabled) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (the GitLab.com project-creation limit; Retry-After when sent) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListGitLabOwners: {
+        parameters: {
+            query: {
+                connectionId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabOwnerDto"][];
+                };
+            };
+            /** @description GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's GitLab connections) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid, or its instance is disabled) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Retry-After when GitLab sent one) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;

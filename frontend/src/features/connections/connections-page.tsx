@@ -19,6 +19,7 @@ import { credentialStatusLabels, maskedKey } from './connection-format'
 import { useDeleteLlmConnection, useLlmConnections, useTestLlmConnection, type LlmCredential } from './connections-api'
 import { CredentialStatusBadge } from './credential-status-badge'
 import { GitHubConnectionSection } from './github-connection-section'
+import { GitLabConnectionSection } from './gitlab-connection-section'
 import { AddLlmKeyDialog, RenameLlmKeyDialog } from './llm-connection-dialogs'
 import { VercelConnectionSection } from './vercel-connection-section'
 
@@ -316,17 +317,24 @@ function WizardReturnNotice() {
 export function ConnectionsPage({
   githubError,
   githubInstalled = false,
+  gitlabError,
+  gitlabConnected = false,
 }: {
   githubError?: { reason?: string }
   /** `?github=installed`: back from installing the GitHub App (its setup URL). */
   githubInstalled?: boolean
+  /** FR-131: a failed Connect GitLab (`?error=GIT_AUTH_FAILED&provider=gitlab`). */
+  gitlabError?: { reason?: string }
+  /** FR-131: `?gitlab=connected`, back from a successful Connect GitLab. */
+  gitlabConnected?: boolean
 }) {
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Connections" description="LLM providers, GitHub and Vercel, connected to your account." />
+      <PageHeader title="Connections" description="LLM providers, source control (GitHub, GitLab) and Vercel, connected to your account." />
       <WizardReturnNotice />
       <LlmProvidersSection />
       <GitHubConnectionSection callbackError={githubError} installed={githubInstalled} />
+      <GitLabConnectionSection callbackError={gitlabError} connected={gitlabConnected} />
       <VercelConnectionSection />
     </div>
   )
