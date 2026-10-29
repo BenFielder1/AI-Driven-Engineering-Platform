@@ -38,9 +38,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-135 | Bitbucket repo picker + create | 3.6 | backend + frontend | M28 | todo | — |
 | FR-136 | Git provider set; binding Owner's connection | 3.7 | backend + data | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40883397083 |
 | FR-137 | MRs/PRs on GitLab and Bitbucket | 3.7 | backend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40883397083 |
-| FR-138 | Merge readiness on GitLab and Bitbucket | 3.7 | backend | M27/M28 | todo | — |
-| FR-139 | CI status on every host | 3.7 | backend | M27/M28 | todo | — |
-| FR-140 | Release on GitLab and Bitbucket | 3.7 | backend | M27/M28 | todo | — |
+| FR-138 | Merge readiness on GitLab and Bitbucket | 3.7 | backend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40897233970 |
+| FR-139 | CI status on every host | 3.7 | backend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40897233970 |
+| FR-140 | Release on GitLab and Bitbucket | 3.7 | backend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40897233970 |
 | FR-141 | Import from GitLab and Bitbucket | 3.7 | backend + frontend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40883397083 |
 | FR-142 | Platform connections (generic; Vercel migrated) | 3.8 | backend + frontend + data | M29 | todo | — |
 | FR-143 | GitHub Pages via the GitHub App | 3.8 | backend + frontend | M29 | todo | — |
@@ -72,7 +72,7 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 - [x] M24 Stack catalog + compatibility — FR-113, FR-116, FR-122. Commit 24eaf5b + fixes; CI green on 7fcb9b9 (same run)
 - [x] M25 Composition in projects — FR-114, FR-115, FR-117–FR-119, Admin → Stack catalog page. Commit b49f789; CI green: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40679856465
 - [x] M26 Specialists across the lifecycle + preset retirement — FR-120, FR-121, FR-123–FR-128, FR-129. Commits 245b3d6, 0b88937, c5629e2 + fixes; CI green on b36e643: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40743533120
-- [ ] M27 GitLab — FR-130–FR-132, FR-136–FR-141 (GitLab). Commits e6400fb (instances, connections, sign-in, picker/create), 5ed0698 (binding, transport, draft MRs, import, rebind), 70c1a08 (fix); CI green on 70c1a08: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40883397083. Remaining: readiness, CI status, merge, release (FR-138–FR-140) + their frontend
+- [x] M27 GitLab — FR-130–FR-132, FR-136–FR-141 (GitLab). Commits e6400fb (instances, connections, sign-in, picker/create), 5ed0698 (binding, transport, draft MRs, import, rebind), be1791d (readiness, CI status, merge, Releases) + fixes 70c1a08, cb2dcfd; CI green on cb2dcfd: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40897233970
 - [ ] M28 Bitbucket — FR-133–FR-135, FR-136–FR-141 (Bitbucket)
 - [ ] M29 Platforms I — FR-142–FR-146, FR-150/151 (frontend parts)
 - [ ] M30 Platforms II — FR-144, FR-147–FR-154
@@ -238,6 +238,7 @@ COMMIT;
 - Railway `preview` deploy of 83d8fa5 (run 40130552891): the deploy succeeded, but the smoke test's sign-in returned 401. The `SMOKE_EMAIL` account is missing on `preview` or its password differs. Operator fix (Ben): create the smoke user on preview, or correct the `SMOKE_PASSWORD` secret.
 
 ## Manual checks (Ben)
+- M27 GitLab against a real instance (no real GitLab in CI): register an OAuth app on gitlab.com with the callback URL from Admin → Integrations → GitLab, connect, sign in, create a project from the wizard, run it to release (MR merged, GitLab Release `v0.1.0`). Railway: `GitLab__AllowPrivateNetworks=false` is in `.railway/railway.ts`, so run `railway config plan`/`apply` before the next deploy.
 - Railway preview smoke account (see Known issues).
 - **Before the next Railway deploy after merging M23:** run `railway config plan` then `railway config apply` for `preview` and `production`. M23 adds `Llm__Providers__Ollama__Enabled=false`, `Llm__Providers__Fake__Enabled=false` and `GitLab__AllowPrivateNetworks=false`, and removes `Llm__Providers__Ollama__BaseUrl` from the ignore list (the plan deletes it where set). Until applied, deploy.yml's drift check fails.
 - After that apply, Railway projects still set to Fake (or Ollama) fail their next agent run with `LLM_PROVIDER_UNAVAILABLE`; their Owners choose another provider in Settings → LLM.
