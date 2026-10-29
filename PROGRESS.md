@@ -35,13 +35,13 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-132 | GitLab repo picker + create | 3.5 | backend + frontend | M27 | done | CI 40883397083 |
 | FR-133 | Bitbucket OAuth consumer (Admin) | 3.6 | backend + frontend + data | M28 | done | CI 40914462854 |
 | FR-134 | Bitbucket connections + sign-in | 3.6 | backend + frontend + data | M28 | done | CI 40914462854 |
-| FR-135 | Bitbucket repo picker + create | 3.6 | backend + frontend | M28 | partial: picker and create done; project binding in slice 2 | CI 40914462854 |
-| FR-136 | Git provider set; binding Owner's connection | 3.7 | backend + data | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40883397083 |
-| FR-137 | MRs/PRs on GitLab and Bitbucket | 3.7 | backend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40883397083 |
-| FR-138 | Merge readiness on GitLab and Bitbucket | 3.7 | backend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40897233970 |
-| FR-139 | CI status on every host | 3.7 | backend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40897233970 |
-| FR-140 | Release on GitLab and Bitbucket | 3.7 | backend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40897233970 |
-| FR-141 | Import from GitLab and Bitbucket | 3.7 | backend + frontend | M27/M28 | partial: GitLab done; Bitbucket in M28 | CI 40883397083 |
+| FR-135 | Bitbucket repo picker + create | 3.6 | backend + frontend | M28 | done | CI 40932865878 |
+| FR-136 | Git provider set; binding Owner's connection | 3.7 | backend + data | M27/M28 | done | CI 40932865878 (GitLab: CI 40897233970) |
+| FR-137 | MRs/PRs on GitLab and Bitbucket | 3.7 | backend | M27/M28 | done | CI 40932865878 (GitLab: CI 40897233970) |
+| FR-138 | Merge readiness on GitLab and Bitbucket | 3.7 | backend | M27/M28 | done | CI 40932865878 (GitLab: CI 40897233970) |
+| FR-139 | CI status on every host | 3.7 | backend | M27/M28 | done | CI 40932865878 (GitLab: CI 40897233970) |
+| FR-140 | Release on GitLab and Bitbucket | 3.7 | backend | M27/M28 | done | CI 40932865878 (GitLab: CI 40897233970) |
+| FR-141 | Import from GitLab and Bitbucket | 3.7 | backend + frontend | M27/M28 | done | CI 40932865878 (GitLab: CI 40897233970) |
 | FR-142 | Platform connections (generic; Vercel migrated) | 3.8 | backend + frontend + data | M29 | todo | — |
 | FR-143 | GitHub Pages via the GitHub App | 3.8 | backend + frontend | M29 | todo | — |
 | FR-144 | Settings → Deployment: targets, readiness | 3.9 | backend + frontend + data | M29/M30 | todo | — |
@@ -73,7 +73,7 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 - [x] M25 Composition in projects — FR-114, FR-115, FR-117–FR-119, Admin → Stack catalog page. Commit b49f789; CI green: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40679856465
 - [x] M26 Specialists across the lifecycle + preset retirement — FR-120, FR-121, FR-123–FR-128, FR-129. Commits 245b3d6, 0b88937, c5629e2 + fixes; CI green on b36e643: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40743533120
 - [x] M27 GitLab — FR-130–FR-132, FR-136–FR-141 (GitLab). Commits e6400fb (instances, connections, sign-in, picker/create), 5ed0698 (binding, transport, draft MRs, import, rebind), be1791d (readiness, CI status, merge, Releases) + fixes 70c1a08, cb2dcfd; CI green on cb2dcfd: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40897233970
-- [ ] M28 Bitbucket — FR-133–FR-135, FR-136–FR-141 (Bitbucket). Slice 1 commit 1c52401, CI green: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40914462854. Remaining: slice 2 (binding, PRs, readiness, statuses, merge, tags, import)
+- [x] M28 Bitbucket — FR-133–FR-135, FR-136–FR-141 (Bitbucket). Commits 1c52401 (consumer, connections, sign-in, picker/create), e56d00d (binding, PRs, readiness, statuses, merge, annotated tags, import) + fixes 384b8b9, 053cd67; CI green on 053cd67: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/40932865878
 - [ ] M29 Platforms I — FR-142–FR-146, FR-150/151 (frontend parts)
 - [ ] M30 Platforms II — FR-144, FR-147–FR-154
 - [ ] M31 Integrate & harden — FR-155, FR-156, E2E, docs, spec-verifier over v1–v4
