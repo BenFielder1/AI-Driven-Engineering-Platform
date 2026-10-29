@@ -19,6 +19,20 @@ public static partial class ReleaseRules
     public const int MaxTagLength = 100;
 
     /// <summary>
+    /// FR-140: how long the release job keeps re-checking a merge the host accepted but is still performing (a Bitbucket
+    /// merge task) before handing it to the merge poll (<c>awaiting_merge</c>, with its own 14-day ceiling).
+    /// </summary>
+    public static readonly TimeSpan SubmittedMergeCeiling = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// FR-140: whether the release job keeps waiting (deferring, no attempt counted) for a merge submitted at
+    /// <paramref name="submittedAt"/>: until it is <see cref="SubmittedMergeCeiling"/> old. An unknown submission time waits
+    /// (the first deferral right after submitting).
+    /// </summary>
+    public static bool KeepWaitingForSubmittedMerge(DateTimeOffset? submittedAt, DateTimeOffset now) =>
+        submittedAt is not { } since || now - since < SubmittedMergeCeiling;
+
+    /// <summary>
     /// A tag name AIDE may create or push: letters, digits and <c>. _ / + -</c>, a valid Git ref (no <c>..</c>, <c>//</c>,
     /// <c>/.</c>, <c>@{</c>, no trailing <c>.</c>, <c>/</c> or <c>.lock</c>) that can't be read as an option (no leading <c>-</c>).
     /// Used to refuse anything else before it reaches git.

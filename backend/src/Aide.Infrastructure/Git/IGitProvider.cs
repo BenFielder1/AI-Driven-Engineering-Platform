@@ -344,6 +344,12 @@ public sealed record ReleaseOutcome(
 
     /// <summary>FR-138: AIDE couldn't take the merge request out of draft, so the awaiting reasons include <c>draft</c>.</summary>
     public bool StillDraft { get; init; }
+
+    /// <summary>
+    /// FR-140: the host accepted AIDE's merge and is still performing it (a Bitbucket merge task still pending): not a
+    /// failure; the release job looks again shortly without counting an attempt.
+    /// </summary>
+    public bool MergePending { get; init; }
 }
 
 /// <summary>The project PR to open (FR-36).</summary>

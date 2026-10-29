@@ -100,6 +100,13 @@ public static class AgentJobs
                     .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Queued).SetProperty(j => j.Attempts, attempt - 1).SetProperty(j => j.RunAfter, JobPolicy.DeferUntil(DateTimeOffset.UtcNow, ex.ResetAt)).SetProperty(j => j.LastError, $"GITLAB_RATE_LIMITED: {ex.Message}"), Ct));
                 return true;
             }
+            catch (Aide.Infrastructure.Bitbucket.BitbucketRateLimitedException ex)
+            {
+                // FR-136, §4.19: like the worker, Bitbucket's 429 (or the connection's budget) waits without counting the attempt.
+                await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id)
+                    .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Queued).SetProperty(j => j.Attempts, attempt - 1).SetProperty(j => j.RunAfter, JobPolicy.DeferUntil(DateTimeOffset.UtcNow, ex.ResetAt)).SetProperty(j => j.LastError, $"{Aide.Domain.Common.ErrorCodes.BitbucketRateLimited}: {ex.Message}"), Ct));
+                return true;
+            }
             catch (JobFailedException ex)
             {
                 status = ex.Transient ? JobStatus.Dead : JobStatus.Failed;

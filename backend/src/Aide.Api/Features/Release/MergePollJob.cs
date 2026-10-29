@@ -226,13 +226,18 @@ public sealed partial class MergePollJobHandler(
         {
             Merge = false,
             Notes = await publisher.HostNotesAsync(release, working.Provider.Kind, working.Connection.RepoUrl, cancellationToken),
+
+            // FR-140: an attempt whose merge AIDE submitted (and that waited past the release job's ceiling) merged by AIDE.
+            RecordedMergeCommitSha = release.MergeCommitSha,
+            MergeSubmitted = release.MergeSubmittedAt is not null,
         };
         var outcome = await working.Provider.ReleaseAsync(working.Connection, request, working.Token, cancellationToken);
         switch (outcome.Kind)
         {
             case ReleaseOutcomeKind.Released:
                 var url = outcome.ReleaseUrl ?? await publisher.PublishAsync(release, outcome.Tag ?? release.Tag, cancellationToken);
-                await completion.SucceedAsync(release.Id, outcome, url, mergedExternally: true, cancellationToken);
+                // FR-140: a merge AIDE submitted (a Bitbucket merge task past the release job's ceiling) isn't an external one.
+                await completion.SucceedAsync(release.Id, outcome, url, mergedExternally: release.MergeSubmittedAt is null || outcome.MergedExternally, cancellationToken);
                 return;
             case ReleaseOutcomeKind.AwaitingMerge:
                 // The merge isn't visible yet (e.g. GitHub's PR read raced the merge): poll again shortly.

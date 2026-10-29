@@ -215,6 +215,38 @@ public sealed class BitbucketReleaseTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task FR140_A_merge_task_pending_for_over_an_hour_hands_the_release_to_the_merge_poll_which_completes_it_as_AIDEs_merge()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var bitbucket = new BitbucketState(remote) { Asynchronous = true, PendingPolls = 20 };
+        var (app, fixture) = await SetUpAsync(bitbucket, remote);
+        using var session = fixture;
+        var id = fixture.Project.Id;
+        await ReleaseFlowTests.StartExecutionAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+        await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
+
+        // Within the hour the job defers; past it (merge submitted 2 hours ago), the attempt awaits the merge instead.
+        await AgentJobs.RunCoreAsync(app, await ReleaseJobAsync(app, id));
+        Assert.Equal((JobStatus.Queued, 0), ((await ReleaseJobAsync(app, id)).Status, (await ReleaseJobAsync(app, id)).Attempts));
+        await ProjectApi.WithDbAsync(app, db => db.Releases.Where(r => r.ProjectId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.MergeSubmittedAt, DateTimeOffset.UtcNow.AddHours(-2)), Ct));
+        await AgentJobs.RunCoreAsync(app, await ReleaseJobAsync(app, id));
+
+        var awaiting = await LatestAsync(fixture.Viewer.Client, id);
+        Assert.Equal(ReleaseStatus.AwaitingMerge, awaiting.Status);
+        Assert.Contains(MergeReadinessReasonCode.ChecksPending, awaiting.MergeReasons!.Select(r => r.Code));
+        Assert.Equal(JobStatus.Succeeded, (await ReleaseJobAsync(app, id)).Status);
+
+        // The merge poll sees the pull request merged: AIDE's own merge, tagged and released.
+        await AgentJobs.RunCoreAsync(app, await PollJobAsync(app, id));
+        var released = await LatestAsync(fixture.Viewer.Client, id);
+        Assert.Equal((ReleaseStatus.Succeeded, bitbucket.MergeSha), (released.Status, released.MergeCommitSha));
+        Assert.Empty(await LifecycleSeed.EventsAsync(app, id, EventTypes.ReleaseMergedExternally));
+        Assert.Equal(1, bitbucket.Api.Count(HttpMethod.Post, PullRequest + "/merge"));
+    }
+
+    [Fact]
     public async Task FR140_A_555_merge_timeout_is_retried_and_the_release_completes()
     {
         using var remote = await BareRemote.CreateAsync(Ct);

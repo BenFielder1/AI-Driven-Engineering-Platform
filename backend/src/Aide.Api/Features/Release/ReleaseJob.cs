@@ -53,6 +53,9 @@ public sealed partial class ReleaseJobHandler(
 {
     public const string CompletedReason = ReleaseCompletion.CompletedReason;
 
+    /// <summary>FR-140: how soon a release whose merge the host is still performing looks again.</summary>
+    public static readonly TimeSpan MergePendingRecheck = TimeSpan.FromSeconds(30);
+
     public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(job);
@@ -129,6 +132,9 @@ public sealed partial class ReleaseJobHandler(
             case ReleaseOutcomeKind.Conflict:
                 await FailAsync(release.Id, ErrorCodes.MergeConflict, outcome.Reason!, outcome.ConflictingFiles, cancellationToken);
                 return;
+            case ReleaseOutcomeKind.Failed when outcome.MergePending:
+                await MergePendingAsync(project, release.Id, outcome, cancellationToken);
+                return;
             case ReleaseOutcomeKind.Failed when outcome.Transient:
                 throw new JobFailedException(outcome.Reason!, transient: true, outcome.ErrorCode);
             default:
@@ -195,6 +201,35 @@ public sealed partial class ReleaseJobHandler(
         await SaveAsync(cancellationToken);
         db.ChangeTracker.Clear();
     }
+
+    /// <summary>
+    /// FR-140: the host accepted AIDE's merge and is still performing it. Within <see cref="ReleaseRules.SubmittedMergeCeiling"/>
+    /// of the submission the job looks again shortly without counting an attempt (the attempt keeps
+    /// <c>merge_submitted_at</c>, so the retry knows the merge is AIDE's own); after it, the attempt becomes
+    /// <c>awaiting_merge</c> and the merge poll takes over (its 14-day ceiling, <c>PR_CLOSED</c>).
+    /// </summary>
+    private async Task MergePendingAsync(Project project, Guid releaseId, ReleaseOutcome outcome, CancellationToken cancellationToken)
+    {
+        var now = time.GetUtcNow();
+        var submittedAt = await db.Releases.AsNoTracking().Where(r => r.Id == releaseId).Select(r => r.MergeSubmittedAt).FirstOrDefaultAsync(cancellationToken);
+        if (ReleaseRules.KeepWaitingForSubmittedMerge(submittedAt, now))
+        {
+            throw new JobDeferredException(outcome.Reason!, now + MergePendingRecheck);
+        }
+
+        LogMergePendingTooLong(logger, project.Id);
+        var reasons = (await AwaitingReasonsAsync(project, outcome, cancellationToken)).ToList();
+        if (reasons.All(r => r.Code == MergeReadinessReasonCode.ManualStrategy))
+        {
+            reasons.Add(new Git.MergeReadinessReasonDto(
+                MergeReadinessReasonCode.ChecksPending, "The Git host accepted the merge but hasn't finished it after an hour; AIDE keeps checking and tags it once merged."));
+        }
+
+        await completion.AwaitMergeAsync(releaseId, project.MergeStrategy, reasons, cancellationToken);
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId}: the host is still performing AIDE's merge after an hour; the merge poll takes over")]
+    private static partial void LogMergePendingTooLong(ILogger logger, Guid projectId);
 
     /// <summary>
     /// FR-140: puts "merge submitted" on the attempt right before the host's merge call (a Bitbucket merge can finish

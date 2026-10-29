@@ -464,7 +464,7 @@ internal sealed partial class BitbucketGitProvider
         }
 
         LogMergeTaskPending(logger, settings.ProjectId, id);
-        return (null, ReleaseOutcome.Failed(ErrorCodes.GitError, $"Bitbucket is still merging pull request #{id}; the release checks again shortly.", transient: true));
+        return (null, ReleaseOutcome.Failed(ErrorCodes.GitError, $"Bitbucket is still merging pull request #{id}; the release checks again shortly.", transient: true) with { MergePending = true });
     }
 
     /// <summary>The full hash of <paramref name="sha"/> (unchanged when it is one; else <c>GET …/commit/{sha}</c>).</summary>
