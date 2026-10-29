@@ -29,12 +29,12 @@ public sealed class DeploymentContractTests(AideApiFactory factory)
     // ---------------------------------------------------------------- FR-87 Account → Connections → Vercel
 
     [Theory]
-    [InlineData("GET", "/api/me/connections/vercel")]
-    [InlineData("POST", "/api/me/connections/vercel")]
-    [InlineData("PATCH", "/api/me/connections/vercel/0192a6a4-0000-7000-8000-000000000001")]
-    [InlineData("DELETE", "/api/me/connections/vercel/0192a6a4-0000-7000-8000-000000000001")]
-    [InlineData("POST", "/api/me/connections/vercel/0192a6a4-0000-7000-8000-000000000001/test")]
-    public async Task FR87_Vercel_connection_routes_need_sign_in(string method, string path)
+    [InlineData("GET", "/api/me/connections/platforms")]
+    [InlineData("POST", "/api/me/connections/platforms")]
+    [InlineData("PATCH", "/api/me/connections/platforms/0192a6a4-0000-7000-8000-000000000001")]
+    [InlineData("DELETE", "/api/me/connections/platforms/0192a6a4-0000-7000-8000-000000000001")]
+    [InlineData("POST", "/api/me/connections/platforms/0192a6a4-0000-7000-8000-000000000001/test")]
+    public async Task FR87_FR142_Vercel_connection_routes_need_sign_in(string method, string path)
     {
         using var anonymous = new ApiSession(factory);
 
@@ -43,30 +43,33 @@ public sealed class DeploymentContractTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR87_Changing_Vercel_connections_needs_a_browser_session_API_tokens_get_FORBIDDEN()
+    public async Task FR87_FR142_Changing_Vercel_connections_needs_a_browser_session_API_tokens_get_FORBIDDEN()
     {
         using var user = await ApiSession.RegisterAsync(factory);
         var own = await SeedConnectionAsync(user.User!.Id);
         using var cli = await BearerAsync(user);
 
-        await Problems.AssertAsync(await cli.PostAsJsonAsync("/api/me/connections/vercel", new { label = "Team", token = "vcp_abc" }, Ct), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(cli, $"/api/me/connections/vercel/{own}", new { label = "x" }), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
-        await Problems.AssertAsync(await cli.DeleteAsync(U($"/api/me/connections/vercel/{own}"), Ct), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
-        await Problems.AssertAsync(await cli.PostAsync(U($"/api/me/connections/vercel/{own}/test"), null, Ct), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
+        await Problems.AssertAsync(await cli.PostAsJsonAsync("/api/me/connections/platforms", new { provider = "vercel", label = "Team", token = "vcp_abc" }, Ct), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
+        await Problems.AssertAsync(await ProjectApi.PatchAsync(cli, $"/api/me/connections/platforms/{own}", new { label = "x" }), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
+        await Problems.AssertAsync(await cli.DeleteAsync(U($"/api/me/connections/platforms/{own}"), Ct), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
+        await Problems.AssertAsync(await cli.PostAsync(U($"/api/me/connections/platforms/{own}/test"), null, Ct), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
 
         // Listing is allowed with a token (e.g. for the CLI).
-        Assert.Equal(HttpStatusCode.OK, (await cli.GetAsync(U("/api/me/connections/vercel"), Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await cli.GetAsync(U("/api/me/connections/platforms"), Ct)).StatusCode);
     }
 
     [Theory]
-    [InlineData("""{"label":" ","token":"vcp_abc"}""", "label")]
-    [InlineData("""{"label":"Team","token":"vcp abc"}""", "token")]
-    [InlineData("""{"label":"Team"}""", null)]
-    public async Task FR87_An_invalid_connection_is_VALIDATION_400(string body, string? field)
+    [InlineData("""{"provider":"vercel","label":" ","token":"vcp_abc"}""", "label")]
+    [InlineData("""{"provider":"vercel","label":"Team","token":"vcp abc"}""", "token")]
+    [InlineData("""{"provider":"netlify","label":"Team","token":"nfp_abc","accountId":"not an id"}""", "accountId")]
+    [InlineData("""{"provider":"vercel","label":"Team"}""", null)]
+    [InlineData("""{"provider":"heroku","label":"Team","token":"abc"}""", null)]
+    [InlineData("""{"label":"Team","token":"abc"}""", null)]
+    public async Task FR87_FR142_An_invalid_connection_is_VALIDATION_400(string body, string? field)
     {
         using var user = await ApiSession.RegisterAsync(factory);
 
-        var response = await user.Client.PostAsync(U("/api/me/connections/vercel"), Json(body), Ct);
+        var response = await user.Client.PostAsync(U("/api/me/connections/platforms"), Json(body), Ct);
 
         // A missing required field fails JSON binding (400 VALIDATION without per-field errors).
         var problem = await Problems.AssertAsync(response, HttpStatusCode.BadRequest, ErrorCodes.Validation);
@@ -74,7 +77,7 @@ public sealed class DeploymentContractTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR87_Another_users_or_an_unknown_connection_is_NOT_FOUND_and_an_own_one_passes_the_ownership_check()
+    public async Task FR87_FR142_Another_users_or_an_unknown_connection_is_NOT_FOUND_and_an_own_one_passes_the_ownership_check()
     {
         using var ana = await ApiSession.RegisterAsync(factory);
         using var ben = await ApiSession.RegisterAsync(factory);
@@ -82,15 +85,15 @@ public sealed class DeploymentContractTests(AideApiFactory factory)
 
         foreach (var id in new[] { anas, Guid.CreateVersion7() })
         {
-            await Problems.AssertAsync(await ProjectApi.PatchAsync(ben.Client, $"/api/me/connections/vercel/{id}", new { label = "Mine" }), HttpStatusCode.NotFound, ErrorCodes.NotFound);
-            await Problems.AssertAsync(await ben.Client.DeleteAsync(U($"/api/me/connections/vercel/{id}"), Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
-            await Problems.AssertAsync(await ben.Client.PostAsync(U($"/api/me/connections/vercel/{id}/test"), null, Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
+            await Problems.AssertAsync(await ProjectApi.PatchAsync(ben.Client, $"/api/me/connections/platforms/{id}", new { label = "Mine" }), HttpStatusCode.NotFound, ErrorCodes.NotFound);
+            await Problems.AssertAsync(await ben.Client.DeleteAsync(U($"/api/me/connections/platforms/{id}"), Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
+            await Problems.AssertAsync(await ben.Client.PostAsync(U($"/api/me/connections/platforms/{id}/test"), null, Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
         }
 
-        Assert.Equal(HttpStatusCode.OK, (await ProjectApi.PatchAsync(ana.Client, $"/api/me/connections/vercel/{anas}", new { label = "Renamed" })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await ProjectApi.PatchAsync(ana.Client, $"/api/me/connections/vercel/{anas}", new { label = "" })).StatusCode);
-        await Problems.AssertAsync(await ana.Client.PostAsync(U($"/api/me/connections/vercel/{anas}/test"), null, Ct), HttpStatusCode.BadGateway, ErrorCodes.UpstreamError);
-        Assert.Equal(HttpStatusCode.NoContent, (await ana.Client.DeleteAsync(U($"/api/me/connections/vercel/{anas}"), Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ProjectApi.PatchAsync(ana.Client, $"/api/me/connections/platforms/{anas}", new { label = "Renamed" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ProjectApi.PatchAsync(ana.Client, $"/api/me/connections/platforms/{anas}", new { label = "" })).StatusCode);
+        await Problems.AssertAsync(await ana.Client.PostAsync(U($"/api/me/connections/platforms/{anas}/test"), null, Ct), HttpStatusCode.BadGateway, ErrorCodes.UpstreamError);
+        Assert.Equal(HttpStatusCode.NoContent, (await ana.Client.DeleteAsync(U($"/api/me/connections/platforms/{anas}"), Ct)).StatusCode);
     }
 
     // ---------------------------------------------------------------- FR-88 Settings → Deployment
@@ -272,8 +275,8 @@ public sealed class DeploymentContractTests(AideApiFactory factory)
     public async Task FR90_FR91_A_writer_redeploys_a_preview_only_an_Owner_production()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory, git: PatGit);
-        var preview = await SeedDeploymentAsync(fixture.Project, DeploymentTarget.Preview, DeploymentStatus.Error);
-        var production = await SeedDeploymentAsync(fixture.Project, DeploymentTarget.Production, DeploymentStatus.Ready);
+        var preview = await SeedDeploymentAsync(fixture.Project, DeploymentEnvironment.Preview, DeploymentStatus.Error);
+        var production = await SeedDeploymentAsync(fixture.Project, DeploymentEnvironment.Production, DeploymentStatus.Ready);
         string Redeploy(Guid id) => $"{fixture.Path}/deployments/{id}/redeploy";
 
         await Problems.AssertAsync(await fixture.Outsider.Client.PostAsync(U(Redeploy(preview)), null, Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
@@ -312,9 +315,9 @@ public sealed class DeploymentContractTests(AideApiFactory factory)
     public async Task FR91_Only_an_Owner_promotes_and_only_a_ready_production_deployment_INVALID_DEPLOYMENT()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory, git: PatGit);
-        var ready = await SeedDeploymentAsync(fixture.Project, DeploymentTarget.Production, DeploymentStatus.Ready);
-        var building = await SeedDeploymentAsync(fixture.Project, DeploymentTarget.Production, DeploymentStatus.Building);
-        var preview = await SeedDeploymentAsync(fixture.Project, DeploymentTarget.Preview, DeploymentStatus.Ready);
+        var ready = await SeedDeploymentAsync(fixture.Project, DeploymentEnvironment.Production, DeploymentStatus.Ready);
+        var building = await SeedDeploymentAsync(fixture.Project, DeploymentEnvironment.Production, DeploymentStatus.Building);
+        var preview = await SeedDeploymentAsync(fixture.Project, DeploymentEnvironment.Preview, DeploymentStatus.Ready);
         string Promote(Guid id) => $"{fixture.Path}/deployments/{id}/promote";
 
         await Problems.AssertAsync(await fixture.Outsider.Client.PostAsync(U(Promote(ready)), null, Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
@@ -332,7 +335,7 @@ public sealed class DeploymentContractTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory, git: PatGit);
         using var stranger = await ApiSession.RegisterAsync(factory);
         var elsewhere = await ProjectApi.CreateAsync(stranger.Client, git: PatGit);
-        var theirs = await SeedDeploymentAsync(elsewhere, DeploymentTarget.Production, DeploymentStatus.Ready);
+        var theirs = await SeedDeploymentAsync(elsewhere, DeploymentEnvironment.Production, DeploymentStatus.Ready);
 
         await Problems.AssertAsync(await fixture.Owner.Client.PostAsync(U($"{fixture.Path}/deployments/{theirs}/promote"), null, Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
         await Problems.AssertAsync(await fixture.Owner.Client.PostAsync(U($"{fixture.Path}/deployments/{theirs}/redeploy"), null, Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
@@ -348,33 +351,20 @@ public sealed class DeploymentContractTests(AideApiFactory factory)
     private Task<Guid> SeedConnectionAsync(Guid userId) => DeploymentHarness.SeedConnectionAsync(factory, userId);
 
     private Task SeedSettingsAsync(Guid projectId, Guid connectionId, Guid boundBy) =>
-        ProjectApi.WithDbAsync(factory, async db =>
-        {
-            db.ProjectDeploymentSettings.Add(new ProjectDeploymentSettings
-            {
-                ProjectId = projectId,
-                Provider = DeploymentProvider.Fake,
-                ConnectionId = connectionId,
-                BoundByUserId = boundBy,
-                VercelProjectId = "prj_contract",
-                VercelProjectName = "todo",
-                UpdatedAt = DateTimeOffset.UtcNow,
-            });
-            await db.SaveChangesAsync(Ct);
-        });
+        DeploymentHarness.BindAsync(factory, projectId, connectionId, boundBy, "prj_contract", DeploymentProvider.Fake);
 
-    private async Task<Guid> SeedDeploymentAsync(ProjectDto project, DeploymentTarget target, DeploymentStatus status)
+    private async Task<Guid> SeedDeploymentAsync(ProjectDto project, DeploymentEnvironment target, DeploymentStatus status)
     {
         var deployment = new Deployment
         {
             ProjectId = project.Id,
             ReleaseVersionId = project.ReleaseVersionId!.Value,
             Provider = DeploymentProvider.Fake,
-            Target = target,
+            Environment = target,
             Status = status,
             Trigger = DeploymentTrigger.Auto,
             ProviderDeploymentId = $"dpl_{Guid.NewGuid():N}",
-            GitRef = target == DeploymentTarget.Production ? "main" : "aide/0.1.0",
+            GitRef = target == DeploymentEnvironment.Production ? "main" : "aide/0.1.0",
             GitSha = new string('a', 40),
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,

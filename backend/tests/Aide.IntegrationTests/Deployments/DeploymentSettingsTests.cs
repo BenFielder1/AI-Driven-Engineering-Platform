@@ -91,7 +91,7 @@ public sealed class DeploymentSettingsTests(AideApiFactory factory)
 
         var problem = await Problems.AssertAsync(response, HttpStatusCode.Conflict, ErrorCodes.VercelGitNotConnected);
         Assert.Equal("https://github.com/apps/vercel/installations/select_target", problem.GetProperty("installUrl").GetString());
-        Assert.False(await ProjectApi.WithDbAsync(app, db => db.ProjectDeploymentSettings.AnyAsync(s => s.ProjectId == project.Id, Ct)));
+        Assert.False(await ProjectApi.WithDbAsync(app, db => db.DeploymentTargets.AnyAsync(t => t.ProjectId == project.Id, Ct)));
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public sealed class DeploymentSettingsTests(AideApiFactory factory)
             await ProjectApi.PatchAsync(owner.Client, Settings(project.Id), new { provider = "vercel", connectionId = connection, vercelProjectId = "prj_todo" }),
             HttpStatusCode.BadRequest,
             ErrorCodes.CredentialInvalid);
-        Assert.Equal(VercelConnectionStatus.Invalid, (await ProjectApi.WithDbAsync(app, db => db.VercelConnections.AsNoTracking().SingleAsync(c => c.Id == connection, Ct))).Status);
+        Assert.Equal(PlatformConnectionStatus.Invalid, (await ProjectApi.WithDbAsync(app, db => db.PlatformConnections.AsNoTracking().SingleAsync(c => c.Id == connection, Ct))).Status);
     }
 
     [Fact]
@@ -211,8 +211,9 @@ public sealed class DeploymentSettingsTests(AideApiFactory factory)
 
         var project = await ProjectApi.ReadAsync<ProjectDto>(response, HttpStatusCode.Created);
         Assert.True(project.DeploymentsEnabled);
-        var settings = await ProjectApi.WithDbAsync(app, db => db.ProjectDeploymentSettings.AsNoTracking().SingleAsync(s => s.ProjectId == project.Id, Ct));
-        Assert.Equal((DeploymentProvider.Fake, (Guid?)connection, (Guid?)owner.User!.Id, "prj_fake_todo-e2e"), (settings.Provider, settings.ConnectionId, settings.BoundByUserId, settings.VercelProjectId));
+        var settings = await DeploymentHarness.FrontendTargetAsync(app, project.Id);
+        Assert.Equal((DeploymentProvider.Fake, (Guid?)connection, (Guid?)owner.User!.Id, "prj_fake_todo-e2e"), (settings.Provider, settings.ConnectionId, settings.BoundByUserId, settings.ResourceId));
+        Assert.Equal((DeploymentTargetStatus.Ready, "nextjs"), (settings.Status, settings.BuildConfig.Framework));
     }
 
     [Fact]
@@ -227,8 +228,9 @@ public sealed class DeploymentSettingsTests(AideApiFactory factory)
         var demoted = await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/members/{fixture.Outsider.User!.Id}", new { role = "contributor" });
         Assert.Equal(HttpStatusCode.OK, demoted.StatusCode);
 
-        var settings = await ProjectApi.WithDbAsync(factory, db => db.ProjectDeploymentSettings.AsNoTracking().SingleAsync(s => s.ProjectId == id, Ct));
+        var settings = await DeploymentHarness.FrontendTargetAsync(factory, id);
         Assert.Equal(((Guid?)null, (Guid?)null), (settings.ConnectionId, settings.BoundByUserId));
+        Assert.Equal((DeploymentTargetStatus.Attention, "connection_missing"), (settings.Status, settings.StatusReason));
         Assert.Contains(await LifecycleSeed.EventsAsync(factory, id, EventTypes.SettingsUpdated), e => e.Payload.Contains("owner_role_lost", StringComparison.Ordinal));
     }
 

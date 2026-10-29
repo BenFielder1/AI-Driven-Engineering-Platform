@@ -62,7 +62,7 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory, git: PatGit);
         var production = await DeploymentHarness.ScheduleAsync(
-            factory, new Api.Features.Deployments.NewDeployment(fixture.Project.Id, fixture.Project.ReleaseVersionId!.Value, null, DeploymentTarget.Production, "main", new string('9', 40), DeploymentTrigger.Auto, null));
+            factory, new Api.Features.Deployments.NewDeployment(fixture.Project.Id, fixture.Project.ReleaseVersionId!.Value, null, DeploymentEnvironment.Production, "main", new string('9', 40), DeploymentTrigger.Auto, null));
 
         await Problems.AssertAsync(
             await fixture.Contributor.Client.PutAsync(new Uri($"{fixture.Path}/settings/deployment/env/KEY", UriKind.Relative), Json("""{"value":"v","targets":["preview"]}"""), Ct),
@@ -97,7 +97,7 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
             .On(HttpMethod.Get, "/v13/deployments/dpl_made", HttpStatusCode.OK, """{"id":"dpl_made","readyState":"READY","url":"todo-made.vercel.app"}""");
         var (app, owner, id, versionId) = await BoundAsync(vercel);
         using var _ = owner;
-        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(id, versionId, null, DeploymentTarget.Preview, "aide/x", new string('6', 40), DeploymentTrigger.Auto, null));
+        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(id, versionId, null, DeploymentEnvironment.Preview, "aide/x", new string('6', 40), DeploymentTrigger.Auto, null));
 
         await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, id, deployment.Id)).Id);
 
@@ -124,7 +124,7 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
         var (app, owner, id, versionId) = await BoundAsync(vercel);
         appRef = app;
         using var _ = owner;
-        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(id, versionId, null, DeploymentTarget.Preview, "aide/x", new string('7', 40), DeploymentTrigger.Auto, null));
+        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(id, versionId, null, DeploymentEnvironment.Preview, "aide/x", new string('7', 40), DeploymentTrigger.Auto, null));
         deploymentId = deployment.Id;
         var job = await DeploymentHarness.JobOfAsync(app, id, deployment.Id);
 

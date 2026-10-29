@@ -69,7 +69,7 @@ public sealed class DeploymentEnvTests(AideApiFactory factory)
         Assert.DoesNotContain(Secret, text, StringComparison.Ordinal);
         var dto = JsonSerializer.Deserialize<DeploymentEnvVarDto>(text, ApiSession.Json)!;
         Assert.Equal((true, true, (string?)null), (dto.HasValue, dto.Sensitive, dto.SyncError));
-        Assert.Equal([DeploymentTarget.Preview, DeploymentTarget.Production], dto.Targets);
+        Assert.Equal([DeploymentEnvironment.Preview, DeploymentEnvironment.Production], dto.Targets);
         Assert.NotNull(dto.SyncedAt);
 
         var post = Assert.Single(vercel.Requests, r => r.Method == "POST");
@@ -100,7 +100,7 @@ public sealed class DeploymentEnvTests(AideApiFactory factory)
 
         var narrowed = await ProjectApi.ReadAsync<DeploymentEnvVarDto>(await owner.Client.PutAsJsonAsync(Env(id, "API_URL"), new { value = "https://b", targets = PreviewOnly }, Ct));
 
-        Assert.Equal([DeploymentTarget.Preview], narrowed.Targets);
+        Assert.Equal([DeploymentEnvironment.Preview], narrowed.Targets);
         var patch = Assert.Single(vercel.Requests, r => r.Method == "PATCH");
         var body = JsonDocument.Parse(patch.Body).RootElement;
         Assert.Equal(("https://b", "encrypted", "preview"), (body.GetProperty("value").GetString(), body.GetProperty("type").GetString(), body.GetProperty("target")[0].GetString()));

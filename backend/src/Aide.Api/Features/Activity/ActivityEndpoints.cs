@@ -198,6 +198,11 @@ internal static class ActivitySummary
             EventTypes.ConnectionInvalid => Get("provider") switch
             {
                 "vercel" => "Vercel rejected the connection's token; it is marked invalid",
+                "netlify" => "Netlify rejected the connection's token; it is marked invalid",
+                "cloudflare" => "Cloudflare rejected the connection's token; it is marked invalid",
+                "render" => "Render rejected the connection's API key; it is marked invalid",
+                "railway" => "Railway rejected the connection's token; it is marked invalid",
+                "supabase" => "Supabase rejected the connection's token; it is marked invalid",
                 "github" => "GitHub rejected the user's connection; it is marked invalid",
                 "gitlab" => "GitLab rejected the user's connection; it is marked invalid",
                 "bitbucket" => "Bitbucket rejected the user's connection; it is marked invalid",

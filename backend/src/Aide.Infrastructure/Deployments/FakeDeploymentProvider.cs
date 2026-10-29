@@ -41,6 +41,12 @@ public sealed class FakeDeploymentProvider(IWorkingCopies workingCopies) : IDepl
             : new DeploymentAccount("usr_fake", "fake-user", null, null, VercelTokenScope.Account, null));
     }
 
+    public Task<IReadOnlyList<DeploymentTeam>> ListTeamsAsync(DeploymentAuth auth, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<DeploymentTeam>>([new DeploymentTeam(TeamId, TeamSlug, "Fake team")]);
+
+    public Task<IReadOnlyList<DeploymentProject>> ListProjectsAsync(DeploymentAuth auth, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<DeploymentProject>>([new DeploymentProject("prj_fake_todo", "todo", null, null)]);
+
     public Task<DeploymentProject> CreateProjectAsync(DeploymentAuth auth, CreateDeploymentProject request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -101,7 +107,7 @@ public sealed class FakeDeploymentProvider(IWorkingCopies workingCopies) : IDepl
         Task.FromResult<string?>(Parse(deploymentId).Fails ? FakeDeploymentRules.FailedBuildLog : "Running \"npm run build\"\n> next build\nBuild completed.");
 
     public Task<ProviderDeployment?> FindByAideIdAsync(
-        DeploymentAuth auth, string vercelProjectId, string sha, DeploymentTarget target, Guid aideDeploymentId, CancellationToken cancellationToken) =>
+        DeploymentAuth auth, string vercelProjectId, string sha, DeploymentEnvironment target, Guid aideDeploymentId, CancellationToken cancellationToken) =>
         Task.FromResult<ProviderDeployment?>(null);
 
     public Task CancelDeploymentAsync(DeploymentAuth auth, string deploymentId, CancellationToken cancellationToken) => Task.CompletedTask;

@@ -49,9 +49,9 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<GitConnection> GitConnections => Set<GitConnection>();
 
-    public DbSet<VercelConnection> VercelConnections => Set<VercelConnection>();
+    public DbSet<PlatformConnection> PlatformConnections => Set<PlatformConnection>();
 
-    public DbSet<ProjectDeploymentSettings> ProjectDeploymentSettings => Set<ProjectDeploymentSettings>();
+    public DbSet<DeploymentTarget> DeploymentTargets => Set<DeploymentTarget>();
 
     public DbSet<DeploymentEnvVar> DeploymentEnvVars => Set<DeploymentEnvVar>();
 
@@ -116,10 +116,14 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<ExternalLoginProvider>(configurationBuilder);
         MapEnum<GitConnectionAuthKind>(configurationBuilder);
         MapEnum<GitConnectionStatus>(configurationBuilder);
-        MapEnum<VercelTokenScope>(configurationBuilder);
-        MapEnum<VercelConnectionStatus>(configurationBuilder);
+        MapEnum<PlatformProvider>(configurationBuilder);
+        MapEnum<PlatformConnectionStatus>(configurationBuilder);
         MapEnum<DeploymentProvider>(configurationBuilder);
-        MapEnum<DeploymentTarget>(configurationBuilder);
+        MapEnum<DeploymentEnvironment>(configurationBuilder);
+        MapEnum<DeploymentComponent>(configurationBuilder);
+        MapEnum<DeploymentTargetStatus>(configurationBuilder);
+        MapEnum<DeploymentKind>(configurationBuilder);
+        MapEnum<DeploymentEnvSource>(configurationBuilder);
         MapEnum<DeploymentStatus>(configurationBuilder);
         MapEnum<DeploymentTrigger>(configurationBuilder);
         MapEnum<DriftLevel>(configurationBuilder);

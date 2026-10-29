@@ -147,8 +147,8 @@ public static class ProductionDeploymentRules
     /// Only the automatic deployment of a release adopts (redeploys always build anew), and only with Vercel: the Fake
     /// provider has no Git integration that deploys by itself.
     /// </summary>
-    public static bool Adopts(DeploymentTarget target, DeploymentTrigger trigger, DeploymentProvider provider) =>
-        target == DeploymentTarget.Production && trigger == DeploymentTrigger.Auto && provider == DeploymentProvider.Vercel;
+    public static bool Adopts(DeploymentEnvironment target, DeploymentTrigger trigger, DeploymentProvider provider) =>
+        target == DeploymentEnvironment.Production && trigger == DeploymentTrigger.Auto && provider == DeploymentProvider.Vercel;
 }
 
 /// <summary>Whether review waits for the preview, or goes on (and whether it gave up waiting).</summary>
@@ -309,10 +309,10 @@ public static class VercelErrorRules
 }
 
 /// <summary>One write of a project env var to Vercel for one target: create (no id yet) or update an existing Vercel var.</summary>
-public sealed record EnvTargetWrite(DeploymentTarget Target, string? ExistingVercelId);
+public sealed record EnvTargetWrite(DeploymentEnvironment Target, string? ExistingVercelId);
 
 /// <summary>One delete of a Vercel env var (a target the AIDE var no longer has).</summary>
-public sealed record EnvTargetDelete(DeploymentTarget Target, string VercelId);
+public sealed record EnvTargetDelete(DeploymentEnvironment Target, string VercelId);
 
 /// <summary>What pushing an env var to Vercel does: write each of its targets, delete the Vercel vars of dropped targets.</summary>
 public sealed record EnvSyncPlan(IReadOnlyList<EnvTargetWrite> Writes, IReadOnlyList<EnvTargetDelete> Deletes);
@@ -333,7 +333,7 @@ public static class EnvSyncRules
     public static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
 
     /// <summary>The plan for pushing a var with <paramref name="targets"/> whose Vercel ids so far are <paramref name="vercelIds"/>.</summary>
-    public static EnvSyncPlan Plan(IReadOnlyCollection<DeploymentTarget> targets, IReadOnlyDictionary<string, string>? vercelIds)
+    public static EnvSyncPlan Plan(IReadOnlyCollection<DeploymentEnvironment> targets, IReadOnlyDictionary<string, string>? vercelIds)
     {
         ArgumentNullException.ThrowIfNull(targets);
         var ids = vercelIds ?? new Dictionary<string, string>();
@@ -341,8 +341,8 @@ public static class EnvSyncRules
             .Select(t => new EnvTargetWrite(t, ids.TryGetValue(t.ToWire(), out var id) && !string.IsNullOrEmpty(id) ? id : null))
             .ToList();
         var deletes = ids
-            .Where(pair => !string.IsNullOrEmpty(pair.Value) && (!EnumStrings.TryParse<DeploymentTarget>(pair.Key, out var t) || !targets.Contains(t)))
-            .Select(pair => new EnvTargetDelete(EnumStrings.TryParse<DeploymentTarget>(pair.Key, out var t) ? t : DeploymentTarget.Preview, pair.Value))
+            .Where(pair => !string.IsNullOrEmpty(pair.Value) && (!EnumStrings.TryParse<DeploymentEnvironment>(pair.Key, out var t) || !targets.Contains(t)))
+            .Select(pair => new EnvTargetDelete(EnumStrings.TryParse<DeploymentEnvironment>(pair.Key, out var t) ? t : DeploymentEnvironment.Preview, pair.Value))
             .OrderBy(d => d.Target)
             .ToList();
         return new EnvSyncPlan(writes, deletes);

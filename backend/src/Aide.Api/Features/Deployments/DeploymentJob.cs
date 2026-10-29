@@ -66,9 +66,9 @@ public sealed partial class DeploymentJobHandler(
         var version = await DeploymentScheduler.VersionTextAsync(db, deployment.ReleaseVersionId, cancellationToken);
         var before = deployment.Status;
 
-        if (deployment.Target == DeploymentTarget.Preview
+        if (deployment.Environment == DeploymentEnvironment.Preview
             && await db.Deployments.AnyAsync(
-                d => d.ProjectId == deployment.ProjectId && d.Target == DeploymentTarget.Preview && d.Id != deployment.Id && d.CreatedAt > deployment.CreatedAt,
+                d => d.ProjectId == deployment.ProjectId && d.Environment == DeploymentEnvironment.Preview && d.Id != deployment.Id && d.CreatedAt > deployment.CreatedAt,
                 cancellationToken))
         {
             deployment.Status = DeploymentStatus.Canceled;
@@ -145,8 +145,8 @@ public sealed partial class DeploymentJobHandler(
     /// <summary>Adopts or creates the provider's deployment; returns when to look again for Vercel's own production deployment.</summary>
     private async Task<DateTimeOffset?> StartAsync(Deployment deployment, DeploymentContext context, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var vercelProjectId = context.Settings.VercelProjectId!;
-        if (ProductionDeploymentRules.Adopts(deployment.Target, deployment.Trigger, context.Provider.Kind))
+        var vercelProjectId = context.Target.ResourceId!;
+        if (ProductionDeploymentRules.Adopts(deployment.Environment, deployment.Trigger, context.Provider.Kind))
         {
             if (await context.Provider.FindProductionDeploymentAsync(context.Auth, vercelProjectId, deployment.GitSha, cancellationToken) is { } adopted)
             {
@@ -163,7 +163,7 @@ public sealed partial class DeploymentJobHandler(
         }
 
         // §4.15 idempotency: an earlier attempt may have created it (its save failed, or the create timed out).
-        if (await context.Provider.FindByAideIdAsync(context.Auth, vercelProjectId, deployment.GitSha, deployment.Target, deployment.Id, cancellationToken) is { } earlier)
+        if (await context.Provider.FindByAideIdAsync(context.Auth, vercelProjectId, deployment.GitSha, deployment.Environment, deployment.Id, cancellationToken) is { } earlier)
         {
             deployment.ProviderDeploymentId = earlier.Id;
             Apply(deployment, earlier);
@@ -178,8 +178,8 @@ public sealed partial class DeploymentJobHandler(
                 deployment.Id,
                 deployment.ProjectId,
                 vercelProjectId,
-                context.Settings.VercelProjectName ?? vercelProjectId,
-                deployment.Target,
+                context.Target.Name ?? vercelProjectId,
+                deployment.Environment,
                 deployment.GitRef,
                 deployment.GitSha,
                 context.Repo.RepoId,
@@ -189,7 +189,7 @@ public sealed partial class DeploymentJobHandler(
         deployment.ProviderDeploymentId = created.Id;
         _created = (created.Id, context.Auth);
         Apply(deployment, created);
-        LogCreated(logger, deployment.Id, deployment.Target);
+        LogCreated(logger, deployment.Id, deployment.Environment);
         return null;
     }
 
@@ -209,7 +209,7 @@ public sealed partial class DeploymentJobHandler(
             deployment.ErrorMessage ??= observed.ErrorMessage ?? "The Vercel build failed.";
         }
 
-        if (deployment.Status == DeploymentStatus.Ready && observed.Alias is { } alias && deployment.Target == DeploymentTarget.Production)
+        if (deployment.Status == DeploymentStatus.Ready && observed.Alias is { } alias && deployment.Environment == DeploymentEnvironment.Production)
         {
             _productionUrl = alias;
         }
@@ -263,23 +263,24 @@ public sealed partial class DeploymentJobHandler(
             if (deployment.Status == DeploymentStatus.Ready)
             {
                 deployment.ReadyAt = now;
-                if (deployment.Target == DeploymentTarget.Preview)
+                if (deployment.Environment == DeploymentEnvironment.Preview)
                 {
                     DeploymentEvents.PreviewReady(db, deployment, version, SystemActor.Name, now);
                 }
                 else if (deployment.Trigger != DeploymentTrigger.Promote
-                    && await db.ProjectDeploymentSettings.FirstOrDefaultAsync(s => s.ProjectId == deployment.ProjectId, cancellationToken) is { } settings)
+                    && await db.DeploymentTargets.FirstOrDefaultAsync(
+                        t => t.ProjectId == deployment.ProjectId && t.Component == deployment.Component, cancellationToken) is { } settings)
                 {
                     settings.ProductionUrl = _productionUrl ?? deployment.Url;
                     settings.UpdatedAt = now;
                 }
             }
-            else if (deployment.Status == DeploymentStatus.Error && (notifyOwners || deployment.Target == DeploymentTarget.Production))
+            else if (deployment.Status == DeploymentStatus.Error && (notifyOwners || deployment.Environment == DeploymentEnvironment.Production))
             {
                 DeploymentEvents.Failed(db, deployment, version, SystemActor.Name, now);
             }
 
-            LogState(logger, deployment.Id, deployment.Target, deployment.Status);
+            LogState(logger, deployment.Id, deployment.Environment, deployment.Status);
         }
 
         try
@@ -313,7 +314,7 @@ public sealed partial class DeploymentJobHandler(
         var context = resolved.Value;
         try
         {
-            if (await context.Provider.FindByAideIdAsync(context.Auth, context.Settings.VercelProjectId!, deployment.GitSha, deployment.Target, deployment.Id, cancellationToken) is { } orphan)
+            if (await context.Provider.FindByAideIdAsync(context.Auth, context.Target.ResourceId!, deployment.GitSha, deployment.Environment, deployment.Id, cancellationToken) is { } orphan)
             {
                 await CancelQuietlyAsync(context.Auth, orphan.Id, cancellationToken);
             }
@@ -347,13 +348,13 @@ public sealed partial class DeploymentJobHandler(
     private static partial void LogSkipped(ILogger logger, string reason);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Deployment {DeploymentId} ({Target}) created at the provider")]
-    private static partial void LogCreated(ILogger logger, Guid deploymentId, DeploymentTarget target);
+    private static partial void LogCreated(ILogger logger, Guid deploymentId, DeploymentEnvironment target);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Deployment {DeploymentId} adopted Vercel's production deployment of the merge commit")]
     private static partial void LogAdopted(ILogger logger, Guid deploymentId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Deployment {DeploymentId} ({Target}) is {Status}")]
-    private static partial void LogState(ILogger logger, Guid deploymentId, DeploymentTarget target, DeploymentStatus status);
+    private static partial void LogState(ILogger logger, Guid deploymentId, DeploymentEnvironment target, DeploymentStatus status);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Deployment {DeploymentId}: Vercel failed with HTTP {Status}; polling again later")]
     private static partial void LogUpstream(ILogger logger, Guid deploymentId, int? status);
@@ -399,7 +400,7 @@ public sealed class DeploymentJobEndedHook(TimeProvider time) : IJobEndedHook
         deployment.UpdatedAt = now;
         var version = await DeploymentScheduler.VersionTextAsync(db, deployment.ReleaseVersionId, cancellationToken);
         DeploymentEvents.Updated(db, deployment, version, SystemActor.Name, now);
-        if (deployment.Target == DeploymentTarget.Production)
+        if (deployment.Environment == DeploymentEnvironment.Production)
         {
             DeploymentEvents.Failed(db, deployment, version, SystemActor.Name, now);
         }

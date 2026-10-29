@@ -60,7 +60,7 @@ describe('Wizard → Deployment step (FR-88)', () => {
   it('FR88_wizard_vercel_create: an own connection and a new Vercel project are sent as `deployment`', async () => {
     let connectionId = ''
     const user = await toDeployment('github', (me) => {
-      connectionId = seedVercelConnection({ userId: me, label: 'Acme team', token: 'vcp_zzzzab12', teamSlug: 'acme', scope: 'team' }).id
+      connectionId = seedVercelConnection({ userId: me, label: 'Acme team', token: 'vcp_zzzzab12', teamSlug: 'acme' }).id
     })
     await user.click(screen.getByRole('radio', { name: /^Vercel/ }))
     const picker = await screen.findByLabelText('Vercel connection')

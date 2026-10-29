@@ -170,8 +170,8 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
         // (the base isn't listed on read, so with existing code its files are unknown and the warning is skipped).
         if (version.Stack?.Composition.Deploy.FrontendHost == "deploy-vercel")
         {
-            var rootDirectory = await db.ProjectDeploymentSettings.AsNoTracking()
-                .Where(s => s.ProjectId == artifact.ProjectId)
+            var rootDirectory = await db.DeploymentTargets.AsNoTracking()
+                .Where(t => t.ProjectId == artifact.ProjectId && t.Component == DeploymentComponent.Frontend)
                 .Select(s => s.RootDirectory)
                 .FirstOrDefaultAsync(cancellationToken);
             if (VercelConfigRules.PlanWarning(plan.Value, deploysToVercel: true, version.BaseFiles, rootDirectory) is { } vercel)

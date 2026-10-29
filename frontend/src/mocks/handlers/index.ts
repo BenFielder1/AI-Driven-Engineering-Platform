@@ -13,6 +13,7 @@ import { healthHandlers } from './health'
 import { lifecycleHandlers } from './lifecycle'
 import { llmHandlers } from './llm'
 import { notificationHandlers } from './notifications'
+import { platformConnectionHandlers } from './platform-connections'
 import { projectHandlers } from './projects'
 import { reviewHandlers } from './review'
 import { runHandlers } from './runs'
@@ -26,6 +27,7 @@ export const handlers = [
   ...projectHandlers,
   ...connectionHandlers,
   ...llmHandlers,
+  ...platformConnectionHandlers,
   ...deploymentHandlers,
   ...githubHandlers,
   ...gitlabHandlers,

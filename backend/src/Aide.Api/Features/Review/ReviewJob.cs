@@ -607,8 +607,8 @@ public sealed partial class ReviewJobHandler(
             return [];
         }
 
-        var rootDirectory = await db.ProjectDeploymentSettings.AsNoTracking()
-            .Where(s => s.ProjectId == projectId && s.Provider == DeploymentProvider.Vercel)
+        var rootDirectory = await db.DeploymentTargets.AsNoTracking()
+            .Where(t => t.ProjectId == projectId && t.Component == DeploymentComponent.Frontend && t.Provider == DeploymentProvider.Vercel)
             .Select(s => s.RootDirectory)
             .FirstOrDefaultAsync(cancellationToken);
         if (rootDirectory is null)

@@ -296,25 +296,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/connections/vercel": {
+    "/api/me/connections/platforms": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The caller's Vercel connections, newest first (no tokens: label, last 4, account, team, scope, expiry, status, bound projects). */
-        get: operations["ListVercelConnections"];
+        /** FR-142: the caller's platform connections (Vercel, Netlify, Cloudflare, Render, Railway, Supabase), newest first: label, last 4, account, metadata (teams, workspaces, orgs, policies, missing permissions), scopes, expiry, status and bound projects. Never the token. */
+        get: operations["ListPlatformConnections"];
         put?: never;
-        /** Add a Vercel access token. It is checked with Vercel first (GET /v2/user, and the team for a team-scoped token): 400 CREDENTIAL_INVALID if rejected (nothing saved), 502 UPSTREAM_ERROR if Vercel can't be reached. Browser session only. */
-        post: operations["CreateVercelConnection"];
+        /** FR-142: add a pasted platform token. It is checked with the platform first (§4.20 / §4.21): rejected → 400 CREDENTIAL_INVALID (nothing saved); a 403 for missing permissions saves it with status insufficient_scope and the missing names; a Cloudflare cfat_ token → 400 CONNECTION_SCOPE_INSUFFICIENT. Browser session only. */
+        post: operations["CreatePlatformConnection"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/me/connections/vercel/{id}": {
+    "/api/me/connections/platforms/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -324,15 +324,15 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete one of the caller's Vercel connections. Projects it was bound to lose their binding (their deployment settings and history stay); new deployments then fail with DEPLOYMENT_NOT_CONFIGURED until an Owner binds another. Browser session only. */
-        delete: operations["DeleteVercelConnection"];
+        /** FR-142, FR-144: delete one of the caller's platform connections. Deployment targets bound to it lose their binding (targets and history stay); deployments then fail with DEPLOYMENT_NOT_CONFIGURED until an Owner binds another. Browser session only. */
+        delete: operations["DeletePlatformConnection"];
         options?: never;
         head?: never;
-        /** Rename one of the caller's Vercel connections. Browser session only. */
-        patch: operations["RenameVercelConnection"];
+        /** FR-142: rename one of the caller's platform connections. Browser session only. */
+        patch: operations["RenamePlatformConnection"];
         trace?: never;
     };
-    "/api/me/connections/vercel/{id}/test": {
+    "/api/me/connections/platforms/{id}/test": {
         parameters: {
             query?: never;
             header?: never;
@@ -341,8 +341,42 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Check the token with Vercel again and record the result (status valid or invalid, lastValidatedAt; account and team refreshed). 502 UPSTREAM_ERROR if Vercel can't be reached (status unchanged). Browser session only. */
-        post: operations["TestVercelConnection"];
+        /** FR-142: check the token with the platform again and record the result (valid, insufficient_scope with the missing names, or invalid — then its owner is notified; lastValidatedAt; account and metadata refreshed). 429 UPSTREAM_RATE_LIMITED or 502 UPSTREAM_ERROR leave the status unchanged. Browser session only. */
+        post: operations["TestPlatformConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/platforms/{id}/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-142 picker: the teams (Vercel), accounts (Netlify, Cloudflare), workspaces (Render, Railway) or organisations (Supabase) the connection's token reaches. A rejected token marks the connection invalid (its owner is notified). */
+        get: operations["ListPlatformConnectionAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/platforms/{id}/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-142 picker: the connection's resources of a type (default: the provider's first): Vercel projects; Netlify sites; Cloudflare workers or projects (Pages); Render services or regions; Railway projects or regions; Supabase projects, orgs or regions. accountId scopes the list (default: the connection's account). A type the provider doesn't list → 400 VALIDATION. */
+        get: operations["ListPlatformConnectionResources"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2352,6 +2386,9 @@ export interface components {
          *     App field is `null` and `permissions` is empty). `installUrl` is
          *     `https://github.com/apps/{slug}/installations/new`; `permissions` are the App's granted permissions
          *     (e.g. `contents: write`); `canCreateRepositories` is true when `administration: write` is granted (§4.14).
+         *     `pagesPermission` (FR-143) is `granted` when the App has `pages: write`, `missing` for an App registered
+         *     before v4 ("Pages permission missing: update the App's permissions in GitHub, then accept them on each installation"),
+         *     and `unknown` when the App isn't configured or GitHub couldn't be asked.
          */
         AdminGitHubAppDto: {
             status: components["schemas"]["GitHubAppStatus"];
@@ -2367,6 +2404,7 @@ export interface components {
                 [key: string]: string;
             };
             canCreateRepositories: boolean;
+            pagesPermission: components["schemas"]["GitHubPagesAccess"];
         };
         /**
          * @description A GitLab instance for Admins (FR-130). Secrets are flags only (`hasClientSecret`). `baseUrl` is the effective
@@ -3207,6 +3245,18 @@ export interface components {
             apiKey: string;
         };
         /**
+         * @description Add a platform connection (FR-142, §4.20): the provider, a label and the pasted token, plus optionally the account it
+         *     is for (`accountId`: a team, account, workspace or organisation id the token reaches; required for a Railway
+         *     workspace token, which can't name its workspace itself). The token is checked with the platform before anything is
+         *     saved.
+         */
+        CreatePlatformConnectionRequest: {
+            provider: components["schemas"]["PlatformProvider"];
+            label: string;
+            token: string;
+            accountId?: null | string;
+        };
+        /**
          * @description Deployment step of the new-project wizard (FR-88): `provider` `vercel`, one of the caller's own Vercel
          *     connections, and an existing Vercel project (`vercelProjectId`) or a new one (`create`), not both. Needs a
          *     GitHub-backed project (`git.mode` `local`: 400 `VALIDATION`).
@@ -3336,14 +3386,6 @@ export interface components {
             deployment?: null | components["schemas"]["CreateProjectDeploymentRequest"];
             llm?: null | components["schemas"]["CreateProjectLlmRequest"];
         };
-        /**
-         * @description Add a Vercel connection (FR-87): a label and an access token (team- or account-scoped, ideally with an expiry).
-         *         The token is checked with Vercel before anything is saved.
-         */
-        CreateVercelConnectionRequest: {
-            label: string;
-            token: string;
-        };
         /** @description FR-88: create a new Vercel project linked to the GitHub repo (framework `nextjs`). */
         CreateVercelProjectRequest: {
             /** @description Lowercase letters, digits, `.`, `_`, `-`, up to 100, without `---`. */
@@ -3416,7 +3458,7 @@ export interface components {
             last4: string;
             teamSlug: null | string;
             boundBy: components["schemas"]["DeploymentUserDto"];
-            status: components["schemas"]["VercelConnectionStatus"];
+            status: components["schemas"]["PlatformConnectionStatus"];
         };
         /**
          * @description A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |
@@ -3431,7 +3473,7 @@ export interface components {
         DeploymentDto: {
             /** Format: uuid */
             id: string;
-            target: components["schemas"]["DeploymentTarget"];
+            target: components["schemas"]["DeploymentEnvironment"];
             provider: components["schemas"]["DeploymentProvider"];
             status: components["schemas"]["DeploymentStatus"];
             url: null | string;
@@ -3462,7 +3504,7 @@ export interface components {
          */
         DeploymentEnvVarDto: {
             key: string;
-            targets: components["schemas"]["DeploymentTarget"][];
+            targets: components["schemas"]["DeploymentEnvironment"][];
             sensitive: boolean;
             hasValue: boolean;
             /** Format: date-time */
@@ -3471,6 +3513,12 @@ export interface components {
             syncedAt: null | string;
             syncError: null | string;
         };
+        /**
+         * @description Deployment environment (FR-147, FR-149), also a Vercel env target (FR-88). Wire values: `preview`,
+         *                 `production`.
+         * @enum {unknown}
+         */
+        DeploymentEnvironment: "preview" | "production";
         /**
          * @description Deployment provider (§4.15). Wire values: `vercel`, `fake` (deterministic, tests and E2E).
          * @enum {unknown}
@@ -3502,11 +3550,6 @@ export interface components {
          * @enum {unknown}
          */
         DeploymentStatus: "queued" | "building" | "ready" | "error" | "canceled";
-        /**
-         * @description Deployment target, also a Vercel env target (FR-88). Wire values: `preview`, `production`.
-         * @enum {unknown}
-         */
-        DeploymentTarget: "preview" | "production";
         /**
          * @description Why a deployment row exists (FR-90, FR-91). Wire values: `auto` (AIDE after execution or release),
          *                 `manual`, `promote`, `redeploy`.
@@ -3874,7 +3917,7 @@ export interface components {
          *     `App:PublicBaseUrl`; `redirect_url` the manifest callback (`/api/admin/integrations/github/callback`);
          *     `callback_urls` the sign-in callback (`/api/auth/github/callback`); no `hook_attributes` (GitHub rejects a
          *     localhost webhook URL even when inactive, and needs a URL whenever the object is present), so the App has no webhook; private; and
-         *     `default_permissions` contents, pull_requests, workflows and administration `write`, metadata, checks and
+         *     `default_permissions` contents, pull_requests, workflows, administration and pages (FR-143) `write`, metadata, checks and
          *     statuses `read` (the Admin may drop `administration`, which disables "Create repository"); no events.
          */
         GitHubAppManifestDto: {
@@ -3932,6 +3975,8 @@ export interface components {
         /**
          * @description An installation of the AIDE GitHub App that the caller can access (FR-81, `GET /user/installations`):
          *     `repositorySelection` is `all` or `selected`; `manageUrl` is where the user adds repositories to it.
+         *     `pagesPermission` (FR-143) is whether the installation grants the App's Pages write permission (`granted`,
+         *     `missing`: the Owner has to accept the updated permissions on the installation, or `unknown`).
          */
         GitHubInstallationDto: {
             /** Format: int64 */
@@ -3939,6 +3984,7 @@ export interface components {
             account: components["schemas"]["GitHubAccountDto"];
             repositorySelection: components["schemas"]["GitHubRepositorySelection"];
             manageUrl: string;
+            pagesPermission: components["schemas"]["GitHubPagesAccess"];
         };
         /**
          * @description A possible owner for "Create repository" (FR-81): the caller (`user`) or an organisation they belong to.
@@ -3959,6 +4005,12 @@ export interface components {
          * @enum {unknown}
          */
         GitHubOwnerType: "user" | "organization";
+        /**
+         * @description FR-143: whether GitHub reports the AIDE App's Pages permission. Wire values: `granted`, `missing`,
+         *                 `unknown`.
+         * @enum {unknown}
+         */
+        GitHubPagesAccess: "granted" | "missing" | "unknown";
         /** @description A GitHub release (FR-73 import, FR-86): `isLatest` marks GitHub's latest release. */
         GitHubReleaseDto: {
             tagName: string;
@@ -4638,6 +4690,88 @@ export interface components {
          */
         PlanRunStatus: "pending" | "running" | "paused" | "completed" | "blocked" | "superseded";
         /**
+         * @description A team, account, workspace or organisation a platform token reaches (FR-142): its id (send it as `accountId`),
+         *     name, slug (Vercel teams, Netlify accounts, Supabase organisations) and kind (e.g. `team`, `user`,
+         *     `workspace`, `organization`; `null` when the platform doesn't say).
+         */
+        PlatformAccountDto: {
+            id: string;
+            name: string;
+            slug: null | string;
+            kind: null | string;
+        };
+        /** @description A project whose deployment target is bound to a platform connection (FR-144). */
+        PlatformBoundProjectDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /**
+         * @description One of the caller's platform connections (FR-142). The token is never returned: only the label and its last 4
+         *     characters. `accountId`/`accountName` are the account it is for (the Vercel or Netlify user or team, Cloudflare
+         *     account, Render workspace, Railway workspace, Supabase organisation; `null` when not chosen or unknown),
+         *     `metadata` what else the token reaches, `scopes` its scopes where the platform reports them, `expiresAt`
+         *     its expiry (`null`: none or unknown), `status` (`valid`, `invalid`, `insufficient_scope`,
+         *     `unchecked`) and when it was last checked, plus the projects whose deployment targets are bound to it.
+         */
+        PlatformConnectionDto: {
+            /** Format: uuid */
+            id: string;
+            provider: components["schemas"]["PlatformProvider"];
+            label: string;
+            last4: string;
+            accountId: null | string;
+            accountName: null | string;
+            metadata: components["schemas"]["PlatformConnectionMetadataDto"];
+            scopes: string[];
+            /** Format: date-time */
+            expiresAt: null | string;
+            status: components["schemas"]["PlatformConnectionStatus"];
+            /** Format: date-time */
+            lastValidatedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            boundProjects: components["schemas"]["PlatformBoundProjectDto"][];
+        };
+        /**
+         * @description What the platform says about a token (FR-142). `teamId`/`teamSlug`: a team-scoped Vercel token's team.
+         *     `accounts`: the teams, accounts, workspaces or organisations it reaches. `policies`: a Cloudflare token's
+         *     permission groups (empty when the token can't read them). `missingPermissions`: what the platform said is missing
+         *     (Supabase `missing_permissions`; non-empty with status `insufficient_scope`). `tokenKind`: e.g. Railway
+         *     `workspace` or `account`, Cloudflare `user` (`null` when it doesn't matter).
+         */
+        PlatformConnectionMetadataDto: {
+            teamId: null | string;
+            teamSlug: null | string;
+            accounts: components["schemas"]["PlatformAccountDto"][];
+            policies: string[];
+            missingPermissions: string[];
+            tokenKind: null | string;
+        };
+        /**
+         * @description Validation state of a platform connection (FR-142). Wire values: `valid`, `invalid` (rejected),
+         *                 `insufficient_scope` (missing permissions), `unchecked`.
+         * @enum {unknown}
+         */
+        PlatformConnectionStatus: "valid" | "invalid" | "insufficient_scope" | "unchecked";
+        /**
+         * @description Deployment platforms and databases with pasted-token connections (FR-142, §4.20, §4.21). Wire values:
+         *                 `vercel`, `netlify`, `cloudflare`, `render`, `railway`, `supabase`.
+         * @enum {unknown}
+         */
+        PlatformProvider: "vercel" | "netlify" | "cloudflare" | "render" | "railway" | "supabase";
+        /**
+         * @description An entry of a platform picker (FR-142 `GET …/resources`): the platform's id (send it as the resource to link), its
+         *     name, URL when there is one, and a short detail (e.g. the linked repository, the service type, a project's region and
+         *     status).
+         */
+        PlatformResourceDto: {
+            id: string;
+            name: string;
+            url: null | string;
+            detail: null | string;
+        };
+        /**
          * @description FR-90: the preview deployment a review cycle waited for (`compliance_report.external_checks.preview`): its id, final
          *     (or last seen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 20
          *     minutes; `null` when it didn't wait) and whether it gave up waiting (`timedOut`).
@@ -4940,7 +5074,7 @@ export interface components {
          */
         PutDeploymentEnvRequest: {
             value: string;
-            targets: components["schemas"]["DeploymentTarget"][];
+            targets: components["schemas"]["DeploymentEnvironment"][];
             sensitive?: boolean;
         };
         /** @description An answer given to the agent: `questionId` when it answered a question of a round, and the question text. */
@@ -5209,7 +5343,7 @@ export interface components {
          */
         RequiredEnvVarDto: {
             key: string;
-            targets: components["schemas"]["DeploymentTarget"][];
+            targets: components["schemas"]["DeploymentEnvironment"][];
             sensitive: boolean;
             description: string;
             present: boolean;
@@ -5717,6 +5851,10 @@ export interface components {
         UpdateNotificationSettingsRequest: {
             channels: components["schemas"]["NotificationChannelInput"][];
         };
+        /** @description Rename a platform connection (FR-142). */
+        UpdatePlatformConnectionRequest: {
+            label: string;
+        };
         /** @description Partial update of a project (FR-7). Omitted fields are unchanged. */
         UpdateProjectRequest: {
             name?: null | string;
@@ -5735,10 +5873,6 @@ export interface components {
             /** @description `true` removes the token budget (unlimited). Can't be combined with `tokenBudget`. */
             clearTokenBudget?: boolean;
         };
-        /** @description Rename a Vercel connection (FR-87). */
-        UpdateVercelConnectionRequest: {
-            label: string;
-        };
         /** @description The signed-in user (or a user, for admins). */
         UserDto: {
             /** Format: uuid */
@@ -5749,43 +5883,6 @@ export interface components {
             avatarUrl: null | string;
             githubLinked: boolean;
         };
-        /** @description A project that has a Vercel connection bound for deployment (FR-88). */
-        VercelBoundProjectDto: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-        };
-        /**
-         * @description One of the caller's Vercel connections (FR-87). The token is never returned: only the label, its last 4 characters,
-         *     the Vercel account (`accountName`, the Vercel username; `null` when unknown) and, for a team-scoped token,
-         *     `teamId`/`teamSlug`, the `scope` (`account` or `team`), the token's expiry (`null`: none),
-         *     the validation status (`valid`, `invalid`, `unchecked`) and when it was last checked, plus the projects
-         *     it is bound to.
-         */
-        VercelConnectionDto: {
-            /** Format: uuid */
-            id: string;
-            label: string;
-            last4: string;
-            accountName: null | string;
-            teamId: null | string;
-            teamSlug: null | string;
-            scope: components["schemas"]["VercelTokenScope"];
-            /** Format: date-time */
-            expiresAt: null | string;
-            status: components["schemas"]["VercelConnectionStatus"];
-            /** Format: date-time */
-            lastValidatedAt: null | string;
-            /** Format: date-time */
-            createdAt: string;
-            boundProjects: components["schemas"]["VercelBoundProjectDto"][];
-        };
-        /**
-         * @description Validation state of a Vercel connection (FR-87: a token Vercel rejects marks it invalid). Wire values:
-         *                 `valid`, `invalid`, `unchecked`.
-         * @enum {unknown}
-         */
-        VercelConnectionStatus: "valid" | "invalid" | "unchecked";
         /** @description The linked Vercel project (FR-88): id (`prj_…`), name, its Vercel URL and the production URL once known. */
         VercelProjectDto: {
             id: string;
@@ -5793,11 +5890,6 @@ export interface components {
             url: null | string;
             productionUrl: null | string;
         };
-        /**
-         * @description Scope of a Vercel token (FR-87). Wire values: `account`, `team`.
-         * @enum {unknown}
-         */
-        VercelTokenScope: "account" | "team";
         /** @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known. */
         ViolationDto: {
             category: components["schemas"]["ReviewCategory"];
@@ -6576,7 +6668,7 @@ export interface operations {
             };
         };
     };
-    ListVercelConnections: {
+    ListPlatformConnections: {
         parameters: {
             query?: never;
             header?: never;
@@ -6591,7 +6683,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VercelConnectionDto"][];
+                    "application/json": components["schemas"]["PlatformConnectionDto"][];
                 };
             };
             /** @description Unauthorized */
@@ -6605,7 +6697,7 @@ export interface operations {
             };
         };
     };
-    CreateVercelConnection: {
+    CreatePlatformConnection: {
         parameters: {
             query?: never;
             header?: never;
@@ -6614,7 +6706,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateVercelConnectionRequest"];
+                "application/json": components["schemas"]["CreatePlatformConnectionRequest"];
             };
         };
         responses: {
@@ -6624,10 +6716,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VercelConnectionDto"];
+                    "application/json": components["schemas"]["PlatformConnectionDto"];
                 };
             };
-            /** @description VALIDATION, or CREDENTIAL_INVALID (Vercel rejected the token; nothing is saved) */
+            /** @description VALIDATION, CREDENTIAL_INVALID (the platform rejected the token; nothing is saved) or CONNECTION_SCOPE_INSUFFICIENT (a Cloudflare account-owned cfat_ token: Workers Builds needs a user token) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6654,7 +6746,18 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached; nothing is saved) */
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -6665,7 +6768,7 @@ export interface operations {
             };
         };
     };
-    DeleteVercelConnection: {
+    DeletePlatformConnection: {
         parameters: {
             query?: never;
             header?: never;
@@ -6712,7 +6815,7 @@ export interface operations {
             };
         };
     };
-    RenameVercelConnection: {
+    RenamePlatformConnection: {
         parameters: {
             query?: never;
             header?: never;
@@ -6723,7 +6826,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateVercelConnectionRequest"];
+                "application/json": components["schemas"]["UpdatePlatformConnectionRequest"];
             };
         };
         responses: {
@@ -6733,7 +6836,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VercelConnectionDto"];
+                    "application/json": components["schemas"]["PlatformConnectionDto"];
                 };
             };
             /** @description Bad Request */
@@ -6774,7 +6877,7 @@ export interface operations {
             };
         };
     };
-    TestVercelConnection: {
+    TestPlatformConnection: {
         parameters: {
             query?: never;
             header?: never;
@@ -6791,7 +6894,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VercelConnectionDto"];
+                    "application/json": components["schemas"]["PlatformConnectionDto"];
                 };
             };
             /** @description Unauthorized */
@@ -6821,7 +6924,159 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Bad Gateway */
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPlatformConnectionAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAccountDto"][];
+                };
+            };
+            /** @description VALIDATION (a type the provider doesn't list, or a malformed accountId), CREDENTIAL_INVALID (the token is invalid or was just rejected; the connection is now invalid) or CONNECTION_SCOPE_INSUFFICIENT (the token lacks a permission for this request; the connection's status is unchanged) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPlatformConnectionResources: {
+        parameters: {
+            query?: {
+                type?: "sites" | "services" | "projects" | "workers" | "orgs" | "regions";
+                accountId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformResourceDto"][];
+                };
+            };
+            /** @description VALIDATION (a type the provider doesn't list, or a malformed accountId), CREDENTIAL_INVALID (the token is invalid or was just rejected; the connection is now invalid) or CONNECTION_SCOPE_INSUFFICIENT (the token lacks a permission for this request; the connection's status is unchanged) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;

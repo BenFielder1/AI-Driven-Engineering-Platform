@@ -34,6 +34,15 @@ public enum GitHubRepositorySelection
     Selected = 1,
 }
 
+/// <summary>FR-143: whether GitHub reports the AIDE App's Pages permission. Wire values: <c>granted</c>, <c>missing</c>,
+/// <c>unknown</c>.</summary>
+public enum GitHubPagesAccess
+{
+    Granted = 0,
+    Missing = 1,
+    Unknown = 2,
+}
+
 /// <summary>Pure GitHub integration rules (FR-80, FR-81, D-V2-7).</summary>
 public static class GitHubRules
 {
@@ -66,8 +75,9 @@ public static class GitHubRules
 
     /// <summary>
     /// §4.14: the App's repository permissions in the manifest: Contents, Pull requests, Workflows and Administration
-    /// write (Administration is for "Create repository"; the Admin may untick it), Metadata, Checks and Commit statuses
-    /// read. User permission: email addresses read (sign-in needs a verified email).
+    /// write (Administration is for "Create repository"; the Admin may untick it), Pages write (FR-143: GitHub Pages
+    /// deployments), Metadata, Checks and Commit statuses read. User permission: email addresses read (sign-in needs a
+    /// verified email).
     /// </summary>
     public static IReadOnlyDictionary<string, string> ManifestPermissions { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -75,6 +85,7 @@ public static class GitHubRules
         ["pull_requests"] = "write",
         ["workflows"] = "write",
         ["administration"] = "write",
+        ["pages"] = "write",
         ["metadata"] = "read",
         ["checks"] = "read",
         ["statuses"] = "read",
@@ -108,6 +119,16 @@ public static class GitHubRules
         ArgumentNullException.ThrowIfNull(permissions);
         return permissions.TryGetValue("administration", out var level) && level == "write";
     }
+
+    /// <summary>
+    /// FR-143: whether permissions GitHub reported (an App's, or an installation's or its token's) include Pages write:
+    /// <c>granted</c>, <c>missing</c> (App registrations from before v4 until the Owner accepts the new permission), or
+    /// <c>unknown</c> when GitHub's permissions couldn't be read (<paramref name="permissions"/> <c>null</c>).
+    /// </summary>
+    public static GitHubPagesAccess PagesPermission(IReadOnlyDictionary<string, string>? permissions) =>
+        permissions is null ? GitHubPagesAccess.Unknown
+        : permissions.TryGetValue("pages", out var level) && level == "write" ? GitHubPagesAccess.Granted
+        : GitHubPagesAccess.Missing;
 
     /// <summary>GitHub's account type (<c>User</c>, <c>Organization</c>; <c>Bot</c> and others count as users).</summary>
     public static GitHubOwnerType OwnerTypeOf(string? githubType) =>

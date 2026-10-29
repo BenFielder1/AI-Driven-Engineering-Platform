@@ -158,6 +158,9 @@ export const errorMessages = {
   // FR-136 job codes (§6): the Git host rate limited a background job; it is re-queued for the reset.
   GITLAB_RATE_LIMITED: hostJobRateLimited("GitLab"),
   BITBUCKET_RATE_LIMITED: hostJobRateLimited("Bitbucket"),
+  // FR-143, §6: GitHub Pages as a frontend host needs the App's Pages permission.
+  PLATFORM_PERMISSION_MISSING:
+    "The AIDE GitHub App needs the Pages permission. Update it in GitHub settings, then accept it on each installation.",
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;
@@ -329,12 +332,33 @@ export const contextualErrorMessages = {
     CREDENTIAL_INVALID:
       "The provider rejected this key, so it wasn't saved. Check that you copied the whole key and that it is active.",
   },
-  /** POST /api/me/connections/vercel · /:id/test (FR-87). */
+  /**
+   * /api/me/connections/platforms[/:id] · /:id/test (FR-142). `{provider}` is completed by platformConnectionMessage().
+   */
+  platformConnection: {
+    UPSTREAM_ERROR: "We couldn't reach {provider} to check the token. Nothing changed; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: "{provider} is rate limiting requests. Nothing changed; try again in a few minutes.",
+    FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
+    NOT_FOUND: "That connection no longer exists. The list now shows the latest.",
+    CREDENTIAL_INVALID:
+      "{provider} rejected this token, so it wasn't saved. Check that you copied the whole token, that it hasn't expired or been revoked, and that it is the type of token described above.",
+  },
+  /** FR-142 Vercel: the v2 copy (FR-87), naming team tokens. */
   vercelConnection: {
     UPSTREAM_ERROR: "We couldn't reach Vercel to check the token. Nothing changed; try again in a moment.",
     FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
     CREDENTIAL_INVALID:
       "Vercel rejected this token, so it wasn't saved. Check that you copied the whole token, that it hasn't expired and, for a team token, that it can access the team.",
+  },
+  /** FR-142 Cloudflare: an account-owned (cfat_) token is refused before calling Cloudflare. */
+  cloudflareConnection: {
+    CONNECTION_SCOPE_INSUFFICIENT:
+      "This is a Cloudflare account-owned token (it starts with cfat_), so it wasn't saved. Workers Builds needs a user API token: create one under My Profile → API Tokens with Workers Scripts Edit, Workers CI Edit, Account Settings Read and User Details Read.",
+  },
+  /** FR-142 Railway: a workspace token also needs its workspace id. */
+  railwayConnection: {
+    CREDENTIAL_INVALID:
+      "Railway rejected this token, so it wasn't saved. Check that you copied the whole token and, for a workspace token, that the Workspace ID is the token's workspace.",
   },
   /** PATCH /api/projects/:id/settings/deployment (FR-88). */
   deploymentSettings: {
@@ -615,6 +639,7 @@ export type ErrorContext = keyof typeof contextualErrorMessages;
  */
 const retryAfterContexts: ReadonlySet<ErrorContext> = new Set<ErrorContext>([
   "bitbucketConnection",
+  "platformConnection",
   "bitbucketRepos",
   "createBitbucketRepo",
   "createProjectBitbucket",
@@ -738,6 +763,21 @@ export function connectionScopeMessage(
     );
   }
   return parts.length === 0 ? errorMessages.CONNECTION_SCOPE_INSUFFICIENT : parts.join(" ");
+}
+
+/**
+ * FR-142: copy for a failed platform connection call. A provider's own context wins (Vercel's team tokens, Cloudflare's
+ * cfat_ refusal, Railway's workspace id), then the shared platform copy with `{provider}` filled in.
+ */
+export function platformConnectionMessage(error: unknown, provider: { id: string; name: string }): string {
+  const own = `${provider.id}Connection`;
+  const providerContext = Object.hasOwn(contextualErrorMessages, own) ? (own as ErrorContext) : undefined;
+  const code = error instanceof ApiError ? error.errorCode : null;
+  const overrides: Partial<Record<ErrorCode, string>> | undefined = providerContext
+    ? contextualErrorMessages[providerContext]
+    : undefined;
+  const context = code !== null && overrides?.[code] ? providerContext : "platformConnection";
+  return errorMessage(error, context).replaceAll("{provider}", provider.name);
 }
 
 function isErrorCode(code: unknown): code is ErrorCode {
@@ -1012,6 +1052,12 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
       );
     }
     if (error.errorCode === "CONNECTION_SCOPE_INSUFFICIENT") {
+      const override: Partial<Record<ErrorCode, string>> | undefined = context
+        ? contextualErrorMessages[context]
+        : undefined;
+      if (override?.CONNECTION_SCOPE_INSUFFICIENT) {
+        return override.CONNECTION_SCOPE_INSUFFICIENT;
+      }
       return connectionScopeMessage(error.details, error.unverifiableScopes);
     }
     if (error.errorCode === "STACK_INCOMPATIBLE") {

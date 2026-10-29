@@ -7,55 +7,33 @@ using Aide.Domain.Projects;
 
 namespace Aide.Domain.Deployments;
 
-/// <summary>FR-87: rules for personal Vercel connections (access tokens). Tokens are checked with Vercel before saving.</summary>
-public static class VercelConnectionRules
+/// <summary>
+/// FR-144, §5: the state of a deployment target as v2's Vercel flow keeps it (slice 1): <c>ready</c> with a bound
+/// connection and a linked resource; <c>attention</c> (<c>connection_missing</c>) when the resource is linked but the binding
+/// was cleared; <c>not_configured</c> otherwise. The PlatformsAndTargets migration applies the same rule to v2 settings.
+/// </summary>
+public static class DeploymentTargetRules
 {
-    public const int MaxLabelLength = 100;
+    public const string ConnectionMissing = "connection_missing";
 
-    /// <summary>Longest accepted token (Vercel tokens are a few dozen characters).</summary>
-    public const int MaxTokenLength = 1000;
+    public static (DeploymentTargetStatus Status, string? Reason) StatusOf(bool hasConnection, bool hasResource) =>
+        (hasConnection, hasResource) switch
+        {
+            (true, true) => (DeploymentTargetStatus.Ready, null),
+            (false, true) => (DeploymentTargetStatus.Attention, ConnectionMissing),
+            _ => (DeploymentTargetStatus.NotConfigured, null),
+        };
 
-    /// <summary>FR-87: a new connection: a label (1–100 characters after trimming) and a well-formed token (not blank, no
-    /// whitespace or control characters).</summary>
-    public static Result ValidateNew(string? label, string? token)
+    /// <summary>Recomputes <paramref name="target"/>'s status from its binding and resource (<see cref="StatusOf"/>).</summary>
+    public static void Refresh(DeploymentTarget target)
     {
-        var problems = new List<string>();
-        AddLabelProblems(label, problems);
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            problems.Add("token: The token is required.");
-        }
-        else if (token.Length > MaxTokenLength)
-        {
-            problems.Add($"token: The token can't be longer than {MaxTokenLength} characters.");
-        }
-        else if (!ProjectSettingsRules.IsWellFormedApiKey(token))
-        {
-            problems.Add("token: The token can't contain spaces, line breaks or other control characters.");
-        }
-
-        return ProjectRules.ToResult(problems, "The connection is invalid.");
+        ArgumentNullException.ThrowIfNull(target);
+        (target.Status, target.StatusReason) = StatusOf(target.ConnectionId is not null, !string.IsNullOrEmpty(target.ResourceId));
     }
 
-    /// <summary>FR-87: renaming a connection.</summary>
-    public static Result ValidateLabel(string? label)
-    {
-        var problems = new List<string>();
-        AddLabelProblems(label, problems);
-        return ProjectRules.ToResult(problems, "The connection is invalid.");
-    }
-
-    private static void AddLabelProblems(string? label, List<string> problems)
-    {
-        if (string.IsNullOrWhiteSpace(label))
-        {
-            problems.Add("label: The label is required.");
-        }
-        else if (label.Trim().Length > MaxLabelLength)
-        {
-            problems.Add($"label: The label can't be longer than {MaxLabelLength} characters.");
-        }
-    }
+    /// <summary>§5: what a deployment row does, from why it exists: a promote re-points production, anything else deploys.</summary>
+    public static DeploymentKind KindOf(DeploymentTrigger trigger) =>
+        trigger == DeploymentTrigger.Promote ? DeploymentKind.Promote : DeploymentKind.Deploy;
 }
 
 /// <summary>
@@ -227,7 +205,7 @@ public static partial class DeploymentSettingsRules
             return false;
         }
 
-        if (path == ProjectDeploymentSettings.DefaultRootDirectory)
+        if (path == DeploymentTarget.DefaultRootDirectory)
         {
             return true;
         }
@@ -254,7 +232,7 @@ public static partial class DeploymentEnvRules
 
     /// <summary>FR-88: a key (<c>^[A-Za-z_][A-Za-z0-9_]*$</c>, up to 256), a non-empty value up to 64 KB and at least one
     /// target, each once.</summary>
-    public static Result Validate(string? key, string? value, IReadOnlyCollection<DeploymentTarget>? targets)
+    public static Result Validate(string? key, string? value, IReadOnlyCollection<DeploymentEnvironment>? targets)
     {
         var problems = new List<string>();
         if (!IsKey(key))
@@ -288,11 +266,24 @@ public static partial class DeploymentEnvRules
     /// (<paramref name="requiredTargets"/>; none listed: any target).
     /// </summary>
     public static bool IsPresent(
-        string key, IReadOnlyCollection<DeploymentTarget> requiredTargets, IReadOnlyDictionary<string, IReadOnlyList<DeploymentTarget>> projectVars)
+        string key, IReadOnlyCollection<DeploymentEnvironment> requiredTargets, IReadOnlyDictionary<string, IReadOnlyList<DeploymentEnvironment>> projectVars)
     {
         ArgumentNullException.ThrowIfNull(requiredTargets);
         ArgumentNullException.ThrowIfNull(projectVars);
         return projectVars.TryGetValue(key, out var targets) && requiredTargets.All(targets.Contains);
+    }
+
+    /// <summary>The public prefix of v2's Next.js frontends (FR-145: <c>NEXT_PUBLIC_</c> variables reach the browser).</summary>
+    public const string NextPublicPrefix = "NEXT_PUBLIC_";
+
+    /// <summary>
+    /// FR-145 (v2 flow and the PlatformsAndTargets backfill): a user variable is public when its key has the Next.js public
+    /// prefix (<see cref="NextPublicPrefix"/>, case-sensitive as Next.js).
+    /// </summary>
+    public static bool IsPublicKey(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return key.StartsWith(NextPublicPrefix, StringComparison.Ordinal);
     }
 
     /// <summary>FR-88: an environment variable key.</summary>
@@ -309,13 +300,13 @@ public static class DeploymentActionRules
     /// FR-90 ("a Contributor can redeploy" the preview) and FR-91 / §6 (production redeploy is Owner-only): redeploying a
     /// preview is a writer action, redeploying production an Owner action.
     /// </summary>
-    public static ProjectAction RedeployAction(DeploymentTarget target) =>
-        target == DeploymentTarget.Production ? ProjectAction.ManageDeployments : ProjectAction.TriggerDeployment;
+    public static ProjectAction RedeployAction(DeploymentEnvironment target) =>
+        target == DeploymentEnvironment.Production ? ProjectAction.ManageDeployments : ProjectAction.TriggerDeployment;
 
     /// <summary>FR-91: only a <c>ready</c> production deployment can be promoted (<c>INVALID_DEPLOYMENT → 409</c>).</summary>
-    public static Result CanPromote(DeploymentTarget target, DeploymentStatus status)
+    public static Result CanPromote(DeploymentEnvironment target, DeploymentStatus status)
     {
-        if (target != DeploymentTarget.Production)
+        if (target != DeploymentEnvironment.Production)
         {
             return Result.Failure(new DomainError(ErrorCodes.InvalidDeployment, "Only a production deployment can be promoted."));
         }

@@ -36,18 +36,21 @@ public sealed record DeploymentAccount(string UserId, string? Username, string? 
 /// <summary>FR-88: a Vercel project; <see cref="LinkedRepo"/> is its linked GitHub repository (<c>owner/name</c>), if any.</summary>
 public sealed record DeploymentProject(string Id, string Name, string? LinkedRepo, long? LinkedRepoId);
 
+/// <summary>FR-142: a Vercel team the token can see.</summary>
+public sealed record DeploymentTeam(string Id, string Slug, string Name);
+
 /// <summary>FR-88: create a Vercel project linked to <see cref="Repo"/> (<c>owner/name</c>).</summary>
 public sealed record CreateDeploymentProject(string Name, string Repo, string Framework, string RootDirectory);
 
 /// <summary>One env var write for one target (§4.15): create, or update <see cref="ExistingId"/>. The value is never logged.</summary>
-public sealed record DeploymentEnvWrite(string Key, string Value, DeploymentTarget Target, bool Sensitive, string? ExistingId)
+public sealed record DeploymentEnvWrite(string Key, string Value, DeploymentEnvironment Target, bool Sensitive, string? ExistingId)
 {
     /// <summary>Redacted: the value never reaches a log.</summary>
     public override string ToString() => $"DeploymentEnvWrite {{ Key = {Key}, Target = {Target} }}";
 }
 
 /// <summary>Vercel's id of a written (key, target).</summary>
-public sealed record DeploymentEnvWritten(string Key, DeploymentTarget Target, string Id);
+public sealed record DeploymentEnvWritten(string Key, DeploymentEnvironment Target, string Id);
 
 /// <summary>
 /// FR-90, FR-91: create a deployment of <see cref="GitSha"/> on <see cref="GitRef"/> for the Vercel project. The repository
@@ -61,7 +64,7 @@ public sealed record CreateDeployment(
     Guid AideProjectId,
     string VercelProjectId,
     string VercelProjectName,
-    DeploymentTarget Target,
+    DeploymentEnvironment Target,
     string GitRef,
     string GitSha,
     long? RepoId,
@@ -123,6 +126,12 @@ public interface IDeploymentProvider
     /// <summary>FR-87: who the token belongs to (<c>GET /v2/user</c>, the token's scope, the team). Rejected: <see cref="VercelFailure.CredentialRejected"/>.</summary>
     Task<DeploymentAccount> ValidateTokenAsync(string token, CancellationToken cancellationToken);
 
+    /// <summary>FR-142 picker: the teams the token can see (<c>GET /v2/teams</c>), as <c>(id, slug, name)</c>.</summary>
+    Task<IReadOnlyList<DeploymentTeam>> ListTeamsAsync(DeploymentAuth auth, CancellationToken cancellationToken);
+
+    /// <summary>FR-142 picker: the projects of the token's account or team (<c>GET /v9/projects</c>, the first 100).</summary>
+    Task<IReadOnlyList<DeploymentProject>> ListProjectsAsync(DeploymentAuth auth, CancellationToken cancellationToken);
+
     /// <summary>FR-88: <c>POST /v11/projects</c> linked to the GitHub repository.</summary>
     Task<DeploymentProject> CreateProjectAsync(DeploymentAuth auth, CreateDeploymentProject request, CancellationToken cancellationToken);
 
@@ -155,7 +164,7 @@ public interface IDeploymentProvider
     /// (its <c>meta.aideDeploymentId</c>), not canceled, or <c>null</c>.
     /// </summary>
     Task<ProviderDeployment?> FindByAideIdAsync(
-        DeploymentAuth auth, string vercelProjectId, string sha, DeploymentTarget target, Guid aideDeploymentId, CancellationToken cancellationToken);
+        DeploymentAuth auth, string vercelProjectId, string sha, DeploymentEnvironment target, Guid aideDeploymentId, CancellationToken cancellationToken);
 
     /// <summary>§4.15: cancels a deployment no AIDE row records (<c>PATCH /v12/deployments/{id}/cancel</c>); gone or finished is fine.</summary>
     Task CancelDeploymentAsync(DeploymentAuth auth, string deploymentId, CancellationToken cancellationToken);

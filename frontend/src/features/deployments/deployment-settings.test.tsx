@@ -45,7 +45,7 @@ describe('Settings → Deployment (FR-88)', () => {
 
   it('FR88_owner_sets_up_vercel: binds an own connection and creates a Vercel project linked to the repo', async () => {
     const { user, project } = await openAsOwner((me) => {
-      seedVercelConnection({ userId: me, label: 'Acme team', token: 'vcp_zzzzab12', teamSlug: 'acme', scope: 'team' })
+      seedVercelConnection({ userId: me, label: 'Acme team', token: 'vcp_zzzzab12', teamSlug: 'acme' })
       const grace = seedUser({ email: 'grace@example.com', name: 'Grace Hopper' })
       seedVercelConnection({ userId: grace.id, label: 'Not mine' })
     })

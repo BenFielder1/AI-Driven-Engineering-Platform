@@ -27,6 +27,7 @@ export const manifestPermissions: Record<string, string> = {
   workflows: 'write',
   administration: 'write',
   metadata: 'read',
+  pages: 'write',
   checks: 'read',
   statuses: 'read',
 }
@@ -42,6 +43,7 @@ const notConfigured = (): App => ({
   htmlUrl: null,
   permissions: {},
   canCreateRepositories: false,
+  pagesPermission: 'unknown',
 })
 
 /** In-memory GitHub App backend for tests (reset after each test by src/test/setup.ts). */
@@ -90,6 +92,7 @@ export function configureGitHubApp(overrides: Partial<App> = {}): App {
     htmlUrl: 'https://github.com/apps/aide-localhost',
     permissions: { ...manifestPermissions },
     canCreateRepositories: true,
+    pagesPermission: 'granted',
     ...overrides,
   }
   authDb.githubMode = 'app'
@@ -138,6 +141,7 @@ export function connectGitHub(userId: string, overrides: Partial<StoredGitHubCon
       account: { login, type: 'user' },
       repositorySelection: 'selected',
       manageUrl: 'https://github.com/settings/installations/9001',
+      pagesPermission: 'granted',
     })
   }
   if (githubDb.owners.length === 0) {

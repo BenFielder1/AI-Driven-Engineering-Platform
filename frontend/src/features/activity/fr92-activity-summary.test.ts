@@ -32,6 +32,14 @@ describe('FR-92: activity summaries of the v2 events', () => {
       'Anthropic connection marked invalid: the provider rejected its key during a run',
     )
     expect(d('CONNECTION_INVALID', { provider: 'vercel' })).toBe('Vercel connection marked invalid: Vercel rejected its token')
+    // FR-142: the new deployment platforms and databases.
+    expect(d('CONNECTION_INVALID', { provider: 'netlify' })).toBe('Netlify connection marked invalid: Netlify rejected its token')
+    expect(d('CONNECTION_INVALID', { provider: 'cloudflare' })).toBe(
+      'Cloudflare connection marked invalid: Cloudflare rejected its token',
+    )
+    expect(d('CONNECTION_INVALID', { provider: 'render' })).toBe('Render connection marked invalid: Render rejected its API key')
+    expect(d('CONNECTION_INVALID', { provider: 'railway' })).toBe('Railway connection marked invalid: Railway rejected its token')
+    expect(d('CONNECTION_INVALID', { provider: 'supabase' })).toBe('Supabase connection marked invalid: Supabase rejected its token')
     expect(d('PRESET_CHANGED', { version: '1.3.0', presetId: 'nextjs-frontend', presetVersion: '1.0.0' })).toBe(
       'Preset of 1.3.0 changed from no preset to nextjs-frontend@1.0.0',
     )

@@ -9,11 +9,11 @@ public static class DeploymentReader
 {
     /// <summary>The project's deployments, newest first, optionally of one target and/or release version.</summary>
     public static async Task<IReadOnlyList<DeploymentDto>> ListAsync(
-        AideDbContext db, Guid projectId, DeploymentTarget? target, Guid? releaseVersionId, CancellationToken cancellationToken, int? take = null)
+        AideDbContext db, Guid projectId, DeploymentEnvironment? target, Guid? releaseVersionId, CancellationToken cancellationToken, int? take = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         var query = db.Deployments.AsNoTracking()
-            .Where(d => d.ProjectId == projectId && (target == null || d.Target == target) && (releaseVersionId == null || d.ReleaseVersionId == releaseVersionId))
+            .Where(d => d.ProjectId == projectId && (target == null || d.Environment == target) && (releaseVersionId == null || d.ReleaseVersionId == releaseVersionId))
             .OrderByDescending(d => d.CreatedAt)
             .ThenByDescending(d => d.Id);
         var rows = await (take is { } n ? query.Take(n) : query).ToListAsync(cancellationToken);
@@ -47,7 +47,7 @@ public static class DeploymentReader
         }
 
         var rows = await db.Deployments.AsNoTracking()
-            .Where(d => d.ReleaseId != null && releaseIds.Contains(d.ReleaseId.Value) && d.Target == DeploymentTarget.Production)
+            .Where(d => d.ReleaseId != null && releaseIds.Contains(d.ReleaseId.Value) && d.Environment == DeploymentEnvironment.Production)
             .OrderByDescending(d => d.CreatedAt)
             .ThenByDescending(d => d.Id)
             .ToListAsync(cancellationToken);
@@ -88,7 +88,7 @@ public static class DeploymentReader
         ArgumentNullException.ThrowIfNull(d);
         return new DeploymentDto(
             d.Id,
-            d.Target,
+            d.Environment,
             d.Provider,
             d.Status,
             d.Url,

@@ -660,9 +660,21 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(16000)")
                         .HasColumnName("build_log_tail");
 
+                    b.Property<string>("Component")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("component");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("environment");
 
                     b.Property<string>("ErrorCode")
                         .HasMaxLength(64)
@@ -688,6 +700,12 @@ namespace Aide.Infrastructure.Migrations
                     b.Property<string>("InspectorUrl")
                         .HasColumnType("text")
                         .HasColumnName("inspector_url");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid")
@@ -720,6 +738,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("release_version_id");
 
+                    b.Property<Guid?>("RolloutId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rollout_id");
+
                     b.Property<uint>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -732,11 +754,9 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("status");
 
-                    b.Property<string>("Target")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("target");
+                    b.Property<Guid?>("TargetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_id");
 
                     b.Property<string>("Trigger")
                         .IsRequired()
@@ -772,6 +792,9 @@ namespace Aide.Infrastructure.Migrations
                         .HasDatabaseName("ix_deployments_status_active")
                         .HasFilter("status IN ('queued', 'building')");
 
+                    b.HasIndex("TargetId")
+                        .HasDatabaseName("ix_deployments_target_id");
+
                     b.HasIndex("TriggeredBy")
                         .HasDatabaseName("ix_deployments_triggered_by");
 
@@ -782,10 +805,10 @@ namespace Aide.Infrastructure.Migrations
                     b.HasIndex("ProjectId", "GitSha")
                         .HasDatabaseName("ix_deployments_project_id_git_sha");
 
-                    b.HasIndex("ReleaseId", "Target")
+                    b.HasIndex("ReleaseId", "Component")
                         .IsUnique()
-                        .HasDatabaseName("ux_deployments_release_id_target_auto_production")
-                        .HasFilter("target = 'production' AND trigger = 'auto'");
+                        .HasDatabaseName("ux_deployments_release_id_component_auto_production")
+                        .HasFilter("environment = 'production' AND trigger = 'auto'");
 
                     b.ToTable("deployments", (string)null);
                 });
@@ -795,6 +818,15 @@ namespace Aide.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.PrimitiveCollection<string[]>("AppliesTo")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("applies_to");
+
+                    b.Property<string>("DerivedFrom")
+                        .HasColumnType("text")
+                        .HasColumnName("derived_from");
 
                     b.Property<string>("Key")
                         .IsRequired()
@@ -806,9 +838,19 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
 
+                    b.Property<bool>("Public")
+                        .HasColumnType("boolean")
+                        .HasColumnName("public");
+
                     b.Property<bool>("Sensitive")
                         .HasColumnType("boolean")
                         .HasColumnName("sensitive");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("source");
 
                     b.Property<string>("SyncError")
                         .HasColumnType("text")
@@ -845,8 +887,110 @@ namespace Aide.Infrastructure.Migrations
 
                     b.ToTable("deployment_env_vars", null, t =>
                         {
+                            t.HasCheckConstraint("ck_deployment_env_vars_applies_to", "cardinality(applies_to) > 0 AND applies_to <@ ARRAY['frontend', 'backend']::text[]");
+
                             t.HasCheckConstraint("ck_deployment_env_vars_targets", "cardinality(targets) > 0 AND targets <@ ARRAY['preview', 'production']::text[]");
                         });
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.DeploymentTarget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BoundByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bound_by_user_id");
+
+                    b.Property<string>("BuildConfig")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("build_config")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<string>("Component")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("component");
+
+                    b.Property<Guid?>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PreviewResourceId")
+                        .HasColumnType("text")
+                        .HasColumnName("preview_resource_id");
+
+                    b.Property<string>("PreviewUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("preview_url");
+
+                    b.Property<string>("ProductionUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("production_url");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("ResourceId")
+                        .HasColumnType("text")
+                        .HasColumnName("resource_id");
+
+                    b.Property<string>("RootDirectory")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue(".")
+                        .HasColumnName("root_directory");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StatusReason")
+                        .HasColumnType("text")
+                        .HasColumnName("status_reason");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_deployment_targets");
+
+                    b.HasIndex("BoundByUserId")
+                        .HasDatabaseName("ix_deployment_targets_bound_by_user_id");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_deployment_targets_connection_id");
+
+                    b.HasIndex("ProjectId", "Component")
+                        .IsUnique()
+                        .HasDatabaseName("ux_deployment_targets_project_id_component");
+
+                    b.ToTable("deployment_targets", (string)null);
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.ExecutionStep", b =>
@@ -1604,6 +1748,86 @@ namespace Aide.Infrastructure.Migrations
                     b.ToTable("notification_deliveries", (string)null);
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.PlatformConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AccountId")
+                        .HasColumnType("text")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("AccountName")
+                        .HasColumnType("text")
+                        .HasColumnName("account_name");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("label");
+
+                    b.Property<string>("Last4")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("last4");
+
+                    b.Property<DateTimeOffset?>("LastValidatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_validated_at");
+
+                    b.Property<string>("Metadata")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadata")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.PrimitiveCollection<string[]>("Scopes")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("scopes")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.Property<string>("SecretEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("secret_encrypted");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_platform_connections");
+
+                    b.HasIndex("UserId", "Provider")
+                        .HasDatabaseName("ix_platform_connections_user_id_provider");
+
+                    b.ToTable("platform_connections", (string)null);
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.Project", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1753,76 +1977,6 @@ namespace Aide.Infrastructure.Migrations
                         .HasDatabaseName("ix_projects_status_current_phase");
 
                     b.ToTable("projects", (string)null);
-                });
-
-            modelBuilder.Entity("Aide.Domain.Entities.ProjectDeploymentSettings", b =>
-                {
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("project_id");
-
-                    b.Property<Guid?>("BoundByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("bound_by_user_id");
-
-                    b.Property<Guid?>("ConnectionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("connection_id");
-
-                    b.Property<string>("Framework")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue("nextjs")
-                        .HasColumnName("framework");
-
-                    b.Property<string>("ProductionUrl")
-                        .HasColumnType("text")
-                        .HasColumnName("production_url");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasDefaultValue("vercel")
-                        .HasColumnName("provider");
-
-                    b.Property<string>("RootDirectory")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue(".")
-                        .HasColumnName("root_directory");
-
-                    b.Property<uint>("RowVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<string>("VercelProjectId")
-                        .HasColumnType("text")
-                        .HasColumnName("vercel_project_id");
-
-                    b.Property<string>("VercelProjectName")
-                        .HasColumnType("text")
-                        .HasColumnName("vercel_project_name");
-
-                    b.HasKey("ProjectId")
-                        .HasName("pk_project_deployment_settings");
-
-                    b.HasIndex("BoundByUserId")
-                        .HasDatabaseName("ix_project_deployment_settings_bound_by_user_id");
-
-                    b.HasIndex("ConnectionId")
-                        .HasDatabaseName("ix_project_deployment_settings_connection_id");
-
-                    b.ToTable("project_deployment_settings", (string)null);
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.ProjectGitSettings", b =>
@@ -2445,84 +2599,6 @@ namespace Aide.Infrastructure.Migrations
                     b.ToTable("user_notification_preferences", (string)null);
                 });
 
-            modelBuilder.Entity("Aide.Domain.Entities.VercelConnection", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<DateTimeOffset?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expires_at");
-
-                    b.Property<string>("Label")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("label");
-
-                    b.Property<string>("Last4")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("last4");
-
-                    b.Property<DateTimeOffset?>("LastValidatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_validated_at");
-
-                    b.Property<string>("Scope")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("scope");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("status");
-
-                    b.Property<string>("TeamId")
-                        .HasColumnType("text")
-                        .HasColumnName("team_id");
-
-                    b.Property<string>("TeamSlug")
-                        .HasColumnType("text")
-                        .HasColumnName("team_slug");
-
-                    b.Property<string>("TokenEncrypted")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("token_encrypted");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.Property<string>("VercelUserId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("vercel_user_id");
-
-                    b.Property<string>("VercelUsername")
-                        .HasColumnType("text")
-                        .HasColumnName("vercel_username");
-
-                    b.HasKey("Id")
-                        .HasName("pk_vercel_connections");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_vercel_connections_user_id");
-
-                    b.ToTable("vercel_connections", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_vercel_connections_team_scope", "scope <> 'team' OR team_id IS NOT NULL");
-                        });
-                });
-
             modelBuilder.Entity("Aide.Infrastructure.Persistence.Identity.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2978,6 +3054,12 @@ namespace Aide.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_deployments_release_versions_release_version_id");
 
+                    b.HasOne("Aide.Domain.Entities.DeploymentTarget", null)
+                        .WithMany()
+                        .HasForeignKey("TargetId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_deployments_deployment_targets_target_id");
+
                     b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
                         .WithMany()
                         .HasForeignKey("TriggeredBy")
@@ -2993,6 +3075,28 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_deployment_env_vars_projects_project_id");
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.DeploymentTarget", b =>
+                {
+                    b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("BoundByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_deployment_targets_users_bound_by_user_id");
+
+                    b.HasOne("Aide.Domain.Entities.PlatformConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_deployment_targets_platform_connections_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_deployment_targets_projects_project_id");
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.ExecutionStep", b =>
@@ -3115,26 +3219,14 @@ namespace Aide.Infrastructure.Migrations
                         .HasConstraintName("fk_notification_deliveries_projects_project_id");
                 });
 
-            modelBuilder.Entity("Aide.Domain.Entities.ProjectDeploymentSettings", b =>
+            modelBuilder.Entity("Aide.Domain.Entities.PlatformConnection", b =>
                 {
                     b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
                         .WithMany()
-                        .HasForeignKey("BoundByUserId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_project_deployment_settings_users_bound_by_user_id");
-
-                    b.HasOne("Aide.Domain.Entities.VercelConnection", null)
-                        .WithMany()
-                        .HasForeignKey("ConnectionId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_project_deployment_settings_vercel_connections_connection_id");
-
-                    b.HasOne("Aide.Domain.Entities.Project", null)
-                        .WithOne()
-                        .HasForeignKey("Aide.Domain.Entities.ProjectDeploymentSettings", "ProjectId")
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_project_deployment_settings_projects_project_id");
+                        .HasConstraintName("fk_platform_connections_users_user_id");
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.ProjectGitSettings", b =>
@@ -3305,16 +3397,6 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_user_notification_preferences_users_user_id");
-                });
-
-            modelBuilder.Entity("Aide.Domain.Entities.VercelConnection", b =>
-                {
-                    b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_vercel_connections_users_user_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>

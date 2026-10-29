@@ -10,12 +10,15 @@ public sealed record GitHubAccountDto(string Login, GitHubOwnerType Type);
 /// <summary>
 /// An installation of the AIDE GitHub App that the caller can access (FR-81, <c>GET /user/installations</c>):
 /// <c>repositorySelection</c> is <c>all</c> or <c>selected</c>; <c>manageUrl</c> is where the user adds repositories to it.
+/// <c>pagesPermission</c> (FR-143) is whether the installation grants the App's Pages write permission (<c>granted</c>,
+/// <c>missing</c>: the Owner has to accept the updated permissions on the installation, or <c>unknown</c>).
 /// </summary>
 public sealed record GitHubInstallationDto(
     long Id,
     GitHubAccountDto Account,
     GitHubRepositorySelection RepositorySelection,
-    string ManageUrl);
+    string ManageUrl,
+    GitHubPagesAccess PagesPermission);
 
 /// <summary>
 /// The caller's GitHub connection (FR-81). Tokens are never returned. When <c>connected</c> is false, <c>login</c>,

@@ -1,4 +1,5 @@
 using Aide.Api.Features.Deployments;
+using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Infrastructure.Deployments;
@@ -34,45 +35,61 @@ public static class DeploymentHarness
     public static async Task<Guid> SeedConnectionAsync(WebApplicationFactory<Program> app, Guid userId, string token = "vcp_seededToken0123456789", string? teamId = null)
     {
         ArgumentNullException.ThrowIfNull(app);
-        var protector = app.Services.GetRequiredService<ISecretProtectors>().ForPurpose(SecretPurposes.VercelToken);
-        var connection = new VercelConnection
+        var protector = app.Services.GetRequiredService<ISecretProtectors>().ForPurpose(SecretPurposes.PlatformToken);
+        var connection = new PlatformConnection
         {
             UserId = userId,
+            Provider = PlatformProvider.Vercel,
             Label = "Personal",
-            TokenEncrypted = protector.Protect(token),
+            SecretEncrypted = protector.Protect(token),
             Last4 = token[^4..],
-            VercelUserId = "usr_seed",
-            VercelUsername = "seed-user",
-            TeamId = teamId,
-            TeamSlug = teamId is null ? null : "acme-team",
-            Scope = teamId is null ? VercelTokenScope.Account : VercelTokenScope.Team,
-            Status = VercelConnectionStatus.Valid,
+            AccountId = "usr_seed",
+            AccountName = "seed-user",
+            Metadata = new PlatformConnectionMetadata { TeamId = teamId, TeamSlug = teamId is null ? null : "acme-team" },
+            Status = PlatformConnectionStatus.Valid,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         await ProjectApi.WithDbAsync(app, async db =>
         {
-            db.VercelConnections.Add(connection);
+            db.PlatformConnections.Add(connection);
             await db.SaveChangesAsync(Ct);
         });
         return connection.Id;
     }
 
-    /// <summary>Deployment settings bound to <paramref name="connectionId"/> and linked to the Vercel project.</summary>
-    public static Task BindAsync(WebApplicationFactory<Program> app, Guid projectId, Guid connectionId, Guid ownerId, string? vercelProjectId = VercelProjectId) =>
+    /// <summary>A frontend deployment target (v2 settings) bound to <paramref name="connectionId"/> and linked to the Vercel project.</summary>
+    public static Task BindAsync(
+        WebApplicationFactory<Program> app, Guid projectId, Guid connectionId, Guid ownerId, string? vercelProjectId = VercelProjectId, DeploymentProvider provider = DeploymentProvider.Vercel) =>
         ProjectApi.WithDbAsync(app, async db =>
         {
-            db.ProjectDeploymentSettings.Add(new ProjectDeploymentSettings
-            {
-                ProjectId = projectId,
-                Provider = DeploymentProvider.Vercel,
-                ConnectionId = connectionId,
-                BoundByUserId = ownerId,
-                VercelProjectId = vercelProjectId,
-                VercelProjectName = vercelProjectId is null ? null : VercelProjectName,
-                UpdatedAt = DateTimeOffset.UtcNow,
-            });
+            db.DeploymentTargets.Add(Target(projectId, connectionId, ownerId, vercelProjectId, provider));
             await db.SaveChangesAsync(Ct);
         });
+
+    /// <summary>A frontend target as v2's Vercel flow leaves it (status from <see cref="DeploymentTargetRules"/>).</summary>
+    public static DeploymentTarget Target(Guid projectId, Guid? connectionId, Guid? ownerId, string? vercelProjectId, DeploymentProvider provider = DeploymentProvider.Vercel, string rootDirectory = ".")
+    {
+        var target = new DeploymentTarget
+        {
+            ProjectId = projectId,
+            Component = DeploymentComponent.Frontend,
+            Provider = provider,
+            ConnectionId = connectionId,
+            BoundByUserId = ownerId,
+            ResourceId = vercelProjectId,
+            Name = vercelProjectId is null ? null : VercelProjectName,
+            RootDirectory = rootDirectory,
+            BuildConfig = new DeploymentBuildConfig { Framework = DeploymentTarget.DefaultFramework },
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        DeploymentTargetRules.Refresh(target);
+        return target;
+    }
+
+    /// <summary>The project's frontend target (v2's deployment settings).</summary>
+    public static Task<DeploymentTarget> FrontendTargetAsync(WebApplicationFactory<Program> app, Guid projectId) =>
+        ProjectApi.WithDbAsync(app, db => db.DeploymentTargets.AsNoTracking()
+            .SingleAsync(t => t.ProjectId == projectId && t.Component == DeploymentComponent.Frontend, Ct));
 
     /// <summary>Records a deployment through the scheduler (row, job, event), as the PR job or an endpoint would.</summary>
     public static async Task<Deployment> ScheduleAsync(WebApplicationFactory<Program> app, NewDeployment spec, DateTimeOffset? now = null)

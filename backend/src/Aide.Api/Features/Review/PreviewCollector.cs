@@ -33,7 +33,7 @@ public sealed partial class PreviewCollector(AideDbContext db, TimeProvider time
         }
 
         var preview = await db.Deployments.AsNoTracking()
-            .Where(d => d.ProjectId == project.Id && d.ReleaseVersionId == id && d.Target == DeploymentTarget.Preview)
+            .Where(d => d.ProjectId == project.Id && d.ReleaseVersionId == id && d.Environment == DeploymentEnvironment.Preview)
             .OrderByDescending(d => d.CreatedAt)
             .ThenByDescending(d => d.Id)
             .FirstOrDefaultAsync(cancellationToken);

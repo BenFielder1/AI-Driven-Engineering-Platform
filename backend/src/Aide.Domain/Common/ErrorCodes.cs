@@ -304,6 +304,12 @@ public static class ErrorCodes
     /// </summary>
     public const string BitbucketRateLimited = "BITBUCKET_RATE_LIMITED";
 
+    /// <summary>
+    /// FR-143, §6 (409 when an Owner selects GitHub Pages as the frontend host): the AIDE GitHub App (or its installation)
+    /// lacks the Pages permission. The ProblemDetails carries the App settings link.
+    /// </summary>
+    public const string PlatformPermissionMissing = "PLATFORM_PERMISSION_MISSING";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {
@@ -377,6 +383,7 @@ public static class ErrorCodes
         [GitHubRateLimited] = 429,
         [VercelGitNotConnected] = 409,
         [VercelPlanLimit] = 409,
+        [PlatformPermissionMissing] = 409,
         [DeploymentNotConfigured] = 409,
         [InvalidDeployment] = 409,
         [LinkExpired] = 410,

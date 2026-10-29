@@ -180,6 +180,9 @@ builder.Services.AddReleaseVersions();
 // Vercel deployments (FR-87–FR-91, §4.15): settings, env sync, previews, production and the poll job.
 builder.Services.AddDeployments();
 
+// Platform connections (FR-142): Vercel, Netlify, Cloudflare, Render, Railway and Supabase tokens and picker data.
+builder.Services.AddScoped<PlatformConnectionService>();
+
 
 // Stack compositions on projects and versions, Settings → Stack and import detection (FR-114–FR-119).
 builder.Services.AddProjectStacks();
@@ -215,7 +218,7 @@ app.MapAuthEndpoints();
 app.MapApiTokenEndpoints();
 app.MapLlmConnectionEndpoints();
 app.MapLlmProviderEndpoints();
-app.MapVercelConnectionEndpoints();
+app.MapPlatformConnectionEndpoints();
 app.MapGitHubEndpoints();
 app.MapGitLabEndpoints();
 app.MapBitbucketEndpoints();

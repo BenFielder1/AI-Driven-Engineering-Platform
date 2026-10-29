@@ -7,6 +7,7 @@ import { resetAuthDb } from '../mocks/handlers/auth'
 import { resetBitbucketDb } from '../mocks/handlers/bitbucket'
 import { resetConnectionsDb } from '../mocks/handlers/connections'
 import { resetVercelDb } from '../mocks/handlers/deployments'
+import { resetPlatformDb } from '../mocks/handlers/platform-connections'
 import { resetGitHubDb } from '../mocks/handlers/github'
 import { resetGitLabDb } from '../mocks/handlers/gitlab'
 import { resetLlmDb } from '../mocks/handlers/llm'
@@ -77,6 +78,7 @@ afterEach(() => {
   resetConnectionsDb()
   resetLlmDb()
   resetVercelDb()
+  resetPlatformDb()
   resetGitHubDb()
   resetGitLabDb()
   resetBitbucketDb()

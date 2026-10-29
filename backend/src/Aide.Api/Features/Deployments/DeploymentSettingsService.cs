@@ -38,7 +38,7 @@ public sealed partial class DeploymentSettingsService(
     /// <summary>FR-88: the settings as a member sees them.</summary>
     public async Task<DeploymentSettingsDto> GetAsync(Guid projectId, ProjectRole? callerRole, CancellationToken cancellationToken)
     {
-        var settings = await db.ProjectDeploymentSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ProjectId == projectId, cancellationToken);
+        var settings = await DeploymentAccess.FrontendTargetAsync(db, projectId, cancellationToken);
         // §4.22: the required variables and deploy hosts come from the version's resolved composition.
         var stack = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken) is { } versionId
             ? (await stacks.ForVersionAsync(versionId, cancellationToken, readBase: false)).Stack
@@ -52,11 +52,11 @@ public sealed partial class DeploymentSettingsService(
             .Where(v => v.ProjectId == projectId)
             .Select(v => new { v.Key, v.Targets })
             .ToListAsync(cancellationToken);
-        var present = vars.ToDictionary(v => v.Key, v => (IReadOnlyList<DeploymentTarget>)[.. Targets(v.Targets)], StringComparer.Ordinal);
+        var present = vars.ToDictionary(v => v.Key, v => (IReadOnlyList<DeploymentEnvironment>)[.. Targets(v.Targets)], StringComparer.Ordinal);
         var required = (stack?.Env ?? [])
             .Select(e =>
             {
-                IReadOnlyList<DeploymentTarget> targets = [.. Targets(e.Targets)];
+                IReadOnlyList<DeploymentEnvironment> targets = [.. Targets(e.Targets)];
                 return new RequiredEnvVarDto(e.Key, targets, e.Sensitive, e.Description, DeploymentEnvRules.IsPresent(e.Key, targets, present));
             })
             .ToList();
@@ -65,24 +65,23 @@ public sealed partial class DeploymentSettingsService(
         string? owner = null;
         if (settings?.ConnectionId is { } connectionId)
         {
-            var row = await (
-                    from c in db.VercelConnections.AsNoTracking()
-                    join u in db.Users.AsNoTracking() on c.UserId equals u.Id
-                    where c.Id == connectionId
-                    select new { c.Id, c.Label, c.Last4, c.TeamSlug, c.VercelUsername, c.Status, UserId = u.Id, u.Name })
-                .FirstOrDefaultAsync(cancellationToken);
-            if (row is not null)
+            var connection = await db.PlatformConnections.AsNoTracking().FirstOrDefaultAsync(c => c.Id == connectionId, cancellationToken);
+            var user = connection is null
+                ? null
+                : await db.Users.AsNoTracking().Where(u => u.Id == connection.UserId).Select(u => new { u.Id, u.Name }).FirstOrDefaultAsync(cancellationToken);
+            if (connection is not null && user is not null)
             {
-                binding = new DeploymentBindingDto(row.Id, row.Label, row.Last4, row.TeamSlug, new DeploymentUserDto(row.UserId, row.Name), row.Status);
-                owner = row.TeamSlug ?? row.VercelUsername;
+                var teamSlug = connection.Metadata.TeamSlug;
+                binding = new DeploymentBindingDto(connection.Id, connection.Label, connection.Last4, teamSlug, new DeploymentUserDto(user.Id, user.Name), connection.Status);
+                owner = teamSlug ?? connection.AccountName;
             }
         }
 
-        var project = settings?.VercelProjectId is { } vercelId
+        var project = settings?.ResourceId is { } vercelId
             ? new VercelProjectDto(
                 vercelId,
-                settings.VercelProjectName ?? vercelId,
-                owner is null || access.UsesFake ? null : $"https://vercel.com/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(settings.VercelProjectName ?? vercelId)}",
+                settings.Name ?? vercelId,
+                owner is null || access.UsesFake ? null : $"https://vercel.com/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(settings.Name ?? vercelId)}",
                 settings.ProductionUrl)
             : null;
         return new DeploymentSettingsDto(
@@ -91,8 +90,8 @@ public sealed partial class DeploymentSettingsService(
             binding,
             callerRole == ProjectRole.Owner,
             project,
-            settings?.RootDirectory ?? ProjectDeploymentSettings.DefaultRootDirectory,
-            settings?.Framework ?? ProjectDeploymentSettings.DefaultFramework,
+            settings?.RootDirectory ?? DeploymentTarget.DefaultRootDirectory,
+            settings?.BuildConfig.Framework ?? DeploymentTarget.DefaultFramework,
             required,
             project is null ? null : true,
             null);
@@ -112,7 +111,8 @@ public sealed partial class DeploymentSettingsService(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fieldPrefix);
-        var connection = await db.VercelConnections.AsNoTracking().FirstOrDefaultAsync(c => c.Id == connectionId, cancellationToken);
+        var connection = await db.PlatformConnections.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == connectionId && c.Provider == PlatformProvider.Vercel, cancellationToken);
         if (connection is null)
         {
             return Result.Failure<PreparedDeployment>(new DomainError(ErrorCodes.NotFound, "The connection was not found."));
@@ -123,12 +123,12 @@ public sealed partial class DeploymentSettingsService(
             return Result.Success(new PreparedDeployment(provider, connectionId, null));
         }
 
-        if (!access.Tokens.TryUnprotect(connection.TokenEncrypted, out var token) || token.Length == 0)
+        if (!access.Tokens.TryUnprotect(connection.SecretEncrypted, out var token) || token.Length == 0)
         {
             return Result.Failure<PreparedDeployment>(new DomainError(ErrorCodes.CredentialInvalid, "The Vercel token can't be decrypted; add the connection again."));
         }
 
-        var auth = new DeploymentAuth(token, connection.TeamId);
+        var auth = new DeploymentAuth(token, connection.Metadata.TeamId);
         var vercel = access.Provider;
         try
         {
@@ -145,10 +145,10 @@ public sealed partial class DeploymentSettingsService(
                     return Invalid($"{fieldPrefix}vercelProjectId", $"The Vercel project is linked to {found.LinkedRepo}, not {repoFullName}.");
                 }
 
-                return Result.Success(new PreparedDeployment(provider, connectionId, new LinkedVercelProject(found.Id, found.Name, ProjectDeploymentSettings.DefaultRootDirectory)));
+                return Result.Success(new PreparedDeployment(provider, connectionId, new LinkedVercelProject(found.Id, found.Name, DeploymentTarget.DefaultRootDirectory)));
             }
 
-            var root = string.IsNullOrEmpty(create!.RootDirectory) ? ProjectDeploymentSettings.DefaultRootDirectory : create.RootDirectory.TrimEnd('/');
+            var root = string.IsNullOrEmpty(create!.RootDirectory) ? DeploymentTarget.DefaultRootDirectory : create.RootDirectory.TrimEnd('/');
 
             // A retry after a failure further on finds the project it created: adopt it when it is linked to this repository.
             var existing = await vercel.FindProjectAsync(auth, create.Name, cancellationToken);
@@ -160,7 +160,7 @@ public sealed partial class DeploymentSettingsService(
             }
 
             var created = await vercel.CreateProjectAsync(
-                auth, new CreateDeploymentProject(create.Name, repoFullName ?? create.Name, ProjectDeploymentSettings.DefaultFramework, root), cancellationToken);
+                auth, new CreateDeploymentProject(create.Name, repoFullName ?? create.Name, DeploymentTarget.DefaultFramework, root), cancellationToken);
             LogProjectCreated(logger, created.Id);
             return Result.Success(new PreparedDeployment(provider, connectionId, new LinkedVercelProject(created.Id, created.Name, root)));
         }
@@ -185,12 +185,19 @@ public sealed partial class DeploymentSettingsService(
     {
         ArgumentNullException.ThrowIfNull(prepared);
         var now = time.GetUtcNow();
-        var settings = await db.ProjectDeploymentSettings.FirstOrDefaultAsync(s => s.ProjectId == projectId, cancellationToken);
+        var settings = await db.DeploymentTargets.FirstOrDefaultAsync(
+            t => t.ProjectId == projectId && t.Component == DeploymentComponent.Frontend, cancellationToken);
         var changes = new List<string>();
         if (settings is null)
         {
-            settings = new ProjectDeploymentSettings { ProjectId = projectId, UpdatedAt = now };
-            db.ProjectDeploymentSettings.Add(settings);
+            settings = new DeploymentTarget
+            {
+                ProjectId = projectId,
+                Component = DeploymentComponent.Frontend,
+                BuildConfig = new DeploymentBuildConfig { Framework = DeploymentTarget.DefaultFramework },
+                UpdatedAt = now,
+            };
+            db.DeploymentTargets.Add(settings);
             changes.Add("provider");
         }
         else if (settings.Provider != prepared.Provider)
@@ -206,16 +213,17 @@ public sealed partial class DeploymentSettingsService(
             changes.Add("connection");
         }
 
-        if (prepared.Project is { } project && project.Id != settings.VercelProjectId)
+        if (prepared.Project is { } project && project.Id != settings.ResourceId)
         {
-            settings.VercelProjectId = project.Id;
-            settings.VercelProjectName = project.Name;
+            settings.ResourceId = project.Id;
+            settings.Name = project.Name;
             settings.RootDirectory = project.RootDirectory;
             settings.ProductionUrl = null;
             changes.Add("vercelProject");
             await envSync.ResetAsync(projectId, cancellationToken);
         }
 
+        DeploymentTargetRules.Refresh(settings);
         settings.UpdatedAt = now;
         if (changes.Count > 0)
         {
@@ -223,16 +231,17 @@ public sealed partial class DeploymentSettingsService(
         }
     }
 
-    /// <summary>FR-88: turning deployment off removes the settings; deployments and env vars stay as history.</summary>
+    /// <summary>FR-88: turning deployment off removes the frontend target; deployments and env vars stay as history.</summary>
     public async Task TurnOffAsync(Guid projectId, string actor, CancellationToken cancellationToken)
     {
-        var settings = await db.ProjectDeploymentSettings.FirstOrDefaultAsync(s => s.ProjectId == projectId, cancellationToken);
+        var settings = await db.DeploymentTargets.FirstOrDefaultAsync(
+            t => t.ProjectId == projectId && t.Component == DeploymentComponent.Frontend, cancellationToken);
         if (settings is null)
         {
             return;
         }
 
-        db.ProjectDeploymentSettings.Remove(settings);
+        db.DeploymentTargets.Remove(settings);
         db.AddEvent(EventTypes.SettingsUpdated, projectId, new { projectId, section = "deployment", changes = ProviderChange, provider = (string?)null }, actor, time.GetUtcNow());
     }
 
@@ -243,8 +252,8 @@ public sealed partial class DeploymentSettingsService(
         return error.Code == ErrorCodes.VercelGitNotConnected ? ApiProblems.VercelGitNotConnected(error.Reason ?? VercelErrorRules.DefaultGitHubInstallUrl, error.Message) : ApiProblems.FromError(error with { Reason = null });
     }
 
-    internal static IEnumerable<DeploymentTarget> Targets(IEnumerable<string> wire) =>
-        wire.Select(t => EnumStrings.TryParse<DeploymentTarget>(t, out var target) ? (DeploymentTarget?)target : null).OfType<DeploymentTarget>();
+    internal static IEnumerable<DeploymentEnvironment> Targets(IEnumerable<string> wire) =>
+        wire.Select(t => EnumStrings.TryParse<DeploymentEnvironment>(t, out var target) ? (DeploymentEnvironment?)target : null).OfType<DeploymentEnvironment>();
 
     internal static string Message(DeploymentProviderException ex) => ex.Failure switch
     {
@@ -278,7 +287,7 @@ public sealed partial class DeploymentEnvSync(AideDbContext db, DeploymentAccess
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(vars);
-        if (vars.Count == 0 || context.Settings.VercelProjectId is not { } projectId)
+        if (vars.Count == 0 || context.Target.ResourceId is not { } projectId)
         {
             return;
         }
@@ -323,7 +332,7 @@ public sealed partial class DeploymentEnvSync(AideDbContext db, DeploymentAccess
     {
         ArgumentNullException.ThrowIfNull(context);
         var pending = await db.DeploymentEnvVars
-            .Where(v => v.ProjectId == context.Settings.ProjectId && (v.SyncedAt == null || v.SyncError != null))
+            .Where(v => v.ProjectId == context.Target.ProjectId && (v.SyncedAt == null || v.SyncError != null))
             .OrderBy(v => v.Key)
             .ToListAsync(cancellationToken);
         try

@@ -633,7 +633,7 @@ public static partial class ProjectEndpoints
 
     /// <summary>FR-88, §7.2: the project has deployment settings, so its navigation shows Deployments.</summary>
     internal static Task<bool> DeploymentsEnabledAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken) =>
-        db.ProjectDeploymentSettings.AsNoTracking().AnyAsync(s => s.ProjectId == projectId, cancellationToken);
+        db.DeploymentTargets.AsNoTracking().AnyAsync(t => t.ProjectId == projectId, cancellationToken);
 
     internal static ProblemHttpResult ConcurrentEdit() =>
         ApiProblems.Of(ErrorCodes.Conflict, "The project was changed by someone else. Reload and try again.");

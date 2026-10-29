@@ -5,6 +5,11 @@ import { toApiError } from '../../lib/errors'
 import { projectKeys, unwrap, type ProjectSettings } from '../projects/projects-api'
 
 export type AdminGitHubApp = Schemas['AdminGitHubAppDto']
+
+/** FR-143: GitHub Pages deploys need the App's Pages permission, which App registrations from before v4 lack. */
+export const PAGES_PERMISSION_MISSING_COPY =
+  "Pages permission missing: update the App's permissions in GitHub, then accept them on each installation"
+
 export type GitHubConnection = Schemas['GitHubConnectionDto']
 export type GitHubRepo = Schemas['GitHubRepoDto']
 export type GitHubOwner = Schemas['GitHubOwnerDto']

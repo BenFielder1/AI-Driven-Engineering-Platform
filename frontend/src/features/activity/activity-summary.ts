@@ -532,10 +532,21 @@ function describeDeployment(type: string, payload: Payload): string | null {
   return `${subject} ${deploymentStatusWords[status]}${status === "ready" && url ? ` at ${url}` : ""}`;
 }
 
-/** LLM and Vercel connection events (FR-78, FR-79, FR-87). */
+/** FR-142: deployment platforms and databases with pasted-token connections (what each calls its token). */
+const platformConnectionTokens: Readonly<Record<string, { name: string; token: string }>> = {
+  vercel: { name: "Vercel", token: "token" },
+  netlify: { name: "Netlify", token: "token" },
+  cloudflare: { name: "Cloudflare", token: "token" },
+  render: { name: "Render", token: "API key" },
+  railway: { name: "Railway", token: "token" },
+  supabase: { name: "Supabase", token: "token" },
+};
+
+/** LLM and platform connection events (FR-78, FR-79, FR-87, FR-142). */
 function describeConnection(type: string, payload: Payload): string | null {
-  if (type === "CONNECTION_INVALID" && payload.provider === "vercel") {
-    return "Vercel connection marked invalid: Vercel rejected its token";
+  const platform = typeof payload.provider === "string" ? platformConnectionTokens[payload.provider] : undefined;
+  if (type === "CONNECTION_INVALID" && platform) {
+    return `${platform.name} connection marked invalid: ${platform.name} rejected its ${platform.token}`;
   }
   if (type === "CONNECTION_INVALID" && payload.provider === "github") {
     // §4.14, FR-92: a user's GitHub connection (no project); its owner reconnects under Connections.

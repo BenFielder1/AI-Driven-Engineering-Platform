@@ -245,7 +245,7 @@ export function GitLabConnectionSection({
     body = (
       <EmptyState
         variant="not_connected"
-        headingLevel={3}
+        headingLevel={4}
         bare
         title="GitLab isn't available"
         description="An administrator has disabled every GitLab instance."
@@ -269,11 +269,11 @@ export function GitLabConnectionSection({
           return (
             <section key={instance.id} aria-labelledby={titleId} className="flex flex-col gap-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <h3 id={titleId} className="flex flex-wrap items-center gap-2 font-semibold">
+                <h4 id={titleId} className="flex flex-wrap items-center gap-2 font-semibold">
                   <GitLabLogo />
                   {instance.name}
                   <span className="font-normal text-muted-foreground">{gitlabHost(instance.baseUrl)}</span>
-                </h3>
+                </h4>
                 <div className="flex flex-wrap gap-2">
                   {instance.oauthConfigured && (
                     <a
@@ -310,9 +310,9 @@ export function GitLabConnectionSection({
         })}
         {orphaned.length > 0 && (
           <section aria-labelledby="gitlab-disabled-title" className="flex flex-col gap-3">
-            <h3 id="gitlab-disabled-title" className="font-semibold">
+            <h4 id="gitlab-disabled-title" className="font-semibold">
               Disabled instances
-            </h3>
+            </h4>
             {renderRows(orphaned, undefined, 'Connections on disabled instances')}
           </section>
         )}
@@ -323,10 +323,10 @@ export function GitLabConnectionSection({
   return (
     <section aria-labelledby="gitlab-connection-title" className={cn(panelClass, 'flex flex-col gap-4 p-5')}>
       <div>
-        <h2 id="gitlab-connection-title" ref={headingRef} tabIndex={-1} className="flex items-center gap-2 text-lg outline-none">
+        <h3 id="gitlab-connection-title" ref={headingRef} tabIndex={-1} className="flex items-center gap-2 text-lg outline-none">
           <GitLabLogo className="size-5" />
           GitLab
-        </h2>
+        </h3>
         <p className="mt-1 text-sm text-muted-foreground">
           Your GitLab accounts, per instance, used to pick and create projects. Background Git work on a GitLab project uses
           the connection of the Owner who bound it.

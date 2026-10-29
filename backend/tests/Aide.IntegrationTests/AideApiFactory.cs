@@ -88,6 +88,12 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
             // §8, CLAUDE.md rule 11 for deployments: no test reaches api.vercel.com; Vercel tests swap in a stub handler.
             services.AddHttpClient(Aide.Infrastructure.Deployments.VercelDeploymentProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
 
+            // FR-142: no test reaches a platform API (Netlify, Cloudflare, Render, Railway, Supabase); tests swap in stubs.
+            foreach (var (name, _) in Aide.Infrastructure.Platforms.PlatformHosts.All)
+            {
+                services.AddHttpClient(name).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
+            }
+
             // FR-130–FR-132, CLAUDE.md rule 10: no test reaches gitlab.com or resolves a real host name; GitLab tests swap in
             // a stub API and stub DNS (GitLabHarness).
             services.AddHttpClient(Aide.Infrastructure.GitLab.GitLabClients.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());

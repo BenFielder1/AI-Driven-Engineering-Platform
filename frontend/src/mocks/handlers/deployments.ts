@@ -1,7 +1,8 @@
 import { http, HttpResponse } from 'msw'
 
 import type { Schemas } from '../../api/client'
-import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from './auth'
+import { antiforgeryFailure, authDb, nextId } from './auth'
+import { platformDb, seedPlatformConnection, type StoredPlatformConnection } from './platform-connections'
 import { problem } from './problem'
 import {
   access,
@@ -9,7 +10,6 @@ import {
   forbidden,
   isOwnerLevel,
   ownerMutation,
-  projectsDb,
   record,
   type StoredDeploymentSettings,
   type StoredEnvVar,
@@ -17,28 +17,21 @@ import {
 } from './projects'
 
 /**
- * Vercel connections, deployment settings, env vars and deployments (FR-87–FR-91, §4.15). The endpoints answer 501
- * until the backend lands; these handlers follow the contract (backend/openapi/api.json) and its error cases.
+ * Deployment settings, env vars and deployments (FR-88–FR-91, §4.15); Vercel connections are platform connections
+ * (FR-142, ./platform-connections). These handlers follow the contract (backend/openapi/api.json) and its error cases.
  */
 
-type VercelConnection = Schemas['VercelConnectionDto']
 type Deployment = Schemas['DeploymentDto']
 type Settings = Schemas['DeploymentSettingsDto']
 
-/** A stored Vercel connection: the DTO minus the derived `boundProjects`, plus its owner and token. */
-export interface StoredVercelConnection extends Omit<VercelConnection, 'boundProjects'> {
-  userId: string
-  token: string
-}
+/** A stored Vercel connection (a platform connection with provider `vercel`). */
+export type StoredVercelConnection = StoredPlatformConnection
 
 export const VERCEL_INSTALL_URL = 'https://github.com/apps/vercel/installations/new'
 
 /** In-memory Vercel backend for tests (reset after each test by src/test/setup.ts). */
 export const vercelDb = {
-  connections: [] as StoredVercelConnection[],
-  /** Tokens Vercel rejects (CREDENTIAL_INVALID on add; status invalid on test). */
-  rejectedTokens: new Set<string>(),
-  /** Vercel unreachable: add, test and settings changes answer 502 UPSTREAM_ERROR. */
+  /** Vercel unreachable: settings changes answer 502 UPSTREAM_ERROR (connections: `platformDb.down`). */
   down: false,
   /** Vercel's GitHub App can't access the repo: linking or creating a project answers 409 VERCEL_GIT_NOT_CONNECTED. */
   gitNotConnected: false,
@@ -51,8 +44,6 @@ export const vercelDb = {
 }
 
 export function resetVercelDb() {
-  vercelDb.connections = []
-  vercelDb.rejectedTokens = new Set()
   vercelDb.down = false
   vercelDb.gitNotConnected = false
   vercelDb.planLimit = false
@@ -100,27 +91,19 @@ export function deploymentOf(p: StoredProject): StoredDeploymentSettings {
   return p.deployment
 }
 
+/** FR-87, FR-142: a Vercel platform connection (`teamSlug` makes it team-scoped). */
 export function seedVercelConnection(
-  overrides: Partial<StoredVercelConnection> & Pick<StoredVercelConnection, 'userId'>,
+  overrides: Partial<Omit<StoredVercelConnection, 'metadata' | 'provider'>> &
+    Pick<StoredVercelConnection, 'userId'> & { teamSlug?: string | null },
 ): StoredVercelConnection {
-  const token = overrides.token ?? `vcp_test${nextId().slice(-4)}`
-  const c: StoredVercelConnection = {
-    id: nextId(),
+  const { teamSlug = null, ...rest } = overrides
+  return seedPlatformConnection({
     label: 'Vercel token',
-    last4: token.slice(-4),
-    accountName: 'ada',
-    teamId: null,
-    teamSlug: null,
-    scope: 'account',
-    expiresAt: null,
-    status: 'valid',
-    lastValidatedAt: '2026-09-01T09:00:00Z',
-    createdAt: '2026-09-01T09:00:00Z',
-    ...overrides,
-    token,
-  }
-  vercelDb.connections.unshift(c)
-  return c
+    token: overrides.token ?? `vcp_test${nextId().slice(-4)}`,
+    ...rest,
+    provider: 'vercel',
+    metadata: { teamSlug, teamId: teamSlug ? `team_${teamSlug}` : null },
+  })
 }
 
 function bindingOf(c: StoredVercelConnection): Schemas['DeploymentBindingDto'] {
@@ -129,7 +112,7 @@ function bindingOf(c: StoredVercelConnection): Schemas['DeploymentBindingDto'] {
     connectionId: c.id,
     label: c.label,
     last4: c.last4,
-    teamSlug: c.teamSlug,
+    teamSlug: c.metadata.teamSlug,
     boundBy: { id: c.userId, name: user?.name ?? 'Unknown' },
     status: c.status,
   }
@@ -202,25 +185,6 @@ export function seedDeployment(p: StoredProject, overrides: Partial<Deployment> 
   return d
 }
 
-function vercelDto(c: StoredVercelConnection): VercelConnection {
-  return {
-    id: c.id,
-    label: c.label,
-    last4: c.last4,
-    accountName: c.accountName,
-    teamId: c.teamId,
-    teamSlug: c.teamSlug,
-    scope: c.scope,
-    expiresAt: c.expiresAt,
-    status: c.status,
-    lastValidatedAt: c.lastValidatedAt,
-    createdAt: c.createdAt,
-    boundProjects: projectsDb.projects
-      .filter((p) => p.deployment?.binding?.connectionId === c.id)
-      .map((p) => ({ id: p.id, name: p.name })),
-  }
-}
-
 function settingsDto(p: StoredProject, canBind: boolean): Settings {
   const d = deploymentOf(p)
   const env = p.deploymentEnv ?? []
@@ -248,16 +212,8 @@ const envDto = (v: StoredEnvVar): Schemas['DeploymentEnvVarDto'] => ({
   syncError: v.syncError,
 })
 
-function userMutation(request: Request) {
-  const user = currentUser()
-  if (!user) {
-    return unauthenticated()
-  }
-  return antiforgeryFailure(request) ?? user
-}
+const notFound = (what: string) => problem(404, 'NOT_FOUND', what)
 
-const ownConnection = (id: unknown, userId: string) => vercelDb.connections.find((c) => c.id === id && c.userId === userId)
-const notFound = (what = 'The connection was not found.') => problem(404, 'NOT_FOUND', what)
 const upstream = () => problem(502, 'UPSTREAM_ERROR', 'Vercel could not be reached.')
 const VERCEL_PROJECT_NAME = /^(?!.*---)[a-z0-9._-]{1,100}$/
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]{0,255}$/
@@ -289,7 +245,7 @@ export function applyVercelSetup(
   }
   let connection: StoredVercelConnection | undefined
   if (body.connectionId) {
-    connection = vercelDb.connections.find((c) => c.id === body.connectionId)
+    connection = platformDb.connections.find((c) => c.id === body.connectionId && c.provider === 'vercel')
     if (!connection) {
       return problem(404, 'NOT_FOUND', 'The connection was not found.', key)
     }
@@ -332,7 +288,7 @@ export function applyVercelSetup(
 }
 
 /** Who may redeploy (FR-90, FR-91): previews need a writer, production an Owner. */
-function mayDeploy(a: Exclude<ReturnType<typeof access>, Response>, target: Schemas['DeploymentTarget']) {
+function mayDeploy(a: Exclude<ReturnType<typeof access>, Response>, target: Schemas['DeploymentEnvironment']) {
   return target === 'preview' ? a.level !== 'viewer' : isOwnerLevel(a)
 }
 
@@ -342,109 +298,6 @@ function userRef(userId: string) {
 }
 
 export const deploymentHandlers = [
-  // ---- Me → Vercel connections (FR-87) ----
-  http.get('*/api/me/connections/vercel', () => {
-    const user = currentUser()
-    if (!user) {
-      return unauthenticated()
-    }
-    return HttpResponse.json<VercelConnection[]>(vercelDb.connections.filter((c) => c.userId === user.id).map(vercelDto))
-  }),
-
-  http.post('*/api/me/connections/vercel', async ({ request }) => {
-    const user = userMutation(request)
-    if (user instanceof Response) {
-      return user
-    }
-    const body = (await record(request)) as Schemas['CreateVercelConnectionRequest']
-    const errors: Record<string, string[]> = {}
-    if (!body.label.trim()) {
-      errors.label = ['The label is required.']
-    }
-    if (!body.token) {
-      errors.token = ['The token is required.']
-    }
-    if (Object.keys(errors).length > 0) {
-      return problem(400, 'VALIDATION', 'The connection is invalid.', { errors })
-    }
-    if (vercelDb.down) {
-      return upstream()
-    }
-    if (vercelDb.rejectedTokens.has(body.token)) {
-      return problem(400, 'CREDENTIAL_INVALID', 'Vercel rejected the token.')
-    }
-    const now = new Date().toISOString()
-    // A token naming a team (`team_…`) is team-scoped in the mock.
-    const team = body.token.startsWith('team_')
-    const created = seedVercelConnection({
-      userId: user.id,
-      label: body.label.trim(),
-      token: body.token,
-      accountName: 'ada',
-      scope: team ? 'team' : 'account',
-      teamId: team ? 'team_acme' : null,
-      teamSlug: team ? 'acme' : null,
-      expiresAt: '2027-01-01T00:00:00Z',
-      lastValidatedAt: now,
-      createdAt: now,
-    })
-    return HttpResponse.json<VercelConnection>(vercelDto(created), { status: 201 })
-  }),
-
-  http.patch('*/api/me/connections/vercel/:id', async ({ request, params }) => {
-    const user = userMutation(request)
-    if (user instanceof Response) {
-      return user
-    }
-    const body = (await record(request)) as Schemas['UpdateLlmCredentialRequest']
-    const c = ownConnection(params.id, user.id)
-    if (!c) {
-      return notFound()
-    }
-    if (!body.label.trim()) {
-      return problem(400, 'VALIDATION', 'The connection is invalid.', { errors: { label: ['The label is required.'] } })
-    }
-    c.label = body.label.trim()
-    return HttpResponse.json<VercelConnection>(vercelDto(c))
-  }),
-
-  http.delete('*/api/me/connections/vercel/:id', async ({ request, params }) => {
-    const user = userMutation(request)
-    if (user instanceof Response) {
-      return user
-    }
-    await record(request)
-    const c = ownConnection(params.id, user.id)
-    if (!c) {
-      return notFound()
-    }
-    for (const p of projectsDb.projects) {
-      if (p.deployment?.binding?.connectionId === c.id) {
-        p.deployment.binding = null
-      }
-    }
-    vercelDb.connections = vercelDb.connections.filter((x) => x !== c)
-    return new HttpResponse(null, { status: 204 })
-  }),
-
-  http.post('*/api/me/connections/vercel/:id/test', async ({ request, params }) => {
-    const user = userMutation(request)
-    if (user instanceof Response) {
-      return user
-    }
-    await record(request)
-    const c = ownConnection(params.id, user.id)
-    if (!c) {
-      return notFound()
-    }
-    if (vercelDb.down) {
-      return upstream()
-    }
-    c.status = vercelDb.rejectedTokens.has(c.token) ? 'invalid' : 'valid'
-    c.lastValidatedAt = new Date().toISOString()
-    return HttpResponse.json<VercelConnection>(vercelDto(c))
-  }),
-
   // ---- Settings → Deployment (FR-88) ----
   http.get('*/api/projects/:id/settings/deployment', ({ params }) => {
     const a = access(params.id)

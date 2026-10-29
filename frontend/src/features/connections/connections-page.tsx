@@ -22,7 +22,8 @@ import { BitbucketConnectionSection } from './bitbucket-connection-section'
 import { GitHubConnectionSection } from './github-connection-section'
 import { GitLabConnectionSection } from './gitlab-connection-section'
 import { AddLlmKeyDialog, RenameLlmKeyDialog } from './llm-connection-dialogs'
-import { VercelConnectionSection } from './vercel-connection-section'
+import { PlatformConnectionSection } from './platform-connection-section'
+import { databasePlatformIds, deploymentPlatformIds } from './platform-providers'
 
 const keylessDescriptions: Partial<Record<LlmCredential['provider'], string>> = {
   ollama: 'Uses the Ollama server configured for AIDE. No key needed.',
@@ -289,10 +290,6 @@ function LlmProvidersSection() {
 }
 
 /**
- * /connections (alias /account/connections; SPEC §7.2): the user's LLM providers (FR-78), GitHub (FR-81) and Vercel
- * (FR-87). `githubError` is a failed Connect GitHub coming back as `?error=GITHUB_AUTH_FAILED&reason=…`.
- */
-/**
  * FR-159: "Add a connection" in the new-project wizard saved it in session storage and opened this page; this offers
  * the way back (the wizard restores its state). Session storage only exists in the browser (server snapshot: none).
  */
@@ -315,6 +312,11 @@ function WizardReturnNotice() {
   )
 }
 
+/**
+ * /connections (alias /account/connections; SPEC §7): four sections (FR-142): LLM providers (FR-78), Source control
+ * (GitHub FR-81, GitLab FR-131, Bitbucket FR-134), Deployment platforms and Databases (pasted platform tokens; Vercel
+ * from FR-87 migrated). `githubError` is a failed Connect GitHub coming back as `?error=GITHUB_AUTH_FAILED&reason=…`.
+ */
 export function ConnectionsPage({
   githubError,
   githubInstalled = false,
@@ -337,13 +339,35 @@ export function ConnectionsPage({
 }) {
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Connections" description="LLM providers, source control (GitHub, GitLab, Bitbucket) and Vercel, connected to your account." />
+      <PageHeader
+        title="Connections"
+        description="LLM providers, source control, deployment platforms and databases, connected to your account."
+      />
       <WizardReturnNotice />
       <LlmProvidersSection />
-      <GitHubConnectionSection callbackError={githubError} installed={githubInstalled} />
-      <GitLabConnectionSection callbackError={gitlabError} connected={gitlabConnected} />
-      <BitbucketConnectionSection callbackError={bitbucketError} connected={bitbucketConnected} />
-      <VercelConnectionSection />
+      <section aria-labelledby="source-control-title" className="flex flex-col gap-4">
+        <div>
+          <h2 id="source-control-title" className="text-lg">
+            Source control
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">GitHub, GitLab and Bitbucket, for picking, creating and working on repositories.</p>
+        </div>
+        <GitHubConnectionSection callbackError={githubError} installed={githubInstalled} />
+        <GitLabConnectionSection callbackError={gitlabError} connected={gitlabConnected} />
+        <BitbucketConnectionSection callbackError={bitbucketError} connected={bitbucketConnected} />
+      </section>
+      <PlatformConnectionSection
+        id="deployment-platforms"
+        title="Deployment platforms"
+        description="Your platform tokens. A project deploys each target with the connection its Owner binds in Settings → Deployment."
+        providers={deploymentPlatformIds}
+      />
+      <PlatformConnectionSection
+        id="database-platforms"
+        title="Databases"
+        description="Your managed database tokens. A project's database cards in Settings → Deployment use the connection its Owner binds."
+        providers={databasePlatformIds}
+      />
     </div>
   )
 }

@@ -168,7 +168,7 @@ public static class DeploymentEndpoints
         PreparedDeployment? prepared = null;
         if (request.Provider is { } provider)
         {
-            var existing = await db.ProjectDeploymentSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ProjectId == id, cancellationToken);
+            var existing = await DeploymentAccess.FrontendTargetAsync(db, id, cancellationToken);
             if ((request.ConnectionId ?? existing?.ConnectionId) is not { } effective)
             {
                 return ApiProblems.Validation(new Dictionary<string, string[]> { ["connectionId"] = ["Choose one of your Vercel connections."] });
@@ -177,7 +177,7 @@ public static class DeploymentEndpoints
             // §2: connections are personal. Without their own connectionId, only the Owner whose connection is bound may
             // change what the project deploys to (another Owner would act with that Owner's token).
             var boundOwner = request.ConnectionId is null
-                ? await db.VercelConnections.AsNoTracking().Where(c => c.Id == effective).Select(c => (Guid?)c.UserId).FirstOrDefaultAsync(cancellationToken)
+                ? await db.PlatformConnections.AsNoTracking().Where(c => c.Id == effective).Select(c => (Guid?)c.UserId).FirstOrDefaultAsync(cancellationToken)
                 : null;
             var mayUse = DeploymentSettingsRules.CanUseBinding(callerId, boundOwner, request.ConnectionId, turningOff: false);
             if (mayUse.IsFailure)
@@ -274,6 +274,12 @@ public static class DeploymentEndpoints
         }
 
         variable.Targets = [.. request.Targets.Distinct().OrderBy(t => t).Select(t => t.ToWire())];
+
+        // FR-145 (v2 flow, slice 1): Owner variables of the Vercel frontend; NEXT_PUBLIC_ ones reach the browser.
+        variable.AppliesTo = [DeploymentComponent.Frontend.ToWire()];
+        variable.Public = DeploymentEnvRules.IsPublicKey(key);
+        variable.Source = DeploymentEnvSource.User;
+        variable.DerivedFrom = null;
         variable.ValueEncrypted = deployments.Values.Protect(request.Value);
         variable.Sensitive = request.Sensitive;
         variable.UpdatedAt = now;
@@ -361,7 +367,7 @@ public static class DeploymentEndpoints
             {
                 foreach (var vercelId in vercelIds)
                 {
-                    await context.Value.Provider.DeleteEnvAsync(context.Value.Auth, context.Value.Settings.VercelProjectId!, vercelId, cancellationToken);
+                    await context.Value.Provider.DeleteEnvAsync(context.Value.Auth, context.Value.Target.ResourceId!, vercelId, cancellationToken);
                 }
             }
             catch (DeploymentProviderException ex)
@@ -387,7 +393,7 @@ public static class DeploymentEndpoints
         IProjectAccess access,
         AideDbContext db,
         CancellationToken cancellationToken,
-        [WireEnum(typeof(DeploymentTarget))] string? target = null,
+        [WireEnum(typeof(DeploymentEnvironment))] string? target = null,
         Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
@@ -396,7 +402,7 @@ public static class DeploymentEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        DeploymentTarget? filter = target is not null && EnumStrings.TryParse<DeploymentTarget>(target, out var parsed) ? parsed : null;
+        DeploymentEnvironment? filter = target is not null && EnumStrings.TryParse<DeploymentEnvironment>(target, out var parsed) ? parsed : null;
         return TypedResults.Ok(await DeploymentReader.ListAsync(db, id, filter, releaseVersionId, cancellationToken));
     }
 
@@ -440,7 +446,7 @@ public static class DeploymentEndpoints
         }
 
         var deployment = await scheduler.AddAsync(
-            new NewDeployment(id, version.Id, null, DeploymentTarget.Preview, branch, sha, DeploymentTrigger.Manual, grant.Value.UserId),
+            new NewDeployment(id, version.Id, null, DeploymentEnvironment.Preview, branch, sha, DeploymentTrigger.Manual, grant.Value.UserId),
             currentUser.Actor,
             Now(time),
             cancellationToken);
@@ -469,7 +475,7 @@ public static class DeploymentEndpoints
             return DeploymentNotFound();
         }
 
-        var promotable = DeploymentActionRules.CanPromote(source.Target, source.Status);
+        var promotable = DeploymentActionRules.CanPromote(source.Environment, source.Status);
         if (promotable.IsFailure)
         {
             return ApiProblems.FromError(promotable.Error!);
@@ -485,7 +491,7 @@ public static class DeploymentEndpoints
         try
         {
             // FR-91: Vercel re-points production at the earlier build (no rebuild); Git is left alone.
-            await context.Value.Provider.PromoteAsync(context.Value.Auth, context.Value.Settings.VercelProjectId!, source.ProviderDeploymentId, cancellationToken);
+            await context.Value.Provider.PromoteAsync(context.Value.Auth, context.Value.Target.ResourceId!, source.ProviderDeploymentId, cancellationToken);
         }
         catch (DeploymentProviderException ex)
         {
@@ -506,7 +512,10 @@ public static class DeploymentEndpoints
             ReleaseVersionId = source.ReleaseVersionId,
             ReleaseId = source.ReleaseId,
             Provider = source.Provider,
-            Target = DeploymentTarget.Production,
+            TargetId = source.TargetId,
+            Component = source.Component,
+            Kind = DeploymentKind.Promote,
+            Environment = DeploymentEnvironment.Production,
             ProviderDeploymentId = source.ProviderDeploymentId,
             Url = source.Url,
             InspectorUrl = source.InspectorUrl,
@@ -548,7 +557,7 @@ public static class DeploymentEndpoints
             return DeploymentNotFound();
         }
 
-        var action = DeploymentActionRules.RedeployAction(deployment.Target);
+        var action = DeploymentActionRules.RedeployAction(deployment.Environment);
         if (action != ProjectAction.TriggerDeployment)
         {
             var owner = await access.CheckAsync(id, action, cancellationToken);
@@ -564,7 +573,7 @@ public static class DeploymentEndpoints
         }
 
         var redeploy = await scheduler.AddAsync(
-            new NewDeployment(id, deployment.ReleaseVersionId, deployment.ReleaseId, deployment.Target, deployment.GitRef, deployment.GitSha, DeploymentTrigger.Redeploy, grant.Value.UserId),
+            new NewDeployment(id, deployment.ReleaseVersionId, deployment.ReleaseId, deployment.Environment, deployment.GitRef, deployment.GitSha, DeploymentTrigger.Redeploy, grant.Value.UserId),
             currentUser.Actor,
             Now(time),
             cancellationToken);
@@ -573,13 +582,14 @@ public static class DeploymentEndpoints
 
     /// <summary>
     /// FR-88: whether the caller (who passed the Owner check: an Owner or an Admin) may bind <paramref name="connectionId"/>,
-    /// their own Vercel connection; <c>null</c> when allowed, else the problem (<c>NOT_FOUND</c>, <c>CREDENTIAL_NOT_OWNER</c>).
+    /// their own Vercel platform connection; <c>null</c> when allowed, else the problem (<c>NOT_FOUND</c> — also for a
+    /// connection of another provider —, <c>CREDENTIAL_NOT_OWNER</c>).
     /// </summary>
     internal static async Task<ProblemHttpResult?> CanBindAsync(AideDbContext db, Guid callerId, Guid connectionId, CancellationToken cancellationToken, string field = "connectionId")
     {
         ArgumentNullException.ThrowIfNull(db);
-        var ownerId = await db.VercelConnections.AsNoTracking()
-            .Where(c => c.Id == connectionId)
+        var ownerId = await db.PlatformConnections.AsNoTracking()
+            .Where(c => c.Id == connectionId && c.Provider == PlatformProvider.Vercel)
             .Select(c => (Guid?)c.UserId)
             .FirstOrDefaultAsync(cancellationToken);
         var allowed = DeploymentSettingsRules.CanBind(callerId, ProjectRole.Owner, ownerId);

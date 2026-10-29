@@ -19,7 +19,7 @@ public sealed record DeploymentUserDto(Guid Id, string Name);
 /// </summary>
 public sealed record DeploymentDto(
     Guid Id,
-    DeploymentTarget Target,
+    DeploymentEnvironment Target,
     DeploymentProvider Provider,
     DeploymentStatus Status,
     string? Url,
@@ -59,7 +59,7 @@ public sealed record DeploymentBindingDto(
     string Last4,
     string? TeamSlug,
     DeploymentUserDto BoundBy,
-    VercelConnectionStatus Status);
+    PlatformConnectionStatus Status);
 
 /// <summary>The linked Vercel project (FR-88): id (<c>prj_…</c>), name, its Vercel URL and the production URL once known.</summary>
 public sealed record VercelProjectDto(string Id, string Name, string? Url, string? ProductionUrl);
@@ -70,7 +70,7 @@ public sealed record VercelProjectDto(string Id, string Name, string? Url, strin
 /// </summary>
 public sealed record RequiredEnvVarDto(
     string Key,
-    IReadOnlyList<DeploymentTarget> Targets,
+    IReadOnlyList<DeploymentEnvironment> Targets,
     bool Sensitive,
     string Description,
     bool Present);
@@ -151,7 +151,7 @@ public sealed record CreateProjectDeploymentRequest
 /// </summary>
 public sealed record DeploymentEnvVarDto(
     string Key,
-    IReadOnlyList<DeploymentTarget> Targets,
+    IReadOnlyList<DeploymentEnvironment> Targets,
     bool Sensitive,
     bool HasValue,
     DateTimeOffset UpdatedAt,
@@ -168,7 +168,7 @@ public sealed record PutDeploymentEnvRequest
     public required string Value { get; init; }
 
     [Required]
-    public required IReadOnlyList<DeploymentTarget> Targets { get; init; }
+    public required IReadOnlyList<DeploymentEnvironment> Targets { get; init; }
 
     public bool Sensitive { get; init; }
 }

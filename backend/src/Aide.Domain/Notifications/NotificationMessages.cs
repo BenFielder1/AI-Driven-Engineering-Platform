@@ -46,7 +46,7 @@ public sealed record NotificationFacts(NotificationType Type, string ProjectName
     public IReadOnlyList<string> MergeReasons { get; init; } = [];
 
     /// <summary>FR-90, FR-91: the deployment's target (<c>preview</c>, <c>production</c>).</summary>
-    public string? DeploymentTarget { get; init; }
+    public string? DeploymentEnvironment { get; init; }
 
     /// <summary>FR-90, FR-91: the deployment URL.</summary>
     public string? DeploymentUrl { get; init; }
@@ -117,7 +117,7 @@ public static class NotificationMessages
             NotificationType.DeploymentFailed => (
                 $"{project}: {Target(facts)} deployment{VersionText(facts)} failed",
                 $"The Vercel {Target(facts)} deployment of {project}{VersionText(facts)} failed{(facts.ErrorCode is { } code ? $" ({OneLine(code, 60)})" : string.Empty)}. "
-                + (facts.DeploymentTarget == "preview"
+                + (facts.DeploymentEnvironment == "preview"
                     ? "Check the project's Vercel connection, then redeploy from the Review page."
                     : "The release stands; an Owner can redeploy from the Release page.")),
             NotificationType.PreviewReady => (
@@ -148,7 +148,7 @@ public static class NotificationMessages
     };
 
     private static string Target(NotificationFacts facts) =>
-        facts.DeploymentTarget is { } target ? OneLine(target, 20) : "production";
+        facts.DeploymentEnvironment is { } target ? OneLine(target, 20) : "production";
 
     /// <summary>"LLM (Anthropic)", "GitHub", "Vercel".</summary>
     private static string ConnectionName(string? provider) => provider switch
@@ -157,6 +157,11 @@ public static class NotificationMessages
         "gitlab" => "GitLab",
         "bitbucket" => "Bitbucket",
         "vercel" => "Vercel",
+        "netlify" => "Netlify",
+        "cloudflare" => "Cloudflare",
+        "render" => "Render",
+        "railway" => "Railway",
+        "supabase" => "Supabase",
         null or "" => "LLM",
         _ => $"LLM ({ProviderName(provider)})",
     };
@@ -169,6 +174,11 @@ public static class NotificationMessages
         "gitlab" => "GitLab",
         "bitbucket" => "Bitbucket",
         "vercel" => "Vercel",
+        "netlify" => "Netlify",
+        "cloudflare" => "Cloudflare",
+        "render" => "Render",
+        "railway" => "Railway",
+        "supabase" => "Supabase",
         null or "" => "The provider",
         _ => OneLine(provider, 40),
     };

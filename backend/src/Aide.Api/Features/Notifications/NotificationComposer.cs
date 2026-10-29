@@ -94,7 +94,7 @@ public sealed class NotificationComposer(AideDbContext db)
             projectName,
             sourceId,
             NotificationMessages.Compose(read),
-            NotificationRules.LinkPath(type, projectId, read.ArtifactType, read.DeploymentTarget),
+            NotificationRules.LinkPath(type, projectId, read.ArtifactType, read.DeploymentEnvironment),
             null)
         {
             RecipientUserId = NotificationRules.IsPersonal(type) ? UserId(payload) : null,
@@ -157,7 +157,7 @@ public sealed class NotificationComposer(AideDbContext db)
             Reason = type is NotificationType.Rollback or NotificationType.LlmBindingCleared or NotificationType.GitBindingCleared ? Text(root, "reason") : null,
             PullRequestUrl = Text(root, "pullRequestUrl"),
             Provider = Text(root, "provider"),
-            DeploymentTarget = Text(root, "target"),
+            DeploymentEnvironment = Text(root, "target"),
             DeploymentUrl = Text(root, "url"),
             ReleaseVersion = Text(root, "releaseVersion"),
             MergeReasons = root.TryGetProperty("reasons", out var reasons) && reasons.ValueKind == JsonValueKind.Array

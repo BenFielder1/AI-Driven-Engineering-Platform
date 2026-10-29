@@ -7,7 +7,7 @@ import { SelectField } from '../../components/ui/select-field'
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import { TextField } from '../../components/ui/text-field'
 import { connectionLabel, credentialStatusLabels } from '../connections/connection-format'
-import { useVercelConnections } from '../connections/vercel-connections-api'
+import { usePlatformConnections } from '../connections/platform-connections-api'
 import type { WizardValues } from './schemas'
 import { deploymentFieldIds } from './wizard-deployment-ids'
 
@@ -25,7 +25,7 @@ export function WizardDeploymentStep({
   values: Pick<WizardValues, 'gitMode' | 'stackKind' | 'stackFrontendHost' | 'deploymentMode' | 'vercelProjectMode' | 'vercelConnectionId'>
 }) {
   const vercel = values.deploymentMode === 'vercel'
-  const connections = useVercelConnections(vercel)
+  const connections = usePlatformConnections({ enabled: vercel, provider: 'vercel' })
   // FR-114: the composed stack's frontend host is Vercel.
   const stackDeploysToVercel = values.stackKind === 'compose' && values.stackFrontendHost === 'deploy-vercel'
 
@@ -87,7 +87,7 @@ export function WizardDeploymentStep({
                 {own.map((c) => (
                   <option key={c.id} value={c.id}>
                     {connectionLabel(c)}
-                    {c.teamSlug ? ` · team ${c.teamSlug}` : ''}
+                    {c.metadata.teamSlug ? ` · team ${c.metadata.teamSlug}` : ''}
                     {c.status === 'valid' ? '' : ` (${credentialStatusLabels[c.status].toLowerCase()})`}
                   </option>
                 ))}

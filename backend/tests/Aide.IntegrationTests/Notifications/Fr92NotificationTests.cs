@@ -313,7 +313,7 @@ public sealed class Fr92NotificationTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await DeploymentHarness.BindAsync(app, id, await DeploymentHarness.SeedConnectionAsync(app, fixture.Owner.User!.Id), fixture.Owner.User!.Id);
         var versionId = await DeploymentHarness.VersionIdAsync(app, id);
-        var preview = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(id, versionId, null, DeploymentTarget.Preview, "aide/x", new string('d', 40), DeploymentTrigger.Auto, null));
+        var preview = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(id, versionId, null, DeploymentEnvironment.Preview, "aide/x", new string('d', 40), DeploymentTrigger.Auto, null));
         var job = await DeploymentHarness.JobOfAsync(app, id, preview.Id);
         await using var viewer = await LiveClient.ConnectAsync(app, fixture.Viewer);
         await viewer.JoinAsync(id);

@@ -19,7 +19,7 @@ public sealed record NewDeployment(
     Guid ProjectId,
     Guid ReleaseVersionId,
     Guid? ReleaseId,
-    DeploymentTarget Target,
+    DeploymentEnvironment Target,
     string GitRef,
     string GitSha,
     DeploymentTrigger Trigger,
@@ -38,7 +38,7 @@ public static class DeploymentEvents
             new
             {
                 deploymentId = d.Id,
-                target = d.Target,
+                target = d.Environment,
                 provider = d.Provider,
                 trigger = d.Trigger,
                 status = d.Status,
@@ -69,7 +69,7 @@ public static class DeploymentEvents
         db.AddEvent(
             EventTypes.DeploymentFailed,
             d.ProjectId,
-            new { deploymentId = d.Id, target = d.Target, status = d.Status, url = d.Url, errorCode = d.ErrorCode, releaseVersion, gitSha = d.GitSha, releaseId = d.ReleaseId, deploymentFailed = true },
+            new { deploymentId = d.Id, target = d.Environment, status = d.Status, url = d.Url, errorCode = d.ErrorCode, releaseVersion, gitSha = d.GitSha, releaseId = d.ReleaseId, deploymentFailed = true },
             actor,
             now);
     }
@@ -82,13 +82,13 @@ public static class DeploymentEvents
         db.AddEvent(
             EventTypes.DeploymentPreviewReady,
             d.ProjectId,
-            new { deploymentId = d.Id, target = d.Target, status = d.Status, url = d.Url, releaseVersion, gitSha = d.GitSha, previewReady = true },
+            new { deploymentId = d.Id, target = d.Environment, status = d.Status, url = d.Url, releaseVersion, gitSha = d.GitSha, previewReady = true },
             actor,
             now);
     }
 
     private static object Facts(Deployment d, string? releaseVersion) =>
-        new { deploymentId = d.Id, target = d.Target, status = d.Status, url = d.Url, errorCode = d.ErrorCode, releaseVersion, gitSha = d.GitSha };
+        new { deploymentId = d.Id, target = d.Environment, status = d.Status, url = d.Url, errorCode = d.ErrorCode, releaseVersion, gitSha = d.GitSha };
 }
 
 /// <summary>
@@ -96,7 +96,7 @@ public static class DeploymentEvents
 /// <list type="bullet">
 /// <item>a preview after execution opens or updates the PR, or on request; at most one preview is polled per project, so a
 /// newer one stops the polling of older unfinished ones (they stay recorded, <c>canceled</c>);</item>
-/// <item>the production deployment of a release once per attempt (unique by <c>(release_id, target)</c>), and redeploys as
+/// <item>the production deployment of a release once per attempt (unique by <c>(release_id, component)</c>), and redeploys as
 /// new rows.</item>
 /// </list>
 /// Nothing is sent to the provider here: the job creates and polls. Without deployment settings (no bound connection or
@@ -108,13 +108,21 @@ public sealed class DeploymentScheduler(AideDbContext db, JobEnqueuer jobs, IDep
     public async Task<Deployment> AddAsync(NewDeployment spec, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(spec);
+        // FR-151: the row names the target (v2 flow: the project's frontend target) and its component.
+        var targetId = await db.DeploymentTargets.AsNoTracking()
+            .Where(t => t.ProjectId == spec.ProjectId && t.Component == DeploymentComponent.Frontend)
+            .Select(t => (Guid?)t.Id)
+            .FirstOrDefaultAsync(cancellationToken);
         var deployment = new Deployment
         {
             ProjectId = spec.ProjectId,
             ReleaseVersionId = spec.ReleaseVersionId,
             ReleaseId = spec.ReleaseId,
             Provider = providers.Current.Kind,
-            Target = spec.Target,
+            TargetId = targetId,
+            Component = DeploymentComponent.Frontend,
+            Kind = DeploymentTargetRules.KindOf(spec.Trigger),
+            Environment = spec.Target,
             ProviderDeploymentId = string.Empty,
             GitRef = spec.GitRef,
             GitSha = spec.GitSha,
@@ -125,7 +133,7 @@ public sealed class DeploymentScheduler(AideDbContext db, JobEnqueuer jobs, IDep
             UpdatedAt = now,
         };
         var version = await VersionTextAsync(db, spec.ReleaseVersionId, cancellationToken);
-        if (spec.Target == DeploymentTarget.Preview)
+        if (spec.Target == DeploymentEnvironment.Preview)
         {
             await StopOlderPreviewsAsync(spec.ProjectId, version, actor, now, cancellationToken);
         }
@@ -145,7 +153,7 @@ public sealed class DeploymentScheduler(AideDbContext db, JobEnqueuer jobs, IDep
         }
 
         return await AddAsync(
-            new NewDeployment(projectId, releaseVersionId, null, DeploymentTarget.Preview, branch, sha, DeploymentTrigger.Auto, null),
+            new NewDeployment(projectId, releaseVersionId, null, DeploymentEnvironment.Preview, branch, sha, DeploymentTrigger.Auto, null),
             SystemActor.Name,
             now,
             cancellationToken);
@@ -163,27 +171,29 @@ public sealed class DeploymentScheduler(AideDbContext db, JobEnqueuer jobs, IDep
             return null;
         }
 
-        var exists = db.ChangeTracker.Entries<Deployment>().Any(e => e.State == EntityState.Added && e.Entity.ReleaseId == release.Id && e.Entity.Target == DeploymentTarget.Production)
+        var exists = db.ChangeTracker.Entries<Deployment>().Any(e => e.State == EntityState.Added && e.Entity.ReleaseId == release.Id && e.Entity.Environment == DeploymentEnvironment.Production)
             || await db.Deployments.AnyAsync(
-                d => d.ReleaseId == release.Id && d.Target == DeploymentTarget.Production && d.Trigger == DeploymentTrigger.Auto, cancellationToken);
+                d => d.ReleaseId == release.Id && d.Environment == DeploymentEnvironment.Production && d.Trigger == DeploymentTrigger.Auto, cancellationToken);
         if (exists)
         {
             return null;
         }
 
         return await AddAsync(
-            new NewDeployment(release.ProjectId, release.ReleaseVersionId, release.Id, DeploymentTarget.Production, defaultBranch, sha, DeploymentTrigger.Auto, null),
+            new NewDeployment(release.ProjectId, release.ReleaseVersionId, release.Id, DeploymentEnvironment.Production, defaultBranch, sha, DeploymentTrigger.Auto, null),
             SystemActor.Name,
             now,
             cancellationToken);
     }
 
-    /// <summary>FR-88: the project can deploy: a bound connection and a linked Vercel project.</summary>
+    /// <summary>FR-88: the project can deploy: its frontend target has a bound connection and a linked Vercel project.</summary>
     public static Task<bool> ConfiguredAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.ProjectDeploymentSettings.AsNoTracking()
-            .AnyAsync(s => s.ProjectId == projectId && s.ConnectionId != null && s.VercelProjectId != null, cancellationToken);
+        return db.DeploymentTargets.AsNoTracking()
+            .AnyAsync(
+                t => t.ProjectId == projectId && t.Component == DeploymentComponent.Frontend && t.ConnectionId != null && t.ResourceId != null,
+                cancellationToken);
     }
 
     public static Task<string?> VersionTextAsync(AideDbContext db, Guid releaseVersionId, CancellationToken cancellationToken)
@@ -199,7 +209,7 @@ public sealed class DeploymentScheduler(AideDbContext db, JobEnqueuer jobs, IDep
     private async Task StopOlderPreviewsAsync(Guid projectId, string? version, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var older = await db.Deployments
-            .Where(d => d.ProjectId == projectId && d.Target == DeploymentTarget.Preview && (d.Status == DeploymentStatus.Queued || d.Status == DeploymentStatus.Building))
+            .Where(d => d.ProjectId == projectId && d.Environment == DeploymentEnvironment.Preview && (d.Status == DeploymentStatus.Queued || d.Status == DeploymentStatus.Building))
             .ToListAsync(cancellationToken);
         if (older.Count == 0)
         {

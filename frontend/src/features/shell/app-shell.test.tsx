@@ -76,9 +76,12 @@ describe('FR-53: app shell', () => {
     await renderRoute('/connections')
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Connections' })).toBeInTheDocument()
-    for (const name of ['GitHub', 'Vercel']) {
-      expect(await within(screen.getByRole('region', { name })).findByTestId('empty-state')).toHaveAttribute('data-variant', 'not_connected')
-    }
+    expect(await within(screen.getByRole('region', { name: 'GitHub' })).findByTestId('empty-state')).toHaveAttribute(
+      'data-variant',
+      'not_connected',
+    )
+    // FR-142: Vercel is one of the deployment platforms, each listed with "Not connected" until a token is added.
+    expect(await within(await screen.findByRole('region', { name: 'Vercel' })).findByText('Not connected')).toBeInTheDocument()
   })
 
   it('FR53_palette: ⌘K opens the command palette, which lists nav-config pages and navigates', async () => {

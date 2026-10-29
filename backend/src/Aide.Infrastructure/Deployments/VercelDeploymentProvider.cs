@@ -106,6 +106,36 @@ public sealed class VercelDeploymentProvider(IHttpClientFactory clients, VercelE
         return new DeploymentAccount(userId, username, teamId, teamSlug, teamId is null ? VercelTokenScope.Account : VercelTokenScope.Team, expiresAt);
     }
 
+    public async Task<IReadOnlyList<DeploymentTeam>> ListTeamsAsync(DeploymentAuth auth, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        using var json = await SendAsync(HttpMethod.Get, "v2/teams?limit=100", auth.Token, null, cancellationToken);
+        if (!json.RootElement.TryGetProperty("teams", out var teams) || teams.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. teams.EnumerateArray()
+                .Select(t => (Id: Text(t, "id"), Slug: Text(t, "slug"), Name: Text(t, "name")))
+                .Where(t => t.Id is not null)
+                .Select(t => new DeploymentTeam(t.Id!, t.Slug ?? t.Id!, t.Name ?? t.Slug ?? t.Id!)),
+        ];
+    }
+
+    public async Task<IReadOnlyList<DeploymentProject>> ListProjectsAsync(DeploymentAuth auth, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        using var json = await SendAsync(HttpMethod.Get, Team("v9/projects?limit=100", auth), auth.Token, null, cancellationToken);
+        if (!json.RootElement.TryGetProperty("projects", out var projects) || projects.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return [.. projects.EnumerateArray().Where(p => Text(p, "id") is not null).Select(ReadProject)];
+    }
+
     public async Task<DeploymentProject> CreateProjectAsync(DeploymentAuth auth, CreateDeploymentProject request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(auth);
@@ -116,7 +146,7 @@ public sealed class VercelDeploymentProvider(IHttpClientFactory clients, VercelE
             ["framework"] = request.Framework,
             ["gitRepository"] = new { type = "github", repo = request.Repo },
         };
-        if (request.RootDirectory != ProjectDeploymentSettings.DefaultRootDirectory)
+        if (request.RootDirectory != DeploymentTarget.DefaultRootDirectory)
         {
             body["rootDirectory"] = request.RootDirectory;
         }
@@ -217,7 +247,7 @@ public sealed class VercelDeploymentProvider(IHttpClientFactory clients, VercelE
             ["gitSource"] = gitSource,
             ["meta"] = new Dictionary<string, string> { [AideDeploymentIdMeta] = request.AideDeploymentId.ToString("D") },
         };
-        if (request.Target == DeploymentTarget.Production)
+        if (request.Target == DeploymentEnvironment.Production)
         {
             body["target"] = "production";
         }
@@ -259,7 +289,7 @@ public sealed class VercelDeploymentProvider(IHttpClientFactory clients, VercelE
     }
 
     public async Task<ProviderDeployment?> FindByAideIdAsync(
-        DeploymentAuth auth, string vercelProjectId, string sha, DeploymentTarget target, Guid aideDeploymentId, CancellationToken cancellationToken)
+        DeploymentAuth auth, string vercelProjectId, string sha, DeploymentEnvironment target, Guid aideDeploymentId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(auth);
         try

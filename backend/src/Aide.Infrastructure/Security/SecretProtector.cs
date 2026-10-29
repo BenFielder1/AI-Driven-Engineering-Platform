@@ -40,6 +40,10 @@ public static class SecretPurposes
     /// <summary>Vercel access tokens (<c>vercel_connections.token_encrypted</c>, FR-87).</summary>
     public const string VercelToken = "Aide.Secrets.VercelToken";
 
+    /// <summary>Platform connection tokens of every provider (<c>platform_connections.secret_encrypted</c>, FR-142). It must
+    /// stay equal to <see cref="VercelToken"/>: the PlatformsAndTargets migration copies v2 Vercel ciphertext unchanged.</summary>
+    public const string PlatformToken = VercelToken;
+
     /// <summary>Deployment environment variable values (<c>deployment_env_vars.value_encrypted</c>, FR-88).</summary>
     public const string DeploymentEnvValue = "Aide.Secrets.DeploymentEnvValue";
 

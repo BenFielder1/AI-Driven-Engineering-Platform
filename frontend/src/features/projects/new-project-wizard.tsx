@@ -26,7 +26,7 @@ import { useBitbucketConnections, useBitbucketRepoRefs, type BitbucketRepo } fro
 import { gitlabHost, useGitLabConnections, useGitLabInstances, useGitLabRepoRefs, type GitLabRepo } from '../gitlab/gitlab-api'
 import { connectionLabel } from '../connections/connection-format'
 import { useLlmProviders, type LlmProviderOption } from '../connections/connections-api'
-import { useVercelConnections } from '../connections/vercel-connections-api'
+import { usePlatformConnections } from '../connections/platform-connections-api'
 import { VercelGitAlert } from '../deployments/vercel-git-alert'
 import { suggestVercelProjectName } from '../deployments/vercel-project-rules'
 import { agentKeys, agentLabels, approvalModeDescriptions, approvalModeLabels, approvalModes, llmProviderLabels } from './labels'
@@ -1629,7 +1629,7 @@ function BitbucketConnectionSummary({ connectionId }: { connectionId: string }) 
 /** FR-88: the Deployment step in the summary ("Vercel", the connection, and the new or existing Vercel project). */
 function DeploymentSummary({ values }: { values: WizardValues }) {
   const request = toDeploymentRequest(values)
-  const connections = useVercelConnections(request !== null)
+  const connections = usePlatformConnections({ enabled: request !== null, provider: 'vercel' })
   if (!request) {
     return <SummaryRow term="Deployment">Skipped</SummaryRow>
   }

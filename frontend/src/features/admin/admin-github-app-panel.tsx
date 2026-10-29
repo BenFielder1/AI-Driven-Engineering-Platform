@@ -15,6 +15,7 @@ import { applyFieldErrors, errorMessage, isApiError, messageFor } from '../../li
 import { cn } from '../../lib/utils'
 import { GitHubLink } from '../github/github-error-alert'
 import {
+  PAGES_PERMISSION_MISSING_COPY,
   useAdminGitHubApp,
   useCreateGitHubAppManifest,
   type AdminGitHubApp,
@@ -28,6 +29,7 @@ const permissionPurpose: Record<string, string> = {
   workflows: 'Commit GitHub Actions workflow files',
   administration: 'Create repositories from the wizard',
   metadata: 'Read repository metadata (always required)',
+  pages: 'Set up and deploy GitHub Pages sites',
   checks: 'Read check runs as a review input',
   statuses: 'Read commit statuses as a review input',
 }
@@ -38,6 +40,7 @@ const permissionNames: Record<string, string> = {
   workflows: 'Workflows',
   administration: 'Administration',
   metadata: 'Metadata',
+  pages: 'Pages',
   checks: 'Checks',
   statuses: 'Commit statuses',
 }
@@ -112,6 +115,20 @@ function ConfiguredApp({ app }: { app: AdminGitHubApp }) {
         <h4 className="mb-2 text-sm font-semibold">Permissions</h4>
         <PermissionList permissions={app.permissions} label="GitHub App permissions" />
       </div>
+      {app.pagesPermission === 'missing' && (
+        <Alert tone="warning" title="GitHub Pages unavailable">
+          <p data-testid="github-app-pages-permission-missing">
+            {PAGES_PERMISSION_MISSING_COPY}. Until then, projects can&apos;t choose GitHub Pages as their frontend host.
+          </p>
+          {app.htmlUrl && (
+            <p className="mt-2">
+              <GitHubLink href={app.htmlUrl} variant="link">
+                Open the App on GitHub
+              </GitHubLink>
+            </p>
+          )}
+        </Alert>
+      )}
       {app.canCreateRepositories ? (
         <p className="text-sm text-muted-foreground">Users can create repositories from the new-project wizard.</p>
       ) : (

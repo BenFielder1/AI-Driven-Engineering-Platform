@@ -179,10 +179,10 @@ public class DeploymentPollingTests
         Assert.Equal(T0.AddSeconds(10), ProductionDeploymentRules.LookAgainAt(T0, T0));
         Assert.Equal(T0.AddSeconds(30), ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(25)));
         Assert.Null(ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(30)));
-        Assert.True(ProductionDeploymentRules.Adopts(DeploymentTarget.Production, DeploymentTrigger.Auto, DeploymentProvider.Vercel));
-        Assert.False(ProductionDeploymentRules.Adopts(DeploymentTarget.Production, DeploymentTrigger.Auto, DeploymentProvider.Fake));
-        Assert.False(ProductionDeploymentRules.Adopts(DeploymentTarget.Production, DeploymentTrigger.Redeploy, DeploymentProvider.Vercel));
-        Assert.False(ProductionDeploymentRules.Adopts(DeploymentTarget.Preview, DeploymentTrigger.Auto, DeploymentProvider.Vercel));
+        Assert.True(ProductionDeploymentRules.Adopts(DeploymentEnvironment.Production, DeploymentTrigger.Auto, DeploymentProvider.Vercel));
+        Assert.False(ProductionDeploymentRules.Adopts(DeploymentEnvironment.Production, DeploymentTrigger.Auto, DeploymentProvider.Fake));
+        Assert.False(ProductionDeploymentRules.Adopts(DeploymentEnvironment.Production, DeploymentTrigger.Redeploy, DeploymentProvider.Vercel));
+        Assert.False(ProductionDeploymentRules.Adopts(DeploymentEnvironment.Preview, DeploymentTrigger.Auto, DeploymentProvider.Vercel));
     }
 
     // ------------------------------------------------------------------ FR-87, FR-88 Vercel errors
@@ -229,16 +229,16 @@ public class DeploymentPollingTests
     [Fact]
     public void FR88_nextjs_supabase_required_env_is_flagged_when_missing()
     {
-        IReadOnlyList<DeploymentTarget> both = [DeploymentTarget.Preview, DeploymentTarget.Production];
-        var project = new Dictionary<string, IReadOnlyList<DeploymentTarget>>
+        IReadOnlyList<DeploymentEnvironment> both = [DeploymentEnvironment.Preview, DeploymentEnvironment.Production];
+        var project = new Dictionary<string, IReadOnlyList<DeploymentEnvironment>>
         {
             ["NEXT_PUBLIC_SUPABASE_URL"] = both,
-            ["NEXT_PUBLIC_SUPABASE_ANON_KEY"] = [DeploymentTarget.Preview],
+            ["NEXT_PUBLIC_SUPABASE_ANON_KEY"] = [DeploymentEnvironment.Preview],
         };
 
         Assert.True(DeploymentEnvRules.IsPresent("NEXT_PUBLIC_SUPABASE_URL", both, project));
         Assert.False(DeploymentEnvRules.IsPresent("NEXT_PUBLIC_SUPABASE_ANON_KEY", both, project));
-        Assert.True(DeploymentEnvRules.IsPresent("NEXT_PUBLIC_SUPABASE_ANON_KEY", [DeploymentTarget.Preview], project));
+        Assert.True(DeploymentEnvRules.IsPresent("NEXT_PUBLIC_SUPABASE_ANON_KEY", [DeploymentEnvironment.Preview], project));
         Assert.False(DeploymentEnvRules.IsPresent("SUPABASE_SERVICE_ROLE_KEY", both, project));
     }
 
@@ -273,14 +273,14 @@ public class DeploymentPollingTests
     [Fact]
     public void S4_15_Env_sync_upserts_by_key_and_target_and_deletes_dropped_targets()
     {
-        var first = EnvSyncRules.Plan([DeploymentTarget.Production, DeploymentTarget.Preview], null);
-        Assert.Equal([new EnvTargetWrite(DeploymentTarget.Preview, null), new EnvTargetWrite(DeploymentTarget.Production, null)], first.Writes);
+        var first = EnvSyncRules.Plan([DeploymentEnvironment.Production, DeploymentEnvironment.Preview], null);
+        Assert.Equal([new EnvTargetWrite(DeploymentEnvironment.Preview, null), new EnvTargetWrite(DeploymentEnvironment.Production, null)], first.Writes);
         Assert.Empty(first.Deletes);
 
         var ids = new Dictionary<string, string> { ["preview"] = "env_p", ["production"] = "env_q" };
-        var narrowed = EnvSyncRules.Plan([DeploymentTarget.Preview], ids);
-        Assert.Equal([new EnvTargetWrite(DeploymentTarget.Preview, "env_p")], narrowed.Writes);
-        Assert.Equal([new EnvTargetDelete(DeploymentTarget.Production, "env_q")], narrowed.Deletes);
+        var narrowed = EnvSyncRules.Plan([DeploymentEnvironment.Preview], ids);
+        Assert.Equal([new EnvTargetWrite(DeploymentEnvironment.Preview, "env_p")], narrowed.Writes);
+        Assert.Equal([new EnvTargetDelete(DeploymentEnvironment.Production, "env_q")], narrowed.Deletes);
 
         Assert.Equal(["env_p", "env_q"], EnvSyncRules.AllIds(ids));
         Assert.Empty(EnvSyncRules.AllIds(null));
@@ -346,7 +346,7 @@ public class DeploymentPollingTests
     {
         var failed = NotificationMessages.Compose(new NotificationFacts(NotificationType.DeploymentFailed, "Todo")
         {
-            DeploymentTarget = "production",
+            DeploymentEnvironment = "production",
             ReleaseVersion = "1.2.0",
             ErrorCode = "VERCEL_ERROR",
         });

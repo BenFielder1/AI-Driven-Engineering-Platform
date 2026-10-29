@@ -2,6 +2,7 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
+using Aide.Domain.Platforms;
 
 namespace Aide.UnitTests.Deployments;
 
@@ -16,12 +17,12 @@ public class DeploymentRulesTests
     [Fact]
     public void FR87_A_connection_needs_a_label_and_a_well_formed_token()
     {
-        Assert.True(VercelConnectionRules.ValidateNew("Team", "vcp_AbC123xyz").IsSuccess);
-        Assert.True(VercelConnectionRules.ValidateNew("  Personal  ", "abc").IsSuccess);
-        AssertProblem(VercelConnectionRules.ValidateNew(" ", "abc"), "label");
-        AssertProblem(VercelConnectionRules.ValidateNew(new string('a', VercelConnectionRules.MaxLabelLength + 1), "abc"), "label");
-        AssertProblem(VercelConnectionRules.ValidateNew("Team", ""), "token");
-        AssertProblem(VercelConnectionRules.ValidateNew("Team", new string('t', VercelConnectionRules.MaxTokenLength + 1)), "token");
+        Assert.True(PlatformConnectionRules.ValidateNew("Team", "vcp_AbC123xyz", null).IsSuccess);
+        Assert.True(PlatformConnectionRules.ValidateNew("  Personal  ", "abc", null).IsSuccess);
+        AssertProblem(PlatformConnectionRules.ValidateNew(" ", "abc", null), "label");
+        AssertProblem(PlatformConnectionRules.ValidateNew(new string('a', PlatformConnectionRules.MaxLabelLength + 1), "abc", null), "label");
+        AssertProblem(PlatformConnectionRules.ValidateNew("Team", "", null), "token");
+        AssertProblem(PlatformConnectionRules.ValidateNew("Team", new string('t', PlatformConnectionRules.MaxTokenLength + 1), null), "token");
     }
 
     [Theory]
@@ -29,21 +30,18 @@ public class DeploymentRulesTests
     [InlineData("abc\n")]
     [InlineData("abc\u0001")]
     public void FR87_Tokens_with_whitespace_or_control_characters_are_refused(string token) =>
-        AssertProblem(VercelConnectionRules.ValidateNew("Team", token), "token");
+        AssertProblem(PlatformConnectionRules.ValidateNew("Team", token, null), "token");
 
     [Fact]
     public void FR87_Renaming_needs_a_label()
     {
-        Assert.True(VercelConnectionRules.ValidateLabel("Renamed").IsSuccess);
-        AssertProblem(VercelConnectionRules.ValidateLabel(null), "label");
+        Assert.True(PlatformConnectionRules.ValidateLabel("Renamed").IsSuccess);
+        AssertProblem(PlatformConnectionRules.ValidateLabel(null), "label");
     }
 
     [Fact]
-    public void FR87_S5_Vercel_connection_wire_values()
-    {
+    public void FR87_S5_Vercel_token_scope_wire_values() =>
         Assert.Equal(["account", "team"], EnumStrings.Values<VercelTokenScope>());
-        Assert.Equal(["valid", "invalid", "unchecked"], EnumStrings.Values<VercelConnectionStatus>());
-    }
 
     // ------------------------------------------------------------------ FR-88 settings
 
@@ -138,7 +136,7 @@ public class DeploymentRulesTests
     [InlineData("_PRIVATE")]
     [InlineData("a1")]
     public void FR88_Env_keys_letters_digits_and_underscore(string key) =>
-        Assert.True(DeploymentEnvRules.Validate(key, "v", [DeploymentTarget.Preview]).IsSuccess);
+        Assert.True(DeploymentEnvRules.Validate(key, "v", [DeploymentEnvironment.Preview]).IsSuccess);
 
     [Theory]
     [InlineData("1KEY")]
@@ -146,22 +144,22 @@ public class DeploymentRulesTests
     [InlineData("MY KEY")]
     [InlineData("")]
     public void FR88_Invalid_env_keys_are_refused(string key) =>
-        AssertProblem(DeploymentEnvRules.Validate(key, "v", [DeploymentTarget.Preview]), "key");
+        AssertProblem(DeploymentEnvRules.Validate(key, "v", [DeploymentEnvironment.Preview]), "key");
 
     [Fact]
     public void FR88_Env_key_length_value_size_and_targets()
     {
         Assert.True(DeploymentEnvRules.IsKey(new string('K', DeploymentEnvVar.KeyMaxLength)));
         Assert.False(DeploymentEnvRules.IsKey(new string('K', DeploymentEnvVar.KeyMaxLength + 1)));
-        Assert.True(DeploymentEnvRules.Validate("K", new string('v', DeploymentEnvRules.ValueMaxBytes), [DeploymentTarget.Production]).IsSuccess);
-        AssertProblem(DeploymentEnvRules.Validate("K", new string('v', DeploymentEnvRules.ValueMaxBytes + 1), [DeploymentTarget.Production]), "value");
+        Assert.True(DeploymentEnvRules.Validate("K", new string('v', DeploymentEnvRules.ValueMaxBytes), [DeploymentEnvironment.Production]).IsSuccess);
+        AssertProblem(DeploymentEnvRules.Validate("K", new string('v', DeploymentEnvRules.ValueMaxBytes + 1), [DeploymentEnvironment.Production]), "value");
 
         // 64 KB is counted in UTF-8 bytes: 3 bytes per "€".
-        AssertProblem(DeploymentEnvRules.Validate("K", new string('€', (DeploymentEnvRules.ValueMaxBytes / 3) + 1), [DeploymentTarget.Production]), "value");
-        AssertProblem(DeploymentEnvRules.Validate("K", "", [DeploymentTarget.Production]), "value");
+        AssertProblem(DeploymentEnvRules.Validate("K", new string('€', (DeploymentEnvRules.ValueMaxBytes / 3) + 1), [DeploymentEnvironment.Production]), "value");
+        AssertProblem(DeploymentEnvRules.Validate("K", "", [DeploymentEnvironment.Production]), "value");
         AssertProblem(DeploymentEnvRules.Validate("K", "v", []), "targets");
-        AssertProblem(DeploymentEnvRules.Validate("K", "v", [DeploymentTarget.Preview, DeploymentTarget.Preview]), "targets");
-        Assert.True(DeploymentEnvRules.Validate("K", "v", [DeploymentTarget.Preview, DeploymentTarget.Production]).IsSuccess);
+        AssertProblem(DeploymentEnvRules.Validate("K", "v", [DeploymentEnvironment.Preview, DeploymentEnvironment.Preview]), "targets");
+        Assert.True(DeploymentEnvRules.Validate("K", "v", [DeploymentEnvironment.Preview, DeploymentEnvironment.Production]).IsSuccess);
     }
 
     // ------------------------------------------------------------------ FR-90, FR-91, §4.15 deployments
@@ -170,7 +168,7 @@ public class DeploymentRulesTests
     public void S4_15_Deployment_wire_values()
     {
         Assert.Equal(["queued", "building", "ready", "error", "canceled"], EnumStrings.Values<DeploymentStatus>());
-        Assert.Equal(["preview", "production"], EnumStrings.Values<DeploymentTarget>());
+        Assert.Equal(["preview", "production"], EnumStrings.Values<DeploymentEnvironment>());
         Assert.Equal(["vercel", "fake"], EnumStrings.Values<DeploymentProvider>());
         Assert.Equal(["auto", "manual", "promote", "redeploy"], EnumStrings.Values<DeploymentTrigger>());
     }
@@ -178,21 +176,21 @@ public class DeploymentRulesTests
     [Fact]
     public void FR91_Only_a_ready_production_deployment_can_be_promoted()
     {
-        Assert.True(DeploymentActionRules.CanPromote(DeploymentTarget.Production, DeploymentStatus.Ready).IsSuccess);
+        Assert.True(DeploymentActionRules.CanPromote(DeploymentEnvironment.Production, DeploymentStatus.Ready).IsSuccess);
         foreach (var status in Enum.GetValues<DeploymentStatus>().Where(s => s != DeploymentStatus.Ready))
         {
-            Assert.Equal(ErrorCodes.InvalidDeployment, DeploymentActionRules.CanPromote(DeploymentTarget.Production, status).Error!.Code);
+            Assert.Equal(ErrorCodes.InvalidDeployment, DeploymentActionRules.CanPromote(DeploymentEnvironment.Production, status).Error!.Code);
         }
 
-        Assert.Equal(ErrorCodes.InvalidDeployment, DeploymentActionRules.CanPromote(DeploymentTarget.Preview, DeploymentStatus.Ready).Error!.Code);
+        Assert.Equal(ErrorCodes.InvalidDeployment, DeploymentActionRules.CanPromote(DeploymentEnvironment.Preview, DeploymentStatus.Ready).Error!.Code);
         Assert.Equal(409, ErrorCodes.StatusCodeFor(ErrorCodes.InvalidDeployment));
     }
 
     [Fact]
     public void FR90_FR91_A_writer_redeploys_a_preview_an_Owner_production()
     {
-        Assert.Equal(ProjectAction.TriggerDeployment, DeploymentActionRules.RedeployAction(DeploymentTarget.Preview));
-        Assert.Equal(ProjectAction.ManageDeployments, DeploymentActionRules.RedeployAction(DeploymentTarget.Production));
+        Assert.Equal(ProjectAction.TriggerDeployment, DeploymentActionRules.RedeployAction(DeploymentEnvironment.Preview));
+        Assert.Equal(ProjectAction.ManageDeployments, DeploymentActionRules.RedeployAction(DeploymentEnvironment.Production));
         Assert.Equal(ProjectRole.Contributor, ProjectPermissions.MinimumRole(ProjectAction.TriggerDeployment));
         Assert.Equal(ProjectRole.Owner, ProjectPermissions.MinimumRole(ProjectAction.ManageDeployments));
     }

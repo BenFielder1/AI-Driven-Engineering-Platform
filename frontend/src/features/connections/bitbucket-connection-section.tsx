@@ -200,7 +200,7 @@ export function BitbucketConnectionSection({
     <section aria-labelledby="bitbucket-connection-title" className={cn(panelClass, 'flex flex-col gap-4 p-5')}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2
+          <h3
             id="bitbucket-connection-title"
             ref={headingRef}
             tabIndex={-1}
@@ -208,7 +208,7 @@ export function BitbucketConnectionSection({
           >
             <BitbucketLogo className="size-5" />
             Bitbucket
-          </h2>
+          </h3>
           <p className="mt-1 text-sm text-muted-foreground">
             Your Bitbucket Cloud accounts, used to pick and create repositories. Background Git work on a Bitbucket project
             uses the connection of the Owner who bound it.

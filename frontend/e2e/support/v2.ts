@@ -10,9 +10,13 @@ import { api, apiJson, projectState, waitForDraft, waitForPendingGate } from './
 export const AGENT_TIMEOUT = 60_000
 export const LIVE_BOUND_MS = 2_000
 
-/** FR-87: a Vercel connection of the context's user. The Fake provider accepts any token not starting `fake_invalid`. */
+/**
+ * FR-87, FR-142: a Vercel platform connection of the context's user. The Fake provider accepts any token not starting
+ * `fake_invalid`.
+ */
 export async function createVercelConnection(context: BrowserContext, label = 'Fake Vercel'): Promise<string> {
-  const connection = await apiJson<{ id: string; status: string }>(context, 'POST', '/api/me/connections/vercel', {
+  const connection = await apiJson<{ id: string; status: string }>(context, 'POST', '/api/me/connections/platforms', {
+    provider: 'vercel',
     label,
     token: `fake_e2e_${String(Date.now())}`,
   })

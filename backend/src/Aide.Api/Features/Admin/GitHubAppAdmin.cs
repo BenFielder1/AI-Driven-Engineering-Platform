@@ -89,7 +89,7 @@ public sealed partial class GitHubAppAdmin(
         var app = await apps.GetAsync(cancellationToken);
         if (app is null)
         {
-            return new AdminGitHubAppDto(GitHubAppStatus.NotConfigured, null, null, null, null, null, null, null, new Dictionary<string, string>(), false);
+            return new AdminGitHubAppDto(GitHubAppStatus.NotConfigured, null, null, null, null, null, null, null, new Dictionary<string, string>(), false, GitHubPagesAccess.Unknown);
         }
 
         var info = await appInfo.GetAsync(app, api, cancellationToken);
@@ -104,7 +104,8 @@ public sealed partial class GitHubAppAdmin(
             app.InstallUrl,
             info?.HtmlUrl ?? app.HtmlUrl ?? GitHubRules.AppHtmlUrl(app.Slug),
             permissions,
-            GitHubRules.CanCreateRepositories(permissions));
+            GitHubRules.CanCreateRepositories(permissions),
+            GitHubRules.PagesPermission(info?.Permissions));
     }
 
     /// <summary>FR-80: the manifest and where to post it; <c>CONFLICT</c> when an App is already configured.</summary>

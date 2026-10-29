@@ -27,6 +27,7 @@ public class GitHubAppRulesTests
                 ["pull_requests"] = "write",
                 ["workflows"] = "write",
                 ["administration"] = "write",
+                ["pages"] = "write",
                 ["metadata"] = "read",
                 ["checks"] = "read",
                 ["statuses"] = "read",

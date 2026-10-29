@@ -19,8 +19,8 @@ export const connectionKeys = {
   llm: () => [...connectionKeys.all, 'llm'] as const,
   /** GET /api/llm/providers (FR-158): under `all`, so a connection change refreshes it. */
   llmProviders: () => [...connectionKeys.all, 'llm-providers'] as const,
-  /** GET /api/me/connections/vercel (FR-87). */
-  vercel: () => [...connectionKeys.all, 'vercel'] as const,
+  /** GET /api/me/connections/platforms (FR-142; Vercel connections included, FR-87). */
+  platforms: () => [...connectionKeys.all, 'platforms'] as const,
   adminLlmPolicy: () => ['admin', 'integrations', 'llm'] as const,
 }
 
@@ -62,7 +62,7 @@ export function useInvalidateConnections() {
  * FR-78: adds a key; the API checks it with the provider first (CREDENTIAL_INVALID → nothing saved). The variables
  * carry the plaintext key, so the mutation is garbage-collected as soon as it has no observer (`gcTime: 0`): callers
  * `reset()` it after every outcome, which drops it from the MutationCache. Use the same pattern for any secret
- * (the Vercel token, FR-87, and deployment env values, FR-88).
+ * (platform tokens, FR-142, and deployment env values, FR-88).
  */
 export function useCreateLlmConnection() {
   const invalidate = useInvalidateConnections()

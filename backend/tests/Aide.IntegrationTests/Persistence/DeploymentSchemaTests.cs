@@ -8,7 +8,7 @@ using Npgsql;
 
 namespace Aide.IntegrationTests.Persistence;
 
-/// <summary>FR-87, FR-88, FR-91, §4.15, §5: the VercelDeployments schema against real PostgreSQL 17.</summary>
+/// <summary>FR-87, FR-88, FR-91, FR-142, FR-144, FR-145, §4.15, §5: the deployment schema (PlatformsAndTargets) against real PostgreSQL 17.</summary>
 [Collection(ApiTestGroup.Name)]
 public sealed class DeploymentSchemaTests(AideApiFactory factory)
 {
@@ -23,33 +23,33 @@ public sealed class DeploymentSchemaTests(AideApiFactory factory)
         var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
         var (project, versionId, release) = await ProjectWithReleaseAsync(db);
 
-        var first = NewDeployment(project.Id, versionId, release.Id, DeploymentTarget.Production, DeploymentTrigger.Auto);
+        var first = NewDeployment(project.Id, versionId, release.Id, DeploymentEnvironment.Production, DeploymentTrigger.Auto);
         db.Deployments.Add(first);
         await db.SaveChangesAsync(Ct);
 
-        var duplicate = NewDeployment(project.Id, versionId, release.Id, DeploymentTarget.Production, DeploymentTrigger.Auto);
+        var duplicate = NewDeployment(project.Id, versionId, release.Id, DeploymentEnvironment.Production, DeploymentTrigger.Auto);
         db.Deployments.Add(duplicate);
         var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
         var pg = Assert.IsType<PostgresException>(error.InnerException);
-        Assert.Equal((PostgresErrorCodes.UniqueViolation, "ux_deployments_release_id_target_auto_production"), (pg.SqlState, pg.ConstraintName));
+        Assert.Equal((PostgresErrorCodes.UniqueViolation, "ux_deployments_release_id_component_auto_production"), (pg.SqlState, pg.ConstraintName));
         db.Entry(duplicate).State = EntityState.Detached;
 
         // Redeploy and promote of the same release are new rows; so are previews.
-        db.Deployments.Add(NewDeployment(project.Id, versionId, release.Id, DeploymentTarget.Production, DeploymentTrigger.Redeploy));
-        db.Deployments.Add(NewDeployment(project.Id, versionId, release.Id, DeploymentTarget.Production, DeploymentTrigger.Redeploy));
-        var promote = NewDeployment(project.Id, versionId, release.Id, DeploymentTarget.Production, DeploymentTrigger.Promote);
+        db.Deployments.Add(NewDeployment(project.Id, versionId, release.Id, DeploymentEnvironment.Production, DeploymentTrigger.Redeploy));
+        db.Deployments.Add(NewDeployment(project.Id, versionId, release.Id, DeploymentEnvironment.Production, DeploymentTrigger.Redeploy));
+        var promote = NewDeployment(project.Id, versionId, release.Id, DeploymentEnvironment.Production, DeploymentTrigger.Promote);
         promote.PromotedFromDeploymentId = first.Id;
         db.Deployments.Add(promote);
-        db.Deployments.Add(NewDeployment(project.Id, versionId, null, DeploymentTarget.Preview, DeploymentTrigger.Auto));
-        db.Deployments.Add(NewDeployment(project.Id, versionId, null, DeploymentTarget.Preview, DeploymentTrigger.Auto));
+        db.Deployments.Add(NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Preview, DeploymentTrigger.Auto));
+        db.Deployments.Add(NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Preview, DeploymentTrigger.Auto));
         await db.SaveChangesAsync(Ct);
 
         var rows = await db.Deployments.AsNoTracking().Where(d => d.ProjectId == project.Id).ToListAsync(Ct);
         Assert.Equal(6, rows.Count);
         Assert.Equal(
-            "production|auto|queued|fake",
+            "production|auto|queued|fake|frontend|deploy",
             await db.Database.SqlQuery<string>(
-                $"SELECT target || '|' || trigger || '|' || status || '|' || provider AS \"Value\" FROM deployments WHERE id = {first.Id}")
+                $"SELECT environment || '|' || trigger || '|' || status || '|' || provider || '|' || component || '|' || kind AS \"Value\" FROM deployments WHERE id = {first.Id}")
                 .SingleAsync(Ct));
 
         // Deleting the release keeps its deployments (release_id SET NULL); the project cascade removes them.
@@ -97,7 +97,7 @@ public sealed class DeploymentSchemaTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR87_team_token_needs_a_team_and_deleting_a_connection_clears_the_project_binding()
+    public async Task FR142_FR144_target_is_unique_per_component_and_deleting_a_connection_clears_the_binding()
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
@@ -106,35 +106,84 @@ public sealed class DeploymentSchemaTests(AideApiFactory factory)
         db.Users.Add(user);
         db.Projects.Add(project);
         var connection = NewConnection(user.Id);
-        connection.Scope = VercelTokenScope.Team;
-        db.VercelConnections.Add(connection);
-        var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
-        Assert.Equal("ck_vercel_connections_team_scope", Assert.IsType<PostgresException>(error.InnerException).ConstraintName);
-
-        (connection.TeamId, connection.TeamSlug) = ("team_123", "acme");
-        db.ProjectDeploymentSettings.Add(new ProjectDeploymentSettings
+        connection.Metadata = new PlatformConnectionMetadata
+        {
+            TeamId = "team_123",
+            TeamSlug = "acme",
+            Accounts = [new PlatformAccountRef("team_123", "Acme", "acme", "team")],
+            MissingPermissions = ["API Key Secrets: Read"],
+        };
+        connection.Scopes = ["read", "write"];
+        db.PlatformConnections.Add(connection);
+        var target = new DeploymentTarget
         {
             ProjectId = project.Id,
             ConnectionId = connection.Id,
             BoundByUserId = user.Id,
-            VercelProjectId = "prj_1",
+            ResourceId = "prj_1",
+            BuildConfig = new DeploymentBuildConfig { Framework = "nextjs" },
+            Status = DeploymentTargetStatus.Ready,
             UpdatedAt = Now,
-        });
+        };
+        db.DeploymentTargets.Add(target);
         await db.SaveChangesAsync(Ct);
 
         db.ChangeTracker.Clear();
-        var settings = await db.ProjectDeploymentSettings.AsNoTracking().SingleAsync(s => s.ProjectId == project.Id, Ct);
-        Assert.Equal((DeploymentProvider.Vercel, ".", "nextjs"), (settings.Provider, settings.RootDirectory, settings.Framework));
+        var stored = await db.PlatformConnections.AsNoTracking().SingleAsync(c => c.Id == connection.Id, Ct);
+        Assert.Equal(("team_123", "acme", "Acme", "API Key Secrets: Read"), (stored.Metadata.TeamId, stored.Metadata.TeamSlug, stored.Metadata.Accounts[0].Name, stored.Metadata.MissingPermissions[0]));
+        Assert.Equal(["read", "write"], stored.Scopes);
+        Assert.Equal(
+            "vercel|valid",
+            await db.Database.SqlQuery<string>($"SELECT provider || '|' || status AS \"Value\" FROM platform_connections WHERE id = {connection.Id}").SingleAsync(Ct));
+        var reloaded = await db.DeploymentTargets.AsNoTracking().SingleAsync(t => t.Id == target.Id, Ct);
+        Assert.Equal((DeploymentComponent.Frontend, DeploymentProvider.Vercel, ".", "nextjs"), (reloaded.Component, reloaded.Provider, reloaded.RootDirectory, reloaded.BuildConfig.Framework));
 
-        await db.VercelConnections.Where(c => c.Id == connection.Id).ExecuteDeleteAsync(Ct);
-        settings = await db.ProjectDeploymentSettings.AsNoTracking().SingleAsync(s => s.ProjectId == project.Id, Ct);
-        Assert.Equal(((Guid?)null, (Guid?)user.Id), (settings.ConnectionId, settings.BoundByUserId));
+        // One target per component: a second frontend target is refused; a backend one is fine.
+        db.DeploymentTargets.Add(new DeploymentTarget { ProjectId = project.Id, Component = DeploymentComponent.Frontend, UpdatedAt = Now });
+        var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
+        Assert.Equal("ux_deployment_targets_project_id_component", Assert.IsType<PostgresException>(error.InnerException).ConstraintName);
+        db.ChangeTracker.Clear();
+        db.DeploymentTargets.Add(new DeploymentTarget { ProjectId = project.Id, Component = DeploymentComponent.Backend, Provider = DeploymentProvider.Fake, UpdatedAt = Now });
+        await db.SaveChangesAsync(Ct);
+
+        // Deleting the connection keeps the target (connection_id SET NULL); deployments keep naming their target until it goes.
+        await db.PlatformConnections.Where(c => c.Id == connection.Id).ExecuteDeleteAsync(Ct);
+        reloaded = await db.DeploymentTargets.AsNoTracking().SingleAsync(t => t.Id == target.Id, Ct);
+        Assert.Equal(((Guid?)null, (Guid?)user.Id), (reloaded.ConnectionId, reloaded.BoundByUserId));
 
         // A user's connections go with the user.
-        db.VercelConnections.Add(NewConnection(user.Id));
+        db.ChangeTracker.Clear();
+        db.PlatformConnections.Add(NewConnection(user.Id));
         await db.SaveChangesAsync(Ct);
         await db.Users.Where(u => u.Id == user.Id).ExecuteDeleteAsync(Ct);
-        Assert.False(await db.VercelConnections.AnyAsync(c => c.UserId == user.Id, Ct));
+        Assert.False(await db.PlatformConnections.AnyAsync(c => c.UserId == user.Id, Ct));
+    }
+
+    [Fact]
+    public async Task FR145_env_var_applies_to_frontend_or_backend()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
+        var project = NewProject();
+        db.Projects.Add(project);
+        var derived = NewEnvVar(project.Id, "DATABASE_URL", ["production"]);
+        (derived.AppliesTo, derived.Source, derived.DerivedFrom) = (["backend"], DeploymentEnvSource.Derived, "Render Postgres (production)");
+        db.DeploymentEnvVars.Add(derived);
+        await db.SaveChangesAsync(Ct);
+        db.ChangeTracker.Clear();
+        var reloaded = await db.DeploymentEnvVars.AsNoTracking().SingleAsync(v => v.Id == derived.Id, Ct);
+        Assert.Equal((DeploymentEnvSource.Derived, "Render Postgres (production)", false), (reloaded.Source, reloaded.DerivedFrom, reloaded.Public));
+        Assert.Equal(["backend"], reloaded.AppliesTo);
+
+        foreach (IReadOnlyList<string> appliesTo in new[] { new[] { "database" }, Array.Empty<string>() })
+        {
+            db.ChangeTracker.Clear();
+            var bad = NewEnvVar(project.Id, $"KEY_{appliesTo.Count}", ["preview"]);
+            bad.AppliesTo = appliesTo;
+            db.DeploymentEnvVars.Add(bad);
+            var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
+            Assert.Equal("ck_deployment_env_vars_applies_to", Assert.IsType<PostgresException>(error.InnerException).ConstraintName);
+        }
     }
 
     [Fact]
@@ -145,7 +194,7 @@ public sealed class DeploymentSchemaTests(AideApiFactory factory)
         {
             var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
             var (project, versionId, _) = await ProjectWithReleaseAsync(db);
-            var deployment = NewDeployment(project.Id, versionId, null, DeploymentTarget.Preview, DeploymentTrigger.Auto);
+            var deployment = NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Preview, DeploymentTrigger.Auto);
             db.Deployments.Add(deployment);
             await db.SaveChangesAsync(Ct);
             id = deployment.Id;
@@ -193,16 +242,16 @@ public sealed class DeploymentSchemaTests(AideApiFactory factory)
         return (project, versionId, release);
     }
 
-    private static Deployment NewDeployment(Guid projectId, Guid versionId, Guid? releaseId, DeploymentTarget target, DeploymentTrigger trigger) => new()
+    private static Deployment NewDeployment(Guid projectId, Guid versionId, Guid? releaseId, DeploymentEnvironment target, DeploymentTrigger trigger) => new()
     {
         ProjectId = projectId,
         ReleaseVersionId = versionId,
         ReleaseId = releaseId,
         Provider = DeploymentProvider.Fake,
-        Target = target,
+        Environment = target,
         Trigger = trigger,
         ProviderDeploymentId = $"dpl_{Guid.NewGuid():N}",
-        GitRef = target == DeploymentTarget.Production ? "main" : "aide/demo",
+        GitRef = target == DeploymentEnvironment.Production ? "main" : "aide/demo",
         GitSha = new string('c', 40),
         CreatedAt = Now,
         UpdatedAt = Now,
@@ -218,13 +267,15 @@ public sealed class DeploymentSchemaTests(AideApiFactory factory)
         UpdatedAt = Now,
     };
 
-    private static VercelConnection NewConnection(Guid userId) => new()
+    private static PlatformConnection NewConnection(Guid userId) => new()
     {
         UserId = userId,
+        Provider = PlatformProvider.Vercel,
         Label = "Personal",
-        TokenEncrypted = "cipher-token",
+        SecretEncrypted = "cipher-token",
         Last4 = "a1b2",
-        VercelUserId = "usr_1",
+        AccountId = "usr_1",
+        Status = PlatformConnectionStatus.Valid,
         CreatedAt = Now,
     };
 

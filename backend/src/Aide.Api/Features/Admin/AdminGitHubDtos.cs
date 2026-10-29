@@ -12,6 +12,9 @@ namespace Aide.Api.Features.Admin;
 /// App field is <c>null</c> and <c>permissions</c> is empty). <c>installUrl</c> is
 /// <c>https://github.com/apps/{slug}/installations/new</c>; <c>permissions</c> are the App's granted permissions
 /// (e.g. <c>contents: write</c>); <c>canCreateRepositories</c> is true when <c>administration: write</c> is granted (§4.14).
+/// <c>pagesPermission</c> (FR-143) is <c>granted</c> when the App has <c>pages: write</c>, <c>missing</c> for an App registered
+/// before v4 ("Pages permission missing: update the App's permissions in GitHub, then accept them on each installation"),
+/// and <c>unknown</c> when the App isn't configured or GitHub couldn't be asked.
 /// </summary>
 public sealed record AdminGitHubAppDto(
     GitHubAppStatus Status,
@@ -23,7 +26,8 @@ public sealed record AdminGitHubAppDto(
     string? InstallUrl,
     string? HtmlUrl,
     IReadOnlyDictionary<string, string> Permissions,
-    bool CanCreateRepositories);
+    bool CanCreateRepositories,
+    GitHubPagesAccess PagesPermission);
 
 /// <summary>
 /// Start the GitHub App manifest flow (FR-80): the App is owned by the Admin's personal account (<c>user</c>) or by the
@@ -45,7 +49,7 @@ public sealed record CreateGitHubAppManifestRequest
 /// <c>App:PublicBaseUrl</c>; <c>redirect_url</c> the manifest callback (<c>/api/admin/integrations/github/callback</c>);
 /// <c>callback_urls</c> the sign-in callback (<c>/api/auth/github/callback</c>); no <c>hook_attributes</c> (GitHub rejects a
 /// localhost webhook URL even when inactive, and needs a URL whenever the object is present), so the App has no webhook; private; and
-/// <c>default_permissions</c> contents, pull_requests, workflows and administration <c>write</c>, metadata, checks and
+/// <c>default_permissions</c> contents, pull_requests, workflows, administration and pages (FR-143) <c>write</c>, metadata, checks and
 /// statuses <c>read</c> (the Admin may drop <c>administration</c>, which disables "Create repository"); no events.
 /// </summary>
 public sealed record GitHubAppManifestDto(

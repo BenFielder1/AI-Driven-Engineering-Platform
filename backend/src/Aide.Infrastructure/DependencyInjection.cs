@@ -6,6 +6,7 @@ using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.GitLab;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
+using Aide.Infrastructure.Platforms;
 using Aide.Infrastructure.RepoTools;
 using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
@@ -221,6 +222,27 @@ public static class DependencyInjection
         services.AddSingleton<VercelDeploymentProvider>();
         services.AddSingleton<FakeDeploymentProvider>();
         services.AddSingleton<IDeploymentProviderResolver, DeploymentProviderResolver>();
+
+        // Platform connections (FR-142, §4.20, §4.21): each platform's REST or GraphQL API on its fixed host (§8: never
+        // configurable, so no SSRF); the Fake for all but Vercel under Deployments:Provider=Fake.
+        foreach (var (name, baseUrl) in PlatformHosts.All)
+        {
+            services.AddHttpClient(name, client =>
+            {
+                client.BaseAddress = new Uri(baseUrl);
+                client.Timeout = TimeSpan.FromSeconds(20);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            });
+        }
+
+        services.AddSingleton<PlatformHttp>();
+        services.AddSingleton<IPlatformConnectionValidator, VercelConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidator, NetlifyConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidator, CloudflareConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidator, RenderConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidator, RailwayConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidator, SupabaseConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidators, PlatformConnectionValidators>();
 
         return services;
     }

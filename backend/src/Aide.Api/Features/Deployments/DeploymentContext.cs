@@ -15,7 +15,8 @@ public sealed record DeploymentRepo(string? Owner, string? Name, long? RepoId)
 }
 
 /// <summary>
-/// What a deployment of a project uses (FR-88): its settings, the bound Owner's Vercel connection and decrypted token (the
+/// What a deployment of a project uses (FR-88, FR-144): its frontend target (v2's settings), the bound Owner's Vercel
+/// platform connection and decrypted token (the
 /// project acts on that Owner's behalf, §2, D-V2-10), the provider in use and the repository. Never logged. Every use is
 /// Owner-gated or automatic: env var writes and deletes, promote and production redeploys need an Owner
 /// (<c>ManageDeployments</c>); preview deployments (a writer, or AIDE after execution) and the automatic production
@@ -23,22 +24,23 @@ public sealed record DeploymentRepo(string? Owner, string? Name, long? RepoId)
 /// binder or the caller's own connection (<see cref="Domain.Deployments.DeploymentSettingsRules.CanUseBinding"/>).
 /// </summary>
 public sealed record DeploymentContext(
-    ProjectDeploymentSettings Settings,
-    VercelConnection Connection,
+    DeploymentTarget Target,
+    PlatformConnection Connection,
     DeploymentAuth Auth,
     IDeploymentProvider Provider,
     DeploymentRepo Repo)
 {
-    public override string ToString() => $"DeploymentContext {{ Project = {Settings.ProjectId} }}";
+    public override string ToString() => $"DeploymentContext {{ Project = {Target.ProjectId} }}";
 }
 
 /// <summary>
-/// FR-87, FR-88: resolves a project's <see cref="DeploymentContext"/> and records a Vercel token rejection (the connection
-/// becomes <c>invalid</c> with <c>CONNECTION_INVALID</c>). Tokens are decrypted with <see cref="SecretPurposes.VercelToken"/>.
+/// FR-88, FR-142: resolves a project's <see cref="DeploymentContext"/> (its <c>frontend</c> target and the bound platform
+/// connection) and records a token rejection (the connection becomes <c>invalid</c> with <c>CONNECTION_INVALID</c>). Tokens
+/// are decrypted with <see cref="SecretPurposes.PlatformToken"/>.
 /// </summary>
 public sealed class DeploymentAccess(AideDbContext db, ISecretProtectors protectors, IDeploymentProviderResolver providers)
 {
-    public ISecretProtector Tokens => protectors.ForPurpose(SecretPurposes.VercelToken);
+    public ISecretProtector Tokens => protectors.ForPurpose(SecretPurposes.PlatformToken);
 
     public ISecretProtector Values => protectors.ForPurpose(SecretPurposes.DeploymentEnvValue);
 
@@ -53,29 +55,31 @@ public sealed class DeploymentAccess(AideDbContext db, ISecretProtectors protect
     /// </summary>
     public async Task<Result<DeploymentContext>> ResolveAsync(Guid projectId, CancellationToken cancellationToken, bool requireProject = true)
     {
-        var settings = await db.ProjectDeploymentSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ProjectId == projectId, cancellationToken);
-        if (settings?.ConnectionId is not { } connectionId)
+        var target = await FrontendTargetAsync(db, projectId, cancellationToken);
+        if (target?.ConnectionId is not { } connectionId)
         {
             return NotConfigured("Deployment isn't set up for this project: bind a Vercel connection in Settings → Deployment.");
         }
 
-        if (requireProject && string.IsNullOrEmpty(settings.VercelProjectId))
+        if (requireProject && string.IsNullOrEmpty(target.ResourceId))
         {
             return NotConfigured("Link or create a Vercel project in Settings → Deployment first.");
         }
 
-        var connection = await db.VercelConnections.AsNoTracking().FirstOrDefaultAsync(c => c.Id == connectionId, cancellationToken);
+        var connection = await db.PlatformConnections.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == connectionId && c.Provider == PlatformProvider.Vercel, cancellationToken);
         if (connection is null)
         {
             return NotConfigured("The bound Vercel connection no longer exists: bind another in Settings → Deployment.");
         }
 
-        if (!Tokens.TryUnprotect(connection.TokenEncrypted, out var token) || token.Length == 0)
+        if (!Tokens.TryUnprotect(connection.SecretEncrypted, out var token) || token.Length == 0)
         {
             return Result.Failure<DeploymentContext>(new DomainError(ErrorCodes.CredentialInvalid, "The bound Vercel token can't be decrypted; its owner needs to add it again."));
         }
 
-        return Result.Success(new DeploymentContext(settings, connection, new DeploymentAuth(token, connection.TeamId), providers.Current, await RepoAsync(projectId, cancellationToken)));
+        return Result.Success(new DeploymentContext(
+            target, connection, new DeploymentAuth(token, connection.Metadata.TeamId), providers.Current, await RepoAsync(projectId, cancellationToken)));
     }
 
     /// <summary>The project's GitHub repository (unknown parts <c>null</c>: a Local project, deployable only with the Fake).</summary>
@@ -94,25 +98,19 @@ public sealed class DeploymentAccess(AideDbContext db, ISecretProtectors protect
     }
 
     /// <summary>
-    /// FR-87: Vercel rejected the token while in use: the connection becomes <c>invalid</c> and <c>CONNECTION_INVALID</c> is
-    /// recorded for the project (no secret). Added to the caller's unit of work; the caller saves.
+    /// FR-87, FR-142: Vercel rejected the token while in use: the connection becomes <c>invalid</c> and
+    /// <c>CONNECTION_INVALID</c> is recorded for the project (no secret), notifying its owner. Added to the caller's unit of
+    /// work; the caller saves.
     /// </summary>
-    public async Task MarkInvalidAsync(Guid connectionId, Guid? projectId, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+    public Task MarkInvalidAsync(Guid connectionId, Guid? projectId, string actor, DateTimeOffset now, CancellationToken cancellationToken) =>
+        Connections.PlatformConnectionService.MarkInvalidAsync(db, connectionId, projectId, actor, now, cancellationToken);
+
+    /// <summary>The project's <c>frontend</c> deployment target (v2's deployment settings), untracked; <c>null</c> when none.</summary>
+    public static Task<DeploymentTarget?> FrontendTargetAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
     {
-        var connection = await db.VercelConnections.FirstOrDefaultAsync(c => c.Id == connectionId, cancellationToken);
-        if (connection is null)
-        {
-            return;
-        }
-
-        connection.LastValidatedAt = now;
-        if (connection.Status == VercelConnectionStatus.Invalid)
-        {
-            return;
-        }
-
-        connection.Status = VercelConnectionStatus.Invalid;
-        db.AddEvent(EventTypes.ConnectionInvalid, projectId, new { connectionId, userId = connection.UserId, provider = "vercel" }, actor, now);
+        ArgumentNullException.ThrowIfNull(db);
+        return db.DeploymentTargets.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.ProjectId == projectId && t.Component == DeploymentComponent.Frontend, cancellationToken);
     }
 
     private static Result<DeploymentContext> NotConfigured(string message) =>

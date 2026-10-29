@@ -7,7 +7,7 @@ import { projectKeys, unwrap } from '../projects/projects-api'
 
 export type Deployment = Schemas['DeploymentDto']
 export type DeploymentStatus = Schemas['DeploymentStatus']
-export type DeploymentTarget = Schemas['DeploymentTarget']
+export type DeploymentTarget = Schemas['DeploymentEnvironment']
 export type DeploymentSettings = Schemas['DeploymentSettingsDto']
 export type DeploymentEnvVar = Schemas['DeploymentEnvVarDto']
 export type RequiredEnvVar = Schemas['RequiredEnvVarDto']
@@ -88,7 +88,7 @@ export function useUpdateDeploymentSettings(projectId: string) {
     onSettled: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) }),
-        queryClient.invalidateQueries({ queryKey: connectionKeys.vercel() }),
+        queryClient.invalidateQueries({ queryKey: connectionKeys.platforms() }),
       ]),
   })
 }

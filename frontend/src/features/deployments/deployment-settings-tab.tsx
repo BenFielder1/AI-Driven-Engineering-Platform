@@ -19,7 +19,7 @@ import { TextField } from '../../components/ui/text-field'
 import { errorMessage, isApiError } from '../../lib/errors'
 import { connectionLabel, credentialStatusLabels } from '../connections/connection-format'
 import { CredentialStatusBadge } from '../connections/credential-status-badge'
-import { useVercelConnections } from '../connections/vercel-connections-api'
+import { usePlatformConnections } from '../connections/platform-connections-api'
 import { useCurrentUser } from '../auth/auth-api'
 import type { Project } from '../projects/projects-api'
 import { deploymentBindingSummary, deploymentTargetLabels } from './deployment-format'
@@ -167,7 +167,7 @@ const serverFields: Record<string, keyof SetupValues> = {
 function DeploymentSetupForm({ project, settings }: { project: Project; settings: DeploymentSettings }) {
   const update = useUpdateDeploymentSettings(project.id)
   const turnOff = useUpdateDeploymentSettings(project.id)
-  const connections = useVercelConnections(settings.canBind)
+  const connections = usePlatformConnections({ enabled: settings.canBind, provider: 'vercel' })
   const me = useCurrentUser()
   const boundByOther = settings.binding !== null && settings.binding.boundBy.id !== me?.id
   const [failure, setFailure] = useState<unknown>(null)
@@ -297,7 +297,7 @@ function DeploymentSetupForm({ project, settings }: { project: Project; settings
                 {own.map((c) => (
                   <option key={c.id} value={c.id}>
                     {connectionLabel(c)}
-                    {c.teamSlug ? ` · team ${c.teamSlug}` : ''}
+                    {c.metadata.teamSlug ? ` · team ${c.metadata.teamSlug}` : ''}
                     {c.status === 'valid' ? '' : ` (${credentialStatusLabels[c.status].toLowerCase()})`}
                   </option>
                 ))}

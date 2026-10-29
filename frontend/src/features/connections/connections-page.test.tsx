@@ -45,7 +45,7 @@ describe('/connections → LLM providers (FR-78)', () => {
     expect(within(keyless).getByText('Ollama')).toBeInTheDocument()
     expect(within(keyless).getByText('Fake (testing)')).toBeInTheDocument()
 
-    // GitHub is covered by github-connection.test.tsx (FR-81), Vercel by vercel-connection.test.tsx (FR-87).
+    // GitHub is covered by github-connection.test.tsx (FR-81), platform connections by platform-connections.test.tsx (FR-142).
     expect(await within(screen.getByRole('region', { name: 'Vercel' })).findByText('Not connected')).toBeInTheDocument()
   })
 

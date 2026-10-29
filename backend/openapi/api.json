@@ -861,13 +861,13 @@
         }
       }
     },
-    "/api/me/connections/vercel": {
+    "/api/me/connections/platforms": {
       "get": {
         "tags": [
           "Connections"
         ],
-        "summary": "The caller's Vercel connections, newest first (no tokens: label, last 4, account, team, scope, expiry, status, bound projects).",
-        "operationId": "ListVercelConnections",
+        "summary": "FR-142: the caller's platform connections (Vercel, Netlify, Cloudflare, Render, Railway, Supabase), newest first: label, last 4, account, metadata (teams, workspaces, orgs, policies, missing permissions), scopes, expiry, status and bound projects. Never the token.",
+        "operationId": "ListPlatformConnections",
         "responses": {
           "401": {
             "description": "Unauthorized",
@@ -886,7 +886,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/VercelConnectionDto"
+                    "$ref": "#/components/schemas/PlatformConnectionDto"
                   }
                 }
               }
@@ -898,13 +898,13 @@
         "tags": [
           "Connections"
         ],
-        "summary": "Add a Vercel access token. It is checked with Vercel first (GET /v2/user, and the team for a team-scoped token): 400 CREDENTIAL_INVALID if rejected (nothing saved), 502 UPSTREAM_ERROR if Vercel can't be reached. Browser session only.",
-        "operationId": "CreateVercelConnection",
+        "summary": "FR-142: add a pasted platform token. It is checked with the platform first (§4.20 / §4.21): rejected → 400 CREDENTIAL_INVALID (nothing saved); a 403 for missing permissions saves it with status insufficient_scope and the missing names; a Cloudflare cfat_ token → 400 CONNECTION_SCOPE_INSUFFICIENT. Browser session only.",
+        "operationId": "CreatePlatformConnection",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateVercelConnectionRequest"
+                "$ref": "#/components/schemas/CreatePlatformConnectionRequest"
               }
             }
           },
@@ -926,13 +926,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VercelConnectionDto"
+                  "$ref": "#/components/schemas/PlatformConnectionDto"
                 }
               }
             }
           },
           "400": {
-            "description": "VALIDATION, or CREDENTIAL_INVALID (Vercel rejected the token; nothing is saved)",
+            "description": "VALIDATION, CREDENTIAL_INVALID (the platform rejected the token; nothing is saved) or CONNECTION_SCOPE_INSUFFICIENT (a Cloudflare account-owned cfat_ token: Workers Builds needs a user token)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -951,8 +951,27 @@
               }
             }
           },
+          "429": {
+            "description": "UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known)",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the action is allowed again.",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "502": {
-            "description": "UPSTREAM_ERROR (Vercel failed or couldn't be reached; nothing is saved)",
+            "description": "UPSTREAM_ERROR (the platform failed or couldn't be reached)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -964,13 +983,13 @@
         }
       }
     },
-    "/api/me/connections/vercel/{id}": {
+    "/api/me/connections/platforms/{id}": {
       "patch": {
         "tags": [
           "Connections"
         ],
-        "summary": "Rename one of the caller's Vercel connections. Browser session only.",
-        "operationId": "RenameVercelConnection",
+        "summary": "FR-142: rename one of the caller's platform connections. Browser session only.",
+        "operationId": "RenamePlatformConnection",
         "parameters": [
           {
             "name": "id",
@@ -986,7 +1005,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateVercelConnectionRequest"
+                "$ref": "#/components/schemas/UpdatePlatformConnectionRequest"
               }
             }
           },
@@ -1008,7 +1027,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VercelConnectionDto"
+                  "$ref": "#/components/schemas/PlatformConnectionDto"
                 }
               }
             }
@@ -1049,8 +1068,8 @@
         "tags": [
           "Connections"
         ],
-        "summary": "Delete one of the caller's Vercel connections. Projects it was bound to lose their binding (their deployment settings and history stay); new deployments then fail with DEPLOYMENT_NOT_CONFIGURED until an Owner binds another. Browser session only.",
-        "operationId": "DeleteVercelConnection",
+        "summary": "FR-142, FR-144: delete one of the caller's platform connections. Deployment targets bound to it lose their binding (targets and history stay); deployments then fail with DEPLOYMENT_NOT_CONFIGURED until an Owner binds another. Browser session only.",
+        "operationId": "DeletePlatformConnection",
         "parameters": [
           {
             "name": "id",
@@ -1099,13 +1118,13 @@
         }
       }
     },
-    "/api/me/connections/vercel/{id}/test": {
+    "/api/me/connections/platforms/{id}/test": {
       "post": {
         "tags": [
           "Connections"
         ],
-        "summary": "Check the token with Vercel again and record the result (status valid or invalid, lastValidatedAt; account and team refreshed). 502 UPSTREAM_ERROR if Vercel can't be reached (status unchanged). Browser session only.",
-        "operationId": "TestVercelConnection",
+        "summary": "FR-142: check the token with the platform again and record the result (valid, insufficient_scope with the missing names, or invalid — then its owner is notified; lastValidatedAt; account and metadata refreshed). 429 UPSTREAM_RATE_LIMITED or 502 UPSTREAM_ERROR leave the status unchanged. Browser session only.",
+        "operationId": "TestPlatformConnection",
         "parameters": [
           {
             "name": "id",
@@ -1133,7 +1152,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VercelConnectionDto"
+                  "$ref": "#/components/schemas/PlatformConnectionDto"
                 }
               }
             }
@@ -1158,8 +1177,238 @@
               }
             }
           },
+          "429": {
+            "description": "UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known)",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the action is allowed again.",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "502": {
-            "description": "Bad Gateway",
+            "description": "UPSTREAM_ERROR (the platform failed or couldn't be reached)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/connections/platforms/{id}/accounts": {
+      "get": {
+        "tags": [
+          "Connections"
+        ],
+        "summary": "FR-142 picker: the teams (Vercel), accounts (Netlify, Cloudflare), workspaces (Render, Railway) or organisations (Supabase) the connection's token reaches. A rejected token marks the connection invalid (its owner is notified).",
+        "operationId": "ListPlatformConnectionAccounts",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformAccountDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION (a type the provider doesn't list, or a malformed accountId), CREDENTIAL_INVALID (the token is invalid or was just rejected; the connection is now invalid) or CONNECTION_SCOPE_INSUFFICIENT (the token lacks a permission for this request; the connection's status is unchanged)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known)",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the action is allowed again.",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR (the platform failed or couldn't be reached)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/connections/platforms/{id}/resources": {
+      "get": {
+        "tags": [
+          "Connections"
+        ],
+        "summary": "FR-142 picker: the connection's resources of a type (default: the provider's first): Vercel projects; Netlify sites; Cloudflare workers or projects (Pages); Render services or regions; Railway projects or regions; Supabase projects, orgs or regions. accountId scopes the list (default: the connection's account). A type the provider doesn't list → 400 VALIDATION.",
+        "operationId": "ListPlatformConnectionResources",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "sites",
+                "services",
+                "projects",
+                "workers",
+                "orgs",
+                "regions"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformResourceDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION (a type the provider doesn't list, or a malformed accountId), CREDENTIAL_INVALID (the token is invalid or was just rejected; the connection is now invalid) or CONNECTION_SCOPE_INSUFFICIENT (the token lacks a permission for this request; the connection's status is unchanged)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known)",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the action is allowed again.",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR (the platform failed or couldn't be reached)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11841,7 +12090,8 @@
           "installUrl",
           "htmlUrl",
           "permissions",
-          "canCreateRepositories"
+          "canCreateRepositories",
+          "pagesPermission"
         ],
         "type": "object",
         "properties": {
@@ -11907,9 +12157,12 @@
           },
           "canCreateRepositories": {
             "type": "boolean"
+          },
+          "pagesPermission": {
+            "$ref": "#/components/schemas/GitHubPagesAccess"
           }
         },
-        "description": "The AIDE GitHub App's status for Admin → Integrations → GitHub (FR-80). Secrets (client secret, private key) are never\nreturned. `source` is `configuration` when `GitHub__App__*` is set (it takes precedence), `database`\nfor an App registered through the manifest flow, and `null` when `status` is `not_configured` (then every\nApp field is `null` and `permissions` is empty). `installUrl` is\n`https://github.com/apps/{slug}/installations/new`; `permissions` are the App's granted permissions\n(e.g. `contents: write`); `canCreateRepositories` is true when `administration: write` is granted (§4.14)."
+        "description": "The AIDE GitHub App's status for Admin → Integrations → GitHub (FR-80). Secrets (client secret, private key) are never\nreturned. `source` is `configuration` when `GitHub__App__*` is set (it takes precedence), `database`\nfor an App registered through the manifest flow, and `null` when `status` is `not_configured` (then every\nApp field is `null` and `permissions` is empty). `installUrl` is\n`https://github.com/apps/{slug}/installations/new`; `permissions` are the App's granted permissions\n(e.g. `contents: write`); `canCreateRepositories` is true when `administration: write` is granted (§4.14).\n`pagesPermission` (FR-143) is `granted` when the App has `pages: write`, `missing` for an App registered\nbefore v4 (\"Pages permission missing: update the App's permissions in GitHub, then accept them on each installation\"),\nand `unknown` when the App isn't configured or GitHub couldn't be asked."
       },
       "AdminGitLabInstanceDto": {
         "required": [
@@ -14296,6 +14549,35 @@
         },
         "description": "Add an LLM connection (FR-78): `anthropic` or `openai`, a label and the key. The key is checked with\n    the provider before anything is saved."
       },
+      "CreatePlatformConnectionRequest": {
+        "required": [
+          "provider",
+          "label",
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/PlatformProvider"
+          },
+          "label": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "accountId": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Add a platform connection (FR-142, §4.20): the provider, a label and the pasted token, plus optionally the account it\nis for (`accountId`: a team, account, workspace or organisation id the token reaches; required for a Railway\nworkspace token, which can't name its workspace itself). The token is checked with the platform before anything is\nsaved."
+      },
       "CreateProjectDeploymentRequest": {
         "required": [
           "provider",
@@ -14580,24 +14862,6 @@
         },
         "description": "The new-project wizard (FR-5). Omitted settings take the FR-5 defaults."
       },
-      "CreateVercelConnectionRequest": {
-        "required": [
-          "label",
-          "token"
-        ],
-        "type": "object",
-        "properties": {
-          "label": {
-            "maxLength": 100,
-            "type": "string"
-          },
-          "token": {
-            "maxLength": 1000,
-            "type": "string"
-          }
-        },
-        "description": "Add a Vercel connection (FR-87): a label and an access token (team- or account-scoped, ideally with an expiry).\n    The token is checked with Vercel before anything is saved."
-      },
       "CreateVercelProjectRequest": {
         "required": [
           "name"
@@ -14810,7 +15074,7 @@
             "$ref": "#/components/schemas/DeploymentUserDto"
           },
           "status": {
-            "$ref": "#/components/schemas/VercelConnectionStatus"
+            "$ref": "#/components/schemas/PlatformConnectionStatus"
           }
         },
         "description": "The project's Vercel binding (FR-88): which connection, \"connected by &lt;name&gt;\", and the connection's status.\n    Never the token."
@@ -14844,7 +15108,7 @@
             "format": "uuid"
           },
           "target": {
-            "$ref": "#/components/schemas/DeploymentTarget"
+            "$ref": "#/components/schemas/DeploymentEnvironment"
           },
           "provider": {
             "$ref": "#/components/schemas/DeploymentProvider"
@@ -14954,7 +15218,7 @@
           "targets": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/DeploymentTarget"
+              "$ref": "#/components/schemas/DeploymentEnvironment"
             }
           },
           "sensitive": {
@@ -14982,6 +15246,13 @@
           }
         },
         "description": "A project environment variable (FR-88, Owner only). The value is never returned: `hasValue` is always `true`.\n`syncedAt` is when the current value was pushed to Vercel (`null`: not yet); `syncError` is the last push\nfailure (`null` after a successful push)."
+      },
+      "DeploymentEnvironment": {
+        "enum": [
+          "preview",
+          "production"
+        ],
+        "description": "Deployment environment (FR-147, FR-149), also a Vercel env target (FR-88). Wire values: `preview`,\n            `production`."
       },
       "DeploymentProvider": {
         "enum": [
@@ -15077,13 +15348,6 @@
           "canceled"
         ],
         "description": "§4.15 deployment states: `queued → building → ready | error | canceled`."
-      },
-      "DeploymentTarget": {
-        "enum": [
-          "preview",
-          "production"
-        ],
-        "description": "Deployment target, also a Vercel env target (FR-88). Wire values: `preview`, `production`."
       },
       "DeploymentTrigger": {
         "enum": [
@@ -16177,7 +16441,7 @@
             "type": "boolean"
           }
         },
-        "description": "A GitHub App manifest (FR-80, §4.14), in GitHub's own field names so the page can post it unchanged (as the\n`manifest` form field, JSON-encoded): name `AIDE ({host})` (the host of `App:PublicBaseUrl`); `url` and `setup_url` under\n`App:PublicBaseUrl`; `redirect_url` the manifest callback (`/api/admin/integrations/github/callback`);\n`callback_urls` the sign-in callback (`/api/auth/github/callback`); no `hook_attributes` (GitHub rejects a\nlocalhost webhook URL even when inactive, and needs a URL whenever the object is present), so the App has no webhook; private; and\n`default_permissions` contents, pull_requests, workflows and administration `write`, metadata, checks and\nstatuses `read` (the Admin may drop `administration`, which disables \"Create repository\"); no events."
+        "description": "A GitHub App manifest (FR-80, §4.14), in GitHub's own field names so the page can post it unchanged (as the\n`manifest` form field, JSON-encoded): name `AIDE ({host})` (the host of `App:PublicBaseUrl`); `url` and `setup_url` under\n`App:PublicBaseUrl`; `redirect_url` the manifest callback (`/api/admin/integrations/github/callback`);\n`callback_urls` the sign-in callback (`/api/auth/github/callback`); no `hook_attributes` (GitHub rejects a\nlocalhost webhook URL even when inactive, and needs a URL whenever the object is present), so the App has no webhook; private; and\n`default_permissions` contents, pull_requests, workflows, administration and pages (FR-143) `write`, metadata, checks and\nstatuses `read` (the Admin may drop `administration`, which disables \"Create repository\"); no events."
       },
       "GitHubAppManifestResponseDto": {
         "required": [
@@ -16285,7 +16549,8 @@
           "id",
           "account",
           "repositorySelection",
-          "manageUrl"
+          "manageUrl",
+          "pagesPermission"
         ],
         "type": "object",
         "properties": {
@@ -16301,9 +16566,12 @@
           },
           "manageUrl": {
             "type": "string"
+          },
+          "pagesPermission": {
+            "$ref": "#/components/schemas/GitHubPagesAccess"
           }
         },
-        "description": "An installation of the AIDE GitHub App that the caller can access (FR-81, `GET /user/installations`):\n`repositorySelection` is `all` or `selected`; `manageUrl` is where the user adds repositories to it."
+        "description": "An installation of the AIDE GitHub App that the caller can access (FR-81, `GET /user/installations`):\n`repositorySelection` is `all` or `selected`; `manageUrl` is where the user adds repositories to it.\n`pagesPermission` (FR-143) is whether the installation grants the App's Pages write permission (`granted`,\n`missing`: the Owner has to accept the updated permissions on the installation, or `unknown`)."
       },
       "GitHubOwnerDto": {
         "required": [
@@ -16343,6 +16611,14 @@
           "organization"
         ],
         "description": "Owner kind of a GitHub App (FR-80). Wire values: `user`, `organization`."
+      },
+      "GitHubPagesAccess": {
+        "enum": [
+          "granted",
+          "missing",
+          "unknown"
+        ],
+        "description": "FR-143: whether GitHub reports the AIDE App's Pages permission. Wire values: `granted`, `missing`,\n            `unknown`."
       },
       "GitHubReleaseDto": {
         "required": [
@@ -18218,6 +18494,235 @@
         ],
         "description": "The state of one execution run (FR-57): the steps of one plan version. `pending` (no step started),\n`running`, `paused`, `completed` (every step completed), `blocked` (a step awaits an escalation\ndecision) or `superseded` (the plan was invalidated; its run stays listed under \"Superseded\")."
       },
+      "PlatformAccountDto": {
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A team, account, workspace or organisation a platform token reaches (FR-142): its id (send it as `accountId`),\nname, slug (Vercel teams, Netlify accounts, Supabase organisations) and kind (e.g. `team`, `user`,\n`workspace`, `organization`; `null` when the platform doesn't say)."
+      },
+      "PlatformBoundProjectDto": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "description": "A project whose deployment target is bound to a platform connection (FR-144)."
+      },
+      "PlatformConnectionDto": {
+        "required": [
+          "id",
+          "provider",
+          "label",
+          "last4",
+          "accountId",
+          "accountName",
+          "metadata",
+          "scopes",
+          "expiresAt",
+          "status",
+          "lastValidatedAt",
+          "createdAt",
+          "boundProjects"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/PlatformProvider"
+          },
+          "label": {
+            "type": "string"
+          },
+          "last4": {
+            "type": "string"
+          },
+          "accountId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accountName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/PlatformConnectionMetadataDto"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PlatformConnectionStatus"
+          },
+          "lastValidatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "boundProjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformBoundProjectDto"
+            }
+          }
+        },
+        "description": "One of the caller's platform connections (FR-142). The token is never returned: only the label and its last 4\ncharacters. `accountId`/`accountName` are the account it is for (the Vercel or Netlify user or team, Cloudflare\naccount, Render workspace, Railway workspace, Supabase organisation; `null` when not chosen or unknown),\n`metadata` what else the token reaches, `scopes` its scopes where the platform reports them, `expiresAt`\nits expiry (`null`: none or unknown), `status` (`valid`, `invalid`, `insufficient_scope`,\n`unchecked`) and when it was last checked, plus the projects whose deployment targets are bound to it."
+      },
+      "PlatformConnectionMetadataDto": {
+        "required": [
+          "teamId",
+          "teamSlug",
+          "accounts",
+          "policies",
+          "missingPermissions",
+          "tokenKind"
+        ],
+        "type": "object",
+        "properties": {
+          "teamId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "teamSlug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformAccountDto"
+            }
+          },
+          "policies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "missingPermissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tokenKind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "What the platform says about a token (FR-142). `teamId`/`teamSlug`: a team-scoped Vercel token's team.\n`accounts`: the teams, accounts, workspaces or organisations it reaches. `policies`: a Cloudflare token's\npermission groups (empty when the token can't read them). `missingPermissions`: what the platform said is missing\n(Supabase `missing_permissions`; non-empty with status `insufficient_scope`). `tokenKind`: e.g. Railway\n`workspace` or `account`, Cloudflare `user` (`null` when it doesn't matter)."
+      },
+      "PlatformConnectionStatus": {
+        "enum": [
+          "valid",
+          "invalid",
+          "insufficient_scope",
+          "unchecked"
+        ],
+        "description": "Validation state of a platform connection (FR-142). Wire values: `valid`, `invalid` (rejected),\n            `insufficient_scope` (missing permissions), `unchecked`."
+      },
+      "PlatformProvider": {
+        "enum": [
+          "vercel",
+          "netlify",
+          "cloudflare",
+          "render",
+          "railway",
+          "supabase"
+        ],
+        "description": "Deployment platforms and databases with pasted-token connections (FR-142, §4.20, §4.21). Wire values:\n            `vercel`, `netlify`, `cloudflare`, `render`, `railway`, `supabase`."
+      },
+      "PlatformResourceDto": {
+        "required": [
+          "id",
+          "name",
+          "url",
+          "detail"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "An entry of a platform picker (FR-142 `GET …/resources`): the platform's id (send it as the resource to link), its\nname, URL when there is one, and a short detail (e.g. the linked repository, the service type, a project's region and\nstatus)."
+      },
       "PreviewCheckDto": {
         "required": [
           "deploymentId",
@@ -19127,7 +19632,7 @@
           "targets": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/DeploymentTarget"
+              "$ref": "#/components/schemas/DeploymentEnvironment"
             }
           },
           "sensitive": {
@@ -19913,7 +20418,7 @@
           "targets": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/DeploymentTarget"
+              "$ref": "#/components/schemas/DeploymentEnvironment"
             }
           },
           "sensitive": {
@@ -21606,6 +22111,19 @@
         },
         "description": "Replaces the project's notification channels (FR-47)."
       },
+      "UpdatePlatformConnectionRequest": {
+        "required": [
+          "label"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
+        "description": "Rename a platform connection (FR-142)."
+      },
       "UpdateProjectRequest": {
         "type": "object",
         "properties": {
@@ -21671,19 +22189,6 @@
         },
         "description": "Partial update of a project (FR-7). Omitted fields are unchanged."
       },
-      "UpdateVercelConnectionRequest": {
-        "required": [
-          "label"
-        ],
-        "type": "object",
-        "properties": {
-          "label": {
-            "maxLength": 100,
-            "type": "string"
-          }
-        },
-        "description": "Rename a Vercel connection (FR-87)."
-      },
       "UserDto": {
         "required": [
           "id",
@@ -21720,109 +22225,6 @@
         },
         "description": "The signed-in user (or a user, for admins)."
       },
-      "VercelBoundProjectDto": {
-        "required": [
-          "id",
-          "name"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "description": "A project that has a Vercel connection bound for deployment (FR-88)."
-      },
-      "VercelConnectionDto": {
-        "required": [
-          "id",
-          "label",
-          "last4",
-          "accountName",
-          "teamId",
-          "teamSlug",
-          "scope",
-          "expiresAt",
-          "status",
-          "lastValidatedAt",
-          "createdAt",
-          "boundProjects"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "label": {
-            "type": "string"
-          },
-          "last4": {
-            "type": "string"
-          },
-          "accountName": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "teamId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "teamSlug": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "scope": {
-            "$ref": "#/components/schemas/VercelTokenScope"
-          },
-          "expiresAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "status": {
-            "$ref": "#/components/schemas/VercelConnectionStatus"
-          },
-          "lastValidatedAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "boundProjects": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/VercelBoundProjectDto"
-            }
-          }
-        },
-        "description": "One of the caller's Vercel connections (FR-87). The token is never returned: only the label, its last 4 characters,\nthe Vercel account (`accountName`, the Vercel username; `null` when unknown) and, for a team-scoped token,\n`teamId`/`teamSlug`, the `scope` (`account` or `team`), the token's expiry (`null`: none),\nthe validation status (`valid`, `invalid`, `unchecked`) and when it was last checked, plus the projects\nit is bound to."
-      },
-      "VercelConnectionStatus": {
-        "enum": [
-          "valid",
-          "invalid",
-          "unchecked"
-        ],
-        "description": "Validation state of a Vercel connection (FR-87: a token Vercel rejects marks it invalid). Wire values:\n            `valid`, `invalid`, `unchecked`."
-      },
       "VercelProjectDto": {
         "required": [
           "id",
@@ -21852,13 +22254,6 @@
           }
         },
         "description": "The linked Vercel project (FR-88): id (`prj_…`), name, its Vercel URL and the production URL once known."
-      },
-      "VercelTokenScope": {
-        "enum": [
-          "account",
-          "team"
-        ],
-        "description": "Scope of a Vercel token (FR-87). Wire values: `account`, `team`."
       },
       "ViolationDto": {
         "required": [

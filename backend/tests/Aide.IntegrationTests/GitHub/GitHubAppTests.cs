@@ -244,8 +244,8 @@ public sealed class GitHubAppTests(AideApiFactory factory)
         Assert.Equal("https://github.com/apps/aide-test/installations/new", connection.InstallUrl);
         Assert.Equal(
             [
-                new GitHubInstallationDto(UserInstallation, new GitHubAccountDto("octo", GitHubOwnerType.User), GitHubRepositorySelection.Selected, "https://github.com/settings/installations/2001"),
-                new GitHubInstallationDto(OrgInstallation, new GitHubAccountDto("acme", GitHubOwnerType.Organization), GitHubRepositorySelection.All, "https://github.com/organizations/acme/settings/installations/2002"),
+                new GitHubInstallationDto(UserInstallation, new GitHubAccountDto("octo", GitHubOwnerType.User), GitHubRepositorySelection.Selected, "https://github.com/settings/installations/2001", GitHubPagesAccess.Missing),
+                new GitHubInstallationDto(OrgInstallation, new GitHubAccountDto("acme", GitHubOwnerType.Organization), GitHubRepositorySelection.All, "https://github.com/organizations/acme/settings/installations/2002", GitHubPagesAccess.Missing),
             ],
             connection.Installations);
         Assert.DoesNotContain(GitHubAppHarness.UserToken, text, StringComparison.Ordinal);
