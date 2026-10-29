@@ -8,6 +8,7 @@ import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from
 import { bindCredential, connectionsDb } from './connections'
 import { applyVercelSetup } from './deployments'
 import { githubDb } from './github'
+import { bitbucketDb, bitbucketRefsOf, findBitbucketConnection, findBitbucketRepo } from './bitbucket'
 import { findGitLabConnection, findGitLabRepo, gitlabDb, gitlabRefsOf } from './gitlab'
 import { checkCreateLlm, isLlmProviderEnabled } from './llm'
 import { problem } from './problem'
@@ -110,6 +111,8 @@ export interface StoredProject extends Omit<
   phaseAtVersion: Record<number, Project['currentPhase']>
   /** Release attempts, oldest first (FR-42, FR-43); see mocks/handlers/release.ts. */
   releases?: Schemas['ReleaseDto'][]
+  /** FR-140: AIDE's release notes per release attempt id (GET …/releases/:releaseId/notes; missing = `null`). */
+  releaseNotes?: Record<string, string | null>
   /** Recorded rollbacks, oldest first (FR-44); see mocks/handlers/release.ts. */
   rollbacks?: Schemas['RollbackDto'][]
   /** When the last rollback ran (epoch ms), for the one-per-minute limit (FR-45). */
@@ -209,7 +212,10 @@ export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
   const app = provider === 'github_app'
   const repoFullName = overrides.repoFullName ?? (app ? 'acme/inventory' : null)
   return {
-    repoUrl: provider === 'local' || provider === 'gitlab' ? null : `https://github.com/${repoFullName ?? 'acme/inventory'}`,
+    repoUrl:
+      provider === 'local' || provider === 'gitlab' || provider === 'bitbucket'
+        ? null
+        : `https://github.com/${repoFullName ?? 'acme/inventory'}`,
     defaultBranch: 'main',
     branchName: null,
     hasToken: false,
@@ -228,14 +234,14 @@ export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
 
 /**
  * GET/PATCH /settings/git body: "Switch to GitHub App" is offered to Owners of a PAT project the App can access;
- * Rebind (FR-136) to Owners of a GitLab project.
+ * Rebind (FR-136) to Owners of a GitLab or Bitbucket project.
  */
 export function gitDto(project: StoredProject, isOwner: boolean): GitSettings {
   const g = project.git
   return {
     ...g,
     canSwitchToApp: isOwner && g.mode === 'github_pat' && g.appInstalledOnRepo === true,
-    canRebind: isOwner && g.mode === 'gitlab',
+    canRebind: isOwner && (g.mode === 'gitlab' || g.mode === 'bitbucket'),
   }
 }
 
@@ -256,6 +262,62 @@ export function gitlabGitSettings(options: {
     repoWebUrl: `${options.instance.baseUrl}/${options.repoFullName}`,
     binding: options.binding,
   })
+}
+
+/** Bitbucket Cloud as project settings show it (FR-136: a `git_host_instances` row, base URL NULL). */
+export const BITBUCKET_CLOUD: Schemas['GitHostInstanceRefDto'] = {
+  id: '0192d000-0000-7000-8000-00000000bb01',
+  name: 'Bitbucket Cloud',
+  baseUrl: 'https://bitbucket.org',
+  enabled: true,
+}
+
+/** FR-136: the Bitbucket settings of a project bound to `connection` (seeds and the create handler). */
+export function bitbucketGitSettings(options: {
+  repoId: string
+  repoFullName: string
+  binding: Schemas['GitBindingDto'] | null
+  defaultBranch?: string
+  mergeStrategy?: Schemas['MergeStrategy']
+}): GitSettings {
+  return gitSettings({
+    provider: 'bitbucket',
+    repoFullName: options.repoFullName,
+    defaultBranch: options.defaultBranch ?? 'main',
+    instance: BITBUCKET_CLOUD,
+    externalRepoId: options.repoId,
+    repoWebUrl: `https://bitbucket.org/${options.repoFullName}`,
+    binding: options.binding,
+    mergeStrategy: options.mergeStrategy ?? 'aide_merges',
+  })
+}
+
+/**
+ * FR-136: the checks of binding a Bitbucket connection (create and Rebind): the caller's own (CREDENTIAL_NOT_OWNER),
+ * valid (GIT_NOT_CONNECTED), with write access to the repository (FORBIDDEN on `fieldPrefix + repoId`).
+ */
+function checkBitbucketBinding(
+  callerId: string,
+  connectionId: string | null | undefined,
+  repoId: string,
+  fieldPrefix: string,
+): Response | Schemas['BitbucketConnectionDto'] {
+  const onConnection = { errors: { [`${fieldPrefix}connectionId`]: ['Bind one of your own valid Bitbucket connections.'] } }
+  const onRepo = { errors: { [`${fieldPrefix}repoId`]: ['Write access to the repository is required.'] } }
+  const found = findBitbucketConnection(connectionId)
+  if (!found) {
+    return problem(404, 'NOT_FOUND', 'The connection was not found.', onConnection)
+  }
+  if (found.userId !== callerId) {
+    return problem(403, 'CREDENTIAL_NOT_OWNER', 'You can only bind your own connections.', onConnection)
+  }
+  if (found.connection.status !== 'valid') {
+    return problem(409, 'GIT_NOT_CONNECTED', 'The Bitbucket connection is invalid. Reconnect it under Account → Connections, then bind it.', onConnection)
+  }
+  if (bitbucketDb.noWriteAccess.includes(repoId)) {
+    return problem(403, 'FORBIDDEN', 'Your Bitbucket account needs write access to the repository to bind it.', onRepo)
+  }
+  return found.connection
 }
 
 /**
@@ -305,7 +367,10 @@ export function instanceRef(instanceId: string): Schemas['GitHostInstanceRefDto'
   }
 }
 
-const bindingOf = (c: Schemas['GitLabConnectionDto'], user: { id: string; name: string }): Schemas['GitBindingDto'] => ({
+const bindingOf = (
+  c: Schemas['GitLabConnectionDto'] | Schemas['BitbucketConnectionDto'],
+  user: { id: string; name: string },
+): Schemas['GitBindingDto'] => ({
   connectionId: c.id,
   login: c.login,
   status: c.status,
@@ -796,14 +861,15 @@ function scratchVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[
  */
 function importVersions(
   body: Schemas['CreateProjectRequest'],
-  gitlabRefs?: Schemas['GitLabRepoRefsDto'],
+  hostRefs?: Schemas['GitLabRepoRefsDto'] | Schemas['BitbucketRepoRefsDto'],
 ): ReleaseVersion[] | Response {
   const releasedTag = body.import?.releasedTag ?? null
   let released: string | null = null
   if (releasedTag !== null) {
-    const refs = gitlabRefs ?? (body.git.repoFullName ? githubDb.refs[body.git.repoFullName] : undefined)
+    const refs = hostRefs ?? (body.git.repoFullName ? githubDb.refs[body.git.repoFullName] : undefined)
     const tag = refs?.tags.find((t) => t.name === releasedTag)
-    if (refs && !tag && !refs.releases.some((r) => r.tagName === releasedTag)) {
+    const asRelease = refs && 'releases' in refs ? refs.releases.some((r) => r.tagName === releasedTag) : false
+    if (refs && !tag && !asRelease) {
       return problem(400, 'TAG_NOT_FOUND', `The tag '${releasedTag}' was not found in the repository.`)
     }
     released = normalizeVersion(tag ? tag.semver : releasedTag)
@@ -925,7 +991,12 @@ export const projectHandlers = [
       }
     }
     if (mode === 'bitbucket') {
-      errors['git.mode'] = ['Bitbucket repositories are not available yet.']
+      if (!body.git.connectionId) {
+        errors['git.connectionId'] = ['Pick one of your Bitbucket connections.']
+      }
+      if (!body.git.repoId) {
+        errors['git.repoId'] = ['Pick a Bitbucket repository.']
+      }
     }
     const importing = body.source === 'import'
     if (importing && !body.import) {
@@ -957,7 +1028,23 @@ export const projectHandlers = [
       }
       gitlab = { connection: checked, repo }
     }
-    const versions = importing ? importVersions(body, gitlab ? gitlabRefsOf(gitlab.repo) : undefined) : scratchVersions(body)
+    // FR-135, FR-136: the caller's own valid Bitbucket connection, with write access to a repository it sees.
+    let bitbucket: { connection: Schemas['BitbucketConnectionDto']; repo: Schemas['BitbucketRepoDto'] } | null = null
+    if (mode === 'bitbucket') {
+      const checked = checkBitbucketBinding(user.id, body.git.connectionId, body.git.repoId ?? '', 'git.')
+      if (checked instanceof Response) {
+        return checked
+      }
+      const repo = findBitbucketRepo(checked.id, body.git.repoId ?? '')
+      if (!repo) {
+        return problem(404, 'NOT_FOUND', "The Bitbucket repository wasn't found, or your Bitbucket account can't see it.", {
+          errors: { 'git.repoId': ['Pick a Bitbucket repository your account can see.'] },
+        })
+      }
+      bitbucket = { connection: checked, repo }
+    }
+    const hostRefs = gitlab ? gitlabRefsOf(gitlab.repo) : bitbucket ? bitbucketRefsOf(bitbucket.repo) : undefined
+    const versions = importing ? importVersions(body, hostRefs) : scratchVersions(body)
     if (versions instanceof Response) {
       return versions
     }
@@ -988,7 +1075,14 @@ export const projectHandlers = [
       tokenBudget: body.tokenBudget ?? null,
       createdAt: now,
       updatedAt: now,
-      git: gitlab
+      git: bitbucket
+        ? bitbucketGitSettings({
+            repoId: bitbucket.repo.id,
+            repoFullName: bitbucket.repo.fullName,
+            binding: bindingOf(bitbucket.connection, user),
+            defaultBranch: body.git.defaultBranch ?? 'main',
+          })
+        : gitlab
         ? gitlabGitSettings({
             instance: instanceRef(gitlab.connection.instanceId),
             repoId: gitlab.repo.id,
@@ -1170,13 +1264,20 @@ export const projectHandlers = [
     if ((provider === 'gitlab' || provider === 'bitbucket') && git.provider !== provider) {
       return validation({ provider: ['A project can only be put on GitLab or Bitbucket when it is created.'] })
     }
-    // FR-136 Rebind: the caller's own connection on the project's instance, with Developer access.
+    // FR-140: fast_forward and squash are Bitbucket's merge strategies only.
+    if ((body.mergeStrategy === 'fast_forward' || body.mergeStrategy === 'squash') && git.mode !== 'bitbucket') {
+      return validation({ mergeStrategy: ['fast_forward and squash are only available on Bitbucket projects.'] })
+    }
+    // FR-136 Rebind: the caller's own connection (GitLab: on the project's instance, Developer access; Bitbucket: write).
     if (body.connectionId) {
-      if (git.mode !== 'gitlab') {
-        return validation({ connectionId: ['Only a GitLab project has a connection to bind.'] })
+      if (git.mode !== 'gitlab' && git.mode !== 'bitbucket') {
+        return validation({ connectionId: ["Only used to re-bind a GitLab or Bitbucket project's connection."] })
       }
       const user = authDb.users.find((u) => u.id === a.userId)
-      const checked = checkGitLabBinding(a.userId, body.connectionId, git.instance?.id, git.externalRepoId ?? '', '')
+      const checked =
+        git.mode === 'bitbucket'
+          ? checkBitbucketBinding(a.userId, body.connectionId, git.externalRepoId ?? '', '')
+          : checkGitLabBinding(a.userId, body.connectionId, git.instance?.id, git.externalRepoId ?? '', '')
       if (checked instanceof Response) {
         return checked
       }
@@ -1189,7 +1290,7 @@ export const projectHandlers = [
     } else if (body.repoUrl) {
       git.repoUrl = body.repoUrl
     }
-    if (provider !== 'github_app' && provider !== 'gitlab') {
+    if (provider !== 'github_app' && provider !== 'gitlab' && provider !== 'bitbucket') {
       git.installationId = null
       git.repoId = null
       git.repoFullName = null

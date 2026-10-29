@@ -257,9 +257,9 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
             )}
           </Row>
           {latest.githubReleaseUrl && (
-            <Row term={host.release ?? 'Release'}>
+            <Row term={host.release ?? 'Release tag'}>
               <a href={latest.githubReleaseUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                {`View the ${host.release ?? 'release'}`}
+                {host.release ? `View the ${host.release}` : `View the tag on ${host.host}`}
               </a>
             </Row>
           )}

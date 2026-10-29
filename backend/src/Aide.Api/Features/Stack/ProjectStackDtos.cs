@@ -86,7 +86,10 @@ public sealed record DetectStackGitRequest
     [MaxLength(Projects.ProjectLimits.SecretMaxLength)]
     public string? Token { get; init; }
 
-    /// <summary><c>gitlab</c> only (FR-141): one of the caller's GitLab connections on the instance (404 <c>NOT_FOUND</c> otherwise).</summary>
+    /// <summary>
+    /// <c>gitlab</c> or <c>bitbucket</c> (FR-141): one of the caller's connections for that host (GitLab: on the instance;
+    /// 404 <c>NOT_FOUND</c> otherwise). Omitted: the caller's newest valid one. Not used with other providers (400).
+    /// </summary>
     public Guid? ConnectionId { get; init; }
 }
 

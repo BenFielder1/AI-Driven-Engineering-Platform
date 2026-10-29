@@ -64,7 +64,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
         // untagged release behind (the merge can't be undone), so the rollback waits for the release instead.
         var releasePartiallyApplied = activeJobs.Any(j => j.Type == JobTypes.Release && j.Status == JobStatus.Queued)
             && await db.Releases.AsNoTracking().AnyAsync(
-                r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress && r.MergeCommitSha != null, cancellationToken);
+                r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress && (r.MergeCommitSha != null || r.MergeSubmittedAt != null), cancellationToken);
 
         // §4.10: the rollback works on the release version in development only; a released (closed) version or one awaiting
         // its merge can't be rolled back at all.

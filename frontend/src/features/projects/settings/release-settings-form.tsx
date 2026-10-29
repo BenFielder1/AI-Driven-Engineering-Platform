@@ -12,12 +12,12 @@ import { RadioGroup } from '../../../components/ui/radio-group'
 import { TextField } from '../../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, isApiError } from '../../../lib/errors'
 import { gitHostTerms } from '../../../lib/git-host'
-import { mergeStrategyDescription, mergeStrategyLabel } from '../labels'
+import { mergeStrategiesFor, mergeStrategyDescription, mergeStrategyLabel } from '../labels'
 import { useProjectState, useUpdateGitSettings, type GitSettings } from '../projects-api'
 import { checkTagPrefix, TAG_PREFIX_MAX, tagPrefixLockReason } from './release-settings-rules'
 
 const releaseSchema = z
-  .object({ mergeStrategy: z.enum(['aide_merges', 'manual']), tagPrefix: z.string().optional() })
+  .object({ mergeStrategy: z.enum(['aide_merges', 'manual', 'fast_forward', 'squash']), tagPrefix: z.string().optional() })
   .superRefine((v, ctx) => {
     // A disabled (locked) field may read as undefined.
     const problem = checkTagPrefix(v.tagPrefix ?? '')
@@ -30,10 +30,10 @@ type ReleaseValues = z.infer<typeof releaseSchema>
 
 const fieldIds = { mergeStrategy: 'release-merge-strategy', tagPrefix: 'release-tag-prefix' } as const
 
-/** FR-65, FR-140: the strategies, worded for the project's Git host. */
+/** FR-65, FR-140: the strategies the project's Git host offers (Bitbucket adds fast-forward and squash), worded for it. */
 const strategyOptions = (git: GitSettings) => {
   const host = gitHostTerms(git.mode)
-  return (['aide_merges', 'manual'] as const).map((value) => ({
+  return mergeStrategiesFor(git.mode).map((value) => ({
     value,
     label: mergeStrategyLabel(value, host),
     description: mergeStrategyDescription(value, host),

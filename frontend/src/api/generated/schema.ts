@@ -798,8 +798,25 @@ export interface paths {
         /** FR-135: the Bitbucket repositories the caller can write to (role=contributor), across their workspaces one workspace at a time, searchable by name, 30 per page most recently updated first; pass nextCursor (workspace:page) as cursor for the next page. The workspace list is reused for five minutes. */
         get: operations["ListBitbucketRepos"];
         put?: never;
-        /** FR-135: create a Bitbucket repository in a workspace (owner = its slug) and project (its key), then push an initial commit with a README to main, so the default branch exists. The slug is Bitbucket's slug of the name. */
+        /** FR-135: create a Bitbucket repository in a workspace (owner = its slug) and project (its key), then push an initial commit with a README to main, so the default branch exists. The slug is Bitbucket's slug of the name. A retry after the README push failed finds the repository still empty and pushes the README instead of answering REPO_NAME_TAKEN. */
         post: operations["CreateBitbucketRepo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/git/bitbucket/repos/{repoId}/refs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-141, FR-86: a Bitbucket repository's default branch (mainbranch.name), whether it is empty, its semver tags (refs/tags; Bitbucket has no Releases), with the released version to preselect (the highest semver tag) and the version to develop (next minor) for the import. repoId is the repository UUID ({…}); connectionId one of the caller's Bitbucket connections. */
+        get: operations["GetBitbucketRepoRefs"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1130,7 +1147,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). FR-136: connectionId re-binds a GitLab project to the caller's own connection after AIDE checks Developer access on the repository; the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). */
+        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). */
         patch: operations["UpdateGitSettings"];
         trace?: never;
     };
@@ -1912,6 +1929,23 @@ export interface paths {
         };
         /** The latest release attempt (members, FR-42, FR-43): in progress, succeeded, or failed with its error and conflicting files. */
         get: operations["GetLatestRelease"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/releases/{releaseId}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-140, D-V4-7: AIDE's full release notes of one release attempt (members): a succeeded Bitbucket release's (Bitbucket has no Releases; the annotated tag's message holds them); notes is null for other Git hosts or an attempt that hasn't succeeded. */
+        get: operations["GetReleaseNotes"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2822,6 +2856,26 @@ export interface components {
             nextCursor: null | string;
         };
         /**
+         * @description What the wizard needs about a picked Bitbucket repository (FR-141, FR-86): its `workspace/slug`, default branch
+         *     (`mainbranch.name`), whether it is `empty` (no commits, or only starter files), its tags (Bitbucket has no
+         *     Releases, D-V4-7), and the import's suggestion: the released version to preselect (the highest semver tag; `null` =
+         *     "Never released") and the version to develop it prefills (its next minor, else `0.1.0`).
+         */
+        BitbucketRepoRefsDto: {
+            fullName: string;
+            defaultBranch: string;
+            empty: boolean;
+            tags: components["schemas"]["BitbucketTagDto"][];
+            preselectedTag: null | string;
+            suggestedDevelopmentVersion: string;
+        };
+        /** @description A semver-or-other tag of a Bitbucket repository; `semver` is its version (the `v` prefix stripped), or `null`. */
+        BitbucketTagDto: {
+            name: string;
+            sha: string;
+            semver: null | string;
+        };
+        /**
          * @description A workspace the caller can access (FR-135) with the first 100 of its projects (`projectsTruncated`: it has more).
          *     Pass `slug` as `owner` when creating. `isAdmin` is whether the caller administers the workspace, when
          *     Bitbucket says.
@@ -3174,8 +3228,8 @@ export interface components {
          */
         CreateProjectGitRequest: {
             /**
-             * @description The Git provider (FR-82, FR-136): `github_app`, `github_pat`, `gitlab` or `local`
-             *         (`bitbucket` isn't available yet: 400 `VALIDATION`).
+             * @description The Git provider (FR-82, FR-136): `github_app`, `github_pat`, `gitlab`, `bitbucket` or
+             *         `local`.
              */
             mode?: components["schemas"]["GitProvider"];
             /** @description v1 alias of `mode` (deprecated; send `mode`). */
@@ -3187,7 +3241,8 @@ export interface components {
             installationId?: null | number;
             /**
              * @description `github_app`: the repository as `owner/name`. `gitlab`: its `group/sub/project` path (the
-             *         stored path is the one GitLab reports for `repoId`).
+             *         stored path is the one GitLab reports for `repoId`). `bitbucket`: its `workspace/slug` (the stored one
+             *         is what Bitbucket reports for `repoId`).
              */
             repoFullName?: null | string;
             /**
@@ -3198,14 +3253,16 @@ export interface components {
             instanceId?: null | string;
             /**
              * Format: uuid
-             * @description `gitlab` (FR-136): one of the caller's own valid GitLab connections on `instanceId`, bound to the project: all
-             *     background Git work uses it. Another user's connection is 403 `CREDENTIAL_NOT_OWNER`; an invalid one or a
-             *     disabled instance 409 `GIT_NOT_CONNECTED`; a connection on another instance 400 `VALIDATION`.
+             * @description `gitlab`, `bitbucket` (FR-136): one of the caller's own valid GitLab connections on `instanceId`, or
+             *     Bitbucket connections, bound to the project: all background Git work uses it. Another user's connection is 403
+             *     `CREDENTIAL_NOT_OWNER`; a missing one 404 `NOT_FOUND`; an invalid one or a disabled instance 409
+             *     `GIT_NOT_CONNECTED`; a connection on another instance 400 `VALIDATION`. Not used with other modes.
              */
             connectionId?: null | string;
             /**
-             * @description `gitlab` (FR-132): GitLab's project id (from the repo picker). The caller needs Developer access or higher on it
-             *     (403 `FORBIDDEN`; 404 `NOT_FOUND` when the connection can't see it).
+             * @description `gitlab` (FR-132): GitLab's project id; `bitbucket` (FR-135): the repository UUID (`{…}`); both from
+             *     the repo picker. The caller needs GitLab Developer access or higher, or Bitbucket `write`/`admin`, on it
+             *     (403 `FORBIDDEN`; 404 `NOT_FOUND` when the connection can't see it). Not used with other modes.
              */
             repoId?: null | string;
             /** @description Required for `github_pat`: `https://github.com/OWNER/REPO`, optionally ending in `.git`. */
@@ -3482,7 +3539,8 @@ export interface components {
             token?: null | string;
             /**
              * Format: uuid
-             * @description `gitlab` only (FR-141): one of the caller's GitLab connections on the instance (404 `NOT_FOUND` otherwise).
+             * @description `gitlab` or `bitbucket` (FR-141): one of the caller's connections for that host (GitLab: on the instance;
+             *     404 `NOT_FOUND` otherwise). Omitted: the caller's newest valid one. Not used with other providers (400).
              */
             connectionId?: null | string;
         };
@@ -4127,12 +4185,12 @@ export interface components {
             mergeStrategy: components["schemas"]["MergeStrategy"];
             tagPrefix: string;
             instance?: null | components["schemas"]["GitHostInstanceRefDto"];
-            /** @description FR-136: the host's repo id (GitLab project id). */
+            /** @description FR-136: the host's repo id (GitLab project id, Bitbucket repository UUID). */
             externalRepoId?: null | string;
-            /** @description The repository's web URL (GitHub or GitLab), `null` for Local. */
+            /** @description The repository's web URL (GitHub, GitLab or Bitbucket), `null` for Local. */
             repoWebUrl?: null | string;
             binding?: null | components["schemas"]["GitBindingDto"];
-            /** @description FR-136: the caller may re-bind their own connection (`connectionId`): an Owner of a GitLab project. */
+            /** @description FR-136: the caller may re-bind their own connection (`connectionId`): an Owner of a GitLab or Bitbucket project. */
             canRebind?: boolean;
         };
         /** @description Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false. */
@@ -4403,10 +4461,12 @@ export interface components {
             message: string;
         };
         /**
-         * @description FR-65 merge strategy. Wire values: `aide_merges`, `manual`.
+         * @description FR-65 merge strategy. Wire values: `aide_merges`, `manual`; FR-140 (Bitbucket only): `fast_forward` and
+         *     `squash`, which are `aide_merges` with Bitbucket's `merge_strategy` of that name (`aide_merges` sends
+         *     `merge_commit`).
          * @enum {unknown}
          */
-        MergeStrategy: "aide_merges" | "manual";
+        MergeStrategy: "aide_merges" | "manual" | "fast_forward" | "squash";
         /**
          * @description A notification channel (FR-47). Secrets are never returned, only `hasSecret`. For `email` and
          *     `webhook`, `target` is the saved address or URL and the secret is a webhook's HMAC signing key. For
@@ -5015,7 +5075,9 @@ export interface components {
          *     `GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and
          *     `MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can
          *     retry with `POST /release`. `githubReleaseUrl` is the host release created for the tag: the GitHub Release
-         *     (FR-64) or the GitLab Release (FR-140); `null` for Local or before it exists. A GitLab merge refused because the
+         *     (FR-64), the GitLab Release, or the Bitbucket annotated tag's page (FR-140; Bitbucket has no Releases); `null` for
+         *     Local or before it exists. AIDE's full release notes of a succeeded Bitbucket release (the tag's message, FR-140,
+         *     D-V4-7) are read with `GET …/releases/{releaseId}/notes`. A GitLab merge refused because the
          *     merge request's head moved since review (409) fails with `GIT_ERROR`. `mergeStrategy` is the project's current merge strategy (FR-65).
          *     `productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including
          *     redeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release.
@@ -5046,6 +5108,16 @@ export interface components {
             mergeReasons: null | components["schemas"]["MergeReadinessReasonDto"][];
             mergeStrategy: components["schemas"]["MergeStrategy"];
             productionDeployment: null | components["schemas"]["DeploymentDto"];
+        };
+        /**
+         * @description FR-140, D-V4-7: AIDE's full release notes of a release attempt, for a host without Releases (Bitbucket: the annotated
+         *     tag's message), rebuilt from the version's locked spec, completed steps and latest review; `null` for other hosts
+         *     or an attempt that hasn't succeeded.
+         */
+        ReleaseNotesDto: {
+            /** Format: uuid */
+            releaseId: string;
+            notes: null | string;
         };
         /**
          * @description Outcome of a release attempt (FR-42, FR-43).
@@ -5599,10 +5671,11 @@ export interface components {
             clearToken?: boolean;
             /**
              * Format: uuid
-             * @description FR-136: re-binds a GitLab project to one of the caller's own connections on the project's instance (Owner). AIDE
-             *     first checks the connection has Developer access or higher on the repository (403 `FORBIDDEN`). Another user's
-             *     connection is 403 `CREDENTIAL_NOT_OWNER`; an invalid one 409 `GIT_NOT_CONNECTED`; one on another instance,
-             *     or `connectionId` on a project that isn't on GitLab, 400 `VALIDATION`.
+             * @description FR-136: re-binds a GitLab or Bitbucket project to one of the caller's own connections on the project's instance
+             *     (Owner). AIDE first checks the connection's access to the repository: GitLab Developer or higher, Bitbucket
+             *     `write` or `admin` (else 403 `FORBIDDEN`). Another user's connection is 403 `CREDENTIAL_NOT_OWNER`;
+             *     an invalid one 409 `GIT_NOT_CONNECTED`; one on another instance, or `connectionId` on a project that isn't
+             *     on GitLab or Bitbucket, 400 `VALIDATION`.
              */
             connectionId?: null | string;
             mergeStrategy?: null | components["schemas"]["MergeStrategy"];
@@ -9004,6 +9077,86 @@ export interface operations {
                 };
             };
             /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached), or UPSTREAM_ERROR after the repository was created: its README commit couldn't be made or pushed (git failed or is missing, or the server couldn't write the temp folder); the empty repository stays */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetBitbucketRepoRefs: {
+        parameters: {
+            query: {
+                connectionId: string;
+            };
+            header?: never;
+            path: {
+                repoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketRepoRefsDto"];
+                };
+            };
+            /** @description VALIDATION */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's Bitbucket connections, or no such repository visible to it) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the connection's budget of 900 requests an hour; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -13221,6 +13374,47 @@ export interface operations {
                 };
             };
             /** @description NOT_FOUND: the project, or no release has started yet. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetReleaseNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseNotesDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or no such release attempt in it. */
             404: {
                 headers: {
                     [name: string]: unknown;

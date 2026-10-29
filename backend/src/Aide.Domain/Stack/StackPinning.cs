@@ -44,6 +44,9 @@ public static class StackPinning
     /// <summary>FR-136, §4.17 R5: the VCS option of a GitLab repository (gitlab.com or a self-managed instance).</summary>
     public const string GitLabVcs = "vcs-gitlab";
 
+    /// <summary>FR-135, FR-136, §4.17 R5: the VCS option of a Bitbucket Cloud repository.</summary>
+    public const string BitbucketVcs = "vcs-bitbucket";
+
     /// <summary>
     /// FR-117: the version's lock. Only a version in development whose first implementation plan isn't locked yet may
     /// change its stack. <paramref name="planWasLocked"/> is <see cref="PlanWasLocked"/> over the version's plans.
@@ -83,6 +86,7 @@ public static class StackPinning
     {
         GitProvider.GithubApp or GitProvider.GithubPat => GitHubVcs,
         GitProvider.Gitlab => GitLabVcs,
+        GitProvider.Bitbucket => BitbucketVcs,
         _ => null,
     };
 

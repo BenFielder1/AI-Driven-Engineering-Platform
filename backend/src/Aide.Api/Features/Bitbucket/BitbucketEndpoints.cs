@@ -189,6 +189,19 @@ public static class BitbucketEndpoints
                 (StatusCodes.Status429TooManyRequests, RateLimited429),
                 (StatusCodes.Status502BadGateway, Upstream502));
 
+        git.MapGet("/repos/{repoId}/refs", GetBitbucketRepoRefs)
+            .WithName("GetBitbucketRepoRefs")
+            .WithSummary("FR-141, FR-86: a Bitbucket repository's default branch (mainbranch.name), whether it is empty, its semver tags (refs/tags; Bitbucket has no Releases), with the released version to preselect (the highest semver tag) and the version to develop (next minor) for the import. repoId is the repository UUID ({…}); connectionId one of the caller's Bitbucket connections.")
+            .Produces<BitbucketRepoRefsDto>()
+            .ProducesValidationProblem()
+            .WithRetryAfterOn429()
+            .WithResponseDescriptions(
+                (StatusCodes.Status400BadRequest, "VALIDATION"),
+                (StatusCodes.Status404NotFound, "NOT_FOUND (not one of the caller's Bitbucket connections, or no such repository visible to it)"),
+                (StatusCodes.Status409Conflict, NotConnected409),
+                (StatusCodes.Status429TooManyRequests, RateLimited429),
+                (StatusCodes.Status502BadGateway, Upstream502));
+
         git.MapGet("/owners", ListBitbucketOwners)
             .WithName("ListBitbucketOwners")
             .WithSummary("FR-135: where the caller can create a repository: their first 50 workspaces, each with its first 100 projects (Bitbucket requires a project); truncated and projectsTruncated say more exist.")
@@ -202,7 +215,7 @@ public static class BitbucketEndpoints
 
         git.MapPost("/repos", CreateBitbucketRepo)
             .WithName("CreateBitbucketRepo")
-            .WithSummary("FR-135: create a Bitbucket repository in a workspace (owner = its slug) and project (its key), then push an initial commit with a README to main, so the default branch exists. The slug is Bitbucket's slug of the name.")
+            .WithSummary("FR-135: create a Bitbucket repository in a workspace (owner = its slug) and project (its key), then push an initial commit with a README to main, so the default branch exists. The slug is Bitbucket's slug of the name. A retry after the README push failed finds the repository still empty and pushes the README instead of answering REPO_NAME_TAKEN.")
             .Produces<BitbucketRepoDto>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -358,6 +371,36 @@ public static class BitbucketEndpoints
         return TypedResults.Ok(result.Value);
     }
 
+    private static async Task<Results<Ok<BitbucketRepoRefsDto>, ValidationProblem, ProblemHttpResult>> GetBitbucketRepoRefs(
+        [MaxLength(BitbucketProjectRules.MaxRepoIdLength)] string repoId,
+        [Required] Guid? connectionId,
+        ICurrentUser currentUser,
+        BitbucketProjectRepos repos,
+        HttpContext http,
+        CancellationToken cancellationToken)
+    {
+        if (!BitbucketProjectRules.IsValidRepoId(repoId))
+        {
+            return ApiProblems.Validation(new DomainError(ErrorCodes.Validation, "The request is invalid.") { Details = ["repoId: Use the repository UUID from the repo picker, e.g. {1c3f…}."] });
+        }
+
+        var result = await repos.RefsAsync(currentUser.RequiredUserId, connectionId!.Value, repoId, cancellationToken);
+        if (result.IsFailure)
+        {
+            ResponseDocs.SetRetryAfter(http, result.Error!.RetryAfter);
+            return result.Error.Code == ErrorCodes.Validation ? ApiProblems.Validation(result.Error) : ApiProblems.FromError(result.Error);
+        }
+
+        var refs = result.Value;
+        return TypedResults.Ok(new BitbucketRepoRefsDto(
+            refs.FullName,
+            refs.DefaultBranch,
+            refs.Empty,
+            [.. refs.Tags.Select(t => new BitbucketTagDto(t.Name, t.Sha, t.Semver))],
+            refs.Suggestion.PreselectedTag,
+            refs.Suggestion.DevelopmentVersion.ToString()));
+    }
+
     private static async Task<Results<Ok<BitbucketOwnersDto>, ProblemHttpResult>> ListBitbucketOwners(
         [Required] Guid? connectionId, ICurrentUser currentUser, BitbucketRepoService repos, HttpContext http, CancellationToken cancellationToken)
     {
@@ -396,6 +439,7 @@ public static class BitbucketServiceCollectionExtensions
         services.AddScoped<BitbucketSignIn>();
         services.AddScoped<BitbucketConnectionService>();
         services.AddScoped<BitbucketRepoService>();
+        services.AddScoped<BitbucketProjectRepos>();
         services.AddSingleton<BitbucketWorkspaceCache>();
         return services;
     }

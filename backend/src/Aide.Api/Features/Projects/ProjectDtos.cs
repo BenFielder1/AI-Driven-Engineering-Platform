@@ -111,8 +111,8 @@ public sealed record CreateProjectGitRequest
     private readonly GitProvider _mode;
     private readonly GitProvider _provider;
 
-    /// <summary>The Git provider (FR-82, FR-136): <c>github_app</c>, <c>github_pat</c>, <c>gitlab</c> or <c>local</c>
-    /// (<c>bitbucket</c> isn't available yet: 400 <c>VALIDATION</c>).</summary>
+    /// <summary>The Git provider (FR-82, FR-136): <c>github_app</c>, <c>github_pat</c>, <c>gitlab</c>, <c>bitbucket</c> or
+    /// <c>local</c>.</summary>
     public GitProvider Mode
     {
         get => _mode;
@@ -147,7 +147,8 @@ public sealed record CreateProjectGitRequest
     public long? InstallationId { get; init; }
 
     /// <summary><c>github_app</c>: the repository as <c>owner/name</c>. <c>gitlab</c>: its <c>group/sub/project</c> path (the
-    /// stored path is the one GitLab reports for <c>repoId</c>).</summary>
+    /// stored path is the one GitLab reports for <c>repoId</c>). <c>bitbucket</c>: its <c>workspace/slug</c> (the stored one
+    /// is what Bitbucket reports for <c>repoId</c>).</summary>
     [MaxLength(ProjectLimits.RepoFullNameMaxLength)]
     public string? RepoFullName { get; init; }
 
@@ -158,17 +159,19 @@ public sealed record CreateProjectGitRequest
     public Guid? InstanceId { get; init; }
 
     /// <summary>
-    /// <c>gitlab</c> (FR-136): one of the caller's own valid GitLab connections on <c>instanceId</c>, bound to the project: all
-    /// background Git work uses it. Another user's connection is 403 <c>CREDENTIAL_NOT_OWNER</c>; an invalid one or a
-    /// disabled instance 409 <c>GIT_NOT_CONNECTED</c>; a connection on another instance 400 <c>VALIDATION</c>.
+    /// <c>gitlab</c>, <c>bitbucket</c> (FR-136): one of the caller's own valid GitLab connections on <c>instanceId</c>, or
+    /// Bitbucket connections, bound to the project: all background Git work uses it. Another user's connection is 403
+    /// <c>CREDENTIAL_NOT_OWNER</c>; a missing one 404 <c>NOT_FOUND</c>; an invalid one or a disabled instance 409
+    /// <c>GIT_NOT_CONNECTED</c>; a connection on another instance 400 <c>VALIDATION</c>. Not used with other modes.
     /// </summary>
     public Guid? ConnectionId { get; init; }
 
     /// <summary>
-    /// <c>gitlab</c> (FR-132): GitLab's project id (from the repo picker). The caller needs Developer access or higher on it
-    /// (403 <c>FORBIDDEN</c>; 404 <c>NOT_FOUND</c> when the connection can't see it).
+    /// <c>gitlab</c> (FR-132): GitLab's project id; <c>bitbucket</c> (FR-135): the repository UUID (<c>{…}</c>); both from
+    /// the repo picker. The caller needs GitLab Developer access or higher, or Bitbucket <c>write</c>/<c>admin</c>, on it
+    /// (403 <c>FORBIDDEN</c>; 404 <c>NOT_FOUND</c> when the connection can't see it). Not used with other modes.
     /// </summary>
-    [MaxLength(Domain.GitHosts.GitLabProjectRules.MaxRepoIdLength)]
+    [MaxLength(Domain.GitHosts.BitbucketProjectRules.MaxRepoIdLength)]
     public string? RepoId { get; init; }
 
     /// <summary>Required for <c>github_pat</c>: <c>https://github.com/OWNER/REPO</c>, optionally ending in <c>.git</c>.</summary>
@@ -423,10 +426,10 @@ public sealed record GitSettingsDto(
     /// <summary>FR-136: the Git host instance of a GitLab or Bitbucket project (<c>null</c> otherwise).</summary>
     public GitHostInstanceRefDto? Instance { get; init; }
 
-    /// <summary>FR-136: the host's repo id (GitLab project id).</summary>
+    /// <summary>FR-136: the host's repo id (GitLab project id, Bitbucket repository UUID).</summary>
     public string? ExternalRepoId { get; init; }
 
-    /// <summary>The repository's web URL (GitHub or GitLab), <c>null</c> for Local.</summary>
+    /// <summary>The repository's web URL (GitHub, GitLab or Bitbucket), <c>null</c> for Local.</summary>
     public string? RepoWebUrl { get; init; }
 
     /// <summary>
@@ -435,7 +438,7 @@ public sealed record GitSettingsDto(
     /// </summary>
     public GitBindingDto? Binding { get; init; }
 
-    /// <summary>FR-136: the caller may re-bind their own connection (<c>connectionId</c>): an Owner of a GitLab project.</summary>
+    /// <summary>FR-136: the caller may re-bind their own connection (<c>connectionId</c>): an Owner of a GitLab or Bitbucket project.</summary>
     public bool CanRebind { get; init; }
 }
 
@@ -544,15 +547,19 @@ public sealed record UpdateGitSettingsRequest
     public bool ClearToken { get; init; }
 
     /// <summary>
-    /// FR-136: re-binds a GitLab project to one of the caller's own connections on the project's instance (Owner). AIDE
-    /// first checks the connection has Developer access or higher on the repository (403 <c>FORBIDDEN</c>). Another user's
-    /// connection is 403 <c>CREDENTIAL_NOT_OWNER</c>; an invalid one 409 <c>GIT_NOT_CONNECTED</c>; one on another instance,
-    /// or <c>connectionId</c> on a project that isn't on GitLab, 400 <c>VALIDATION</c>.
+    /// FR-136: re-binds a GitLab or Bitbucket project to one of the caller's own connections on the project's instance
+    /// (Owner). AIDE first checks the connection's access to the repository: GitLab Developer or higher, Bitbucket
+    /// <c>write</c> or <c>admin</c> (else 403 <c>FORBIDDEN</c>). Another user's connection is 403 <c>CREDENTIAL_NOT_OWNER</c>;
+    /// an invalid one 409 <c>GIT_NOT_CONNECTED</c>; one on another instance, or <c>connectionId</c> on a project that isn't
+    /// on GitLab or Bitbucket, 400 <c>VALIDATION</c>.
     /// </summary>
     public Guid? ConnectionId { get; init; }
 
     /// <summary>FR-65: <c>aide_merges</c> (AIDE merges the PR on release) or <c>manual</c> (AIDE never merges; the release
-    /// marks the PR ready for review and waits for the merge on GitHub). Applies to the next release attempt.</summary>
+    /// marks the PR ready for review and waits for the merge on the Git host). FR-140, Bitbucket projects only (else 400
+    /// <c>VALIDATION</c>): <c>fast_forward</c> or <c>squash</c>, AIDE merging with that Bitbucket merge strategy
+    /// (<c>aide_merges</c> merges with <c>merge_commit</c>); a project that leaves Bitbucket goes back to <c>aide_merges</c>.
+    /// Applies to the next release attempt.</summary>
     public MergeStrategy? MergeStrategy { get; init; }
 
     /// <summary>§4.10, FR-64: the tag prefix (<c>^[A-Za-z0-9._/-]{0,20}$</c>, not starting with <c>.</c>, <c>/</c> or

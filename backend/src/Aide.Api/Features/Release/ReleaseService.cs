@@ -213,7 +213,7 @@ public static class ReleaseRecords
 }
 
 /// <summary>FR-42, FR-43: release history and the Owner's retry of a failed release.</summary>
-public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, TimeProvider time, ILogger<ReleaseService> logger)
+public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, GitHubReleasePublisher publisher, TimeProvider time, ILogger<ReleaseService> logger)
 {
     /// <summary>
     /// FR-43 <c>POST /release</c>: <see cref="ReleaseRules.CanRetry"/> (<c>NOT_RELEASING</c>, <c>RELEASE_IN_PROGRESS</c>), then the
@@ -268,6 +268,37 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, T
         var strategy = await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken);
         var production = await Deployments.DeploymentReader.ProductionByReleaseAsync(db, [.. releases.Select(r => r.Id)], cancellationToken);
         return [.. releases.Select(r => ReleaseRecords.ToDto(r, strategy, production.GetValueOrDefault(r.Id)))];
+    }
+
+    /// <summary>
+    /// FR-140, D-V4-7: one release attempt's full notes: a succeeded Bitbucket release's (Bitbucket has no Releases; the tag's
+    /// message holds them), rebuilt from the version's locked spec, steps and review as when it was tagged; <c>null</c>
+    /// otherwise. <c>null</c> result: no such attempt in the project. Read on demand only (lists and latest stay cheap).
+    /// </summary>
+    public async Task<ReleaseNotesDto?> NotesAsync(Guid projectId, Guid releaseId, CancellationToken cancellationToken)
+    {
+        var release = await db.Releases.AsNoTracking().FirstOrDefaultAsync(r => r.Id == releaseId && r.ProjectId == projectId, cancellationToken);
+        if (release is null)
+        {
+            return null;
+        }
+
+        if (release.Status != ReleaseStatus.Succeeded)
+        {
+            return new ReleaseNotesDto(release.Id, null);
+        }
+
+        var git = await db.ProjectGitSettings.AsNoTracking()
+            .Where(s => s.ProjectId == release.ProjectId)
+            .Select(s => new { s.Provider, s.RepoUrl, s.RepoFullName })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (git?.Provider != GitProvider.Bitbucket)
+        {
+            return new ReleaseNotesDto(release.Id, null);
+        }
+
+        var webUrl = Domain.Projects.ProjectSettingsRules.RepoWebUrl(git.Provider, git.RepoUrl, git.RepoFullName);
+        return new ReleaseNotesDto(release.Id, await publisher.HostNotesAsync(release, git.Provider, webUrl, cancellationToken));
     }
 
     /// <summary>The latest release attempt, or <c>null</c> before the first release.</summary>

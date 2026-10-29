@@ -91,9 +91,15 @@ public static class MergeReadinessRules
                 ErrorCodes.WrongPhase,
                 $"Merge readiness is checked in the review and release phases, not in {phase.ToWire()}."));
 
-    /// <summary>FR-65, FR-84: "AIDE will merge automatically" needs the <c>aide_merges</c> strategy and a mergeable PR.</summary>
+    /// <summary>
+    /// FR-65, FR-84: "AIDE will merge automatically" needs a strategy where AIDE merges (<c>aide_merges</c>, or Bitbucket's
+    /// <c>fast_forward</c>/<c>squash</c>, FR-140) and a mergeable PR.
+    /// </summary>
     public static bool WillAutoMerge(MergeStrategy strategy, bool canMerge) =>
-        strategy == MergeStrategy.AideMerges && canMerge;
+        AideMerges(strategy) && canMerge;
+
+    /// <summary>FR-65, FR-140: whether AIDE merges under <paramref name="strategy"/> (every strategy but <c>manual</c>).</summary>
+    public static bool AideMerges(MergeStrategy strategy) => strategy != MergeStrategy.Manual;
 
     /// <summary>A completed check whose conclusion blocks a required check: failure, timed out, cancelled or action required.</summary>
     public static bool IsFailing(CheckObservation check)

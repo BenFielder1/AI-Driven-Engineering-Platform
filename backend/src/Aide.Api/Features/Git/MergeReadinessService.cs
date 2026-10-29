@@ -193,16 +193,19 @@ public sealed partial class MergeReadinessService(
     }
 
     /// <summary>
-    /// FR-138: GitLab readiness through the project's provider (the binding connection): the merge request's
-    /// <c>detailed_merge_status</c>, approvals, branch protection, access level and head pipeline, with the head's CI
-    /// statuses as checks. <c>mergeStateStatus</c> carries GitLab's <c>detailed_merge_status</c>; <c>reviewDecision</c> is
-    /// <c>null</c>. Without a recorded merge request it is <c>pr_not_open</c>.
+    /// FR-138: GitLab or Bitbucket readiness through the project's provider (the binding connection). GitLab: the merge
+    /// request's <c>detailed_merge_status</c>, approvals, branch protection, access level and head pipeline, with the head's
+    /// CI statuses as checks; <c>mergeStateStatus</c> carries GitLab's <c>detailed_merge_status</c>. Bitbucket: the single
+    /// mergeability-checks call (§4.19 budget; no checks or status listed). <c>reviewDecision</c> is <c>null</c>. Without a
+    /// recorded merge/pull request it is <c>pr_not_open</c>.
     /// </summary>
     private async Task<Result<MergeReadinessDto>> HostAsync(Project project, ReleaseVersion? version, GitHostTarget host, DateTimeOffset now, CancellationToken cancellationToken)
     {
         if (version?.PullRequestNumber is not { } number)
         {
-            var closed = Domain.GitHosts.GitLabMergeReadiness.Map(new Domain.GitHosts.GitLabMergeFacts { Open = false }, project.MergeStrategy);
+            var closed = host.Provider.Kind == GitProvider.Bitbucket
+                ? Domain.GitHosts.MergeabilityChecks.Map([], project.MergeStrategy, pullRequestOpen: false)
+                : Domain.GitHosts.GitLabMergeReadiness.Map(new Domain.GitHosts.GitLabMergeFacts { Open = false }, project.MergeStrategy);
             return Result.Success(Dto(closed.Verdict!, project.MergeStrategy, [], null, null, now));
         }
 

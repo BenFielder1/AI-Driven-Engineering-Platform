@@ -54,11 +54,21 @@ public enum ReleaseVersionStatus
     Imported = 3,
 }
 
-/// <summary>FR-65 merge strategy. Wire values: <c>aide_merges</c>, <c>manual</c>.</summary>
+/// <summary>
+/// FR-65 merge strategy. Wire values: <c>aide_merges</c>, <c>manual</c>; FR-140 (Bitbucket only): <c>fast_forward</c> and
+/// <c>squash</c>, which are <c>aide_merges</c> with Bitbucket's <c>merge_strategy</c> of that name (<c>aide_merges</c> sends
+/// <c>merge_commit</c>).
+/// </summary>
 public enum MergeStrategy
 {
     AideMerges = 0,
     Manual = 1,
+
+    /// <summary>FR-140: AIDE merges with Bitbucket's <c>fast_forward</c> merge strategy (Bitbucket projects only).</summary>
+    FastForward = 2,
+
+    /// <summary>FR-140: AIDE merges with Bitbucket's <c>squash</c> merge strategy (Bitbucket projects only).</summary>
+    Squash = 3,
 }
 
 /// <summary>Outcome of an execution step attempt (FR-57). Wire values: <c>accepted</c>, <c>rejected</c>, <c>error</c>.</summary>

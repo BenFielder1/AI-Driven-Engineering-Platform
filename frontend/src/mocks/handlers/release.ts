@@ -24,8 +24,14 @@ export function seedReleasePhase(p: StoredProject) {
   p.phaseAtVersion[p.checkpoint] = 'release'
 }
 
-/** Appends a release attempt (newest last). Defaults: a succeeded, merged and tagged release of the current version. */
-export function seedRelease(p: StoredProject, overrides: Partial<Release> = {}): Release {
+/**
+ * Appends a release attempt (newest last). Defaults: a succeeded, merged and tagged release of the current version.
+ * `notes` (FR-140) are served by GET …/releases/:releaseId/notes.
+ */
+export function seedRelease(
+  p: StoredProject,
+  { notes, ...overrides }: Partial<Release> & { notes?: string | null } = {},
+): Release {
   const releases = (p.releases ??= [])
   const release: Release = {
     id: nextId(),
@@ -49,6 +55,9 @@ export function seedRelease(p: StoredProject, overrides: Partial<Release> = {}):
     ...overrides,
   }
   releases.push(release)
+  if (notes !== undefined) {
+    ;(p.releaseNotes ??= {})[release.id] = notes
+  }
   return release
 }
 
@@ -71,7 +80,7 @@ export function mergeReadiness(overrides: Partial<MergeReadiness> = {}): MergeRe
   const mergeStrategy = overrides.mergeStrategy ?? 'aide_merges'
   return {
     canMerge,
-    willAutoMerge: canMerge && mergeStrategy === 'aide_merges',
+    willAutoMerge: canMerge && mergeStrategy !== 'manual',
     mergeStrategy,
     reasons,
     checks: [
@@ -174,6 +183,19 @@ export const releaseHandlers = [
     return HttpResponse.json<Release[]>(
       [...(a.project.releases ?? [])].filter((r) => r.releaseVersionId === versionId).reverse(),
     )
+  }),
+
+  // FR-140, D-V4-7: AIDE's release notes of one attempt (404 when the attempt isn't in the project).
+  http.get('*/api/projects/:id/releases/:releaseId/notes', ({ params }) => {
+    const a = access(params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    const releaseId = String(params.releaseId)
+    if (!(a.project.releases ?? []).some((r) => r.id === releaseId)) {
+      return notFound()
+    }
+    return HttpResponse.json<Schemas['ReleaseNotesDto']>({ releaseId, notes: a.project.releaseNotes?.[releaseId] ?? null })
   }),
 
   http.get('*/api/projects/:id/releases/latest', ({ params }) => {

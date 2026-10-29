@@ -3848,7 +3848,7 @@
         "tags": [
           "Bitbucket"
         ],
-        "summary": "FR-135: create a Bitbucket repository in a workspace (owner = its slug) and project (its key), then push an initial commit with a README to main, so the default branch exists. The slug is Bitbucket's slug of the name.",
+        "summary": "FR-135: create a Bitbucket repository in a workspace (owner = its slug) and project (its key), then push an initial commit with a README to main, so the default branch exists. The slug is Bitbucket's slug of the name. A retry after the README push failed finds the repository still empty and pushes the README instead of answering REPO_NAME_TAKEN.",
         "operationId": "CreateBitbucketRepo",
         "requestBody": {
           "content": {
@@ -3946,6 +3946,116 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/git/bitbucket/repos/{repoId}/refs": {
+      "get": {
+        "tags": [
+          "Bitbucket"
+        ],
+        "summary": "FR-141, FR-86: a Bitbucket repository's default branch (mainbranch.name), whether it is empty, its semver tags (refs/tags; Bitbucket has no Releases), with the released version to preselect (the highest semver tag) and the version to develop (next minor) for the import. repoId is the repository UUID ({…}); connectionId one of the caller's Bitbucket connections.",
+        "operationId": "GetBitbucketRepoRefs",
+        "parameters": [
+          {
+            "name": "repoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "maxLength": 66,
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND (not one of the caller's Bitbucket connections, or no such repository visible to it)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "GIT_NOT_CONNECTED (the connection is invalid)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the connection's budget of 900 requests an hour; Retry-After when known)",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the action is allowed again.",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR (Bitbucket failed or couldn't be reached)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BitbucketRepoRefsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
                 }
               }
             }
@@ -5857,7 +5967,7 @@
         "tags": [
           "Project settings"
         ],
-        "summary": "Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). FR-136: connectionId re-binds a GitLab project to the caller's own connection after AIDE checks Developer access on the repository; the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION).",
+        "summary": "Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION).",
         "operationId": "UpdateGitSettings",
         "parameters": [
           {
@@ -10089,6 +10199,67 @@
         }
       }
     },
+    "/api/projects/{id}/releases/{releaseId}/notes": {
+      "get": {
+        "tags": [
+          "Release"
+        ],
+        "summary": "FR-140, D-V4-7: AIDE's full release notes of one release attempt (members): a succeeded Bitbucket release's (Bitbucket has no Releases; the annotated tag's message holds them); notes is null for other Git hosts or an attempt that hasn't succeeded.",
+        "operationId": "GetReleaseNotes",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseNotesDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or no such release attempt in it.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/rollback": {
       "post": {
         "tags": [
@@ -13172,6 +13343,67 @@
         },
         "description": "One page of repositories (one workspace at a time, most recently updated first); pass `nextCursor` as\n    `cursor` for the next (`null` = last page)."
       },
+      "BitbucketRepoRefsDto": {
+        "required": [
+          "fullName",
+          "defaultBranch",
+          "empty",
+          "tags",
+          "preselectedTag",
+          "suggestedDevelopmentVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "fullName": {
+            "type": "string"
+          },
+          "defaultBranch": {
+            "type": "string"
+          },
+          "empty": {
+            "type": "boolean"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BitbucketTagDto"
+            }
+          },
+          "preselectedTag": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "suggestedDevelopmentVersion": {
+            "type": "string"
+          }
+        },
+        "description": "What the wizard needs about a picked Bitbucket repository (FR-141, FR-86): its `workspace/slug`, default branch\n(`mainbranch.name`), whether it is `empty` (no commits, or only starter files), its tags (Bitbucket has no\nReleases, D-V4-7), and the import's suggestion: the released version to preselect (the highest semver tag; `null` =\n\"Never released\") and the version to develop it prefills (its next minor, else `0.1.0`)."
+      },
+      "BitbucketTagDto": {
+        "required": [
+          "name",
+          "sha",
+          "semver"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sha": {
+            "type": "string"
+          },
+          "semver": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A semver-or-other tag of a Bitbucket repository; `semver` is its version (the `v` prefix stripped), or `null`."
+      },
       "BitbucketWorkspaceDto": {
         "required": [
           "slug",
@@ -14102,7 +14334,7 @@
         "type": "object",
         "properties": {
           "mode": {
-            "description": "The Git provider (FR-82, FR-136): `github_app`, `github_pat`, `gitlab` or `local`\n    (`bitbucket` isn't available yet: 400 `VALIDATION`).",
+            "description": "The Git provider (FR-82, FR-136): `github_app`, `github_pat`, `gitlab`, `bitbucket` or\n    `local`.",
             "$ref": "#/components/schemas/GitProvider"
           },
           "provider": {
@@ -14125,7 +14357,7 @@
               "null",
               "string"
             ],
-            "description": "`github_app`: the repository as `owner/name`. `gitlab`: its `group/sub/project` path (the\n    stored path is the one GitLab reports for `repoId`)."
+            "description": "`github_app`: the repository as `owner/name`. `gitlab`: its `group/sub/project` path (the\n    stored path is the one GitLab reports for `repoId`). `bitbucket`: its `workspace/slug` (the stored one\n    is what Bitbucket reports for `repoId`)."
           },
           "instanceId": {
             "type": [
@@ -14140,16 +14372,16 @@
               "null",
               "string"
             ],
-            "description": "`gitlab` (FR-136): one of the caller's own valid GitLab connections on `instanceId`, bound to the project: all\nbackground Git work uses it. Another user's connection is 403 `CREDENTIAL_NOT_OWNER`; an invalid one or a\ndisabled instance 409 `GIT_NOT_CONNECTED`; a connection on another instance 400 `VALIDATION`.",
+            "description": "`gitlab`, `bitbucket` (FR-136): one of the caller's own valid GitLab connections on `instanceId`, or\nBitbucket connections, bound to the project: all background Git work uses it. Another user's connection is 403\n`CREDENTIAL_NOT_OWNER`; a missing one 404 `NOT_FOUND`; an invalid one or a disabled instance 409\n`GIT_NOT_CONNECTED`; a connection on another instance 400 `VALIDATION`. Not used with other modes.",
             "format": "uuid"
           },
           "repoId": {
-            "maxLength": 20,
+            "maxLength": 66,
             "type": [
               "null",
               "string"
             ],
-            "description": "`gitlab` (FR-132): GitLab's project id (from the repo picker). The caller needs Developer access or higher on it\n(403 `FORBIDDEN`; 404 `NOT_FOUND` when the connection can't see it)."
+            "description": "`gitlab` (FR-132): GitLab's project id; `bitbucket` (FR-135): the repository UUID (`{…}`); both from\nthe repo picker. The caller needs GitLab Developer access or higher, or Bitbucket `write`/`admin`, on it\n(403 `FORBIDDEN`; 404 `NOT_FOUND` when the connection can't see it). Not used with other modes."
           },
           "repoUrl": {
             "maxLength": 2048,
@@ -14921,7 +15153,7 @@
               "null",
               "string"
             ],
-            "description": "`gitlab` only (FR-141): one of the caller's GitLab connections on the instance (404 `NOT_FOUND` otherwise).",
+            "description": "`gitlab` or `bitbucket` (FR-141): one of the caller's connections for that host (GitLab: on the instance;\n404 `NOT_FOUND` otherwise). Omitted: the caller's newest valid one. Not used with other providers (400).",
             "format": "uuid"
           }
         },
@@ -16765,14 +16997,14 @@
               "null",
               "string"
             ],
-            "description": "FR-136: the host's repo id (GitLab project id)."
+            "description": "FR-136: the host's repo id (GitLab project id, Bitbucket repository UUID)."
           },
           "repoWebUrl": {
             "type": [
               "null",
               "string"
             ],
-            "description": "The repository's web URL (GitHub or GitLab), `null` for Local."
+            "description": "The repository's web URL (GitHub, GitLab or Bitbucket), `null` for Local."
           },
           "binding": {
             "oneOf": [
@@ -16787,7 +17019,7 @@
           },
           "canRebind": {
             "type": "boolean",
-            "description": "FR-136: the caller may re-bind their own connection (`connectionId`): an Owner of a GitLab project."
+            "description": "FR-136: the caller may re-bind their own connection (`connectionId`): an Owner of a GitLab or Bitbucket project."
           }
         },
         "description": "Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the\nproject branch, once the working copy has been prepared. `mode` is the v2 name of `provider` (always equal).\nFor `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else\n`null`). `appInstalledOnRepo` says whether the AIDE GitHub App can access a `github_pat` project's repo\n(`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an\nOwner (\"Switch to GitHub App\"). `mergeStrategy` (FR-65: `aide_merges`, the default, or `manual`) and\n`tagPrefix` (§4.10, FR-64: default `v`, so tags read `v1.2.0`) are the project's release settings."
@@ -17535,9 +17767,11 @@
       "MergeStrategy": {
         "enum": [
           "aide_merges",
-          "manual"
+          "manual",
+          "fast_forward",
+          "squash"
         ],
-        "description": "FR-65 merge strategy. Wire values: `aide_merges`, `manual`."
+        "description": "FR-65 merge strategy. Wire values: `aide_merges`, `manual`; FR-140 (Bitbucket only): `fast_forward` and\n`squash`, which are `aide_merges` with Bitbucket's `merge_strategy` of that name (`aide_merges` sends\n`merge_commit`)."
       },
       "NotificationChannelDto": {
         "required": [
@@ -19391,7 +19625,27 @@
             ]
           }
         },
-        "description": "A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint\n`checkpoint`. `status` is `in_progress` while the release job is queued or running, then\n`succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`, or\n`awaiting_merge` (FR-65) when the merge was refused or the strategy is `manual`: `awaitingMergeSince` is\nwhen it started waiting and `mergeReasons` are the merge-readiness reasons (FR-84) recorded then (`null`\notherwise); the merge poll then completes it once the PR is merged on GitHub (§4.14).\nA failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict\n`conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`\nfor Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).\n`completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`\n(e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails\nthe release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.\nFailure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,\n`GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and\n`MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can\nretry with `POST /release`. `githubReleaseUrl` is the host release created for the tag: the GitHub Release\n(FR-64) or the GitLab Release (FR-140); `null` for Local or before it exists. A GitLab merge refused because the\nmerge request's head moved since review (409) fails with `GIT_ERROR`. `mergeStrategy` is the project's current merge strategy (FR-65).\n`productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including\nredeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release."
+        "description": "A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint\n`checkpoint`. `status` is `in_progress` while the release job is queued or running, then\n`succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`, or\n`awaiting_merge` (FR-65) when the merge was refused or the strategy is `manual`: `awaitingMergeSince` is\nwhen it started waiting and `mergeReasons` are the merge-readiness reasons (FR-84) recorded then (`null`\notherwise); the merge poll then completes it once the PR is merged on GitHub (§4.14).\nA failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict\n`conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`\nfor Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).\n`completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`\n(e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails\nthe release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.\nFailure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,\n`GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and\n`MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can\nretry with `POST /release`. `githubReleaseUrl` is the host release created for the tag: the GitHub Release\n(FR-64), the GitLab Release, or the Bitbucket annotated tag's page (FR-140; Bitbucket has no Releases); `null` for\nLocal or before it exists. AIDE's full release notes of a succeeded Bitbucket release (the tag's message, FR-140,\nD-V4-7) are read with `GET …/releases/{releaseId}/notes`. A GitLab merge refused because the\nmerge request's head moved since review (409) fails with `GIT_ERROR`. `mergeStrategy` is the project's current merge strategy (FR-65).\n`productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including\nredeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release."
+      },
+      "ReleaseNotesDto": {
+        "required": [
+          "releaseId",
+          "notes"
+        ],
+        "type": "object",
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-140, D-V4-7: AIDE's full release notes of a release attempt, for a host without Releases (Bitbucket: the annotated\ntag's message), rebuilt from the version's locked spec, completed steps and latest review; `null` for other hosts\nor an attempt that hasn't succeeded."
       },
       "ReleaseStatus": {
         "enum": [
@@ -21229,7 +21483,7 @@
               "null",
               "string"
             ],
-            "description": "FR-136: re-binds a GitLab project to one of the caller's own connections on the project's instance (Owner). AIDE\nfirst checks the connection has Developer access or higher on the repository (403 `FORBIDDEN`). Another user's\nconnection is 403 `CREDENTIAL_NOT_OWNER`; an invalid one 409 `GIT_NOT_CONNECTED`; one on another instance,\nor `connectionId` on a project that isn't on GitLab, 400 `VALIDATION`.",
+            "description": "FR-136: re-binds a GitLab or Bitbucket project to one of the caller's own connections on the project's instance\n(Owner). AIDE first checks the connection's access to the repository: GitLab Developer or higher, Bitbucket\n`write` or `admin` (else 403 `FORBIDDEN`). Another user's connection is 403 `CREDENTIAL_NOT_OWNER`;\nan invalid one 409 `GIT_NOT_CONNECTED`; one on another instance, or `connectionId` on a project that isn't\non GitLab or Bitbucket, 400 `VALIDATION`.",
             "format": "uuid"
           },
           "mergeStrategy": {
@@ -21238,7 +21492,7 @@
                 "type": "null"
               },
               {
-                "description": "FR-65: `aide_merges` (AIDE merges the PR on release) or `manual` (AIDE never merges; the release\n    marks the PR ready for review and waits for the merge on GitHub). Applies to the next release attempt.",
+                "description": "FR-65: `aide_merges` (AIDE merges the PR on release) or `manual` (AIDE never merges; the release\n    marks the PR ready for review and waits for the merge on the Git host). FR-140, Bitbucket projects only (else 400\n    `VALIDATION`): `fast_forward` or `squash`, AIDE merging with that Bitbucket merge strategy\n    (`aide_merges` merges with `merge_commit`); a project that leaves Bitbucket goes back to `aide_merges`.\n    Applies to the next release attempt.",
                 "$ref": "#/components/schemas/MergeStrategy"
               }
             ]

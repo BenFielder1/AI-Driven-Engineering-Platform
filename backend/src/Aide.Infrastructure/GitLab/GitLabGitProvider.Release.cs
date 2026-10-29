@@ -107,7 +107,8 @@ internal sealed partial class GitLabGitProvider
     /// FR-139: the head's commit statuses (pipeline jobs and external statuses) as checks, required when the project
     /// requires pipelines to succeed and the job may not fail (<see cref="CommitStatusFindings.FromGitLab"/>).
     /// </summary>
-    public async Task<Result<IReadOnlyList<CheckObservation>>> GetCommitStatusesAsync(GitConnectionSettings settings, string sha, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<CheckObservation>>> GetCommitStatusesAsync(
+        GitConnectionSettings settings, string sha, CancellationToken cancellationToken, int? pullRequestNumber = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentException.ThrowIfNullOrEmpty(sha);

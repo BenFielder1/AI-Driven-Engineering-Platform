@@ -16,7 +16,7 @@ namespace Aide.Api.Features.Review;
 /// <summary>The PR head's checks as review used them (FR-85), how long it waited and whether it gave up waiting.</summary>
 public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int? WaitedSeconds, bool TimedOut)
 {
-    /// <summary>FR-139: the Git host the statuses came from (GitLab); <c>null</c> for GitHub's check runs (FR-85).</summary>
+    /// <summary>FR-139: the Git host the statuses came from (GitLab, Bitbucket); <c>null</c> for GitHub's check runs (FR-85).</summary>
     public Domain.GitHosts.CommitStatusHost? Host { get; init; }
 
     /// <summary>
@@ -137,10 +137,11 @@ public sealed partial class ExternalChecksCollector(
     }
 
     /// <summary>
-    /// FR-139: a GitLab project's statuses on the version branch head (pipeline jobs and commit statuses, required when the
-    /// project requires pipelines to succeed), waited for like GitHub's checks (30 s re-checks, 15 minutes). A version
-    /// without a merge request or a pushed branch has none; GitLab failing is logged and review goes on without them; a
-    /// GitLab rate limit waits for the reset.
+    /// FR-139: a GitLab or Bitbucket project's statuses on the version branch head (GitLab pipeline jobs and commit statuses,
+    /// required when the project requires pipelines to succeed; Bitbucket commit statuses, required when the pull request's
+    /// mergeability checks show <c>require_passing_builds_to_merge</c>), waited for like GitHub's checks (30 s re-checks, 15
+    /// minutes). A version without a merge/pull request or a pushed branch has none; the host failing is logged and review
+    /// goes on without them; a rate limit waits for the reset.
     /// </summary>
     private async Task<CollectedChecks?> HostAsync(Project project, LifecycleJobPayload payload, GitHostTarget host, CancellationToken cancellationToken)
     {
@@ -173,12 +174,19 @@ public sealed partial class ExternalChecksCollector(
         Result<IReadOnlyList<CheckObservation>> statuses;
         try
         {
-            statuses = await host.Provider.GetCommitStatusesAsync(host.Connection, head, cancellationToken);
+            statuses = await host.Provider.GetCommitStatusesAsync(host.Connection, head, cancellationToken, version.PullRequestNumber);
         }
         catch (Infrastructure.GitLab.GitLabRateLimitedException ex)
         {
             throw new JobDeferredException(
                 $"{ErrorCodes.GitLabRateLimited}: GitLab is rate limiting requests; review waits for the reset.",
+                JobPolicy.DeferUntil(now, ex.ResetAt));
+        }
+        catch (Infrastructure.Bitbucket.BitbucketRateLimitedException ex)
+        {
+            // §4.19: Bitbucket's 429, or the connection's budget: wait without counting an attempt.
+            throw new JobDeferredException(
+                $"{ErrorCodes.BitbucketRateLimited}: Bitbucket is rate limiting requests; review waits until {ex.ResetAt:u}.",
                 JobPolicy.DeferUntil(now, ex.ResetAt));
         }
 
@@ -205,7 +213,8 @@ public sealed partial class ExternalChecksCollector(
             LogTimedOut(logger, project.Id);
         }
 
-        return new CollectedChecks(checks, decision.WaitedSeconds, decision.TimedOut) { Host = Domain.GitHosts.CommitStatusHost.Gitlab };
+        var source = host.Provider.Kind == GitProvider.Bitbucket ? Domain.GitHosts.CommitStatusHost.Bitbucket : Domain.GitHosts.CommitStatusHost.Gitlab;
+        return new CollectedChecks(checks, decision.WaitedSeconds, decision.TimedOut) { Host = source };
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Review of project {ProjectId} waits for {Pending} pending check(s)")]

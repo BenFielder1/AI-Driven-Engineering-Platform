@@ -5,6 +5,7 @@ using Aide.Api.Features.GitHub;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Aide.Domain.GitHosts;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
@@ -42,7 +43,7 @@ public static partial class ProjectSettingsEndpoints
 
         group.MapPatch("/git", UpdateGitSettings)
             .WithName("UpdateGitSettings")
-            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). FR-136: connectionId re-binds a GitLab project to the caller's own connection after AIDE checks Developer access on the repository; the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION).")
+            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION).")
             .Produces<GitSettingsDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status409Conflict)
@@ -156,6 +157,7 @@ public static partial class ProjectSettingsEndpoints
         ISecretProtector secrets,
         PullRequestJobs pullRequests,
         GitLab.GitLabProjectRepos gitLabRepos,
+        Bitbucket.BitbucketProjectRepos bitbucketRepos,
         IGitLabInstances gitLabInstances,
         HttpContext http,
         TimeProvider time,
@@ -177,25 +179,41 @@ public static partial class ProjectSettingsEndpoints
             ProjectSettingsRules.ValidateProviderChange(settings.Provider, provider),
             ProjectSettingsRules.ValidateGit(provider, repoUrl, branch, request.Token, request.ClearToken),
             ProjectSettingsRules.ValidateTagPrefix(request.TagPrefix),
-            ValidateHostedGit(request, settings, hosted));
+            ValidateHostedGit(request, settings, hosted),
+
+            // FR-140: fast_forward and squash are Bitbucket's merge strategies only.
+            request.MergeStrategy is { } wantedStrategy ? BitbucketProjectRules.ValidateMergeStrategy(provider, wantedStrategy) : Result.Success());
         if (validation.IsFailure)
         {
             return ApiProblems.Validation(validation.Error!);
         }
 
-        // FR-136: re-bind to the caller's own connection, after AIDE checks it has Developer access to the repository.
-        GitLab.VerifiedGitLabRepo? rebound = null;
+        // FR-136: re-bind to the caller's own connection, after AIDE checks it has developer (GitLab) or write (Bitbucket)
+        // access to the repository.
+        (Guid ConnectionId, Guid OwnerUserId)? rebound = null;
         if (request.ConnectionId is { } connectionId)
         {
-            var verified = await gitLabRepos.VerifyAsync(
-                currentUser.RequiredUserId, grant.Value.ProjectRole, settings.InstanceId!.Value, connectionId, settings.ExternalRepoId!, string.Empty, cancellationToken);
-            if (verified.IsFailure)
+            DomainError? refused;
+            if (settings.Provider == GitProvider.Bitbucket)
             {
-                ResponseDocs.SetRetryAfter(http, verified.Error!.RetryAfter);
-                return verified.Error.Code == ErrorCodes.Validation ? ApiProblems.Validation(verified.Error) : ApiProblems.FromError(verified.Error);
+                var verified = await bitbucketRepos.VerifyAsync(
+                    currentUser.RequiredUserId, grant.Value.ProjectRole, connectionId, settings.ExternalRepoId!, settings.RepoFullName!, string.Empty, cancellationToken);
+                refused = verified.Error;
+                rebound = verified.IsSuccess ? (verified.Value.ConnectionId, verified.Value.OwnerUserId) : null;
+            }
+            else
+            {
+                var verified = await gitLabRepos.VerifyAsync(
+                    currentUser.RequiredUserId, grant.Value.ProjectRole, settings.InstanceId!.Value, connectionId, settings.ExternalRepoId!, string.Empty, cancellationToken);
+                refused = verified.Error;
+                rebound = verified.IsSuccess ? (verified.Value.ConnectionId, verified.Value.OwnerUserId) : null;
             }
 
-            rebound = verified.Value;
+            if (refused is not null)
+            {
+                ResponseDocs.SetRetryAfter(http, refused.RetryAfter);
+                return refused.Code == ErrorCodes.Validation ? ApiProblems.Validation(refused) : ApiProblems.FromError(refused);
+            }
         }
 
         var changes = new List<string>();
@@ -210,6 +228,16 @@ public static partial class ProjectSettingsEndpoints
         {
             project.MergeStrategy = mergeStrategy;
             changes.Add("mergeStrategy");
+        }
+
+        // FR-140: fast_forward and squash are Bitbucket's; a project leaving Bitbucket goes back to aide_merges.
+        if (provider != GitProvider.Bitbucket && project.MergeStrategy is MergeStrategy.FastForward or MergeStrategy.Squash)
+        {
+            project.MergeStrategy = MergeStrategy.AideMerges;
+            if (!changes.Contains("mergeStrategy"))
+            {
+                changes.Add("mergeStrategy");
+            }
         }
 
         if (request.TagPrefix is { } tagPrefix && tagPrefix != project.TagPrefix)
@@ -237,10 +265,10 @@ public static partial class ProjectSettingsEndpoints
         var previousProvider = settings.Provider;
         // FR-136: a GitLab project's web URL is the one read from GitLab when it was bound; it isn't edited here.
         var normalizedUrl = hosted ? settings.RepoUrl : ProjectSettingsRules.NormalizeRepoUrl(provider, repoUrl);
-        if (rebound is not null && (settings.GitConnectionId != rebound.ConnectionId || settings.BoundByUserId != rebound.OwnerUserId))
+        if (rebound is { } bind && (settings.GitConnectionId != bind.ConnectionId || settings.BoundByUserId != bind.OwnerUserId))
         {
-            settings.GitConnectionId = rebound.ConnectionId;
-            settings.BoundByUserId = rebound.OwnerUserId;
+            settings.GitConnectionId = bind.ConnectionId;
+            settings.BoundByUserId = bind.OwnerUserId;
             changes.Add("gitConnectionId");
         }
 
@@ -332,20 +360,22 @@ public static partial class ProjectSettingsEndpoints
     }
 
     /// <summary>
-    /// FR-136: <c>connectionId</c> only re-binds a GitLab project (not Bitbucket yet, not GitHub or Local); a GitLab
-    /// project's repository URL comes from GitLab and can't be changed here (sending the stored one is accepted).
+    /// FR-136: <c>connectionId</c> only re-binds a GitLab or Bitbucket project (not GitHub or Local); such a project's
+    /// repository URL comes from the host and can't be changed here (sending the stored one is accepted).
     /// </summary>
     private static Result ValidateHostedGit(UpdateGitSettingsRequest request, ProjectGitSettings settings, bool hosted)
     {
         var problems = new List<string>();
-        if (request.ConnectionId is not null && !(hosted && settings.Provider == GitProvider.Gitlab && settings.InstanceId is not null && settings.ExternalRepoId is not null))
+        var rebindable = hosted && settings.InstanceId is not null && settings.ExternalRepoId is not null
+            && (settings.Provider == GitProvider.Gitlab || (settings.Provider == GitProvider.Bitbucket && settings.RepoFullName is not null));
+        if (request.ConnectionId is not null && !rebindable)
         {
-            problems.Add("connectionId: Only used to re-bind a GitLab project's connection.");
+            problems.Add("connectionId: Only used to re-bind a GitLab or Bitbucket project's connection.");
         }
 
         if (hosted && request.RepoUrl is { } sentUrl && !string.Equals(sentUrl.Trim(), settings.RepoUrl, StringComparison.Ordinal))
         {
-            problems.Add("repoUrl: A GitLab project's repository can't be changed; create a new project for another repository.");
+            problems.Add($"repoUrl: A {GitHostNames.Display(settings.Provider.ToWire())} project's repository can't be changed; create a new project for another repository.");
         }
 
         return problems.Count == 0
@@ -601,6 +631,11 @@ public static partial class ProjectSettingsEndpoints
         var instance = settings.InstanceId is { } instanceId && settings.Provider == GitProvider.Gitlab
             ? await gitLabInstances.GetAsync(instanceId, cancellationToken)
             : null;
+        var instanceDto = instance is not null
+            ? new GitHostInstanceRefDto(instance.Id, instance.Name, instance.BaseUrl.AbsoluteUri.TrimEnd('/'), instance.Enabled)
+            : settings.Provider == GitProvider.Bitbucket && settings.InstanceId is { } bitbucketCloud
+                ? new GitHostInstanceRefDto(bitbucketCloud, BitbucketRules.CloudName, BitbucketRules.WebBaseUrl, true)
+                : null;
         GitBindingDto? binding = null;
         if (settings.GitConnectionId is { } connectionId)
         {
@@ -614,10 +649,10 @@ public static partial class ProjectSettingsEndpoints
 
         return dto with
         {
-            Instance = instance is null ? null : new GitHostInstanceRefDto(instance.Id, instance.Name, instance.BaseUrl.AbsoluteUri.TrimEnd('/'), instance.Enabled),
+            Instance = instanceDto,
             ExternalRepoId = settings.ExternalRepoId,
             Binding = binding,
-            CanRebind = callerRole == ProjectRole.Owner && settings.Provider == GitProvider.Gitlab,
+            CanRebind = callerRole == ProjectRole.Owner,
         };
     }
 

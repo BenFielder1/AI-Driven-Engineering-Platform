@@ -138,8 +138,12 @@ public interface IGitProvider
         GitConnectionSettings settings, int number, MergeStrategy strategy, CancellationToken cancellationToken, bool markedReady = false) =>
         Task.FromResult(Result.Failure<HostMergeReadiness>(GitHostOperations.NotSupported(Kind, "merge readiness")));
 
-    /// <summary>§4.19, FR-139 (slice 2b): the commit's CI statuses as review observations.</summary>
-    Task<Result<IReadOnlyList<CheckObservation>>> GetCommitStatusesAsync(GitConnectionSettings settings, string sha, CancellationToken cancellationToken) =>
+    /// <summary>
+    /// §4.19, FR-139: the commit's CI statuses as review observations. <paramref name="pullRequestNumber"/>: the version's
+    /// merge/pull request, when the host tells from it which statuses are required (Bitbucket's mergeability checks).
+    /// </summary>
+    Task<Result<IReadOnlyList<CheckObservation>>> GetCommitStatusesAsync(
+        GitConnectionSettings settings, string sha, CancellationToken cancellationToken, int? pullRequestNumber = null) =>
         Task.FromResult(Result.Failure<IReadOnlyList<CheckObservation>>(GitHostOperations.NotSupported(Kind, "commit statuses")));
 
     /// <summary>§4.19, FR-140: publishes the host release (GitLab Release; Bitbucket annotated tag); its URL.</summary>
@@ -244,15 +248,34 @@ public sealed record ReleaseRequest(
 
     /// <summary>
     /// FR-140: AIDE's release notes (<see cref="Domain.Releases.ReleaseNotes"/>) for a host whose release is created with the
-    /// tag (GitLab: the Release's <c>description</c>). <c>null</c> for GitHub (its Release is created after tagging) and Local.
+    /// tag (GitLab: the Release's <c>description</c>; Bitbucket: the annotated tag's message). <c>null</c> for GitHub (its
+    /// Release is created after tagging) and Local.
     /// </summary>
     public string? Notes { get; init; }
+
+    /// <summary>
+    /// FR-140: the project's merge strategy, for a host whose merge call takes the method (Bitbucket <c>merge_strategy</c>:
+    /// <c>merge_commit</c>, <c>squash</c>, <c>fast_forward</c>).
+    /// </summary>
+    public MergeStrategy Strategy { get; init; } = MergeStrategy.AideMerges;
 
     /// <summary>
     /// FR-65, FR-140: the merge commit already recorded on the attempt (AIDE's own merge, before a retry); a merged PR/MR
     /// on this commit isn't a merge someone else made.
     /// </summary>
     public string? RecordedMergeCommitSha { get; init; }
+
+    /// <summary>
+    /// FR-140: the attempt already submitted AIDE's merge (<c>releases.merge_submitted_at</c>); a pull request found merged is
+    /// then AIDE's own merge, even before its commit was recorded.
+    /// </summary>
+    public bool MergeSubmitted { get; init; }
+
+    /// <summary>
+    /// FR-140: called right before the host's merge call, so the attempt records that a merge may be happening (a rollback
+    /// then waits for the release). An exception from it ends the release (nothing is merged).
+    /// </summary>
+    public Func<CancellationToken, Task>? OnMergeSubmitting { get; init; }
 }
 
 /// <summary>How a release attempt ended at the provider.</summary>

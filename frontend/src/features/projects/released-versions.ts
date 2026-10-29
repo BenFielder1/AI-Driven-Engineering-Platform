@@ -2,8 +2,13 @@ import type { Schemas } from '../../api/client'
 import { compareSemVer, normalizeVersion, parseSemVer } from '../versions/semver'
 import { NEVER_RELEASED } from './schemas'
 
-/** FR-73, FR-141: a repository's Releases and tags, as GitHub (`GitHubRepoRefsDto`) and GitLab (`GitLabRepoRefsDto`) list them. */
-export type ReleaseRefs = Pick<Schemas['GitHubRepoRefsDto'] | Schemas['GitLabRepoRefsDto'], 'releases' | 'tags'>
+/**
+ * FR-73, FR-141: a repository's Releases and tags, as GitHub (`GitHubRepoRefsDto`) and GitLab (`GitLabRepoRefsDto`)
+ * list them, or only its tags on Bitbucket (`BitbucketRepoRefsDto`; Bitbucket has no Releases, D-V4-7).
+ */
+export type ReleaseRefs =
+  | Pick<Schemas['GitHubRepoRefsDto'] | Schemas['GitLabRepoRefsDto'], 'releases' | 'tags'>
+  | Pick<Schemas['BitbucketRepoRefsDto'], 'tags'>
 type Refs = ReleaseRefs
 
 /** FR-73, FR-141: one choice of "Currently released version": a GitHub or GitLab Release, or a semver tag. */
@@ -39,7 +44,8 @@ const byVersionDesc = (a: ReleasedOption, b: ReleasedOption) => {
  * that aren't semantic versions are left out: they can't be the released version (the API answers VERSION_INVALID).
  */
 export function releasedOptions(refs: Refs): ReleasedOption[] {
-  const releases = refs.releases.flatMap((r): ReleasedOption[] => {
+  const listedReleases = 'releases' in refs ? refs.releases : []
+  const releases = listedReleases.flatMap((r): ReleasedOption[] => {
     const version = semverOfTag(r.tagName, refs)
     return version
       ? [{ tag: r.tagName, version, kind: 'release', isLatest: r.isLatest, name: r.name, publishedAt: r.publishedAt }]

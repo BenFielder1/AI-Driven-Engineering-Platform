@@ -3,9 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import { signInAs } from '../../mocks/handlers/auth'
-import { bitbucketDb, configureBitbucketConsumer, seedBitbucketConnection, seedBitbucketRepo } from '../../mocks/handlers/bitbucket'
+import { configureBitbucketConsumer, seedBitbucketConnection, seedBitbucketRepo } from '../../mocks/handlers/bitbucket'
 import { renderRoute } from '../../test/render'
-import { bitbucketProjectCreationAvailable } from './schemas'
 import { WIZARD_DRAFT_KEY } from './wizard-draft'
 import { repoHostLabelOf, repoVcsOf } from './wizard-stack'
 
@@ -39,25 +38,22 @@ describe('Wizard → Repository on Bitbucket (FR-135)', () => {
 
     await screen.findByRole('radio', { name: 'Local repository' })
     expect(screen.queryByRole('radio', { name: 'Bitbucket' })).not.toBeInTheDocument()
-    expect(screen.queryByText(/Bitbucket projects arrive in the next AIDE update/)).not.toBeInTheDocument()
   })
 
-  it('FR135_consumer_without_connection: the option shows with the notice and a way to Connections that keeps the wizard', async () => {
+  it('FR135_consumer_without_connection: the option shows with a way to Connections that keeps the wizard', async () => {
     const { user } = await openRepositoryStep({ connect: false, consumer: true })
 
     await user.click(await screen.findByRole('radio', { name: 'Bitbucket' }))
-    expect(await screen.findByText('Bitbucket projects arrive in the next AIDE update')).toBeInTheDocument()
     const link = await screen.findByRole('link', { name: 'Connect Bitbucket under Connections' })
     await user.click(link)
 
     expect(sessionStorage.getItem(WIZARD_DRAFT_KEY)).toContain('"gitMode":"bitbucket"')
   })
 
-  it('FR135_picker_in_wizard: picks a repository with search and paging; Create is hidden while projects can not bind it', async () => {
+  it('FR135_picker_in_wizard: picks a repository with search and paging; Create is offered from scratch', async () => {
     const { user, connection } = await openRepositoryStep({ repos: 32 })
 
     await user.click(await screen.findByRole('radio', { name: 'Bitbucket' }))
-    expect(await screen.findByText('Bitbucket projects arrive in the next AIDE update')).toBeInTheDocument()
     expect(await screen.findByLabelText('Bitbucket connection')).toHaveValue(connection?.id)
 
     const list = await screen.findByRole('list', { name: 'Bitbucket repositories' })
@@ -73,23 +69,7 @@ describe('Wizard → Repository on Bitbucket (FR-135)', () => {
     await user.click(screen.getByRole('radio', { name: 'acme/app-07' }))
     expect(screen.getByText('Selected:').parentElement).toHaveTextContent('Selected: acme/app-07')
     expect(screen.getByLabelText('Default branch')).toHaveValue('main')
-
-    expect(bitbucketProjectCreationAvailable()).toBe(false)
-    expect(screen.queryByRole('button', { name: 'Create Bitbucket repository' })).not.toBeInTheDocument()
-    expect(bitbucketDb.createdRepos).toEqual([])
-  })
-
-  it('FR135_blocked_until_binding: Next on the Bitbucket option says AIDE cannot create Bitbucket projects yet', async () => {
-    const { user } = await openRepositoryStep({ repos: 1 })
-
-    await user.click(await screen.findByRole('radio', { name: 'Bitbucket' }))
-    await user.click(await screen.findByRole('radio', { name: 'acme/app-01' }))
-    await user.click(screen.getByRole('button', { name: 'Next' }))
-
-    expect(
-      await screen.findAllByText("AIDE can't create projects on Bitbucket yet. Choose another option to continue."),
-    ).not.toHaveLength(0)
-    expect(screen.getByRole('heading', { level: 2, name: /Step 3 of 8: Repository/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create Bitbucket repository' })).toBeInTheDocument()
   })
 
   it('FR135_switch_mode_clears_pick: leaving Bitbucket clears the picked repository and its id', async () => {

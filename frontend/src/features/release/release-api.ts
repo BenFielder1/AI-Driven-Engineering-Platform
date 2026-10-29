@@ -28,6 +28,25 @@ export function useReleases(id: string, enabled = true, releaseVersionId?: strin
 }
 
 /**
+ * FR-140, D-V4-7: AIDE's full release notes of one release attempt (`null` when it has none: only a succeeded Bitbucket
+ * release keeps them today). Pass `null` to skip the request.
+ */
+export function useReleaseNotes(id: string, releaseId: string | null) {
+  return useQuery({
+    queryKey: [...projectKeys.releases(id), 'notes', releaseId ?? ''] as const,
+    queryFn: async ({ signal }) =>
+      unwrap(
+        await api.GET('/api/projects/{id}/releases/{releaseId}/notes', {
+          params: { path: { id, releaseId: releaseId ?? '' } },
+          signal,
+        }),
+      ),
+    enabled: releaseId !== null,
+    staleTime: Infinity,
+  })
+}
+
+/**
  * FR-43: queues the release job again (Owner) after the latest attempt failed, e.g. once a merge conflict is resolved
  * on the project branch. 202 with the new `in_progress` release; the outcome arrives as RELEASE_COMPLETED or
  * RELEASE_FAILED. 409 NOT_RELEASING, RELEASE_IN_PROGRESS or CONFLICT.

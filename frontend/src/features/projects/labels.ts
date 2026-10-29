@@ -571,6 +571,22 @@ const mergeStrategyCopy: Record<Schemas['MergeStrategy'], { label: string; descr
     description:
       'AIDE never merges. It marks the {pr} ready for review and waits; once someone merges it on {host}, AIDE tags the merge commit and creates the {release}.',
   },
+  // FR-140: Bitbucket only (its `merge_strategy`); `aide_merges` sends `merge_commit`.
+  fast_forward: {
+    label: 'AIDE merges (fast-forward)',
+    description:
+      'When the release is approved, AIDE fast-forwards the default branch to the {pr} without a merge commit. If {host} refuses (the branch has moved on, required approvals or builds), the release waits for a merge on {host}.',
+  },
+  squash: {
+    label: 'AIDE merges (squash)',
+    description:
+      "When the release is approved, AIDE squashes the {pr}'s commits into one commit on the default branch. If {host} refuses (required approvals or builds, branch restrictions), the release waits for a merge on {host}.",
+  },
+}
+
+/** FR-65, FR-140: the merge strategies a project on this Git host can use (`fast_forward` and `squash` on Bitbucket only). */
+export function mergeStrategiesFor(provider: Schemas['GitProvider'] | null | undefined): readonly Schemas['MergeStrategy'][] {
+  return provider === 'bitbucket' ? ['aide_merges', 'fast_forward', 'squash', 'manual'] : ['aide_merges', 'manual']
 }
 
 /** The merge strategy's label, naming the project's Git host (default GitHub). */

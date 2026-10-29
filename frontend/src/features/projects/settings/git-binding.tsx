@@ -7,11 +7,12 @@ import { Button } from '../../../components/ui/button'
 import { SelectField } from '../../../components/ui/select-field'
 import { ErrorState, LoadingState } from '../../../components/ui/states'
 import { errorMessage, isApiError } from '../../../lib/errors'
+import { gitHostTerms, withGitHost } from '../../../lib/git-host'
 import { Link } from '../../../lib/navigation'
+import { useBitbucketConnections, type BitbucketConnection } from '../../bitbucket/bitbucket-api'
 import { gitConnectionStatusLabels, gitConnectionStatusTones } from '../../connections/gitlab-connection-section'
+import { GitHostLink } from '../../git-hosts/git-host-link'
 import { gitlabHost, useGitLabConnections, type GitLabConnection } from '../../gitlab/gitlab-api'
-import { GitLabLink } from '../../gitlab/gitlab-link'
-import { gitProviderLabels } from '../labels'
 import { useUpdateGitSettings, type GitSettings } from '../projects-api'
 
 /** FR-136: the Git hosts whose projects carry a binding (the Owner's connection all background Git work uses). */
@@ -37,7 +38,7 @@ function Row({ term, children }: { term: string; children: ReactNode }) {
  * link to its page) and the binding ("connected by Ana (@ana)" with the connection's status), or the cleared state.
  */
 export function BoundHostRows({ git }: { git: GitSettings }) {
-  const host = gitProviderLabels[git.mode]
+  const host = gitHostTerms(git.mode).host
   const instance = git.instance
   return (
     <>
@@ -57,7 +58,9 @@ export function BoundHostRows({ git }: { git: GitSettings }) {
       </Row>
       <Row term="Repository">
         {git.repoWebUrl && git.repoFullName ? (
-          <GitLabLink href={git.repoWebUrl}>{git.repoFullName}</GitLabLink>
+          <GitHostLink site={host} href={git.repoWebUrl}>
+            {git.repoFullName}
+          </GitHostLink>
         ) : (
           (git.repoFullName ?? 'Not set')
         )}
@@ -74,7 +77,7 @@ export function BoundHostRows({ git }: { git: GitSettings }) {
               </StatusBadge>
             </span>
             <span className="text-muted-foreground">
-              Clones, pushes, merge requests and releases use this connection&apos;s token.
+              {withGitHost("Clones, pushes, {pr}s and releases use this connection's token.", gitHostTerms(git.mode))}
             </span>
           </span>
         ) : (
@@ -92,15 +95,16 @@ export function BoundHostRows({ git }: { git: GitSettings }) {
  * binding's warning.
  */
 export function BindingAlert({ git }: { git: GitSettings }) {
-  const host = gitProviderLabels[git.mode]
+  const host = gitHostTerms(git.mode).host
+  const terms = gitHostTerms(git.mode)
   if (!git.binding) {
     return (
       <Alert tone="warning" role="status" title={`No ${host} connection is bound`}>
         <p>{bindingClearedMessage(host)}</p>
         <p className="mt-1">
           {git.canRebind
-            ? 'Until then, pushes, merge requests and releases fail. Re-bind one of your own connections below.'
-            : 'Until then, pushes, merge requests and releases fail. Ask an Owner to re-bind it.'}
+            ? withGitHost('Until then, pushes, {pr}s and releases fail. Re-bind one of your own connections below.', terms)
+            : withGitHost('Until then, pushes, {pr}s and releases fail. Ask an Owner to re-bind it.', terms)}
         </p>
       </Alert>
     )
@@ -118,39 +122,66 @@ export function BindingAlert({ git }: { git: GitSettings }) {
   return null
 }
 
-const usable = (c: GitLabConnection) => c.status === 'valid' && c.instanceEnabled
+/** A connection the Rebind picker lists, whichever host it is on. */
+interface RebindOption {
+  id: string
+  label: string
+  usable: boolean
+}
 
-function optionLabel(c: GitLabConnection, boundId: string | undefined): string {
-  const problem = !c.instanceEnabled
-    ? ' (instance disabled)'
-    : c.status === 'valid'
-      ? ''
-      : ' (needs reconnecting)'
-  return `${c.login} on ${c.instanceName} (${gitlabHost(c.instanceBaseUrl)})${c.id === boundId ? ' (bound now)' : ''}${problem}`
+const usableGitLab = (c: GitLabConnection) => c.status === 'valid' && c.instanceEnabled
+
+function gitlabOptionLabel(c: GitLabConnection): string {
+  const problem = !c.instanceEnabled ? ' (instance disabled)' : c.status === 'valid' ? '' : ' (needs reconnecting)'
+  return `${c.login} on ${c.instanceName} (${gitlabHost(c.instanceBaseUrl)})${problem}`
+}
+
+function bitbucketOptionLabel(c: BitbucketConnection): string {
+  const problem = c.status === 'valid' ? '' : c.status === 'invalid' ? ' (needs reconnecting)' : ' (missing scopes)'
+  return `${c.login} (${c.authKind === 'oauth' ? 'OAuth' : 'API token'})${problem}`
+}
+
+/** The connections a GitLab project can re-bind: the caller's, on the project's instance. */
+function gitlabOptions(connections: readonly GitLabConnection[] | undefined, instanceId: string | undefined): RebindOption[] {
+  return (connections ?? [])
+    .filter((c) => c.instanceId === instanceId)
+    .map((c) => ({ id: c.id, label: gitlabOptionLabel(c), usable: usableGitLab(c) }))
+}
+
+/** The connections a Bitbucket project can re-bind: all of the caller's (Bitbucket Cloud). */
+function bitbucketOptions(connections: readonly BitbucketConnection[] | undefined): RebindOption[] {
+  return (connections ?? []).map((c) => ({ id: c.id, label: bitbucketOptionLabel(c), usable: c.status === 'valid' }))
 }
 
 /**
- * FR-136 Rebind (Owners, `canRebind`): choose one of your own GitLab connections on the project's instance; AIDE checks
- * it has Developer access to the repository, then binds it.
+ * FR-136 Rebind (Owners, `canRebind`): choose one of your own connections for the project's host (GitLab: on the
+ * project's instance); AIDE checks it has Developer (GitLab) or write (Bitbucket) access to the repository, then binds
+ * it.
  */
-export function RebindGitLab({ projectId, git }: { projectId: string; git: GitSettings }) {
-  const connections = useGitLabConnections(git.canRebind === true)
+export function RebindConnection({ projectId, git }: { projectId: string; git: GitSettings }) {
+  const enabled = git.canRebind === true
+  const gitlab = useGitLabConnections(enabled && git.mode === 'gitlab')
+  const bitbucket = useBitbucketConnections(enabled && git.mode === 'bitbucket')
   const update = useUpdateGitSettings(projectId)
   const [choice, setChoice] = useState('')
   const [error, setError] = useState<unknown>(null)
-  if (!git.canRebind || git.mode !== 'gitlab') {
+  if (!enabled || !isBoundHost(git)) {
     return null
   }
-  const instanceId = git.instance?.id
+  const isBitbucket = git.mode === 'bitbucket'
+  const host = gitHostTerms(git.mode).host
+  const connections = isBitbucket ? bitbucket : gitlab
   const boundId = git.binding?.connectionId
-  const onInstance = (connections.data ?? []).filter((c) => c.instanceId === instanceId)
-  const options = onInstance.filter((c) => usable(c) && c.id !== boundId)
+  const candidates = isBitbucket ? bitbucketOptions(bitbucket.data) : gitlabOptions(gitlab.data, git.instance?.id)
+  const options = candidates.filter((c) => c.usable && c.id !== boundId)
   const selected = options.some((c) => c.id === choice) ? choice : (options[0]?.id ?? '')
   const instanceName = git.instance ? `${git.instance.name} (${gitlabHost(git.instance.baseUrl)})` : 'this instance'
+  const context = isBitbucket ? 'gitBindingBitbucket' : 'gitBinding'
   const fieldId = 'git-rebind-connection'
-  const fieldError = error !== null && !isApiError(error, 'UPSTREAM_ERROR') && !isApiError(error, 'UPSTREAM_RATE_LIMITED')
-    ? errorMessage(error, 'gitBinding')
-    : undefined
+  const fieldError =
+    error !== null && !isApiError(error, 'UPSTREAM_ERROR') && !isApiError(error, 'UPSTREAM_RATE_LIMITED')
+      ? errorMessage(error, context)
+      : undefined
 
   const rebind = () => {
     if (!selected) {
@@ -164,8 +195,8 @@ export function RebindGitLab({ projectId, git }: { projectId: string; git: GitSe
           setChoice('')
           toast.success(
             next.binding
-              ? `The project now uses @${next.binding.login}'s GitLab connection.`
-              : 'The project now uses your GitLab connection.',
+              ? `The project now uses @${next.binding.login}'s ${host} connection.`
+              : `The project now uses your ${host} connection.`,
           )
         },
         onError: (e) => {
@@ -181,27 +212,33 @@ export function RebindGitLab({ projectId, git }: { projectId: string; git: GitSe
   return (
     <section aria-labelledby="git-rebind-title" className="rounded-lg border border-border/60 bg-background/40 p-4">
       <h3 id="git-rebind-title" className="font-semibold">
-        {git.binding ? 'Rebind' : 'Re-bind the GitLab connection'}
+        {git.binding ? 'Rebind' : `Re-bind the ${host} connection`}
       </h3>
       <p className="mb-3 mt-1 text-sm text-muted-foreground">
-        Bind one of your own GitLab connections on {instanceName}. AIDE checks it has Developer access or higher on the
-        repository, then uses it for all of this project&apos;s Git work.
+        {isBitbucket
+          ? "Bind one of your own Bitbucket connections. AIDE checks it has write access to the repository, then uses it for all of this project's Git work."
+          : `Bind one of your own GitLab connections on ${instanceName}. AIDE checks it has Developer access or higher on the repository, then uses it for all of this project's Git work.`}
       </p>
       {connections.isPending ? (
-        <LoadingState label="Loading your GitLab connections…" />
+        <LoadingState label={`Loading your ${host} connections…`} />
       ) : connections.isError ? (
         <ErrorState
           error={connections.error}
-          title="Your GitLab connections couldn't load"
-          context="gitlabConnection"
+          title={`Your ${host} connections couldn't load`}
+          context={isBitbucket ? 'bitbucketConnection' : 'gitlabConnection'}
           onRetry={() => void connections.refetch()}
         />
       ) : options.length === 0 ? (
-        <Alert tone="info" title={`You have no other usable GitLab connection on ${instanceName}`}>
+        <Alert
+          tone="info"
+          title={isBitbucket ? 'You have no other usable Bitbucket connection' : `You have no other usable GitLab connection on ${instanceName}`}
+        >
           <p>
-            {onInstance.length > 0
+            {candidates.length > 0
               ? 'Your connections there need reconnecting, or are already bound. '
-              : 'Connect GitLab on this instance first. '}
+              : isBitbucket
+                ? 'Connect Bitbucket first. '
+                : 'Connect GitLab on this instance first. '}
             <Link to="/connections" className="text-primary underline underline-offset-2">
               Go to Connections
             </Link>
@@ -211,7 +248,7 @@ export function RebindGitLab({ projectId, git }: { projectId: string; git: GitSe
         <div className="flex flex-col gap-3">
           <SelectField
             id={fieldId}
-            label="Your GitLab connection"
+            label={`Your ${host} connection`}
             value={selected}
             error={fieldError}
             onChange={(e) => {
@@ -219,15 +256,15 @@ export function RebindGitLab({ projectId, git }: { projectId: string; git: GitSe
               setError(null)
             }}
           >
-            {onInstance.map((c) => (
-              <option key={c.id} value={c.id} disabled={!usable(c) || c.id === boundId}>
-                {optionLabel(c, boundId)}
+            {candidates.map((c) => (
+              <option key={c.id} value={c.id} disabled={!c.usable || c.id === boundId}>
+                {`${c.label}${c.id === boundId ? ' (bound now)' : ''}`}
               </option>
             ))}
           </SelectField>
           {error !== null && fieldError === undefined && (
             <Alert tone="error" role="alert" title="The connection wasn't bound">
-              <p>{errorMessage(error, 'gitBinding')}</p>
+              <p>{errorMessage(error, context)}</p>
             </Alert>
           )}
           {isApiError(error, 'GIT_NOT_CONNECTED') && (

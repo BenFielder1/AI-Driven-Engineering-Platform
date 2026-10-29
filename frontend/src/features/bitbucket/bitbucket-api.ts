@@ -12,6 +12,7 @@ export type BitbucketRepo = Schemas['BitbucketRepoDto']
 export type BitbucketWorkspace = Schemas['BitbucketWorkspaceDto']
 export type BitbucketProject = Schemas['BitbucketProjectDto']
 export type BitbucketPendingLink = Schemas['BitbucketPendingLinkDto']
+export type BitbucketRepoRefs = Schemas['BitbucketRepoRefsDto']
 
 /** FR-133, §4.19: the permissions to tick on the Bitbucket OAuth consumer (Bitbucket fixes scopes on the consumer). */
 export const BITBUCKET_CONSUMER_PERMISSIONS = [
@@ -46,6 +47,7 @@ export const bitbucketKeys = {
   connections: () => [...connectionKeys.all, 'bitbucket'] as const,
   repos: (connectionId: string, search: string) => [...bitbucketKeys.all, connectionId, 'repos', search] as const,
   owners: (connectionId: string) => [...bitbucketKeys.all, connectionId, 'owners'] as const,
+  refs: (connectionId: string, repoId: string) => [...bitbucketKeys.all, connectionId, 'refs', repoId] as const,
   pendingLink: () => [...authKeys.all, 'bitbucket-link'] as const,
 }
 
@@ -245,6 +247,24 @@ export function useBitbucketOwners(connectionId: string, enabled = true) {
     queryFn: async ({ signal }) =>
       unwrap(await api.GET('/api/me/git/bitbucket/owners', { params: { query: { connectionId } }, signal })),
     enabled: enabled && connectionId !== '',
+  })
+}
+
+/**
+ * FR-141, FR-86: a picked repository's default branch, whether it is empty, its semver tags (Bitbucket has no Releases),
+ * the tag to preselect and the version to develop. `repoId` is the repository UUID (`{…}`).
+ */
+export function useBitbucketRepoRefs(connectionId: string, repoId: string) {
+  return useQuery({
+    queryKey: bitbucketKeys.refs(connectionId, repoId),
+    queryFn: async ({ signal }) =>
+      unwrap(
+        await api.GET('/api/me/git/bitbucket/repos/{repoId}/refs', {
+          params: { path: { repoId }, query: { connectionId } },
+          signal,
+        }),
+      ),
+    enabled: connectionId !== '' && repoId !== '',
   })
 }
 

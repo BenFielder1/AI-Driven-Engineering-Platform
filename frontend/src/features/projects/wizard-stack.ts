@@ -117,9 +117,10 @@ export function detectRequestOf(v: WizardValues): DetectStackRequest | null {
           }
         : null
     case 'bitbucket':
-      // TODO(M28 slice 2, FR-141): DetectStackGitRequest has no Bitbucket connection yet, so a Bitbucket import isn't
-      // detected (the wizard can't create Bitbucket projects until then either).
-      return null
+      // FR-141: the picked Bitbucket repository (by its `{uuid}`), read with the chosen connection.
+      return v.bitbucketRepoId && v.bitbucketConnectionId
+        ? { git: { provider: 'bitbucket', repo: v.bitbucketRepoId, ref, connectionId: v.bitbucketConnectionId } }
+        : null
   }
 }
 

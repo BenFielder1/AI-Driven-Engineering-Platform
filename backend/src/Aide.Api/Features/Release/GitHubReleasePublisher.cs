@@ -79,12 +79,12 @@ public sealed partial class GitHubReleasePublisher(
 
     /// <summary>
     /// FR-140: AIDE's release notes for a provider that creates its release together with the tag (GitLab: the Release's
-    /// description); <c>null</c> for GitHub (published here after tagging) and Local.
+    /// description; Bitbucket: the annotated tag's message); <c>null</c> for GitHub (published here after tagging) and Local.
     /// </summary>
     public async Task<string?> HostNotesAsync(ReleaseEntity release, Domain.Entities.GitProvider provider, string? repoWebUrl, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(release);
-        if (provider != Domain.Entities.GitProvider.Gitlab)
+        if (!Domain.Projects.ProjectSettingsRules.IsGitHost(provider))
         {
             return null;
         }

@@ -22,7 +22,7 @@ import { useAuthProviders } from '../auth/auth-api'
 import { connectGitHubHref, useGitHubConnection, useGitHubRepoRefs, type GitHubRepo } from '../github/github-api'
 import { GitHubErrorAlert } from '../github/github-error-alert'
 import { RepoPicker } from '../github/repo-picker'
-import { useBitbucketConnections, type BitbucketRepo } from '../bitbucket/bitbucket-api'
+import { useBitbucketConnections, useBitbucketRepoRefs, type BitbucketRepo } from '../bitbucket/bitbucket-api'
 import { gitlabHost, useGitLabConnections, useGitLabInstances, useGitLabRepoRefs, type GitLabRepo } from '../gitlab/gitlab-api'
 import { connectionLabel } from '../connections/connection-format'
 import { useLlmProviders, type LlmProviderOption } from '../connections/connections-api'
@@ -157,10 +157,16 @@ function stepTitle(key: StepKey, source: Source): string {
 const stepIndex = (key: StepKey) => stepKeys.indexOf(key)
 const LAST_STEP = stepKeys.length - 1
 
-/** A server VALIDATION key → wizard field: the map below, or a `stack.*` key of the composition (FR-114, FR-119). */
-function wizardFieldOfKey(key: string): Field | undefined {
+/**
+ * A server VALIDATION key → wizard field: the map below, or a `stack.*` key of the composition (FR-114, FR-119).
+ * `git.connectionId` is the chosen host's connection (GitLab or Bitbucket, FR-136).
+ */
+function wizardFieldOfKey(key: string, gitMode: WizardValues['gitMode']): Field | undefined {
   const lower = key.toLowerCase()
   const mapped = serverFieldMap[lower]
+  if (mapped === 'gitlabConnectionId' && gitMode === 'bitbucket') {
+    return 'bitbucketConnectionId'
+  }
   if (mapped) {
     return mapped
   }
@@ -186,7 +192,7 @@ const serverFieldMap: Record<string, Field> = {
   'git.installationid': 'repoFullName',
   'git.repofullname': 'repoFullName',
   'git.localsourcepath': 'localSourcePath',
-  // FR-132, FR-136: the GitLab binding (the connection and its instance) and the picked project.
+  // FR-132, FR-135, FR-136: the GitLab or Bitbucket binding (the connection, GitLab's instance) and the picked repository.
   'git.instanceid': 'gitlabConnectionId',
   'git.connectionid': 'gitlabConnectionId',
   'git.repoid': 'repoFullName',
@@ -223,8 +229,8 @@ const serverFieldMap: Record<string, Field> = {
  * Which part of the request a CREDENTIAL_NOT_OWNER / NOT_FOUND / GIT_NOT_CONNECTED / FORBIDDEN on create is about.
  * The ProblemDetails `errors` key says so first (`llm.credentialId`, `git.connectionId` / `git.repoId`,
  * `deployment.connectionId`). Without one, the server's check order decides: the AI model section's connection
- * (PlanLlmAsync) when one is chosen, then the Vercel connection when Vercel is chosen, then the GitLab binding and
- * project (FR-136). For the other hosts: a PAT import's repository is the likely 404, else the LLM credential.
+ * (PlanLlmAsync) when one is chosen, then the Vercel connection when Vercel is chosen, then the GitLab or Bitbucket
+ * binding and repository (FR-136). For the other hosts: a PAT import's repository is the likely 404, else the LLM credential.
  */
 function credentialErrorTarget(error: unknown, v: WizardValues, importing: boolean): 'llm' | 'git' | 'deployment' | 'other' {
   const keys = isApiError(error) ? Object.keys(error.fieldErrors).map((k) => k.toLowerCase()) : []
@@ -278,9 +284,14 @@ function toGitRequest(v: WizardValues): Schemas['CreateProjectGitRequest'] {
         defaultBranch,
       }
     case 'bitbucket':
-      // TODO(M28 slice 2, FR-136): add the Bitbucket connection and repository id once CreateProjectGitRequest has them.
-      // Unreachable until then: the schema blocks the Repository step (bitbucketProjectCreationAvailable).
-      return { mode: 'bitbucket', repoFullName: v.repoFullName, defaultBranch }
+      // FR-135, FR-136: the picked repository (its `{uuid}` and `workspace/slug`), bound to the caller's own connection.
+      return {
+        mode: 'bitbucket',
+        connectionId: v.bitbucketConnectionId,
+        repoId: v.bitbucketRepoId,
+        repoFullName: v.repoFullName,
+        defaultBranch,
+      }
     case 'local':
       // FR-73: a Local import names the existing repository on the server (development and E2E only).
       return v.source === 'import'
@@ -546,22 +557,29 @@ export function NewProjectWizard() {
 
   // The list may not know whether a repo is empty; its refs always do (FR-86). They also list releases and tags (FR-73).
   const refs = useGitHubRepoRefs(gitMode === 'github_app' && repoFullName ? repoFullName : null)
-  // FR-141: a picked GitLab project's refs, read with the chosen connection.
+  // FR-141: a picked GitLab project's or Bitbucket repository's refs, read with the chosen connection.
   const gitlabConnectionId = useWatch({ control, name: 'gitlabConnectionId' })
   const gitlabRepoId = useWatch({ control, name: 'gitlabRepoId' })
   const gitlabRefs = useGitLabRepoRefs(gitMode === 'gitlab' ? gitlabConnectionId : '', gitMode === 'gitlab' ? gitlabRepoId : '')
-  const gitlabRefsData = gitMode === 'gitlab' ? gitlabRefs.data : undefined
-  const refsData = gitMode === 'github_app' ? refs.data : gitlabRefsData
+  const bitbucketConnectionId = useWatch({ control, name: 'bitbucketConnectionId' })
+  const bitbucketRepoId = useWatch({ control, name: 'bitbucketRepoId' })
+  const bitbucketRefs = useBitbucketRepoRefs(
+    gitMode === 'bitbucket' ? bitbucketConnectionId : '',
+    gitMode === 'bitbucket' ? bitbucketRepoId : '',
+  )
+  // The host's own suggestion (GitLab, Bitbucket): the tag to preselect and the version to develop.
+  const hostRefsData = gitMode === 'gitlab' ? gitlabRefs.data : gitMode === 'bitbucket' ? bitbucketRefs.data : undefined
+  const refsData = gitMode === 'github_app' ? refs.data : hostRefsData
   useEffect(() => {
     if (refs.data) {
       setValue('repoHasCode', !refs.data.empty)
     }
   }, [refs.data, setValue])
   useEffect(() => {
-    if (gitlabRefsData) {
-      setValue('repoHasCode', !gitlabRefsData.empty)
+    if (hostRefsData) {
+      setValue('repoHasCode', !hostRefsData.empty)
     }
-  }, [gitlabRefsData, setValue])
+  }, [hostRefsData, setValue])
 
   /**
    * Whether the user chose the released version / edited the version to develop. Kept here rather than read from
@@ -574,16 +592,16 @@ export function NewProjectWizard() {
     resetField('releasedTag')
   }, [resetField])
 
-  // FR-73: preselect the latest release once a repo's refs are known, unless the user already chose. FR-141: GitLab
-  // says which one (`preselectedTag`; `null` = never released).
+  // FR-73: preselect the latest release once a repo's refs are known, unless the user already chose. FR-141: GitLab and
+  // Bitbucket say which one (`preselectedTag`; `null` = never released).
   useEffect(() => {
     if (refsData && importing && !releasedChosen) {
       setValue(
         'releasedTag',
-        gitlabRefsData ? (gitlabRefsData.preselectedTag ?? NEVER_RELEASED) : defaultReleasedTag(releasedOptions(refsData)),
+        hostRefsData ? (hostRefsData.preselectedTag ?? NEVER_RELEASED) : defaultReleasedTag(releasedOptions(refsData)),
       )
     }
-  }, [refsData, gitlabRefsData, importing, releasedChosen, setValue])
+  }, [refsData, hostRefsData, importing, releasedChosen, setValue])
 
   // A typed tag (URL + token, Local) doesn't carry over to the picker, and a picked one doesn't carry over to the field.
   const previousMode = useRef(gitMode)
@@ -631,7 +649,7 @@ export function NewProjectWizard() {
     setValue('repoHasCode', false)
     setValue('defaultBranch', repo.defaultBranch ?? 'main', { shouldValidate: true })
   }
-  /** FR-141: an empty GitLab project has nothing to import, so the wizard starts from scratch on it. */
+  /** FR-141: an empty GitLab project or Bitbucket repository has nothing to import, so the wizard starts from scratch on it. */
   const scratchInstead = () => {
     setValue('source', 'scratch', { shouldDirty: true })
   }
@@ -641,11 +659,10 @@ export function NewProjectWizard() {
   }
 
   // FR-135: the Bitbucket option shows where Bitbucket is in use: the OAuth consumer is configured, or the user has a
-  // connection (until slice 2 it can't create projects, so it isn't offered to everyone).
+  // connection (API tokens work without the consumer).
   const bitbucketConnections = useBitbucketConnections()
   const bitbucketAvailable =
     providers.data?.bitbucket === true || (bitbucketConnections.data?.length ?? 0) > 0 || gitMode === 'bitbucket'
-  const bitbucketConnectionId = useWatch({ control, name: 'bitbucketConnectionId' })
   const chooseBitbucketConnection = useCallback(
     (id: string) => {
       if (id !== getValues('bitbucketConnectionId')) {
@@ -664,23 +681,23 @@ export function NewProjectWizard() {
     }
     setValue('repoFullName', repo.fullName, { shouldValidate: getFieldState('repoFullName').invalid })
     setValue('bitbucketRepoId', repo.id)
-    // TODO(M28 slice 2, FR-86): whether it has code comes from its refs, which Bitbucket doesn't list yet.
+    // Known from the repository's refs (FR-86, FR-141), which load next.
     setValue('repoHasCode', false)
     setValue('defaultBranch', repo.mainBranch ?? 'main', { shouldValidate: true })
   }
 
   // Keep the released tag's semver in sync, and prefill the version to develop with its next minor (FR-73). FR-141:
-  // with GitLab's own preselection, the version it suggests.
+  // with GitLab's or Bitbucket's own preselection, the version it suggests.
   useEffect(() => {
     setValue('releasedVersion', semverOfTag(releasedTag, refsData) ?? '')
   }, [releasedTag, refsData, setValue])
-  const gitlabSuggestion =
-    gitlabRefsData?.preselectedTag === releasedTagOf({ releasedTag }) ? gitlabRefsData.suggestedDevelopmentVersion : null
+  const hostSuggestion =
+    hostRefsData?.preselectedTag === releasedTagOf({ releasedTag }) ? hostRefsData.suggestedDevelopmentVersion : null
   useEffect(() => {
     if (!versionEdited) {
-      setValue('developmentVersion', gitlabSuggestion ?? suggestNextVersion(releasedVersion || null))
+      setValue('developmentVersion', hostSuggestion ?? suggestNextVersion(releasedVersion || null))
     }
-  }, [releasedVersion, gitlabSuggestion, versionEdited, setValue])
+  }, [releasedVersion, hostSuggestion, versionEdited, setValue])
 
   const pickRepo = (repo: GitHubRepo) => {
     if (repo.fullName !== getValues('repoFullName')) {
@@ -856,7 +873,7 @@ export function NewProjectWizard() {
             const unmatched: string[] = []
             const matched: Partial<Record<Field, string>> = {}
             for (const [field, messages] of Object.entries(error.fieldErrors)) {
-              const target = wizardFieldOfKey(field)
+              const target = wizardFieldOfKey(field, values.gitMode)
               if (target) {
                 matched[target] = messages.join(' ')
                 setError(target, { type: 'server', message: messages.join(' ') })
@@ -889,24 +906,25 @@ export function NewProjectWizard() {
             setError('repoUrl', { type: 'server', message: errorMessage(error, 'createProject') })
             goTo(stepIndex('repository'))
           } else if (
-            values.gitMode === 'gitlab' &&
+            (values.gitMode === 'gitlab' || values.gitMode === 'bitbucket') &&
             (isApiError(error, 'CREDENTIAL_NOT_OWNER') ||
               isApiError(error, 'GIT_NOT_CONNECTED') ||
               isApiError(error, 'NOT_FOUND') ||
               isApiError(error, 'FORBIDDEN')) &&
             credentialErrorTarget(error, values, importValues) === 'git'
           ) {
-            // FR-136: the binding must be the caller's own, valid connection; FR-132: with Developer access to a
-            // project it can see. The connection's problems go on the connection, the project's on the picker.
+            // FR-136: the binding must be the caller's own, valid connection; FR-132, FR-135: with write access to a
+            // repository it can see. The connection's problems go on the connection, the repository's on the picker.
             const keys = Object.keys(error.fieldErrors).map((k) => k.toLowerCase())
             const onConnection = keys.includes('git.connectionid') || keys.includes('git.instanceid')
               ? true
               : keys.includes('git.repoid')
                 ? false
                 : isApiError(error, 'CREDENTIAL_NOT_OWNER') || isApiError(error, 'GIT_NOT_CONNECTED')
-            setError(onConnection ? 'gitlabConnectionId' : 'repoFullName', {
+            const bitbucket = values.gitMode === 'bitbucket'
+            setError(onConnection ? (bitbucket ? 'bitbucketConnectionId' : 'gitlabConnectionId') : 'repoFullName', {
               type: 'server',
-              message: errorMessage(error, 'createProjectGitLab'),
+              message: errorMessage(error, bitbucket ? 'createProjectBitbucket' : 'createProjectGitLab'),
             })
             goTo(stepIndex('repository'))
           } else if (isApiError(error, 'STACK_INCOMPATIBLE') || isApiError(error, 'VCS_MISMATCH')) {
@@ -938,11 +956,22 @@ export function NewProjectWizard() {
             goTo(stepIndex('deployment'))
             setServerError({ message: errorMessage(error, 'createProject'), error })
           } else if (importValues && isApiError(error, 'TAG_NOT_FOUND')) {
-            void (values.gitMode === 'gitlab' ? gitlabRefs.refetch() : refs.refetch())
+            void (values.gitMode === 'gitlab'
+              ? gitlabRefs.refetch()
+              : values.gitMode === 'bitbucket'
+                ? bitbucketRefs.refetch()
+                : refs.refetch())
             failVersion('releasedTag', error)
           } else {
             setServerError({
-              message: errorMessage(error, values.gitMode === 'gitlab' ? 'createProjectGitLab' : 'createProject'),
+              message: errorMessage(
+                error,
+                values.gitMode === 'gitlab'
+                  ? 'createProjectGitLab'
+                  : values.gitMode === 'bitbucket'
+                    ? 'createProjectBitbucket'
+                    : 'createProject',
+              ),
               error,
             })
           }
@@ -1139,7 +1168,7 @@ export function NewProjectWizard() {
                   connectionId={gitlabConnectionId}
                   selected={repoFullName}
                   importing={importing}
-                  empty={gitlabRefsData?.empty}
+                  empty={gitlabRefs.data?.empty}
                   connectionError={errors.gitlabConnectionId?.message}
                   repoError={errors.repoFullName?.message}
                   onConnection={chooseGitLabConnection}
@@ -1156,11 +1185,14 @@ export function NewProjectWizard() {
                   connectionId={bitbucketConnectionId}
                   selected={repoFullName}
                   importing={importing}
+                  empty={bitbucketRefs.data?.empty}
                   connectionError={errors.bitbucketConnectionId?.message}
                   repoError={errors.repoFullName?.message}
                   onConnection={chooseBitbucketConnection}
                   onSelect={pickBitbucketRepo}
                   onAddConnection={saveDraftForConnections}
+                  onImportInstead={importInstead}
+                  onScratchInstead={scratchInstead}
                 />
               )}
               {gitMode === 'github_pat' && (
@@ -1223,10 +1255,10 @@ export function NewProjectWizard() {
               {importing && (
                 <ReleasedVersionField
                   id={fieldIds.releasedTag}
-                  listed={gitMode === 'github_app' || gitMode === 'gitlab'}
-                  host={gitMode === 'gitlab' ? 'gitlab' : 'github'}
+                  listed={gitMode === 'github_app' || gitMode === 'gitlab' || gitMode === 'bitbucket'}
+                  host={gitMode === 'gitlab' ? 'gitlab' : gitMode === 'bitbucket' ? 'bitbucket' : 'github'}
                   repoSelected={Boolean(repoFullName)}
-                  refs={gitMode === 'gitlab' ? gitlabRefs : refs}
+                  refs={gitMode === 'gitlab' ? gitlabRefs : gitMode === 'bitbucket' ? bitbucketRefs : refs}
                   inputProps={register('releasedTag', {
                     onChange: () => {
                       setReleasedChosen(true)
@@ -1294,7 +1326,7 @@ export function NewProjectWizard() {
                   },
                 ]}
               />
-              {importing && <DetectionNotice detection={detection} gitlab={gitMode === 'gitlab'} />}
+              {importing && <DetectionNotice detection={detection} gitMode={gitMode} />}
               {stackKind === 'compose' &&
                 (stackCatalog.isPending ? (
                   <LoadingState label="Loading the stack catalog…" />
@@ -1512,7 +1544,13 @@ function StackReview({ values }: { values: WizardValues }) {
 }
 
 /** FR-118: what import detection found (or that it couldn't run); it never blocks the step. */
-function DetectionNotice({ detection, gitlab }: { detection: ReturnType<typeof useStackDetection>; gitlab: boolean }) {
+function DetectionNotice({
+  detection,
+  gitMode,
+}: {
+  detection: ReturnType<typeof useStackDetection>
+  gitMode: WizardValues['gitMode']
+}) {
   if (detection.isPending && detection.fetchStatus === 'idle') {
     return null
   }
@@ -1526,7 +1564,12 @@ function DetectionNotice({ detection, gitlab }: { detection: ReturnType<typeof u
   if (detection.isError) {
     return (
       <Alert tone="info" role="status" title="We couldn't detect the stack">
-        <p>{errorMessage(detection.error, gitlab ? 'detectStackGitLab' : 'detectStack')}</p>
+        <p>
+          {errorMessage(
+            detection.error,
+            gitMode === 'gitlab' ? 'detectStackGitLab' : gitMode === 'bitbucket' ? 'detectStackBitbucket' : 'detectStack',
+          )}
+        </p>
       </Alert>
     )
   }
@@ -1561,6 +1604,23 @@ function GitLabConnectionSummary({ connectionId }: { connectionId: string }) {
           ? 'Loading…'
           : connections.isError
             ? "Your GitLab connections couldn't load"
+            : 'Connection not found. Choose another under Repository.'}
+    </SummaryRow>
+  )
+}
+
+/** FR-136: the Bitbucket connection the project is bound to ("ada (OAuth)"). */
+function BitbucketConnectionSummary({ connectionId }: { connectionId: string }) {
+  const connections = useBitbucketConnections()
+  const c = connections.data?.find((x) => x.id === connectionId)
+  return (
+    <SummaryRow term="Bitbucket connection">
+      {c
+        ? `${c.login} (${c.authKind === 'oauth' ? 'OAuth' : 'API token'})`
+        : connections.isPending
+          ? 'Loading…'
+          : connections.isError
+            ? "Your Bitbucket connections couldn't load"
             : 'Connection not found. Choose another under Repository.'}
     </SummaryRow>
   )
@@ -1647,7 +1707,8 @@ function ReviewSummary({
           <SummaryRow term="Repository">{values.repoFullName}</SummaryRow>
         )}
         {values.gitMode === 'gitlab' && <GitLabConnectionSummary connectionId={values.gitlabConnectionId} />}
-        {(app || values.gitMode === 'gitlab') && values.repoHasCode && !importing && (
+        {values.gitMode === 'bitbucket' && <BitbucketConnectionSummary connectionId={values.bitbucketConnectionId} />}
+        {(app || values.gitMode === 'gitlab' || values.gitMode === 'bitbucket') && values.repoHasCode && !importing && (
           <SummaryRow term="Existing code">AIDE builds on it (treated as an import that was never released)</SummaryRow>
         )}
         {pat && <SummaryRow term="Repository URL">{values.repoUrl.trim()}</SummaryRow>}

@@ -103,24 +103,44 @@ public sealed partial class BitbucketRepoService(
         var create = new BitbucketCreateRepository(request.Owner.Trim(), BitbucketRules.Slug(name), name, request.Project.Trim(), description, request.Private);
         var created = await connections.CallAsync<Result<BitbucketRepository>>(userId, request.ConnectionId, async call =>
         {
-            BitbucketRepository repository;
+            BitbucketRepository? repository = null;
+            BitbucketApiException? refused = null;
             try
             {
                 repository = await call.Client.CreateRepositoryAsync(call.Auth, create, cancellationToken);
             }
             catch (BitbucketApiException ex) when (ex.Status is 400 or 403 or 404 or 409 or 429)
             {
-                var code = BitbucketRules.CreateRepoErrorCode(ex.Status!.Value, ex.UpstreamMessage);
-                LogCreateRefused(logger, ex.Status, code);
+                refused = ex;
+            }
+
+            if (refused is { Status: { } status } && BitbucketRules.CreateRepoErrorCode(status, refused.UpstreamMessage) == ErrorCodes.RepoNameTaken
+                && await EmptyExistingAsync(call, create, cancellationToken) is { } empty)
+            {
+                // A retry after the README push failed: the repository exists but is still empty, so finish it.
+                LogResumed(logger, empty.Uuid);
+                repository = empty;
+                refused = null;
+            }
+
+            if (refused is not null)
+            {
+                var code = BitbucketRules.CreateRepoErrorCode(refused.Status!.Value, refused.UpstreamMessage);
+                LogCreateRefused(logger, refused.Status, code);
                 return Result.Failure<BitbucketRepository>(code switch
                 {
                     ErrorCodes.RepoNameTaken => new DomainError(code, "A repository with that name already exists."),
                     ErrorCodes.Forbidden => new DomainError(code, "Bitbucket doesn't let your account create repositories there."),
                     ErrorCodes.NotFound => new DomainError(code, "That Bitbucket workspace or project wasn't found, or your account can't see it."),
-                    ErrorCodes.UpstreamRateLimited => new DomainError(code, "Bitbucket is rate limiting requests. Try again in a few minutes.") { RetryAfter = ex.RetryAfter },
-                    ErrorCodes.Validation => new DomainError(code, "Bitbucket refused the repository.") { Details = [$"name: {ex.UpstreamMessage ?? "Bitbucket refused the name or project."}"] },
+                    ErrorCodes.UpstreamRateLimited => new DomainError(code, "Bitbucket is rate limiting requests. Try again in a few minutes.") { RetryAfter = refused.RetryAfter },
+                    ErrorCodes.Validation => new DomainError(code, "Bitbucket refused the repository.") { Details = [$"name: {refused.UpstreamMessage ?? "Bitbucket refused the name or project."}"] },
                     _ => new DomainError(ErrorCodes.UpstreamError, "Bitbucket returned an error. Try again later."),
                 });
+            }
+
+            if (repository is null)
+            {
+                return Result.Failure<BitbucketRepository>(new DomainError(ErrorCodes.UpstreamError, "Bitbucket returned an error. Try again later."));
             }
 
             var fullName = repository.FullName.Length > 0 ? repository.FullName : $"{create.Workspace}/{create.Slug}";
@@ -132,7 +152,7 @@ public sealed partial class BitbucketRepoService(
             {
                 // git failed, timed out or is missing, or the temp folder couldn't be written: the empty repository stays.
                 LogPushFailed(logger, repository.Uuid, ex.GetType().Name);
-                return Result.Failure<BitbucketRepository>(new DomainError(ErrorCodes.UpstreamError, $"Bitbucket created {fullName}, but AIDE couldn't push its first commit. Pick it in the repository list to use it, or delete it in Bitbucket and try again.")
+                return Result.Failure<BitbucketRepository>(new DomainError(ErrorCodes.UpstreamError, $"Bitbucket created {fullName}, but AIDE couldn't push its first commit. Try again: AIDE then pushes the README to the empty repository.")
                 {
                     Details = [ex is BitbucketInitialPushException or GitCommandException ? ex.Message : "The README commit couldn't be prepared on the AIDE server."],
                 });
@@ -155,11 +175,37 @@ public sealed partial class BitbucketRepoService(
         return Result.Success(ToDto(repo));
     }
 
+    /// <summary>
+    /// FR-135 (slice 1 follow-up): the existing <c>{workspace}/{slug}</c> when it is still empty (no main branch: nothing was
+    /// ever pushed) and in the requested project with the requested visibility (what this request would have created), so a retry after a failed README push pushes it instead of answering <c>REPO_NAME_TAKEN</c>; <c>null</c>
+    /// when it has commits or can't be read.
+    /// </summary>
+    private static async Task<BitbucketRepository?> EmptyExistingAsync(BitbucketCall call, BitbucketCreateRepository create, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var existing = await call.Client.GetRepositoryAsync(call.Auth, create.Workspace, create.Slug, cancellationToken);
+            return existing is { MainBranch: null }
+                && string.Equals(existing.ProjectKey, create.ProjectKey, StringComparison.OrdinalIgnoreCase)
+                && existing.IsPrivate == create.Private
+                && await call.Client.GetBranchHeadAsync(call.Auth, existing.FullName.Length > 0 ? existing.FullName : $"{create.Workspace}/{create.Slug}", BitbucketRepoInitializer.DefaultBranch, cancellationToken) is null
+                ? existing
+                : null;
+        }
+        catch (BitbucketApiException ex) when (ex.Status is not (401 or 429))
+        {
+            return null;
+        }
+    }
+
     private static BitbucketRepoDto ToDto(BitbucketRepository r) =>
         new(r.Uuid, r.FullName, r.Name, r.Slug, r.WorkspaceSlug, r.ProjectKey, r.MainBranch, r.IsPrivate, r.WebUrl, r.UpdatedOn);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Bitbucket repository {RepositoryId} created with connection {ConnectionId}")]
     private static partial void LogCreated(ILogger logger, string repositoryId, Guid connectionId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bitbucket repository {RepositoryId} already existed empty; pushing its README")]
+    private static partial void LogResumed(ILogger logger, string repositoryId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Bitbucket refused to create a repository (HTTP {Status}, {ErrorCode})")]
     private static partial void LogCreateRefused(ILogger logger, int? status, string errorCode);

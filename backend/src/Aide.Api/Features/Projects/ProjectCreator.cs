@@ -38,8 +38,9 @@ namespace Aide.Api.Features.Projects;
 /// artifacts) unless "Never released", plus the <c>in_development</c> version based on that tag's commit (or the default
 /// branch head); the idea is the version's request; the Repository Analyst is queued (FR-70).</item>
 /// </list>
-/// <b>GitLab</b> (FR-132, FR-136, FR-141): the picked repository is checked with the creator's own connection (Developer
-/// access or higher) and the project is bound to that connection; a repository with code is built on, as on GitHub.
+/// <b>GitLab</b> (FR-132, FR-136, FR-141) and <b>Bitbucket</b> (FR-135, FR-136, FR-141): the picked repository is checked
+/// with the creator's own connection (GitLab Developer access or higher; Bitbucket write access) and the project is bound to
+/// that connection; a repository with code is built on, as on GitHub.
 /// Used by <c>POST /api/projects</c> and the dev seed.
 /// </summary>
 public sealed partial class ProjectCreator(
@@ -50,6 +51,7 @@ public sealed partial class ProjectCreator(
     GitHubRepoService gitHubRepos,
     GitHubApi gitHubApi,
     GitLab.GitLabProjectRepos gitLabRepos,
+    Bitbucket.BitbucketProjectRepos bitbucketRepos,
     IWorkingCopies workingCopies,
     IWorkspaceStore workspaces,
     JobEnqueuer jobs,
@@ -84,12 +86,14 @@ public sealed partial class ProjectCreator(
                 ? ProjectSettingsRules.ValidateAppRepo(git.InstallationId, git.RepoFullName, git.RepoUrl, git.Token, prefix: "git.")
                 : Result.Success(),
             // FR-132, FR-136: a GitLab repository from the picker, bound to the caller's own connection.
-            gitProvider == GitProvider.Gitlab
-                ? GitLabProjectRules.ValidateCreate(git.InstanceId, git.ConnectionId, git.RepoId, git.RepoFullName, git.RepoUrl, git.Token, git.InstallationId, prefix: "git.")
-                : GitLabProjectRules.ValidateNotSent(git.InstanceId, git.ConnectionId, git.RepoId, prefix: "git."),
-            gitProvider == GitProvider.Bitbucket
-                ? Result.Failure(new DomainError(ErrorCodes.Validation, "The Git settings are invalid.") { Details = ["git.mode: Bitbucket repositories are not available yet."] })
-                : Result.Success(),
+            gitProvider switch
+            {
+                GitProvider.Gitlab => GitLabProjectRules.ValidateCreate(git.InstanceId, git.ConnectionId, git.RepoId, git.RepoFullName, git.RepoUrl, git.Token, git.InstallationId, prefix: "git."),
+
+                // FR-135, FR-136: a Bitbucket repository from the picker (UUID and workspace/slug), bound to the caller's own connection.
+                GitProvider.Bitbucket => BitbucketProjectRules.ValidateCreate(git.InstanceId, git.ConnectionId, git.RepoId, git.RepoFullName, git.RepoUrl, git.Token, git.InstallationId, prefix: "git."),
+                _ => BitbucketProjectRules.ValidateNotSent(gitProvider, git.InstanceId, git.ConnectionId, git.RepoId, prefix: "git."),
+            },
             ImportRules.ValidateSource(request.Source, request.Import is not null, request.InitialVersion is not null, git.LocalSourcePath is not null, gitProvider));
         if (validation.IsFailure)
         {
@@ -282,8 +286,22 @@ public sealed partial class ProjectCreator(
         bool LocalCopy,
         bool Imported)
     {
-        /// <summary>FR-136: the GitLab repository bound to the project (gitlab mode).</summary>
-        public GitLab.VerifiedGitLabRepo? GitLabRepo { get; init; }
+        /// <summary>FR-136: the GitLab or Bitbucket repository bound to the project (gitlab, bitbucket mode).</summary>
+        public HostRepo? GitLabRepo { get; init; }
+    }
+
+    /// <summary>
+    /// FR-136: a GitLab or Bitbucket repository checked for binding: the host instance, the binding connection and its owner,
+    /// the host's repo id and full path, default branch, web URL, head and whether it has code.
+    /// </summary>
+    private sealed record HostRepo(
+        Guid InstanceId, Guid ConnectionId, Guid OwnerUserId, string RepoId, string FullName, string DefaultBranch, string WebUrl, string? HeadSha, bool HasCode)
+    {
+        public static HostRepo From(GitLab.VerifiedGitLabRepo r) =>
+            new(r.InstanceId, r.ConnectionId, r.OwnerUserId, r.RepoId, r.FullName, r.DefaultBranch, r.WebUrl, r.HeadSha, r.HasCode);
+
+        public static HostRepo From(Bitbucket.VerifiedBitbucketRepo r) =>
+            new(r.InstanceId, r.ConnectionId, r.OwnerUserId, r.RepoId, r.FullName, r.DefaultBranch, r.WebUrl, r.HeadSha, r.HasCode);
     }
 
     /// <summary>FR-66, FR-82, FR-86: the initial version; a picked App repository is verified (and checked for code).</summary>
@@ -291,10 +309,10 @@ public sealed partial class ProjectCreator(
     {
         var git = request.Git;
         VerifiedAppRepo? appRepo = null;
-        GitLab.VerifiedGitLabRepo? gitLabRepo = null;
-        if (gitProvider == GitProvider.Gitlab)
+        HostRepo? gitLabRepo = null;
+        if (ProjectSettingsRules.IsGitHost(gitProvider))
         {
-            var checkedRepo = await VerifyGitLabAsync(git, ownerId, cancellationToken);
+            var checkedRepo = await VerifyHostAsync(gitProvider, git, ownerId, cancellationToken);
             if (checkedRepo.IsFailure)
             {
                 return Result.Failure<RepositoryStart>(checkedRepo.Error!);
@@ -346,7 +364,7 @@ public sealed partial class ProjectCreator(
         {
             GitProvider.GithubApp => await AppRepositoryAsync(git, ownerId, wanted, cancellationToken),
             GitProvider.GithubPat => await PatRepositoryAsync(git, wanted, cancellationToken),
-            GitProvider.Gitlab => await GitLabRepositoryAsync(git, ownerId, wanted, cancellationToken),
+            GitProvider.Gitlab or GitProvider.Bitbucket => await HostRepositoryAsync(gitProvider, git, ownerId, wanted, cancellationToken),
             _ => await LocalRepositoryAsync(git, project.Id, cancellationToken),
         };
         if (repository.IsFailure)
@@ -385,17 +403,30 @@ public sealed partial class ProjectCreator(
     /// <summary>A repository to import: its tags (with their commits), default branch head and branch.</summary>
     private sealed record FoundRepository(IReadOnlyList<ReleaseTagRef> Tags, string? HeadCommit, string? DefaultBranch, VerifiedAppRepo? AppRepo, bool LocalCopy)
     {
-        public GitLab.VerifiedGitLabRepo? GitLabRepo { get; init; }
+        public HostRepo? GitLabRepo { get; init; }
     }
 
-    /// <summary>FR-132, FR-136: the picked GitLab repository, checked for binding with the caller's own connection.</summary>
-    private Task<Result<GitLab.VerifiedGitLabRepo>> VerifyGitLabAsync(CreateProjectGitRequest git, Guid ownerId, CancellationToken cancellationToken) =>
-        gitLabRepos.VerifyAsync(ownerId, ProjectRole.Owner, git.InstanceId!.Value, git.ConnectionId!.Value, git.RepoId!.Trim(), "git.", cancellationToken);
-
-    /// <summary>FR-141: the picked GitLab repository (verified for binding) and which of <paramref name="wanted"/> exist.</summary>
-    private async Task<Result<FoundRepository>> GitLabRepositoryAsync(CreateProjectGitRequest git, Guid ownerId, IReadOnlyList<string> wanted, CancellationToken cancellationToken)
+    /// <summary>
+    /// FR-132, FR-135, FR-136: the picked GitLab or Bitbucket repository, checked for binding with the caller's own
+    /// connection.
+    /// </summary>
+    private async Task<Result<HostRepo>> VerifyHostAsync(GitProvider provider, CreateProjectGitRequest git, Guid ownerId, CancellationToken cancellationToken)
     {
-        var checkedRepo = await VerifyGitLabAsync(git, ownerId, cancellationToken);
+        if (provider == GitProvider.Bitbucket)
+        {
+            var bitbucket = await bitbucketRepos.VerifyAsync(ownerId, ProjectRole.Owner, git.ConnectionId!.Value, git.RepoId!.Trim(), git.RepoFullName!.Trim(), "git.", cancellationToken);
+            return bitbucket.IsFailure ? Result.Failure<HostRepo>(bitbucket.Error!) : Result.Success(HostRepo.From(bitbucket.Value));
+        }
+
+        var gitLab = await gitLabRepos.VerifyAsync(ownerId, ProjectRole.Owner, git.InstanceId!.Value, git.ConnectionId!.Value, git.RepoId!.Trim(), "git.", cancellationToken);
+        return gitLab.IsFailure ? Result.Failure<HostRepo>(gitLab.Error!) : Result.Success(HostRepo.From(gitLab.Value));
+    }
+
+    /// <summary>FR-141: the picked GitLab or Bitbucket repository (verified for binding) and which of <paramref name="wanted"/> exist.</summary>
+    private async Task<Result<FoundRepository>> HostRepositoryAsync(
+        GitProvider provider, CreateProjectGitRequest git, Guid ownerId, IReadOnlyList<string> wanted, CancellationToken cancellationToken)
+    {
+        var checkedRepo = await VerifyHostAsync(provider, git, ownerId, cancellationToken);
         if (checkedRepo.IsFailure)
         {
             return Result.Failure<FoundRepository>(checkedRepo.Error!);
@@ -404,7 +435,9 @@ public sealed partial class ProjectCreator(
         var repo = checkedRepo.Value;
         var tags = repo.HeadSha is null
             ? Result.Success<IReadOnlyList<(string Tag, string Commit)>>([])
-            : await gitLabRepos.FindTagsAsync(ownerId, repo.ConnectionId, repo.RepoId, wanted, cancellationToken);
+            : provider == GitProvider.Bitbucket
+                ? await bitbucketRepos.FindTagsAsync(ownerId, repo.ConnectionId, repo.FullName, wanted, cancellationToken)
+                : await gitLabRepos.FindTagsAsync(ownerId, repo.ConnectionId, repo.RepoId, wanted, cancellationToken);
         if (tags.IsFailure)
         {
             return Result.Failure<FoundRepository>(tags.Error!);
@@ -587,7 +620,7 @@ public sealed partial class ProjectCreator(
             RepoId = appRepo?.RepoId,
             RepoFullName = appRepo?.FullName ?? gitLabRepo?.FullName,
 
-            // FR-136: a GitLab project is bound to the creator's connection (the binding Owner).
+            // FR-136: a GitLab or Bitbucket project is bound to the creator's connection (the binding Owner).
             InstanceId = gitLabRepo?.InstanceId,
             GitConnectionId = gitLabRepo?.ConnectionId,
             BoundByUserId = gitLabRepo?.OwnerUserId,

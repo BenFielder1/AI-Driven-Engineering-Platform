@@ -443,6 +443,31 @@ export const contextualErrorMessages = {
     UPSTREAM_ERROR: "We couldn't reach GitLab to check your access. Nothing changed; try again in a moment.",
     UPSTREAM_RATE_LIMITED: hostRateLimited("GitLab", "Nothing changed"),
   },
+  /** POST /api/projects `git` with `mode: bitbucket` (FR-135, FR-136, FR-141): the bound connection and the picked repository. */
+  createProjectBitbucket: {
+    CREDENTIAL_NOT_OWNER:
+      "You can only bind one of your own Bitbucket connections. Pick another, or connect Bitbucket under Connections.",
+    GIT_NOT_CONNECTED:
+      "This Bitbucket connection no longer works: Bitbucket rejected it, or it is missing scopes. Reconnect it under Connections, or pick another.",
+    FORBIDDEN:
+      "Your Bitbucket account needs write access to this repository for AIDE to work on it. Pick another repository, or ask its admins for access.",
+    NOT_FOUND:
+      "That Bitbucket repository or connection no longer exists, or your Bitbucket account can't see it. Pick another repository.",
+    UPSTREAM_ERROR: "We couldn't reach Bitbucket to check the repository. Nothing was created; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket", "Nothing was created"),
+  },
+  /** PATCH /api/projects/:id/settings/git `connectionId` on a Bitbucket project: Rebind (FR-136). */
+  gitBindingBitbucket: {
+    CREDENTIAL_NOT_OWNER: "You can only bind one of your own Bitbucket connections. Pick another.",
+    GIT_NOT_CONNECTED:
+      "That Bitbucket connection no longer works: Bitbucket rejected it, or it is missing scopes. Reconnect it under Connections, then bind it.",
+    FORBIDDEN:
+      "Your Bitbucket account needs write access to this repository to bind it. Ask a workspace admin for access, or ask another Owner to re-bind.",
+    NOT_FOUND: "That Bitbucket connection no longer exists. Pick another, or connect Bitbucket under Connections.",
+    VALIDATION: "That connection can't be bound to this project. Pick another.",
+    UPSTREAM_ERROR: "We couldn't reach Bitbucket to check your access. Nothing changed; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket", "Nothing changed"),
+  },
   /** POST /api/projects `llm` (FR-159): the AI model section's connection. */
   createProjectLlm: {
     CREDENTIAL_NOT_OWNER: "You can only use one of your own connections. Pick another, or add a key under Connections.",
@@ -464,6 +489,15 @@ export const contextualErrorMessages = {
     NOT_FOUND: "We couldn't read that project or ref, so nothing was detected. Choose each layer yourself.",
     VALIDATION: "We couldn't read that project, so nothing was detected. Choose each layer yourself.",
     FORBIDDEN: "GitLab refused to list the project's files, so nothing was detected. Choose each layer yourself.",
+  },
+  /** POST /api/stack/detect for a Bitbucket import (FR-141). */
+  detectStackBitbucket: {
+    GIT_NOT_CONNECTED:
+      "Your Bitbucket connection no longer works, so nothing was detected. Reconnect it under Connections, or choose each layer yourself.",
+    NOT_FOUND: "We couldn't read that repository or ref, so nothing was detected. Choose each layer yourself.",
+    VALIDATION: "We couldn't read that repository, so nothing was detected. Choose each layer yourself.",
+    FORBIDDEN: "Bitbucket refused to list the repository's files, so nothing was detected. Choose each layer yourself.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket"),
   },
   /** PUT /api/projects/:id/stack and the start-version stack change (FR-117). */
   changeStack: {
@@ -583,6 +617,9 @@ const retryAfterContexts: ReadonlySet<ErrorContext> = new Set<ErrorContext>([
   "bitbucketConnection",
   "bitbucketRepos",
   "createBitbucketRepo",
+  "createProjectBitbucket",
+  "gitBindingBitbucket",
+  "detectStackBitbucket",
 ]);
 
 /** Copy for a code, preferring the context's override. */

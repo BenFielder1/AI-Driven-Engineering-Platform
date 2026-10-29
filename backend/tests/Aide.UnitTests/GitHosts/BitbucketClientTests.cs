@@ -50,6 +50,58 @@ public class BitbucketClientTests
     }
 
     [Fact]
+    public async Task FR140_A_202_merge_returns_the_task_status_path_and_the_task_answer_is_read()
+    {
+        const string location = "https://api.bitbucket.org/2.0/repositories/acme/todo/pullrequests/3/merge/task-status/t-1";
+        var (clients, handler, _, _) = Create((r, _) => r.Method == HttpMethod.Post
+            ? Json(HttpStatusCode.Accepted, "{}", ("Location", location))
+            : Json(HttpStatusCode.OK, """{"task_status":"SUCCESS","merge_result":{"id":3,"state":"MERGED","merge_commit":{"hash":"abcdef012345"}}}"""));
+        var client = clients.Create(Guid.NewGuid());
+        var auth = BitbucketAuth.OAuth("t");
+
+        var answer = await client.MergePullRequestAsync(auth, "acme/todo", 3, "merge_commit", "msg", Ct);
+        Assert.Equal((null, "repositories/acme/todo/pullrequests/3/merge/task-status/t-1"), (answer.PullRequest, answer.TaskPath));
+        var task = await client.GetMergeTaskAsync(auth, answer.TaskPath!, Ct);
+
+        Assert.Equal((BitbucketMergeTaskState.Succeeded, "abcdef012345"), (task.State, task.Result!.MergeCommit));
+        Assert.Contains("\"merge_strategy\":\"merge_commit\"", handler.Requests[0].Body, StringComparison.Ordinal);
+        Assert.Contains("\"close_source_branch\":false", handler.Requests[0].Body, StringComparison.Ordinal);
+        Assert.Equal(location, handler.Requests[1].Url);
+    }
+
+    [Fact]
+    public async Task FR140_A_555_merge_timeout_throws_with_its_status()
+    {
+        var (clients, _, _, _) = Create((_, _) => Json((HttpStatusCode)555, """{"type":"error","error":{"message":"timeout"}}"""));
+        var ex = await Assert.ThrowsAsync<BitbucketApiException>(() => clients.Create().MergePullRequestAsync(BitbucketAuth.OAuth("t"), "acme/todo", 3, "squash", "m", Ct));
+        Assert.Equal(555, ex.Status);
+    }
+
+    [Fact]
+    public async Task FR138_Mergeability_checks_are_parsed_and_an_unusable_answer_is_a_failure()
+    {
+        var garbled = false;
+        var (clients, _, _, _) = Create((_, _) => Json(HttpStatusCode.OK, garbled
+            ? """{"unexpected":true}"""
+            : """{"values":[{"type":"standard_merge_check","key":"require_passing_builds_to_merge","status":"failed","required":true,"blocking":true}]}"""));
+        var client = clients.Create();
+
+        var checks = await client.GetMergeabilityChecksAsync(BitbucketAuth.OAuth("t"), "acme/todo", 3, Ct);
+        Assert.Equal(new MergeabilityCheck("standard_merge_check", "require_passing_builds_to_merge", "FAILED", true, true), Assert.Single(checks!));
+
+        garbled = true;
+        Assert.Equal(200, (await Assert.ThrowsAsync<BitbucketApiException>(() => client.GetMergeabilityChecksAsync(BitbucketAuth.OAuth("t"), "acme/todo", 3, Ct))).Status);
+    }
+
+    [Theory]
+    [InlineData("https://api.bitbucket.org/2.0/repositories/a/b/src/c/?page=x", "repositories/a/b/src/c/?page=x")]
+    [InlineData("https://evil.example/2.0/repositories/a/b", null)]
+    [InlineData("http://api.bitbucket.org/2.0/repositories/a/b", null)]
+    [InlineData("https://api.bitbucket.org/1.0/x", null)]
+    public void FR141_Links_are_followed_only_on_the_API_host(string link, string? expected) =>
+        Assert.Equal(expected, BitbucketClient.ToRelative(link));
+
+    [Fact]
     public async Task FR134_The_code_exchange_uses_client_Basic_auth_on_bitbucket_org()
     {
         var (clients, handler, _, _) = Create((_, _) => Json(HttpStatusCode.OK,

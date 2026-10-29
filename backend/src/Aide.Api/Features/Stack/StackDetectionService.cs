@@ -21,6 +21,7 @@ namespace Aide.Api.Features.Stack;
 public sealed partial class StackDetectionService(
     GitHubConnections connections,
     GitLab.GitLabConnectionService gitLabConnections,
+    Bitbucket.BitbucketConnectionService bitbucketConnections,
     Infrastructure.Persistence.AideDbContext db,
     GitHubApi api,
     IGitCli git,
@@ -35,6 +36,9 @@ public sealed partial class StackDetectionService(
 
     /// <summary>FR-141: the VCS host of a GitLab repository (gitlab.com or self-managed: both are <c>vcs-gitlab</c>).</summary>
     public const string GitLabVcsHost = "gitlab";
+
+    /// <summary>FR-141: the VCS host of a Bitbucket repository (<c>vcs-bitbucket</c>).</summary>
+    public const string BitbucketVcsHost = "bitbucket";
 
     /// <summary>FR-141: the most GitLab tree pages (100 entries each, directories included) read; beyond it the result is <c>truncated</c>.</summary>
     public const int MaxTreePages = 50;
@@ -51,19 +55,15 @@ public sealed partial class StackDetectionService(
         ArgumentNullException.ThrowIfNull(request);
         var problems = new List<string>();
         var gitLab = request.Provider == GitProvider.Gitlab;
+        var bitbucket = request.Provider == GitProvider.Bitbucket;
         if (request.InstanceId is not null && !gitLab)
         {
             problems.Add("git.instanceId: Only used for GitLab instances.");
         }
 
-        if (request.ConnectionId is not null && !gitLab)
+        if (request.ConnectionId is not null && !gitLab && !bitbucket)
         {
-            problems.Add("git.connectionId: Only used with gitlab.");
-        }
-
-        if (request.Provider == GitProvider.Bitbucket)
-        {
-            problems.Add("git.provider: Bitbucket repositories are not available yet.");
+            problems.Add("git.connectionId: Only used with gitlab or bitbucket.");
         }
 
         if (request.Ref is { } gitRef && !IsSafeRef(gitRef.Trim()))
@@ -86,6 +86,7 @@ public sealed partial class StackDetectionService(
         {
             GitProvider.Local => await LocalAsync(request.Repo, wantedRef, cancellationToken),
             GitProvider.Gitlab => await GitLabAsync(userId, request, wantedRef, cancellationToken),
+            GitProvider.Bitbucket => await BitbucketAsync(userId, request, wantedRef, cancellationToken),
             _ => await GitHubAsync(userId, request, wantedRef, cancellationToken),
         };
         if (snapshot.IsFailure)
@@ -94,7 +95,7 @@ public sealed partial class StackDetectionService(
         }
 
         var read = snapshot.Value;
-        var detection = StackDetector.Detect(read.Files, read.Manifests, gitLab ? GitLabVcsHost : VcsHost);
+        var detection = StackDetector.Detect(read.Files, read.Manifests, gitLab ? GitLabVcsHost : bitbucket ? BitbucketVcsHost : VcsHost);
         LogDetected(logger, request.Provider, detection.Suggestions.Count, detection.Conflicts.Count, read.Manifests.Count);
         return Result.Success(new StackDetectionDto(
             read.Ref,
@@ -287,6 +288,105 @@ public sealed partial class StackDetectionService(
             {
                 if (listed.TryGetValue(manifest, out var original)
                     && await client.ReadSmallFileAsync(token, id, original, commit, StackDetector.MaxManifestLength, cancellationToken) is { } text)
+                {
+                    manifests[manifest] = text;
+                }
+            }
+
+            return new RepoSnapshot(gitRef, commit, [.. listed.Keys], manifests, cut || next is not null);
+        }, cancellationToken);
+        if (read.IsFailure)
+        {
+            return Result.Failure<RepoSnapshot>(read.Error!);
+        }
+
+        return read.Value is { } snapshot ? Result.Success(snapshot) : RepoNotFound();
+    }
+
+    // ---------- Bitbucket ----------
+
+    /// <summary>
+    /// FR-141: the repository (<c>workspace/slug</c> or its UUID) through the Bitbucket API with the caller's connection (the
+    /// one sent, or their newest valid one): the commit of the ref (default: <c>mainbranch.name</c>), the recursive listing of
+    /// <c>…/src/{commit}/</c> (pages of 100, up to <see cref="MaxFiles"/>), and the manifests the detector asks for, each read
+    /// only when Bitbucket reports it at most <see cref="StackDetector.MaxManifestLength"/> bytes. Every call takes from the
+    /// connection's budget (§4.19).
+    /// </summary>
+    private async Task<Result<RepoSnapshot>> BitbucketAsync(Guid userId, DetectStackGitRequest request, string? wantedRef, CancellationToken cancellationToken)
+    {
+        var repo = request.Repo.Trim().Trim('/');
+        var byUuid = Domain.GitHosts.BitbucketProjectRules.IsValidRepoId(repo);
+        if (!byUuid && !Domain.GitHosts.BitbucketProjectRules.IsValidFullName(repo))
+        {
+            return Invalid<RepoSnapshot>(["git.repo: Use the repository's workspace/slug, e.g. acme/todo-app, or its UUID."]);
+        }
+
+        Guid connectionId;
+        if (request.ConnectionId is { } sent)
+        {
+            var owned = await db.GitConnections.AsNoTracking()
+                .AnyAsync(c => c.Id == sent && c.UserId == userId && c.Provider == GitHostKind.Bitbucket, cancellationToken);
+            if (!owned)
+            {
+                return Result.Failure<RepoSnapshot>(new DomainError(ErrorCodes.NotFound, "The Bitbucket connection was not found."));
+            }
+
+            connectionId = sent;
+        }
+        else if (await db.GitConnections.AsNoTracking()
+            .Where(c => c.UserId == userId && c.Provider == GitHostKind.Bitbucket && c.Status == GitConnectionStatus.Valid)
+            .OrderByDescending(c => c.CreatedAt)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync(cancellationToken) is { } newest)
+        {
+            connectionId = newest;
+        }
+        else
+        {
+            return Result.Failure<RepoSnapshot>(new DomainError(ErrorCodes.GitNotConnected, "Connect your Bitbucket account under Account → Connections → Bitbucket to continue."));
+        }
+
+        var read = await bitbucketConnections.CallAsync<RepoSnapshot?>(userId, connectionId, async call =>
+        {
+            var (workspace, slug) = byUuid ? (string.Empty, repo) : Domain.GitHosts.BitbucketProjectRules.SplitFullName(repo);
+            var found = await call.Client.GetRepositoryAsync(call.Auth, workspace, slug, cancellationToken);
+            if (found is null)
+            {
+                return null;
+            }
+
+            var fullName = found.FullName.Length > 0 ? found.FullName : repo;
+            var gitRef = wantedRef ?? found.MainBranch ?? Domain.Projects.ProjectSettingsRules.DefaultBranch;
+            if (await call.Client.GetCommitHashAsync(call.Auth, fullName, gitRef, cancellationToken) is not { } commit)
+            {
+                return null;
+            }
+
+            var files = new List<(string Path, long? Size)>();
+            string? next = null;
+            var pages = 0;
+            bool more;
+            do
+            {
+                pages++;
+                var page = await call.Client.ListSrcPageAsync(call.Auth, fullName, commit, next, cancellationToken);
+                if (page is null)
+                {
+                    return null;
+                }
+
+                files.AddRange(page.Entries.Where(e => e.Type == "commit_file").Select(e => (e.Path, e.Size)));
+                next = page.Next;
+                more = next is not null && files.Count <= MaxFiles && pages < MaxTreePages;
+            }
+            while (more);
+
+            var (listed, cut) = RepoFiles.ByNormalisedPath(files.Select(f => (f.Path, f)), MaxFiles);
+            var manifests = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var manifest in StackDetector.ManifestsToRead(listed.Keys))
+            {
+                if (listed.TryGetValue(manifest, out var file) && file.Size is { } size && size <= StackDetector.MaxManifestLength
+                    && await call.Client.ReadSmallFileAsync(call.Auth, fullName, commit, file.Path, StackDetector.MaxManifestLength, cancellationToken) is { } text)
                 {
                     manifests[manifest] = text;
                 }

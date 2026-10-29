@@ -141,3 +141,20 @@ public sealed record CreateBitbucketRepoRequest
 
     public bool Private { get; init; } = true;
 }
+
+/// <summary>A semver-or-other tag of a Bitbucket repository; <c>semver</c> is its version (the <c>v</c> prefix stripped), or <c>null</c>.</summary>
+public sealed record BitbucketTagDto(string Name, string Sha, string? Semver);
+
+/// <summary>
+/// What the wizard needs about a picked Bitbucket repository (FR-141, FR-86): its <c>workspace/slug</c>, default branch
+/// (<c>mainbranch.name</c>), whether it is <c>empty</c> (no commits, or only starter files), its tags (Bitbucket has no
+/// Releases, D-V4-7), and the import's suggestion: the released version to preselect (the highest semver tag; <c>null</c> =
+/// "Never released") and the version to develop it prefills (its next minor, else <c>0.1.0</c>).
+/// </summary>
+public sealed record BitbucketRepoRefsDto(
+    string FullName,
+    string DefaultBranch,
+    bool Empty,
+    IReadOnlyList<BitbucketTagDto> Tags,
+    string? PreselectedTag,
+    string SuggestedDevelopmentVersion);

@@ -152,7 +152,7 @@ public sealed class BitbucketClients(IHttpClientFactory http, IOptionsMonitor<Bi
 /// Bitbucket 429 empties the bucket until <c>Retry-After</c> (else five minutes): either way the call fails with a 429
 /// <see cref="BitbucketApiException"/>. Non-success answers throw <see cref="BitbucketApiException"/>.
 /// </summary>
-public sealed class BitbucketClient
+public sealed partial class BitbucketClient
 {
     public const int ReposPerPage = BitbucketRules.ReposPerPage;
 

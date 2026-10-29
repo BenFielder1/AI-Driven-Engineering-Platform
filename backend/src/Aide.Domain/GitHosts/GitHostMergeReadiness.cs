@@ -312,6 +312,17 @@ public static class MergeabilityChecks
         return checks.Any(c => (c.Required || c.Blocking) && IsBuildCheck(c));
     }
 
+    /// <summary>
+    /// FR-138, FR-137: AIDE opens the pull request as a draft and marks it ready itself before merging, so until it has
+    /// (<paramref name="markedReady"/> false) a draft check doesn't block AIDE (as for GitLab and v2's GitHub drafts). Once
+    /// AIDE marked it ready, a draft (made again by someone) blocks: the checks are unchanged.
+    /// </summary>
+    public static IReadOnlyList<MergeabilityCheck> IgnoringAideDraft(IEnumerable<MergeabilityCheck> checks, bool markedReady = false)
+    {
+        ArgumentNullException.ThrowIfNull(checks);
+        return markedReady ? [.. checks] : [.. checks.Where(c => !Has(c, "draft"))];
+    }
+
     private static bool IsBuildCheck(MergeabilityCheck check) => Has(check, "build");
 
     private static (MergeReadinessReasonCode Code, string Message) ReasonOf(MergeabilityCheck check)
@@ -337,6 +348,11 @@ public static class MergeabilityChecks
         if (Has(check, "task"))
         {
             return (MergeReadinessReasonCode.DiscussionsUnresolved, "Open tasks on the pull request aren't resolved.");
+        }
+
+        if (Has(check, "rebase") || Has(check, "fast_forward") || Has(check, "behind"))
+        {
+            return (MergeReadinessReasonCode.RebaseRequired, "The version branch must be rebased onto the destination branch first (the merge strategy needs it).");
         }
 
         if (Has(check, "conflict"))

@@ -143,16 +143,6 @@ export const wizardAgentModelFields = {
 
 const modelTooLong = `Model ids are at most ${String(limits.modelMax)} characters.`
 
-/**
- * TODO(M28 slice 2, FR-136): POST /api/projects doesn't accept a Bitbucket binding yet (`mode: bitbucket` is 400
- * VALIDATION, and `CreateProjectGitRequest` has no Bitbucket connection or repository id). Until it does, the wizard lets
- * users pick a Bitbucket repository but blocks the Repository step, and hides Create so no orphan repositories are made.
- * Flip this once the contract has the fields, and send them in toGitRequest.
- */
-export function bitbucketProjectCreationAvailable(): boolean {
-  return false
-}
-
 /** The wizard's fields, without the cross-field refinement (also used to check a restored session-storage draft). */
 export const wizardShape = z.object({
   /** FR-73: start from scratch, or import an existing repository. */
@@ -166,7 +156,7 @@ export const wizardShape = z.object({
   tokenBudget: str,
   /**
    * FR-82, FR-86, FR-132, FR-135: `github_app` (picker / create), `github_pat` (URL + token), `gitlab` (picker / create),
-   * `bitbucket` (picker; create once projects can bind it) or `local`.
+   * `bitbucket` (picker / create) or `local`.
    */
   gitMode: z.enum(['github_app', 'github_pat', 'gitlab', 'bitbucket', 'local']),
   repoUrl: str,
@@ -311,16 +301,8 @@ export const wizardSchema = wizardShape.superRefine((v, ctx) => {
       v.bitbucketConnectionId && (!v.repoFullName || !v.bitbucketRepoId)
         ? importing
           ? 'Pick the Bitbucket repository to import.'
-          : 'Pick a Bitbucket repository.'
+          : 'Pick a Bitbucket repository, or create one.'
         : null,
-    )
-    // TODO(M28 slice 2, FR-136): remove once POST /api/projects accepts the Bitbucket binding.
-    addCheck(
-      ctx,
-      'gitMode',
-      bitbucketProjectCreationAvailable()
-        ? null
-        : "AIDE can't create projects on Bitbucket yet. Choose another option to continue.",
     )
   }
   // FR-114: a composition needs a choice (or None) for each layer up to VCS; compatibility is the server's (D-V4-19).

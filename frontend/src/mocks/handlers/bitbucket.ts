@@ -9,6 +9,7 @@ type Connection = Schemas['BitbucketConnectionDto']
 type Repo = Schemas['BitbucketRepoDto']
 type Workspace = Schemas['BitbucketWorkspaceDto']
 type PendingLink = Schemas['BitbucketPendingLinkDto']
+type Refs = Schemas['BitbucketRepoRefsDto']
 
 export const BITBUCKET_CALLBACK_URL = 'http://localhost:3000/api/auth/bitbucket/callback'
 const PAGE_SIZE = 30
@@ -45,6 +46,10 @@ export const bitbucketDb = {
   /** Repositories per connection id (the picker lists them in this order). */
   repos: {} as Record<string, Repo[]>,
   owners: {} as Record<string, Workspace[]>,
+  /** FR-141: refs per repository UUID (default: a repository with code and no tags, see bitbucketRefsOf). */
+  refs: {} as Record<string, Refs>,
+  /** FR-136: repository UUIDs the caller's connection can't write to (create and Rebind answer 403 FORBIDDEN). */
+  noWriteAccess: [] as string[],
   /** The owners list was capped at 50 workspaces (`truncated`). */
   ownersTruncated: false,
   /** The sign-in waiting in this browser to be linked (FR-134). */
@@ -64,6 +69,8 @@ export function resetBitbucketDb() {
   bitbucketDb.connections = {}
   bitbucketDb.repos = {}
   bitbucketDb.owners = {}
+  bitbucketDb.refs = {}
+  bitbucketDb.noWriteAccess = []
   bitbucketDb.ownersTruncated = false
   bitbucketDb.pendingLink = null
   bitbucketDb.consumerUpdates = []
@@ -142,6 +149,43 @@ export function seedBitbucketRepo(connectionId: string, overrides: Partial<Repo>
   }
   list.push(repo)
   return repo
+}
+
+/** FR-141: the refs the API reports for a repository (seeded, or one with code and no tags). */
+export function bitbucketRefsOf(repo: Repo): Refs {
+  return (
+    bitbucketDb.refs[repo.id] ?? {
+      fullName: repo.fullName,
+      defaultBranch: repo.mainBranch ?? 'main',
+      empty: false,
+      tags: [],
+      preselectedTag: null,
+      suggestedDevelopmentVersion: '0.1.0',
+    }
+  )
+}
+
+/** FR-141: seeds a repository's refs (e.g. tags `v1.0.0`, `v1.1.0` → preselected `v1.1.0`, version to develop `1.2.0`). */
+export function seedBitbucketRefs(repo: Repo, overrides: Partial<Refs> = {}): Refs {
+  const refs: Refs = { ...bitbucketRefsOf(repo), ...overrides }
+  bitbucketDb.refs[repo.id] = refs
+  return refs
+}
+
+/** A Bitbucket connection of any user, with its owner (FR-136 binding checks). */
+export function findBitbucketConnection(id: string | null | undefined): { userId: string; connection: Connection } | null {
+  for (const [userId, list] of Object.entries(bitbucketDb.connections)) {
+    const connection = list.find((c) => c.id === id)
+    if (connection) {
+      return { userId, connection }
+    }
+  }
+  return null
+}
+
+/** A repository one of the caller's connections can see, by UUID. */
+export function findBitbucketRepo(connectionId: string, repoId: string): Repo | undefined {
+  return (bitbucketDb.repos[connectionId] ?? []).find((r) => r.id === repoId)
 }
 
 const isAdminUser = () => currentUser()?.systemRole === 'admin'
@@ -364,6 +408,19 @@ export const bitbucketHandlers = [
     return HttpResponse.json<Schemas['BitbucketRepoPageDto']>({ items, nextCursor })
   }),
 
+  // FR-141: a repository's default branch, emptiness and semver tags, with the import's suggestion.
+  http.get('*/api/me/git/bitbucket/repos/:repoId/refs', ({ request, params }) => {
+    const connectionId = new URL(request.url).searchParams.get('connectionId')
+    const guard = pickerGuard(connectionId)
+    if (guard instanceof Response) {
+      return guard
+    }
+    const repo = findBitbucketRepo(guard.id, String(params.repoId))
+    return repo
+      ? HttpResponse.json<Refs>(bitbucketRefsOf(repo))
+      : problem(404, 'NOT_FOUND', "The Bitbucket repository wasn't found, or your Bitbucket account can't see it.")
+  }),
+
   http.get('*/api/me/git/bitbucket/owners', ({ request }) => {
     const connectionId = new URL(request.url).searchParams.get('connectionId')
     const guard = pickerGuard(connectionId)
@@ -404,6 +461,8 @@ export const bitbucketHandlers = [
       projectKey: body.project,
       isPrivate: body.private !== false,
     })
+    // FR-135: main holds only the README AIDE pushed (starter files: empty for FR-86).
+    seedBitbucketRefs(repo, { empty: true })
     return HttpResponse.json(repo, { status: 201 })
   }),
 ]

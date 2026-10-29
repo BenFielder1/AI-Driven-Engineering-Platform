@@ -2049,6 +2049,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("merge_reasons");
 
+                    b.Property<DateTimeOffset?>("MergeSubmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("merge_submitted_at");
+
                     b.Property<string>("PrUrl")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")

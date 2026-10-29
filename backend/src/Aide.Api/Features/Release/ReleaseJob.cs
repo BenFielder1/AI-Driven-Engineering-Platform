@@ -100,7 +100,7 @@ public sealed partial class ReleaseJobHandler(
         }
 
         // FR-65: the manual strategy never merges; the release then waits for the merge on GitHub (or in the Local repository).
-        var merge = project.MergeStrategy == MergeStrategy.AideMerges;
+        var merge = MergeReadinessRules.AideMerges(project.MergeStrategy);
         var request = new ReleaseRequest(
             working.Branch,
             release.Tag,
@@ -110,8 +110,11 @@ public sealed partial class ReleaseJobHandler(
             (sha, ct) => RecordMergeAsync(release.Id, sha, ct))
         {
             Merge = merge,
+            Strategy = project.MergeStrategy,
             Notes = await publisher.HostNotesAsync(release, working.Provider.Kind, working.Connection.RepoUrl, cancellationToken),
             RecordedMergeCommitSha = release.MergeCommitSha,
+            MergeSubmitted = release.MergeSubmittedAt is not null,
+            OnMergeSubmitting = ct => RecordMergeSubmittedAsync(release.Id, ct),
         };
         var outcome = await working.Provider.ReleaseAsync(working.Connection, request, working.Token, cancellationToken);
         switch (outcome.Kind)
@@ -194,6 +197,24 @@ public sealed partial class ReleaseJobHandler(
     }
 
     /// <summary>
+    /// FR-140: puts "merge submitted" on the attempt right before the host's merge call (a Bitbucket merge can finish
+    /// asynchronously): a rollback then waits for the release, and a retry knows a merged pull request is AIDE's own.
+    /// </summary>
+    private async Task RecordMergeSubmittedAsync(Guid releaseId, CancellationToken cancellationToken)
+    {
+        db.ChangeTracker.Clear();
+        var release = await db.Releases.FirstAsync(r => r.Id == releaseId, cancellationToken);
+        if (release.Status != ReleaseStatus.InProgress || release.MergeSubmittedAt is not null)
+        {
+            return;
+        }
+
+        release.MergeSubmittedAt = time.GetUtcNow();
+        await SaveAsync(cancellationToken);
+        db.ChangeTracker.Clear();
+    }
+
+    /// <summary>
     /// FR-65, FR-84: why the release waits for a merge on GitHub: the merge-readiness reasons (<c>manual_strategy</c> first
     /// for the manual strategy). When readiness can't be read, or finds nothing although GitHub refused, GitHub's own answer
     /// is the reason (<c>branch_protected</c>): the merge endpoint is authoritative.
@@ -209,7 +230,8 @@ public sealed partial class ReleaseJobHandler(
                 reasons.AddRange(computed.Value.Reasons);
             }
         }
-        catch (Exception ex) when (ex is Infrastructure.GitHub.GitHubRateLimitedException or Infrastructure.GitLab.GitLabRateLimitedException)
+        catch (Exception ex) when (ex is Infrastructure.GitHub.GitHubRateLimitedException or Infrastructure.GitLab.GitLabRateLimitedException
+            or Infrastructure.Bitbucket.BitbucketRateLimitedException)
         {
             LogReadinessRateLimited(logger, project.Id);
         }

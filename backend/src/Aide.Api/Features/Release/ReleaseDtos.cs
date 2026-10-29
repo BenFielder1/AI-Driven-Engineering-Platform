@@ -20,7 +20,9 @@ namespace Aide.Api.Features.Release;
 /// <c>GITHUB_RATE_LIMITED</c>, and while awaiting the merge <c>PR_CLOSED</c> (closed without merging) and
 /// <c>MERGE_TIMEOUT</c> (not merged within 14 days); after either the project stays in <c>release</c> and an Owner can
 /// retry with <c>POST /release</c>. <c>githubReleaseUrl</c> is the host release created for the tag: the GitHub Release
-/// (FR-64) or the GitLab Release (FR-140); <c>null</c> for Local or before it exists. A GitLab merge refused because the
+/// (FR-64), the GitLab Release, or the Bitbucket annotated tag's page (FR-140; Bitbucket has no Releases); <c>null</c> for
+/// Local or before it exists. AIDE's full release notes of a succeeded Bitbucket release (the tag's message, FR-140,
+/// D-V4-7) are read with <c>GET …/releases/{releaseId}/notes</c>. A GitLab merge refused because the
 /// merge request's head moved since review (409) fails with <c>GIT_ERROR</c>. <c>mergeStrategy</c> is the project's current merge strategy (FR-65).
 /// <c>productionDeployment</c> is the release's production deployment (FR-91: the newest for this release attempt, including
 /// redeploys; <c>null</c> when deployment isn't configured or not created yet). A failed one doesn't undo the release.
@@ -44,6 +46,13 @@ public sealed record ReleaseDto(
     IReadOnlyList<MergeReadinessReasonDto>? MergeReasons,
     MergeStrategy MergeStrategy,
     Deployments.DeploymentDto? ProductionDeployment);
+
+/// <summary>
+/// FR-140, D-V4-7: AIDE's full release notes of a release attempt, for a host without Releases (Bitbucket: the annotated
+/// tag's message), rebuilt from the version's locked spec, completed steps and latest review; <c>null</c> for other hosts
+/// or an attempt that hasn't succeeded.
+/// </summary>
+public sealed record ReleaseNotesDto(Guid ReleaseId, string? Notes);
 
 /// <summary>
 /// The latest release attempt in the project state (FR-42, FR-43, FR-64, FR-65): enough for the overview's release banner,

@@ -19,7 +19,7 @@ import { GitHubErrorAlert, GitHubLink } from '../../github/github-error-alert'
 import { gitProviderLabels, mergeStrategyLabel } from '../labels'
 import { useTestGitConnection, useUpdateGitSettings, type GitSettings, type GitTestResult } from '../projects-api'
 import { checkBranch, checkRepoUrl, checkSecret, limits } from '../schemas'
-import { BindingAlert, BoundHostRows, isBoundHost, RebindGitLab } from './git-binding'
+import { BindingAlert, BoundHostRows, isBoundHost, RebindConnection } from './git-binding'
 import { ReleaseSettingsForm } from './release-settings-form'
 import { SecretField, type SecretAction } from './secret-field'
 
@@ -194,7 +194,7 @@ export function GitTab({ projectId, git }: { projectId: string; git: GitSettings
     <div className="flex max-w-2xl flex-col gap-8">
       {isBoundHost(git) && <BindingAlert git={git} />}
       <GitModeSummary git={git} />
-      <RebindGitLab projectId={projectId} git={git} />
+      <RebindConnection projectId={projectId} git={git} />
       <SwitchToApp projectId={projectId} git={git} />
       {/* Remount when the mode changes (Switch to GitHub App), so the form starts from the saved settings. */}
       <GitForm key={git.mode} projectId={projectId} git={git} />

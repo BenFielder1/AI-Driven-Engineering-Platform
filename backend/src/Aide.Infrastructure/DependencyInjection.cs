@@ -182,6 +182,9 @@ public static class DependencyInjection
         // FR-136, FR-137: the gitlab provider (the binding Owner's connection, per-command extraHeader for git).
         services.AddScoped<IGitProvider, GitLabGitProvider>();
 
+        // FR-136, FR-137: the bitbucket provider (the binding Owner's connection, its budget, per-command extraHeader for git).
+        services.AddScoped<IGitProvider, Bitbucket.BitbucketGitProvider>();
+
         // Bitbucket Cloud (FR-133–FR-135, §4.19): fixed hosts (no SSRF surface), redirects never followed, the consumer row
         // (git_host_instances, kind bitbucket) with Bitbucket__OAuth__* on top, and the shared per-connection limiter
         // (900 requests an hour, in memory: one API replica).

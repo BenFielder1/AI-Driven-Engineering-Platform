@@ -9,10 +9,10 @@ import { NEVER_RELEASED } from './schemas'
 
 const dateFormat = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' })
 
-/** The host whose Releases and tags are listed (FR-73 GitHub App, FR-141 GitLab). */
-export type ReleaseHost = 'github' | 'gitlab'
+/** The host whose Releases and tags are listed (FR-73 GitHub App, FR-141 GitLab and Bitbucket). */
+export type ReleaseHost = 'github' | 'gitlab' | 'bitbucket'
 
-const hostNames: Record<ReleaseHost, string> = { github: 'GitHub', gitlab: 'GitLab' }
+const hostNames: Record<ReleaseHost, string> = { github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket' }
 
 function describe(o: ReleasedOption, host: ReleaseHost): string {
   if (o.kind === 'tag') {
@@ -27,7 +27,7 @@ function describe(o: ReleasedOption, host: ReleaseHost): string {
     .join(' · ')
 }
 
-/** The refs query as the field reads it (GitHub's or GitLab's). */
+/** The refs query as the field reads it (GitHub's, GitLab's or Bitbucket's). */
 interface RefsQuery {
   isPending: boolean
   isError: boolean
@@ -37,8 +37,8 @@ interface RefsQuery {
 }
 
 /**
- * FR-73, FR-141 "Currently released version": for a GitHub App or GitLab repo, its Releases and semver tags (the
- * wizard preselects one) plus "Never released"; for a URL + token or Local import, the tag typed in (empty: never
+ * FR-73, FR-141 "Currently released version": for a GitHub App or GitLab repo, its Releases and semver tags, for a
+ * Bitbucket repo its semver tags (the wizard preselects one), plus "Never released"; for a URL + token or Local import, the tag typed in (empty: never
  * released), since AIDE can't list those repositories' tags before the project exists.
  */
 export function ReleasedVersionField({
@@ -51,7 +51,7 @@ export function ReleasedVersionField({
   error,
 }: {
   id: string
-  /** The GitHub App or GitLab option is chosen: list the repo's releases and tags. */
+  /** The GitHub App, GitLab or Bitbucket option is chosen: list the repo's releases and tags. */
   listed: boolean
   host?: ReleaseHost
   repoSelected: boolean
@@ -87,6 +87,13 @@ export function ReleasedVersionField({
         context="gitlabRepos"
         onRetry={() => void refs.refetch()}
       />
+    ) : host === 'bitbucket' ? (
+      <ErrorState
+        error={refs.error}
+        title="We couldn't load the repository's tags"
+        context="bitbucketRepos"
+        onRetry={() => void refs.refetch()}
+      />
     ) : (
       <GitHubErrorAlert error={refs.error} title="We couldn't load the repository's releases and tags" context="githubRepos" />
     )
@@ -110,7 +117,9 @@ export function ReleasedVersionField({
       />
       {options.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          This repository has no {hostNames[host]} Releases or semantic-version tags.
+          {host === 'bitbucket'
+            ? 'This repository has no semantic-version tags.'
+            : `This repository has no ${hostNames[host]} Releases or semantic-version tags.`}
         </p>
       )}
     </div>
