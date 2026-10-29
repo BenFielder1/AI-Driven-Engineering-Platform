@@ -60,6 +60,33 @@ public sealed class GitLabReleaseTests(AideApiFactory factory)
         Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.MergeReadinessChecked));
     }
 
+    [Fact]
+    public async Task FR138_Readiness_before_the_branch_is_pushed_or_with_an_unreadable_GitLab_answer_is_never_a_500()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var gitlab = new GitLabState(remote) { Opened = true };
+        var (app, fixture) = await SetUpAsync(gitlab, remote);
+        using var session = fixture;
+        var id = fixture.Project.Id;
+        await LifecycleSeed.SetProjectAsync(app, id, Phase.Review, 5, ApprovalMode.Advisory);
+        await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.Where(v => v.ProjectId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(v => v.PullRequestNumber, 3), Ct));
+
+        // No head yet (sha null): readiness without checks.
+        var readiness = await ProjectApi.ReadAsync<MergeReadinessDto>(
+            await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/git/merge-readiness?refresh=true", UriKind.Relative), Ct));
+        Assert.Empty(readiness.Checks);
+        Assert.DoesNotContain(gitlab.Api.Requests, r => r.Path.EndsWith("/statuses", StringComparison.Ordinal));
+
+        // An unusable merge request answer is UPSTREAM_ERROR (502).
+        gitlab.Garbled = true;
+        Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<MergeReadinessThrottle>(app.Services).Forget(id);
+        await Problems.AssertAsync(
+            await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/git/merge-readiness?refresh=true", UriKind.Relative), Ct),
+            HttpStatusCode.BadGateway,
+            ErrorCodes.UpstreamError);
+    }
+
     // ---------- FR-139: CI statuses as a review input ----------
 
     [Fact]
@@ -419,7 +446,7 @@ public sealed class GitLabReleaseTests(AideApiFactory factory)
                 })
                 .OnWithHeaders(HttpMethod.Get, MergeRequest, _ => Hidden
                     ? (HttpStatusCode.NotFound, """{"message":"404 Not found"}""", null)
-                    : (HttpStatusCode.OK, MergeRequestJson(), RateLimit))
+                    : (HttpStatusCode.OK, Garbled ? """{"title":"no iid"}""" : MergeRequestJson(), RateLimit))
                 .On(HttpMethod.Put, MergeRequest, r =>
                 {
                     if (GitLabHarness.Body(r).TryGetProperty("title", out var title))
@@ -474,6 +501,9 @@ public sealed class GitLabReleaseTests(AideApiFactory factory)
 
         public bool Opened { get; set; }
 
+        /// <summary>GitLab answers the merge request with JSON AIDE can't use (no <c>iid</c>).</summary>
+        public bool Garbled { get; set; }
+
         /// <summary>The connection lost access: the project and the merge request answer 404.</summary>
         public bool Hidden { get; set; }
 
@@ -507,7 +537,11 @@ public sealed class GitLabReleaseTests(AideApiFactory factory)
             MergeSha = sha;
         }
 
-        private string? Head() => Branch is null ? null : ReleaseFlowTests.BareSha(_remote, $"refs/heads/{Branch}");
+        /// <summary>The version branch head in the bare repository; <c>null</c> before AIDE pushed it (like GitLab's <c>sha</c> then).</summary>
+        private string? Head() =>
+            Branch is null
+                ? null
+                : ReleaseFlowTests.Run(_remote.BarePath, "for-each-ref", "--format=%(objectname)", $"refs/heads/{Branch}") is { Length: > 0 } sha ? sha : null;
 
         private string MergeRequestJson() => JsonSerializer.Serialize(new
         {

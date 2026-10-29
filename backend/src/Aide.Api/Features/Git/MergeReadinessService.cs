@@ -117,7 +117,16 @@ public sealed partial class MergeReadinessService(
             : null;
         if (await hosts.ResolveAsync(projectId, cancellationToken) is { } host)
         {
-            return await HostAsync(project, version, host, now, cancellationToken);
+            try
+            {
+                return await HostAsync(project, version, host, now, cancellationToken);
+            }
+            catch (Exception ex) when (ex is Infrastructure.GitLab.GitLabApiException or HttpRequestException or System.Text.Json.JsonException)
+            {
+                // FR-138: a GitLab answer the provider didn't turn into a result is an upstream failure (502), never a 500.
+                LogHostFailed(logger, projectId, ex.GetType().Name);
+                return Result.Failure<MergeReadinessDto>(new DomainError(ErrorCodes.UpstreamError, "GitLab failed or returned an unreadable answer. Try again later."));
+            }
         }
 
         var target = await access.ResolveAsync(projectId, cancellationToken);
