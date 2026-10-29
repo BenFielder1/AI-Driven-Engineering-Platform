@@ -77,6 +77,21 @@ public sealed partial class GitHubReleasePublisher(
         }
     }
 
+    /// <summary>
+    /// FR-140: AIDE's release notes for a provider that creates its release together with the tag (GitLab: the Release's
+    /// description); <c>null</c> for GitHub (published here after tagging) and Local.
+    /// </summary>
+    public async Task<string?> HostNotesAsync(ReleaseEntity release, Domain.Entities.GitProvider provider, string? repoWebUrl, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(release);
+        if (provider != Domain.Entities.GitProvider.Gitlab)
+        {
+            return null;
+        }
+
+        return ReleaseNotes.Build(await NotesInputAsync(release, release.Tag, repoWebUrl, cancellationToken));
+    }
+
     /// <summary>The notes' inputs from the version: its locked spec, its completed steps (all plans, in order) and latest review.</summary>
     internal async Task<ReleaseNotesInput> NotesInputAsync(ReleaseEntity release, string tag, string? repoWebUrl, CancellationToken cancellationToken)
     {

@@ -6,6 +6,7 @@ import { Badge, type BadgeTone } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import { copyForCode, errorMessage } from '../../lib/errors'
+import { gitHostTerms, type GitHostTerms } from '../../lib/git-host'
 import { releaseStatusLabels } from '../projects/labels'
 import type { ProjectState } from '../projects/projects-api'
 import { RelativeTime } from '../projects/relative-time'
@@ -33,7 +34,7 @@ function Row({ term, children }: { term: string; children: ReactNode }) {
   )
 }
 
-function ReleaseFailure({ release, branch }: { release: Release; branch: string | null }) {
+function ReleaseFailure({ release, branch, host }: { release: Release; branch: string | null; host: GitHostTerms }) {
   const where = branch ? (
     <>
       on <code className="font-mono">{branch}</code>
@@ -60,19 +61,19 @@ function ReleaseFailure({ release, branch }: { release: Release; branch: string 
   }
   const title =
     release.errorCode === 'PR_CLOSED'
-      ? 'The pull request was closed'
+      ? `The ${host.pr} was closed`
       : release.errorCode === 'MERGE_TIMEOUT'
         ? 'The release stopped waiting for the merge'
         : 'The release failed'
   const showPr = (release.errorCode === 'PR_CLOSED' || release.errorCode === 'MERGE_TIMEOUT') && release.pullRequestUrl
   return (
     <Alert tone="error" title={title}>
-      <p className="mt-1">{copyForCode(release.errorCode, 'releaseAttempt') ?? 'The release job ended with an error.'}</p>
+      <p className="mt-1">{copyForCode(release.errorCode, 'releaseAttempt', host) ?? 'The release job ended with an error.'}</p>
       {release.errorMessage && <p className="mt-1 break-words">{release.errorMessage}</p>}
       {showPr && (
         <p className="mt-1">
           <a href={release.pullRequestUrl ?? undefined} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-            Open the pull request on GitHub
+            {`Open the ${host.pr} on ${host.host}`}
           </a>
         </p>
       )}
@@ -81,10 +82,11 @@ function ReleaseFailure({ release, branch }: { release: Release; branch: string 
 }
 
 /**
- * FR-65, §4.14: a release attempt waiting for its PR to be merged on GitHub: a live status pill with the time it
- * started waiting, the PR link, the merge-readiness reasons recorded then and how the merge poll works.
+ * FR-65, §4.14, FR-140: a release attempt waiting for its PR (GitLab: MR) to be merged on the Git host: a live status
+ * pill with the time it started waiting, the PR link, the merge-readiness reasons recorded then and how the merge poll
+ * works.
  */
-function AwaitingMerge({ release, pullRequestUrl }: { release: Release; pullRequestUrl: string | null }) {
+function AwaitingMerge({ release, pullRequestUrl, host }: { release: Release; pullRequestUrl: string | null; host: GitHostTerms }) {
   const manual = release.mergeStrategy === 'manual'
   return (
     <section aria-labelledby="awaiting-merge-title" className="flex flex-col gap-2 rounded-lg border border-warning/50 bg-warning/5 p-3 text-sm">
@@ -93,7 +95,7 @@ function AwaitingMerge({ release, pullRequestUrl }: { release: Release; pullRequ
       </h3>
       <p role="status" className="flex flex-wrap items-center gap-2">
         <StatusBadge tone="warning" pulse>
-          Waiting for merge on GitHub
+          {`Waiting for merge on ${host.host}`}
         </StatusBadge>
         {release.awaitingMergeSince && (
           <span className="text-muted-foreground">
@@ -103,20 +105,22 @@ function AwaitingMerge({ release, pullRequestUrl }: { release: Release; pullRequ
       </p>
       <p>
         {manual
-          ? 'This project merges manually: merge the pull request on GitHub.'
-          : "AIDE couldn't merge the pull request itself. Merge it on GitHub once it's allowed."}{' '}
-        AIDE then tags the merge commit and creates the GitHub Release.
+          ? `This project merges manually: merge the ${host.pr} on ${host.host}.`
+          : `AIDE couldn't merge the ${host.pr} itself. Merge it on ${host.host} once it's allowed.`}{' '}
+        {host.release
+          ? `AIDE then tags the merge commit and creates the ${host.release}.`
+          : 'AIDE then tags the merge commit with the release notes.'}
       </p>
       <MergeReasons reasons={release.mergeReasons ?? []} label="Why AIDE is waiting" />
       {pullRequestUrl && (
         <p>
           <a href={pullRequestUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-            Open the pull request on GitHub
+            {`Open the ${host.pr} on ${host.host}`}
           </a>
         </p>
       )}
       <p className="text-muted-foreground">
-        AIDE checks the pull request every 2 minutes for the first hour, then every 10 minutes, for up to 14 days. If
+        AIDE checks the {host.pr} every 2 minutes for the first hour, then every 10 minutes, for up to 14 days. If
         it's closed without merging or still unmerged after 14 days, the release fails and an Owner can retry.
       </p>
     </section>
@@ -173,6 +177,7 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
   // FR-43: a failed release leaves the project in release / releasing; that's when an Owner may retry.
   const retryable = inReleasing && (noAttempt ? !starting : latest.status === 'failed')
   const branch = state.pullRequest?.headBranch ?? null
+  const host = gitHostTerms(state.pullRequest?.provider)
 
   const retryControls = (
     <>
@@ -234,7 +239,7 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
           )}
         </div>
         {latest.status === 'awaiting_merge' && (
-          <AwaitingMerge release={latest} pullRequestUrl={latest.pullRequestUrl ?? state.pullRequest?.url ?? null} />
+          <AwaitingMerge release={latest} pullRequestUrl={latest.pullRequestUrl ?? state.pullRequest?.url ?? null} host={host} />
         )}
         <dl>
           <Row term="Tag">
@@ -252,16 +257,16 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
             )}
           </Row>
           {latest.githubReleaseUrl && (
-            <Row term="GitHub Release">
+            <Row term={host.release ?? 'Release'}>
               <a href={latest.githubReleaseUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                View the GitHub Release
+                {`View the ${host.release ?? 'release'}`}
               </a>
             </Row>
           )}
           {latest.pullRequestUrl && latest.status !== 'awaiting_merge' && (
-            <Row term="Pull request">
+            <Row term={host.prTitle}>
               <a href={latest.pullRequestUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                View on GitHub
+                {`View on ${host.host}`}
               </a>
             </Row>
           )}
@@ -274,7 +279,7 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
             </Row>
           )}
         </dl>
-        {latest.status === 'failed' && <ReleaseFailure release={latest} branch={branch} />}
+        {latest.status === 'failed' && <ReleaseFailure release={latest} branch={branch} host={host} />}
         {retryControls}
         {releases.data.length > 1 && <ReleaseHistory releases={releases.data} versionOf={versionOf} />}
       </div>

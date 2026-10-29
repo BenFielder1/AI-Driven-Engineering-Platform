@@ -87,6 +87,7 @@ public sealed partial class ReleaseCompletion(
             LogProjectMoved(logger, project.Id, release.Checkpoint);
         }
 
+        var provider = await ReleaseRecords.ProviderAsync(db, release.ProjectId, cancellationToken);
         if (mergedExternally)
         {
             db.AddEvent(
@@ -102,6 +103,7 @@ public sealed partial class ReleaseCompletion(
                     mergeCommitSha = release.MergeCommitSha,
                     githubReleaseUrl = release.GithubReleaseUrl,
                     pullRequestUrl = release.PrUrl,
+                    provider,
                 },
                 SystemActor.Name,
                 now);
@@ -122,6 +124,7 @@ public sealed partial class ReleaseCompletion(
                 githubReleaseUrl = release.GithubReleaseUrl,
                 alreadyTagged = outcome.AlreadyTagged,
                 mergedExternally,
+                provider,
             },
             SystemActor.Name,
             now);
@@ -186,6 +189,7 @@ public sealed partial class ReleaseCompletion(
                 mergeStrategy = strategy,
                 awaitingMerge = true,
                 reasons,
+                provider = await ReleaseRecords.ProviderAsync(db, project.Id, cancellationToken),
             },
             SystemActor.Name,
             now);
@@ -211,7 +215,7 @@ public sealed partial class ReleaseCompletion(
             return;
         }
 
-        ReleaseRecords.Fail(db, release, errorCode, message, [], SystemActor.Name, now);
+        ReleaseRecords.Fail(db, release, errorCode, message, [], SystemActor.Name, now, provider: await ReleaseRecords.ProviderAsync(db, release.ProjectId, cancellationToken));
         var project = await db.Projects.FirstAsync(p => p.Id == release.ProjectId, cancellationToken);
         if (project.Checkpoint == release.Checkpoint)
         {
@@ -284,10 +288,10 @@ public sealed partial class ReleaseCompletion(
     [LoggerMessage(Level = LogLevel.Information, Message = "Release completion did nothing: {Reason}")]
     private static partial void LogSkipped(ILogger logger, string reason);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} released as {Tag} (tag already existed: {AlreadyTagged}, merged on GitHub: {MergedExternally})")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} released as {Tag} (tag already existed: {AlreadyTagged}, merged outside AIDE: {MergedExternally})")]
     private static partial void LogReleased(ILogger logger, Guid projectId, string tag, bool alreadyTagged, bool mergedExternally);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Release {Tag} of project {ProjectId} awaits a merge on GitHub ({ReasonCount} reasons)")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Release {Tag} of project {ProjectId} awaits a merge on its Git host ({ReasonCount} reasons)")]
     private static partial void LogAwaiting(ILogger logger, Guid projectId, string tag, int reasonCount);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Awaited merge of release {Tag} of project {ProjectId} abandoned ({ErrorCode})")]

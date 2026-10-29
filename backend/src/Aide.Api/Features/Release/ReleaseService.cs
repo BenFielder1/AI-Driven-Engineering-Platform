@@ -63,7 +63,7 @@ public static class ReleaseRecords
         db.AddEvent(
             EventTypes.ReleaseStarted,
             project.Id,
-            new { releaseId = release.Id, releaseVersionId = versionId, version = version?.Version, checkpoint, tag = release.Tag, attempt = release.Attempt, trigger },
+            new { releaseId = release.Id, releaseVersionId = versionId, version = version?.Version, checkpoint, tag = release.Tag, attempt = release.Attempt, trigger, provider = provider?.ToWire() },
             actor,
             now);
         return release;
@@ -78,9 +78,34 @@ public static class ReleaseRecords
             : prefix + (version ?? string.Empty);
     }
 
-    /// <summary>FR-43: marks an in-progress attempt failed and adds <c>RELEASE_FAILED</c> (the Owner notification seam, FR-47).</summary>
+    /// <summary>
+    /// FR-140: the project's Git provider wire value (<c>github_app</c>, <c>gitlab</c>, ...) carried as <c>provider</c> in the
+    /// <c>RELEASE_*</c> and <c>MERGE_READINESS_CHECKED</c> payloads, so activity and notifications name the host.
+    /// </summary>
+    public static async Task<string?> ProviderAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var provider = await db.ProjectGitSettings.AsNoTracking()
+            .Where(s => s.ProjectId == projectId)
+            .Select(s => (GitProvider?)s.Provider)
+            .FirstOrDefaultAsync(cancellationToken);
+        return provider?.ToWire();
+    }
+
+    /// <summary>
+    /// FR-43: marks an in-progress attempt failed and adds <c>RELEASE_FAILED</c> (the Owner notification seam, FR-47), with
+    /// the project's Git <paramref name="provider"/> (<see cref="ProviderAsync"/>).
+    /// </summary>
     public static void Fail(
-        AideDbContext db, ReleaseEntity release, string errorCode, string message, IReadOnlyList<string> conflictingFiles, string actor, DateTimeOffset now, bool deadLettered = false)
+        AideDbContext db,
+        ReleaseEntity release,
+        string errorCode,
+        string message,
+        IReadOnlyList<string> conflictingFiles,
+        string actor,
+        DateTimeOffset now,
+        bool deadLettered = false,
+        string? provider = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(release);
@@ -103,6 +128,7 @@ public static class ReleaseRecords
                 errorMessage = message,
                 conflictingFiles,
                 deadLettered,
+                provider,
             },
             actor,
             now);

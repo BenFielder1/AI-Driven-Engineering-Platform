@@ -198,7 +198,7 @@ public static class GitEndpoints
 
         group.MapGet("/merge-readiness", GetMergeReadiness)
             .WithName("GetMergeReadiness")
-            .WithSummary("Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: \"AIDE will merge automatically\", else \"A merge on GitHub will be needed\" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. The merge itself stays authoritative (FR-65).")
+            .WithSummary("Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: \"AIDE will merge automatically\", else \"A merge on GitHub will be needed\" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65).")
             .Produces<MergeReadinessDto>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
@@ -207,9 +207,9 @@ public static class GitEndpoints
             .WithRetryAfterOn429()
             .WithResponseDescriptions(
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project."),
-                (StatusCodes.Status409Conflict, "WRONG_PHASE: not in the review or release phase."),
-                (StatusCodes.Status429TooManyRequests, "GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset)."),
-                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR: GitHub failed or couldn't be reached."));
+                (StatusCodes.Status409Conflict, "WRONG_PHASE: not in the review or release phase. GIT_NOT_CONNECTED: the GitLab project's binding was cleared."),
+                (StatusCodes.Status429TooManyRequests, "GITHUB_RATE_LIMITED, or UPSTREAM_RATE_LIMITED for GitLab (Retry-After: seconds until the rate-limit reset)."),
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR: GitHub or GitLab failed or couldn't be reached."));
 
         return app;
     }

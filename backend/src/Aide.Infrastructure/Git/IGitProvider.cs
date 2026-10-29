@@ -130,18 +130,35 @@ public interface IGitProvider
     Task<Result<GitHostReleaseRefs>> FindReleaseRefsAsync(Guid connectionId, string repoId, CancellationToken cancellationToken) =>
         Task.FromResult(Result.Failure<GitHostReleaseRefs>(GitHostOperations.NotSupported(Kind, "reading releases and tags")));
 
-    /// <summary>§4.19, FR-138 (slice 2b): the version's merge/pull request readiness.</summary>
-    Task<Result<HostMergeReadiness>> GetMergeReadinessAsync(GitConnectionSettings settings, int number, MergeStrategy strategy, CancellationToken cancellationToken) =>
+    /// <summary>
+    /// §4.19, FR-138: the version's merge/pull request readiness. <paramref name="markedReady"/>: AIDE already marked the
+    /// draft ready for this version (a release attempt awaited its merge), so a draft blocks again.
+    /// </summary>
+    Task<Result<HostMergeReadiness>> GetMergeReadinessAsync(
+        GitConnectionSettings settings, int number, MergeStrategy strategy, CancellationToken cancellationToken, bool markedReady = false) =>
         Task.FromResult(Result.Failure<HostMergeReadiness>(GitHostOperations.NotSupported(Kind, "merge readiness")));
 
     /// <summary>§4.19, FR-139 (slice 2b): the commit's CI statuses as review observations.</summary>
     Task<Result<IReadOnlyList<CheckObservation>>> GetCommitStatusesAsync(GitConnectionSettings settings, string sha, CancellationToken cancellationToken) =>
         Task.FromResult(Result.Failure<IReadOnlyList<CheckObservation>>(GitHostOperations.NotSupported(Kind, "commit statuses")));
 
-    /// <summary>§4.19, FR-140 (slice 2b): publishes the host release (GitLab Release; Bitbucket annotated tag); its URL.</summary>
+    /// <summary>§4.19, FR-140: publishes the host release (GitLab Release; Bitbucket annotated tag); its URL.</summary>
     Task<Result<string?>> PublishReleaseAsync(GitConnectionSettings settings, HostReleaseRequest request, CancellationToken cancellationToken) =>
         Task.FromResult(Result.Failure<string?>(GitHostOperations.NotSupported(Kind, "publishing releases")));
+
+    /// <summary>
+    /// FR-140, FR-65, §4.19: the merge poll's look at the version's merge/pull request <paramref name="number"/>: open,
+    /// merged or closed, and the earliest the next poll may run under the host's rate limit.
+    /// </summary>
+    Task<Result<HostMergeObservation>> ObserveMergeRequestAsync(GitConnectionSettings settings, int number, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<HostMergeObservation>(GitHostOperations.NotSupported(Kind, "merge polls")));
 }
+
+/// <summary>
+/// FR-65, §4.19: what the merge poll saw (<see cref="Observation"/>), and <see cref="NotBefore"/>, the rate-limit back-off
+/// for the next poll (<c>null</c>: the poll's own cadence).
+/// </summary>
+public sealed record HostMergeObservation(MergePollObservation Observation, DateTimeOffset? NotBefore);
 
 /// <summary>§4.19: a repo on a Git host, as the picker shows it (<see cref="Id"/>: GitLab project id, Bitbucket UUID).</summary>
 public sealed record GitHostRepo(
@@ -224,6 +241,18 @@ public sealed record ReleaseRequest(
     /// is <see cref="ReleaseOutcomeKind.AwaitingMerge"/> (GitHub: a draft PR is marked ready for review first).
     /// </summary>
     public bool Merge { get; init; } = true;
+
+    /// <summary>
+    /// FR-140: AIDE's release notes (<see cref="Domain.Releases.ReleaseNotes"/>) for a host whose release is created with the
+    /// tag (GitLab: the Release's <c>description</c>). <c>null</c> for GitHub (its Release is created after tagging) and Local.
+    /// </summary>
+    public string? Notes { get; init; }
+
+    /// <summary>
+    /// FR-65, FR-140: the merge commit already recorded on the attempt (AIDE's own merge, before a retry); a merged PR/MR
+    /// on this commit isn't a merge someone else made.
+    /// </summary>
+    public string? RecordedMergeCommitSha { get; init; }
 }
 
 /// <summary>How a release attempt ended at the provider.</summary>
@@ -280,6 +309,18 @@ public sealed record ReleaseOutcome(
 
     /// <summary>FR-65: released on a merge someone else made (the PR was already merged on GitHub, or the Local branch by hand).</summary>
     public bool MergedExternally { get; init; }
+
+    /// <summary>FR-140: the host release the provider created with the tag (GitLab Release); <c>null</c> otherwise.</summary>
+    public string? ReleaseUrl { get; init; }
+
+    /// <summary>
+    /// FR-140: the readiness reason the host's refusal implies (GitLab 403 → <c>no_permission</c>), used when merge readiness
+    /// shows none; <c>null</c>: <c>branch_protected</c>.
+    /// </summary>
+    public MergeReadinessReasonCode? RefusedReason { get; init; }
+
+    /// <summary>FR-138: AIDE couldn't take the merge request out of draft, so the awaiting reasons include <c>draft</c>.</summary>
+    public bool StillDraft { get; init; }
 }
 
 /// <summary>The project PR to open (FR-36).</summary>

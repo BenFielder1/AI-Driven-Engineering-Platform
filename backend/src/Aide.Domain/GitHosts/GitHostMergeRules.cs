@@ -78,6 +78,44 @@ public static class GitLabMergeResult
     /// </summary>
     public static DateTimeOffset? TagLimitRetryAt(int status, string? retryAfter, string? rateLimitReset, DateTimeOffset now) =>
         status != 429 ? null : GitHostPollBudget.ResetAt(retryAfter, rateLimitReset, now) ?? now + TagCreationWindow;
+
+    /// <summary>
+    /// FR-140: the merge call's <c>squash</c> per the project's merge settings: GitLab's <c>squash_option</c>
+    /// <c>always</c> or <c>default_on</c> squashes; <c>never</c>, <c>default_off</c> or unknown doesn't (GitLab refuses a squash
+    /// the project forbids, and requires one it enforces).
+    /// </summary>
+    public static bool Squash(string? squashOption) => squashOption is "always" or "default_on";
+
+    /// <summary>
+    /// FR-140, FR-65: what a merge request's <c>state</c> means for the merge poll: <c>merged</c> → merged; <c>closed</c> →
+    /// closed without merging (<c>PR_CLOSED</c>); <c>opened</c>, <c>locked</c> (GitLab is merging it) or unknown → still open.
+    /// </summary>
+    public static MergePollObservation ObservationOf(string? state) => state switch
+    {
+        "merged" => MergePollObservation.Merged,
+        "closed" => MergePollObservation.ClosedUnmerged,
+        _ => MergePollObservation.Open,
+    };
+
+    /// <summary>
+    /// FR-140: the GitLab Release's web page: the release's <c>_links.self</c> when it is an absolute http(s) URL, else
+    /// <c>&lt;project web URL&gt;/-/releases/&lt;tag&gt;</c>; <c>null</c> when neither is known.
+    /// </summary>
+    public static string? ReleaseUrl(string? selfLink, string? projectWebUrl, string tag)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(tag);
+        if (IsWebUrl(selfLink))
+        {
+            return selfLink;
+        }
+
+        return IsWebUrl(projectWebUrl) ? $"{projectWebUrl!.TrimEnd('/')}/-/releases/{Uri.EscapeDataString(tag)}" : null;
+    }
+
+    private static bool IsWebUrl(string? url) =>
+        url is { Length: <= 500 }
+        && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 }
 
 /// <summary>FR-140, §4.19: Bitbucket merge rules. Pure.</summary>

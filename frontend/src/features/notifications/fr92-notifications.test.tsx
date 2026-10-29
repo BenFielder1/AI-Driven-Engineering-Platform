@@ -21,7 +21,7 @@ function signInUser() {
 const fr92Cases: { type: Schemas['NotificationType']; label: string; title: string; link: string }[] = [
   {
     type: 'release_awaiting_merge',
-    label: 'Release awaiting a merge on GitHub',
+    label: 'Release awaiting a merge on the Git host',
     title: 'Release v1.2.0 is waiting for a merge',
     link: `/projects/${PROJECT}/release`,
   },

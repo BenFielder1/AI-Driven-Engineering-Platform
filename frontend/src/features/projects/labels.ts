@@ -1,4 +1,5 @@
 import type { Schemas } from '../../api/client'
+import { withGitHost, type GitHostTerms } from '../../lib/git-host'
 import type { ProjectRole } from '../../lib/permissions'
 
 /** User-facing names for the contract's enums used by the projects feature. */
@@ -329,7 +330,8 @@ export const notificationEventLabels: Record<Schemas['NotificationEvent'], strin
   review_completed: 'Review completed',
   release_completed: 'Release completed',
   release_failed: 'Release failed',
-  release_awaiting_merge: 'Release awaiting a merge on GitHub',
+  // FR-140: the type label has no project host (notifications carry no provider), so it doesn't name one.
+  release_awaiting_merge: 'Release awaiting a merge on the Git host',
   rollback: 'Rollback',
   deployment_failed: 'Deployment failed',
   preview_ready: 'Preview ready',
@@ -557,18 +559,27 @@ export const stepAttemptOutcomeLabels: Record<Schemas['StepAttemptOutcome'], str
 
 // ---- Merge readiness and checks (FR-64, FR-65, FR-84, FR-85) -----------------------------------------------------
 
-/** FR-65: the project's merge strategy, as Settings → Git and the Release page name it. */
-export const mergeStrategyLabels: Record<Schemas['MergeStrategy'], string> = {
-  aide_merges: 'AIDE merges the pull request',
-  manual: 'Merge manually on GitHub — AIDE waits and tags the merge',
+/** FR-65, FR-140: the project's merge strategy, as Settings → Git and the Release page name it (`{…}`: see withGitHost). */
+const mergeStrategyCopy: Record<Schemas['MergeStrategy'], { label: string; description: string }> = {
+  aide_merges: {
+    label: 'AIDE merges the {pr}',
+    description:
+      'When the release is approved, AIDE merges the {pr}. If {host} refuses (required reviews or checks, branch protection), the release waits for a merge on {host}.',
+  },
+  manual: {
+    label: 'Merge manually on {host} — AIDE waits and tags the merge',
+    description:
+      'AIDE never merges. It marks the {pr} ready for review and waits; once someone merges it on {host}, AIDE tags the merge commit and creates the {release}.',
+  },
 }
 
-export const mergeStrategyDescriptions: Record<Schemas['MergeStrategy'], string> = {
-  aide_merges:
-    'When the release is approved, AIDE merges the pull request. If GitHub refuses (required reviews or checks, branch protection), the release waits for a merge on GitHub.',
-  manual:
-    'AIDE never merges. It marks the pull request ready for review and waits; once someone merges it on GitHub, AIDE tags the merge commit and creates the GitHub Release.',
-}
+/** The merge strategy's label, naming the project's Git host (default GitHub). */
+export const mergeStrategyLabel = (strategy: Schemas['MergeStrategy'], host?: GitHostTerms) =>
+  withGitHost(mergeStrategyCopy[strategy].label, host)
+
+/** The merge strategy's description, naming the project's Git host (default GitHub). */
+export const mergeStrategyDescription = (strategy: Schemas['MergeStrategy'], host?: GitHostTerms) =>
+  withGitHost(mergeStrategyCopy[strategy].description, host)
 
 /** FR-84: why AIDE can't merge the version's PR itself (fallback when a reason has no message). */
 export const mergeReasonLabels: Record<Schemas['MergeReadinessReasonCode'], string> = {

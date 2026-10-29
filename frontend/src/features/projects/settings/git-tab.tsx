@@ -13,9 +13,10 @@ import { fieldErrorSummary } from '../../../components/ui/form-errors'
 import { SelectField } from '../../../components/ui/select-field'
 import { TextField } from '../../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, isApiError } from '../../../lib/errors'
+import { gitHostTerms } from '../../../lib/git-host'
 import { useSwitchGitToApp } from '../../github/github-api'
 import { GitHubErrorAlert, GitHubLink } from '../../github/github-error-alert'
-import { gitProviderLabels, mergeStrategyLabels } from '../labels'
+import { gitProviderLabels, mergeStrategyLabel } from '../labels'
 import { useTestGitConnection, useUpdateGitSettings, type GitSettings, type GitTestResult } from '../projects-api'
 import { checkBranch, checkRepoUrl, checkSecret, limits } from '../schemas'
 import { BindingAlert, BoundHostRows, isBoundHost, RebindGitLab } from './git-binding'
@@ -114,7 +115,7 @@ function GitModeSummary({ git }: { git: GitSettings }) {
           </>
         )}
         <Row term="Merge strategy">
-          <span data-testid="git-merge-strategy">{mergeStrategyLabels[git.mergeStrategy]}</span>
+          <span data-testid="git-merge-strategy">{mergeStrategyLabel(git.mergeStrategy, gitHostTerms(git.mode))}</span>
         </Row>
         <Row term="Tag prefix">
           {git.tagPrefix ? <code className="font-mono">{git.tagPrefix}</code> : <span className="text-muted-foreground">None (bare version tags)</span>}

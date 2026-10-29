@@ -24,6 +24,9 @@ namespace Aide.Api.Features.Release;
 /// <item>GitHub: <c>GET /pulls/{n}</c> with the last ETag (<c>If-None-Match</c>; a 304 is "no change"). <c>merged</c> →
 /// the PR's <c>merge_commit_sha</c> is the tag target (authoritative even for squash or rebase merges); closed without merging
 /// → <c>PR_CLOSED</c>.</item>
+/// <item>GitLab (FR-140): <c>GET …/merge_requests/:iid</c>: <c>merged</c> → the merged commit is tagged with the GitLab
+/// Release; <c>closed</c> → <c>PR_CLOSED</c>. Under 10 % of the rate limit left pushes the next poll to the reset
+/// (§4.19).</item>
 /// <item>Local: the version branch head is in the default branch (<c>merge-base --is-ancestor</c>) → the merge commit is the
 /// oldest first-parent commit of the default branch that contains it (the head itself after a fast-forward).</item>
 /// </list>
@@ -35,6 +38,7 @@ namespace Aide.Api.Features.Release;
 public sealed partial class MergePollJobHandler(
     AideDbContext db,
     GitHubRepoAccess access,
+    GitHostTargets hosts,
     GitHubApi api,
     WorkingCopyPreparer preparer,
     IWorkingCopies workingCopies,
@@ -64,10 +68,18 @@ public sealed partial class MergePollJobHandler(
             .FirstOrDefaultAsync(cancellationToken);
 
         MergePollObservation observation;
+        DateTimeOffset? notBefore = null;
         var etag = payload.ETag;
         try
         {
-            (observation, etag) = await ObserveAsync(project, version?.PullRequestNumber, version?.BranchName, etag, cancellationToken);
+            if (await hosts.ResolveAsync(project.Id, cancellationToken) is { } host)
+            {
+                (observation, notBefore) = await ObserveHostAsync(project, host, version?.PullRequestNumber, cancellationToken);
+            }
+            else
+            {
+                (observation, etag) = await ObserveAsync(project, version?.PullRequestNumber, version?.BranchName, etag, cancellationToken);
+            }
         }
         catch (GitHubRateLimitedException ex)
         {
@@ -81,9 +93,11 @@ public sealed partial class MergePollJobHandler(
         switch (decision.Kind)
         {
             case MergePollDecisionKind.Wait:
+                // §4.19: a GitLab rate limit running low pushes the next poll to its reset.
+                var next = Domain.GitHosts.GitHostPollBudget.Later(decision.NextPollAt!.Value, notBefore);
                 throw new JobDeferredException(
-                    $"Waiting for the pull request to be merged (next poll {decision.NextPollAt:u}).",
-                    decision.NextPollAt!.Value,
+                    $"Waiting for the pull request to be merged (next poll {next:u}).",
+                    next,
                     AideJson.Serialize(payload with { ETag = etag }));
             case MergePollDecisionKind.Fail:
                 await completion.AbandonAsync(release.Id, decision.ErrorCode!, decision.Message!, cancellationToken);
@@ -92,6 +106,29 @@ public sealed partial class MergePollJobHandler(
                 await CompleteAsync(release, cancellationToken);
                 return;
         }
+    }
+
+    /// <summary>
+    /// FR-140, §4.19: what the GitLab merge request shows now (<c>merged</c>, <c>closed</c> or still open), and the
+    /// rate-limit back-off for the next poll. GitLab failing is a poll without news; a 429 waits for the reset (the job
+    /// worker re-queues it without counting an attempt).
+    /// </summary>
+    private async Task<(MergePollObservation Observation, DateTimeOffset? NotBefore)> ObserveHostAsync(
+        Project project, GitHostTarget host, int? pullRequestNumber, CancellationToken cancellationToken)
+    {
+        if (pullRequestNumber is not { } number)
+        {
+            return (MergePollObservation.Open, null);
+        }
+
+        var observed = await host.Provider.ObserveMergeRequestAsync(host.Connection, number, cancellationToken);
+        if (observed.IsFailure)
+        {
+            LogNoAccess(logger, project.Id, observed.Error!.Message);
+            return (MergePollObservation.Open, null);
+        }
+
+        return (observed.Value.Observation, observed.Value.NotBefore);
     }
 
     /// <summary>What the PR (GitHub) or the version branch (Local) shows now, and the PR's ETag for the next poll.</summary>
@@ -188,12 +225,13 @@ public sealed partial class MergePollJobHandler(
             (sha, ct) => RecordMergeAsync(release.Id, sha, ct))
         {
             Merge = false,
+            Notes = await publisher.HostNotesAsync(release, working.Provider.Kind, working.Connection.RepoUrl, cancellationToken),
         };
         var outcome = await working.Provider.ReleaseAsync(working.Connection, request, working.Token, cancellationToken);
         switch (outcome.Kind)
         {
             case ReleaseOutcomeKind.Released:
-                var url = await publisher.PublishAsync(release, outcome.Tag ?? release.Tag, cancellationToken);
+                var url = outcome.ReleaseUrl ?? await publisher.PublishAsync(release, outcome.Tag ?? release.Tag, cancellationToken);
                 await completion.SucceedAsync(release.Id, outcome, url, mergedExternally: true, cancellationToken);
                 return;
             case ReleaseOutcomeKind.AwaitingMerge:
@@ -263,9 +301,10 @@ public sealed class MergePollJobEndedHook(TimeProvider time) : IJobEndedHook
             return;
         }
 
+        var provider = await ReleaseRecords.ProviderAsync(db, projectId, cancellationToken);
         foreach (var release in awaiting)
         {
-            ReleaseRecords.Fail(db, release, ErrorCodes.GitError, job.Error ?? "The merge poll failed.", [], SystemActor.Name, now, job.DeadLettered);
+            ReleaseRecords.Fail(db, release, ErrorCodes.GitError, job.Error ?? "The merge poll failed.", [], SystemActor.Name, now, job.DeadLettered, provider);
         }
 
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);

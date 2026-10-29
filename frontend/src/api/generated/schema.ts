@@ -1598,7 +1598,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: "AIDE will merge automatically", else "A merge on GitHub will be needed" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. The merge itself stays authoritative (FR-65). */
+        /** Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: "AIDE will merge automatically", else "A merge on GitHub will be needed" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65). */
         get: operations["GetMergeReadiness"];
         put?: never;
         post?: never;
@@ -4081,7 +4081,10 @@ export interface components {
          *     ("AIDE will merge automatically"); otherwise "A merge on GitHub will be needed" with `reasons` (empty when
          *     `canMerge`, except `manual_strategy`). `checks` are the PR head's check runs and commit statuses.
          *     `mergeStateStatus` and `reviewDecision` are GitHub's GraphQL values verbatim (e.g. `CLEAN`,
-         *     `BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a Local project
+         *     `BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a GitLab project (FR-138)
+         *     `mergeStateStatus` is the merge request's `detailed_merge_status` verbatim (e.g. `mergeable`,
+         *     `not_approved`), `reviewDecision` is `null` and `checks` are the head's pipeline jobs and commit
+         *     statuses (FR-139). For a Local project
          *     `canMerge` is true with no checks. The merge itself stays authoritative (FR-65).
          */
         MergeReadinessDto: {
@@ -4721,8 +4724,9 @@ export interface components {
          *     Failure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,
          *     `GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and
          *     `MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can
-         *     retry with `POST /release`. `githubReleaseUrl` is the GitHub Release created for the tag (FR-64; `null`
-         *     for Local or before it exists). `mergeStrategy` is the project's current merge strategy (FR-65).
+         *     retry with `POST /release`. `githubReleaseUrl` is the host release created for the tag: the GitHub Release
+         *     (FR-64) or the GitLab Release (FR-140); `null` for Local or before it exists. A GitLab merge refused because the
+         *     merge request's head moved since review (409) fails with `GIT_ERROR`. `mergeStrategy` is the project's current merge strategy (FR-65).
          *     `productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including
          *     redeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release.
          */
@@ -11693,7 +11697,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description WRONG_PHASE: not in the review or release phase. */
+            /** @description WRONG_PHASE: not in the review or release phase. GIT_NOT_CONNECTED: the GitLab project's binding was cleared. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -11702,7 +11706,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset). */
+            /** @description GITHUB_RATE_LIMITED, or UPSTREAM_RATE_LIMITED for GitLab (Retry-After: seconds until the rate-limit reset). */
             429: {
                 headers: {
                     /** @description Seconds until the action is allowed again. */
@@ -11713,7 +11717,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR: GitHub failed or couldn't be reached. */
+            /** @description UPSTREAM_ERROR: GitHub or GitLab failed or couldn't be reached. */
             502: {
                 headers: {
                     [name: string]: unknown;

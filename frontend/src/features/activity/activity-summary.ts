@@ -16,6 +16,7 @@ import {
   phases,
   reviewDecisions,
 } from "../projects/labels";
+import { gitHostTermsOf } from "../../lib/git-host";
 import { stackLayerLabels } from "../stack/stack-model";
 import type { ActivityItem } from "./activity-api";
 
@@ -371,9 +372,11 @@ function describeReview(type: string, payload: Payload): string | null {
 
 /**
  * Release events (FR-42, FR-43). Assumed payload: `tag`, `attempt`, and on failure `errorCode` and `conflictingFiles`;
- * anything missing falls back to a shorter line.
+ * anything missing falls back to a shorter line. `provider` (FR-140) names the Git host; older events without it read
+ * as GitHub.
  */
 function describeRelease(type: string, payload: Payload): string | null {
+  const host = gitHostTermsOf(payload.provider);
   const tag = str(payload, "tag");
   const release = tag ? `Release ${tag}` : "Release";
   switch (type) {
@@ -384,7 +387,7 @@ function describeRelease(type: string, payload: Payload): string | null {
         : `${release} started`;
     }
     case "RELEASE_COMPLETED": {
-      const how = payload.mergedExternally === true ? "merged on GitHub and tagged" : "merged and tagged";
+      const how = payload.mergedExternally === true ? `merged on ${host.host} and tagged` : "merged and tagged";
       return tag ? `Released: ${how} ${tag}` : `Released: ${how}`;
     }
     case "RELEASE_AWAITING_MERGE": {
@@ -394,7 +397,7 @@ function describeRelease(type: string, payload: Payload): string | null {
         typeof first === "object" && first !== null && "message" in first && typeof first.message === "string"
           ? first.message
           : null;
-      const base = `${release} is waiting for its pull request to be merged on GitHub`;
+      const base = `${release} is waiting for its ${host.pr} to be merged on ${host.host}`;
       if (message === null) {
         return base;
       }
@@ -405,18 +408,18 @@ function describeRelease(type: string, payload: Payload): string | null {
         return "Merge readiness checked: AIDE will merge automatically";
       }
       if (payload.willAutoMerge === false) {
-        return "Merge readiness checked: a merge on GitHub will be needed";
+        return `Merge readiness checked: a merge on ${host.host} will be needed`;
       }
       return "Merge readiness checked";
     }
     case "RELEASE_MERGED_EXTERNALLY":
-      return `${release}: the pull request was merged on GitHub`;
+      return `${release}: the ${host.pr} was merged on ${host.host}`;
     case "RELEASE_FAILED": {
       if (str(payload, "errorCode") === "PR_CLOSED") {
-        return `${release} failed: the pull request was closed without merging`;
+        return `${release} failed: the ${host.pr} was closed without merging`;
       }
       if (str(payload, "errorCode") === "MERGE_TIMEOUT") {
-        return `${release} failed: the pull request wasn't merged within 14 days`;
+        return `${release} failed: the ${host.pr} wasn't merged within 14 days`;
       }
       if (str(payload, "errorCode") === "MERGE_CONFLICT") {
         const files = payload.conflictingFiles;

@@ -10,6 +10,12 @@ namespace Aide.Domain.GitHosts;
 public sealed record HostMergeReadiness(bool RePoll, MergeReadinessVerdict? Verdict)
 {
     public static HostMergeReadiness Pending { get; } = new(true, null);
+
+    /// <summary>FR-138, FR-139: the head's CI statuses as checks (shown with the readiness); empty when not read.</summary>
+    public IReadOnlyList<CheckObservation> Checks { get; init; } = [];
+
+    /// <summary>The host's own merge status verbatim (GitLab <c>detailed_merge_status</c>), when known.</summary>
+    public string? HostStatus { get; init; }
 }
 
 /// <summary>
@@ -164,6 +170,39 @@ public static class GitLabMergeReadiness
     }
 
     /// <summary>
+    /// FR-138, FR-65, FR-137: AIDE opens the merge request as a draft and marks it ready itself before merging (under both
+    /// strategies), so until it has (<paramref name="markedReady"/> false) the draft doesn't block AIDE (as v2 does for
+    /// GitHub drafts): the facts without <see cref="GitLabMergeFacts.Draft"/>, and without GitLab's <c>draft_status</c>
+    /// (which hides the other merge checks; the approvals endpoint, conflicts, discussions and the head pipeline still say
+    /// what blocks). Once AIDE marked it ready, a draft (made again by someone, or never cleared) blocks: facts unchanged.
+    /// </summary>
+    public static GitLabMergeFacts IgnoringAideDraft(GitLabMergeFacts facts, bool markedReady = false)
+    {
+        ArgumentNullException.ThrowIfNull(facts);
+        if (markedReady)
+        {
+            return facts;
+        }
+
+        return facts with
+        {
+            Draft = false,
+            DetailedMergeStatus = facts.DetailedMergeStatus == "draft_status" ? null : facts.DetailedMergeStatus,
+        };
+    }
+
+    /// <summary>
+    /// FR-138: the verdict while GitLab is still computing the merge status after the re-polls
+    /// (<see cref="TransientStatuses"/>): not mergeable yet, with <c>checks_pending</c>.
+    /// </summary>
+    public static MergeReadinessVerdict StillChecking(MergeStrategy strategy)
+    {
+        var reasons = new ReasonList();
+        reasons.Add(MergeReadinessReasonCode.ChecksPending, "GitLab is still checking whether the merge request can be merged. Refresh in a moment.");
+        return reasons.Verdict(strategy, "GitLab");
+    }
+
+    /// <summary>
     /// §4.19: whether a user with <paramref name="userAccessLevel"/> may merge into the target branch: an unprotected
     /// branch needs Developer; a protected one needs at least one of its merge access levels (0 = no one). Unknown access is
     /// assumed allowed (GitLab's own status and the merge call stay authoritative).
@@ -183,15 +222,19 @@ public static class GitLabMergeReadiness
         return protectedBranchMergeAccessLevels.Any(allowed => allowed > 0 && level >= allowed);
     }
 
-    /// <summary>A GitLab pipeline or job status as a check: <c>success</c>; <c>failed</c>; <c>canceled</c>; <c>skipped</c>;
-    /// <c>manual</c> (waiting for someone to run it: action required); everything else is still running.</summary>
+    /// <summary>
+    /// FR-139: a GitLab pipeline or job status as a check: <c>success</c>; <c>failed</c> and <c>canceled</c> fail;
+    /// <c>skipped</c> and <c>manual</c> (a job nobody has run, e.g. <c>deploy:prod</c>) are neutral, neither failing nor
+    /// pending; <c>created</c>, <c>waiting_for_resource</c>, <c>preparing</c>, <c>pending</c> and <c>scheduled</c> are queued;
+    /// everything else (<c>running</c>, <c>canceling</c>) is still running.
+    /// </summary>
     public static (CheckRunStatus Status, CheckRunConclusion? Conclusion) StatusOf(string? status) => status switch
     {
         "success" => (CheckRunStatus.Completed, CheckRunConclusion.Success),
         "failed" => (CheckRunStatus.Completed, CheckRunConclusion.Failure),
         "canceled" or "cancelled" => (CheckRunStatus.Completed, CheckRunConclusion.Cancelled),
         "skipped" => (CheckRunStatus.Completed, CheckRunConclusion.Skipped),
-        "manual" => (CheckRunStatus.Completed, CheckRunConclusion.ActionRequired),
+        "manual" => (CheckRunStatus.Completed, CheckRunConclusion.Neutral),
         "created" or "waiting_for_resource" or "preparing" or "pending" or "scheduled" => (CheckRunStatus.Queued, null),
         _ => (CheckRunStatus.InProgress, null),
     };

@@ -429,7 +429,10 @@ public sealed partial class GitLabClient
     {
         try
         {
-            return await _http.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken);
+            var response = await _http.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken);
+            LastRateLimit = new RateLimitHeaders(
+                Header(response, "RateLimit-Remaining"), Header(response, "RateLimit-Limit"), Header(response, "RateLimit-Reset"), Header(response, "Retry-After"));
+            return response;
         }
         catch (HttpRequestException ex) when (GitHostBlockedException.Find(ex) is { } blocked)
         {
@@ -444,6 +447,12 @@ public sealed partial class GitLabClient
             throw new GitLabApiException(null, "GitLab didn't answer in time.", ex);
         }
     }
+
+    /// <summary>§4.19: the rate-limit headers of this client's last answer (for the polling budget).</summary>
+    public RateLimitHeaders LastRateLimit { get; private set; } = RateLimitHeaders.None;
+
+    private static string? Header(HttpResponseMessage response, string name) =>
+        response.Headers.TryGetValues(name, out var values) ? values.FirstOrDefault() : null;
 
     private static async Task<JsonDocument> ReadJsonAsync(HttpResponseMessage response, CancellationToken cancellationToken) =>
         await TryJsonAsync(response, cancellationToken) ?? throw new GitLabApiException((int)response.StatusCode, "GitLab's answer isn't JSON.");

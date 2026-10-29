@@ -1,5 +1,7 @@
 import type { FieldValues, Path, UseFormSetError } from "react-hook-form";
 
+import { withGitHost, type GitHostTerms } from "./git-host";
+
 /**
  * The ONE place that maps API `errorCode`s to user copy (CLAUDE.md rule 4). Mirrors
  * backend/src/Aide.Domain/Common/ErrorCodes.cs (endpoint codes and agent-run codes; Guardian codes are separate).
@@ -82,10 +84,11 @@ export const errorMessages = {
   // Import an existing repository (FR-73)
   TAG_NOT_FOUND: "That tag isn't in the repository. Pick another released version, or choose Never released.",
   RELEASE_CANCELLED: "A rollback cancelled this release before it ran.",
-  // Recorded on a release attempt that was awaiting its merge (FR-65, §4.14)
-  PR_CLOSED: "The pull request was closed without merging. Reopen it on GitHub, then retry.",
+  // Recorded on a release attempt that was awaiting its merge (FR-65, §4.14). `{pr}` and `{host}` name the project's Git
+  // host (FR-140): pass its terms to copyForCode(); without them the copy reads as GitHub.
+  PR_CLOSED: "The {pr} was closed without merging. Reopen it on {host}, then retry.",
   MERGE_TIMEOUT:
-    "The pull request wasn't merged within 14 days, so AIDE stopped waiting. Merge it on GitHub or fix what blocks it, then retry the release.",
+    "The {pr} wasn't merged within 14 days, so AIDE stopped waiting. Merge it on {host} or fix what blocks it, then retry the release.",
   // Approval links
   LINK_EXPIRED: "This approval link has expired.",
   LINK_USED: "This approval link has already been used.",
@@ -519,7 +522,7 @@ export function messageFor(code: ErrorCode, context?: ErrorContext): string {
   const overrides: Partial<Record<ErrorCode, string>> | undefined = context
     ? contextualErrorMessages[context]
     : undefined;
-  return overrides?.[code] ?? errorMessages[code];
+  return withGitHost(overrides?.[code] ?? errorMessages[code]);
 }
 
 /** FR-2: `reason` on `/login?error=GITHUB_AUTH_FAILED&reason=…` (see backend Auth/GitHubAuth.cs). */
@@ -607,9 +610,22 @@ function isErrorCode(code: unknown): code is ErrorCode {
   return typeof code === "string" && Object.hasOwn(errorMessages, code);
 }
 
-/** Copy for an `errorCode` recorded on a resource (e.g. a failed release), or `null` when the code is unknown. */
-export function copyForCode(code: string | null | undefined, context?: ErrorContext): string | null {
-  return isErrorCode(code) ? messageFor(code, context) : null;
+/**
+ * Copy for an `errorCode` recorded on a resource (e.g. a failed release), or `null` when the code is unknown. `host`
+ * names the project's Git host in host-aware copy (FR-140; default GitHub).
+ */
+export function copyForCode(
+  code: string | null | undefined,
+  context?: ErrorContext,
+  host?: GitHostTerms,
+): string | null {
+  if (!isErrorCode(code)) {
+    return null;
+  }
+  const overrides: Partial<Record<ErrorCode, string>> | undefined = context
+    ? contextualErrorMessages[context]
+    : undefined;
+  return withGitHost(overrides?.[code] ?? errorMessages[code], host);
 }
 
 const statusFallback: Partial<Record<number, ErrorCode>> = {
@@ -749,12 +765,20 @@ export const rollbackBlockedMessages = {
     "This version is released and closed, so it can't be rolled back. Start a new version to make changes.",
   releasePartiallyApplied:
     "A rollback isn't possible because the release is partially applied: it's awaiting its merge on GitHub, or it was merged or tagged but didn't finish. Merge or close the pull request, or retry the release, first.",
-  /** Shown before asking: the release is awaiting its merge on GitHub (FR-65; the API says release_partially_applied). */
+  /**
+   * Shown before asking: the release is awaiting its merge on the Git host (FR-65; the API says
+   * release_partially_applied). Host-aware (FR-140): show it through rollbackAwaitingMergeMessage().
+   */
   awaitingMerge:
-    "A rollback isn't possible while the release is awaiting its merge on GitHub (the release is partially applied). Merge or close the pull request first.",
+    "A rollback isn't possible while the release is awaiting its merge on {host} (the release is partially applied). Merge or close the {pr} first.",
   releaseRunning:
     "A rollback isn't possible while a release is merging and tagging. Wait for it to finish, then try again.",
 } as const;
+
+/** FR-65, FR-140: rollbackBlockedMessages.awaitingMerge naming the project's Git host (default GitHub). */
+export function rollbackAwaitingMergeMessage(host?: GitHostTerms): string {
+  return withGitHost(rollbackBlockedMessages.awaitingMerge, host);
+}
 
 function rollbackBlockedMessage(error: ApiError): string | null {
   const reason = `${detailValue(error, "reason") ?? ""} ${error.message}`.toLowerCase();

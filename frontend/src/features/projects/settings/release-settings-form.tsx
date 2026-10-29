@@ -11,7 +11,8 @@ import { fieldErrorSummary } from '../../../components/ui/form-errors'
 import { RadioGroup } from '../../../components/ui/radio-group'
 import { TextField } from '../../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, isApiError } from '../../../lib/errors'
-import { mergeStrategyDescriptions, mergeStrategyLabels } from '../labels'
+import { gitHostTerms } from '../../../lib/git-host'
+import { mergeStrategyDescription, mergeStrategyLabel } from '../labels'
 import { useProjectState, useUpdateGitSettings, type GitSettings } from '../projects-api'
 import { checkTagPrefix, TAG_PREFIX_MAX, tagPrefixLockReason } from './release-settings-rules'
 
@@ -29,11 +30,15 @@ type ReleaseValues = z.infer<typeof releaseSchema>
 
 const fieldIds = { mergeStrategy: 'release-merge-strategy', tagPrefix: 'release-tag-prefix' } as const
 
-const strategyOptions = (['aide_merges', 'manual'] as const).map((value) => ({
-  value,
-  label: mergeStrategyLabels[value],
-  description: mergeStrategyDescriptions[value],
-}))
+/** FR-65, FR-140: the strategies, worded for the project's Git host. */
+const strategyOptions = (git: GitSettings) => {
+  const host = gitHostTerms(git.mode)
+  return (['aide_merges', 'manual'] as const).map((value) => ({
+    value,
+    label: mergeStrategyLabel(value, host),
+    description: mergeStrategyDescription(value, host),
+  }))
+}
 
 const toValues = (g: GitSettings): ReleaseValues => ({ mergeStrategy: g.mergeStrategy, tagPrefix: g.tagPrefix })
 
@@ -55,7 +60,7 @@ export function ReleaseSettingsForm({ projectId, git }: { projectId: string; git
   } = useForm<ReleaseValues>({ resolver: zodResolver(releaseSchema), defaultValues: toValues(git), mode: 'onChange' })
 
   const tagPrefix = useWatch({ control, name: 'tagPrefix' })
-  const lockReason = tagPrefixLockReason(state.data)
+  const lockReason = tagPrefixLockReason(state.data, gitHostTerms(git.mode))
   const sampleVersion = state.data?.developmentVersion ?? state.data?.suggestedNextVersion ?? '1.2.0'
 
   const onSubmit = handleSubmit((v) => {
@@ -95,7 +100,7 @@ export function ReleaseSettingsForm({ projectId, git }: { projectId: string; git
         <RadioGroup
           legend="Merge strategy"
           id={fieldIds.mergeStrategy}
-          options={strategyOptions}
+          options={strategyOptions(git)}
           inputProps={register('mergeStrategy')}
           error={errors.mergeStrategy?.message}
         />

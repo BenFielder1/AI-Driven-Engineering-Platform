@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
-import { contextualErrorMessages, errorMessages, rollbackBlockedMessages } from '../../lib/errors'
+import { contextualErrorMessages, rollbackAwaitingMergeMessage } from '../../lib/errors'
 import { seedGate } from '../../mocks/handlers/lifecycle'
 import type { StoredProject } from '../../mocks/handlers/projects'
 import { mergeReadiness, seedAwaitingMerge, seedRelease, seedReleasePhase } from '../../mocks/handlers/release'
@@ -165,7 +165,11 @@ describe('Awaiting merge (FR-65)', () => {
     await openRelease(project)
     const panel = await releasePanel()
     expect(await within(panel).findByText('The release stopped waiting for the merge')).toBeInTheDocument()
-    expect(within(panel).getByText(errorMessages.MERGE_TIMEOUT)).toBeInTheDocument()
+    expect(
+      within(panel).getByText(
+        "The pull request wasn't merged within 14 days, so AIDE stopped waiting. Merge it on GitHub or fix what blocks it, then retry the release.",
+      ),
+    ).toBeInTheDocument()
   })
 
   it('FR65_rollback_is_blocked_with_the_reason_while_awaiting_merge', async () => {
@@ -175,7 +179,7 @@ describe('Awaiting merge (FR-65)', () => {
     await renderRoute(`/projects/${project.id}/settings/danger`)
     const button = await screen.findByRole('button', { name: 'Roll back…' })
     expect(button).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByText(rollbackBlockedMessages.awaitingMerge)).toBeInTheDocument()
+    expect(screen.getByText(rollbackAwaitingMergeMessage())).toBeInTheDocument()
   })
 
   it('FR65_FR92_activity_lines_for_awaiting_merge_merged_externally_and_pr_closed', () => {

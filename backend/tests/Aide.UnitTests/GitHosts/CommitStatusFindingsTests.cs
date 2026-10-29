@@ -86,11 +86,32 @@ public class CommitStatusFindingsTests
     [InlineData("failed", CheckRunStatus.Completed, CheckRunConclusion.Failure)]
     [InlineData("canceled", CheckRunStatus.Completed, CheckRunConclusion.Cancelled)]
     [InlineData("skipped", CheckRunStatus.Completed, CheckRunConclusion.Skipped)]
-    [InlineData("manual", CheckRunStatus.Completed, CheckRunConclusion.ActionRequired)]
+    [InlineData("manual", CheckRunStatus.Completed, CheckRunConclusion.Neutral)]
     [InlineData("pending", CheckRunStatus.Queued, null)]
+    [InlineData("created", CheckRunStatus.Queued, null)]
+    [InlineData("scheduled", CheckRunStatus.Queued, null)]
+    [InlineData("waiting_for_resource", CheckRunStatus.Queued, null)]
+    [InlineData("preparing", CheckRunStatus.Queued, null)]
     [InlineData("running", CheckRunStatus.InProgress, null)]
     public void FR139_GitLab_statuses_map_to_checks(string state, CheckRunStatus status, CheckRunConclusion? conclusion) =>
         Assert.Equal((status, conclusion), GitLabMergeReadiness.StatusOf(state));
+
+    [Theory]
+    [InlineData("manual", false, false)]
+    [InlineData("skipped", false, false)]
+    [InlineData("canceled", true, false)]
+    [InlineData("failed", true, false)]
+    [InlineData("created", false, true)]
+    [InlineData("scheduled", false, true)]
+    [InlineData("waiting_for_resource", false, true)]
+    [InlineData("preparing", false, true)]
+    public void FR139_GitLab_unrun_manual_and_skipped_jobs_are_neutral_canceled_fails_and_queued_ones_are_pending(string state, bool failing, bool pending)
+    {
+        var check = Assert.Single(CommitStatusFindings.FromGitLab([new GitLabCommitStatus("deploy:prod", state, false, null)], pipelinesMustSucceed: true));
+
+        Assert.Equal((failing, pending), (MergeReadinessRules.IsFailing(check), MergeReadinessRules.IsPending(check)));
+        Assert.Equal(failing ? 1 : 0, CommitStatusFindings.Findings([check], CommitStatusHost.Gitlab).Count);
+    }
 
     [Fact]
     public void FR139_Pending_statuses_are_waited_for_up_to_15_minutes()

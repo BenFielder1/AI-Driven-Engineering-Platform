@@ -18,6 +18,15 @@ public sealed record GitLabProjectDetails(
     int? GroupAccess)
 {
     public string ExternalId => Id.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>FR-140: <c>merge_method</c> (<c>merge</c>, <c>rebase_merge</c>, <c>ff</c>).</summary>
+    public string? MergeMethod { get; init; }
+
+    /// <summary>FR-140: <c>squash_option</c> (<c>never</c>, <c>always</c>, <c>default_on</c>, <c>default_off</c>).</summary>
+    public string? SquashOption { get; init; }
+
+    /// <summary>FR-139: <c>only_allow_merge_if_pipeline_succeeds</c> ("pipelines must succeed").</summary>
+    public bool PipelinesMustSucceed { get; init; }
 }
 
 /// <summary>A tag and the commit it points at.</summary>
@@ -61,7 +70,12 @@ public sealed partial class GitLabClient
                 Str(p, "web_url"),
                 p.TryGetProperty("empty_repo", out var empty) && empty.ValueKind == JsonValueKind.True,
                 Access("project_access"),
-                Access("group_access"));
+                Access("group_access"))
+            {
+                MergeMethod = Str(p, "merge_method"),
+                SquashOption = Str(p, "squash_option"),
+                PipelinesMustSucceed = p.TryGetProperty("only_allow_merge_if_pipeline_succeeds", out var must) && must.ValueKind == JsonValueKind.True,
+            };
         }
         catch (GitLabApiException ex) when (ex.Status == 404)
         {

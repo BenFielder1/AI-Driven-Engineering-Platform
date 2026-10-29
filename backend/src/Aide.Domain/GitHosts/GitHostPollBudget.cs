@@ -83,6 +83,21 @@ public static class GitHostPollBudget
         return normal;
     }
 
+    /// <summary>
+    /// §4.19: the earliest the next GitLab merge poll may run after a response with <paramref name="headers"/>: when under
+    /// 10 % of the rate limit remains, at <c>RateLimit-Reset</c> (else two minutes later); otherwise <c>null</c> (the merge
+    /// poll's own cadence applies).
+    /// </summary>
+    public static DateTimeOffset? GitLabMergePollNotBefore(RateLimitHeaders headers, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(headers);
+        return IsLow(headers) ? ResetAt(null, headers.Reset, now) ?? now + LowRemainingBackoff : null;
+    }
+
+    /// <summary>The later of the merge poll's next time and the rate-limit back-off (<c>null</c>: none).</summary>
+    public static DateTimeOffset Later(DateTimeOffset next, DateTimeOffset? notBefore) =>
+        notBefore is { } backOff && backOff > next ? backOff : next;
+
     /// <summary>§4.19: <c>RateLimit-Remaining</c> is below 10 % of <c>RateLimit-Limit</c> (unknown values aren't low).</summary>
     public static bool IsLow(RateLimitHeaders headers)
     {

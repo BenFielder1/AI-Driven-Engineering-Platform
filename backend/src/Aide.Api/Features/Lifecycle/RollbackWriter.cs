@@ -158,10 +158,11 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
 
         // A release whose job was still queued (now cancelled) will never run: its attempt fails as cancelled (FR-43, FR-44).
         var releases = await db.Releases.Where(r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress).ToListAsync(cancellationToken);
+        var gitProvider = releases.Count == 0 ? null : await Release.ReleaseRecords.ProviderAsync(db, id, cancellationToken);
         foreach (var release in releases)
         {
             Release.ReleaseRecords.Fail(
-                db, release, ErrorCodes.ReleaseCancelled, $"Cancelled by the rollback to checkpoint {targetVersion}.", [], actor, now);
+                db, release, ErrorCodes.ReleaseCancelled, $"Cancelled by the rollback to checkpoint {targetVersion}.", [], actor, now, provider: gitProvider);
         }
 
         var record = new RollbackEvent

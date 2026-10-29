@@ -2,7 +2,8 @@ import { useState } from 'react'
 
 import { Alert } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
-import { rollbackBlockedMessages } from '../../lib/errors'
+import { rollbackAwaitingMergeMessage } from '../../lib/errors'
+import type { GitHostTerms } from '../../lib/git-host'
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import { phaseLabels } from '../projects/labels'
 import { RelativeTime } from '../projects/relative-time'
@@ -52,6 +53,7 @@ export function RollbackSection({
   releasedVersion,
   currentCheckpoint,
   awaitingMerge = false,
+  host,
 }: {
   projectId: string
   /** The version in development; `null` when the project is released with nothing in development. */
@@ -60,13 +62,15 @@ export function RollbackSection({
   currentCheckpoint: number
   /** FR-65, §4.8: the release is awaiting its merge (ROLLBACK_BLOCKED release_partially_applied). */
   awaitingMerge?: boolean
+  /** FR-140: the project's Git host, named in the awaiting-merge reason (default GitHub). */
+  host?: GitHostTerms
 }) {
   const [open, setOpen] = useState(false)
   const [done, setDone] = useState<Rollback | null>(null)
   // FR-63, D-V2-3: a released version is closed; the way forward is a new version.
   const closed = developmentVersion === null || awaitingMerge
   const closedReason = awaitingMerge
-    ? rollbackBlockedMessages.awaitingMerge
+    ? rollbackAwaitingMergeMessage(host)
     : releasedVersion
       ? `Version ${releasedVersion} is released and closed, so it can't be rolled back. Start a new version to make changes.`
       : 'There is no version in development to roll back.'

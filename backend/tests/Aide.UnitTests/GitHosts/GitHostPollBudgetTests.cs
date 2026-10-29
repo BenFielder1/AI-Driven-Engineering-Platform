@@ -92,4 +92,24 @@ public class GitHostPollBudgetTests
         Assert.True(GitHostPollBudget.CanPollBitbucketPullRequest(Now.AddMinutes(-1), Now));
         Assert.Equal(Now.AddSeconds(30), GitHostPollBudget.NextBitbucketPullRequestPollAt(Now.AddSeconds(-30), Now));
     }
+
+    [Fact]
+    public void S4_19_FR140_GitLab_merge_poll_backs_off_to_the_reset_when_under_10_percent_remains()
+    {
+        var reset = Now.AddMinutes(25);
+        var low = new RateLimitHeaders(Remaining: "9", Limit: "100", Reset: Epoch(reset));
+
+        Assert.Equal(reset, GitHostPollBudget.GitLabMergePollNotBefore(low, Now));
+        Assert.Equal(Now + GitHostPollBudget.LowRemainingBackoff, GitHostPollBudget.GitLabMergePollNotBefore(low with { Reset = null }, Now));
+        Assert.Null(GitHostPollBudget.GitLabMergePollNotBefore(new RateLimitHeaders(Remaining: "10", Limit: "100"), Now));
+        Assert.Null(GitHostPollBudget.GitLabMergePollNotBefore(RateLimitHeaders.None, Now));
+    }
+
+    [Fact]
+    public void S4_19_The_merge_poll_runs_at_the_later_of_its_cadence_and_the_back_off()
+    {
+        Assert.Equal(Now.AddMinutes(25), GitHostPollBudget.Later(Now.AddMinutes(2), Now.AddMinutes(25)));
+        Assert.Equal(Now.AddMinutes(2), GitHostPollBudget.Later(Now.AddMinutes(2), Now.AddMinutes(1)));
+        Assert.Equal(Now.AddMinutes(2), GitHostPollBudget.Later(Now.AddMinutes(2), null));
+    }
 }

@@ -193,4 +193,44 @@ public class GitHostMergeReadinessTests
             [MergeReadinessReasonCode.PrNotOpen, MergeReadinessReasonCode.ManualStrategy],
             Codes(MergeabilityChecks.Map([], MergeStrategy.Manual, pullRequestOpen: false)));
     }
+
+    [Theory]
+    [InlineData(MergeStrategy.AideMerges)]
+    [InlineData(MergeStrategy.Manual)]
+    public void FR138_GitLab_still_checking_after_the_re_polls_is_not_mergeable_with_checks_pending(MergeStrategy strategy)
+    {
+        var verdict = GitLabMergeReadiness.StillChecking(strategy);
+
+        Assert.False(verdict.CanMerge);
+        Assert.False(verdict.WillAutoMerge);
+        Assert.Equal(MergeReadinessReasonCode.ChecksPending, verdict.Reasons[0].Code);
+        Assert.Equal(strategy == MergeStrategy.Manual, verdict.Reasons.Any(r => r.Code == MergeReadinessReasonCode.ManualStrategy));
+    }
+
+    [Fact]
+    public void FR138_FR65_The_draft_AIDE_opened_the_MR_as_does_not_block_AIDE_but_what_draft_status_hides_still_does()
+    {
+        var draft = Mergeable with { DetailedMergeStatus = "draft_status", Draft = true };
+
+        Assert.Equal([MergeReadinessReasonCode.Draft], Codes(GitLabMergeReadiness.Map(draft, MergeStrategy.AideMerges)));
+        var ignored = GitLabMergeReadiness.Map(GitLabMergeReadiness.IgnoringAideDraft(draft), MergeStrategy.AideMerges);
+        Assert.True(ignored.Verdict!.CanMerge);
+        Assert.Equal(
+            [MergeReadinessReasonCode.ReviewRequired],
+            Codes(GitLabMergeReadiness.Map(GitLabMergeReadiness.IgnoringAideDraft(draft with { Approved = false }), MergeStrategy.AideMerges)));
+        Assert.Equal("not_approved", GitLabMergeReadiness.IgnoringAideDraft(Mergeable with { DetailedMergeStatus = "not_approved" }).DetailedMergeStatus);
+    }
+
+    [Theory]
+    [InlineData(MergeStrategy.Manual)]
+    [InlineData(MergeStrategy.AideMerges)]
+    public void FR138_Once_AIDE_marked_the_MR_ready_a_draft_blocks_again(MergeStrategy strategy)
+    {
+        var draft = Mergeable with { DetailedMergeStatus = "draft_status", Draft = true };
+
+        var readiness = GitLabMergeReadiness.Map(GitLabMergeReadiness.IgnoringAideDraft(draft, markedReady: true), strategy);
+
+        Assert.False(readiness.Verdict!.CanMerge);
+        Assert.Contains(MergeReadinessReasonCode.Draft, Codes(readiness));
+    }
 }

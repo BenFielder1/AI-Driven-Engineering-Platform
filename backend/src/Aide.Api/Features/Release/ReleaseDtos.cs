@@ -19,8 +19,9 @@ namespace Aide.Api.Features.Release;
 /// Failure codes include <c>MERGE_CONFLICT</c>, <c>TAG_EXISTS</c>, <c>GIT_ERROR</c>, <c>RELEASE_CANCELLED</c>,
 /// <c>GITHUB_RATE_LIMITED</c>, and while awaiting the merge <c>PR_CLOSED</c> (closed without merging) and
 /// <c>MERGE_TIMEOUT</c> (not merged within 14 days); after either the project stays in <c>release</c> and an Owner can
-/// retry with <c>POST /release</c>. <c>githubReleaseUrl</c> is the GitHub Release created for the tag (FR-64; <c>null</c>
-/// for Local or before it exists). <c>mergeStrategy</c> is the project's current merge strategy (FR-65).
+/// retry with <c>POST /release</c>. <c>githubReleaseUrl</c> is the host release created for the tag: the GitHub Release
+/// (FR-64) or the GitLab Release (FR-140); <c>null</c> for Local or before it exists. A GitLab merge refused because the
+/// merge request's head moved since review (409) fails with <c>GIT_ERROR</c>. <c>mergeStrategy</c> is the project's current merge strategy (FR-65).
 /// <c>productionDeployment</c> is the release's production deployment (FR-91: the newest for this release attempt, including
 /// redeploys; <c>null</c> when deployment isn't configured or not created yet). A failed one doesn't undo the release.
 /// </summary>

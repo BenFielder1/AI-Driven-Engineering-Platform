@@ -255,6 +255,97 @@ public class GitLabClientTests
     }
 
     [Fact]
+    public async Task FR138_The_merge_request_details_carry_the_readiness_fields_and_the_rate_limit_headers()
+    {
+        var (client, handler) = Client((_, _) =>
+        {
+            var response = Json(HttpStatusCode.OK, """
+                {"iid":3,"title":"Draft: Release 0.1.0","web_url":"https://gitlab.acme.example/gitlab/acme/widgets/-/merge_requests/3","state":"opened",
+                 "draft":true,"detailed_merge_status":"not_approved","has_conflicts":false,"blocking_discussions_resolved":false,
+                 "sha":"1111111111111111111111111111111111111111","merge_commit_sha":null,"squash_commit_sha":null,"head_pipeline":{"id":9,"status":"failed"}}
+                """);
+            response.Headers.TryAddWithoutValidation("RateLimit-Remaining", "5");
+            response.Headers.TryAddWithoutValidation("RateLimit-Limit", "100");
+            return response;
+        });
+
+        var mr = await client.GetMergeRequestDetailsAsync("tok", "77", 3, Ct);
+
+        Assert.Equal(
+            new GitLabMergeRequestDetails(3, "Draft: Release 0.1.0", "https://gitlab.acme.example/gitlab/acme/widgets/-/merge_requests/3", "opened", true, "not_approved", false, false,
+                "1111111111111111111111111111111111111111", null, null, "failed"),
+            mr);
+        Assert.Equal("https://gitlab.acme.example/gitlab/api/v4/projects/77/merge_requests/3", handler.Requests[0].Url);
+        Assert.True(Aide.Domain.GitHosts.GitHostPollBudget.IsLow(client.LastRateLimit));
+    }
+
+    [Fact]
+    public async Task FR140_Merge_pins_the_sha_never_removes_the_source_branch_and_returns_the_merged_commits()
+    {
+        var (client, handler) = Client((_, _) => Json(HttpStatusCode.OK,
+            """{"iid":3,"state":"merged","sha":"1111111111111111111111111111111111111111","merge_commit_sha":"2222222222222222222222222222222222222222","squash_commit_sha":null}"""));
+
+        var merged = await client.MergeAsync("tok", "77", 3, "1111111111111111111111111111111111111111", squash: false, "Release v0.1.0", Ct);
+
+        Assert.Equal(new GitLabMerged("2222222222222222222222222222222222222222", null, "1111111111111111111111111111111111111111"), merged);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(("PUT", "https://gitlab.acme.example/gitlab/api/v4/projects/77/merge_requests/3/merge"), (request.Method, request.Url));
+        using var body = JsonDocument.Parse(request.Body);
+        Assert.Equal(
+            ("1111111111111111111111111111111111111111", false, false, "Release v0.1.0"),
+            (body.RootElement.GetProperty("sha").GetString(), body.RootElement.GetProperty("squash").GetBoolean(),
+                body.RootElement.GetProperty("should_remove_source_branch").GetBoolean(), body.RootElement.GetProperty("merge_commit_message").GetString()));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.MethodNotAllowed)]
+    [InlineData(HttpStatusCode.Conflict)]
+    [InlineData(HttpStatusCode.UnprocessableEntity)]
+    public async Task FR140_A_refused_merge_throws_with_GitLabs_status(HttpStatusCode status)
+    {
+        var (client, _) = Client((_, _) => Json(status, """{"message":"Branch cannot be merged"}"""));
+
+        var ex = await Assert.ThrowsAsync<GitLabApiException>(() => client.MergeAsync("tok", "77", 3, "1111111111111111111111111111111111111111", squash: true, null, Ct));
+
+        Assert.Equal((int)status, ex.Status);
+    }
+
+    [Fact]
+    public async Task FR140_The_release_is_created_with_the_tag_on_the_ref_the_tag_message_and_the_notes()
+    {
+        var (client, handler) = Client((_, _) => Json(HttpStatusCode.Created,
+            """{"tag_name":"v0.1.0","name":"0.1.0","_links":{"self":"https://gitlab.acme.example/gitlab/acme/widgets/-/releases/v0.1.0"}}"""));
+
+        var url = await client.CreateReleaseAsync("tok", "77", new GitLabNewRelease("v0.1.0", "2222222222222222222222222222222222222222", "0.1.0", "## Notes", "Release v0.1.0"), Ct);
+
+        Assert.Equal("https://gitlab.acme.example/gitlab/acme/widgets/-/releases/v0.1.0", url);
+        using var body = JsonDocument.Parse(Assert.Single(handler.Requests).Body);
+        Assert.Equal(
+            ("v0.1.0", "2222222222222222222222222222222222222222", "0.1.0", "## Notes", "Release v0.1.0"),
+            (body.RootElement.GetProperty("tag_name").GetString(), body.RootElement.GetProperty("ref").GetString(), body.RootElement.GetProperty("name").GetString(),
+                body.RootElement.GetProperty("description").GetString(), body.RootElement.GetProperty("tag_message").GetString()));
+    }
+
+    [Fact]
+    public async Task FR139_Commit_statuses_read_name_status_allow_failure_and_the_job_URL()
+    {
+        var (client, handler) = Client((_, _) => Json(HttpStatusCode.OK, """
+            [{"name":"test:backend","status":"failed","allow_failure":false,"target_url":"https://gitlab.acme.example/gitlab/acme/widgets/-/jobs/7"},
+             {"name":"lint","status":"failed","allow_failure":true,"target_url":"javascript:alert(1)"}]
+            """));
+
+        var statuses = await client.ListCommitStatusesAsync("tok", "77", "1111111111111111111111111111111111111111", Ct);
+
+        Assert.Equal(
+            [
+                new Aide.Domain.GitHosts.GitLabCommitStatus("test:backend", "failed", false, "https://gitlab.acme.example/gitlab/acme/widgets/-/jobs/7"),
+                new Aide.Domain.GitHosts.GitLabCommitStatus("lint", "failed", true, null),
+            ],
+            statuses);
+        Assert.StartsWith("https://gitlab.acme.example/gitlab/api/v4/projects/77/repository/commits/1111111111111111111111111111111111111111/statuses", handler.Requests[0].Url, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FR131_Token_self_reads_scopes_and_expiry()
     {
         var (client, _) = Client((_, _) => Json(HttpStatusCode.OK, """{"id":1,"name":"aide","revoked":false,"active":true,"scopes":["api","read_repository"],"expires_at":"2026-11-05"}"""));

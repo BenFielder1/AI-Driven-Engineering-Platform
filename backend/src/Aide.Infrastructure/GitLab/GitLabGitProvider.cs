@@ -17,7 +17,8 @@ namespace Aide.Infrastructure.GitLab;
 /// throws <see cref="GitLabRateLimitedException"/> (the job waits for the reset without counting an attempt).
 /// Branches stay <c>aide/&lt;slug&gt;/v&lt;version&gt;</c> (chosen by the caller). The merge request is opened as a draft
 /// (<c>Draft: </c> title prefix, <c>remove_source_branch: false</c>) and marked ready by removing the prefix
-/// (<see cref="MarkMergeRequestReadyAsync"/>). Merge, CI and release (FR-138–FR-140) arrive in slice 2b.
+/// (<see cref="MarkMergeRequestReadyAsync"/>). Merge readiness, CI statuses, the merge, the GitLab Release and the merge
+/// poll (FR-138–FR-140) are in <c>GitLabGitProvider.Release.cs</c>.
 /// </summary>
 internal sealed partial class GitLabGitProvider(
     IGitConnectionTokens tokens,
@@ -199,13 +200,6 @@ internal sealed partial class GitLabGitProvider(
         return $"refs/remotes/{GitRemote.Name}/{settings.DefaultBranch}";
     }
 
-    /// <summary>FR-140 arrives in slice 2b: until then a GitLab release fails without merging or tagging anything.</summary>
-    public Task<ReleaseOutcome> ReleaseAsync(GitConnectionSettings settings, ReleaseRequest request, string? token, CancellationToken cancellationToken) =>
-        Task.FromResult(ReleaseOutcome.Failed(
-            ErrorCodes.GitError,
-            "Releasing a GitLab project isn't available in this AIDE version yet. Merge the merge request on GitLab.",
-            transient: false));
-
     /// <summary>FR-61: <c>GET /projects/:id/repository/tags/:tag</c> (404 = no such tag).</summary>
     public async Task<TagLookup> FindTagAsync(GitConnectionSettings settings, string tag, string? token, CancellationToken cancellationToken)
     {
@@ -361,7 +355,7 @@ internal sealed partial class GitLabGitProvider(
             }
             catch (GitLabApiException ex) when (ex.Status is { } status && conflictStatuses?.Contains(status) == true)
             {
-                return new Call<T>(default, null) { Conflict = true, ConflictReason = Describe(ex) };
+                return new Call<T>(default, null) { Conflict = true, ConflictReason = Describe(ex), ConflictStatus = status };
             }
             catch (GitLabApiException ex)
             {
@@ -559,6 +553,8 @@ internal sealed partial class GitLabGitProvider(
         public bool Conflict { get; init; }
 
         public string? ConflictReason { get; init; }
+
+        public int? ConflictStatus { get; init; }
 
         public static Call<T> Failed(GitOutcome failure) => new(default, failure);
     }

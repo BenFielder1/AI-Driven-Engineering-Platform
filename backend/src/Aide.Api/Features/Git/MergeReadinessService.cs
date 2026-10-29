@@ -18,13 +18,15 @@ namespace Aide.Api.Features.Git;
 /// (<c>GET /repos/{o}/{r}</c>), the default branch's rules (<c>GET /rules/branches/{default}</c>: required approvals and
 /// status checks), the PR's <c>mergeStateStatus</c> and <c>reviewDecision</c> (GraphQL; without GraphQL for the token it
 /// degrades: logged, and required approvals count as missing) and the check runs and commit statuses on the PR head;
-/// evaluated by <see cref="MergeReadinessRules.Evaluate"/>. Local: AIDE can merge unless a dry-run merge conflicts. Each
+/// evaluated by <see cref="MergeReadinessRules.Evaluate"/>. GitLab (FR-138): through the project's provider
+/// (<see cref="GitHostTargets"/>). Local: AIDE can merge unless a dry-run merge conflicts. Each
 /// check is stored as <c>MERGE_READINESS_CHECKED</c>; reads return the latest one while it is fresh
 /// (<see cref="FreshFor"/>).
 /// </summary>
 public sealed partial class MergeReadinessService(
     AideDbContext db,
     GitHubRepoAccess access,
+    GitHostTargets hosts,
     GitHubApi api,
     IWorkingCopies workingCopies,
     IOptions<GitHubGitOptions> gitOptions,
@@ -92,7 +94,7 @@ public sealed partial class MergeReadinessService(
         db.AddEvent(
             EventTypes.MergeReadinessChecked,
             projectId,
-            new { releaseVersionId = project.CurrentReleaseVersionId, readiness = computed.Value },
+            new { releaseVersionId = project.CurrentReleaseVersionId, readiness = computed.Value, provider = await Release.ReleaseRecords.ProviderAsync(db, projectId, cancellationToken) },
             SystemActor.Name,
             computed.Value.CheckedAt);
         await db.SaveChangesAsync(cancellationToken);
@@ -113,6 +115,11 @@ public sealed partial class MergeReadinessService(
         var version = versionId is { } id
             ? await db.ReleaseVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == id, cancellationToken)
             : null;
+        if (await hosts.ResolveAsync(projectId, cancellationToken) is { } host)
+        {
+            return await HostAsync(project, version, host, now, cancellationToken);
+        }
+
         var target = await access.ResolveAsync(projectId, cancellationToken);
         if (target.IsFailure)
         {
@@ -174,6 +181,34 @@ public sealed partial class MergeReadinessService(
         var verdict = MergeReadinessRules.Evaluate(facts, project.MergeStrategy);
         LogChecked(logger, project.Id, verdict.CanMerge, verdict.Reasons.Count);
         return Dto(verdict, project.MergeStrategy, marked, graph?.MergeStateStatus, graph?.ReviewDecision, now);
+    }
+
+    /// <summary>
+    /// FR-138: GitLab readiness through the project's provider (the binding connection): the merge request's
+    /// <c>detailed_merge_status</c>, approvals, branch protection, access level and head pipeline, with the head's CI
+    /// statuses as checks. <c>mergeStateStatus</c> carries GitLab's <c>detailed_merge_status</c>; <c>reviewDecision</c> is
+    /// <c>null</c>. Without a recorded merge request it is <c>pr_not_open</c>.
+    /// </summary>
+    private async Task<Result<MergeReadinessDto>> HostAsync(Project project, ReleaseVersion? version, GitHostTarget host, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (version?.PullRequestNumber is not { } number)
+        {
+            var closed = Domain.GitHosts.GitLabMergeReadiness.Map(new Domain.GitHosts.GitLabMergeFacts { Open = false }, project.MergeStrategy);
+            return Result.Success(Dto(closed.Verdict!, project.MergeStrategy, [], null, null, now));
+        }
+
+        // FR-138: once a release attempt of this version awaited its merge, AIDE has marked the draft ready: a draft blocks again.
+        var markedReady = await db.Releases.AsNoTracking().AnyAsync(r => r.ReleaseVersionId == version.Id && r.AwaitingMergeSince != null, cancellationToken);
+        var readiness = await host.Provider.GetMergeReadinessAsync(host.Connection, number, project.MergeStrategy, cancellationToken, markedReady);
+        if (readiness.IsFailure)
+        {
+            LogHostFailed(logger, project.Id, readiness.Error!.Code);
+            return Result.Failure<MergeReadinessDto>(readiness.Error);
+        }
+
+        var verdict = readiness.Value.Verdict ?? Domain.GitHosts.GitLabMergeReadiness.StillChecking(project.MergeStrategy);
+        LogChecked(logger, project.Id, verdict.CanMerge, verdict.Reasons.Count);
+        return Result.Success(Dto(verdict, project.MergeStrategy, readiness.Value.Checks, readiness.Value.HostStatus, null, now));
     }
 
     /// <summary>Local (D12): AIDE can merge unless a dry-run merge of the version branch into the default branch conflicts.</summary>
@@ -258,6 +293,9 @@ public sealed partial class MergeReadinessService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Merge readiness of project {ProjectId}: GitHub failed with HTTP {Status}")]
     private static partial void LogUpstream(ILogger logger, Guid projectId, int? status);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Merge readiness of project {ProjectId} couldn't be read from its Git host ({ErrorCode})")]
+    private static partial void LogHostFailed(ILogger logger, Guid projectId, string errorCode);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Merge readiness of Local project {ProjectId}: the dry-run merge failed ({ErrorType})")]
     private static partial void LogLocalCheckFailed(ILogger logger, Guid projectId, string errorType);

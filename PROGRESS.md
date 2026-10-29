@@ -111,6 +111,10 @@ v1 (FR-1–FR-52), v2 (FR-53–FR-93) and v3 (FR-94–FR-112) requirements stay 
 - 2026-10-29 — M27: the §4.19 common `IGitProvider` methods (`ListReposAsync` … `PublishReleaseAsync`) are implemented for GitLab (and Bitbucket in M28); GitHub and Local keep their v2 services and inherit NotSupported defaults, since nothing calls them through the interface — SPEC updated: no
 - 2026-10-29 — M27: PATCH settings/git can't move a project onto gitlab/bitbucket (400 VALIDATION on `provider`); a GitLab binding is set on create/import and changed only by rebind (`connectionId`) — SPEC updated: no
 - 2026-10-29 — M27: git CLI calls to a GitLab instance pin the SSRF-vetted addresses (`http.curloptResolve`) and don't follow redirects (`http.followRedirects=false`), matching the API path (§8) — SPEC updated: no
+- 2026-10-29 — M27: AIDE's own draft MR doesn't count against readiness (it is marked ready before the merge), mirroring v2's handling of GitHub drafts; a draft only blocks under the `manual` strategy after AIDE marked it ready and a human re-drafted it — SPEC updated: no
+- 2026-10-29 — M27: GitLab squash follows the GitLab project's `squash_option` and the merge method its `merge_method`; AIDE's `mergeStrategy` stays `aide_merges`/`manual`. `fast_forward` (§6) is Bitbucket's `merge_strategy` and is added with M28 — SPEC updated: no
+- 2026-10-29 — M27: no stored reviewed-head SHA: a head that moved before the merge call is re-fetched and retried (v2), and a GitLab 409 fails the release for a new review — SPEC updated: no
+- 2026-10-29 — M27: the GitLab Release URL is stored in the existing `githubReleaseUrl` field (no schema change); CI status polls back off on 429 only, the <10 % `RateLimit-Remaining` back-off applies to merge polls — SPEC updated: no
 - 2026-10-28 — FR-129 (preset retirement) moves from M25 to the end of M26: migrated in-flight plans must run as the new specialists, which M26 builds — SPEC updated: no
 - 2026-10-25 — M24: `legacy/` is created in M26 together with a catalog version bump, so the pinned hash only changes with a version — SPEC updated: no
 - 2026-10-25 — M24: pack skills are 70–115% of the source length (not 40–60%): hand-writing generated files and CI checks needs the room — SPEC updated: no
@@ -228,6 +232,7 @@ COMMIT;
 ```
 
 ## Known issues
+- M27 (2026-10-29, minor): Settings → Danger zone words the rollback-blocked reason as GitHub/"pull request" until `/state` loads (or for good if it fails) on GitLab/Bitbucket projects; notifications carry no provider, so the awaiting-merge notification label is host-neutral. Revisit with FR-155 (M31).
 - §4.22 gap (2026-10-28): a Supabase BaaS stack in Next.js full-stack declares `SUPABASE_SECRET_KEY` but not the server-side unprefixed `SUPABASE_URL` (a pack can't list a key twice; the public `SUPABASE_URL` becomes `NEXT_PUBLIC_SUPABASE_URL`). Fix in M30 with the derived Supabase variables (FR-145, FR-153).
 - Integration test memory (found 2026-10-27): every derived test host (`WithWebHostBuilder`, e.g. `LlmStubs.App`, harnesses) stays alive on the shared `AideApiFactory` until the run ends (~37 MB each). With v4's extra tests one process outgrew a 16 GB runner (heap dump: 50 live hosts after 150 s; RSS ~14.7 GB). Fixed for CI by running integration tests in 3 shards (`backend-integration` job, ci.yml); the stack catalog is also loaded once per process now. Follow-up (test-engineer): dispose derived factories per test so a single process stays small.
 - Railway `preview` deploy of 83d8fa5 (run 40130552891): the deploy succeeded, but the smoke test's sign-in returned 401. The `SMOKE_EMAIL` account is missing on `preview` or its password differs. Operator fix (Ben): create the smoke user on preview, or correct the `SMOKE_PASSWORD` secret.

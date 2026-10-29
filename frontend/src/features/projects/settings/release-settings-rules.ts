@@ -1,3 +1,4 @@
+import type { GitHostTerms } from '../../../lib/git-host'
 import type { ProjectState } from '../projects-api'
 
 /**
@@ -25,10 +26,13 @@ export function checkTagPrefix(value: string): string | null {
   return null
 }
 
-/** Why the tag prefix can't change now (409 CONFLICT server-side), or `null`. */
-export function tagPrefixLockReason(state: Pick<ProjectState, 'status' | 'latestRelease'> | undefined): string | null {
+/** Why the tag prefix can't change now (409 CONFLICT server-side), or `null`. `host` names the Git host (default GitHub). */
+export function tagPrefixLockReason(
+  state: Pick<ProjectState, 'status' | 'latestRelease'> | undefined,
+  host?: GitHostTerms,
+): string | null {
   if (state?.status === 'awaiting_merge' || state?.latestRelease?.status === 'awaiting_merge') {
-    return 'The tag prefix can’t change while the release is awaiting its merge on GitHub.'
+    return `The tag prefix can’t change while the release is awaiting its merge on ${host?.host ?? 'GitHub'}.`
   }
   if (state?.latestRelease?.status === 'in_progress') {
     return 'The tag prefix can’t change while a release is in progress.'

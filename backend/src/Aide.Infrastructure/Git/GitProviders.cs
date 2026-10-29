@@ -336,7 +336,7 @@ internal sealed partial class GitHubGitProvider(
                 }
 
                 mergeSha = merged;
-                mergedExternally = true;
+                mergedExternally = !string.Equals(request.RecordedMergeCommitSha, merged, StringComparison.Ordinal);
             }
             else
             {

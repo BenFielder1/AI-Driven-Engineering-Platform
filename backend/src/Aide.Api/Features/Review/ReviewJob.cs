@@ -138,12 +138,12 @@ public sealed partial class ReviewJobHandler(
         // FR-90: the preview of the PR head is waited for (the job defers itself) and a failed build is a finding.
         var preview = await previews.CollectAsync(project, payload, cancellationToken);
 
-        // FR-85: the PR head's checks are a deterministic input; pending ones are waited for (the job defers itself) first.
+        // FR-85, FR-139: the PR/MR head's checks are a deterministic input; pending ones are waited for (the job defers itself) first.
         var checks = await externalChecks.CollectAsync(project, payload, cancellationToken);
         var material = await GatherAsync(
             project,
             cancellationToken,
-            [.. checks is null ? [] : ExternalCheckRules.Findings(checks.Checks), .. preview?.Findings ?? []]);
+            [.. checks is null ? [] : checks.Findings(), .. preview?.Findings ?? []]);
 
         // §4.5 row 4: the previous score is the latest earlier cycle's report in the current review timeline (§4.8).
         var previous = await ReviewTimeline.Current(db, project)

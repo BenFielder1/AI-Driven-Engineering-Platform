@@ -8448,7 +8448,7 @@
         "tags": [
           "Git"
         ],
-        "summary": "Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: \"AIDE will merge automatically\", else \"A merge on GitHub will be needed\" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. The merge itself stays authoritative (FR-65).",
+        "summary": "Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: \"AIDE will merge automatically\", else \"A merge on GitHub will be needed\" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65).",
         "operationId": "GetMergeReadiness",
         "parameters": [
           {
@@ -8501,7 +8501,7 @@
             }
           },
           "409": {
-            "description": "WRONG_PHASE: not in the review or release phase.",
+            "description": "WRONG_PHASE: not in the review or release phase. GIT_NOT_CONNECTED: the GitLab project's binding was cleared.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8511,7 +8511,7 @@
             }
           },
           "429": {
-            "description": "GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset).",
+            "description": "GITHUB_RATE_LIMITED, or UPSTREAM_RATE_LIMITED for GitLab (Retry-After: seconds until the rate-limit reset).",
             "headers": {
               "Retry-After": {
                 "description": "Seconds until the action is allowed again.",
@@ -8530,7 +8530,7 @@
             }
           },
           "502": {
-            "description": "UPSTREAM_ERROR: GitHub failed or couldn't be reached.",
+            "description": "UPSTREAM_ERROR: GitHub or GitLab failed or couldn't be reached.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16195,7 +16195,7 @@
             "format": "date-time"
           }
         },
-        "description": "FR-84 merge readiness of the version's PR, as of `checkedAt`. `canMerge` is whether AIDE's token may merge it\nnow (repository permission and allowed merge methods, branch rules, the PR's `mergeStateStatus` and\n`reviewDecision`, required checks). `willAutoMerge` is `canMerge` under the `aide_merges` strategy\n(\"AIDE will merge automatically\"); otherwise \"A merge on GitHub will be needed\" with `reasons` (empty when\n`canMerge`, except `manual_strategy`). `checks` are the PR head's check runs and commit statuses.\n`mergeStateStatus` and `reviewDecision` are GitHub's GraphQL values verbatim (e.g. `CLEAN`,\n`BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a Local project\n`canMerge` is true with no checks. The merge itself stays authoritative (FR-65)."
+        "description": "FR-84 merge readiness of the version's PR, as of `checkedAt`. `canMerge` is whether AIDE's token may merge it\nnow (repository permission and allowed merge methods, branch rules, the PR's `mergeStateStatus` and\n`reviewDecision`, required checks). `willAutoMerge` is `canMerge` under the `aide_merges` strategy\n(\"AIDE will merge automatically\"); otherwise \"A merge on GitHub will be needed\" with `reasons` (empty when\n`canMerge`, except `manual_strategy`). `checks` are the PR head's check runs and commit statuses.\n`mergeStateStatus` and `reviewDecision` are GitHub's GraphQL values verbatim (e.g. `CLEAN`,\n`BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a GitLab project (FR-138)\n`mergeStateStatus` is the merge request's `detailed_merge_status` verbatim (e.g. `mergeable`,\n`not_approved`), `reviewDecision` is `null` and `checks` are the head's pipeline jobs and commit\nstatuses (FR-139). For a Local project\n`canMerge` is true with no checks. The merge itself stays authoritative (FR-65)."
       },
       "MergeReadinessReasonCode": {
         "enum": [
@@ -18090,7 +18090,7 @@
             ]
           }
         },
-        "description": "A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint\n`checkpoint`. `status` is `in_progress` while the release job is queued or running, then\n`succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`, or\n`awaiting_merge` (FR-65) when the merge was refused or the strategy is `manual`: `awaitingMergeSince` is\nwhen it started waiting and `mergeReasons` are the merge-readiness reasons (FR-84) recorded then (`null`\notherwise); the merge poll then completes it once the PR is merged on GitHub (§4.14).\nA failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict\n`conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`\nfor Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).\n`completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`\n(e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails\nthe release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.\nFailure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,\n`GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and\n`MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can\nretry with `POST /release`. `githubReleaseUrl` is the GitHub Release created for the tag (FR-64; `null`\nfor Local or before it exists). `mergeStrategy` is the project's current merge strategy (FR-65).\n`productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including\nredeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release."
+        "description": "A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint\n`checkpoint`. `status` is `in_progress` while the release job is queued or running, then\n`succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`, or\n`awaiting_merge` (FR-65) when the merge was refused or the strategy is `manual`: `awaitingMergeSince` is\nwhen it started waiting and `mergeReasons` are the merge-readiness reasons (FR-84) recorded then (`null`\notherwise); the merge poll then completes it once the PR is merged on GitHub (§4.14).\nA failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict\n`conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`\nfor Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).\n`completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`\n(e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails\nthe release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.\nFailure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,\n`GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and\n`MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can\nretry with `POST /release`. `githubReleaseUrl` is the host release created for the tag: the GitHub Release\n(FR-64) or the GitLab Release (FR-140); `null` for Local or before it exists. A GitLab merge refused because the\nmerge request's head moved since review (409) fails with `GIT_ERROR`. `mergeStrategy` is the project's current merge strategy (FR-65).\n`productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including\nredeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release."
       },
       "ReleaseStatus": {
         "enum": [

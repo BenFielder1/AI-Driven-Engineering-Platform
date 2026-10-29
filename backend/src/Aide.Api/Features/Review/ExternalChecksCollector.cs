@@ -5,6 +5,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Domain.Releases;
 using Aide.Domain.Review;
+using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
@@ -15,6 +16,16 @@ namespace Aide.Api.Features.Review;
 /// <summary>The PR head's checks as review used them (FR-85), how long it waited and whether it gave up waiting.</summary>
 public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int? WaitedSeconds, bool TimedOut)
 {
+    /// <summary>FR-139: the Git host the statuses came from (GitLab); <c>null</c> for GitHub's check runs (FR-85).</summary>
+    public Domain.GitHosts.CommitStatusHost? Host { get; init; }
+
+    /// <summary>
+    /// The review findings: FR-139 for a GitLab project ("required pipeline job test:backend failed", major when required,
+    /// else minor), FR-85 for GitHub ("required check ci / test failed").
+    /// </summary>
+    public IReadOnlyList<ReviewFinding> Findings() =>
+        Host is { } host ? Domain.GitHosts.CommitStatusFindings.Findings(Checks, host) : ExternalCheckRules.Findings(Checks);
+
     /// <summary>The <c>compliance_report.external_checks</c> JSON (the <see cref="ExternalChecksDto"/> shape) without a preview.</summary>
     public string ToJson() => Compose(this, null)!;
 
@@ -39,11 +50,14 @@ public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int
 /// read), marked required from the default branch's rules. Pending checks are waited for: the review job defers itself every
 /// 30 seconds (not a blocking sleep, not a counted attempt; when waiting started is kept in the job payload) for up to 15
 /// minutes, then review proceeds with <c>checksTimedOut</c>. Local projects, a version without a PR, or checks GitHub won't
-/// show (no permission) give <c>null</c> without waiting; GitHub failing is logged and review goes on without them.
+/// show (no permission) give <c>null</c> without waiting; GitHub failing is logged and review goes on without them. GitLab
+/// projects (FR-139) read the head's pipeline jobs and commit statuses through their provider.
 /// </summary>
 public sealed partial class ExternalChecksCollector(
     AideDbContext db,
     GitHubRepoAccess access,
+    GitHostTargets hosts,
+    IWorkingCopies workingCopies,
     GitHubApi api,
     TimeProvider time,
     ILogger<ExternalChecksCollector> logger)
@@ -53,6 +67,11 @@ public sealed partial class ExternalChecksCollector(
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(payload);
+        if (await hosts.ResolveAsync(project.Id, cancellationToken) is { } host)
+        {
+            return await HostAsync(project, payload, host, cancellationToken);
+        }
+
         var target = await access.ResolveAsync(project.Id, cancellationToken);
         if (target.IsFailure)
         {
@@ -117,12 +136,84 @@ public sealed partial class ExternalChecksCollector(
         }
     }
 
+    /// <summary>
+    /// FR-139: a GitLab project's statuses on the version branch head (pipeline jobs and commit statuses, required when the
+    /// project requires pipelines to succeed), waited for like GitHub's checks (30 s re-checks, 15 minutes). A version
+    /// without a merge request or a pushed branch has none; GitLab failing is logged and review goes on without them; a
+    /// GitLab rate limit waits for the reset.
+    /// </summary>
+    private async Task<CollectedChecks?> HostAsync(Project project, LifecycleJobPayload payload, GitHostTarget host, CancellationToken cancellationToken)
+    {
+        var versionId = project.CurrentReleaseVersionId ?? await db.CurrentReleaseVersionIdAsync(project.Id, cancellationToken);
+        var version = versionId is { } id
+            ? await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == id).Select(v => new { v.PullRequestNumber, v.BranchName }).FirstOrDefaultAsync(cancellationToken)
+            : null;
+        if (version is not { PullRequestNumber: not null, BranchName: { } branch })
+        {
+            return null;
+        }
+
+        string? head;
+        try
+        {
+            head = await workingCopies.ResolveCommitAsync(project.Id, $"refs/heads/{branch}", cancellationToken);
+        }
+        catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException)
+        {
+            LogUnavailable(logger, project.Id, ex.GetType().Name);
+            return null;
+        }
+
+        if (head is null)
+        {
+            return null;
+        }
+
+        var now = time.GetUtcNow();
+        Result<IReadOnlyList<CheckObservation>> statuses;
+        try
+        {
+            statuses = await host.Provider.GetCommitStatusesAsync(host.Connection, head, cancellationToken);
+        }
+        catch (Infrastructure.GitLab.GitLabRateLimitedException ex)
+        {
+            throw new JobDeferredException(
+                $"{ErrorCodes.GitLabRateLimited}: GitLab is rate limiting requests; review waits for the reset.",
+                JobPolicy.DeferUntil(now, ex.ResetAt));
+        }
+
+        if (statuses.IsFailure)
+        {
+            LogUnavailable(logger, project.Id, statuses.Error!.Message);
+            return null;
+        }
+
+        var checks = statuses.Value;
+        var decision = Domain.GitHosts.CommitStatusFindings.Wait(checks, payload.ChecksWaitSince, now);
+        if (decision.Wait)
+        {
+            var pending = checks.Count(MergeReadinessRules.IsPending);
+            LogWaiting(logger, project.Id, pending);
+            throw new JobDeferredException(
+                $"Waiting for {pending} pending pipeline job(s) or status(es) on the merge request before scoring (up to 15 minutes).",
+                decision.RecheckAt!.Value,
+                AideJson.Serialize(payload with { ChecksWaitSince = decision.WaitingSince }));
+        }
+
+        if (decision.TimedOut)
+        {
+            LogTimedOut(logger, project.Id);
+        }
+
+        return new CollectedChecks(checks, decision.WaitedSeconds, decision.TimedOut) { Host = Domain.GitHosts.CommitStatusHost.Gitlab };
+    }
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Review of project {ProjectId} waits for {Pending} pending check(s)")]
     private static partial void LogWaiting(ILogger logger, Guid projectId, int pending);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Review of project {ProjectId} stopped waiting for pending checks after 15 minutes")]
     private static partial void LogTimedOut(ILogger logger, Guid projectId);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Review of project {ProjectId} goes on without GitHub checks: {Reason}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Review of project {ProjectId} goes on without the Git host's checks: {Reason}")]
     private static partial void LogUnavailable(ILogger logger, Guid projectId, string reason);
 }

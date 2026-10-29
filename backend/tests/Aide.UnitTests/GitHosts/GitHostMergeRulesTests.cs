@@ -79,4 +79,37 @@ public class GitHostMergeRulesTests
         Assert.Equal(Now.AddMinutes(30), GitLabMergeResult.TagLimitRetryAt(429, null, null, Now));
         Assert.Null(GitLabMergeResult.TagLimitRetryAt(400, "120", null, Now));
     }
+
+    [Theory]
+    [InlineData("always", true)]
+    [InlineData("default_on", true)]
+    [InlineData("default_off", false)]
+    [InlineData("never", false)]
+    [InlineData(null, false)]
+    public void FR140_GitLab_merge_squashes_per_the_projects_squash_option(string? squashOption, bool squash) =>
+        Assert.Equal(squash, GitLabMergeResult.Squash(squashOption));
+
+    [Theory]
+    [InlineData("merged", MergePollObservation.Merged)]
+    [InlineData("closed", MergePollObservation.ClosedUnmerged)]
+    [InlineData("opened", MergePollObservation.Open)]
+    [InlineData("locked", MergePollObservation.Open)]
+    [InlineData(null, MergePollObservation.Open)]
+    public void FR140_FR65_GitLab_merge_request_state_is_the_merge_poll_observation(string? state, MergePollObservation expected) =>
+        Assert.Equal(expected, GitLabMergeResult.ObservationOf(state));
+
+    [Fact]
+    public void FR140_GitLab_Release_link_is_its_self_link_else_the_projects_releases_page()
+    {
+        Assert.Equal(
+            "https://gitlab.example/acme/widgets/-/releases/v0.1.0",
+            GitLabMergeResult.ReleaseUrl("https://gitlab.example/acme/widgets/-/releases/v0.1.0", "https://gitlab.example/other", "v0.1.0"));
+        Assert.Equal(
+            "https://gitlab.example/acme/widgets/-/releases/v0.1.0",
+            GitLabMergeResult.ReleaseUrl(null, "https://gitlab.example/acme/widgets/", "v0.1.0"));
+        Assert.Equal(
+            "https://gitlab.example/acme/widgets/-/releases/v0.1.0",
+            GitLabMergeResult.ReleaseUrl("javascript:alert(1)", "https://gitlab.example/acme/widgets", "v0.1.0"));
+        Assert.Null(GitLabMergeResult.ReleaseUrl(null, null, "v0.1.0"));
+    }
 }
