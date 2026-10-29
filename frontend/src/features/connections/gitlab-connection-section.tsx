@@ -35,8 +35,11 @@ import { GitLabTokenDialog } from './gitlab-token-dialog'
 const CONNECT_RETURN_URL = '/connections?gitlab=connected'
 
 type Status = Schemas['GitConnectionStatus']
-const statusLabels: Record<Status, string> = { valid: 'Valid', invalid: 'Invalid', insufficient_scope: 'Missing permissions' }
-const statusTones: Record<Status, StatusTone> = { valid: 'success', invalid: 'destructive', insufficient_scope: 'warning' }
+/** FR-131, FR-136: a Git connection's status in words and as a badge tone (Connections, Settings → Git binding). */
+export const gitConnectionStatusLabels: Record<Status, string> = { valid: 'Valid', invalid: 'Invalid', insufficient_scope: 'Missing permissions' }
+export const gitConnectionStatusTones: Record<Status, StatusTone> = { valid: 'success', invalid: 'destructive', insufficient_scope: 'warning' }
+const statusLabels = gitConnectionStatusLabels
+const statusTones = gitConnectionStatusTones
 
 function ExpiryText({ connection }: { connection: GitLabConnection }) {
   const c = connection

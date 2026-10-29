@@ -154,7 +154,7 @@ public sealed class NotificationComposer(AideDbContext db)
             Tag = Text(root, "tag"),
             FromVersion = Int(root, "fromCheckpoint") ?? Int(root, "fromVersion"),
             TargetVersion = Int(root, "targetCheckpoint") ?? Int(root, "targetVersion"),
-            Reason = type is NotificationType.Rollback or NotificationType.LlmBindingCleared ? Text(root, "reason") : null,
+            Reason = type is NotificationType.Rollback or NotificationType.LlmBindingCleared or NotificationType.GitBindingCleared ? Text(root, "reason") : null,
             PullRequestUrl = Text(root, "pullRequestUrl"),
             Provider = Text(root, "provider"),
             DeploymentTarget = Text(root, "target"),

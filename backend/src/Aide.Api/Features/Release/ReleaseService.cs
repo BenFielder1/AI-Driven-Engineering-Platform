@@ -4,7 +4,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
-using Aide.Domain.Projects;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -57,7 +56,7 @@ public static class ReleaseRecords
             Tag = TagFor(version?.TagPrefix, version?.Version),
             Status = ReleaseStatus.InProgress,
             Attempt = ReleaseRules.NextAttempt(attempts),
-            PrUrl = provider is { } gitProvider && ProjectSettingsRules.IsGitHub(gitProvider) ? version?.PullRequestUrl : null,
+            PrUrl = provider is { } gitProvider && gitProvider != GitProvider.Local ? version?.PullRequestUrl : null,
             CreatedAt = now,
         };
         db.Releases.Add(release);

@@ -105,7 +105,8 @@ public sealed partial class ExecutionJobHandler(
         var prepared = await preparer.PrepareAsync(project.Id, cancellationToken);
         if (prepared.IsFailure)
         {
-            throw new JobFailedException(prepared.Error!.Message, transient: true, prepared.Error.Code);
+            // FR-136: an unbound GitLab project (GIT_NOT_CONNECTED) needs an Owner to re-bind; retrying can't help.
+            throw new JobFailedException(prepared.Error!.Message, transient: prepared.Error.Code != ErrorCodes.GitNotConnected, prepared.Error.Code);
         }
 
         var working = prepared.Value;

@@ -122,11 +122,12 @@ export function checkCreateLlm(llm: Schemas['CreateProjectLlmRequest'], userId: 
   }
   if (llm.credentialId) {
     const c = connectionsDb.credentials.find((x) => x.id === llm.credentialId)
+    const key = { errors: { 'llm.credentialId': ['The connection was not found, or is not yours.'] } }
     if (!c) {
-      return problem(404, 'NOT_FOUND', 'The connection was not found.')
+      return problem(404, 'NOT_FOUND', 'The connection was not found.', key)
     }
     if (c.userId !== userId) {
-      return problem(403, 'CREDENTIAL_NOT_OWNER', 'You can only bind your own connection.')
+      return problem(403, 'CREDENTIAL_NOT_OWNER', 'You can only bind your own connection.', key)
     }
   }
   return null

@@ -267,7 +267,10 @@ export function applyVercelSetup(
   p: StoredProject,
   userId: string,
   body: { connectionId?: string | null; vercelProjectId?: string | null; create?: Schemas['CreateVercelProjectRequest'] | null },
+  /** POST /projects names the field (`deployment.connectionId`); the settings endpoint sends none. */
+  fieldPrefix: string | null = null,
 ): Response | null {
+  const key = fieldPrefix === null ? undefined : { errors: { [`${fieldPrefix}connectionId`]: ['Pick one of your own Vercel connections.'] } }
   const d = deploymentOf(p)
   if (p.git.mode === 'local') {
     return problem(400, 'VALIDATION', 'Deployment needs a GitHub-backed project.', {
@@ -288,10 +291,10 @@ export function applyVercelSetup(
   if (body.connectionId) {
     connection = vercelDb.connections.find((c) => c.id === body.connectionId)
     if (!connection) {
-      return notFound()
+      return problem(404, 'NOT_FOUND', 'The connection was not found.', key)
     }
     if (connection.userId !== userId) {
-      return problem(403, 'CREDENTIAL_NOT_OWNER', 'You can only bind your own connection.')
+      return problem(403, 'CREDENTIAL_NOT_OWNER', 'You can only bind your own connection.', key)
     }
   }
   if (body.vercelProjectId || body.create) {

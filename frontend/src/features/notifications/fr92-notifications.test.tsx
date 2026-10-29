@@ -38,6 +38,13 @@ const fr92Cases: { type: Schemas['NotificationType']; label: string; title: stri
     title: 'The LLM connection was unbound',
     link: `/projects/${PROJECT}/settings/llm`,
   },
+  // FR-136: a GitLab or Bitbucket project's Git binding was cleared; it opens Settings → Git to re-bind.
+  {
+    type: 'git_binding_cleared',
+    label: 'Git connection unbound',
+    title: 'Inventory tracker: GitLab connection unbound',
+    link: `/projects/${PROJECT}/settings/git`,
+  },
   { type: 'connection_invalid', label: 'Connection invalid', title: 'Your GitHub connection is invalid', link: '/connections' },
 ]
 
@@ -58,6 +65,7 @@ const allTypes: Schemas['NotificationType'][] = [
   'preview_ready',
   'connection_invalid',
   'llm_binding_cleared',
+  'git_binding_cleared',
 ]
 
 describe('FR-92: v2 notification types in the UI', () => {

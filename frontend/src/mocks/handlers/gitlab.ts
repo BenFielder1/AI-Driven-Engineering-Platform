@@ -9,6 +9,7 @@ type Connection = Schemas['GitLabConnectionDto']
 type Repo = Schemas['GitLabRepoDto']
 type Owner = Schemas['GitLabOwnerDto']
 type PendingLink = Schemas['GitLabPendingLinkDto']
+type Refs = Schemas['GitLabRepoRefsDto']
 
 export const GITLAB_COM_ID = '00000000-0000-7000-9000-000000000001'
 export const GITLAB_CALLBACK_URL = 'http://localhost:3000/api/auth/gitlab/callback'
@@ -56,6 +57,10 @@ export const gitlabDb = {
   nextVersion: '17.11.2' as string | null,
   /** Answer the picker endpoints with 429 UPSTREAM_RATE_LIMITED. */
   rateLimited: false,
+  /** FR-141: refs per GitLab project id (default: an empty-tag repo with code, see gitlabRefsOf). */
+  refs: {} as Record<string, Refs>,
+  /** FR-136: GitLab project ids the caller's connections only have Reporter (below Developer) access on. */
+  noDeveloperAccess: [] as string[],
 }
 
 export function resetGitLabDb() {
@@ -72,7 +77,47 @@ export function resetGitLabDb() {
   gitlabDb.linkConfirmed = false
   gitlabDb.nextVersion = '17.11.2'
   gitlabDb.rateLimited = false
+  gitlabDb.refs = {}
+  gitlabDb.noDeveloperAccess = []
   syncSignIn()
+}
+
+/** FR-141: the refs the API reports for a project (seeded, or a repo with code and no releases or tags). */
+export function gitlabRefsOf(repo: Repo): Refs {
+  return (
+    gitlabDb.refs[repo.id] ?? {
+      fullPath: repo.fullPath,
+      defaultBranch: repo.defaultBranch ?? 'main',
+      empty: false,
+      releases: [],
+      tags: [],
+      preselectedTag: null,
+      suggestedDevelopmentVersion: '0.1.0',
+    }
+  )
+}
+
+/** FR-141: seeds a project's refs (tags `v1.0.0`, `v1.1.0` → preselected `v1.1.0`, version to develop `1.2.0`). */
+export function seedGitLabRefs(repo: Repo, overrides: Partial<Refs> = {}): Refs {
+  const refs: Refs = { ...gitlabRefsOf(repo), ...overrides }
+  gitlabDb.refs[repo.id] = refs
+  return refs
+}
+
+/** Any user's GitLab connection by id (the API checks ownership itself: CREDENTIAL_NOT_OWNER). */
+export function findGitLabConnection(id: string | null | undefined): { userId: string; connection: Connection } | null {
+  for (const [userId, list] of Object.entries(gitlabDb.connections)) {
+    const connection = list.find((c) => c.id === id)
+    if (connection) {
+      return { userId, connection }
+    }
+  }
+  return null
+}
+
+/** A GitLab project any of the connection's lists has (by GitLab id). */
+export function findGitLabRepo(connectionId: string, repoId: string): Repo | undefined {
+  return (gitlabDb.repos[connectionId] ?? []).find((r) => r.id === repoId)
 }
 
 /** "Continue with GitLab" on /login: the enabled instances with an OAuth application (GET /api/auth/providers). */
@@ -486,6 +531,19 @@ export const gitlabHandlers = [
     return HttpResponse.json<Schemas['GitLabRepoPageDto']>({ items, nextCursor })
   }),
 
+  // FR-141: a project's default branch, emptiness, releases and tags, with the import's suggestion.
+  http.get('*/api/me/git/gitlab/repos/:repoId/refs', ({ request, params }) => {
+    const connectionId = new URL(request.url).searchParams.get('connectionId')
+    const guard = pickerGuard(connectionId)
+    if (guard instanceof Response) {
+      return guard
+    }
+    const repo = findGitLabRepo(guard.id, String(params.repoId))
+    return repo
+      ? HttpResponse.json<Refs>(gitlabRefsOf(repo))
+      : problem(404, 'NOT_FOUND', "The GitLab repository wasn't found, or your GitLab account can't see it.")
+  }),
+
   http.get('*/api/me/git/gitlab/owners', ({ request }) => {
     const connectionId = new URL(request.url).searchParams.get('connectionId')
     const guard = pickerGuard(connectionId)
@@ -529,6 +587,8 @@ export const gitlabHandlers = [
       fullPath: `${owner.fullPath}/${path}`,
       visibility: body.private === false ? 'public' : 'private',
     })
+    // A new project holds only its README: empty for FR-86/FR-141.
+    seedGitLabRefs(repo, { empty: true })
     return HttpResponse.json(repo, { status: 201 })
   }),
 ]

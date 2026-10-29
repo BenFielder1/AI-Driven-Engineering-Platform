@@ -129,6 +129,9 @@ public static class NotificationMessages
             NotificationType.LlmBindingCleared => (
                 $"{project}: LLM connection unbound",
                 $"The LLM connection bound to {project} was cleared: {BindingClearedReason(facts.Reason)}. Agent runs fail until an Owner binds a connection in the project's LLM settings."),
+            NotificationType.GitBindingCleared => (
+                $"{project}: {ConnectionName(facts.Provider)} connection unbound",
+                $"The {ConnectionName(facts.Provider)} connection bound to {project} was cleared: {BindingClearedReason(facts.Reason)}. Git work (push, merge request, release) fails until an Owner re-binds their own connection in the project's Git settings."),
             _ => ($"{project}: update", $"There is an update on {project}."),
         };
 
@@ -175,6 +178,7 @@ public static class NotificationMessages
         "owner_role_lost" => "the Owner who bound it is no longer an Owner",
         "member_removed" => "the Owner who bound it left the project",
         "connection_deleted" => "the Owner who bound it deleted the connection",
+        "connection_invalid" => "the host rejected the connection",
         null or "" => "the binding is no longer valid",
         _ => Humanize(reason),
     };

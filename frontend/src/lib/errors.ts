@@ -136,6 +136,8 @@ export const errorMessages = {
   GIT_AUTH_FAILED: "Signing in with your Git host didn't complete. Try again.",
   CONNECTION_SCOPE_INSUFFICIENT: "This token is missing permissions AIDE needs, or it is the wrong type of token.",
   UPSTREAM_RATE_LIMITED: "The service is rate limiting requests. Try again in a few minutes.",
+  // FR-136 job code (§6): GitLab rate limited a background job; it is re-queued for the reset.
+  GITLAB_RATE_LIMITED: "GitLab is rate limiting requests. AIDE will retry.",
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;
@@ -396,6 +398,31 @@ export const contextualErrorMessages = {
       "We couldn't find that repository, or the access token can't see it. Check the URL and the token's repository access.",
     CREDENTIAL_NOT_OWNER: "You can only use one of your own Vercel connections. Pick another, or skip deployment.",
   },
+  /** POST /api/projects `git` with `mode: gitlab` (FR-132, FR-136, FR-141): the bound connection and the picked project. */
+  createProjectGitLab: {
+    CREDENTIAL_NOT_OWNER:
+      "You can only bind one of your own GitLab connections. Pick another, or connect GitLab under Connections.",
+    GIT_NOT_CONNECTED:
+      "This GitLab connection no longer works: GitLab rejected it, or an administrator disabled its instance. Reconnect it under Connections, or pick another.",
+    FORBIDDEN:
+      "Your GitLab account needs Developer access or higher on this project for AIDE to work on it. Pick another project, or ask its maintainers for access.",
+    NOT_FOUND:
+      "That GitLab project or connection no longer exists, or your GitLab account can't see it. Pick another project.",
+    UPSTREAM_ERROR: "We couldn't reach GitLab to check the project. Nothing was created; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: "GitLab is rate limiting requests. Nothing was created; try again in a few minutes.",
+  },
+  /** PATCH /api/projects/:id/settings/git `connectionId`: Rebind (FR-136). */
+  gitBinding: {
+    CREDENTIAL_NOT_OWNER: "You can only bind one of your own GitLab connections. Pick another.",
+    GIT_NOT_CONNECTED:
+      "That GitLab connection no longer works: GitLab rejected it, or an administrator disabled its instance. Reconnect it under Connections, then bind it.",
+    FORBIDDEN:
+      "Your GitLab account needs Developer access or higher on this repository to bind it. Ask a maintainer for access, or ask another Owner to re-bind.",
+    NOT_FOUND: "That GitLab connection no longer exists. Pick another, or connect GitLab under Connections.",
+    VALIDATION: "That connection is for a different GitLab instance than the project's repository. Pick another.",
+    UPSTREAM_ERROR: "We couldn't reach GitLab to check your access. Nothing changed; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: "GitLab is rate limiting requests. Nothing changed; try again in a few minutes.",
+  },
   /** POST /api/projects `llm` (FR-159): the AI model section's connection. */
   createProjectLlm: {
     CREDENTIAL_NOT_OWNER: "You can only use one of your own connections. Pick another, or add a key under Connections.",
@@ -409,6 +436,14 @@ export const contextualErrorMessages = {
     NOT_FOUND: "We couldn't read that repository or ref, so nothing was detected. Choose each layer yourself.",
     VALIDATION: "We couldn't read that repository, so nothing was detected. Choose each layer yourself.",
     FORBIDDEN: "GitHub refused to list the repository's files, so nothing was detected. Choose each layer yourself.",
+  },
+  /** POST /api/stack/detect for a GitLab import (FR-141). */
+  detectStackGitLab: {
+    GIT_NOT_CONNECTED:
+      "Your GitLab connection no longer works, so nothing was detected. Reconnect it under Connections, or choose each layer yourself.",
+    NOT_FOUND: "We couldn't read that project or ref, so nothing was detected. Choose each layer yourself.",
+    VALIDATION: "We couldn't read that project, so nothing was detected. Choose each layer yourself.",
+    FORBIDDEN: "GitLab refused to list the project's files, so nothing was detected. Choose each layer yourself.",
   },
   /** PUT /api/projects/:id/stack and the start-version stack change (FR-117). */
   changeStack: {

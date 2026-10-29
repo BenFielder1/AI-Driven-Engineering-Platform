@@ -78,22 +78,6 @@ describe('Wizard → Repository on GitLab (FR-132)', () => {
     expect(await screen.findByText('GitLab is rate limiting requests. Try again in a few minutes.')).toBeInTheDocument()
   })
 
-  it('FR132_creation_blocked_until_binding: a picked GitLab project can’t continue yet (slice 2 adds the binding)', async () => {
-    const { user, connection } = await openGitLabStep()
-    if (connection) {
-      seedGitLabRepo(connection.id, { path: 'todo-app' })
-    }
-    expect(await screen.findByText('GitLab projects arrive in the next AIDE update')).toBeInTheDocument()
-    // Creating a GitLab project now would leave an orphan: it's offered once AIDE projects can bind it.
-    await screen.findByRole('list', { name: 'GitLab projects' })
-    expect(screen.queryByRole('button', { name: 'Create GitLab project' })).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Next' }))
-
-    expect(await screen.findAllByText("AIDE can't create projects on GitLab yet. Choose another option to continue.")).not.toHaveLength(0)
-    expect(screen.getByRole('heading', { level: 2, name: /Step 3 of 8: Repository/ })).toBeInTheDocument()
-  })
-
   it('FR132_summary_link_target: without a connection, the error summary links to an element that exists', async () => {
     const { user } = await openGitLabStep({ connect: false })
     await screen.findByRole('link', { name: 'Connect GitLab under Connections' })

@@ -143,6 +143,10 @@ public static partial class ProjectSettingsRules
         {
             problems.Add($"{prefix}token: Not used with github_app: AIDE uses the App's installation tokens.");
         }
+        else if (tokenSent is not null && IsGitHost(provider))
+        {
+            problems.Add($"{prefix}token: Not used with {provider.ToWire()}: AIDE uses the binding Owner's connection.");
+        }
 
         return ProjectRules.ToResult(problems, "The Git settings are invalid.");
     }
@@ -158,14 +162,19 @@ public static partial class ProjectSettingsRules
     /// <summary>FR-82, FR-83: whether the provider is a GitHub one (<c>github_app</c> or <c>github_pat</c>).</summary>
     public static bool IsGitHub(GitProvider provider) => provider is GitProvider.GithubApp or GitProvider.GithubPat;
 
+    /// <summary>FR-136: whether the provider is a connection-bound Git host (<c>gitlab</c> or <c>bitbucket</c>).</summary>
+    public static bool IsGitHost(GitProvider provider) => provider is GitProvider.Gitlab or GitProvider.Bitbucket;
+
     /// <summary>
     /// The repository's web URL: the stored <c>repoUrl</c> for <c>github_pat</c>, <c>https://github.com/{repoFullName}</c>
-    /// for <c>github_app</c> (which stores the full name, not a URL), <c>null</c> for Local.
+    /// for <c>github_app</c> (which stores the full name, not a URL), the stored web URL for GitLab and Bitbucket (FR-136,
+    /// read from the host when the repo was bound), <c>null</c> for Local.
     /// </summary>
     public static string? RepoWebUrl(GitProvider provider, string? repoUrl, string? repoFullName) => provider switch
     {
         GitProvider.GithubPat => repoUrl,
         GitProvider.GithubApp when TryParseRepoFullName(repoFullName, out var repo) => $"https://github.com/{repo.Owner}/{repo.Name}",
+        GitProvider.Gitlab or GitProvider.Bitbucket => repoUrl,
         _ => null,
     };
 
@@ -186,7 +195,7 @@ public static partial class ProjectSettingsRules
 
         return (mode ?? provider) is { } resolved
             ? Result.Success(resolved)
-            : Result.Failure<GitProvider>(Invalid($"{prefix}mode: Choose github_app, github_pat or local."));
+            : Result.Failure<GitProvider>(Invalid($"{prefix}mode: Choose github_app, github_pat, gitlab or local."));
     }
 
     /// <summary>
@@ -230,12 +239,16 @@ public static partial class ProjectSettingsRules
 
     /// <summary>
     /// FR-82, FR-83: <c>PATCH /settings/git</c> can't move a project onto <c>github_app</c>, which needs an installation and
-    /// repository id: that goes through "Switch to GitHub App" (or the wizard).
+    /// repository id: that goes through "Switch to GitHub App" (or the wizard). FR-136: nor onto <c>gitlab</c> or
+    /// <c>bitbucket</c>, which need an instance, a repo id and a binding connection (the wizard binds them).
     /// </summary>
     public static Result ValidateProviderChange(GitProvider previous, GitProvider next) =>
-        next == GitProvider.GithubApp && previous != GitProvider.GithubApp
+        next == previous ? Result.Success()
+        : next == GitProvider.GithubApp
             ? Result.Failure(Invalid("provider: Use Switch to GitHub App to move this project onto the AIDE GitHub App."))
-            : Result.Success();
+        : IsGitHost(next)
+            ? Result.Failure(Invalid($"provider: A project moves onto {next.ToWire()} only when it is created with a repository picked through a connection."))
+        : Result.Success();
 
     /// <summary>§4.10, FR-64: a sent tag prefix must be <c>^[A-Za-z0-9._/-]{0,20}$</c> and a safe Git ref start (<c>null</c>: unchanged).</summary>
     public static Result ValidateTagPrefix(string? tagPrefix) =>

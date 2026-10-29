@@ -8,6 +8,7 @@ import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from
 import { bindCredential, connectionsDb } from './connections'
 import { applyVercelSetup } from './deployments'
 import { githubDb } from './github'
+import { findGitLabConnection, findGitLabRepo, gitlabDb, gitlabRefsOf } from './gitlab'
 import { checkCreateLlm, isLlmProviderEnabled } from './llm'
 import { problem } from './problem'
 import { packsOf, validateComposition } from './stack-catalog'
@@ -140,7 +141,12 @@ export interface StoredStack {
 
 /** §4.17 R5: the VCS option of the project's repository host (Local: none, any VCS). */
 export function repoVcsOfProject(p: StoredProject): string | null {
-  return p.git.mode === 'local' ? null : 'vcs-github'
+  return repoVcsOfMode(p.git.mode)
+}
+
+/** §4.17 R5: the VCS option fixed by a repository host (Local: any). */
+function repoVcsOfMode(mode: Schemas['GitProvider'] | undefined): string | null {
+  return !mode || mode === 'local' ? null : mode === 'gitlab' ? 'vcs-gitlab' : mode === 'bitbucket' ? 'vcs-bitbucket' : 'vcs-github'
 }
 
 /** FR-88: the stored deployment settings; `present` on required env and `canBind` are derived per request. */
@@ -203,7 +209,7 @@ export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
   const app = provider === 'github_app'
   const repoFullName = overrides.repoFullName ?? (app ? 'acme/inventory' : null)
   return {
-    repoUrl: provider === 'local' ? null : `https://github.com/${repoFullName ?? 'acme/inventory'}`,
+    repoUrl: provider === 'local' || provider === 'gitlab' ? null : `https://github.com/${repoFullName ?? 'acme/inventory'}`,
     defaultBranch: 'main',
     branchName: null,
     hasToken: false,
@@ -220,11 +226,91 @@ export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
   }
 }
 
-/** GET/PATCH /settings/git body: "Switch to GitHub App" is offered to Owners of a PAT project the App can access. */
+/**
+ * GET/PATCH /settings/git body: "Switch to GitHub App" is offered to Owners of a PAT project the App can access;
+ * Rebind (FR-136) to Owners of a GitLab project.
+ */
 export function gitDto(project: StoredProject, isOwner: boolean): GitSettings {
   const g = project.git
-  return { ...g, canSwitchToApp: isOwner && g.mode === 'github_pat' && g.appInstalledOnRepo === true }
+  return {
+    ...g,
+    canSwitchToApp: isOwner && g.mode === 'github_pat' && g.appInstalledOnRepo === true,
+    canRebind: isOwner && g.mode === 'gitlab',
+  }
 }
+
+/** FR-136: the GitLab settings of a project bound to `connection` (seeds and the create handler). */
+export function gitlabGitSettings(options: {
+  instance: Schemas['GitHostInstanceRefDto']
+  repoId: string
+  repoFullName: string
+  binding: Schemas['GitBindingDto'] | null
+  defaultBranch?: string
+}): GitSettings {
+  return gitSettings({
+    provider: 'gitlab',
+    repoFullName: options.repoFullName,
+    defaultBranch: options.defaultBranch ?? 'main',
+    instance: options.instance,
+    externalRepoId: options.repoId,
+    repoWebUrl: `${options.instance.baseUrl}/${options.repoFullName}`,
+    binding: options.binding,
+  })
+}
+
+/**
+ * FR-136: the checks of binding a GitLab connection (create and Rebind): the caller's own (CREDENTIAL_NOT_OWNER), on
+ * the repo's instance (VALIDATION on `fieldPrefix + connectionId`), valid on an enabled instance (GIT_NOT_CONNECTED),
+ * and Developer access to the repo (FORBIDDEN).
+ */
+function checkGitLabBinding(
+  callerId: string,
+  connectionId: string | null | undefined,
+  instanceId: string | null | undefined,
+  repoId: string,
+  fieldPrefix: string,
+): Response | Schemas['GitLabConnectionDto'] {
+  const onConnection = { errors: { [`${fieldPrefix}connectionId`]: ['Bind one of your own valid GitLab connections.'] } }
+  const onRepo = { errors: { [`${fieldPrefix}repoId`]: ['Developer access or higher is required.'] } }
+  const found = findGitLabConnection(connectionId)
+  if (!found) {
+    return problem(404, 'NOT_FOUND', 'The connection was not found.', onConnection)
+  }
+  if (found.userId !== callerId) {
+    return problem(403, 'CREDENTIAL_NOT_OWNER', 'You can only bind your own connections.', onConnection)
+  }
+  const c = found.connection
+  if (c.instanceId !== instanceId) {
+    return validation({
+      [`${fieldPrefix}connectionId`]: ["The connection is for a different GitLab instance than the project's repository."],
+    })
+  }
+  if (c.status !== 'valid' || !c.instanceEnabled) {
+    return problem(409, 'GIT_NOT_CONNECTED', 'The GitLab connection is invalid. Reconnect it under Account → Connections, then bind it.', onConnection)
+  }
+  if (gitlabDb.noDeveloperAccess.includes(repoId)) {
+    return problem(403, 'FORBIDDEN', 'Your GitLab account needs developer (write) access to the repository to bind it.', onRepo)
+  }
+  return c
+}
+
+/** The instance as project settings show it. */
+export function instanceRef(instanceId: string): Schemas['GitHostInstanceRefDto'] {
+  const i = gitlabDb.instances.find((x) => x.id === instanceId)
+  return {
+    id: instanceId,
+    name: i?.name ?? 'GitLab.com',
+    baseUrl: i?.baseUrl ?? 'https://gitlab.com',
+    enabled: i?.enabled ?? true,
+  }
+}
+
+const bindingOf = (c: Schemas['GitLabConnectionDto'], user: { id: string; name: string }): Schemas['GitBindingDto'] => ({
+  connectionId: c.id,
+  login: c.login,
+  status: c.status,
+  boundBy: { id: user.id, name: user.name },
+})
 
 /** In-memory projects backend for tests (reset after each test by src/test/setup.ts). */
 export const projectsDb = {
@@ -708,11 +794,14 @@ function scratchVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[
  * GitHub App repo's refs (TAG_NOT_FOUND) and a version (VERSION_INVALID); the version to develop must be valid and
  * greater (VERSION_NOT_GREATER). Creates an `imported` row for the released tag plus the version `in_development`.
  */
-function importVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[] | Response {
+function importVersions(
+  body: Schemas['CreateProjectRequest'],
+  gitlabRefs?: Schemas['GitLabRepoRefsDto'],
+): ReleaseVersion[] | Response {
   const releasedTag = body.import?.releasedTag ?? null
   let released: string | null = null
   if (releasedTag !== null) {
-    const refs = body.git.repoFullName ? githubDb.refs[body.git.repoFullName] : undefined
+    const refs = gitlabRefs ?? (body.git.repoFullName ? githubDb.refs[body.git.repoFullName] : undefined)
     const tag = refs?.tags.find((t) => t.name === releasedTag)
     if (refs && !tag && !refs.releases.some((r) => r.tagName === releasedTag)) {
       return problem(400, 'TAG_NOT_FOUND', `The tag '${releasedTag}' was not found in the repository.`)
@@ -821,6 +910,23 @@ export const projectHandlers = [
     if (mode === 'github_app' && (!body.git.installationId || !body.git.repoFullName)) {
       errors['git.repoFullName'] = ['Pick a repository the AIDE GitHub App is installed on.']
     }
+    if (mode === 'gitlab') {
+      if (!body.git.instanceId) {
+        errors['git.instanceId'] = ['The GitLab instance is required.']
+      }
+      if (!body.git.connectionId) {
+        errors['git.connectionId'] = ['Pick one of your GitLab connections.']
+      }
+      if (!body.git.repoId) {
+        errors['git.repoId'] = ['Pick a GitLab project.']
+      }
+      if ((body.git.repoFullName ?? '').length > 255) {
+        errors['git.repoFullName'] = ['The project path is at most 255 characters.']
+      }
+    }
+    if (mode === 'bitbucket') {
+      errors['git.mode'] = ['Bitbucket repositories are not available yet.']
+    }
     const importing = body.source === 'import'
     if (importing && !body.import) {
       errors.import = ['Say which version is released and which to develop.']
@@ -836,14 +942,29 @@ export const projectHandlers = [
     if (llmFailure) {
       return llmFailure
     }
-    const versions = importing ? importVersions(body) : scratchVersions(body)
+    // FR-132, FR-136: the caller's own valid connection on the repo's instance, with Developer access to a project it sees.
+    let gitlab: { connection: Schemas['GitLabConnectionDto']; repo: Schemas['GitLabRepoDto'] } | null = null
+    if (mode === 'gitlab') {
+      const checked = checkGitLabBinding(user.id, body.git.connectionId, body.git.instanceId, body.git.repoId ?? '', 'git.')
+      if (checked instanceof Response) {
+        return checked
+      }
+      const repo = findGitLabRepo(checked.id, body.git.repoId ?? '')
+      if (!repo) {
+        return problem(404, 'NOT_FOUND', "The GitLab repository wasn't found, or your GitLab account can't see it.", {
+          errors: { 'git.repoId': ['Pick a GitLab project your account can see.'] },
+        })
+      }
+      gitlab = { connection: checked, repo }
+    }
+    const versions = importing ? importVersions(body, gitlab ? gitlabRefsOf(gitlab.repo) : undefined) : scratchVersions(body)
     if (versions instanceof Response) {
       return versions
     }
     // FR-114–FR-117: the stack composition, validated (STACK_INCOMPATIBLE, VCS_MISMATCH, paths).
     let composition: Schemas['StackCompositionDto'] | null = null
     if (body.stack) {
-      const repoVcs = mode === 'local' ? null : 'vcs-github'
+      const repoVcs = repoVcsOfMode(mode)
       if (repoVcs && body.stack.vcs && body.stack.vcs.pack !== repoVcs) {
         return problem(400, 'VCS_MISMATCH', "The VCS layer isn't the repository's host.")
       }
@@ -867,7 +988,15 @@ export const projectHandlers = [
       tokenBudget: body.tokenBudget ?? null,
       createdAt: now,
       updatedAt: now,
-      git: gitSettings({
+      git: gitlab
+        ? gitlabGitSettings({
+            instance: instanceRef(gitlab.connection.instanceId),
+            repoId: gitlab.repo.id,
+            repoFullName: gitlab.repo.fullPath,
+            binding: bindingOf(gitlab.connection, user),
+            defaultBranch: body.git.defaultBranch ?? 'main',
+          })
+        : gitSettings({
         provider: mode ?? 'local',
         ...(mode === 'github_pat' ? { repoUrl: body.git.repoUrl ?? null } : {}),
         ...(mode === 'github_app'
@@ -882,7 +1011,7 @@ export const projectHandlers = [
     })
     // FR-88: the optional Deployment step (one of the caller's own Vercel connections; Local can't deploy).
     if (body.deployment) {
-      const failed = applyVercelSetup(project, user.id, body.deployment)
+      const failed = applyVercelSetup(project, user.id, body.deployment, 'deployment.')
       if (failed) {
         projectsDb.projects = projectsDb.projects.filter((p) => p !== project)
         return failed
@@ -1037,6 +1166,22 @@ export const projectHandlers = [
     if (provider === 'github_app' && git.provider !== 'github_app') {
       return validation({ provider: ['Use Switch to GitHub App to move this project onto the AIDE GitHub App.'] })
     }
+    // FR-136: a project can't move onto GitLab or Bitbucket here (only the wizard creates those).
+    if ((provider === 'gitlab' || provider === 'bitbucket') && git.provider !== provider) {
+      return validation({ provider: ['A project can only be put on GitLab or Bitbucket when it is created.'] })
+    }
+    // FR-136 Rebind: the caller's own connection on the project's instance, with Developer access.
+    if (body.connectionId) {
+      if (git.mode !== 'gitlab') {
+        return validation({ connectionId: ['Only a GitLab project has a connection to bind.'] })
+      }
+      const user = authDb.users.find((u) => u.id === a.userId)
+      const checked = checkGitLabBinding(a.userId, body.connectionId, git.instance?.id, git.externalRepoId ?? '', '')
+      if (checked instanceof Response) {
+        return checked
+      }
+      git.binding = bindingOf(checked, { id: a.userId, name: user?.name ?? 'Owner' })
+    }
     git.provider = provider
     git.mode = provider
     if (provider === 'local') {
@@ -1044,7 +1189,7 @@ export const projectHandlers = [
     } else if (body.repoUrl) {
       git.repoUrl = body.repoUrl
     }
-    if (provider !== 'github_app') {
+    if (provider !== 'github_app' && provider !== 'gitlab') {
       git.installationId = null
       git.repoId = null
       git.repoFullName = null

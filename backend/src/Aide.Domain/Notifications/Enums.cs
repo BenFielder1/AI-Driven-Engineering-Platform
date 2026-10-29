@@ -33,4 +33,7 @@ public enum NotificationType
 
     /// <summary>FR-79, FR-92: the project's LLM binding was cleared (Owners; the reason).</summary>
     LlmBindingCleared = 15,
+
+    /// <summary>FR-136: the project's Git binding (GitLab or Bitbucket connection) was cleared (Owners; the reason).</summary>
+    GitBindingCleared = 16,
 }

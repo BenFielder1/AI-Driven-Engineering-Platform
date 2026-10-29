@@ -630,6 +630,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/git/gitlab/repos/{repoId}/refs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-141, FR-86: a GitLab repository's default branch, whether it is empty, its Releases and semver tags, with the released version to preselect and the version to develop (next minor) for the import. repoId is GitLab's project id; connectionId one of the caller's GitLab connections. */
+        get: operations["GetGitLabRepoRefs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/git/gitlab/owners": {
         parameters: {
             query?: never;
@@ -954,7 +971,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). */
+        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). FR-136: connectionId re-binds a GitLab project to the caller's own connection after AIDE checks Developer access on the repository; the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). */
         patch: operations["UpdateGitSettings"];
         trace?: never;
     };
@@ -1873,7 +1890,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import detection (FR-118): reads the repository's file list and manifests at ref (default: the default branch) through the Git provider (github_app with the caller's GitHub connection, github_pat with an optional token, local under Git:Local:ImportRoot) and returns the suggested choices with their layer paths and evidence, and the conflicting ones (left empty, every candidate shown). The VCS layer is fixed to the repository's host. Nothing is stored. */
+        /** Import detection (FR-118): reads the repository's file list and manifests at ref (default: the default branch) through the Git provider (github_app with the caller's GitHub connection, github_pat with an optional token, gitlab with the caller's GitLab connection on instanceId (FR-141), local under Git:Local:ImportRoot) and returns the suggested choices with their layer paths and evidence, and the conflicting ones (left empty, every candidate shown). The VCS layer is fixed to the repository's host. Nothing is stored. */
         post: operations["DetectStack"];
         delete?: never;
         options?: never;
@@ -2866,7 +2883,10 @@ export interface components {
          *     when both are sent they must be equal (else 400 `VALIDATION` on `git.mode`).
          */
         CreateProjectGitRequest: {
-            /** @description The Git provider (FR-82): `github_app`, `github_pat` or `local`. */
+            /**
+             * @description The Git provider (FR-82, FR-136): `github_app`, `github_pat`, `gitlab` or `local`
+             *         (`bitbucket` isn't available yet: 400 `VALIDATION`).
+             */
             mode?: components["schemas"]["GitProvider"];
             /** @description v1 alias of `mode` (deprecated; send `mode`). */
             provider?: components["schemas"]["GitProvider"];
@@ -2875,8 +2895,29 @@ export interface components {
              * @description `github_app`: the App installation that grants access to the repo (from the repo picker).
              */
             installationId?: null | number;
-            /** @description `github_app`: the repository as `owner/name`. */
+            /**
+             * @description `github_app`: the repository as `owner/name`. `gitlab`: its `group/sub/project` path (the
+             *         stored path is the one GitLab reports for `repoId`).
+             */
             repoFullName?: null | string;
+            /**
+             * Format: uuid
+             * @description `gitlab` (FR-132, FR-136): the GitLab instance of the repository (from the repo picker). Required with gitlab and
+             *     not used otherwise (400 `VALIDATION`).
+             */
+            instanceId?: null | string;
+            /**
+             * Format: uuid
+             * @description `gitlab` (FR-136): one of the caller's own valid GitLab connections on `instanceId`, bound to the project: all
+             *     background Git work uses it. Another user's connection is 403 `CREDENTIAL_NOT_OWNER`; an invalid one or a
+             *     disabled instance 409 `GIT_NOT_CONNECTED`; a connection on another instance 400 `VALIDATION`.
+             */
+            connectionId?: null | string;
+            /**
+             * @description `gitlab` (FR-132): GitLab's project id (from the repo picker). The caller needs Developer access or higher on it
+             *     (403 `FORBIDDEN`; 404 `NOT_FOUND` when the connection can't see it).
+             */
+            repoId?: null | string;
             /** @description Required for `github_pat`: `https://github.com/OWNER/REPO`, optionally ending in `.git`. */
             repoUrl?: null | string;
             defaultBranch?: string;
@@ -3136,8 +3177,10 @@ export interface components {
          *     caller's GitHub connection: 409 `GIT_NOT_CONNECTED` without one), `github_pat` (`repo` = `owner/name`
          *     or `https://github.com/owner/name`, with the optional `token`; public repositories need none) or `local`
          *     (`repo` = the directory under `Git:Local:ImportRoot`, Development and E2E only). `ref` is the branch, tag
-         *     or commit to read (default: the default branch). `instanceId` is for GitLab instances (not used by these providers:
-         *     400 `VALIDATION` when sent).
+         *     or commit to read (default: the default branch). FR-141: `gitlab` (`repo` = GitLab's project id or its
+         *     `group/sub/project` path) on `instanceId` (omitted: gitlab.com), read with the caller's `connectionId` or,
+         *     omitted, their newest valid GitLab connection on that instance (409 `GIT_NOT_CONNECTED` without one).
+         *     `instanceId` and `connectionId` are only for gitlab (400 `VALIDATION` otherwise).
          */
         DetectStackGitRequest: {
             provider: components["schemas"]["GitProvider"];
@@ -3147,6 +3190,11 @@ export interface components {
             ref?: null | string;
             /** @description `github_pat` only: the GitHub token to read a private repository. Used for this request only, never stored. */
             token?: null | string;
+            /**
+             * Format: uuid
+             * @description `gitlab` only (FR-141): one of the caller's GitLab connections on the instance (404 `NOT_FOUND` otherwise).
+             */
+            connectionId?: null | string;
         };
         /** @description FR-118: the repository to detect the stack of. */
         DetectStackRequest: {
@@ -3427,6 +3475,23 @@ export interface components {
         /** @enum {unknown} */
         GateType: "spec_approval" | "plan_approval" | "pre_release" | "escalation";
         /**
+         * @description The Git connection bound to a GitLab or Bitbucket project (FR-136), shown to Owners as e.g. "GitLab · connected by Ana
+         *     (@ana)". Never contains a token. `connectionId` only lets the binding Owner recognise their own connection.
+         */
+        GitBindingDto: {
+            /** Format: uuid */
+            connectionId: string;
+            login: string;
+            status: components["schemas"]["GitConnectionStatus"];
+            boundBy: components["schemas"]["GitBindingUserDto"];
+        };
+        /** @description The Owner who bound a project's Git connection (FR-136). */
+        GitBindingUserDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /**
          * @description How a GitConnection authenticates (FR-131, FR-134). Wire values: `oauth`, `token`.
          * @enum {unknown}
          */
@@ -3437,6 +3502,14 @@ export interface components {
          * @enum {unknown}
          */
         GitConnectionStatus: "valid" | "invalid" | "insufficient_scope";
+        /** @description A Git host instance as project settings show it (FR-136). */
+        GitHostInstanceRefDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            baseUrl: string;
+            enabled: boolean;
+        };
         /**
          * @description Where a GitLab instance's settings come from (FR-130). Wire values: `database`, `configuration`.
          * @enum {unknown}
@@ -3677,6 +3750,14 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
         };
+        /** @description A GitLab Release (FR-141): `isLatest` marks the newest released one (upcoming releases aren't listed). */
+        GitLabReleaseDto: {
+            tagName: string;
+            name: null | string;
+            /** Format: date-time */
+            publishedAt: null | string;
+            isLatest: boolean;
+        };
         /**
          * @description A GitLab project for the repo picker (FR-132). `id` is GitLab's numeric project id as text; `fullPath`
          *         is `group/sub/project`.
@@ -3697,6 +3778,27 @@ export interface components {
         GitLabRepoPageDto: {
             items: components["schemas"]["GitLabRepoDto"][];
             nextCursor: null | string;
+        };
+        /**
+         * @description What the wizard needs about a picked GitLab repository (FR-141, FR-86): its canonical path, default branch, whether it
+         *     is `empty` (no commits, or only starter files), its Releases and tags, and the import's suggestion: the released
+         *     version to preselect (the latest release, else the highest release, else the highest semver tag; `null` = "Never
+         *     released") and the version to develop it prefills (its next minor, else `0.1.0`).
+         */
+        GitLabRepoRefsDto: {
+            fullPath: string;
+            defaultBranch: string;
+            empty: boolean;
+            releases: components["schemas"]["GitLabReleaseDto"][];
+            tags: components["schemas"]["GitLabTagDto"][];
+            preselectedTag: null | string;
+            suggestedDevelopmentVersion: string;
+        };
+        /** @description A tag; `semver` is its version (the `v` prefix stripped), or `null` when it isn't a semantic version. */
+        GitLabTagDto: {
+            name: string;
+            sha: string;
+            semver: null | string;
         };
         /**
          * @description The outcome of a GitLab `GET /api/v4/version` reachability check (FR-130).
@@ -3734,6 +3836,14 @@ export interface components {
             canSwitchToApp: boolean;
             mergeStrategy: components["schemas"]["MergeStrategy"];
             tagPrefix: string;
+            instance?: null | components["schemas"]["GitHostInstanceRefDto"];
+            /** @description FR-136: the host's repo id (GitLab project id). */
+            externalRepoId?: null | string;
+            /** @description The repository's web URL (GitHub or GitLab), `null` for Local. */
+            repoWebUrl?: null | string;
+            binding?: null | components["schemas"]["GitBindingDto"];
+            /** @description FR-136: the caller may re-bind their own connection (`connectionId`): an Owner of a GitLab project. */
+            canRebind?: boolean;
         };
         /** @description Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false. */
         GitTestResultDto: {
@@ -4074,7 +4184,7 @@ export interface components {
          *     types (`NotificationRules.ChannelTypes`); the personal `connection_invalid` never goes to project channels.
          * @enum {unknown}
          */
-        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "llm_binding_cleared";
+        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "llm_binding_cleared" | "git_binding_cleared";
         /**
          * @description A page of the caller's notifications, newest first. `unreadCount` counts all the caller's unread notifications
          *     (not just this page). Load more with `before` = `nextBefore`; `null` on the last page.
@@ -4101,7 +4211,7 @@ export interface components {
          *     Wire values are snake_case.
          * @enum {unknown}
          */
-        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared";
+        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared" | "git_binding_cleared";
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfAdminAgentRunDto: {
             items: components["schemas"]["AdminAgentRunDto"][];
@@ -5185,6 +5295,14 @@ export interface components {
             /** @description Sets the access token. To remove it, send `clearToken: true`. */
             token?: null | string;
             clearToken?: boolean;
+            /**
+             * Format: uuid
+             * @description FR-136: re-binds a GitLab project to one of the caller's own connections on the project's instance (Owner). AIDE
+             *     first checks the connection has Developer access or higher on the repository (403 `FORBIDDEN`). Another user's
+             *     connection is 403 `CREDENTIAL_NOT_OWNER`; an invalid one 409 `GIT_NOT_CONNECTED`; one on another instance,
+             *     or `connectionId` on a project that isn't on GitLab, 400 `VALIDATION`.
+             */
+            connectionId?: null | string;
             mergeStrategy?: null | components["schemas"]["MergeStrategy"];
             /**
              * @description §4.10, FR-64: the tag prefix (`^[A-Za-z0-9._/-]{0,20}$`, not starting with `.`, `/` or
@@ -7719,6 +7837,86 @@ export interface operations {
             };
         };
     };
+    GetGitLabRepoRefs: {
+        parameters: {
+            query: {
+                connectionId: string;
+            };
+            header?: never;
+            path: {
+                repoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabRepoRefsDto"];
+                };
+            };
+            /** @description VALIDATION or GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's GitLab connections, or no such repository visible to it) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid, or its instance is disabled) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Retry-After when GitLab sent one) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListGitLabOwners: {
         parameters: {
             query: {
@@ -9017,7 +9215,7 @@ export interface operations {
                     "application/json": components["schemas"]["GitSettingsDto"];
                 };
             };
-            /** @description VALIDATION: invalid Git settings or tag prefix. */
+            /** @description VALIDATION: invalid Git settings or tag prefix, a provider change onto gitlab/bitbucket, or connectionId on a project that isn't on GitLab or for another instance; GIT_HOST_NOT_ALLOWED. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9035,7 +9233,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Forbidden */
+            /** @description FORBIDDEN (not an Owner, or the connection lacks Developer access to the repository); CREDENTIAL_NOT_OWNER (another user's connection) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9053,8 +9251,28 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description CONFLICT: the tag prefix can't change while a release is in progress or awaiting its merge, or a concurrent change. */
+            /** @description CONFLICT: the tag prefix can't change while a release is in progress or awaiting its merge, or a concurrent change; GIT_NOT_CONNECTED (the connection is invalid or its instance disabled). */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (GitLab; Retry-After when sent) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12344,7 +12562,7 @@ export interface operations {
                     "application/json": components["schemas"]["StackDetectionDto"];
                 };
             };
-            /** @description VALIDATION: a malformed repo, ref or token, an instanceId, or (local) a directory outside the import root or local import not enabled. */
+            /** @description VALIDATION: a malformed repo, ref or token, an instanceId or connectionId for a provider other than gitlab, or (local) a directory outside the import root or local import not enabled. GIT_HOST_NOT_ALLOWED (gitlab). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -12380,7 +12598,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description GIT_NOT_CONNECTED: github_app without a valid GitHub connection. */
+            /** @description GIT_NOT_CONNECTED: github_app without a valid GitHub connection, or gitlab without a valid GitLab connection on the instance. */
             409: {
                 headers: {
                     [name: string]: unknown;

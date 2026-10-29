@@ -235,6 +235,19 @@ public static class GitLabEndpoints
                 (StatusCodes.Status429TooManyRequests, RateLimited429),
                 (StatusCodes.Status502BadGateway, Upstream502));
 
+        git.MapGet("/repos/{repoId}/refs", GetGitLabRepoRefs)
+            .WithName("GetGitLabRepoRefs")
+            .WithSummary("FR-141, FR-86: a GitLab repository's default branch, whether it is empty, its Releases and semver tags, with the released version to preselect and the version to develop (next minor) for the import. repoId is GitLab's project id; connectionId one of the caller's GitLab connections.")
+            .Produces<GitLabRepoRefsDto>()
+            .ProducesValidationProblem()
+            .WithRetryAfterOn429()
+            .WithResponseDescriptions(
+                (StatusCodes.Status400BadRequest, "VALIDATION or GIT_HOST_NOT_ALLOWED"),
+                (StatusCodes.Status404NotFound, "NOT_FOUND (not one of the caller's GitLab connections, or no such repository visible to it)"),
+                (StatusCodes.Status409Conflict, NotConnected409),
+                (StatusCodes.Status429TooManyRequests, RateLimited429),
+                (StatusCodes.Status502BadGateway, Upstream502));
+
         git.MapGet("/owners", ListGitLabOwners)
             .WithName("ListGitLabOwners")
             .WithSummary("FR-132: where the caller can create a project: their personal namespace and the groups where they are Developer or above, with whether the group's project_creation_level allows them.")
@@ -401,7 +414,7 @@ public static class GitLabEndpoints
 
     private static async Task<Results<NoContent, ProblemHttpResult>> DeleteGitLabConnection(
         Guid id, ICurrentUser currentUser, GitLabConnectionService connections, CancellationToken cancellationToken) =>
-        await connections.DeleteAsync(currentUser.RequiredUserId, id, cancellationToken)
+        await connections.DeleteAsync(currentUser.RequiredUserId, id, cancellationToken, currentUser.Actor)
             ? TypedResults.NoContent()
             : ApiProblems.NotFound("The GitLab connection was not found.");
 
@@ -465,6 +478,37 @@ public static class GitLabEndpoints
         return TypedResults.Created(result.Value.WebUrl ?? $"/api/me/git/gitlab/repos/{result.Value.Id}", result.Value);
     }
 
+    private static async Task<Results<Ok<GitLabRepoRefsDto>, ValidationProblem, ProblemHttpResult>> GetGitLabRepoRefs(
+        [MaxLength(GitLabProjectRules.MaxRepoIdLength)] string repoId,
+        [Required] Guid? connectionId,
+        ICurrentUser currentUser,
+        GitLabProjectRepos repos,
+        HttpContext http,
+        CancellationToken cancellationToken)
+    {
+        if (!GitLabProjectRules.IsValidRepoId(repoId))
+        {
+            return ApiProblems.Validation(new DomainError(ErrorCodes.Validation, "The request is invalid.") { Details = ["repoId: Use the GitLab project id from the repo picker."] });
+        }
+
+        var result = await repos.RefsAsync(currentUser.RequiredUserId, connectionId!.Value, repoId, cancellationToken);
+        if (result.IsFailure)
+        {
+            ResponseDocs.SetRetryAfter(http, result.Error!.RetryAfter);
+            return result.Error.Code == ErrorCodes.Validation ? ApiProblems.Validation(result.Error) : ApiProblems.FromError(result.Error);
+        }
+
+        var refs = result.Value;
+        return TypedResults.Ok(new GitLabRepoRefsDto(
+            refs.FullName,
+            refs.DefaultBranch,
+            refs.Empty,
+            [.. refs.Releases.Select(r => new GitLabReleaseDto(r.TagName, r.Name, r.ReleasedAt, r.IsLatest))],
+            [.. refs.Tags.Select(t => new GitLabTagDto(t.Name, t.Sha, t.Semver))],
+            refs.Suggestion.PreselectedTag,
+            refs.Suggestion.DevelopmentVersion.ToString()));
+    }
+
     /// <summary>The enabled instances offered on the sign-in page ("Continue with GitLab" needs an OAuth application).</summary>
     public static IReadOnlyList<GitLabInstanceSummaryDto> SignInInstances(IEnumerable<GitLabInstance> instances) =>
         [.. instances.Where(i => i.Enabled && i.OAuthConfigured).Select(ToSummary)];
@@ -485,6 +529,7 @@ public static class GitLabServiceCollectionExtensions
         services.AddScoped<GitLabSignIn>();
         services.AddScoped<GitLabConnectionService>();
         services.AddScoped<GitLabRepoService>();
+        services.AddScoped<GitLabProjectRepos>();
         return services;
     }
 }

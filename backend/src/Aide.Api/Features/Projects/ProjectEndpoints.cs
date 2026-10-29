@@ -309,7 +309,7 @@ public static partial class ProjectEndpoints
                 return ApiProblems.Validation(validation.Error!);
             }
 
-            if (await Deployments.DeploymentEndpoints.CanBindAsync(db, currentUser.RequiredUserId, deployment.ConnectionId, cancellationToken) is { } bindProblem)
+            if (await Deployments.DeploymentEndpoints.CanBindAsync(db, currentUser.RequiredUserId, deployment.ConnectionId, cancellationToken, "deployment.connectionId") is { } bindProblem)
             {
                 return bindProblem;
             }

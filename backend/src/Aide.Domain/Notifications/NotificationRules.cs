@@ -48,6 +48,7 @@ public static class NotificationRules
         EventTypes.DeploymentPreviewReady => NotificationType.PreviewReady,
         EventTypes.ConnectionInvalid => NotificationType.ConnectionInvalid,
         EventTypes.LlmBindingCleared => NotificationType.LlmBindingCleared,
+        EventTypes.GitBindingCleared => NotificationType.GitBindingCleared,
         _ => null,
     };
 
@@ -57,7 +58,7 @@ public static class NotificationRules
 
     /// <summary>
     /// Recipients: Owners for what needs an Owner's action (gates, drafts to approve, blocked steps, failed runs, budget,
-    /// failed releases, releases awaiting a merge, failed deployments, cleared LLM bindings); every member for outcomes
+    /// failed releases, releases awaiting a merge, failed deployments, cleared LLM and Git bindings); every member for outcomes
     /// (review completed, release completed, rollback, preview ready); the connection's owner alone for an invalid connection.
     /// </summary>
     public static RecipientScope Recipients(NotificationType type) => type switch
@@ -136,6 +137,7 @@ public static class NotificationRules
             NotificationType.DeploymentFailed when deploymentTarget == "preview" => $"/projects/{id:D}/review",
             NotificationType.ReleaseAwaitingMerge or NotificationType.DeploymentFailed => $"/projects/{id:D}/release",
             NotificationType.LlmBindingCleared => $"/projects/{id:D}/settings/llm",
+            NotificationType.GitBindingCleared => $"/projects/{id:D}/settings/git",
             _ => $"/projects/{id:D}",
         };
     }

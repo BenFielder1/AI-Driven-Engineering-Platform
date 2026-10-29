@@ -1,6 +1,8 @@
+using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHosts;
+using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitLab;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
@@ -148,7 +150,7 @@ public sealed partial class GitLabConnectionService(
     }
 
     /// <summary>Removes one of the caller's connections; projects bound to it lose the binding (FR-136).</summary>
-    public async Task<bool> DeleteAsync(Guid userId, Guid id, CancellationToken cancellationToken)
+    public async Task<bool> DeleteAsync(Guid userId, Guid id, CancellationToken cancellationToken, string? actor = null)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var row = await db.GitConnections.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId && c.Provider == GitHostKind.Gitlab, cancellationToken);
@@ -157,9 +159,8 @@ public sealed partial class GitLabConnectionService(
             return false;
         }
 
-        // FR-136: the binding is cleared (the FK is ON DELETE SET NULL; the binding owner goes with it).
-        await db.ProjectGitSettings.Where(s => s.GitConnectionId == id)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.GitConnectionId, (Guid?)null).SetProperty(x => x.BoundByUserId, (Guid?)null), cancellationToken);
+        // FR-136: projects bound to it lose the binding (and their Owners are notified, git_binding_cleared).
+        await GitBindings.ClearForConnectionAsync(db, id, GitBindingClearedReason.ConnectionDeleted, actor ?? SystemActor.Name, time.GetUtcNow(), cancellationToken);
         db.GitConnections.Remove(row);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -235,6 +236,13 @@ public sealed partial class GitLabConnectionService(
         if (tracked is null)
         {
             return Result.Failure<GitLabConnectionDto>(new DomainError(ErrorCodes.NotFound, "The GitLab connection was not found."));
+        }
+
+        if (GitBindingRules.StatusChangeClearsBinding(tracked.Status, status))
+        {
+            // FR-136: an expired or revoked token, or one that lost a scope (insufficient_scope counts as an invalidation),
+            // can't run Git work: projects bound to it lose the binding and their Owners are notified.
+            await GitBindings.ClearForConnectionAsync(db, id, GitBindingClearedReason.ConnectionInvalid, SystemActor.Name, now, cancellationToken);
         }
 
         tracked.Status = status;

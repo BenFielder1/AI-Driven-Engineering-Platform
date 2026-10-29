@@ -195,3 +195,24 @@ public sealed record CreateGitLabRepoRequest
 
     public bool Private { get; init; } = true;
 }
+
+/// <summary>A GitLab Release (FR-141): <c>isLatest</c> marks the newest released one (upcoming releases aren't listed).</summary>
+public sealed record GitLabReleaseDto(string TagName, string? Name, DateTimeOffset? PublishedAt, bool IsLatest);
+
+/// <summary>A tag; <c>semver</c> is its version (the <c>v</c> prefix stripped), or <c>null</c> when it isn't a semantic version.</summary>
+public sealed record GitLabTagDto(string Name, string Sha, string? Semver);
+
+/// <summary>
+/// What the wizard needs about a picked GitLab repository (FR-141, FR-86): its canonical path, default branch, whether it
+/// is <c>empty</c> (no commits, or only starter files), its Releases and tags, and the import's suggestion: the released
+/// version to preselect (the latest release, else the highest release, else the highest semver tag; <c>null</c> = "Never
+/// released") and the version to develop it prefills (its next minor, else <c>0.1.0</c>).
+/// </summary>
+public sealed record GitLabRepoRefsDto(
+    string FullPath,
+    string DefaultBranch,
+    bool Empty,
+    IReadOnlyList<GitLabReleaseDto> Releases,
+    IReadOnlyList<GitLabTagDto> Tags,
+    string? PreselectedTag,
+    string SuggestedDevelopmentVersion);

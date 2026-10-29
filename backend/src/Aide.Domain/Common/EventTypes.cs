@@ -60,6 +60,14 @@ public static class EventTypes
     /// </summary>
     public const string LlmBindingCleared = "LLM_BINDING_CLEARED";
 
+    /// <summary>
+    /// FR-136: the project's Git binding (a GitLab or Bitbucket connection) was cleared because the binding Owner lost the
+    /// Owner role, left or was removed, or deleted the connection, or the host rejected it (marked <c>invalid</c>):
+    /// <c>{projectId, gitConnectionId, boundByUserId, provider, reason}</c> (<see cref="GitHosts.GitBindingClearedReason"/>).
+    /// Git jobs then fail with <c>GIT_NOT_CONNECTED</c> until an Owner re-binds; Owners are notified (<c>git_binding_cleared</c>).
+    /// </summary>
+    public const string GitBindingCleared = "GIT_BINDING_CLEARED";
+
     /// <summary>DEP-2 seed marker: the dev seed created its demo project. Written with <c>project_id</c> null (so it
     /// survives deleting the project) and the project id in the payload; the seed never creates the demo again.</summary>
     public const string DemoProjectSeeded = "DEMO_PROJECT_SEEDED";
@@ -270,7 +278,7 @@ public static class EventTypes
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady],
         [EventCategory.Rollback] = [RollbackCompleted],
-        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, PresetChanged, StackChanged],
+        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, GitBindingCleared, PresetChanged, StackChanged],
         [EventCategory.Integrity] = [IntegrityAlert],
     };
 
@@ -280,6 +288,7 @@ public static class EventTypes
         BudgetExceeded,
         ConnectionInvalid,
         LlmBindingCleared,
+        GitBindingCleared,
         StepRejected,
         StepBlocked,
         GitPushFailed,

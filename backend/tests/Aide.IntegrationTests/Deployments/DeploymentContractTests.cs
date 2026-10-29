@@ -217,10 +217,16 @@ public sealed class DeploymentContractTests(AideApiFactory factory)
         var problem = await Problems.AssertAsync(local, HttpStatusCode.BadRequest, ErrorCodes.Validation);
         Assert.True(problem.GetProperty("errors").TryGetProperty("deployment.provider", out _), problem.ToString());
 
-        await Problems.AssertAsync(
+        var notOwner = await Problems.AssertAsync(
             await owner.Client.PostAsJsonAsync("/api/projects", NewProject(name, PatGit, new { provider = "vercel", connectionId = others, create = new { name = "todo" } }), Ct),
             HttpStatusCode.Forbidden,
             ErrorCodes.CredentialNotOwner);
+        Assert.True(notOwner.GetProperty("errors").TryGetProperty("deployment.connectionId", out _), notOwner.ToString());
+        var missing = await Problems.AssertAsync(
+            await owner.Client.PostAsJsonAsync("/api/projects", NewProject(name, PatGit, new { provider = "vercel", connectionId = Guid.CreateVersion7(), create = new { name = "todo" } }), Ct),
+            HttpStatusCode.NotFound,
+            ErrorCodes.NotFound);
+        Assert.True(missing.GetProperty("errors").TryGetProperty("deployment.connectionId", out _), missing.ToString());
         await Problems.AssertAsync(
             await owner.Client.PostAsJsonAsync("/api/projects", NewProject(name, PatGit, new { provider = "vercel", connectionId = own, create = new { name = "todo", rootDirectory = "apps/web" } }), Ct),
             HttpStatusCode.BadGateway,

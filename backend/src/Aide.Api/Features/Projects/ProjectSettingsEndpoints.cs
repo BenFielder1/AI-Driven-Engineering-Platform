@@ -8,6 +8,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
+using Aide.Infrastructure.GitLab;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
@@ -41,13 +42,19 @@ public static partial class ProjectSettingsEndpoints
 
         group.MapPatch("/git", UpdateGitSettings)
             .WithName("UpdateGitSettings")
-            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress).")
+            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). FR-136: connectionId re-binds a GitLab project to the caller's own connection after AIDE checks Developer access on the repository; the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION).")
             .Produces<GitSettingsDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ProducesProblem(StatusCodes.Status502BadGateway)
+            .WithRetryAfterOn429()
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION: invalid Git settings or tag prefix."),
-                (StatusCodes.Status409Conflict, "CONFLICT: the tag prefix can't change while a release is in progress or awaiting its merge, or a concurrent change."));
+                (StatusCodes.Status400BadRequest, "VALIDATION: invalid Git settings or tag prefix, a provider change onto gitlab/bitbucket, or connectionId on a project that isn't on GitLab or for another instance; GIT_HOST_NOT_ALLOWED."),
+                (StatusCodes.Status403Forbidden, "FORBIDDEN (not an Owner, or the connection lacks Developer access to the repository); CREDENTIAL_NOT_OWNER (another user's connection)"),
+                (StatusCodes.Status409Conflict, "CONFLICT: the tag prefix can't change while a release is in progress or awaiting its merge, or a concurrent change; GIT_NOT_CONNECTED (the connection is invalid or its instance disabled)."),
+                (StatusCodes.Status429TooManyRequests, "UPSTREAM_RATE_LIMITED (GitLab; Retry-After when sent)"),
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (GitLab failed or couldn't be reached)"));
 
         group.MapPost("/git/switch-to-app", SwitchGitToApp)
             .WithName("SwitchGitToApp")
@@ -95,6 +102,7 @@ public static partial class ProjectSettingsEndpoints
         ILlmProviderCatalog catalog,
         IGitHubAppStore apps,
         GitHubRepoService gitHubRepos,
+        IGitLabInstances gitLabInstances,
         CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(id, ProjectAction.ChangeSettings, cancellationToken);
@@ -115,7 +123,7 @@ public static partial class ProjectSettingsEndpoints
         }
 
         return TypedResults.Ok(new ProjectSettingsDto(
-            await GitDtoAsync(db, git, appInstalled, appInstalled == true, cancellationToken),
+            await GitDtoAsync(db, git, gitLabInstances, grant.Value.ProjectRole, appInstalled, appInstalled == true, cancellationToken),
             ProjectMapping.ToDto(llm, catalog, await LlmBindings.LoadAsync(db, llm, cancellationToken), LlmBindings.CanBind(grant.Value.ProjectRole)),
             ProjectMapping.ToDto(notifications)));
     }
@@ -147,6 +155,9 @@ public static partial class ProjectSettingsEndpoints
         AideDbContext db,
         ISecretProtector secrets,
         PullRequestJobs pullRequests,
+        GitLab.GitLabProjectRepos gitLabRepos,
+        IGitLabInstances gitLabInstances,
+        HttpContext http,
         TimeProvider time,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
@@ -161,13 +172,30 @@ public static partial class ProjectSettingsEndpoints
         var provider = request.Provider ?? settings.Provider;
         var repoUrl = request.RepoUrl ?? settings.RepoUrl;
         var branch = request.DefaultBranch?.Trim() ?? settings.DefaultBranch;
+        var hosted = ProjectSettingsRules.IsGitHost(settings.Provider) && provider == settings.Provider;
         var validation = Validation.Combine(
             ProjectSettingsRules.ValidateProviderChange(settings.Provider, provider),
             ProjectSettingsRules.ValidateGit(provider, repoUrl, branch, request.Token, request.ClearToken),
-            ProjectSettingsRules.ValidateTagPrefix(request.TagPrefix));
+            ProjectSettingsRules.ValidateTagPrefix(request.TagPrefix),
+            ValidateHostedGit(request, settings, hosted));
         if (validation.IsFailure)
         {
             return ApiProblems.Validation(validation.Error!);
+        }
+
+        // FR-136: re-bind to the caller's own connection, after AIDE checks it has Developer access to the repository.
+        GitLab.VerifiedGitLabRepo? rebound = null;
+        if (request.ConnectionId is { } connectionId)
+        {
+            var verified = await gitLabRepos.VerifyAsync(
+                currentUser.RequiredUserId, grant.Value.ProjectRole, settings.InstanceId!.Value, connectionId, settings.ExternalRepoId!, string.Empty, cancellationToken);
+            if (verified.IsFailure)
+            {
+                ResponseDocs.SetRetryAfter(http, verified.Error!.RetryAfter);
+                return verified.Error.Code == ErrorCodes.Validation ? ApiProblems.Validation(verified.Error) : ApiProblems.FromError(verified.Error);
+            }
+
+            rebound = verified.Value;
         }
 
         var changes = new List<string>();
@@ -207,7 +235,15 @@ public static partial class ProjectSettingsEndpoints
             changes.Add("tagPrefix");
         }
         var previousProvider = settings.Provider;
-        var normalizedUrl = ProjectSettingsRules.NormalizeRepoUrl(provider, repoUrl);
+        // FR-136: a GitLab project's web URL is the one read from GitLab when it was bound; it isn't edited here.
+        var normalizedUrl = hosted ? settings.RepoUrl : ProjectSettingsRules.NormalizeRepoUrl(provider, repoUrl);
+        if (rebound is not null && (settings.GitConnectionId != rebound.ConnectionId || settings.BoundByUserId != rebound.OwnerUserId))
+        {
+            settings.GitConnectionId = rebound.ConnectionId;
+            settings.BoundByUserId = rebound.OwnerUserId;
+            changes.Add("gitConnectionId");
+        }
+
         if (provider != settings.Provider)
         {
             if (settings.Provider == GitProvider.GithubApp)
@@ -215,6 +251,16 @@ public static partial class ProjectSettingsEndpoints
                 // FR-82: the App's installation and repository belong to the github_app mode only.
                 settings.InstallationId = null;
                 settings.RepoId = null;
+                settings.RepoFullName = null;
+            }
+
+            if (ProjectSettingsRules.IsGitHost(settings.Provider))
+            {
+                // FR-136: the instance, repo and binding belong to the gitlab/bitbucket mode only.
+                settings.InstanceId = null;
+                settings.GitConnectionId = null;
+                settings.BoundByUserId = null;
+                settings.ExternalRepoId = null;
                 settings.RepoFullName = null;
             }
 
@@ -282,7 +328,29 @@ public static partial class ProjectSettingsEndpoints
 
         // A concurrent change to the project (xmin) becomes 409 CONFLICT in the exception handler.
         await SaveChangesAsync(db, id, "git", changes, currentUser, time, loggers, cancellationToken);
-        return TypedResults.Ok(await GitDtoAsync(db, settings, null, false, cancellationToken));
+        return TypedResults.Ok(await GitDtoAsync(db, settings, gitLabInstances, grant.Value.ProjectRole, null, false, cancellationToken));
+    }
+
+    /// <summary>
+    /// FR-136: <c>connectionId</c> only re-binds a GitLab project (not Bitbucket yet, not GitHub or Local); a GitLab
+    /// project's repository URL comes from GitLab and can't be changed here (sending the stored one is accepted).
+    /// </summary>
+    private static Result ValidateHostedGit(UpdateGitSettingsRequest request, ProjectGitSettings settings, bool hosted)
+    {
+        var problems = new List<string>();
+        if (request.ConnectionId is not null && !(hosted && settings.Provider == GitProvider.Gitlab && settings.InstanceId is not null && settings.ExternalRepoId is not null))
+        {
+            problems.Add("connectionId: Only used to re-bind a GitLab project's connection.");
+        }
+
+        if (hosted && request.RepoUrl is { } sentUrl && !string.Equals(sentUrl.Trim(), settings.RepoUrl, StringComparison.Ordinal))
+        {
+            problems.Add("repoUrl: A GitLab project's repository can't be changed; create a new project for another repository.");
+        }
+
+        return problems.Count == 0
+            ? Result.Success()
+            : Result.Failure(new DomainError(ErrorCodes.Validation, "The Git settings are invalid.") { Details = problems });
     }
 
     private static async Task<Results<Ok<LlmSettingsDto>, ValidationProblem, ProblemHttpResult>> UpdateLlmSettings(
@@ -504,20 +572,53 @@ public static partial class ProjectSettingsEndpoints
     /// <summary>The working branch recorded on the project's current release version (§4.10).</summary>
     /// <summary>The Git settings DTO with the project branch and the project's release settings (FR-65, §4.10).</summary>
     private static async Task<GitSettingsDto> GitDtoAsync(
-        AideDbContext db, ProjectGitSettings settings, bool? appInstalledOnRepo, bool canSwitchToApp, CancellationToken cancellationToken)
+        AideDbContext db,
+        ProjectGitSettings settings,
+        IGitLabInstances gitLabInstances,
+        ProjectRole? callerRole,
+        bool? appInstalledOnRepo,
+        bool canSwitchToApp,
+        CancellationToken cancellationToken)
     {
         var release = await db.Projects.AsNoTracking()
             .Where(p => p.Id == settings.ProjectId)
             .Select(p => new { p.MergeStrategy, p.TagPrefix })
             .FirstOrDefaultAsync(cancellationToken);
         var tracked = db.ChangeTracker.Entries<Project>().FirstOrDefault(e => e.Entity.Id == settings.ProjectId)?.Entity;
-        return ProjectMapping.ToDto(
+        var dto = ProjectMapping.ToDto(
             settings,
             await CurrentBranchAsync(db, settings.ProjectId, cancellationToken),
             tracked?.MergeStrategy ?? release?.MergeStrategy ?? MergeStrategy.AideMerges,
             tracked?.TagPrefix ?? release?.TagPrefix ?? ReleaseVersion.DefaultTagPrefix,
             appInstalledOnRepo,
             canSwitchToApp);
+        if (!ProjectSettingsRules.IsGitHost(settings.Provider))
+        {
+            return dto;
+        }
+
+        // FR-136: the host instance, the repo and the binding ("connected by <name>"), never a token.
+        var instance = settings.InstanceId is { } instanceId && settings.Provider == GitProvider.Gitlab
+            ? await gitLabInstances.GetAsync(instanceId, cancellationToken)
+            : null;
+        GitBindingDto? binding = null;
+        if (settings.GitConnectionId is { } connectionId)
+        {
+            binding = await (
+                    from c in db.GitConnections.AsNoTracking()
+                    join u in db.Users.AsNoTracking() on c.UserId equals u.Id
+                    where c.Id == connectionId
+                    select new GitBindingDto(c.Id, c.Login, c.Status, new GitBindingUserDto(u.Id, u.Name)))
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        return dto with
+        {
+            Instance = instance is null ? null : new GitHostInstanceRefDto(instance.Id, instance.Name, instance.BaseUrl.AbsoluteUri.TrimEnd('/'), instance.Enabled),
+            ExternalRepoId = settings.ExternalRepoId,
+            Binding = binding,
+            CanRebind = callerRole == ProjectRole.Owner && settings.Provider == GitProvider.Gitlab,
+        };
     }
 
     private static async Task<string?> CurrentBranchAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken) =>
@@ -532,6 +633,7 @@ public static partial class ProjectSettingsEndpoints
         AideDbContext db,
         IGitHubAppStore apps,
         GitHubRepoService gitHubRepos,
+        IGitLabInstances gitLabInstances,
         TimeProvider time,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
@@ -569,7 +671,7 @@ public static partial class ProjectSettingsEndpoints
         settings.RepoUrl = null;
         settings.TokenEncrypted = null;
         await SaveChangesAsync(db, id, "git", ["provider", "installationId", "repoId", "repoFullName", "token"], currentUser, time, loggers, cancellationToken);
-        return TypedResults.Ok(await GitDtoAsync(db, settings, null, false, cancellationToken));
+        return TypedResults.Ok(await GitDtoAsync(db, settings, gitLabInstances, grant.Value.ProjectRole, null, false, cancellationToken));
     }
 
     private static async Task<Results<Ok<GitTestResultDto>, ProblemHttpResult>> TestGitConnection(

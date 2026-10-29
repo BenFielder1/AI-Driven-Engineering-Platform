@@ -156,14 +156,14 @@ public sealed partial class PullRequestJobHandler(
         var published = await working.Provider.PublishBranchAsync(working.Connection, working.Branch, working.Token, cancellationToken);
         if (!published.Ok)
         {
-            throw new JobFailedException($"The project branch could not be pushed: {published.Reason}", published.Transient);
+            throw new JobFailedException($"The project branch could not be pushed: {published.Reason}", published.Transient, published.ErrorCode);
         }
 
         var input = await DescriptionInputAsync(project, payload.PlanArtifactId, steps, cancellationToken);
         var body = PullRequestDescription.Body(input);
-        if (working.Provider.Kind == GitProvider.GithubApp)
+        if (working.Provider.Kind is GitProvider.GithubApp or GitProvider.Gitlab)
         {
-            // FR-82: the App's PR links back to the AIDE project.
+            // FR-82, FR-137: the App's PR and the GitLab merge request link back to the AIDE project.
             body += $"\n\n---\nOpened by [AIDE]({appOptions.Value.Absolute($"/projects/{project.Id}")}) for {project.Name}.";
         }
 
@@ -171,7 +171,7 @@ public sealed partial class PullRequestJobHandler(
         var opened = await working.Provider.OpenPullRequestAsync(working.Connection, request, working.Token, cancellationToken);
         if (!opened.Ok)
         {
-            throw new JobFailedException($"The pull request could not be opened: {opened.Reason}", opened.Transient);
+            throw new JobFailedException($"The pull request could not be opened: {opened.Reason}", opened.Transient, opened.ErrorCode);
         }
 
         var comparison = await CompareAsync(working, cancellationToken);

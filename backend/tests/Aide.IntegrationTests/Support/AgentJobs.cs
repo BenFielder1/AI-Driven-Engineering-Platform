@@ -93,6 +93,13 @@ public static class AgentJobs
                     .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Queued).SetProperty(j => j.Attempts, attempt - 1).SetProperty(j => j.RunAfter, JobPolicy.DeferUntil(DateTimeOffset.UtcNow, ex.ResetAt)).SetProperty(j => j.LastError, $"GITHUB_RATE_LIMITED: {ex.Message}"), Ct));
                 return true;
             }
+            catch (Aide.Infrastructure.GitLab.GitLabRateLimitedException ex)
+            {
+                // FR-136, §4.19: a GitLab rate limit waits for the reset without counting the attempt (GITLAB_RATE_LIMITED).
+                await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id)
+                    .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Queued).SetProperty(j => j.Attempts, attempt - 1).SetProperty(j => j.RunAfter, JobPolicy.DeferUntil(DateTimeOffset.UtcNow, ex.ResetAt)).SetProperty(j => j.LastError, $"GITLAB_RATE_LIMITED: {ex.Message}"), Ct));
+                return true;
+            }
             catch (JobFailedException ex)
             {
                 status = ex.Transient ? JobStatus.Dead : JobStatus.Failed;

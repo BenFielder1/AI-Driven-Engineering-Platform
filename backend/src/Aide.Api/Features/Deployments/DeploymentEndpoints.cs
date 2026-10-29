@@ -575,7 +575,7 @@ public static class DeploymentEndpoints
     /// FR-88: whether the caller (who passed the Owner check: an Owner or an Admin) may bind <paramref name="connectionId"/>,
     /// their own Vercel connection; <c>null</c> when allowed, else the problem (<c>NOT_FOUND</c>, <c>CREDENTIAL_NOT_OWNER</c>).
     /// </summary>
-    internal static async Task<ProblemHttpResult?> CanBindAsync(AideDbContext db, Guid callerId, Guid connectionId, CancellationToken cancellationToken)
+    internal static async Task<ProblemHttpResult?> CanBindAsync(AideDbContext db, Guid callerId, Guid connectionId, CancellationToken cancellationToken, string field = "connectionId")
     {
         ArgumentNullException.ThrowIfNull(db);
         var ownerId = await db.VercelConnections.AsNoTracking()
@@ -583,7 +583,7 @@ public static class DeploymentEndpoints
             .Select(c => (Guid?)c.UserId)
             .FirstOrDefaultAsync(cancellationToken);
         var allowed = DeploymentSettingsRules.CanBind(callerId, ProjectRole.Owner, ownerId);
-        return allowed.IsFailure ? ApiProblems.FromError(allowed.Error!) : null;
+        return allowed.IsFailure ? ApiProblems.FromError(allowed.Error! with { Field = field }) : null;
     }
 
     internal static DeploymentEnvVarDto ToDto(DeploymentEnvVar v) =>

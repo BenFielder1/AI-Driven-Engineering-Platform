@@ -178,6 +178,9 @@ public static class DependencyInjection
         services.AddScoped<IGitLabInstances, GitLabInstances>();
         services.AddSingleton<IGitConnectionTokens, GitConnectionTokens>();
 
+        // FR-136, FR-137: the gitlab provider (the binding Owner's connection, per-command extraHeader for git).
+        services.AddScoped<IGitProvider, GitLabGitProvider>();
+
         // Deployments (FR-87–FR-91, §4.15, D-V2-10): Vercel's REST API on the fixed host api.vercel.com (§8: never
         // configurable, so no SSRF), the deterministic Fake (Deployments:Provider=Fake) and the env write limiter.
         services.AddOptions<DeploymentOptions>().BindConfiguration(DeploymentOptions.SectionName);

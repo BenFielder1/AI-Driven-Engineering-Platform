@@ -55,7 +55,12 @@ export function selectionOfValues(v: Pick<WizardValues, WizardStackField>): Stac
   ) as unknown as StackSelection
 }
 
-/** §4.17 R5: the VCS option fixed by the repository's host (GitHub for both GitHub modes, GitLab; Local: any). */
+/** The repository host's name for copy (GitHub for both GitHub modes, GitLab), or `null` for Local. */
+export function repoHostLabelOf(gitMode: WizardValues['gitMode']): string | null {
+  return gitMode === 'local' ? null : gitMode === 'gitlab' ? 'GitLab' : 'GitHub'
+}
+
+/** §4.17 R5: the VCS option id fixed by the repository's host, or `null` for Local (any). */
 export function repoVcsOf(gitMode: WizardValues['gitMode']): string | null {
   switch (gitMode) {
     case 'local':
@@ -88,15 +93,25 @@ export function detectRequestOf(v: WizardValues): DetectStackRequest | null {
     case 'local':
       return v.localSourcePath.trim() ? { git: { provider: 'local', repo: v.localSourcePath.trim(), ref } } : null
     case 'gitlab':
-      // TODO(FR-141): GitLab import detection, once the detect endpoint takes the caller's GitLab connection.
-      return null
+      // FR-141: the picked GitLab project (by id) on its instance, read with the chosen connection.
+      return v.gitlabRepoId && v.gitlabInstanceId && v.gitlabConnectionId
+        ? {
+            git: {
+              provider: 'gitlab',
+              repo: v.gitlabRepoId,
+              ref,
+              instanceId: v.gitlabInstanceId,
+              connectionId: v.gitlabConnectionId,
+            },
+          }
+        : null
   }
 }
 
 /** FR-118: the identity of a detection result (the repository, ref and commit it read; never the token). */
 export function detectionIdOf(request: DetectStackRequest, detection: StackDetection): string {
-  const { provider, instanceId, repo, ref } = request.git
-  return JSON.stringify({ provider, instanceId, repo, ref, commit: detection.commit })
+  const { provider, instanceId, connectionId, repo, ref } = request.git
+  return JSON.stringify({ provider, instanceId, connectionId, repo, ref, commit: detection.commit })
 }
 
 /**

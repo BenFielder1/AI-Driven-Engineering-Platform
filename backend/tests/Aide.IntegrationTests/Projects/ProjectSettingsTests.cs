@@ -90,7 +90,9 @@ public sealed class ProjectSettingsTests(AideApiFactory factory)
     [InlineData("""{"defaultBranch":"a b"}""", "defaultBranch")]
     [InlineData("""{"token":"x","clearToken":true}""", "token")]
     [InlineData("""{"token":""}""", "token")]
-    [InlineData("""{"provider":"gitlab"}""", null)]
+    [InlineData("""{"provider":"gitlab"}""", "provider")]
+    [InlineData("""{"provider":"bitbucket"}""", "provider")]
+    [InlineData("""{"connectionId":"0193a1f2-0000-7000-8000-000000000001"}""", "connectionId")]
     public async Task FR9_Invalid_git_settings_are_VALIDATION(string json, string? field)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);

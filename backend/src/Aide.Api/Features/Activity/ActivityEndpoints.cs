@@ -204,6 +204,7 @@ internal static class ActivitySummary
                 var provider => $"{provider ?? "LLM"} rejected the bound connection's key; it is marked invalid",
             },
             EventTypes.LlmBindingCleared => $"LLM binding cleared ({Get("reason") ?? "?"})",
+            EventTypes.GitBindingCleared => $"Git binding cleared ({Get("reason") ?? "?"})",
             EventTypes.StepStarted => $"Step {Get("stepNumber") ?? "?"} started (attempt {Get("attempt") ?? "?"})",
             EventTypes.StepCompleted => $"Step {Get("stepNumber") ?? "?"} completed",
             EventTypes.StepRejected => $"Step {Get("stepNumber") ?? "?"} rejected by the Execution Guardian (attempt {Get("attempt") ?? "?"})",

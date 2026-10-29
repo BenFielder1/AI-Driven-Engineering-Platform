@@ -53,4 +53,8 @@ public enum NotificationEvent
     /// <summary>FR-92: the project's LLM binding was cleared.</summary>
     [JsonStringEnumMemberName("llm_binding_cleared")]
     LlmBindingCleared = 13,
+
+    /// <summary>FR-136: the project's Git binding (GitLab or Bitbucket connection) was cleared.</summary>
+    [JsonStringEnumMemberName("git_binding_cleared")]
+    GitBindingCleared = 14,
 }

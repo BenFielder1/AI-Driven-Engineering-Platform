@@ -6,6 +6,7 @@ using Aide.Domain.Projects;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Aide.Api.Features.Stack;
@@ -19,6 +20,8 @@ namespace Aide.Api.Features.Stack;
 /// </summary>
 public sealed partial class StackDetectionService(
     GitHubConnections connections,
+    GitLab.GitLabConnectionService gitLabConnections,
+    Infrastructure.Persistence.AideDbContext db,
     GitHubApi api,
     IGitCli git,
     IOptions<LocalGitOptions> localGit,
@@ -29,6 +32,12 @@ public sealed partial class StackDetectionService(
 
     /// <summary>The VCS host the detector fixes the VCS layer to: GitHub for these providers (Local defaults to GitHub, R5).</summary>
     public const string VcsHost = "github";
+
+    /// <summary>FR-141: the VCS host of a GitLab repository (gitlab.com or self-managed: both are <c>vcs-gitlab</c>).</summary>
+    public const string GitLabVcsHost = "gitlab";
+
+    /// <summary>FR-141: the most GitLab tree pages (100 entries each, directories included) read; beyond it the result is <c>truncated</c>.</summary>
+    public const int MaxTreePages = 50;
 
     private sealed record RepoSnapshot(string Ref, string Commit, IReadOnlyList<string> Files, IReadOnlyDictionary<string, string> Manifests, bool Truncated);
 
@@ -41,9 +50,20 @@ public sealed partial class StackDetectionService(
     {
         ArgumentNullException.ThrowIfNull(request);
         var problems = new List<string>();
-        if (request.InstanceId is not null)
+        var gitLab = request.Provider == GitProvider.Gitlab;
+        if (request.InstanceId is not null && !gitLab)
         {
             problems.Add("git.instanceId: Only used for GitLab instances.");
+        }
+
+        if (request.ConnectionId is not null && !gitLab)
+        {
+            problems.Add("git.connectionId: Only used with gitlab.");
+        }
+
+        if (request.Provider == GitProvider.Bitbucket)
+        {
+            problems.Add("git.provider: Bitbucket repositories are not available yet.");
         }
 
         if (request.Ref is { } gitRef && !IsSafeRef(gitRef.Trim()))
@@ -62,16 +82,19 @@ public sealed partial class StackDetectionService(
         }
 
         var wantedRef = string.IsNullOrWhiteSpace(request.Ref) ? null : request.Ref.Trim();
-        var snapshot = request.Provider == GitProvider.Local
-            ? await LocalAsync(request.Repo, wantedRef, cancellationToken)
-            : await GitHubAsync(userId, request, wantedRef, cancellationToken);
+        var snapshot = request.Provider switch
+        {
+            GitProvider.Local => await LocalAsync(request.Repo, wantedRef, cancellationToken),
+            GitProvider.Gitlab => await GitLabAsync(userId, request, wantedRef, cancellationToken),
+            _ => await GitHubAsync(userId, request, wantedRef, cancellationToken),
+        };
         if (snapshot.IsFailure)
         {
             return Result.Failure<StackDetectionDto>(snapshot.Error!);
         }
 
         var read = snapshot.Value;
-        var detection = StackDetector.Detect(read.Files, read.Manifests, VcsHost);
+        var detection = StackDetector.Detect(read.Files, read.Manifests, gitLab ? GitLabVcsHost : VcsHost);
         LogDetected(logger, request.Provider, detection.Suggestions.Count, detection.Conflicts.Count, read.Manifests.Count);
         return Result.Success(new StackDetectionDto(
             read.Ref,
@@ -169,6 +192,115 @@ public sealed partial class StackDetectionService(
     /// <summary>§6: a missing or rejected GitHub connection is <c>GIT_NOT_CONNECTED</c> on this endpoint; other errors pass through.</summary>
     private static DomainError NotConnected(DomainError error) =>
         error.Code == ErrorCodes.GitHubNotConnected ? error with { Code = ErrorCodes.GitNotConnected } : error;
+
+    // ---------- GitLab ----------
+
+    /// <summary>
+    /// FR-141: the repository through the GitLab API with the caller's connection (the one sent, or their newest valid one on
+    /// the instance): the recursive tree of the ref (keyset pages, up to <see cref="MaxFiles"/>), and the manifests the
+    /// detector asks for, each read only when GitLab reports it at most <see cref="StackDetector.MaxManifestLength"/> bytes.
+    /// </summary>
+    private async Task<Result<RepoSnapshot>> GitLabAsync(Guid userId, DetectStackGitRequest request, string? wantedRef, CancellationToken cancellationToken)
+    {
+        var repo = request.Repo.Trim().Trim('/');
+        if (!Domain.GitHosts.GitLabProjectRules.IsValidRepoId(repo) && !Domain.GitHosts.GitLabProjectRules.IsValidFullPath(repo))
+        {
+            return Invalid<RepoSnapshot>(["git.repo: Use the GitLab project id or its path, e.g. acme/web/todo-app."]);
+        }
+
+        var instance = await gitLabConnections.UsableInstanceAsync(request.InstanceId, cancellationToken);
+        if (instance is null)
+        {
+            return Result.Failure<RepoSnapshot>(new DomainError(ErrorCodes.NotFound, "The GitLab instance was not found or is disabled."));
+        }
+
+        Guid connectionId;
+        if (request.ConnectionId is { } sent)
+        {
+            var owned = await db.GitConnections.AsNoTracking()
+                .Where(c => c.Id == sent && c.UserId == userId && c.Provider == GitHostKind.Gitlab)
+                .Select(c => (Guid?)c.InstanceId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (owned is null)
+            {
+                return Result.Failure<RepoSnapshot>(new DomainError(ErrorCodes.NotFound, "The GitLab connection was not found."));
+            }
+
+            if (owned != instance.Id)
+            {
+                return Invalid<RepoSnapshot>(["git.connectionId: The connection is for a different GitLab instance."]);
+            }
+
+            connectionId = sent;
+        }
+        else if (await db.GitConnections.AsNoTracking()
+            .Where(c => c.UserId == userId && c.Provider == GitHostKind.Gitlab && c.InstanceId == instance.Id && c.Status == GitConnectionStatus.Valid)
+            .OrderByDescending(c => c.CreatedAt)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync(cancellationToken) is { } newest)
+        {
+            connectionId = newest;
+        }
+        else
+        {
+            return Result.Failure<RepoSnapshot>(new DomainError(
+                ErrorCodes.GitNotConnected, $"Connect your GitLab account on {instance.Name} under Account → Connections → GitLab to continue."));
+        }
+
+        var read = await gitLabConnections.CallAsync<RepoSnapshot?>(userId, connectionId, async (client, token) =>
+        {
+            var project = await client.GetProjectAsync(token, repo, cancellationToken);
+            if (project is null)
+            {
+                return null;
+            }
+
+            var id = project.ExternalId;
+            var gitRef = wantedRef ?? project.DefaultBranch ?? Domain.Projects.ProjectSettingsRules.DefaultBranch;
+            if (await client.ResolveCommitAsync(token, id, gitRef, cancellationToken) is not { } commit)
+            {
+                return null;
+            }
+
+            var paths = new List<string>();
+            Uri? next = null;
+            var more = false;
+            var pages = 0;
+            do
+            {
+                pages++;
+                var page = await client.ListTreePageAsync(token, id, gitRef, next, cancellationToken);
+                if (page is null)
+                {
+                    return null;
+                }
+
+                paths.AddRange(page.Entries.Where(e => e.Type == "blob").Select(e => e.Path));
+                next = page.Next;
+                more = next is not null && paths.Count <= MaxFiles && pages < MaxTreePages;
+            }
+            while (more);
+
+            var (listed, cut) = RepoFiles.ByNormalisedPath(paths.Select(p => (p, p)), MaxFiles);
+            var manifests = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var manifest in StackDetector.ManifestsToRead(listed.Keys))
+            {
+                if (listed.TryGetValue(manifest, out var original)
+                    && await client.ReadSmallFileAsync(token, id, original, commit, StackDetector.MaxManifestLength, cancellationToken) is { } text)
+                {
+                    manifests[manifest] = text;
+                }
+            }
+
+            return new RepoSnapshot(gitRef, commit, [.. listed.Keys], manifests, cut || next is not null);
+        }, cancellationToken);
+        if (read.IsFailure)
+        {
+            return Result.Failure<RepoSnapshot>(read.Error!);
+        }
+
+        return read.Value is { } snapshot ? Result.Success(snapshot) : RepoNotFound();
+    }
 
     // ---------- Local ----------
 

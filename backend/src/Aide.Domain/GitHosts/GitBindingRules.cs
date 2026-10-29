@@ -39,6 +39,13 @@ public static class GitBindingRules
     public static bool RemovalClearsBinding(Guid? boundByUserId, Guid memberUserId) =>
         LlmConnectionRules.RemovalClearsBinding(boundByUserId, memberUserId);
 
+    /// <summary>
+    /// FR-136: a connection that stops being valid — <c>invalid</c> (rejected, expired, revoked) or
+    /// <c>insufficient_scope</c> (build decision: treated as an invalidation) — clears every binding to it.
+    /// </summary>
+    public static bool StatusChangeClearsBinding(Entities.GitConnectionStatus previous, Entities.GitConnectionStatus next) =>
+        previous == Entities.GitConnectionStatus.Valid && next != Entities.GitConnectionStatus.Valid;
+
     /// <summary>FR-136: deleting or invalidating a connection clears every binding to it.</summary>
     public static bool ConnectionChangeClearsBinding(Guid? boundConnectionId, Guid connectionId) => boundConnectionId == connectionId;
 

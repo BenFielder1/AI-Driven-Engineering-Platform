@@ -115,7 +115,7 @@ public sealed class GitLabClients(IHttpClientFactory http, IOptionsMonitor<GitLa
 /// <c>AllowAutoRedirect = false</c>; a 3xx is a failure). Non-success answers throw <see cref="GitLabApiException"/>; the SSRF
 /// guard throws <see cref="GitHostBlockedException"/>.
 /// </summary>
-public sealed class GitLabClient
+public sealed partial class GitLabClient
 {
     public const int ProjectsPerPage = 30;
 

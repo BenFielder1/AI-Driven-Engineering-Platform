@@ -64,8 +64,8 @@ public class Fr92NotificationTypesTests
     [Fact]
     public void FR92_Preferences_cover_every_type_and_new_types_default_on()
     {
-        Assert.Equal(16, NotificationRules.All.Count);
-        foreach (var type in new[] { NotificationType.ReleaseAwaitingMerge, NotificationType.DeploymentFailed, NotificationType.PreviewReady, NotificationType.ConnectionInvalid, NotificationType.LlmBindingCleared })
+        Assert.Equal(17, NotificationRules.All.Count);
+        foreach (var type in new[] { NotificationType.ReleaseAwaitingMerge, NotificationType.DeploymentFailed, NotificationType.PreviewReady, NotificationType.ConnectionInvalid, NotificationType.LlmBindingCleared, NotificationType.GitBindingCleared })
         {
             Assert.True(NotificationRules.Wants(type, null));
             Assert.True(NotificationRules.Wants(type, [NotificationType.ReviewCompleted, NotificationType.ReleaseFailed]));

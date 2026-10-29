@@ -19,12 +19,12 @@ describe('Settings → Notifications: FR-92 channel events', () => {
     const events = screen.getByRole('group', { name: 'Channel 1 events' })
 
     expect(within(events).getByLabelText('Preview ready')).toBeChecked()
-    for (const label of ['Release awaiting a merge on GitHub', 'Deployment failed', 'LLM connection unbound']) {
+    for (const label of ['Release awaiting a merge on GitHub', 'Deployment failed', 'LLM connection unbound', 'Git connection unbound']) {
       expect(within(events).getByLabelText(label)).not.toBeChecked()
     }
     // Personal: never a project channel event.
     expect(within(events).queryByLabelText('Connection invalid')).not.toBeInTheDocument()
-    expect(within(events).getAllByRole('checkbox')).toHaveLength(14)
+    expect(within(events).getAllByRole('checkbox')).toHaveLength(15)
 
     await user.click(within(events).getByLabelText('Release awaiting a merge on GitHub'))
     await user.click(within(events).getByLabelText('Deployment failed'))

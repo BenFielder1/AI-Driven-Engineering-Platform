@@ -110,6 +110,7 @@ public sealed class StackPinningTests
     {
         Assert.Equal("vcs-github", StackPinning.RepoVcs(GitProvider.GithubApp));
         Assert.Equal("vcs-github", StackPinning.RepoVcs(GitProvider.GithubPat));
+        Assert.Equal("vcs-gitlab", StackPinning.RepoVcs(GitProvider.Gitlab));
         Assert.Null(StackPinning.RepoVcs(GitProvider.Local));
     }
 

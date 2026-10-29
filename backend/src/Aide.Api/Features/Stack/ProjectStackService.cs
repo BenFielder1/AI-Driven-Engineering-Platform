@@ -10,7 +10,7 @@ namespace Aide.Api.Features.Stack;
 
 /// <summary>
 /// FR-114–FR-119: compositions on projects and release versions. Validation is <see cref="StackCompatibility.Validate"/>
-/// after the R5 VCS rule (<see cref="StackPinning.FixVcs"/>); pinning writes the normalised composition with the catalog
+/// after the R5 VCS rule (<see cref="StackPinning.FixVcs(StackSelection, StackVcsPick?)"/>); pinning writes the normalised composition with the catalog
 /// version and hash on the version (a migrated version keeps its retired preset columns as history, FR-129) and keeps
 /// <c>projects.stack_packs</c> in sync with the current version. Used by project create, <c>POST /versions</c> and
 /// <c>GET/PUT /api/projects/:id/stack</c>.
@@ -19,6 +19,7 @@ public sealed partial class ProjectStackService(
     AideDbContext db,
     IStackCatalog stacks,
     VersionStackReader reader,
+    Infrastructure.GitLab.IGitLabInstances gitLabInstances,
     TimeProvider time,
     ILogger<ProjectStackService> logger)
 {
@@ -34,10 +35,21 @@ public sealed partial class ProjectStackService(
     }
 
     /// <summary>As <see cref="Resolve(StackCompositionRequest, string?, string)"/>, for a selection.</summary>
-    public Result<StackComposition> Resolve(StackSelection selection, string? repoVcs, string fieldPrefix)
+    public Result<StackComposition> Resolve(StackSelection selection, string? repoVcs, string fieldPrefix) =>
+        Resolve(selection, repoVcs is null ? null : new StackVcsPick(repoVcs), fieldPrefix);
+
+    /// <summary>FR-136: as <see cref="Resolve(StackCompositionRequest, string?, string)"/> for the repository host <see cref="RepoHostAsync(Guid, CancellationToken)"/>.</summary>
+    public Result<StackComposition> Resolve(StackCompositionRequest request, StackVcsPick? repoHost, string fieldPrefix)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return Resolve(StackMapping.ToSelection(request), repoHost, fieldPrefix);
+    }
+
+    /// <summary>As <see cref="Resolve(StackCompositionRequest, StackVcsPick?, string)"/>, for a selection.</summary>
+    public Result<StackComposition> Resolve(StackSelection selection, StackVcsPick? repoHost, string fieldPrefix)
     {
         ArgumentNullException.ThrowIfNull(selection);
-        var fixedVcs = StackPinning.FixVcs(selection, repoVcs);
+        var fixedVcs = StackPinning.FixVcs(selection, repoHost);
         if (fixedVcs.IsFailure)
         {
             var error = fixedVcs.Error!;
@@ -83,6 +95,27 @@ public sealed partial class ProjectStackService(
     {
         ArgumentNullException.ThrowIfNull(project);
         project.StackPacks = composition is null ? [] : StackPinning.PackIds(composition, stacks.Current);
+    }
+
+    /// <summary>
+    /// FR-136, R5: the VCS pick of a repository host: the provider's VCS option and, for GitLab, the instance and whether it
+    /// is self-managed (not gitlab.com).
+    /// </summary>
+    public async Task<StackVcsPick?> RepoHostAsync(GitProvider provider, Guid? instanceId, CancellationToken cancellationToken)
+    {
+        var selfManaged = provider == GitProvider.Gitlab && instanceId is { } id
+            && await gitLabInstances.GetAsync(id, cancellationToken) is { IsGitLabCom: false };
+        return StackPinning.RepoHost(provider, instanceId, selfManaged);
+    }
+
+    /// <summary>FR-136, R5: <see cref="RepoHostAsync(GitProvider, Guid?, CancellationToken)"/> of the project's repository.</summary>
+    public async Task<StackVcsPick?> RepoHostAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var git = await db.ProjectGitSettings.AsNoTracking()
+            .Where(g => g.ProjectId == projectId)
+            .Select(g => new { g.Provider, g.InstanceId })
+            .FirstOrDefaultAsync(cancellationToken);
+        return git is null ? null : await RepoHostAsync(git.Provider, git.InstanceId, cancellationToken);
     }
 
     /// <summary>R5: the VCS option of the project's repository host (<c>null</c>: Local, any VCS).</summary>
@@ -132,8 +165,7 @@ public sealed partial class ProjectStackService(
         }
 
         var target = version!;
-        var repoVcs = await RepoVcsAsync(projectId, cancellationToken);
-        var resolved = Resolve(request, repoVcs);
+        var resolved = Resolve(request, await RepoHostAsync(projectId, cancellationToken), string.Empty);
         if (resolved.IsFailure)
         {
             return Result.Failure<ProjectStackDto>(resolved.Error!);

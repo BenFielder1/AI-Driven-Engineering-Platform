@@ -282,6 +282,14 @@ public sealed partial class JobWorker : BackgroundService
             spanError = ErrorCodes.GitHubRateLimited;
             LogRateLimited(_logger, deferredUntil.Value);
         }
+        catch (Infrastructure.GitLab.GitLabRateLimitedException ex)
+        {
+            // FR-136, §4.19: a GitLab rate limit re-queues the job for the reset without counting the attempt.
+            deferredUntil = JobPolicy.DeferUntil(_time.GetUtcNow(), ex.ResetAt);
+            error = $"{ErrorCodes.GitLabRateLimited}: GitLab is rate limiting requests; the job waits until {deferredUntil:u}.";
+            spanError = ErrorCodes.GitLabRateLimited;
+            LogHostRateLimited(_logger, "GitLab", deferredUntil.Value);
+        }
         catch (JobDeferredException ex)
         {
             // FR-70: the handler waits for something (e.g. the codebase summary): run again later, attempt not counted.
@@ -616,6 +624,9 @@ public sealed partial class JobWorker : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Job stopped by GitHub's rate limit; deferred until {RunAfter} without counting the attempt")]
     private static partial void LogRateLimited(ILogger logger, DateTimeOffset runAfter);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Job stopped by {Host}'s rate limit; deferred until {RunAfter} without counting the attempt")]
+    private static partial void LogHostRateLimited(ILogger logger, string host, DateTimeOffset runAfter);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Job is waiting; deferred until {RunAfter} without counting the attempt")]
     private static partial void LogDeferred(ILogger logger, DateTimeOffset runAfter);

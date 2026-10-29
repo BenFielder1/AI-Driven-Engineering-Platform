@@ -41,6 +41,9 @@ public static class StackPinning
     /// <summary>The VCS option of a GitHub repository (the only remote host before GitLab and Bitbucket).</summary>
     public const string GitHubVcs = "vcs-github";
 
+    /// <summary>FR-136, §4.17 R5: the VCS option of a GitLab repository (gitlab.com or a self-managed instance).</summary>
+    public const string GitLabVcs = "vcs-gitlab";
+
     /// <summary>
     /// FR-117: the version's lock. Only a version in development whose first implementation plan isn't locked yet may
     /// change its stack. <paramref name="planWasLocked"/> is <see cref="PlanWasLocked"/> over the version's plans.
@@ -79,8 +82,30 @@ public static class StackPinning
     public static string? RepoVcs(GitProvider provider) => provider switch
     {
         GitProvider.GithubApp or GitProvider.GithubPat => GitHubVcs,
+        GitProvider.Gitlab => GitLabVcs,
         _ => null,
     };
+
+    /// <summary>
+    /// FR-136, §4.17 R5: the VCS pick of the project's repository host, with the GitLab instance and whether it is
+    /// self-managed (§4.17 restricts the hosts a self-managed GitLab can deploy to); <c>null</c> for a Local repository.
+    /// </summary>
+    public static StackVcsPick? RepoHost(GitProvider provider, Guid? instanceId, bool selfManaged) =>
+        RepoVcs(provider) is not { } pack ? null
+        : provider == GitProvider.Gitlab ? new StackVcsPick(pack, instanceId, selfManaged)
+        : new StackVcsPick(pack);
+
+    /// <summary>
+    /// FR-136, §4.17 R5: as <see cref="FixVcs(StackSelection, string?)"/>, and the VCS layer takes the repository host's
+    /// instance and self-managed flag (never the client's), so a self-managed GitLab's host rules apply.
+    /// </summary>
+    public static Result<StackSelection> FixVcs(StackSelection selection, StackVcsPick? repoHost)
+    {
+        var fixedVcs = FixVcs(selection, repoHost?.Pack);
+        return fixedVcs.IsSuccess && repoHost is not null
+            ? Result.Success(fixedVcs.Value with { Vcs = repoHost })
+            : fixedVcs;
+    }
 
     /// <summary>
     /// §4.17 R5: the selection with its VCS layer fixed to the repository's host. A left-out VCS is set from the repo (or,

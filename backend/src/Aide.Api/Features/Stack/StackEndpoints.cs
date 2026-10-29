@@ -43,7 +43,7 @@ public static class StackEndpoints
 
         stack.MapPost("/detect", Detect)
             .WithName("DetectStack")
-            .WithSummary("Import detection (FR-118): reads the repository's file list and manifests at ref (default: the default branch) through the Git provider (github_app with the caller's GitHub connection, github_pat with an optional token, local under Git:Local:ImportRoot) and returns the suggested choices with their layer paths and evidence, and the conflicting ones (left empty, every candidate shown). The VCS layer is fixed to the repository's host. Nothing is stored.")
+            .WithSummary("Import detection (FR-118): reads the repository's file list and manifests at ref (default: the default branch) through the Git provider (github_app with the caller's GitHub connection, github_pat with an optional token, gitlab with the caller's GitLab connection on instanceId (FR-141), local under Git:Local:ImportRoot) and returns the suggested choices with their layer paths and evidence, and the conflicting ones (left empty, every candidate shown). The VCS layer is fixed to the repository's host. Nothing is stored.")
             .Produces<StackDetectionDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -53,10 +53,10 @@ public static class StackEndpoints
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithRetryAfterOn429()
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION: a malformed repo, ref or token, an instanceId, or (local) a directory outside the import root or local import not enabled."),
+                (StatusCodes.Status400BadRequest, "VALIDATION: a malformed repo, ref or token, an instanceId or connectionId for a provider other than gitlab, or (local) a directory outside the import root or local import not enabled. GIT_HOST_NOT_ALLOWED (gitlab)."),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN: GitHub refused the request."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: no such repository or ref, or the caller can't see it."),
-                (StatusCodes.Status409Conflict, "GIT_NOT_CONNECTED: github_app without a valid GitHub connection."),
+                (StatusCodes.Status409Conflict, "GIT_NOT_CONNECTED: github_app without a valid GitHub connection, or gitlab without a valid GitLab connection on the instance."),
                 (StatusCodes.Status429TooManyRequests, "GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset)"),
                 (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR: GitHub failed or couldn't be reached, or the local repository couldn't be read."));
 

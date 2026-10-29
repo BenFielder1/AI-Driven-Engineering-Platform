@@ -259,7 +259,8 @@ public sealed class LlmProviderTests(AideApiFactory factory) : IDisposable
 
         var response = await CreateAsync(user, new { provider = "anthropic", credentialId = theirs.Id, defaultModel = "claude-opus-5-5" });
 
-        await Problems.AssertAsync(response, HttpStatusCode.Forbidden, ErrorCodes.CredentialNotOwner);
+        var problem = await Problems.AssertAsync(response, HttpStatusCode.Forbidden, ErrorCodes.CredentialNotOwner);
+        Assert.True(problem.GetProperty("errors").TryGetProperty("llm.credentialId", out _), problem.ToString());
     }
 
     [Fact]
@@ -269,7 +270,8 @@ public sealed class LlmProviderTests(AideApiFactory factory) : IDisposable
 
         var response = await CreateAsync(user, new { provider = "anthropic", credentialId = Guid.CreateVersion7(), defaultModel = "claude-opus-5-5" });
 
-        await Problems.AssertAsync(response, HttpStatusCode.NotFound, ErrorCodes.NotFound);
+        var problem = await Problems.AssertAsync(response, HttpStatusCode.NotFound, ErrorCodes.NotFound);
+        Assert.True(problem.GetProperty("errors").TryGetProperty("llm.credentialId", out _), problem.ToString());
     }
 
     [Fact]

@@ -291,6 +291,12 @@ public static class ErrorCodes
     /// GitLab.com project-creation limit, FR-132).</summary>
     public const string UpstreamRateLimited = "UPSTREAM_RATE_LIMITED";
 
+    /// <summary>
+    /// §6 job code (FR-136, §4.19): GitLab rate limited a background job's request (429). The job is re-queued for the reset
+    /// (<c>Retry-After</c> or <c>RateLimit-Reset</c>) without counting an attempt.
+    /// </summary>
+    public const string GitLabRateLimited = "GITLAB_RATE_LIMITED";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {

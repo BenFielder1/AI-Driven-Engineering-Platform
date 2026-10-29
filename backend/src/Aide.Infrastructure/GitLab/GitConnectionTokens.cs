@@ -50,7 +50,8 @@ public sealed record GitAccessToken(
 /// is saved at once in its own transaction (GitLab invalidates the old pair), concurrency-checked with <c>xmin</c>.</item>
 /// <item><see cref="OnUnauthorizedAsync"/>: after the host answers 401: an OAuth connection that hasn't refreshed in this job
 /// refreshes once; otherwise (or after that refresh) it is marked <c>invalid</c> and its owner notified
-/// (<c>CONNECTION_INVALID</c> → <c>connection_invalid</c>).</item>
+/// (<c>CONNECTION_INVALID</c> → <c>connection_invalid</c>), and projects bound to it lose the binding (FR-136,
+/// <c>GIT_BINDING_CLEARED</c>).</item>
 /// </list>
 /// Failures: <c>GIT_NOT_CONNECTED</c> (missing, invalid or unreadable connection; disabled instance; refresh refused),
 /// <c>UPSTREAM_ERROR</c> (the token endpoint couldn't be reached or failed transiently: retry; the connection is unchanged) and
@@ -296,14 +297,17 @@ internal sealed partial class GitConnectionTokens(
             new { connectionId = connection.Id, userId = connection.UserId, provider = connection.Provider.ToWire(), login = connection.Login, reason },
             SystemActor.Name,
             now);
+
+        // FR-136: an invalid connection can't run Git work: projects bound to it lose the binding (Owners are notified).
+        await Git.GitBindings.ClearForConnectionAsync(db, connection.Id, GitBindingClearedReason.ConnectionInvalid, SystemActor.Name, now, cancellationToken);
         try
         {
             await db.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
-            // Changed since it was read (refreshed or reconnected): leave it, without the event or its notification job.
-            foreach (var entry in db.ChangeTracker.Entries().Where(e => e.Entity is GitConnection or AuditEvent or Job).ToList())
+            // Changed since it was read (refreshed or reconnected): leave it, without the events or their notification jobs.
+            foreach (var entry in db.ChangeTracker.Entries().Where(e => e.Entity is GitConnection or AuditEvent or Job or ProjectGitSettings).ToList())
             {
                 entry.State = EntityState.Detached;
             }

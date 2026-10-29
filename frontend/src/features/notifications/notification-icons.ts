@@ -14,6 +14,7 @@ import {
   Rocket,
   ShieldCheck,
   Undo2,
+  Unlink,
   Unplug,
   type LucideIcon,
 } from 'lucide-react'
@@ -41,4 +42,5 @@ export const notificationTypeIcons: Record<Schemas['NotificationType'], LucideIc
   preview_ready: Eye,
   connection_invalid: Unplug,
   llm_binding_cleared: KeyRound,
+  git_binding_cleared: Unlink,
 }

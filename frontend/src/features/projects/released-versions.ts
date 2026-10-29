@@ -2,15 +2,17 @@ import type { Schemas } from '../../api/client'
 import { compareSemVer, normalizeVersion, parseSemVer } from '../versions/semver'
 import { NEVER_RELEASED } from './schemas'
 
-type Refs = Schemas['GitHubRepoRefsDto']
+/** FR-73, FR-141: a repository's Releases and tags, as GitHub (`GitHubRepoRefsDto`) and GitLab (`GitLabRepoRefsDto`) list them. */
+export type ReleaseRefs = Pick<Schemas['GitHubRepoRefsDto'] | Schemas['GitLabRepoRefsDto'], 'releases' | 'tags'>
+type Refs = ReleaseRefs
 
-/** FR-73: one choice of "Currently released version": a GitHub Release or a semver tag. */
+/** FR-73, FR-141: one choice of "Currently released version": a GitHub or GitLab Release, or a semver tag. */
 export interface ReleasedOption {
   tag: string
   /** The tag's semantic version (normalised, no leading `v`). */
   version: string
   kind: 'release' | 'tag'
-  /** GitHub's latest release. */
+  /** The host's latest release. */
   isLatest: boolean
   name: string | null
   publishedAt: string | null
@@ -53,7 +55,7 @@ export function releasedOptions(refs: Refs): ReleasedOption[] {
   return [...releases.sort(byVersionDesc), ...tags.sort(byVersionDesc)]
 }
 
-/** FR-73: the preselected choice: GitHub's latest release, else the highest release, else the highest tag, else never. */
+/** FR-73: the preselected choice: the host's latest release, else the highest release, else the highest tag, else never. */
 export function defaultReleasedTag(options: readonly ReleasedOption[]): string {
   return (
     options.find((o) => o.isLatest)?.tag ??

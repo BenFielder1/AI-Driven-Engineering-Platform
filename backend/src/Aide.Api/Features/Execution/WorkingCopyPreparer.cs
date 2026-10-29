@@ -75,7 +75,11 @@ public sealed partial class WorkingCopyPreparer(
         if (!outcome.Ok)
         {
             LogPrepareFailed(logger, projectId, settings.Provider);
-            return Failure($"The Git working copy could not be prepared: {outcome.Reason}", outcome.Transient);
+            // FR-136: a coded failure (GIT_NOT_CONNECTED for an unbound GitLab project) keeps its code for the job.
+            return Failure(
+                $"The Git working copy could not be prepared: {outcome.Reason}",
+                outcome.Transient,
+                outcome.ErrorCode is ErrorCodes.GitNotConnected or ErrorCodes.GitHostNotAllowed ? outcome.ErrorCode : ErrorCodes.PhasePreconditionFailed);
         }
 
         if (recordedBranch is null && versionId is { } current)

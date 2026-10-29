@@ -143,15 +143,6 @@ export const wizardAgentModelFields = {
 
 const modelTooLong = `Model ids are at most ${String(limits.modelMax)} characters.`
 
-/**
- * TODO(M27 slice 2, FR-136): POST /api/projects doesn't accept a GitLab binding yet (`CreateProjectGitRequest` has no
- * `instanceId`, `connectionId` or `repoId`). Until it does, the wizard lets users pick or create a GitLab project but
- * blocks the Repository step. Flip this once the contract has the fields, and send them in toGitRequest.
- */
-export function gitlabProjectCreationAvailable(): boolean {
-  return false
-}
-
 /** The wizard's fields, without the cross-field refinement (also used to check a restored session-storage draft). */
 export const wizardShape = z.object({
   /** FR-73: start from scratch, or import an existing repository. */
@@ -174,8 +165,12 @@ export const wizardShape = z.object({
    */
   repoFullName: str,
   installationId: str,
-  /** FR-132 `gitlab`: the caller's GitLab connection (its instance), and the picked project's GitLab id. */
+  /**
+   * FR-132, FR-136 `gitlab`: the caller's GitLab connection (bound to the project), its instance, and the picked
+   * project's GitLab id.
+   */
   gitlabConnectionId: str,
+  gitlabInstanceId: str,
   gitlabRepoId: str,
   /** `github_app`: the picked repository already has commits (FR-86 warning). */
   repoHasCode: z.boolean(),
@@ -282,9 +277,15 @@ export const wizardSchema = wizardShape.superRefine((v, ctx) => {
   }
   if (v.gitMode === 'gitlab') {
     addCheck(ctx, 'gitlabConnectionId', v.gitlabConnectionId ? null : 'Connect GitLab, or choose another option.')
-    addCheck(ctx, 'repoFullName', v.gitlabConnectionId && (!v.repoFullName || !v.gitlabRepoId) ? 'Pick a GitLab project, or create one.' : null)
-    // TODO(M27 slice 2, FR-136): remove once POST /api/projects accepts the GitLab binding (wizard-gitlab-repository.tsx).
-    addCheck(ctx, 'gitMode', gitlabProjectCreationAvailable() ? null : "AIDE can't create projects on GitLab yet. Choose another option to continue.")
+    addCheck(
+      ctx,
+      'repoFullName',
+      v.gitlabConnectionId && (!v.repoFullName || !v.gitlabRepoId)
+        ? importing
+          ? 'Pick the GitLab project to import.'
+          : 'Pick a GitLab project, or create one.'
+        : null,
+    )
   }
   // FR-114: a composition needs a choice (or None) for each layer up to VCS; compatibility is the server's (D-V4-19).
   if (v.stackKind === 'compose') {
@@ -330,6 +331,7 @@ export const wizardDefaults: WizardValues = {
   repoFullName: '',
   installationId: '',
   gitlabConnectionId: '',
+  gitlabInstanceId: '',
   gitlabRepoId: '',
   repoHasCode: false,
   initialVersion: DEFAULT_INITIAL_VERSION,

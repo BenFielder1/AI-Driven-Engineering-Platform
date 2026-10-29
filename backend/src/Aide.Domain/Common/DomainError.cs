@@ -17,4 +17,10 @@ public sealed record DomainError(string Code, string Message)
 
     /// <summary>For <see cref="ErrorCodes.StackIncompatible"/> (FR-116): the broken rules, returned as the ProblemDetails <c>violations</c>.</summary>
     public IReadOnlyList<Stack.StackViolation> Violations { get; init; } = [];
+
+    /// <summary>
+    /// The request field the error is about (e.g. <c>git.connectionId</c>), returned as the ProblemDetails <c>errors</c>
+    /// entry <c>{field: [message]}</c> (the VALIDATION shape), so a client can tell which choice failed.
+    /// </summary>
+    public string? Field { get; init; }
 }

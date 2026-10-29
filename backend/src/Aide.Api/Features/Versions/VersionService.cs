@@ -58,10 +58,11 @@ public sealed partial class VersionService(
 
         // FR-117: a sent stack is validated (R5 against the repository's host) before anything else about the version.
         var repoVcs = await stacks.RepoVcsAsync(projectId, cancellationToken);
+        var repoHost = await stacks.RepoHostAsync(projectId, cancellationToken);
         StackComposition? sentStack = null;
         if (request.Stack is { } stackRequest)
         {
-            var resolved = stacks.Resolve(stackRequest, repoVcs, "stack.");
+            var resolved = stacks.Resolve(stackRequest, repoHost, "stack.");
             if (resolved.IsFailure)
             {
                 return Result.Failure<ReleaseVersion>(resolved.Error!);

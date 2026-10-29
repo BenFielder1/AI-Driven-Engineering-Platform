@@ -22,7 +22,7 @@ import { useAuthProviders } from '../auth/auth-api'
 import { connectGitHubHref, useGitHubConnection, useGitHubRepoRefs, type GitHubRepo } from '../github/github-api'
 import { GitHubErrorAlert } from '../github/github-error-alert'
 import { RepoPicker } from '../github/repo-picker'
-import { useGitLabInstances, type GitLabRepo } from '../gitlab/gitlab-api'
+import { gitlabHost, useGitLabConnections, useGitLabInstances, useGitLabRepoRefs, type GitLabRepo } from '../gitlab/gitlab-api'
 import { connectionLabel } from '../connections/connection-format'
 import { useLlmProviders, type LlmProviderOption } from '../connections/connections-api'
 import { useVercelConnections } from '../connections/vercel-connections-api'
@@ -64,6 +64,7 @@ import { detectedAnything, emptyStackSelection, selectionFromDetection, stackFie
 import { CompositionRows, StackSummary } from '../stack/stack-summary'
 import {
   detectRequestOf,
+  repoHostLabelOf,
   repoVcsOf,
   selectionOfValues,
   toWizardStackRequest,
@@ -96,6 +97,7 @@ const fieldIds: Record<Field, string> = {
   repoFullName: 'project-repo-search',
   installationId: 'project-repo-search',
   gitlabConnectionId: 'project-gitlab-connection',
+  gitlabInstanceId: 'project-gitlab-connection',
   gitlabRepoId: 'project-repo-search',
   repoHasCode: 'project-repo-search',
   initialVersion: 'project-initial-version',
@@ -180,6 +182,10 @@ const serverFieldMap: Record<string, Field> = {
   'git.installationid': 'repoFullName',
   'git.repofullname': 'repoFullName',
   'git.localsourcepath': 'localSourcePath',
+  // FR-132, FR-136: the GitLab binding (the connection and its instance) and the picked project.
+  'git.instanceid': 'gitlabConnectionId',
+  'git.connectionid': 'gitlabConnectionId',
+  'git.repoid': 'repoFullName',
   git: 'gitMode',
   initialversion: 'initialVersion',
   version: 'initialVersion',
@@ -210,20 +216,36 @@ const serverFieldMap: Record<string, Field> = {
 }
 
 /**
- * Which credential a CREDENTIAL_NOT_OWNER / NOT_FOUND on create is about: the ProblemDetails `errors` key says so
- * (`llm.credentialId` vs `deployment.connectionId`). Without one, the old rule: an LLM credential unless Vercel is
- * chosen (CREDENTIAL_NOT_OWNER), or unless a PAT import's repository is the likely 404 (NOT_FOUND).
+ * Which part of the request a CREDENTIAL_NOT_OWNER / NOT_FOUND / GIT_NOT_CONNECTED / FORBIDDEN on create is about.
+ * The ProblemDetails `errors` key says so first (`llm.credentialId`, `git.connectionId` / `git.repoId`,
+ * `deployment.connectionId`). Without one, the server's check order decides: the AI model section's connection
+ * (PlanLlmAsync) when one is chosen, then the Vercel connection when Vercel is chosen, then the GitLab binding and
+ * project (FR-136). For the other hosts: a PAT import's repository is the likely 404, else the LLM credential.
  */
-function credentialErrorTarget(error: unknown, v: WizardValues, importing: boolean): 'llm' | 'other' {
+function credentialErrorTarget(error: unknown, v: WizardValues, importing: boolean): 'llm' | 'git' | 'deployment' | 'other' {
   const keys = isApiError(error) ? Object.keys(error.fieldErrors).map((k) => k.toLowerCase()) : []
   if (keys.some((k) => k.startsWith('llm'))) {
     return 'llm'
   }
+  if (keys.some((k) => k.startsWith('git'))) {
+    return 'git'
+  }
+  if (keys.some((k) => k.startsWith('deployment'))) {
+    return 'deployment'
+  }
   if (keys.length > 0) {
     return 'other'
   }
-  if (isApiError(error, 'CREDENTIAL_NOT_OWNER')) {
-    return v.deploymentMode === 'vercel' ? 'other' : 'llm'
+  // Only a credential can be another user's or missing: GIT_NOT_CONNECTED and FORBIDDEN are about the repository.
+  const credentialCode = isApiError(error, 'CREDENTIAL_NOT_OWNER') || isApiError(error, 'NOT_FOUND')
+  if (credentialCode && v.llmCredentialId) {
+    return 'llm'
+  }
+  if (credentialCode && v.deploymentMode === 'vercel') {
+    return 'deployment'
+  }
+  if (v.gitMode === 'gitlab') {
+    return 'git'
   }
   return importing && v.gitMode === 'github_pat' ? 'other' : 'llm'
 }
@@ -242,9 +264,15 @@ function toGitRequest(v: WizardValues): Schemas['CreateProjectGitRequest'] {
     case 'github_pat':
       return { mode: 'github_pat', repoUrl: v.repoUrl.trim(), defaultBranch, token: v.gitToken ? v.gitToken : null }
     case 'gitlab':
-      // TODO(M27 slice 2, FR-136): add instanceId, connectionId and the GitLab repo id once CreateProjectGitRequest has
-      // them. Unreachable until then: the schema blocks the Repository step (gitlabProjectCreationAvailable).
-      return { mode: 'gitlab', repoFullName: v.repoFullName, defaultBranch }
+      // FR-132, FR-136: the picked project on its instance, bound to the caller's own connection.
+      return {
+        mode: 'gitlab',
+        instanceId: v.gitlabInstanceId,
+        connectionId: v.gitlabConnectionId,
+        repoId: v.gitlabRepoId,
+        repoFullName: v.repoFullName,
+        defaultBranch,
+      }
     case 'local':
       // FR-73: a Local import names the existing repository on the server (development and E2E only).
       return v.source === 'import'
@@ -509,12 +537,22 @@ export function NewProjectWizard() {
 
   // The list may not know whether a repo is empty; its refs always do (FR-86). They also list releases and tags (FR-73).
   const refs = useGitHubRepoRefs(gitMode === 'github_app' && repoFullName ? repoFullName : null)
-  const refsData = gitMode === 'github_app' ? refs.data : undefined
+  // FR-141: a picked GitLab project's refs, read with the chosen connection.
+  const gitlabConnectionId = useWatch({ control, name: 'gitlabConnectionId' })
+  const gitlabRepoId = useWatch({ control, name: 'gitlabRepoId' })
+  const gitlabRefs = useGitLabRepoRefs(gitMode === 'gitlab' ? gitlabConnectionId : '', gitMode === 'gitlab' ? gitlabRepoId : '')
+  const gitlabRefsData = gitMode === 'gitlab' ? gitlabRefs.data : undefined
+  const refsData = gitMode === 'github_app' ? refs.data : gitlabRefsData
   useEffect(() => {
     if (refs.data) {
       setValue('repoHasCode', !refs.data.empty)
     }
   }, [refs.data, setValue])
+  useEffect(() => {
+    if (gitlabRefsData) {
+      setValue('repoHasCode', !gitlabRefsData.empty)
+    }
+  }, [gitlabRefsData, setValue])
 
   /**
    * Whether the user chose the released version / edited the version to develop. Kept here rather than read from
@@ -527,12 +565,16 @@ export function NewProjectWizard() {
     resetField('releasedTag')
   }, [resetField])
 
-  // FR-73: preselect the latest release once a repo's refs are known, unless the user already chose.
+  // FR-73: preselect the latest release once a repo's refs are known, unless the user already chose. FR-141: GitLab
+  // says which one (`preselectedTag`; `null` = never released).
   useEffect(() => {
     if (refsData && importing && !releasedChosen) {
-      setValue('releasedTag', defaultReleasedTag(releasedOptions(refsData)))
+      setValue(
+        'releasedTag',
+        gitlabRefsData ? (gitlabRefsData.preselectedTag ?? NEVER_RELEASED) : defaultReleasedTag(releasedOptions(refsData)),
+      )
     }
-  }, [refsData, importing, releasedChosen, setValue])
+  }, [refsData, gitlabRefsData, importing, releasedChosen, setValue])
 
   // A typed tag (URL + token, Local) doesn't carry over to the picker, and a picked one doesn't carry over to the field.
   const previousMode = useRef(gitMode)
@@ -543,6 +585,7 @@ export function NewProjectWizard() {
         setValue('repoFullName', '')
         setValue('installationId', '')
         setValue('gitlabRepoId', '')
+        setValue('repoHasCode', false)
       }
       previousMode.current = gitMode
       resetReleased()
@@ -552,37 +595,52 @@ export function NewProjectWizard() {
   // FR-132: the GitLab option exists while any GitLab instance is enabled.
   const gitlabInstances = useGitLabInstances()
   const gitlabAvailable = (gitlabInstances.data?.length ?? 0) > 0 || gitMode === 'gitlab'
-  const gitlabConnectionId = useWatch({ control, name: 'gitlabConnectionId' })
   const chooseGitLabConnection = useCallback(
-    (id: string) => {
+    (id: string, instanceId: string) => {
+      if (instanceId !== getValues('gitlabInstanceId')) {
+        setValue('gitlabInstanceId', instanceId)
+      }
       if (id !== getValues('gitlabConnectionId')) {
         setValue('gitlabConnectionId', id, { shouldValidate: getFieldState('gitlabConnectionId').invalid })
         setValue('repoFullName', '')
         setValue('gitlabRepoId', '')
+        setValue('repoHasCode', false)
+        resetReleased()
       }
     },
-    [getValues, setValue, getFieldState],
+    [getValues, setValue, getFieldState, resetReleased],
   )
   const pickGitLabRepo = (repo: GitLabRepo) => {
+    if (repo.id !== getValues('gitlabRepoId')) {
+      resetReleased()
+    }
     setValue('repoFullName', repo.fullPath, { shouldValidate: getFieldState('repoFullName').invalid })
     setValue('gitlabRepoId', repo.id)
+    // Known from the project's refs (FR-86), which load next.
     setValue('repoHasCode', false)
     setValue('defaultBranch', repo.defaultBranch ?? 'main', { shouldValidate: true })
+  }
+  /** FR-141: an empty GitLab project has nothing to import, so the wizard starts from scratch on it. */
+  const scratchInstead = () => {
+    setValue('source', 'scratch', { shouldDirty: true })
   }
   /** "Connect GitLab under Connections": saves the wizard (FR-159 draft) before Connections opens. */
   const addGitLabConnection = () => {
     saveWizardDraft(getValues(), step)
   }
 
-  // Keep the released tag's semver in sync, and prefill the version to develop with its next minor (FR-73).
+  // Keep the released tag's semver in sync, and prefill the version to develop with its next minor (FR-73). FR-141:
+  // with GitLab's own preselection, the version it suggests.
   useEffect(() => {
     setValue('releasedVersion', semverOfTag(releasedTag, refsData) ?? '')
   }, [releasedTag, refsData, setValue])
+  const gitlabSuggestion =
+    gitlabRefsData?.preselectedTag === releasedTagOf({ releasedTag }) ? gitlabRefsData.suggestedDevelopmentVersion : null
   useEffect(() => {
     if (!versionEdited) {
-      setValue('developmentVersion', suggestNextVersion(releasedVersion || null))
+      setValue('developmentVersion', gitlabSuggestion ?? suggestNextVersion(releasedVersion || null))
     }
-  }, [releasedVersion, versionEdited, setValue])
+  }, [releasedVersion, gitlabSuggestion, versionEdited, setValue])
 
   const pickRepo = (repo: GitHubRepo) => {
     if (repo.fullName !== getValues('repoFullName')) {
@@ -790,6 +848,27 @@ export function NewProjectWizard() {
             // FR-73: the repository to import doesn't exist, or the token can't see it.
             setError('repoUrl', { type: 'server', message: errorMessage(error, 'createProject') })
             goTo(stepIndex('repository'))
+          } else if (
+            values.gitMode === 'gitlab' &&
+            (isApiError(error, 'CREDENTIAL_NOT_OWNER') ||
+              isApiError(error, 'GIT_NOT_CONNECTED') ||
+              isApiError(error, 'NOT_FOUND') ||
+              isApiError(error, 'FORBIDDEN')) &&
+            credentialErrorTarget(error, values, importValues) === 'git'
+          ) {
+            // FR-136: the binding must be the caller's own, valid connection; FR-132: with Developer access to a
+            // project it can see. The connection's problems go on the connection, the project's on the picker.
+            const keys = Object.keys(error.fieldErrors).map((k) => k.toLowerCase())
+            const onConnection = keys.includes('git.connectionid') || keys.includes('git.instanceid')
+              ? true
+              : keys.includes('git.repoid')
+                ? false
+                : isApiError(error, 'CREDENTIAL_NOT_OWNER') || isApiError(error, 'GIT_NOT_CONNECTED')
+            setError(onConnection ? 'gitlabConnectionId' : 'repoFullName', {
+              type: 'server',
+              message: errorMessage(error, 'createProjectGitLab'),
+            })
+            goTo(stepIndex('repository'))
           } else if (isApiError(error, 'STACK_INCOMPATIBLE') || isApiError(error, 'VCS_MISMATCH')) {
             // FR-116, FR-117: the composition breaks a rule (the reasons are listed), or the VCS isn't the repo's host.
             goTo(stepIndex('stack'))
@@ -808,7 +887,10 @@ export function NewProjectWizard() {
             void llmProviders.refetch()
             setError('llmCredentialId', { type: 'server', message: errorMessage(error, 'createProjectLlm') })
             goTo(stepIndex('configuration'))
-          } else if (isApiError(error, 'CREDENTIAL_NOT_OWNER')) {
+          } else if (
+            isApiError(error, 'CREDENTIAL_NOT_OWNER') ||
+            (isApiError(error, 'NOT_FOUND') && credentialErrorTarget(error, values, importValues) === 'deployment')
+          ) {
             // FR-88: only the caller's own Vercel connections can be used.
             setError('vercelConnectionId', { type: 'server', message: errorMessage(error, 'createProject') })
             goTo(stepIndex('deployment'))
@@ -816,10 +898,13 @@ export function NewProjectWizard() {
             goTo(stepIndex('deployment'))
             setServerError({ message: errorMessage(error, 'createProject'), error })
           } else if (importValues && isApiError(error, 'TAG_NOT_FOUND')) {
-            void refs.refetch()
+            void (values.gitMode === 'gitlab' ? gitlabRefs.refetch() : refs.refetch())
             failVersion('releasedTag', error)
           } else {
-            setServerError({ message: errorMessage(error, 'createProject'), error })
+            setServerError({
+              message: errorMessage(error, values.gitMode === 'gitlab' ? 'createProjectGitLab' : 'createProject'),
+              error,
+            })
           }
         },
       })
@@ -966,7 +1051,7 @@ export function NewProjectWizard() {
                           label: gitModeOptionLabels.gitlab,
                           description: importing
                             ? 'Pick a GitLab project with one of your GitLab connections.'
-                            : 'Pick or create a project on gitlab.com or your GitLab instance.',
+                            : 'Pick or create a project on gitlab.com or your GitLab instance. Git work uses your connection.',
                         },
                       ]
                     : []),
@@ -1004,11 +1089,15 @@ export function NewProjectWizard() {
                   searchId={fieldIds.repoFullName}
                   connectionId={gitlabConnectionId}
                   selected={repoFullName}
+                  importing={importing}
+                  empty={gitlabRefsData?.empty}
                   connectionError={errors.gitlabConnectionId?.message}
                   repoError={errors.repoFullName?.message}
                   onConnection={chooseGitLabConnection}
                   onSelect={pickGitLabRepo}
                   onAddConnection={addGitLabConnection}
+                  onImportInstead={importInstead}
+                  onScratchInstead={scratchInstead}
                 />
               )}
               {gitMode === 'github_pat' && (
@@ -1067,9 +1156,10 @@ export function NewProjectWizard() {
               {importing && (
                 <ReleasedVersionField
                   id={fieldIds.releasedTag}
-                  listed={gitMode === 'github_app'}
+                  listed={gitMode === 'github_app' || gitMode === 'gitlab'}
+                  host={gitMode === 'gitlab' ? 'gitlab' : 'github'}
                   repoSelected={Boolean(repoFullName)}
-                  refs={refs}
+                  refs={gitMode === 'gitlab' ? gitlabRefs : refs}
                   inputProps={register('releasedTag', {
                     onChange: () => {
                       setReleasedChosen(true)
@@ -1137,7 +1227,7 @@ export function NewProjectWizard() {
                   },
                 ]}
               />
-              {importing && <DetectionNotice detection={detection} />}
+              {importing && <DetectionNotice detection={detection} gitlab={gitMode === 'gitlab'} />}
               {stackKind === 'compose' &&
                 (stackCatalog.isPending ? (
                   <LoadingState label="Loading the stack catalog…" />
@@ -1157,7 +1247,7 @@ export function NewProjectWizard() {
                       onSubStepChange={setStackSubStep}
                       idPrefix={WIZARD_STACK_PREFIX}
                       vcsFixed={repoVcsOf(gitMode)}
-                      vcsFixedReason="Set from the repository you chose (GitHub). It can only be the repository's host."
+                      vcsFixedReason={`Set from the repository you chose (${repoHostLabelOf(gitMode) ?? 'GitHub'}). It can only be the repository's host.`}
                       detection={importing && detectionKey !== null && detectionKey === appliedDetection ? detection.data : null}
                       errors={stackErrors}
                     />
@@ -1355,7 +1445,7 @@ function StackReview({ values }: { values: WizardValues }) {
 }
 
 /** FR-118: what import detection found (or that it couldn't run); it never blocks the step. */
-function DetectionNotice({ detection }: { detection: ReturnType<typeof useStackDetection> }) {
+function DetectionNotice({ detection, gitlab }: { detection: ReturnType<typeof useStackDetection>; gitlab: boolean }) {
   if (detection.isPending && detection.fetchStatus === 'idle') {
     return null
   }
@@ -1369,7 +1459,7 @@ function DetectionNotice({ detection }: { detection: ReturnType<typeof useStackD
   if (detection.isError) {
     return (
       <Alert tone="info" role="status" title="We couldn't detect the stack">
-        <p>{errorMessage(detection.error, 'detectStack')}</p>
+        <p>{errorMessage(detection.error, gitlab ? 'detectStackGitLab' : 'detectStack')}</p>
       </Alert>
     )
   }
@@ -1389,6 +1479,23 @@ function DetectionNotice({ detection }: { detection: ReturnType<typeof useStackD
       </p>
       {d.truncated && <p className="mt-1">The repository has more files than AIDE listed, so some layers may be missing.</p>}
     </Alert>
+  )
+}
+
+/** FR-136: the GitLab connection the project is bound to ("ada on GitLab.com (gitlab.com)"). */
+function GitLabConnectionSummary({ connectionId }: { connectionId: string }) {
+  const connections = useGitLabConnections()
+  const c = connections.data?.find((x) => x.id === connectionId)
+  return (
+    <SummaryRow term="GitLab connection">
+      {c
+        ? `${c.login} on ${c.instanceName} (${gitlabHost(c.instanceBaseUrl)})`
+        : connections.isPending
+          ? 'Loading…'
+          : connections.isError
+            ? "Your GitLab connections couldn't load"
+            : 'Connection not found. Choose another under Repository.'}
+    </SummaryRow>
   )
 }
 
@@ -1470,7 +1577,8 @@ function ReviewSummary({
       <SummarySection title="Repository" step="repository" onEdit={onEdit}>
         <SummaryRow term="Mode">{gitModeOptionLabels[values.gitMode]}</SummaryRow>
         {(app || values.gitMode === 'gitlab') && <SummaryRow term="Repository">{values.repoFullName}</SummaryRow>}
-        {app && values.repoHasCode && !importing && (
+        {values.gitMode === 'gitlab' && <GitLabConnectionSummary connectionId={values.gitlabConnectionId} />}
+        {(app || values.gitMode === 'gitlab') && values.repoHasCode && !importing && (
           <SummaryRow term="Existing code">AIDE builds on it (treated as an import that was never released)</SummaryRow>
         )}
         {pat && <SummaryRow term="Repository URL">{values.repoUrl.trim()}</SummaryRow>}

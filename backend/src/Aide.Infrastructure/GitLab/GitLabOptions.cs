@@ -24,6 +24,15 @@ public sealed class GitLabOptions
     public List<GitLabInstanceSettings> Instances { get; set; } = [];
 
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// Tests only: clone and push go to <c>{GitBaseUrlOverride}{group/sub/project}.git</c> instead of the instance's base
+    /// URL (a <c>file://</c> folder of bare repositories). Needs <see cref="AllowInsecureGitBaseUrl"/>. Never set in a deployment.
+    /// </summary>
+    public string? GitBaseUrlOverride { get; set; }
+
+    /// <summary>Tests only: allows a <c>file://</c> or <c>http://</c> <see cref="GitBaseUrlOverride"/>.</summary>
+    public bool AllowInsecureGitBaseUrl { get; set; }
 }
 
 /// <summary>One configured GitLab instance (<c>GitLab__Instances__&lt;n&gt;__*</c>). Secrets never reach the database.</summary>
@@ -69,6 +78,14 @@ public sealed class GitLabOptionsValidator : IValidateOptions<GitLabOptions>
         if (options.RequestTimeout <= TimeSpan.Zero)
         {
             failures.Add("GitLab:RequestTimeout must be positive.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.GitBaseUrlOverride)
+            && (!Uri.TryCreate(options.GitBaseUrlOverride, UriKind.Absolute, out var gitBase)
+                || (gitBase.Scheme != Uri.UriSchemeHttps && !options.AllowInsecureGitBaseUrl)
+                || !string.IsNullOrEmpty(gitBase.UserInfo) || !string.IsNullOrEmpty(gitBase.Query)))
+        {
+            failures.Add("GitLab:GitBaseUrlOverride must be an absolute https URL without credentials or a query (file:// or http:// only with GitLab:AllowInsecureGitBaseUrl).");
         }
 
         var seen = new HashSet<string>(StringComparer.Ordinal);

@@ -63,8 +63,10 @@ public sealed record DetectStackRequest
 /// caller's GitHub connection: 409 <c>GIT_NOT_CONNECTED</c> without one), <c>github_pat</c> (<c>repo</c> = <c>owner/name</c>
 /// or <c>https://github.com/owner/name</c>, with the optional <c>token</c>; public repositories need none) or <c>local</c>
 /// (<c>repo</c> = the directory under <c>Git:Local:ImportRoot</c>, Development and E2E only). <c>ref</c> is the branch, tag
-/// or commit to read (default: the default branch). <c>instanceId</c> is for GitLab instances (not used by these providers:
-/// 400 <c>VALIDATION</c> when sent).
+/// or commit to read (default: the default branch). FR-141: <c>gitlab</c> (<c>repo</c> = GitLab's project id or its
+/// <c>group/sub/project</c> path) on <c>instanceId</c> (omitted: gitlab.com), read with the caller's <c>connectionId</c> or,
+/// omitted, their newest valid GitLab connection on that instance (409 <c>GIT_NOT_CONNECTED</c> without one).
+/// <c>instanceId</c> and <c>connectionId</c> are only for gitlab (400 <c>VALIDATION</c> otherwise).
 /// </summary>
 public sealed record DetectStackGitRequest
 {
@@ -83,6 +85,9 @@ public sealed record DetectStackGitRequest
     /// <summary><c>github_pat</c> only: the GitHub token to read a private repository. Used for this request only, never stored.</summary>
     [MaxLength(Projects.ProjectLimits.SecretMaxLength)]
     public string? Token { get; init; }
+
+    /// <summary><c>gitlab</c> only (FR-141): one of the caller's GitLab connections on the instance (404 <c>NOT_FOUND</c> otherwise).</summary>
+    public Guid? ConnectionId { get; init; }
 }
 
 /// <summary>

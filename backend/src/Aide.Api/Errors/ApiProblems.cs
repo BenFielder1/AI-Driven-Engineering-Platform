@@ -15,6 +15,9 @@ public static class ApiProblems
     public const string DetailsKey = "details";
     public const string ReasonKey = "reason";
 
+    /// <summary>The field map of a VALIDATION problem; other codes carry it when the error names its field (<see cref="DomainError.Field"/>).</summary>
+    public const string ErrorsKey = "errors";
+
     /// <summary>FR-81, FR-83: the AIDE GitHub App's install link on a <c>GITHUB_APP_NOT_INSTALLED</c> problem; FR-88: Vercel's
     /// GitHub App install link on a <c>VERCEL_GIT_NOT_CONNECTED</c> problem.</summary>
     public const string InstallUrlKey = "installUrl";
@@ -41,6 +44,11 @@ public static class ApiProblems
         if (error.Reason is not null)
         {
             extensions[ReasonKey] = error.Reason;
+        }
+
+        if (error.Field is { Length: > 0 } field)
+        {
+            extensions[ErrorsKey] = new Dictionary<string, string[]>(StringComparer.Ordinal) { [field] = [error.Message] };
         }
 
         if (error.Violations.Count > 0)

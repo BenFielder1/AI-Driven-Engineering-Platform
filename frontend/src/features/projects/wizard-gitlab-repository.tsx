@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 
 import { Alert } from '../../components/ui/alert'
+import { Button } from '../../components/ui/button'
 import { SelectField } from '../../components/ui/select-field'
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import { Link } from '../../lib/navigation'
 import { gitlabHost, useGitLabConnections, type GitLabConnection, type GitLabRepo } from '../gitlab/gitlab-api'
 import { GitLabRepoPicker } from '../gitlab/gitlab-repo-picker'
-import { gitlabProjectCreationAvailable } from './schemas'
 
 /** Whether a connection can list and create projects (valid, on an enabled instance). */
 export const usableGitLabConnection = (c: GitLabConnection) => c.status === 'valid' && c.instanceEnabled
@@ -17,43 +17,63 @@ function connectionLabel(c: GitLabConnection): string {
 }
 
 /**
- * FR-132 Repository step, GitLab option: choose one of the caller's GitLab connections (its instance), then pick a
- * project or create one. Without a usable connection it links to Connections, keeping the wizard (FR-159 draft).
+ * FR-132, FR-136, FR-141 Repository step, GitLab option: choose one of the caller's GitLab connections (its instance;
+ * it becomes the project's binding), then pick a project, or create one when starting from scratch. Without a usable
+ * connection it links to Connections, keeping the wizard (FR-159 draft).
  */
 export function WizardGitLabRepository({
   connectionFieldId,
   searchId,
   connectionId,
   selected,
+  importing,
+  empty,
   connectionError,
   repoError,
   onConnection,
   onSelect,
   onAddConnection,
+  onImportInstead,
+  onScratchInstead,
 }: {
   connectionFieldId: string
   searchId: string
   connectionId: string
   /** The selected project's full path. */
   selected: string
+  /** FR-141: importing an existing project (no Create; the empty-project notice). */
+  importing: boolean
+  /** Whether the selected project is empty (from its refs), `undefined` while unknown. */
+  empty: boolean | undefined
   connectionError?: string | undefined
   repoError?: string | undefined
-  onConnection: (id: string) => void
+  /** The chosen connection and its instance ('' and '' when none is usable). */
+  onConnection: (id: string, instanceId: string) => void
   onSelect: (repo: GitLabRepo) => void
   /** Saves the wizard before Connections opens. */
   onAddConnection: () => void
+  /** FR-86: a project with code, from scratch, becomes an import that was never released. */
+  onImportInstead: () => void
+  /** FR-141: an empty project has nothing to import. */
+  onScratchInstead: () => void
 }) {
   const connections = useGitLabConnections()
   const usable = (connections.data ?? []).filter(usableGitLabConnection)
-  const firstUsable = usable[0]?.id ?? ''
+  const first = usable[0]
   const current = usable.find((c) => c.id === connectionId)
 
   // Preselect the first usable connection; drop one that is no longer usable.
   useEffect(() => {
-    if (connections.data && !current && firstUsable !== connectionId) {
-      onConnection(firstUsable)
+    if (connections.data && !current && (first?.id ?? '') !== connectionId) {
+      onConnection(first?.id ?? '', first?.instanceId ?? '')
     }
-  }, [connections.data, current, firstUsable, connectionId, onConnection])
+  }, [connections.data, current, first, connectionId, onConnection])
+  // Keep the instance in step with the chosen connection (a restored wizard, or a connection moved).
+  useEffect(() => {
+    if (current) {
+      onConnection(current.id, current.instanceId)
+    }
+  }, [current, onConnection])
 
   const addLink = (
     <Link to="/connections" className="text-primary underline underline-offset-2" onClick={onAddConnection}>
@@ -77,14 +97,6 @@ export function WizardGitLabRepository({
   return (
     // The connection field's id is on this wrapper too, so the error summary's link always has a target.
     <div id={usable.length === 0 ? connectionFieldId : undefined} tabIndex={-1} className="flex flex-col gap-3 outline-none">
-      {!gitlabProjectCreationAvailable() && (
-        <Alert tone="info" title="GitLab projects arrive in the next AIDE update">
-          <p>
-            You can browse your GitLab projects here already, but AIDE can&apos;t create an AIDE project on GitLab yet.
-            Choose another option to continue.
-          </p>
-        </Alert>
-      )}
       {usable.length === 0 ? (
         <Alert tone="info" title="Connect GitLab to pick a project">
           <p>
@@ -104,7 +116,8 @@ export function WizardGitLabRepository({
             value={connectionId}
             error={connectionError}
             onChange={(e) => {
-              onConnection(e.target.value)
+              const picked = usable.find((c) => c.id === e.target.value)
+              onConnection(picked?.id ?? '', picked?.instanceId ?? '')
             }}
           >
             {connections.data.map((c) => (
@@ -122,7 +135,7 @@ export function WizardGitLabRepository({
               selected={selected}
               error={repoError}
               onSelect={onSelect}
-              allowCreate={gitlabProjectCreationAvailable()}
+              allowCreate={!importing}
             />
           )}
           <p role="status" aria-live="polite" className="text-sm">
@@ -134,6 +147,33 @@ export function WizardGitLabRepository({
               <span className="text-muted-foreground">No project selected yet.</span>
             )}
           </p>
+          {selected && empty === false && !importing && (
+            <Alert tone="warning" title="This project has code. AIDE will build on it">
+              <p>
+                The project is treated as an import of a repository that was never released: the Repository Analyst reads
+                the code first, and the first specification covers what is already there. Import it instead to say which
+                version is released.
+              </p>
+              <p className="mt-2">
+                <Button variant="secondary" onClick={onImportInstead}>
+                  Import instead
+                </Button>
+              </p>
+            </Alert>
+          )}
+          {selected && empty === true && importing && (
+            <Alert tone="info" title="This project is empty">
+              <p>
+                It has no commits yet (or only starter files), so there is no code for the Repository Analyst to read and
+                no released version. Start from scratch on it instead, or pick another project.
+              </p>
+              <p className="mt-2">
+                <Button variant="secondary" onClick={onScratchInstead}>
+                  Start from scratch instead
+                </Button>
+              </p>
+            </Alert>
+          )}
         </>
       )}
     </div>

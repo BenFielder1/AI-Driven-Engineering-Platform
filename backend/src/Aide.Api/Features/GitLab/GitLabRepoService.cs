@@ -30,36 +30,11 @@ public sealed partial class GitLabRepoService(GitLabConnectionService connection
     /// </summary>
     public async Task<Result<IReadOnlyList<GitLabOwnerDto>>> ListOwnersAsync(Guid userId, Guid connectionId, CancellationToken cancellationToken)
     {
-        var owners = await connections.CallAsync<IReadOnlyList<GitLabOwnerDto>>(userId, connectionId, async (client, token) =>
-        {
-            var user = await client.GetUserAsync(token, cancellationToken);
-            var personal = await client.GetNamespaceAsync(token, user.Username, cancellationToken);
-            var developer = await client.ListGroupsAsync(token, GitLabRules.DeveloperAccess, cancellationToken);
-            var maintainer = (await client.ListGroupsAsync(token, GitLabRules.MaintainerAccess, cancellationToken)).Select(g => g.Id).ToHashSet();
-            var owner = developer.Any(g => string.Equals(g.ProjectCreationLevel, "owner", StringComparison.OrdinalIgnoreCase))
-                ? (await client.ListGroupsAsync(token, GitLabRules.OwnerAccess, cancellationToken)).Select(g => g.Id).ToHashSet()
-                : [];
-            var list = new List<GitLabOwnerDto>
-            {
-                new(personal?.Id ?? 0, GitLabOwnerKind.User, personal?.FullPath ?? user.Username, user.Name ?? user.Username, true, null),
-            };
-            foreach (var group in developer)
-            {
-                var level = owner.Contains(group.Id) ? GitLabRules.OwnerAccess
-                    : maintainer.Contains(group.Id) ? GitLabRules.MaintainerAccess
-                    : GitLabRules.DeveloperAccess;
-                list.Add(new GitLabOwnerDto(
-                    group.Id,
-                    GitLabOwnerKind.Group,
-                    group.FullPath,
-                    group.FullName ?? group.Name,
-                    GitLabRules.CanCreateProjectIn(group.ProjectCreationLevel, level),
-                    GitLabRules.CannotCreateReason(group.ProjectCreationLevel, level)));
-            }
-
-            return list;
-        }, cancellationToken);
-        return owners;
+        var owners = await connections.CallAsync(userId, connectionId, (client, token) => GitLabReaders.OwnersAsync(client, token, cancellationToken), cancellationToken);
+        return owners.IsFailure
+            ? Result.Failure<IReadOnlyList<GitLabOwnerDto>>(owners.Error!)
+            : Result.Success<IReadOnlyList<GitLabOwnerDto>>([.. owners.Value.Select(o => new GitLabOwnerDto(
+                o.Id, EnumStrings.Parse<GitLabOwnerKind>(o.Kind), o.FullPath, o.Name, o.CanCreate, o.Reason))]);
     }
 
     /// <summary>

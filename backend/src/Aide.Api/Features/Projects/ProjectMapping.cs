@@ -49,7 +49,7 @@ internal static class ProjectMapping
     /// <param name="tagPrefix">§4.10: the project's tag prefix.</param>
     public static GitSettingsDto ToDto(
         ProjectGitSettings s, string? branchName, MergeStrategy mergeStrategy, string tagPrefix, bool? appInstalledOnRepo = null, bool canSwitchToApp = false) =>
-        new(
+        new GitSettingsDto(
             s.Provider,
             s.RepoUrl,
             s.DefaultBranch,
@@ -62,7 +62,11 @@ internal static class ProjectMapping
             appInstalledOnRepo,
             canSwitchToApp,
             mergeStrategy,
-            tagPrefix);
+            tagPrefix)
+        {
+            RepoWebUrl = ProjectSettingsRules.RepoWebUrl(s.Provider, s.RepoUrl, s.RepoFullName),
+            ExternalRepoId = s.ExternalRepoId,
+        };
 
     /// <param name="s">The project's LLM settings.</param>
     /// <param name="catalog">The system LLM configuration.</param>

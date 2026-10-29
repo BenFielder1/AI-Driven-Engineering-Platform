@@ -13,6 +13,7 @@ export type GitLabConnection = Schemas['GitLabConnectionDto']
 export type GitLabRepo = Schemas['GitLabRepoDto']
 export type GitLabOwner = Schemas['GitLabOwnerDto']
 export type GitLabPendingLink = Schemas['GitLabPendingLinkDto']
+export type GitLabRepoRefs = Schemas['GitLabRepoRefsDto']
 
 /** SPEC §4.19: the OAuth scopes every GitLab OAuth application registers (FR-130, FR-131). */
 export const GITLAB_OAUTH_SCOPES = ['api', 'write_repository', 'openid', 'profile', 'email'] as const
@@ -26,6 +27,7 @@ export const gitlabKeys = {
   instances: () => [...connectionKeys.all, 'gitlab', 'instances'] as const,
   repos: (connectionId: string, search: string) => [...gitlabKeys.all, connectionId, 'repos', search] as const,
   owners: (connectionId: string) => [...gitlabKeys.all, connectionId, 'owners'] as const,
+  refs: (connectionId: string, repoId: string) => [...gitlabKeys.all, connectionId, 'refs', repoId] as const,
   pendingLink: () => [...authKeys.all, 'gitlab-link'] as const,
 }
 
@@ -283,6 +285,24 @@ export function useGitLabOwners(connectionId: string, enabled = true) {
     queryFn: async ({ signal }) =>
       unwrap(await api.GET('/api/me/git/gitlab/owners', { params: { query: { connectionId } }, signal })),
     enabled: enabled && connectionId !== '',
+  })
+}
+
+/**
+ * FR-141, FR-86: a picked project's default branch, whether it is empty, its Releases and semver tags, and the import's
+ * suggestion (`preselectedTag`, `suggestedDevelopmentVersion`). Idle until both ids are known.
+ */
+export function useGitLabRepoRefs(connectionId: string, repoId: string) {
+  return useQuery({
+    queryKey: gitlabKeys.refs(connectionId, repoId),
+    queryFn: async ({ signal }) =>
+      unwrap(
+        await api.GET('/api/me/git/gitlab/repos/{repoId}/refs', {
+          params: { path: { repoId }, query: { connectionId } },
+          signal,
+        }),
+      ),
+    enabled: connectionId !== '' && repoId !== '',
   })
 }
 

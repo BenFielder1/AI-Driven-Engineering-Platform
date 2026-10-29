@@ -18,6 +18,7 @@ import { GitHubErrorAlert, GitHubLink } from '../../github/github-error-alert'
 import { gitProviderLabels, mergeStrategyLabels } from '../labels'
 import { useTestGitConnection, useUpdateGitSettings, type GitSettings, type GitTestResult } from '../projects-api'
 import { checkBranch, checkRepoUrl, checkSecret, limits } from '../schemas'
+import { BindingAlert, BoundHostRows, isBoundHost, RebindGitLab } from './git-binding'
 import { ReleaseSettingsForm } from './release-settings-form'
 import { SecretField, type SecretAction } from './secret-field'
 
@@ -66,7 +67,10 @@ function Row({ term, children }: { term: string; children: ReactNode }) {
   )
 }
 
-/** FR-83: which mode is in use, the repository, App access and the PAT flag (never a token). */
+/**
+ * FR-83: which mode is in use, the repository, App access and the PAT flag (never a token). FR-136: for GitLab and
+ * Bitbucket, the host instance, the repository link and the binding.
+ */
 function GitModeSummary({ git }: { git: GitSettings }) {
   const repo = git.mode === 'github_app' ? git.repoFullName : git.mode === 'github_pat' ? git.repoUrl : null
   return (
@@ -78,9 +82,13 @@ function GitModeSummary({ git }: { git: GitSettings }) {
         <Row term="Mode">
           <span data-testid="git-mode">{gitProviderLabels[git.mode]}</span>
         </Row>
-        <Row term="Repository">
-          {git.mode === 'local' ? 'AIDE-managed local repository' : (repo ?? 'Not set')}
-        </Row>
+        {isBoundHost(git) ? (
+          <BoundHostRows git={git} />
+        ) : (
+          <Row term="Repository">
+            {git.mode === 'local' ? 'AIDE-managed local repository' : (repo ?? 'Not set')}
+          </Row>
+        )}
         {git.mode === 'github_app' && (
           <Row term="GitHub App">
             <StatusBadge tone="success">Installed on the repository</StatusBadge>
@@ -183,7 +191,9 @@ function SwitchToApp({ projectId, git }: { projectId: string; git: GitSettings }
 export function GitTab({ projectId, git }: { projectId: string; git: GitSettings }) {
   return (
     <div className="flex max-w-2xl flex-col gap-8">
+      {isBoundHost(git) && <BindingAlert git={git} />}
       <GitModeSummary git={git} />
+      <RebindGitLab projectId={projectId} git={git} />
       <SwitchToApp projectId={projectId} git={git} />
       {/* Remount when the mode changes (Switch to GitHub App), so the form starts from the saved settings. */}
       <GitForm key={git.mode} projectId={projectId} git={git} />
@@ -209,7 +219,7 @@ function GitForm({ projectId, git }: { projectId: string; git: GitSettings }) {
 
   const provider = useWatch({ control, name: 'provider' })
   const isApp = git.mode === 'github_app'
-  /** GitLab/Bitbucket projects (FR-136) keep their host here; their binding and Rebind come with M27/M28 settings. */
+  /** GitLab/Bitbucket projects (FR-136) keep their host here; their binding and Rebind are above the form. */
   const hostMode = git.mode === 'gitlab' || git.mode === 'bitbucket' ? git.mode : null
 
   const onSubmit = handleSubmit((v) => {
