@@ -86,7 +86,7 @@ public sealed class GitHubAppTests(AideApiFactory factory)
         Assert.Equal("http://localhost:8080/api/admin/integrations/github/callback", manifest.RedirectUrl);
         Assert.False(manifest.Public);
         Assert.Equal(
-            ["administration=write", "checks=read", "contents=write", "emails=read", "metadata=read", "pull_requests=write", "statuses=read", "workflows=write"],
+            ["administration=write", "checks=read", "contents=write", "emails=read", "metadata=read", "pages=write", "pull_requests=write", "statuses=read", "workflows=write"],
             manifest.DefaultPermissions.Select(p => $"{p.Key}={p.Value}").Order(StringComparer.Ordinal));
         Assert.Equal($"https://github.com/settings/apps/new?state={Uri.EscapeDataString(started.State)}", started.PostUrl);
         Assert.True(started.State.Length <= AdminGitHubLimits.StateMaxLength);

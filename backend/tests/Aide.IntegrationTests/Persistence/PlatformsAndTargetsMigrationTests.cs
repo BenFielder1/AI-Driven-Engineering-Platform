@@ -176,8 +176,8 @@ public sealed class PlatformsAndTargetsMigrationTests(AideApiFactory factory)
                ('01990000-0000-7000-8000-000000000363', '01990000-0000-7000-8000-0000000003a1', 'NEXT_PUBLICITY', '{production}', 'c3', false, @t0);
         INSERT INTO release_versions (id, project_id, version, status, request, created_at)
         VALUES ('01990000-0000-7000-8000-0000000003b1', '01990000-0000-7000-8000-0000000003a1', '0.1.0', 'released', 'r', @t0);
-        INSERT INTO releases (id, project_id, release_version_id, checkpoint, tag, status, created_at)
-        VALUES ('01990000-0000-7000-8000-0000000003d1', '01990000-0000-7000-8000-0000000003a1', '01990000-0000-7000-8000-0000000003b1', 1, 'v0.1.0', 'succeeded', @t0);
+        INSERT INTO releases (id, project_id, release_version_id, checkpoint, tag, status, conflicting_files, created_at)
+        VALUES ('01990000-0000-7000-8000-0000000003d1', '01990000-0000-7000-8000-0000000003a1', '01990000-0000-7000-8000-0000000003b1', 1, 'v0.1.0', 'succeeded', '{}', @t0);
         INSERT INTO deployments (id, project_id, release_version_id, release_id, provider, target, provider_deployment_id, git_ref, git_sha,
                                  status, trigger, promoted_from_deployment_id, created_at, updated_at)
         VALUES ('01990000-0000-7000-8000-0000000003f1', '01990000-0000-7000-8000-0000000003a1', '01990000-0000-7000-8000-0000000003b1',
