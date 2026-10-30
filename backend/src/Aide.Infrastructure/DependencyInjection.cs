@@ -212,15 +212,18 @@ public static class DependencyInjection
         // Deployments (FR-87–FR-91, §4.15, D-V2-10): Vercel's REST API on the fixed host api.vercel.com (§8: never
         // configurable, so no SSRF), the deterministic Fake (Deployments:Provider=Fake) and the env write limiter.
         services.AddOptions<DeploymentOptions>().BindConfiguration(DeploymentOptions.SectionName);
-        services.AddHttpClient(VercelDeploymentProvider.HttpClientName, client =>
+        services.AddHttpClient(VercelApiClient.HttpClientName, client =>
         {
-            client.BaseAddress = new Uri(VercelDeploymentProvider.ApiBaseUrl);
+            client.BaseAddress = new Uri(VercelApiClient.ApiBaseUrl);
             client.Timeout = TimeSpan.FromSeconds(20);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
         });
         services.AddSingleton<VercelEnvWriteLimiter>();
+        // §4.20: one provider per platform (Vercel and GitHub Pages real; the others Fake-only until their slices).
+        services.AddSingleton<VercelApiClient>();
+        services.AddSingleton<FakeVercelClient>();
         services.AddSingleton<VercelDeploymentProvider>();
-        services.AddSingleton<FakeDeploymentProvider>();
+        services.AddSingleton<GitHubPagesDeploymentProvider>();
         services.AddSingleton<IDeploymentProviderResolver, DeploymentProviderResolver>();
 
         // Platform connections (FR-142, §4.20, §4.21): each platform's REST or GraphQL API on its fixed host (§8: never

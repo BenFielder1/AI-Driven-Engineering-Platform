@@ -142,7 +142,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, id, preview.Id)).Id);
 
         var failed = await DeploymentHarness.DeploymentAsync(app, preview.Id);
-        Assert.Equal((DeploymentStatus.Error, ErrorCodes.VercelError), (failed.Status, failed.ErrorCode));
+        Assert.Equal((DeploymentStatus.Error, ErrorCodes.PlatformError), (failed.Status, failed.ErrorCode));
         Assert.Contains("Type error", failed.BuildLogTail, StringComparison.Ordinal);
         Assert.Empty(await LifecycleSeed.EventsAsync(app, id, EventTypes.DeploymentFailed)); // previews don't notify Owners
 
@@ -290,7 +290,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, project.Id, deployment.Id)).Id);
 
         var failed = await DeploymentHarness.DeploymentAsync(app, deployment.Id);
-        Assert.Equal((DeploymentStatus.Error, ErrorCodes.VercelError, "https://todo-git-aide.vercel.app", "dpl_1"), (failed.Status, failed.ErrorCode, failed.Url, failed.ProviderDeploymentId));
+        Assert.Equal((DeploymentStatus.Error, ErrorCodes.PlatformError, "https://todo-git-aide.vercel.app", "dpl_1"), (failed.Status, failed.ErrorCode, failed.Url, failed.ProviderDeploymentId));
         Assert.StartsWith("Running \"npm run build\"\nFailed to compile.\nType error: Type 'number' is not assignable to type 'string'.\n", failed.BuildLogTail, StringComparison.Ordinal);
         Assert.DoesNotContain("build-secret-0123456789", failed.BuildLogTail, StringComparison.Ordinal);
         var create = JsonDocument.Parse(Assert.Single(vercel.Requests, r => r.Method == "POST" && r.Path == "/v13/deployments").Body).RootElement;

@@ -152,18 +152,20 @@ function repoVcsOfMode(mode: Schemas['GitProvider'] | undefined): string | null 
   return !mode || mode === 'local' ? null : mode === 'gitlab' ? 'vcs-gitlab' : mode === 'bitbucket' ? 'vcs-bitbucket' : 'vcs-github'
 }
 
-/** FR-88: the stored deployment settings; `present` on required env and `canBind` are derived per request. */
+/**
+ * FR-144–FR-146: Settings → Deployment as stored. `canBind` on the targets is derived per request; the setup job of a
+ * target advances one step per GET (see mocks/handlers/deployments.ts).
+ */
 export interface StoredDeploymentSettings {
-  provider: Schemas['DeploymentProvider'] | null
-  /** The preset supports Vercel (an Owner can opt in otherwise by setting a provider). */
-  supported: boolean
-  binding: Schemas['DeploymentBindingDto'] | null
-  vercelProject: Schemas['VercelProjectDto'] | null
-  rootDirectory: string
-  framework: string
-  requiredEnv: Omit<Schemas['RequiredEnvVarDto'], 'present'>[]
-  gitConnected: boolean | null
-  installUrl: string | null
+  targets: Schemas['DeploymentTargetDto'][]
+  databases: Schemas['DeploymentDatabaseDto'][]
+  publicPrefix: string | null
+  originModel: Schemas['DeploymentOriginModelDto']
+  /** Pack-declared variables: listed as `required` rows while no user value exists. */
+  required: Pick<Schemas['DeploymentEnvVarDto'], 'key' | 'appliesTo' | 'environments' | 'sensitive' | 'public' | 'description'>[]
+  /** AIDE-written rows (§4.22): read-only. */
+  derived: Schemas['DeploymentEnvVarDto'][]
+  fakeMode: boolean
 }
 
 /** An env var with its plaintext value (the mock's stand-in for the encrypted column). */
@@ -571,7 +573,7 @@ export function projectDto(project: StoredProject, userId: string): Project {
     myRole: roleOf(p, userId),
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
-    deploymentsEnabled: p.deployment?.provider != null,
+    deploymentsEnabled: p.deployment?.targets.some((t) => t.resourceId !== null || t.status !== 'not_configured') ?? false,
     stackPacks: p.stackPacks,
   }
 }

@@ -47,7 +47,7 @@ public sealed class Fr93CommandTests : IDisposable
     private const string FailedPreview = """
         {"id":"0199f2a0-7777-7000-8000-000000000002","target":"preview","provider":"vercel","status":"error","url":null,
          "inspectorUrl":null,"gitRef":"aide/todo-app-1.3.0","gitSha":"fedcba9876543210fedcba9876543210fedcba98","releaseVersionId":"0199f2a0-6666-7000-8000-000000000001",
-         "releaseVersion":"1.3.0","releaseId":null,"errorCode":"VERCEL_ERROR","errorMessage":"Build failed","buildLogTail":"error TS2322","trigger":"auto",
+         "releaseVersion":"1.3.0","releaseId":null,"errorCode":"PLATFORM_ERROR","errorMessage":"Build failed","buildLogTail":"error TS2322","trigger":"auto",
          "triggeredBy":null,"promotedFromDeploymentId":null,"createdAt":"2026-10-17T11:00:00Z","readyAt":null}
         """;
 
@@ -214,7 +214,7 @@ public sealed class Fr93CommandTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, run.ExitCode);
         Assert.Equal($"/api/projects/{Samples.ProjectId}/deployments?target=production", Assert.Single(_cli.Requests).Uri.PathAndQuery);
-        Assert.Contains("error (VERCEL_ERROR)", run.Out, StringComparison.Ordinal);
+        Assert.Contains("error (PLATFORM_ERROR)", run.Out, StringComparison.Ordinal);
         Assert.Contains("fedcba9", run.Out, StringComparison.Ordinal);
         Assert.Contains("https://todo.vercel.app", run.Out, StringComparison.Ordinal);
         Assert.Contains("Ada", run.Out, StringComparison.Ordinal);

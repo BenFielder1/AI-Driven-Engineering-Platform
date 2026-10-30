@@ -494,6 +494,10 @@ const deploymentFailureWords: Readonly<Record<string, string>> = {
   CONNECTION_INVALID: "Vercel rejected the connection's token",
   VERCEL_GIT_NOT_CONNECTED: "Vercel can't access the repository",
   VERCEL_PLAN_LIMIT: "the Vercel plan doesn't allow it",
+  // D-V4-4: the provider-neutral codes that replaced the VERCEL_* ones (FR-144).
+  PLATFORM_ERROR: "the platform reported the build as failed",
+  PLATFORM_GIT_NOT_CONNECTED: "the platform can't see the repository",
+  PLATFORM_PLAN_LIMIT: "the platform plan doesn't allow it",
 };
 
 /** §4.14, FR-92: why GitHub stopped accepting a user's connection (`reason` of a GitHub `CONNECTION_INVALID`). */

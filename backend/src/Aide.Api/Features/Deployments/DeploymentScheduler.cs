@@ -23,7 +23,8 @@ public sealed record NewDeployment(
     string GitRef,
     string GitSha,
     DeploymentTrigger Trigger,
-    Guid? TriggeredBy);
+    Guid? TriggeredBy,
+    DeploymentComponent Component = DeploymentComponent.Frontend);
 
 /// <summary>The deployment audit events (FR-90, FR-91): payloads carry ids, state and URL, never env values or logs.</summary>
 public static class DeploymentEvents
@@ -108,19 +109,21 @@ public sealed class DeploymentScheduler(AideDbContext db, JobEnqueuer jobs, IDep
     public async Task<Deployment> AddAsync(NewDeployment spec, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(spec);
-        // FR-151: the row names the target (v2 flow: the project's frontend target) and its component.
-        var targetId = await db.DeploymentTargets.AsNoTracking()
-            .Where(t => t.ProjectId == spec.ProjectId && t.Component == DeploymentComponent.Frontend)
-            .Select(t => (Guid?)t.Id)
+        // FR-151: the row names the target (v2 flow: the project's frontend target), its component and provider (fake in
+        // Fake mode).
+        var target = await db.DeploymentTargets.AsNoTracking()
+            .Where(t => t.ProjectId == spec.ProjectId && t.Component == spec.Component)
+            .Select(t => new { t.Id, t.Provider })
             .FirstOrDefaultAsync(cancellationToken);
+        var provider = target is null ? DeploymentProvider.Fake : providers.ForPlatform(target.Provider).Kind;
         var deployment = new Deployment
         {
             ProjectId = spec.ProjectId,
             ReleaseVersionId = spec.ReleaseVersionId,
             ReleaseId = spec.ReleaseId,
-            Provider = providers.Current.Kind,
-            TargetId = targetId,
-            Component = DeploymentComponent.Frontend,
+            Provider = provider,
+            TargetId = target?.Id,
+            Component = spec.Component,
             Kind = DeploymentTargetRules.KindOf(spec.Trigger),
             Environment = spec.Target,
             ProviderDeploymentId = string.Empty,
@@ -147,7 +150,8 @@ public sealed class DeploymentScheduler(AideDbContext db, JobEnqueuer jobs, IDep
     /// <summary>FR-90: the automatic preview of the PR head after execution, when deployment is set up; else <c>null</c>.</summary>
     public async Task<Deployment?> AutoPreviewAsync(Guid projectId, Guid releaseVersionId, string branch, string sha, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        if (!await ConfiguredAsync(db, projectId, cancellationToken))
+        // FR-147: hosts without previews (GitHub Pages) are skipped; review doesn't wait for them.
+        if (!await ConfiguredAsync(db, projectId, cancellationToken) || !await HasPreviewsAsync(projectId, cancellationToken))
         {
             return null;
         }
@@ -186,14 +190,28 @@ public sealed class DeploymentScheduler(AideDbContext db, JobEnqueuer jobs, IDep
             cancellationToken);
     }
 
-    /// <summary>FR-88: the project can deploy: its frontend target has a bound connection and a linked Vercel project.</summary>
+    /// <summary>
+    /// FR-88, FR-144: the project can deploy: its frontend target has a resource and a bound connection (GitHub Pages needs
+    /// none, FR-143).
+    /// </summary>
     public static Task<bool> ConfiguredAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         return db.DeploymentTargets.AsNoTracking()
             .AnyAsync(
-                t => t.ProjectId == projectId && t.Component == DeploymentComponent.Frontend && t.ConnectionId != null && t.ResourceId != null,
+                t => t.ProjectId == projectId && t.Component == DeploymentComponent.Frontend && t.ResourceId != null
+                    && (t.ConnectionId != null || t.Provider == DeploymentProvider.GithubPages),
                 cancellationToken);
+    }
+
+    /// <summary>§4.20: whether the frontend target's provider has preview deployments.</summary>
+    private async Task<bool> HasPreviewsAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var provider = await db.DeploymentTargets.AsNoTracking()
+            .Where(t => t.ProjectId == projectId && t.Component == DeploymentComponent.Frontend)
+            .Select(t => (DeploymentProvider?)t.Provider)
+            .FirstOrDefaultAsync(cancellationToken);
+        return provider is { } p && DeploymentPlatforms.Capabilities(p).Previews;
     }
 
     public static Task<string?> VersionTextAsync(AideDbContext db, Guid releaseVersionId, CancellationToken cancellationToken)

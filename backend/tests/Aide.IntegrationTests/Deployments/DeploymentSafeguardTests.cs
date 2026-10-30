@@ -28,33 +28,41 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task FR88_A_co_Owner_cant_relink_with_the_binding_Owners_connection_but_can_with_their_own()
+    public async Task FR144_A_co_Owner_cant_set_up_a_target_with_the_binding_Owners_connection_but_can_with_their_own()
     {
         var vercel = new FakeGitHubApi()
             .On(HttpMethod.Get, "/v9/projects/prj_other", HttpStatusCode.OK, """{"id":"prj_other","name":"other","link":{"type":"github","org":"acme","repo":"todo"}}""");
         var app = DeploymentHarness.Vercel(factory, vercel);
         using var fixture = await ProjectApi.FixtureAsync(app, git: PatGit);
         var id = fixture.Project.Id;
+        await DeploymentHarness.SetStackAsync(fixture.Owner.Client, id, DeploymentHarness.VercelStack);
         var ana = fixture.Owner.User!.Id;
-        await DeploymentHarness.BindAsync(app, id, await DeploymentHarness.SeedConnectionAsync(app, ana), ana);
+        var anas = await DeploymentHarness.SeedConnectionAsync(app, ana);
+        await DeploymentHarness.BindAsync(app, id, anas, ana);
         var ben = fixture.Outsider;
         await ProjectApi.AddMemberInDbAsync(app, id, ben.User!.Id, ProjectRole.Owner);
-        var path = $"{fixture.Path}/settings/deployment";
 
-        // With Ana's bound connection: refused, and Vercel is never called with her token.
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(ben.Client, path, new { provider = "vercel", vercelProjectId = "prj_other" }), HttpStatusCode.Forbidden, ErrorCodes.CredentialNotOwner);
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(ben.Client, path, new { provider = "vercel", create = new { name = "todo2" } }), HttpStatusCode.Forbidden, ErrorCodes.CredentialNotOwner);
+        // With Ana's connection: refused, nothing queued, and Vercel is never called with her token.
+        await Problems.AssertAsync(
+            await DeploymentHarness.PutTargetAsync(ben.Client, id, "frontend", new { provider = "vercel", connectionId = anas, link = new { resourceId = "prj_other" } }),
+            HttpStatusCode.Forbidden,
+            ErrorCodes.CredentialNotOwner);
+        Assert.False(await ProjectApi.WithDbAsync(app, db => db.Jobs.AnyAsync(j => j.ProjectId == id && j.Type == JobTypes.DeploymentSetup, Ct)));
         Assert.Empty(vercel.Requests);
 
         // With his own connection: allowed, and the binding becomes his.
         var bens = await DeploymentHarness.SeedConnectionAsync(app, ben.User!.Id, token: "vcp_bensOwnToken0123");
-        var saved = await ProjectApi.ReadAsync<DeploymentSettingsDto>(await ProjectApi.PatchAsync(ben.Client, path, new { provider = "vercel", connectionId = bens, vercelProjectId = "prj_other" }));
-        Assert.Equal((bens, ben.User!.Id, "prj_other"), (saved.Binding!.ConnectionId, saved.Binding.BoundBy.Id, saved.VercelProject!.Id));
+        await DeploymentHarness.SetUpTargetAsync(app, ben.Client, id, "frontend", new { provider = "vercel", connectionId = bens, link = new { resourceId = "prj_other" } });
+        var target = Assert.Single((await DeploymentHarness.SettingsAsync(ben.Client, id)).Targets);
+        Assert.Equal((bens, ben.User!.Id, "prj_other"), (target.Binding!.ConnectionId, target.Binding.BoundBy.Id, target.ResourceId));
         Assert.All(vercel.Requests, r => Assert.Equal("Bearer vcp_bensOwnToken0123", r.Authorization));
 
-        // Ana (no longer the binder) is now refused in turn; either Owner may still turn deployment off.
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(fixture.Owner.Client, path, new { provider = "vercel", vercelProjectId = "prj_todo" }), HttpStatusCode.Forbidden, ErrorCodes.CredentialNotOwner);
-        Assert.Equal(HttpStatusCode.OK, (await ProjectApi.PatchAsync(fixture.Owner.Client, path, new { provider = (string?)null })).StatusCode);
+        // Ana (no longer the binder) can't reuse Ben's connection; either Owner may clear the target.
+        await Problems.AssertAsync(
+            await DeploymentHarness.PutTargetAsync(fixture.Owner.Client, id, "frontend", new { provider = "vercel", connectionId = bens, link = new { resourceId = "prj_todo" } }),
+            HttpStatusCode.Forbidden,
+            ErrorCodes.CredentialNotOwner);
+        Assert.Equal(HttpStatusCode.NoContent, (await fixture.Owner.Client.DeleteAsync(new Uri(DeploymentHarness.TargetPath(id, "frontend"), UriKind.Relative), Ct)).StatusCode);
     }
 
     [Fact]

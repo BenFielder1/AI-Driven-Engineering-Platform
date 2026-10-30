@@ -19,7 +19,7 @@ public sealed class VercelConnectionValidator(IDeploymentProviderResolver provid
     public async Task<PlatformTokenCheck> ValidateAsync(PlatformCredential credential, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credential);
-        var account = await Call(() => providers.Current.ValidateTokenAsync(credential.Token, cancellationToken));
+        var account = await Call(() => providers.Vercel.ValidateTokenAsync(credential.Token, cancellationToken));
         return new PlatformTokenCheck(
             account.UserId,
             account.Username,
@@ -38,7 +38,7 @@ public sealed class VercelConnectionValidator(IDeploymentProviderResolver provid
             return [new PlatformAccountRef(teamId, credential.Metadata.TeamSlug ?? teamId, credential.Metadata.TeamSlug, "team")];
         }
 
-        var teams = await Call(() => providers.Current.ListTeamsAsync(new DeploymentAuth(credential.Token, null), cancellationToken));
+        var teams = await Call(() => providers.Vercel.ListTeamsAsync(new DeploymentAuth(credential.Token, null), cancellationToken));
         return [.. teams.Select(t => new PlatformAccountRef(t.Id, t.Name, t.Slug, "team"))];
     }
 
@@ -48,7 +48,7 @@ public sealed class VercelConnectionValidator(IDeploymentProviderResolver provid
         ArgumentNullException.ThrowIfNull(credential);
         // The account id of a Vercel connection is the user; another id is a team.
         var team = accountId is null || accountId == credential.AccountId ? credential.Metadata.TeamId : accountId;
-        var projects = await Call(() => providers.Current.ListProjectsAsync(new DeploymentAuth(credential.Token, team), cancellationToken));
+        var projects = await Call(() => providers.Vercel.ListProjectsAsync(new DeploymentAuth(credential.Token, team), cancellationToken));
         return [.. projects.Select(p => new PlatformResource(p.Id, p.Name, null, p.LinkedRepo))];
     }
 

@@ -229,7 +229,7 @@ describe('/connections → platform connections (FR-142)', () => {
     await user.click(within(confirm).getByRole('button', { name: 'Delete connection' }))
 
     expect(await within(providerRegion('Vercel')).findByText('Not connected')).toBeInTheDocument()
-    expect(project.deployment?.binding).toBeNull()
+    expect(project.deployment?.targets[0]?.binding).toBeNull()
     expect(platformDb.connections).toHaveLength(0)
   })
 

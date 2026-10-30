@@ -84,10 +84,10 @@ describe('Wizard → Deployment step (FR-88)', () => {
       connectionId,
       create: { name: 'inventory-tracker', rootDirectory: 'web' },
     })
-    expect(projectsDb.projects[0]?.deployment?.provider).toBe('vercel')
+    expect(projectsDb.projects[0]?.deployment?.targets[0]?.provider).toBe('vercel')
   })
 
-  it('FR88_wizard_git_not_connected: VERCEL_GIT_NOT_CONNECTED returns to the Deployment step with Vercel\'s install link', async () => {
+  it('FR88_wizard_git_not_connected: PLATFORM_GIT_NOT_CONNECTED (was VERCEL_GIT_NOT_CONNECTED) returns to the Deployment step with Vercel\'s install link', async () => {
     vercelDb.gitNotConnected = true
     const user = await toDeployment('github', (me) => {
       seedVercelConnection({ userId: me, label: 'Personal', token: 'vcp_q1w2' })
@@ -101,7 +101,7 @@ describe('Wizard → Deployment step (FR-88)', () => {
     await user.click(screen.getByRole('button', { name: 'Create project' }))
 
     expect(await stepHeading(/Step 7 of 8: Deployment/)).toBeInTheDocument()
-    expect(await screen.findByRole('link', { name: /Install Vercel's GitHub App/ })).toHaveAttribute('href', VERCEL_INSTALL_URL)
+    expect(await screen.findByRole('link', { name: /Connect the repository in Vercel/ })).toHaveAttribute('href', VERCEL_INSTALL_URL)
     expect(screen.getByText(/We couldn't create the project/)).toBeInTheDocument()
     expect(projectsDb.projects).toHaveLength(0)
   })
@@ -109,8 +109,9 @@ describe('Wizard → Deployment step (FR-88)', () => {
   it('FR88_wizard_no_connections: Vercel without a token points to Connections', async () => {
     const user = await toDeployment('github')
     await user.click(screen.getByRole('radio', { name: /^Vercel/ }))
-    expect(await screen.findByText('Add a Vercel token first')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Connections → Vercel' })).toHaveAttribute('href', '/connections')
+    const alert = (await screen.findByText('Add a Vercel token first')).closest('div')
+    expect(alert).not.toBeNull()
+    expect(within(alert as HTMLElement).getByRole('link', { name: 'Connections' })).toHaveAttribute('href', '/connections')
   })
 
   it('FR88_wizard_local_server_decides: a Local project may pick Vercel; the server\'s VALIDATION returns to the step', async () => {

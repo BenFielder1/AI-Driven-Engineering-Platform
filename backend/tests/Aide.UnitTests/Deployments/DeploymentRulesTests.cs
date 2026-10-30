@@ -124,8 +124,8 @@ public class DeploymentRulesTests
     public void FR88_CREDENTIAL_NOT_OWNER_is_403_and_the_Vercel_conflicts_are_409()
     {
         Assert.Equal(403, ErrorCodes.StatusCodeFor(ErrorCodes.CredentialNotOwner));
-        Assert.Equal(409, ErrorCodes.StatusCodeFor(ErrorCodes.VercelGitNotConnected));
-        Assert.Equal(409, ErrorCodes.StatusCodeFor(ErrorCodes.VercelPlanLimit));
+        Assert.Equal(409, ErrorCodes.StatusCodeFor(ErrorCodes.PlatformGitNotConnected));
+        Assert.Equal(409, ErrorCodes.StatusCodeFor(ErrorCodes.PlatformPlanLimit));
         Assert.Equal(502, ErrorCodes.StatusCodeFor(ErrorCodes.UpstreamError));
     }
 
@@ -169,7 +169,7 @@ public class DeploymentRulesTests
     {
         Assert.Equal(["queued", "building", "ready", "error", "canceled"], EnumStrings.Values<DeploymentStatus>());
         Assert.Equal(["preview", "production"], EnumStrings.Values<DeploymentEnvironment>());
-        Assert.Equal(["vercel", "fake"], EnumStrings.Values<DeploymentProvider>());
+        Assert.Equal(["vercel", "fake", "netlify", "cloudflare", "render", "railway", "github_pages"], EnumStrings.Values<DeploymentProvider>());
         Assert.Equal(["auto", "manual", "promote", "redeploy"], EnumStrings.Values<DeploymentTrigger>());
     }
 
@@ -198,9 +198,10 @@ public class DeploymentRulesTests
     [Fact]
     public void FR90_S4_15_Deployment_failure_codes_are_recorded_not_returned()
     {
-        Assert.Equal(("DEPLOYMENT_TIMEOUT", "VERCEL_ERROR"), (ErrorCodes.DeploymentTimeout, ErrorCodes.VercelError));
+        // D-V4-4: VERCEL_ERROR is PLATFORM_ERROR, recorded on deployments and (§6) a 502 when an endpoint's platform call fails.
+        Assert.Equal(("DEPLOYMENT_TIMEOUT", "PLATFORM_ERROR"), (ErrorCodes.DeploymentTimeout, ErrorCodes.PlatformError));
         Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.DeploymentTimeout));
-        Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.VercelError));
+        Assert.Equal(502, ErrorCodes.StatusCodeFor(ErrorCodes.PlatformError));
         Assert.Equal(409, ErrorCodes.StatusCodeFor(ErrorCodes.DeploymentNotConfigured));
         Assert.Equal(("DEPLOYMENT_CREATED", "DEPLOYMENT_UPDATED"), (EventTypes.DeploymentCreated, EventTypes.DeploymentUpdated));
     }

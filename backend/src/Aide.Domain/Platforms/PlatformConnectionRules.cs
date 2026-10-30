@@ -134,12 +134,12 @@ public static partial class PlatformConnectionRules
     /// FR-142 for Vercel (v2's classification kept): a rejected token (401, or 403 with <c>invalidToken</c>) is rejected,
     /// another 403 is missing permissions, 429 rate limited, 404 not found, anything else upstream.
     /// </summary>
-    public static PlatformFailure FromVercel(Deployments.VercelFailure failure) => failure switch
+    public static PlatformFailure FromVercel(Deployments.DeploymentFailure failure) => failure switch
     {
-        Deployments.VercelFailure.CredentialRejected => PlatformFailure.Rejected,
-        Deployments.VercelFailure.Forbidden => PlatformFailure.MissingPermissions,
-        Deployments.VercelFailure.RateLimited => PlatformFailure.RateLimited,
-        Deployments.VercelFailure.NotFound => PlatformFailure.NotFound,
+        Deployments.DeploymentFailure.CredentialRejected => PlatformFailure.Rejected,
+        Deployments.DeploymentFailure.Forbidden => PlatformFailure.MissingPermissions,
+        Deployments.DeploymentFailure.RateLimited => PlatformFailure.RateLimited,
+        Deployments.DeploymentFailure.NotFound => PlatformFailure.NotFound,
         _ => PlatformFailure.Upstream,
     };
 

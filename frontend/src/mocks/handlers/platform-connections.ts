@@ -97,7 +97,7 @@ export function platformDto(c: StoredPlatformConnection): PlatformConnection {
     lastValidatedAt: c.lastValidatedAt,
     createdAt: c.createdAt,
     boundProjects: projectsDb.projects
-      .filter((p) => p.deployment?.binding?.connectionId === c.id)
+      .filter((p) => p.deployment?.targets.some((t) => t.binding?.connectionId === c.id))
       .map((p) => ({ id: p.id, name: p.name })),
   }
 }
@@ -273,8 +273,10 @@ export const platformConnectionHandlers = [
       return notFound()
     }
     for (const p of projectsDb.projects) {
-      if (p.deployment?.binding?.connectionId === c.id) {
-        p.deployment.binding = null
+      for (const t of p.deployment?.targets ?? []) {
+        if (t.binding?.connectionId === c.id) {
+          t.binding = null
+        }
       }
     }
     platformDb.connections = platformDb.connections.filter((x) => x !== c)

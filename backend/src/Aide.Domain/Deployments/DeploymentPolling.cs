@@ -144,11 +144,11 @@ public static class ProductionDeploymentRules
     }
 
     /// <summary>
-    /// Only the automatic deployment of a release adopts (redeploys always build anew), and only with Vercel: the Fake
+    /// Only the automatic deployment of a release adopts (redeploys always build anew), and only on a platform that deploys the default branch by itself (§4.20; FR-149): the Fake
     /// provider has no Git integration that deploys by itself.
     /// </summary>
     public static bool Adopts(DeploymentEnvironment target, DeploymentTrigger trigger, DeploymentProvider provider) =>
-        target == DeploymentEnvironment.Production && trigger == DeploymentTrigger.Auto && provider == DeploymentProvider.Vercel;
+        target == DeploymentEnvironment.Production && trigger == DeploymentTrigger.Auto && DeploymentPlatforms.AutoDeploysDefaultBranch(provider);
 }
 
 /// <summary>Whether review waits for the preview, or goes on (and whether it gave up waiting).</summary>
@@ -206,10 +206,10 @@ public static class PreviewReviewRules
     }
 }
 
-/// <summary>A failure as Vercel described it (classified for FR-87/FR-88 error codes).</summary>
-public enum VercelFailure
+/// <summary>A failure as a deployment platform described it (classified for the FR-144 error codes, §4.20).</summary>
+public enum DeploymentFailure
 {
-    /// <summary>Vercel couldn't be reached, timed out, or answered 5xx or something unreadable.</summary>
+    /// <summary>The platform couldn't be reached, timed out, or answered 5xx or something unreadable.</summary>
     Upstream = 0,
 
     /// <summary>The token was rejected (401, or 403 flagged <c>invalidToken</c>): the connection becomes <c>invalid</c>.</summary>
@@ -220,17 +220,24 @@ public enum VercelFailure
 
     NotFound = 3,
 
-    /// <summary>FR-88: Vercel's GitHub App can't access the repository (<c>VERCEL_GIT_NOT_CONNECTED</c>).</summary>
+    /// <summary>FR-144: the platform's Git integration can't access the repository (<c>PLATFORM_GIT_NOT_CONNECTED</c>).</summary>
     GitNotConnected = 4,
 
-    /// <summary>FR-88: the plan doesn't allow it, e.g. Hobby with an organisation repository (<c>VERCEL_PLAN_LIMIT</c>).</summary>
+    /// <summary>FR-144: the plan doesn't allow it, e.g. Vercel Hobby with an organisation repository (<c>PLATFORM_PLAN_LIMIT</c>).</summary>
     PlanLimit = 5,
 
-    /// <summary>Vercel's rate limit; retry after its reset.</summary>
+    /// <summary>The platform's rate limit; retry after its reset.</summary>
     RateLimited = 6,
 
     /// <summary>Any other refusal (400, 409, 422 …).</summary>
     Rejected = 7,
+
+    /// <summary>FR-143: the credentials lack a permission the operation needs, e.g. the GitHub App's Pages permission
+    /// (<c>PLATFORM_PERMISSION_MISSING</c>).</summary>
+    PermissionMissing = 8,
+
+    /// <summary>§4.20: AIDE can't call this provider for real yet (only its Fake mode works); <c>PLATFORM_ERROR</c>.</summary>
+    NotSupported = 9,
 }
 
 /// <summary>
@@ -254,21 +261,21 @@ public static class VercelErrorRules
         "don't have access to the repository", "do not have access to the repository",
     ];
 
-    public static VercelFailure Classify(int? status, string? code, string? message, bool invalidToken)
+    public static DeploymentFailure Classify(int? status, string? code, string? message, bool invalidToken)
     {
         if (status == 429)
         {
-            return VercelFailure.RateLimited;
+            return DeploymentFailure.RateLimited;
         }
 
         if (status == 401 || invalidToken)
         {
-            return VercelFailure.CredentialRejected;
+            return DeploymentFailure.CredentialRejected;
         }
 
         if (status is null or >= 500)
         {
-            return VercelFailure.Upstream;
+            return DeploymentFailure.Upstream;
         }
 
         var lowerCode = code?.Trim().ToLowerInvariant() ?? string.Empty;
@@ -276,34 +283,36 @@ public static class VercelErrorRules
         if (lowerMessage.Contains("hobby", StringComparison.Ordinal)
             && (lowerMessage.Contains("organization", StringComparison.Ordinal) || lowerMessage.Contains("organisation", StringComparison.Ordinal) || lowerMessage.Contains(" org", StringComparison.Ordinal)))
         {
-            return VercelFailure.PlanLimit;
+            return DeploymentFailure.PlanLimit;
         }
 
         if (lowerCode is "plan_limit" or "plan_limit_reached")
         {
-            return VercelFailure.PlanLimit;
+            return DeploymentFailure.PlanLimit;
         }
 
         if (GitNotConnectedCodes.Contains(lowerCode) || GitNotConnectedPhrases.Any(p => lowerMessage.Contains(p, StringComparison.Ordinal)))
         {
-            return VercelFailure.GitNotConnected;
+            return DeploymentFailure.GitNotConnected;
         }
 
         return status switch
         {
-            403 => VercelFailure.Forbidden,
-            404 => VercelFailure.NotFound,
-            _ => VercelFailure.Rejected,
+            403 => DeploymentFailure.Forbidden,
+            404 => DeploymentFailure.NotFound,
+            _ => DeploymentFailure.Rejected,
         };
     }
 
-    /// <summary>The API error code for an endpoint answering a Vercel failure (<c>UPSTREAM_ERROR</c> unless specific).</summary>
-    public static string ErrorCodeFor(VercelFailure failure) => failure switch
+    /// <summary>The API error code for an endpoint answering a platform failure (<c>UPSTREAM_ERROR</c> unless specific).</summary>
+    public static string ErrorCodeFor(DeploymentFailure failure) => failure switch
     {
-        VercelFailure.GitNotConnected => ErrorCodes.VercelGitNotConnected,
-        VercelFailure.PlanLimit => ErrorCodes.VercelPlanLimit,
-        VercelFailure.CredentialRejected => ErrorCodes.CredentialInvalid,
-        VercelFailure.NotFound => ErrorCodes.NotFound,
+        DeploymentFailure.GitNotConnected => ErrorCodes.PlatformGitNotConnected,
+        DeploymentFailure.PlanLimit => ErrorCodes.PlatformPlanLimit,
+        DeploymentFailure.PermissionMissing => ErrorCodes.PlatformPermissionMissing,
+        DeploymentFailure.NotSupported => ErrorCodes.PlatformError,
+        DeploymentFailure.CredentialRejected => ErrorCodes.CredentialInvalid,
+        DeploymentFailure.NotFound => ErrorCodes.NotFound,
         _ => ErrorCodes.UpstreamError,
     };
 }
@@ -486,6 +495,26 @@ public static class FakeDeploymentRules
         var short8 = sha.Length >= 8 ? sha[..8] : sha;
         return string.Create(CultureInfo.InvariantCulture, $"https://fake-{short8.ToLowerInvariant()}.vercel.test");
     }
+
+    /// <summary>A file whose presence on the deployed branch makes a Fake backend pre-deploy (migration) fail (§4.20).</summary>
+    public const string FailMigrationMarker = ".aide-fake/fail-migration";
+
+    /// <summary>§4.20: the Fake URL of a component's deployment: <c>https://fake-&lt;sha8&gt;-&lt;component&gt;.&lt;provider&gt;.test</c>.</summary>
+    public static string Url(string sha, DeploymentComponent component, DeploymentProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(sha);
+        var short8 = (sha.Length >= 8 ? sha[..8] : sha).ToLowerInvariant();
+        return string.Create(CultureInfo.InvariantCulture, $"https://fake-{short8}-{component.ToWire()}.{DeploymentPlatforms.HostLabel(provider)}.test");
+    }
+
+    /// <summary>Whether a backend commit with <paramref name="paths"/> fails its Fake pre-deploy migration.</summary>
+    public static bool FailsMigration(IEnumerable<string>? paths) =>
+        paths?.Any(p => string.Equals(p.Replace('\\', '/').TrimStart('/'), FailMigrationMarker, StringComparison.OrdinalIgnoreCase)) ?? false;
+
+    /// <summary>The Fake log of a failed backend pre-deploy.</summary>
+    public const string FailedMigrationLog =
+        "==> Running pre-deploy command\nApplying migration 0002_add_items...\nerror: relation \"items\" already exists\n"
+        + "The Fake deployment provider fails backend pre-deploys of commits containing .aide-fake/fail-migration.\n==> Pre-deploy command failed (exit 1)";
 
     /// <summary>Whether a commit with <paramref name="paths"/> fails the Fake build.</summary>
     public static bool FailsBuild(IEnumerable<string>? paths) =>

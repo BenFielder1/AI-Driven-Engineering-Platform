@@ -39,7 +39,8 @@ async function openRepository({
   const connection = seedGitLabConnection(me.id)
   const seeded = repos.map((path) => seedGitLabRepo(connection.id, { path }))
   await renderRoute('/projects/new')
-  const user = userEvent.setup()
+  // No per-keystroke delay: this wizard walk is long (the full suite runs it under load).
+  const user = userEvent.setup({ delay: null })
   await stepHeading(/Step 1 of 8: Source/)
   if (importing) {
     await user.click(screen.getByRole('radio', { name: 'Import an existing repository' }))
@@ -47,12 +48,16 @@ async function openRepository({
   await next(user)
   if (importing) {
     await stepHeading(/Step 2 of 8: Request/)
-    await user.type(screen.getByLabelText('Project name'), 'Todo app')
-    await user.type(screen.getByLabelText('What should this version deliver?'), 'Add sharing')
+    await user.click(screen.getByLabelText('Project name'))
+    await user.paste('Todo app')
+    await user.click(screen.getByLabelText('What should this version deliver?'))
+    await user.paste('Add sharing')
   } else {
     await stepHeading(/Step 2 of 8: Project idea/)
-    await user.type(screen.getByLabelText('Project name'), 'Todo app')
-    await user.type(screen.getByLabelText('Your idea'), 'A shared todo list.')
+    await user.click(screen.getByLabelText('Project name'))
+    await user.paste('Todo app')
+    await user.click(screen.getByLabelText('Your idea'))
+    await user.paste('A shared todo list.')
   }
   await next(user)
   await stepHeading(/Step 3 of 8: Repository/)
@@ -122,7 +127,7 @@ describe('Wizard → create on GitLab (FR-132, FR-136)', () => {
       defaultBranch: 'main',
     })
     expect(created?.git.binding).toMatchObject({ connectionId: connection.id, login: 'ada', boundBy: { name: 'Ada Lovelace' } })
-  })
+  }, 40_000)
 
   it('FR132_scratch_repo_with_code: a GitLab project with code warns and offers Import instead', async () => {
     const { user } = await openRepository({ repos: ['legacy'] })

@@ -220,11 +220,21 @@ public sealed class Deployment
     }
 }
 
-/// <summary>Deployment provider (§4.15). Wire values: <c>vercel</c>, <c>fake</c> (deterministic, tests and E2E).</summary>
+/// <summary>
+/// Deployment provider (§4.15, §4.20): a target's platform, from the composition's host (<c>deploy-vercel</c> → <c>vercel</c>).
+/// Wire values: <c>vercel</c>, <c>fake</c> (v2's explicit Fake provider; deployments made under
+/// <c>Deployments:Provider=Fake</c> are recorded as <c>fake</c>), <c>netlify</c>, <c>cloudflare</c>, <c>render</c>,
+/// <c>railway</c>, <c>github_pages</c>.
+/// </summary>
 public enum DeploymentProvider
 {
     Vercel = 0,
     Fake = 1,
+    Netlify = 2,
+    Cloudflare = 3,
+    Render = 4,
+    Railway = 5,
+    GithubPages = 6,
 }
 
 /// <summary>Deployment environment (FR-147, FR-149), also a Vercel env target (FR-88). Wire values: <c>preview</c>,
@@ -263,9 +273,11 @@ public enum DeploymentKind
     Promote = 2,
 }
 
-/// <summary>Who wrote an environment variable (FR-145). Wire values: <c>user</c>, <c>derived</c>.</summary>
+/// <summary>Who wrote an environment variable (FR-145). Wire values: <c>user</c>, <c>derived</c>; <c>required</c> is an
+/// inventory row only (a pack's required variable without a value), never stored.</summary>
 public enum DeploymentEnvSource
 {
     User = 0,
     Derived = 1,
+    Required = 2,
 }

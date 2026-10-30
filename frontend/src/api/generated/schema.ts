@@ -1054,7 +1054,7 @@ export interface paths {
         /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and, as history, the retired preset a migrated version was pinned to (FR-129). */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -1261,15 +1261,49 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Settings → Deployment for any member (FR-88): provider, supported, the binding ("connected by <name>", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the stack's required env vars (§4.22) with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not). */
+        /** Settings → Deployment for any member (FR-144–FR-146; D-V4-4 reshaped it): one target card per component the composition hosts (provider, binding with "connected by", resource, root directory, derived build config, URLs, status, setup job progress, capabilities, readiness), database cards (not_configured until M30), the environment inventory (keys only) and the origin model. */
         get: operations["GetDeploymentSettings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Set the deployment provider (vercel, or null to turn deployment off), bind one of the caller's own Vercel connections (connectionId), and link an existing Vercel project (vercelProjectId) or create one linked to the GitHub repo (create {name, rootDirectory}) (Owner, FR-88). A Local Git project can't deploy (400 VALIDATION). */
-        patch: operations["UpdateDeploymentSettings"];
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/targets/{component}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set up the component's target (Owner, FR-143, FR-144): bind one of the caller's own connections of the composition's host and create (create {name, region?, plan?}) or link (link {resourceId}) the platform resource. Answers 202 with the target (configuring); a deployment_setup job does the platform work and its progress is on the target. GitHub Pages needs no connection and enables Pages on the GitHub repository. */
+        put: operations["PutDeploymentTarget"];
+        post?: never;
+        /** Unbind and clear the component's target (Owner, FR-144). The platform resource is never deleted; deployments and env vars stay as history; derived env vars are recomputed. */
+        delete: operations["DeleteDeploymentTarget"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/targets/{component}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run the readiness checklist of the component's target with the platform (Owner, FR-144): connection, git_access, required_env, branch_control, preview_environment, plan_notes; each ok, warning, error or na with a message and an optional fix link. A ready target with an error item becomes attention. */
+        post: operations["VerifyDeploymentTarget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/projects/{id}/settings/deployment/env": {
@@ -1279,7 +1313,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's environment variables (Owner, FR-88): key, targets, sensitive, hasValue (always true), updatedAt and the Vercel sync state. Values are never returned. */
+        /** The environment inventory (Owner, FR-145): user, derived and required variables with appliesTo, environments, sensitive, public, source, derivedFrom, hasValue and the sync state. Values are never returned. */
         get: operations["ListDeploymentEnv"];
         put?: never;
         post?: never;
@@ -1297,10 +1331,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Create or replace an environment variable (Owner, FR-88): key ^[A-Za-z_][A-Za-z0-9_]*$ (up to 256), value up to 64 KB, targets preview and/or production, sensitive. The value is encrypted and pushed to Vercel (upsert by key and target). If the push fails the value is still saved, with syncError set, and the response is 502 UPSTREAM_ERROR; the next save or deployment pushes it again. */
+        /** Create or replace a user environment variable (Owner, FR-145): key ^[A-Za-z_][A-Za-z0-9_]*$ (up to 256), value up to 64 KB, targets preview and/or production, sensitive, appliesTo (frontend, backend; default frontend) and public (default: the key has the frontend's public prefix). VALIDATION for a derived key or a public value that looks secret ("secret values can't be public"). The value is encrypted and synced to the targets of its components; a failed sync keeps the value with syncError and answers 502 UPSTREAM_ERROR. */
         put: operations["PutDeploymentEnv"];
         post?: never;
-        /** Delete an environment variable in AIDE and in Vercel (Owner, FR-88). If Vercel can't delete it, nothing is deleted (502 UPSTREAM_ERROR) so it can be retried. */
+        /** Delete a user environment variable in AIDE and on its targets (Owner, FR-145). If a platform can't delete it, nothing is deleted (502 UPSTREAM_ERROR). Derived variables can't be deleted (VALIDATION). */
         delete: operations["DeleteDeploymentEnv"];
         options?: never;
         head?: never;
@@ -3178,6 +3212,12 @@ export interface components {
             token: string;
             email: string;
         };
+        /** @description FR-144: create a platform resource: its name (letters, digits, `.`, `_`, `-`), and region and plan where the platform has them. */
+        CreateDeploymentResourceRequest: {
+            name: string;
+            region?: null | string;
+            plan?: null | string;
+        };
         /**
          * @description Start the GitHub App manifest flow (FR-80): the App is owned by the Admin's personal account (`user`) or by the
          *     organisation `org` (required for `organization`, ignored for `user`).
@@ -3447,25 +3487,45 @@ export interface components {
             action: components["schemas"]["FileAction"];
             protected: boolean;
         };
+        /** @description The build configuration AIDE derived from the composition (§4.20); each field is `null` when it doesn't apply. */
+        DeploymentBuildConfigDto: {
+            framework: null | string;
+            buildCommand: null | string;
+            outputDirectory: null | string;
+            startCommand: null | string;
+            dockerfilePath: null | string;
+            healthCheckPath: null | string;
+            preDeployCommand: null | string;
+        };
+        /** @description §4.20 capabilities of the target's provider. */
+        DeploymentCapabilitiesDto: {
+            shaPinned: boolean;
+            previews: boolean;
+            rollback: boolean;
+            perEnvironmentVariables: boolean;
+            runtimeSecrets: boolean;
+        };
         /**
-         * @description The project's Vercel binding (FR-88): which connection, "connected by &lt;name&gt;", and the connection's status.
-         *         Never the token.
+         * @description A deployable component of a project (FR-144). Wire values: `frontend`, `backend`.
+         * @enum {unknown}
          */
-        DeploymentBindingDto: {
-            /** Format: uuid */
-            connectionId: string;
-            label: string;
-            last4: string;
-            teamSlug: null | string;
-            boundBy: components["schemas"]["DeploymentUserDto"];
-            status: components["schemas"]["PlatformConnectionStatus"];
+        DeploymentComponent: "frontend" | "backend";
+        /**
+         * @description A database card (FR-144, FR-152): per environment when the composition has a database host. Until M30 every card is
+         *     `status: not_configured` with the composition's `provider` (`supabase`, `render-postgres`,
+         *     `railway-postgres`, `external`).
+         */
+        DeploymentDatabaseDto: {
+            environment: components["schemas"]["DeploymentEnvironment"];
+            provider: string;
+            status: string;
         };
         /**
          * @description A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |
          *     canceled`. `url` is the deployment URL once known, `inspectorUrl` Vercel's inspector page. `gitRef`
          *     and `gitSha` are what was deployed; `releaseVersion` is the version (e.g. `1.2.0`) of
          *     `releaseVersionId`; `releaseId` is the release attempt of a production deployment (`null` for previews).
-         *     A failed deployment carries `errorCode` (`VERCEL_ERROR`, `DEPLOYMENT_TIMEOUT`), `errorMessage` and
+         *     A failed deployment carries `errorCode` (`PLATFORM_ERROR`, formerly `VERCEL_ERROR`; `DEPLOYMENT_TIMEOUT`), `errorMessage` and
          *     `buildLogTail` (the end of the build log). `trigger` is `auto` (AIDE, after execution or the release
          *     merge), `manual`, `promote` or `redeploy`; `triggeredBy` is `null` for `auto` (or a
          *     deleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` row promoted.
@@ -3497,18 +3557,35 @@ export interface components {
             /** Format: date-time */
             readyAt: null | string;
         };
+        /** @description The environment inventory (FR-145): the frontend pack's public prefix (`NEXT_PUBLIC_`, `VITE_`, or `null`) and the rows. */
+        DeploymentEnvInventoryDto: {
+            publicPrefix: null | string;
+            variables: components["schemas"]["DeploymentEnvVarDto"][];
+        };
         /**
-         * @description A project environment variable (FR-88, Owner only). The value is never returned: `hasValue` is always `true`.
-         *     `syncedAt` is when the current value was pushed to Vercel (`null`: not yet); `syncError` is the last push
-         *     failure (`null` after a successful push).
+         * @description Who wrote an environment variable (FR-145). Wire values: `user`, `derived`; `required` is an
+         *                 inventory row only (a pack's required variable without a value), never stored.
+         * @enum {unknown}
+         */
+        DeploymentEnvSource: "user" | "derived" | "required";
+        /**
+         * @description One row of the environment inventory (FR-145): `key`, the components it applies to, its environments, whether it is
+         *     sensitive or public, its `source` (`user`, `derived`, `required`), what a derived one comes from
+         *     (`derivedFrom`), a required one's `description`, `hasValue` (required rows and derived rows without a
+         *     source URL yet: `false`; values are never returned), and the sync state (`syncedAt`, `syncError`).
          */
         DeploymentEnvVarDto: {
             key: string;
-            targets: components["schemas"]["DeploymentEnvironment"][];
+            appliesTo: components["schemas"]["DeploymentComponent"][];
+            environments: components["schemas"]["DeploymentEnvironment"][];
             sensitive: boolean;
+            public: boolean;
+            source: components["schemas"]["DeploymentEnvSource"];
+            derivedFrom: null | string;
+            description: null | string;
             hasValue: boolean;
             /** Format: date-time */
-            updatedAt: string;
+            updatedAt: null | string;
             /** Format: date-time */
             syncedAt: null | string;
             syncError: null | string;
@@ -3520,36 +3597,114 @@ export interface components {
          */
         DeploymentEnvironment: "preview" | "production";
         /**
-         * @description Deployment provider (§4.15). Wire values: `vercel`, `fake` (deterministic, tests and E2E).
+         * @description FR-146: the composition's origin model (`same-origin`, `proxy`, `cross-origin`; `null` API only), the
+         *     stack-packs vocabulary's (`packModel`: `same-origin` or `cross-origin`), the models the Owner may switch
+         *     between (Settings → Stack) and the one-line explanation.
+         */
+        DeploymentOriginModelDto: {
+            model: null | string;
+            packModel: null | string;
+            options: string[];
+            explanation: null | string;
+        };
+        /**
+         * @description Deployment provider (§4.15, §4.20): a target's platform, from the composition's host (`deploy-vercel` → `vercel`).
+         *     Wire values: `vercel`, `fake` (v2's explicit Fake provider; deployments made under
+         *     `Deployments:Provider=Fake` are recorded as `fake`), `netlify`, `cloudflare`, `render`,
+         *     `railway`, `github_pages`.
          * @enum {unknown}
          */
-        DeploymentProvider: "vercel" | "fake";
+        DeploymentProvider: "vercel" | "fake" | "netlify" | "cloudflare" | "render" | "railway" | "github_pages";
         /**
-         * @description Settings → Deployment (FR-88), for any member. `provider` is `vercel` (or `fake` in test environments)
-         *     once deployment is set, else `null`. `supported`: the stack deploys to Vercel, or an Owner opted in by setting
-         *     a provider. `binding` is the bound connection ("connected by &lt;name&gt;"; `null`: none) and `canBind`
-         *     whether the caller may bind one of their own (Owners). `vercelProject` is the linked Vercel project (`null`:
-         *     none yet). `rootDirectory` and `framework` are what the Vercel project builds. `requiredEnv` lists the
-         *     stack's required env vars with `present`. `gitConnected` is whether Vercel's GitHub App can access the repo
-         *     (`null`: not checked), with Vercel's `installUrl` when it can't.
+         * @description Settings → Deployment (FR-144, any member; D-V4-4 replaced v2's single Vercel shape): `targets`, `databases`,
+         *     the environment inventory (`env`; keys only) and the `originModel`. `canManage`: the caller is an Owner.
+         *     `fakeMode`: `Deployments:Provider=Fake`.
          */
         DeploymentSettingsDto: {
-            provider: null | components["schemas"]["DeploymentProvider"];
-            supported: boolean;
-            binding: null | components["schemas"]["DeploymentBindingDto"];
-            canBind: boolean;
-            vercelProject: null | components["schemas"]["VercelProjectDto"];
-            rootDirectory: string;
-            framework: string;
-            requiredEnv: components["schemas"]["RequiredEnvVarDto"][];
-            gitConnected: null | boolean;
-            installUrl: null | string;
+            targets: components["schemas"]["DeploymentTargetDto"][];
+            databases: components["schemas"]["DeploymentDatabaseDto"][];
+            env: components["schemas"]["DeploymentEnvInventoryDto"];
+            originModel: components["schemas"]["DeploymentOriginModelDto"];
+            canManage: boolean;
+            fakeMode: boolean;
+        };
+        /**
+         * @description The `deployment_setup` job of a target (FR-144): `state` `queued`, `running`, `succeeded` or
+         *     `failed`; `step` while it runs (`queued`, `creating`, `linking`, `syncing_env`); when it
+         *     failed, `errorCode` (`PLATFORM_GIT_NOT_CONNECTED`, `PLATFORM_PLAN_LIMIT`, `PLATFORM_PERMISSION_MISSING`,
+         *     `CREDENTIAL_INVALID`, `NOT_FOUND`, `VALIDATION`, `PLATFORM_ERROR`, `UPSTREAM_ERROR`), the
+         *     `message` and a `fixUrl` (the platform's install or connect link, or the GitHub App settings).
+         */
+        DeploymentSetupDto: {
+            /** Format: uuid */
+            jobId: null | string;
+            state: string;
+            step: null | string;
+            errorCode: null | string;
+            message: null | string;
+            fixUrl: null | string;
+            /** Format: date-time */
+            startedAt: null | string;
+            /** Format: date-time */
+            completedAt: null | string;
         };
         /**
          * @description §4.15 deployment states: `queued → building → ready | error | canceled`.
          * @enum {unknown}
          */
         DeploymentStatus: "queued" | "building" | "ready" | "error" | "canceled";
+        /**
+         * @description A target's bound connection (FR-144): which of the binder's platform connections, "connected by &lt;name&gt;", the
+         *     account it reaches and its status. Never the token.
+         */
+        DeploymentTargetBindingDto: {
+            /** Format: uuid */
+            connectionId: string;
+            label: string;
+            last4: string;
+            accountName: null | string;
+            boundBy: components["schemas"]["DeploymentUserDto"];
+            status: components["schemas"]["PlatformConnectionStatus"];
+        };
+        /**
+         * @description One target card of Settings → Deployment (FR-144): one per component whose host the composition names (plus a target
+         *     set up before the composition dropped its host, `inComposition: false`). `provider` is the composition's host
+         *     (`hostOption` is its catalog id). `binding` is the bound connection (`null` for GitHub Pages, which uses
+         *     the project's GitHub App or PAT) and `needsConnection` whether one is needed; `canBind` whether the caller may
+         *     bind one of their own. `resourceId`/`name` the platform resource (`null` until set up),
+         *     `rootDirectory` and `buildConfig` what it builds, the production and preview URLs once known, `status`
+         *     (`not_configured`, `configuring`, `ready`, `attention`, `error`) with `statusReason`, the
+         *     setup job (`setup`, `null` before the first), the provider's capabilities and the readiness checklist
+         *     (platform items say "not checked yet" until `verify`). `fakeMode`: deployments run on the Fake provider.
+         */
+        DeploymentTargetDto: {
+            component: components["schemas"]["DeploymentComponent"];
+            provider: components["schemas"]["DeploymentProvider"];
+            hostOption: null | string;
+            inComposition: boolean;
+            needsConnection: boolean;
+            binding: null | components["schemas"]["DeploymentTargetBindingDto"];
+            canBind: boolean;
+            resourceId: null | string;
+            name: null | string;
+            rootDirectory: string;
+            buildConfig: components["schemas"]["DeploymentBuildConfigDto"];
+            productionUrl: null | string;
+            previewUrl: null | string;
+            status: components["schemas"]["DeploymentTargetStatus"];
+            statusReason: null | string;
+            setup: null | components["schemas"]["DeploymentSetupDto"];
+            capabilities: components["schemas"]["DeploymentCapabilitiesDto"];
+            readiness: components["schemas"]["ReadinessItemDto"][];
+            implementedForReal: boolean;
+            fakeMode: boolean;
+        };
+        /**
+         * @description State of a deployment target (FR-144). Wire values: `not_configured`, `configuring`, `ready`,
+         *                 `attention`, `error`.
+         * @enum {unknown}
+         */
+        DeploymentTargetStatus: "not_configured" | "configuring" | "ready" | "attention" | "error";
         /**
          * @description Why a deployment row exists (FR-90, FR-91). Wire values: `auto` (AIDE after execution or release),
          *                 `manual`, `promote`, `redeploy`.
@@ -3561,6 +3716,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+        };
+        /** @description FR-144: the readiness checklist of `POST …/targets/:component/verify`, with the target after the check. */
+        DeploymentVerifyDto: {
+            target: components["schemas"]["DeploymentTargetDto"];
+            items: components["schemas"]["ReadinessItemDto"][];
         };
         /**
          * @description FR-118: where the repository is. `provider`: `github_app` (`repo` = `owner/name`, read with the
@@ -4287,8 +4447,10 @@ export interface components {
             details?: string[];
             /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
             reason?: string;
-            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88). */
+            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
+            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
+            platform?: string;
             /** @description STACK_INCOMPATIBLE: each broken compatibility rule (FR-116). */
             violations?: {
                 /** @description The choice: frontend, backend, data, vcs, frontendHost, backendHost, databaseHost, local or originModel. */
@@ -4331,6 +4493,10 @@ export interface components {
             presetName: string;
             presetVersion: null | string;
             label: string;
+        };
+        /** @description FR-144: link an existing platform resource (from `GET /api/me/connections/platforms/:id/resources`). */
+        LinkDeploymentResourceRequest: {
+            resourceId: string;
         };
         /**
          * @description The connection bound to a project (FR-79), shown to every member as e.g. "Anthropic · connected by Ana (••••a1b2)".
@@ -4801,8 +4967,10 @@ export interface components {
             details?: string[];
             /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
             reason?: string;
-            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88). */
+            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
+            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
+            platform?: string;
             /** @description STACK_INCOMPATIBLE: each broken compatibility rule (FR-116). */
             violations?: {
                 /** @description The choice: frontend, backend, data, vcs, frontendHost, backendHost, databaseHost, local or originModel. */
@@ -5069,14 +5237,43 @@ export interface components {
             openedAt: string;
         };
         /**
-         * @description Create or replace an environment variable (FR-88): the value (up to 64 KB; encrypted in AIDE and never returned), its
-         *     targets (`preview`, `production`, at least one) and whether Vercel stores it as sensitive.
+         * @description Create or replace a user environment variable (FR-88, FR-145): the value (up to 64 KB; encrypted, never returned), its
+         *     environments (`targets`: `preview`, `production`), whether it is sensitive, the components it applies to
+         *     (`appliesTo`, default `["frontend"]`) and whether it is public (default: the key has the frontend pack's public
+         *     prefix; a prefixed key is always public). A public variable that looks secret, or a key AIDE derives, is
+         *     `VALIDATION`.
          */
         PutDeploymentEnvRequest: {
             value: string;
             targets: components["schemas"]["DeploymentEnvironment"][];
             sensitive?: boolean;
+            appliesTo?: null | components["schemas"]["DeploymentComponent"][];
+            public?: null | boolean;
         };
+        /**
+         * @description FR-144 (Owner): set up a target. `provider` must be the composition's host for the component (`fake` also in
+         *     Fake mode); `connectionId` one of the caller's own connections of that platform (not used by GitHub Pages);
+         *     `create` or `link`, not both (GitHub Pages: neither; setup enables Pages on the repository).
+         */
+        PutDeploymentTargetRequest: {
+            provider: components["schemas"]["DeploymentProvider"];
+            /** Format: uuid */
+            connectionId?: null | string;
+            create?: null | components["schemas"]["CreateDeploymentResourceRequest"];
+            link?: null | components["schemas"]["LinkDeploymentResourceRequest"];
+        };
+        /** @description One readiness checklist item (FR-144): a stable `id`, `state` (`ok`, `warning`, `error`, `na`), a message and an optional fix link. */
+        ReadinessItemDto: {
+            id: string;
+            state: components["schemas"]["ReadinessState"];
+            message: string;
+            fixUrl: null | string;
+        };
+        /**
+         * @description State of a readiness item (FR-144). Wire values: `ok`, `warning`, `error`, `na`.
+         * @enum {unknown}
+         */
+        ReadinessState: "ok" | "warning" | "error" | "na";
         /** @description An answer given to the agent: `questionId` when it answered a question of a round, and the question text. */
         RefinementAnswerDto: {
             questionId: null | string;
@@ -5336,17 +5533,6 @@ export interface components {
             /** Format: int32 */
             version: number;
             status: components["schemas"]["ArtifactStatus"];
-        };
-        /**
-         * @description An environment variable the project's stack requires (FR-88, §4.22: the resolved composition's env): its key, targets, whether it is
-         *     sensitive, what it is for, and whether the project has it (`present`; missing ones are flagged).
-         */
-        RequiredEnvVarDto: {
-            key: string;
-            targets: components["schemas"]["DeploymentEnvironment"][];
-            sensitive: boolean;
-            description: string;
-            present: boolean;
         };
         /**
          * @description Compliance categories (§4.7).
@@ -5769,19 +5955,6 @@ export interface components {
             clientSecret?: null | string;
         };
         /**
-         * @description Settings → Deployment (FR-88, Owner). `provider` (required) is `vercel`, or `null` to turn deployment
-         *     off (other fields not allowed then; history is kept). `connectionId` binds one of the caller's own Vercel
-         *     connections (omitted: keep the bound one). Send `vercelProjectId` to link an existing Vercel project or
-         *     `create` to create one, not both (omitted: keep the linked one).
-         */
-        UpdateDeploymentSettingsRequest: {
-            provider: null | components["schemas"]["DeploymentProvider"];
-            /** Format: uuid */
-            connectionId?: null | string;
-            vercelProjectId?: null | string;
-            create?: null | components["schemas"]["CreateVercelProjectRequest"];
-        };
-        /**
          * @description Change a GitLab instance (FR-130); omitted fields are unchanged. An empty `clientId` or `clientSecret` clears it.
          *     Changing `baseUrl` or `allowInsecureHttp` runs the SSRF guard and the reachability check again. gitlab.com's
          *     base URL can't change. `enabled: false` disables the instance: its connections stop working and sign-in hides it.
@@ -5882,13 +6055,6 @@ export interface components {
             systemRole: components["schemas"]["SystemRole"];
             avatarUrl: null | string;
             githubLinked: boolean;
-        };
-        /** @description The linked Vercel project (FR-88): id (`prj_…`), name, its Vercel URL and the production URL once known. */
-        VercelProjectDto: {
-            id: string;
-            name: string;
-            url: null | string;
-            productionUrl: null | string;
         };
         /** @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known. */
         ViolationDto: {
@@ -10125,7 +10291,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists); deployment: VERCEL_GIT_NOT_CONNECTED (extension installUrl) or VERCEL_PLAN_LIMIT */
+            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists); deployment: PLATFORM_GIT_NOT_CONNECTED (extensions platform, installUrl) or PLATFORM_PLAN_LIMIT */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -11127,31 +11293,32 @@ export interface operations {
             };
         };
     };
-    UpdateDeploymentSettings: {
+    PutDeploymentTarget: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 id: string;
+                component: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateDeploymentSettingsRequest"];
+                "application/json": components["schemas"]["PutDeploymentTargetRequest"];
             };
         };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeploymentSettingsDto"];
+                    "application/json": components["schemas"]["DeploymentTargetDto"];
                 };
             };
-            /** @description VALIDATION (including a Local Git project, or both vercelProjectId and create) */
+            /** @description VALIDATION (body, component, or a Local Git project outside Fake mode) or STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11169,7 +11336,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection, or changing the deployment with another Owner's bound connection without sending your own connectionId) */
+            /** @description FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -11178,7 +11345,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description NOT_FOUND (project, connection or Vercel project) */
+            /** @description NOT_FOUND (project or connection) */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -11187,7 +11354,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description VERCEL_GIT_NOT_CONNECTED (extension installUrl: Vercel's GitHub App install link), VERCEL_PLAN_LIMIT (Hobby plan with an organisation-owned repo) or CONFLICT (concurrent change) */
+            /** @description PLATFORM_PERMISSION_MISSING (GitHub Pages: the AIDE GitHub App lacks Pages; extensions platform, installUrl = the App's page), PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT (extension platform; also reported by the setup job on the target) or CONFLICT */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -11196,8 +11363,124 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            /** @description PLATFORM_ERROR (the provider isn't supported for real yet; extension platform) or UPSTREAM_ERROR (GitHub couldn't mint a token) */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteDeploymentTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                component: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    VerifyDeploymentTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                component: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentVerifyDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11281,7 +11564,7 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentEnvVarDto"];
                 };
             };
-            /** @description Bad Request */
+            /** @description VALIDATION (including a derived key, or secret values can't be public) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11317,7 +11600,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR (saved in AIDE with syncError; Vercel failed or couldn't be reached) */
+            /** @description UPSTREAM_ERROR (saved in AIDE with syncError; a platform failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -11493,7 +11776,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description DEPLOYMENT_NOT_CONFIGURED (no deployment settings or no bound connection) */
+            /** @description DEPLOYMENT_NOT_CONFIGURED (no deployment settings or no bound connection) or DEPLOYMENT_ACTION_UNSUPPORTED (the frontend's provider has no previews, e.g. GitHub Pages; extension platform) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -11561,7 +11844,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description INVALID_DEPLOYMENT (not a ready production deployment) or DEPLOYMENT_NOT_CONFIGURED */
+            /** @description INVALID_DEPLOYMENT (not a ready production deployment), DEPLOYMENT_ACTION_UNSUPPORTED (the provider has no rollback, e.g. GitHub Pages; extension platform) or DEPLOYMENT_NOT_CONFIGURED */
             409: {
                 headers: {
                     [name: string]: unknown;

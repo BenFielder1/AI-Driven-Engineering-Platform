@@ -28,7 +28,9 @@ public static class DeploymentTargetRules
     public static void Refresh(DeploymentTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
-        (target.Status, target.StatusReason) = StatusOf(target.ConnectionId is not null, !string.IsNullOrEmpty(target.ResourceId));
+        // FR-143: GitHub Pages binds no platform connection (the project's GitHub App installation or PAT is used).
+        (target.Status, target.StatusReason) = StatusOf(
+            target.ConnectionId is not null || !DeploymentPlatforms.NeedsConnection(target.Provider), !string.IsNullOrEmpty(target.ResourceId));
     }
 
     /// <summary>§5: what a deployment row does, from why it exists: a promote re-points production, anything else deploys.</summary>

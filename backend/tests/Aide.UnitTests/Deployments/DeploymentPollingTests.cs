@@ -188,29 +188,29 @@ public class DeploymentPollingTests
     // ------------------------------------------------------------------ FR-87, FR-88 Vercel errors
 
     [Theory]
-    [InlineData(401, null, "Not authorized", false, VercelFailure.CredentialRejected)]
-    [InlineData(403, "forbidden", "Not authorized", true, VercelFailure.CredentialRejected)]
-    [InlineData(403, "forbidden", "You don't have permission to create the project.", false, VercelFailure.Forbidden)]
-    [InlineData(429, "rate_limited", "Too many requests", false, VercelFailure.RateLimited)]
-    [InlineData(500, null, null, false, VercelFailure.Upstream)]
-    [InlineData(null, null, null, false, VercelFailure.Upstream)]
-    [InlineData(404, "not_found", "Project not found", false, VercelFailure.NotFound)]
-    [InlineData(400, "bad_request", "To link a GitHub repository, you need to install the GitHub integration first.", false, VercelFailure.GitNotConnected)]
-    [InlineData(404, "repo_not_found", "Repository not found", false, VercelFailure.GitNotConnected)]
-    [InlineData(400, "bad_request", "Hobby teams can't deploy repositories owned by an organization; upgrade to Pro.", false, VercelFailure.PlanLimit)]
-    [InlineData(400, "bad_request", "Invalid name", false, VercelFailure.Rejected)]
-    public void FR88_Vercel_errors_are_classified(int? status, string? code, string? message, bool invalidToken, VercelFailure expected) =>
+    [InlineData(401, null, "Not authorized", false, DeploymentFailure.CredentialRejected)]
+    [InlineData(403, "forbidden", "Not authorized", true, DeploymentFailure.CredentialRejected)]
+    [InlineData(403, "forbidden", "You don't have permission to create the project.", false, DeploymentFailure.Forbidden)]
+    [InlineData(429, "rate_limited", "Too many requests", false, DeploymentFailure.RateLimited)]
+    [InlineData(500, null, null, false, DeploymentFailure.Upstream)]
+    [InlineData(null, null, null, false, DeploymentFailure.Upstream)]
+    [InlineData(404, "not_found", "Project not found", false, DeploymentFailure.NotFound)]
+    [InlineData(400, "bad_request", "To link a GitHub repository, you need to install the GitHub integration first.", false, DeploymentFailure.GitNotConnected)]
+    [InlineData(404, "repo_not_found", "Repository not found", false, DeploymentFailure.GitNotConnected)]
+    [InlineData(400, "bad_request", "Hobby teams can't deploy repositories owned by an organization; upgrade to Pro.", false, DeploymentFailure.PlanLimit)]
+    [InlineData(400, "bad_request", "Invalid name", false, DeploymentFailure.Rejected)]
+    public void FR88_Vercel_errors_are_classified(int? status, string? code, string? message, bool invalidToken, DeploymentFailure expected) =>
         Assert.Equal(expected, VercelErrorRules.Classify(status, code, message, invalidToken));
 
     [Fact]
     public void FR88_Vercel_failures_map_to_the_spec_error_codes()
     {
-        Assert.Equal(ErrorCodes.VercelGitNotConnected, VercelErrorRules.ErrorCodeFor(VercelFailure.GitNotConnected));
-        Assert.Equal(ErrorCodes.VercelPlanLimit, VercelErrorRules.ErrorCodeFor(VercelFailure.PlanLimit));
-        Assert.Equal(ErrorCodes.CredentialInvalid, VercelErrorRules.ErrorCodeFor(VercelFailure.CredentialRejected));
-        Assert.Equal(ErrorCodes.NotFound, VercelErrorRules.ErrorCodeFor(VercelFailure.NotFound));
-        Assert.Equal(ErrorCodes.UpstreamError, VercelErrorRules.ErrorCodeFor(VercelFailure.Upstream));
-        Assert.Equal(ErrorCodes.UpstreamError, VercelErrorRules.ErrorCodeFor(VercelFailure.RateLimited));
+        Assert.Equal(ErrorCodes.PlatformGitNotConnected, VercelErrorRules.ErrorCodeFor(DeploymentFailure.GitNotConnected));
+        Assert.Equal(ErrorCodes.PlatformPlanLimit, VercelErrorRules.ErrorCodeFor(DeploymentFailure.PlanLimit));
+        Assert.Equal(ErrorCodes.CredentialInvalid, VercelErrorRules.ErrorCodeFor(DeploymentFailure.CredentialRejected));
+        Assert.Equal(ErrorCodes.NotFound, VercelErrorRules.ErrorCodeFor(DeploymentFailure.NotFound));
+        Assert.Equal(ErrorCodes.UpstreamError, VercelErrorRules.ErrorCodeFor(DeploymentFailure.Upstream));
+        Assert.Equal(ErrorCodes.UpstreamError, VercelErrorRules.ErrorCodeFor(DeploymentFailure.RateLimited));
         Assert.StartsWith("https://github.com/apps/vercel", VercelErrorRules.DefaultGitHubInstallUrl, StringComparison.Ordinal);
     }
 

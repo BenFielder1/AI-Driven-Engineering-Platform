@@ -27,7 +27,7 @@ import { gitlabHost, useGitLabConnections, useGitLabInstances, useGitLabRepoRefs
 import { connectionLabel } from '../connections/connection-format'
 import { useLlmProviders, type LlmProviderOption } from '../connections/connections-api'
 import { usePlatformConnections } from '../connections/platform-connections-api'
-import { VercelGitAlert } from '../deployments/vercel-git-alert'
+import { PlatformGitAlert } from '../deployments/platform-git-alert'
 import { suggestVercelProjectName } from '../deployments/vercel-project-rules'
 import { agentKeys, agentLabels, approvalModeDescriptions, approvalModeLabels, approvalModes, llmProviderLabels } from './labels'
 import { catalogModel } from './model-picker'
@@ -952,7 +952,7 @@ export function NewProjectWizard() {
             // FR-88: only the caller's own Vercel connections can be used.
             setError('vercelConnectionId', { type: 'server', message: errorMessage(error, 'createProject') })
             goTo(stepIndex('deployment'))
-          } else if (isApiError(error, 'VERCEL_GIT_NOT_CONNECTED') || isApiError(error, 'VERCEL_PLAN_LIMIT')) {
+          } else if (isApiError(error, 'PLATFORM_GIT_NOT_CONNECTED') || isApiError(error, 'PLATFORM_PLAN_LIMIT')) {
             goTo(stepIndex('deployment'))
             setServerError({ message: errorMessage(error, 'createProject'), error })
           } else if (importValues && isApiError(error, 'TAG_NOT_FOUND')) {
@@ -1019,8 +1019,13 @@ export function NewProjectWizard() {
         <ErrorSummary title="Check this step" errors={stepErrors} />
         {serverError && (
           <div className="mb-4">
-            {isApiError(serverError.error, 'VERCEL_GIT_NOT_CONNECTED') ? (
-              <VercelGitAlert error={serverError.error} title="We couldn't create the project" />
+            {isApiError(serverError.error, 'PLATFORM_GIT_NOT_CONNECTED') ? (
+              <PlatformGitAlert
+                error={serverError.error}
+                platform={serverError.error.platform ?? 'vercel'}
+                message={serverError.message}
+                title="We couldn't create the project"
+              />
             ) : isApiError(serverError.error, 'GITHUB_APP_NOT_INSTALLED') ||
               isApiError(serverError.error, 'GITHUB_NOT_CONNECTED') ? (
               <GitHubErrorAlert

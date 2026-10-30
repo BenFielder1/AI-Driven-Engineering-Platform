@@ -58,6 +58,12 @@ public static class JobTypes
     public const string Deployment = "deployment";
 
     /// <summary>
+    /// FR-144: sets up one deployment target: creates or links the platform resource (with branch control and the preview
+    /// resource where the platform has one), then recomputes and syncs the derived env vars. Progress is on the target.
+    /// </summary>
+    public const string DeploymentSetup = "deployment_setup";
+
+    /// <summary>
     /// FR-47: fan out one notification-worthy event (or a gate reminder, FR-15): in-app notifications for its recipients,
     /// one delivery row per subscribed project channel, then a first delivery attempt. Queued in the event's transaction.
     /// </summary>

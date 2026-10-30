@@ -13,6 +13,10 @@ public static class DeploymentServiceCollectionExtensions
         services.AddScoped<DeploymentAccess>();
         services.AddScoped<DeploymentEnvSync>();
         services.AddScoped<DeploymentSettingsService>();
+        services.AddScoped<DeploymentInventoryService>();
+        services.AddScoped<DeploymentTargetService>();
+        services.AddScoped<IJobEndedHook, DeploymentSetupJobEndedHook>();
+        services.AddJobHandler<DeploymentSetupJobHandler>(JobTypes.DeploymentSetup);
         services.AddScoped<DeploymentScheduler>();
         services.AddScoped<IJobEndedHook, DeploymentJobEndedHook>();
         services.AddJobHandler<DeploymentJobHandler>(JobTypes.Deployment);

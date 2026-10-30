@@ -41,7 +41,12 @@ internal sealed class ProblemDetailsSchemaTransformer : IOpenApiSchemaTransforme
         schema.Properties[ApiProblems.InstallUrlKey] = new OpenApiSchema
         {
             Type = JsonSchemaType.String,
-            Description = "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88).",
+            Description = "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144).",
+        };
+        schema.Properties[ApiProblems.PlatformKey] = new OpenApiSchema
+        {
+            Type = JsonSchemaType.String,
+            Description = "PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4).",
         };
         schema.Properties[ApiProblems.ViolationsKey] = new OpenApiSchema
         {

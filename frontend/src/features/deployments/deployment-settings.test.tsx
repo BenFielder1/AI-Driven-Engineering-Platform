@@ -1,250 +1,438 @@
 import { screen, waitFor, within } from '@testing-library/react'
-import { http } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { seedUser, signInAs } from '../../mocks/handlers/auth'
-import { seedDeploymentSettings, seedEnvVar, seedVercelConnection, VERCEL_INSTALL_URL, vercelDb } from '../../mocks/handlers/deployments'
-import { problem } from '../../mocks/handlers/problem'
-import { makeReleaseVersion, seedProject, type StoredProject } from '../../mocks/handlers/projects'
-import { server } from '../../mocks/server'
-import { openSettings, requestsTo, signInAsOwner } from '../../test/project-settings'
+import { errorMessage, errorMessages, toApiError } from '../../lib/errors'
 import type { ProjectRole } from '../../lib/permissions'
+import { seedUser, signInAs } from '../../mocks/handlers/auth'
+import {
+  deploymentDb,
+  GITHUB_APP_SETTINGS_URL,
+  NETLIFY_INSTALL_URL,
+  seedEnvVar,
+  seedGitHubPagesTargets,
+  seedNetlifyRenderTargets,
+} from '../../mocks/handlers/deployments'
+import { seedPlatformConnection } from '../../mocks/handlers/platform-connections'
+import { seedProject, type StoredProject } from '../../mocks/handlers/projects'
+import { openSettings, requestsTo, signInAsOwner } from '../../test/project-settings'
+import { deploymentSettingsPolling } from './deployments-api'
 
-const supabaseVersion = () => [makeReleaseVersion({ version: '0.1.0', presetId: 'nextjs-supabase', presetVersion: '1.0.0' })]
-
-/** Ada owns a nextjs-supabase project; `seed` runs with her id before anything loads. */
-async function openAsOwner(seed?: (me: string, p: StoredProject) => void) {
+/** Ada owns the project; `seed` runs with her id before anything loads. */
+async function openAsOwner(seed: (me: string, p: StoredProject) => void) {
   const me = signInAsOwner()
-  const project = seedProject({ releaseVersions: supabaseVersion() })
-  seed?.(me.id, project)
+  const project = seedProject({})
+  seed(me.id, project)
   const utils = await openSettings('deployment', project)
   await screen.findByRole('heading', { level: 2, name: 'Deployment' })
   return utils
 }
 
-const requiredStatus = (key: string) =>
-  within(screen.getByRole('listitem', { name: `Required ${key}` })).getByTestId('required-env-status')
+const card = (name: string) => screen.findByRole('region', { name })
+const envRow = (key: string) => screen.findByRole('listitem', { name: `Variable ${key}` })
 
-describe('Settings → Deployment (FR-88)', () => {
-  it('FR88_required_env_flagged: a nextjs-supabase project lists the three Supabase variables, missing ones flagged', async () => {
-    await openAsOwner((_me, p) => {
-      seedDeploymentSettings(p)
-      seedEnvVar(p, { key: 'NEXT_PUBLIC_SUPABASE_URL' })
-    })
-    const list = await screen.findByRole('list', { name: 'Required environment variables' })
-    expect(within(list).getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual([
-      'Required NEXT_PUBLIC_SUPABASE_URL',
-      'Required NEXT_PUBLIC_SUPABASE_ANON_KEY',
-      'Required SUPABASE_SERVICE_ROLE_KEY',
-    ])
-    expect(requiredStatus('NEXT_PUBLIC_SUPABASE_URL')).toHaveTextContent('Set')
-    expect(requiredStatus('NEXT_PUBLIC_SUPABASE_ANON_KEY')).toHaveTextContent('Missing')
-    expect(requiredStatus('SUPABASE_SERVICE_ROLE_KEY')).toHaveTextContent('Missing')
-    expect(screen.getByText('2 required variables are missing')).toBeInTheDocument()
-  })
-
-  it('FR88_owner_sets_up_vercel: binds an own connection and creates a Vercel project linked to the repo', async () => {
-    const { user, project } = await openAsOwner((me) => {
-      seedVercelConnection({ userId: me, label: 'Acme team', token: 'vcp_zzzzab12', teamSlug: 'acme' })
-      const grace = seedUser({ email: 'grace@example.com', name: 'Grace Hopper' })
-      seedVercelConnection({ userId: grace.id, label: 'Not mine' })
-    })
-    expect(screen.getByText(/stack deploys to Vercel/)).toBeInTheDocument()
-    const picker = await screen.findByLabelText('Vercel connection')
-    expect(within(picker).getAllByRole('option').map((o) => o.textContent)).toEqual(['Pick a connection', 'Acme team (••••ab12) · team acme'])
-    expect(screen.getByLabelText('Project name')).toHaveValue('inventory-tracker')
-
-    await user.click(screen.getByRole('button', { name: 'Set up Vercel' }))
-    expect((await screen.findAllByText('Pick one of your Vercel connections.')).length).toBeGreaterThan(0)
-
-    await user.selectOptions(picker, 'Acme team (••••ab12) · team acme')
-    await user.type(screen.getByLabelText('Root directory (optional)'), 'apps/web')
-    await user.click(screen.getByRole('button', { name: 'Set up Vercel' }))
-
-    expect(await screen.findByText('Vercel deployment is set up.')).toBeInTheDocument()
-    expect(requestsTo('PATCH', '/settings/deployment').at(-1)?.body).toEqual({
-      provider: 'vercel',
-      connectionId: project.deployment?.binding?.connectionId,
-      create: { name: 'inventory-tracker', rootDirectory: 'apps/web' },
-    })
-    expect(await screen.findByTestId('deployment-binding')).toHaveTextContent('Vercel · connected by Ada Lovelace (••••ab12) · team acme')
-    expect(screen.getByRole('region', { name: 'Environment variables' })).toBeInTheDocument()
-  })
-
-  it('FR88_git_not_connected: VERCEL_GIT_NOT_CONNECTED shows the copy and Vercel\'s install link', async () => {
-    vercelDb.gitNotConnected = true
-    const { user } = await openAsOwner((me) => {
-      seedVercelConnection({ userId: me, label: 'Personal', token: 'vcp_q1w2' })
-    })
-    await user.selectOptions(await screen.findByLabelText('Vercel connection'), 'Personal (••••q1w2)')
-    await user.click(screen.getByRole('radio', { name: /Link an existing Vercel project/ }))
-    await user.type(screen.getByLabelText('Vercel project id or name'), 'prj_shop')
-    await user.click(screen.getByRole('button', { name: 'Set up Vercel' }))
-
-    const link = await screen.findByRole('link', { name: /Install Vercel's GitHub App/ })
-    expect(link).toHaveAttribute('href', VERCEL_INSTALL_URL)
-    expect(link.closest('[role="alert"]')).toHaveTextContent("Vercel's GitHub App can't access this repository")
-  })
-
-  it('FR88_plan_limit: VERCEL_PLAN_LIMIT explains the Hobby plan limit', async () => {
-    vercelDb.planLimit = true
-    const { user } = await openAsOwner((me) => {
-      seedVercelConnection({ userId: me, label: 'Personal', token: 'vcp_q1w2' })
-    })
-    await user.selectOptions(await screen.findByLabelText('Vercel connection'), 'Personal (••••q1w2)')
-    await user.click(screen.getByRole('button', { name: 'Set up Vercel' }))
-    expect(await screen.findByText(/a Hobby account can't deploy a repository owned by a GitHub organisation/)).toBeInTheDocument()
-  })
-
-  it('FR88_rebind_when_changing_project: another Owner\'s binding means changing the project needs my own connection', async () => {
-    const grace = seedUser({ email: 'grace@example.com', name: 'Grace Hopper', systemRole: 'user' })
-    const ada = signInAs({ email: 'ada@example.com', name: 'Ada Lovelace', systemRole: 'user' })
-    const project = seedProject({
-      releaseVersions: supabaseVersion(),
-      members: [
-        { userId: grace.id, role: 'owner' },
-        { userId: ada.id, role: 'owner' },
-      ],
-    })
-    seedDeploymentSettings(project, { connection: seedVercelConnection({ userId: grace.id, label: 'Grace', token: 'vcp_9999c0de' }) })
-    const mine = seedVercelConnection({ userId: ada.id, label: 'Mine', token: 'vcp_aaaa1111' })
-    const { user } = await openSettings('deployment', project)
-
-    await user.click(await screen.findByRole('radio', { name: /Link an existing Vercel project/ }))
-    expect(screen.getByText(/Changing the Vercel project uses your own Vercel connection: pick one of yours/)).toBeInTheDocument()
-    await user.type(screen.getByLabelText('Vercel project id or name'), 'prj_other')
-    await user.click(screen.getByRole('button', { name: 'Save deployment settings' }))
-    expect((await screen.findAllByText('Changing the Vercel project uses your own Vercel connection. Pick one of yours.')).length).toBeGreaterThan(0)
-    expect(requestsTo('PATCH', '/settings/deployment')).toHaveLength(0)
-
-    await user.selectOptions(screen.getByLabelText('Vercel connection'), 'Mine (••••1111)')
-    await user.click(screen.getByRole('button', { name: 'Save deployment settings' }))
-    expect(await screen.findByText('Deployment settings saved.')).toBeInTheDocument()
-    expect(requestsTo('PATCH', '/settings/deployment').at(-1)?.body).toEqual({ provider: 'vercel', connectionId: mine.id, vercelProjectId: 'prj_other' })
-    expect(await screen.findByTestId('deployment-binding')).toHaveTextContent('connected by Ada Lovelace (••••1111)')
-  })
-
-  it('FR88_rebind_server_copy: a 403 CREDENTIAL_NOT_OWNER from the server shows the rebind copy', async () => {
-    const grace = seedUser({ email: 'grace@example.com', name: 'Grace Hopper', systemRole: 'user' })
-    const ada = signInAs({ email: 'ada@example.com', name: 'Ada Lovelace', systemRole: 'user' })
-    const project = seedProject({
-      members: [
-        { userId: grace.id, role: 'owner' },
-        { userId: ada.id, role: 'owner' },
-      ],
-    })
-    seedDeploymentSettings(project, { connection: seedVercelConnection({ userId: grace.id, label: 'Grace', token: 'vcp_9999c0de' }) })
-    seedVercelConnection({ userId: ada.id, label: 'Mine', token: 'vcp_aaaa1111' })
-    server.use(http.patch('*/api/projects/:id/settings/deployment', () => problem(403, 'CREDENTIAL_NOT_OWNER', 'Not yours.')))
-    const { user } = await openSettings('deployment', project)
-    await user.selectOptions(await screen.findByLabelText('Vercel connection'), 'Mine (••••1111)')
-    await user.click(screen.getByRole('button', { name: 'Save deployment settings' }))
-    expect(await screen.findByText(/pick one of yours, which rebinds the project to it/)).toBeInTheDocument()
-  })
-
-  it.each<Exclude<ProjectRole, 'owner'>>(['contributor', 'viewer'])(
-    'FR88_read_only_for_%s: "Vercel · connected by <name>", no setup form and no env editor',
-    async (role) => {
-      const grace = seedUser({ email: 'grace@example.com', name: 'Grace Hopper', systemRole: 'user' })
-      const ada = signInAs({ email: 'ada@example.com', name: 'Ada Lovelace', systemRole: 'user' })
-      const project = seedProject({
-        releaseVersions: supabaseVersion(),
-        members: [
-          { userId: grace.id, role: 'owner' },
-          { userId: ada.id, role },
-        ],
-      })
-      seedDeploymentSettings(project, { connection: seedVercelConnection({ userId: grace.id, label: 'Grace', token: 'vcp_9999c0de' }) })
-      await openSettings('deployment', project)
-
-      expect(await screen.findByTestId('deployment-binding')).toHaveTextContent('Vercel · connected by Grace Hopper (••••c0de)')
-      expect(screen.queryByRole('button', { name: /Save deployment settings|Set up Vercel/ })).not.toBeInTheDocument()
-      expect(screen.queryByRole('region', { name: 'Environment variables' })).not.toBeInTheDocument()
-      expect(screen.getByRole('list', { name: 'Required environment variables' })).toBeInTheDocument()
-    },
-  )
+beforeEach(() => {
+  deploymentSettingsPolling.setupMs = 20
 })
 
-describe('Settings → Deployment → Environment variables (FR-88)', () => {
-  it('FR88_env_value_cleared_after_save: the value is sent once, never listed, and not kept in memory', async () => {
-    const secret = 'https://abcd.supabase.co'
-    const { user, queryClient, project } = await openAsOwner((_me, p) => {
-      seedDeploymentSettings(p)
+afterEach(() => {
+  deploymentSettingsPolling.setupMs = 2_000
+})
+
+describe('Settings → Deployment targets (FR-144)', () => {
+  it('FR144_target_cards_per_component: one card per component, with "connected by", databases and the Fake-mode note', async () => {
+    const grace = seedUser({ email: 'grace@example.com', name: 'Grace Hopper', systemRole: 'user' })
+    const netlify = seedPlatformConnection({ userId: grace.id, provider: 'netlify', label: 'Acme Netlify', token: 'nfp_aaaa1111', accountName: 'acme' })
+    const render = seedPlatformConnection({ userId: grace.id, provider: 'render', label: 'Render key', token: 'rnd_bbbb2222', accountName: 'Ada' })
+    await openAsOwner((_me, p) => {
+      seedNetlifyRenderTargets(p, { configured: true, netlify, render })
     })
-    const env = await screen.findByRole('region', { name: 'Environment variables' })
-    await user.click(within(env).getByRole('button', { name: 'Add NEXT_PUBLIC_SUPABASE_URL' }))
-    const form = within(env).getByRole('form', { name: 'Add a variable' })
-    expect(within(form).getByLabelText('Name')).toHaveValue('NEXT_PUBLIC_SUPABASE_URL')
+
+    const fe = await card('Frontend on Netlify')
+    expect(within(fe).getByTestId('target-binding')).toHaveTextContent('Netlify · Acme Netlify (••••1111) · account acme · connected by Grace Hopper')
+    expect(within(fe).getByTestId('target-status')).toHaveTextContent('Ready')
+    expect(within(fe).getByRole('link', { name: /inventory-web\.netlify\.app/ })).toHaveAttribute('href', 'https://inventory-web.netlify.app')
+    expect(within(fe).getByText('Build configuration (derived from the stack)')).toBeInTheDocument()
+    expect(within(fe).getByText('dist')).toBeInTheDocument()
+
+    const be = await card('Backend on Render')
+    expect(within(be).getByTestId('target-binding')).toHaveTextContent('connected by Grace Hopper')
+    expect(within(be).getByText('backend/Dockerfile')).toBeInTheDocument()
+    expect(within(be).getByText('/api/health/ready')).toBeInTheDocument()
+
+    const dbs = screen.getByRole('list', { name: 'Databases' })
+    expect(within(dbs).getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual(['Production database', 'Preview database'])
+    expect(within(dbs).getAllByText('Database setup arrives with managed databases.')).toHaveLength(2)
+    expect(screen.getByText(/deploys with its Fake provider/)).toBeInTheDocument()
+  })
+
+  it('FR144_bind_create_progress_ready: binds an own connection, creates the site, shows the setup steps, then Ready', async () => {
+    const { user } = await openAsOwner((me, p) => {
+      seedNetlifyRenderTargets(p)
+      seedPlatformConnection({ userId: me, provider: 'netlify', label: 'Mine', token: 'nfp_cccc3333' })
+      const grace = seedUser({ email: 'grace@example.com', name: 'Grace Hopper' })
+      seedPlatformConnection({ userId: grace.id, provider: 'netlify', label: 'Not mine' })
+    })
+    const fe = await card('Frontend on Netlify')
+    const form = within(fe).getByRole('form', { name: 'Set up the frontend on Netlify' })
+    const picker = await within(form).findByLabelText('Netlify connection')
+    expect(within(picker).getAllByRole('option').map((o) => o.textContent)).toEqual(['Pick a connection', 'Mine (••••3333) · ada'])
+
+    await user.click(within(form).getByRole('button', { name: 'Set up Netlify' }))
+    expect((await within(form).findAllByText('Pick one of your Netlify connections.')).length).toBeGreaterThan(0)
+    expect(requestsTo('PUT', '/targets/frontend')).toHaveLength(0)
+
+    await user.selectOptions(picker, 'Mine (••••3333) · ada')
+    const name = within(form).getByLabelText('Name')
+    await user.clear(name)
+    await user.type(name, 'shop-web')
+    await user.type(within(form).getByLabelText('Region (optional)'), 'eu')
+    await user.click(within(form).getByRole('button', { name: 'Set up Netlify' }))
+
+    expect(await within(fe).findByTestId('setup-progress')).toHaveTextContent(/Setting up/)
+    expect(requestsTo('PUT', '/targets/frontend').at(-1)?.body).toEqual({
+      provider: 'netlify',
+      connectionId: expect.any(String) as string,
+      create: { name: 'shop-web', region: 'eu' },
+    })
+    await waitFor(() => {
+      expect(within(fe).getByTestId('target-status')).toHaveTextContent('Ready')
+    })
+    expect(within(fe).queryByTestId('setup-progress')).not.toBeInTheDocument()
+    expect(within(fe).getByTestId('target-binding')).toHaveTextContent('connected by Ada Lovelace')
+    expect(within(fe).getByRole('link', { name: /shop-web\.netlify\.app/ })).toBeInTheDocument()
+  })
+
+  it('FR144_link_picker: Link lists the resources the connection reaches and sends the picked id', async () => {
+    const { user } = await openAsOwner((me, p) => {
+      seedNetlifyRenderTargets(p)
+      seedPlatformConnection({ userId: me, provider: 'render', label: 'Render key', token: 'rnd_dddd4444' })
+    })
+    const be = await card('Backend on Render')
+    const form = within(be).getByRole('form', { name: 'Set up the backend on Render' })
+    await user.selectOptions(await within(form).findByLabelText('Render connection'), 'Render key (••••4444) · ada')
+    await user.click(within(form).getByRole('radio', { name: /Link an existing Render service/ }))
+    const existing = await within(form).findByLabelText('Existing service')
+    await user.selectOptions(existing, 'inventory-services · A render service')
+    await user.click(within(form).getByRole('button', { name: 'Set up Render' }))
+    await waitFor(() => {
+      expect(requestsTo('PUT', '/targets/backend').at(-1)?.body).toMatchObject({ provider: 'render', link: { resourceId: 'services_1' } })
+    })
+  })
+
+  it('FR144_setup_job_error: a failed setup job shows the shared copy and the platform\'s fix link on the card', async () => {
+    deploymentDb.gitNotConnected = true
+    const { user } = await openAsOwner((me, p) => {
+      seedNetlifyRenderTargets(p)
+      seedPlatformConnection({ userId: me, provider: 'netlify', label: 'Mine', token: 'nfp_cccc3333' })
+    })
+    const fe = await card('Frontend on Netlify')
+    const form = within(fe).getByRole('form', { name: 'Set up the frontend on Netlify' })
+    await user.selectOptions(await within(form).findByLabelText('Netlify connection'), 'Mine (••••3333) · ada')
+    await user.click(within(form).getByRole('button', { name: 'Set up Netlify' }))
+
+    const link = await within(fe).findByRole('link', { name: /Connect the repository in Netlify/ }, { timeout: 3000 })
+    expect(link).toHaveAttribute('href', NETLIFY_INSTALL_URL)
+    expect(link.closest('[role="alert"]')).toHaveTextContent("Netlify can't see this repository. Connect it in Netlify, then verify again.")
+    expect(within(fe).getByTestId('target-status')).toHaveTextContent('Error')
+  })
+
+  it('FR144_setup_plan_limit: PLATFORM_PLAN_LIMIT from the job names the platform and its reason', async () => {
+    deploymentDb.planLimit = true
+    const { user } = await openAsOwner((me, p) => {
+      seedNetlifyRenderTargets(p)
+      seedPlatformConnection({ userId: me, provider: 'netlify', label: 'Mine', token: 'nfp_cccc3333' })
+    })
+    const fe = await card('Frontend on Netlify')
+    await user.selectOptions(await within(fe).findByLabelText('Netlify connection'), 'Mine (••••3333) · ada')
+    await user.click(within(fe).getByRole('button', { name: 'Set up Netlify' }))
+    expect(await within(fe).findByTestId('setup-error', {}, { timeout: 3000 })).toHaveTextContent(
+      "Your Netlify plan doesn't allow this. A private organisation repository needs the Pro plan.",
+    )
+  })
+
+  it('FR144_verify_checklist: Verify lists every readiness item with its state in words and fix links', async () => {
+    const { user } = await openAsOwner((me, p) => {
+      const c = seedPlatformConnection({ userId: me, provider: 'netlify', label: 'Mine', token: 'nfp_cccc3333' })
+      seedNetlifyRenderTargets(p, { configured: true, netlify: c })
+    })
+    const be = await card('Backend on Render')
+    deploymentDb.gitNotConnected = true
+    await user.click(within(be).getByRole('button', { name: 'Verify the backend target' }))
+    const list = within(be).getByRole('list', { name: 'Readiness checklist (backend)' })
+    await waitFor(() => {
+      expect(within(list).getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual([
+        'Connection',
+        'Repository access',
+        'Required variables',
+        'AIDE branches not auto-deployed',
+        'Preview environment',
+        'Plan limits',
+      ])
+    })
+    const git = within(list).getByRole('listitem', { name: 'Repository access' })
+    expect(within(git).getByTestId('readiness-state')).toHaveTextContent('Problem')
+    expect(within(git).getByRole('link', { name: /Fix: Repository access/ })).toHaveAttribute('href', NETLIFY_INSTALL_URL)
+    const env = within(list).getByRole('listitem', { name: 'Required variables' })
+    expect(within(env).getByTestId('readiness-state')).toHaveTextContent('Warning')
+    expect(env).toHaveTextContent('Missing: JWT_SIGNING_KEY.')
+    expect(within(within(list).getByRole('listitem', { name: 'Connection' })).getByTestId('readiness-state')).toHaveTextContent('Problem')
+  })
+
+  it('FR144_keep_rebinds: "Keep <resource>" sends only my connection (no create or link) and the card is rebound to me', async () => {
+    const grace = seedUser({ email: 'grace@example.com', name: 'Grace Hopper', systemRole: 'user' })
+    const ada = signInAs({ email: 'ada@example.com', name: 'Ada Lovelace', systemRole: 'user' })
+    const project = seedProject({
+      members: [
+        { userId: grace.id, role: 'owner' },
+        { userId: ada.id, role: 'owner' },
+      ],
+    })
+    const theirs = seedPlatformConnection({ userId: grace.id, provider: 'netlify', label: 'Grace', token: 'nfp_9999c0de' })
+    const mine = seedPlatformConnection({ userId: ada.id, provider: 'netlify', label: 'Mine', token: 'nfp_cccc3333' })
+    seedNetlifyRenderTargets(project, { configured: true, netlify: theirs })
+    const { user } = await openSettings('deployment', project)
+
+    const fe = await card('Frontend on Netlify')
+    await user.click(within(fe).getByRole('button', { name: 'Change the frontend target' }))
+    const form = within(fe).getByRole('form', { name: 'Set up the frontend on Netlify' })
+    expect(within(form).getByRole('radio', { name: /Keep inventory-web/ })).toBeChecked()
+    await within(form).findByLabelText('Netlify connection')
+    await user.click(within(form).getByRole('button', { name: 'Save target' }))
+    expect((await within(form).findAllByText('Pick one of your Netlify connections.')).length).toBeGreaterThan(0)
+    expect(requestsTo('PUT', '/targets/frontend')).toHaveLength(0)
+
+    await user.selectOptions(within(form).getByLabelText('Netlify connection'), 'Mine (••••3333) · ada')
+    await user.click(within(form).getByRole('button', { name: 'Save target' }))
+    await waitFor(() => {
+      expect(requestsTo('PUT', '/targets/frontend').at(-1)?.body).toEqual({ provider: 'netlify', connectionId: mine.id })
+    })
+    await waitFor(() => {
+      expect(within(fe).getByTestId('target-status')).toHaveTextContent('Ready')
+    })
+    expect(within(fe).getByTestId('target-binding')).toHaveTextContent('connected by Ada Lovelace')
+    expect(within(fe).getByTestId('target-resource')).toHaveTextContent('inventory-web')
+  })
+
+  it('FR144_unbind: Unbind asks first, then the card is not set up', async () => {
+    const { user } = await openAsOwner((me, p) => {
+      const c = seedPlatformConnection({ userId: me, provider: 'netlify', label: 'Mine', token: 'nfp_cccc3333' })
+      seedNetlifyRenderTargets(p, { configured: true, netlify: c })
+    })
+    const fe = await card('Frontend on Netlify')
+    await user.click(within(fe).getByRole('button', { name: 'Unbind the frontend target' }))
+    const confirm = await screen.findByRole('alertdialog', { name: 'Unbind the frontend target?' })
+    await user.click(within(confirm).getByRole('button', { name: 'Unbind' }))
+    await waitFor(() => {
+      expect(within(fe).getByTestId('target-status')).toHaveTextContent('Not set up')
+    })
+    expect(requestsTo('DELETE', '/targets/frontend')).toHaveLength(1)
+  })
+
+  it.each<Exclude<ProjectRole, 'owner'>>(['contributor', 'viewer'])('FR144_read_only_for_%s: no setup, verify, unbind or env editing', async (role) => {
+    const grace = seedUser({ email: 'grace@example.com', name: 'Grace Hopper', systemRole: 'user' })
+    const ada = signInAs({ email: 'ada@example.com', name: 'Ada Lovelace', systemRole: 'user' })
+    const project = seedProject({
+      members: [
+        { userId: grace.id, role: 'owner' },
+        { userId: ada.id, role },
+      ],
+    })
+    const c = seedPlatformConnection({ userId: grace.id, provider: 'netlify', label: 'Grace', token: 'nfp_9999c0de' })
+    seedNetlifyRenderTargets(project, { configured: true, netlify: c })
+    seedEnvVar(project, { key: 'FEATURE_FLAG' })
+    await openSettings('deployment', project)
+
+    const fe = await card('Frontend on Netlify')
+    expect(within(fe).getByTestId('target-binding')).toHaveTextContent('connected by Grace')
+    expect(screen.getByText('Only project Owners can change the deployment settings.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Verify|Unbind|Change setup|Add variable|Replace the value|Add a value/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('form')).not.toBeInTheDocument()
+    expect(await envRow('FEATURE_FLAG')).toBeInTheDocument()
+  })
+})
+
+describe('GitHub Pages (FR-143)', () => {
+  it('FR143_pages_permission_409: PLATFORM_PERMISSION_MISSING shows the copy and the App settings link', async () => {
+    deploymentDb.pagesPermissionMissing = true
+    const { user } = await openAsOwner((_me, p) => {
+      seedGitHubPagesTargets(p)
+    })
+    const fe = await card('Frontend on GitHub Pages')
+    expect(within(fe).getByTestId('target-binding')).toHaveTextContent("connected by the project's GitHub App installation")
+    expect(within(fe).getByRole('list', { name: 'What GitHub Pages supports' })).toHaveTextContent('No previews on GitHub Pages')
+    expect(within(fe).getByText('No previews on GitHub Pages', { selector: 'dd span' })).toBeInTheDocument()
+
+    await user.click(within(fe).getByRole('button', { name: 'Set up GitHub Pages' }))
+    const link = await within(fe).findByRole('link', { name: /Open the GitHub App settings/ })
+    expect(link).toHaveAttribute('href', GITHUB_APP_SETTINGS_URL)
+    expect(link.closest('[role="alert"]')).toHaveTextContent(errorMessages.PLATFORM_PERMISSION_MISSING)
+    expect(requestsTo('PUT', '/targets/frontend').at(-1)?.body).toEqual({ provider: 'github_pages' })
+  })
+
+  it('FR143_pages_setup: with the permission, GitHub Pages sets up without a connection', async () => {
+    const { user } = await openAsOwner((_me, p) => {
+      seedGitHubPagesTargets(p)
+    })
+    const fe = await card('Frontend on GitHub Pages')
+    expect(within(fe).queryByLabelText(/connection/)).not.toBeInTheDocument()
+    await user.click(within(fe).getByRole('button', { name: 'Set up GitHub Pages' }))
+    await waitFor(() => {
+      expect(within(fe).getByTestId('target-status')).toHaveTextContent('Ready')
+    })
+  })
+})
+
+describe('Environment inventory (FR-145)', () => {
+  it('FR145_source_badges: user, derived (read-only, with its origin) and required-missing rows', async () => {
+    await openAsOwner((_me, p) => {
+      seedNetlifyRenderTargets(p, { configured: true })
+      seedEnvVar(p, { key: 'FEATURE_FLAG', appliesTo: ['frontend', 'backend'], environments: ['preview'] })
+    })
+    const list = await screen.findByRole('list', { name: 'Environment variables' })
+    expect(within(list).getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual([
+      'Variable API_ORIGIN',
+      'Variable DATABASE_URL',
+      'Variable FEATURE_FLAG',
+      'Variable JWT_SIGNING_KEY',
+    ])
+
+    const user = await envRow('FEATURE_FLAG')
+    expect(within(user).getByTestId('env-source')).toHaveTextContent('User')
+    expect(within(user).getByTestId('env-components')).toHaveTextContent('Frontend, Backend')
+    expect(within(user).getByTestId('env-environments')).toHaveTextContent('Preview')
+    expect(within(user).getByRole('button', { name: 'Replace the value of FEATURE_FLAG' })).toBeInTheDocument()
+
+    const derived = await envRow('API_ORIGIN')
+    expect(within(derived).getByTestId('env-source')).toHaveTextContent('Derived')
+    expect(within(derived).getByTestId('env-derived-from')).toHaveTextContent('From the backend target on Render (read-only)')
+    expect(within(derived).queryByRole('button')).not.toBeInTheDocument()
+
+    const required = await envRow('JWT_SIGNING_KEY')
+    expect(within(required).getByTestId('env-source')).toHaveTextContent('Required · missing')
+    expect(within(required).getByText('Sensitive')).toBeInTheDocument()
+    expect(within(required).getByRole('button', { name: 'Add a value for JWT_SIGNING_KEY' })).toBeInTheDocument()
+    expect(screen.getByText('1 required variable is missing')).toBeInTheDocument()
+  })
+
+  it('FR145_add_required_value: the value is sent once with the row\'s components and never shown', async () => {
+    const secret = 'super-signing-key-123'
+    const { user, project } = await openAsOwner((_me, p) => {
+      seedNetlifyRenderTargets(p, { configured: true })
+    })
+    await user.click(await screen.findByRole('button', { name: 'Add a value for JWT_SIGNING_KEY' }))
+    const form = screen.getByRole('form', { name: 'Add JWT_SIGNING_KEY' })
+    expect(within(form).getByLabelText('Name')).toHaveAttribute('readonly')
     const value = within(form).getByLabelText('Value')
     expect(value).toHaveAttribute('type', 'password')
     await user.type(value, secret)
     await user.click(within(form).getByRole('button', { name: 'Save variable' }))
 
-    expect(await screen.findByText('NEXT_PUBLIC_SUPABASE_URL saved and pushed to Vercel.')).toBeInTheDocument()
-    const row = await within(env).findByRole('listitem', { name: 'Variable NEXT_PUBLIC_SUPABASE_URL' })
-    expect(row).toHaveTextContent('Value set')
-    expect(row).toHaveTextContent('Preview · Production')
-    expect(row).toHaveTextContent(/Synced to Vercel/)
-    expect(document.body).not.toHaveTextContent(secret)
-    await waitFor(() => {
-      expect(JSON.stringify(queryClient.getMutationCache().getAll().map((m) => m.state))).not.toContain(secret)
+    await waitFor(async () => {
+      expect(within(await envRow('JWT_SIGNING_KEY')).getByTestId('env-source')).toHaveTextContent('User')
     })
-    expect(requestsTo('PUT', '/env/NEXT_PUBLIC_SUPABASE_URL').at(-1)?.body).toEqual({
+    expect(requestsTo('PUT', '/env/JWT_SIGNING_KEY').at(-1)?.body).toEqual({
       value: secret,
       targets: ['preview', 'production'],
-      sensitive: false,
+      appliesTo: ['backend'],
+      sensitive: true,
+      public: false,
     })
     expect(project.deploymentEnv?.[0]?.value).toBe(secret)
+    expect(document.body).not.toHaveTextContent(secret)
+  })
+
+  it('FR145_public_secret_validation: a secret-looking public value is refused inline', async () => {
+    const { user } = await openAsOwner((_me, p) => {
+      seedNetlifyRenderTargets(p, { configured: true })
+    })
+    await user.click(await screen.findByRole('button', { name: 'Add variable' }))
+    const form = screen.getByRole('form', { name: 'Add a variable' })
+    await user.type(within(form).getByLabelText('Name'), 'VITE_STRIPE_KEY')
+    await user.type(within(form).getByLabelText('Value'), 'sk_live_abc')
+    await user.click(within(form).getByLabelText('Public'))
+    await user.click(within(form).getByRole('button', { name: 'Save variable' }))
+
+    const publicBox = within(form).getByLabelText('Public')
     await waitFor(() => {
-      expect(requiredStatus('NEXT_PUBLIC_SUPABASE_URL')).toHaveTextContent('Set')
+      expect(publicBox).toHaveAttribute('aria-invalid', 'true')
     })
+    expect(publicBox).toHaveAccessibleDescription(expect.stringContaining("Secret values can't be public.") as string)
+    expect(within(form).getByLabelText('Value')).toHaveValue('')
   })
 
-  it('FR88_env_targets_required: a variable needs at least one target', async () => {
+  it('FR145_derived_key_refused: a derived key is VALIDATION on the name field', async () => {
     const { user } = await openAsOwner((_me, p) => {
-      seedDeploymentSettings(p)
+      seedNetlifyRenderTargets(p, { configured: true })
     })
-    const env = await screen.findByRole('region', { name: 'Environment variables' })
-    await user.click(within(env).getByRole('button', { name: 'Add variable' }))
-    const form = within(env).getByRole('form', { name: 'Add a variable' })
-    await user.type(within(form).getByLabelText('Name'), 'API_URL')
-    await user.type(within(form).getByLabelText('Value'), 'x')
-    await user.click(within(form).getByLabelText('Preview'))
-    await user.click(within(form).getByLabelText('Production'))
+    await user.click(await screen.findByRole('button', { name: 'Add variable' }))
+    const form = screen.getByRole('form', { name: 'Add a variable' })
+    await user.type(within(form).getByLabelText('Name'), 'API_ORIGIN')
+    await user.type(within(form).getByLabelText('Value'), 'https://x.example')
     await user.click(within(form).getByRole('button', { name: 'Save variable' }))
-    expect((await within(form).findAllByText('Pick at least one target: Preview or Production.')).length).toBeGreaterThan(0)
-    expect(requestsTo('PUT', '/env/API_URL')).toHaveLength(0)
+    expect((await within(form).findAllByText(/AIDE derives API_ORIGIN from the deployment targets/)).length).toBeGreaterThan(0)
   })
 
-  it('FR88_env_sync_failure: a 502 keeps the value in AIDE, says it will retry, and lists the sync error', async () => {
-    vercelDb.envSyncFails = true
+  it('FR145_env_sync_failure: a 502 keeps the value and the row shows the sync error', async () => {
+    deploymentDb.envSyncFails = true
     const { user } = await openAsOwner((_me, p) => {
-      seedDeploymentSettings(p)
+      seedNetlifyRenderTargets(p, { configured: true })
     })
-    const env = await screen.findByRole('region', { name: 'Environment variables' })
-    await user.click(within(env).getByRole('button', { name: 'Add variable' }))
-    const form = within(env).getByRole('form', { name: 'Add a variable' })
-    await user.type(within(form).getByLabelText('Name'), 'API_URL')
-    await user.type(within(form).getByLabelText('Value'), 'https://api.example.com')
-    await user.click(within(form).getByLabelText('Sensitive'))
+    await user.click(await screen.findByRole('button', { name: 'Add variable' }))
+    const form = screen.getByRole('form', { name: 'Add a variable' })
+    await user.type(within(form).getByLabelText('Name'), 'API_KEY')
+    await user.type(within(form).getByLabelText('Value'), 'abc')
     await user.click(within(form).getByRole('button', { name: 'Save variable' }))
-
-    expect(await within(env).findByText(/Saved in AIDE, but pushing it to Vercel failed/)).toBeInTheDocument()
-    const row = await within(env).findByRole('listitem', { name: 'Variable API_URL' })
-    expect(within(row).getByTestId('env-sync-error')).toHaveTextContent('AIDE will retry on the next save or deployment.')
-    expect(row).toHaveTextContent('Sensitive')
+    expect(await screen.findByText(/Saved in AIDE, but pushing it to a deployment platform failed/)).toBeInTheDocument()
+    expect(within(await envRow('API_KEY')).getByTestId('env-sync-error')).toHaveTextContent('AIDE retries on the next save or deployment.')
   })
 
-  it('FR88_env_delete: deleting asks first and removes the variable', async () => {
+  it('FR145_env_delete: deleting a user variable asks first and removes it', async () => {
     const { user, project } = await openAsOwner((_me, p) => {
-      seedDeploymentSettings(p)
+      seedNetlifyRenderTargets(p, { configured: true })
       seedEnvVar(p, { key: 'OLD_FLAG' })
     })
-    const env = await screen.findByRole('region', { name: 'Environment variables' })
-    await user.click(await within(env).findByRole('button', { name: 'Delete OLD_FLAG' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete OLD_FLAG' }))
     const confirm = await screen.findByRole('alertdialog', { name: 'Delete OLD_FLAG?' })
     await user.click(within(confirm).getByRole('button', { name: 'Delete variable' }))
-    expect(await screen.findByText('OLD_FLAG deleted in AIDE and Vercel.')).toBeInTheDocument()
+    expect(await screen.findByText('OLD_FLAG deleted.')).toBeInTheDocument()
     expect(project.deploymentEnv).toEqual([])
+  })
+})
+
+describe('Origin model (FR-146)', () => {
+  it('FR146_origin_model_card: proxy is pack "same-origin", with the explanation and the other allowed model', async () => {
+    await openAsOwner((_me, p) => {
+      seedNetlifyRenderTargets(p)
+    })
+    const origin = await screen.findByTestId('origin-model')
+    expect(within(origin).getByTestId('origin-model-value')).toHaveTextContent('Proxy')
+    expect(within(origin).getByTestId('origin-pack-model')).toHaveTextContent('same-origin')
+    expect(origin).toHaveTextContent('Netlify rewrites /api/* to the backend (API_ORIGIN)')
+    expect(origin).toHaveTextContent('This stack also allows Cross-origin.')
+    expect(within(origin).getByRole('link', { name: 'Settings → Stack' })).toHaveAttribute('href', expect.stringContaining('/settings/stack') as string)
+  })
+
+  it('FR146_cross_origin_pages: a SPA on GitHub Pages is cross-origin, with VITE_API_BASE_URL derived public', async () => {
+    await openAsOwner((_me, p) => {
+      seedGitHubPagesTargets(p)
+    })
+    const origin = await screen.findByTestId('origin-model')
+    expect(within(origin).getByTestId('origin-model-value')).toHaveTextContent('Cross-origin')
+    expect(within(origin).getByTestId('origin-pack-model')).toHaveTextContent('cross-origin')
+    const row = await envRow('VITE_API_BASE_URL')
+    expect(within(row).getByTestId('env-source')).toHaveTextContent('Derived')
+    expect(within(row).getByText('Public')).toBeInTheDocument()
+    expect(within(await envRow('CORS_ALLOWED_ORIGINS')).getByTestId('env-components')).toHaveTextContent('Backend')
+  })
+})
+
+describe('Platform error copy (FR-144, D-V4-4)', () => {
+  it('FR144_platform_copy: {platform} comes from the ProblemDetails, plan limits append the reason', () => {
+    const plan = toApiError({ errorCode: 'PLATFORM_PLAN_LIMIT', title: 'Hobby teams cannot deploy org repositories.', platform: 'vercel' }, new Response(null, { status: 409 }))
+    expect(errorMessage(plan)).toBe("Your Vercel plan doesn't allow this. Hobby teams cannot deploy org repositories.")
+    const unsupported = toApiError({ errorCode: 'DEPLOYMENT_ACTION_UNSUPPORTED', platform: 'github_pages' }, new Response(null, { status: 409 }))
+    expect(errorMessage(unsupported)).toBe("GitHub Pages doesn't support this action.")
+    const failed = toApiError({ errorCode: 'PLATFORM_ERROR' }, new Response(null, { status: 502 }))
+    expect(errorMessage(failed)).toBe('The platform returned an error. Try again later.')
   })
 })

@@ -68,7 +68,7 @@ export function WizardDeploymentStep({
               <p>
                 You have no Vercel connections yet. Add a token under{' '}
                 <Link to="/connections" className="font-medium text-primary underline underline-offset-2">
-                  Connections → Vercel
+                  Connections
                 </Link>{' '}
                 (what you entered here isn&apos;t kept), or skip deployment and set it up later in Settings → Deployment.
               </p>

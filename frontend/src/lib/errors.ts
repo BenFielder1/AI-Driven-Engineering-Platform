@@ -87,16 +87,16 @@ export const errorMessages = {
   REPO_NAME_TAKEN: "A repository with this name already exists for that owner. Choose another name.",
   GITHUB_RATE_LIMITED: "GitHub's rate limit was reached. Wait a moment and try again.",
   GIT_ERROR: "Git or GitHub refused the operation.",
-  // Vercel deployments (FR-87–FR-91, §4.15)
-  VERCEL_GIT_NOT_CONNECTED:
-    "Vercel's GitHub App can't access this repository. Install it on the repository's owner (or give it access to the repository), then try again.",
-  VERCEL_PLAN_LIMIT:
-    "Your Vercel plan doesn't allow this: a Hobby account can't deploy a repository owned by a GitHub organisation. Use a token for a Pro team, or a repository on your personal account.",
+  // Deployment platforms (FR-87–FR-91, FR-144, §4.15, §6). `{platform}` is completed by errorMessage() from the
+  // ProblemDetails `platform` extension, or by platformCopy() for a code recorded on a target or deployment.
+  PLATFORM_GIT_NOT_CONNECTED: "{platform} can't see this repository. Connect it in {platform}, then verify again.",
+  PLATFORM_PLAN_LIMIT: "Your {platform} plan doesn't allow this.",
+  PLATFORM_ERROR: "{platform} returned an error. Try again later.",
+  DEPLOYMENT_ACTION_UNSUPPORTED: "{platform} doesn't support this action.",
   DEPLOYMENT_NOT_CONFIGURED:
-    "Deployment isn't set up for this project. An Owner can set up Vercel in Settings → Deployment.",
+    "Deployment isn't set up for this project. An Owner can set up the deployment targets in Settings → Deployment.",
   INVALID_DEPLOYMENT: "Only a ready production deployment can be promoted.",
   DEPLOYMENT_TIMEOUT: "The deployment didn't finish within 30 minutes, so AIDE stopped waiting for it.",
-  VERCEL_ERROR: "Vercel reported the build or deployment as failed. The build log says why.",
   // Import an existing repository (FR-73)
   TAG_NOT_FOUND: "That tag isn't in the repository. Pick another released version, or choose Never released.",
   RELEASE_CANCELLED: "A rollback cancelled this release before it ran.",
@@ -360,37 +360,45 @@ export const contextualErrorMessages = {
     CREDENTIAL_INVALID:
       "Railway rejected this token, so it wasn't saved. Check that you copied the whole token and, for a workspace token, that the Workspace ID is the token's workspace.",
   },
-  /** PATCH /api/projects/:id/settings/deployment (FR-88). */
-  deploymentSettings: {
-    FORBIDDEN: "Only project Owners can change the deployment settings.",
+  /** PUT /api/projects/:id/settings/deployment/targets/:component (FR-144). */
+  deploymentTarget: {
+    FORBIDDEN: "Only project Owners can change the deployment targets.",
     CREDENTIAL_NOT_OWNER:
-      "Changing the Vercel project uses your own Vercel connection: pick one of yours, which rebinds the project to it. Add a token under Connections → Vercel if you have none.",
-    VALIDATION: "Deployment needs a GitHub-backed project: a Local repository can't deploy to Vercel.",
-    UPSTREAM_ERROR: "Vercel failed or couldn't be reached, so nothing changed. Try again in a moment.",
+      "You can only bind one of your own connections. Pick one of yours, or add a token under Connections.",
+    VALIDATION: "Check the target's settings: some fields need attention.",
+    UPSTREAM_ERROR: "A service AIDE needs for this failed or couldn't be reached, so nothing changed. Try again in a moment.",
     CONFLICT: "Someone else changed the deployment settings at the same time. The page now shows the latest; try again.",
   },
-  /** PUT /api/projects/:id/settings/deployment/env/:key (FR-88): 502 means saved in AIDE but not pushed to Vercel. */
+  /** POST /api/projects/:id/settings/deployment/targets/:component/verify (FR-144). */
+  deploymentVerify: {
+    FORBIDDEN: "Only project Owners can check a deployment target.",
+  },
+  /** DELETE /api/projects/:id/settings/deployment/targets/:component (FR-144). */
+  deploymentUnbind: {
+    FORBIDDEN: "Only project Owners can unbind a deployment target.",
+  },
+  /** PUT /api/projects/:id/settings/deployment/env/:key (FR-145): 502 means saved in AIDE but not pushed to a platform. */
   deploymentEnvSave: {
     FORBIDDEN: "Only project Owners can edit environment variables.",
     UPSTREAM_ERROR:
-      "Saved in AIDE, but pushing it to Vercel failed. AIDE pushes it again on the next save or deployment.",
+      "Saved in AIDE, but pushing it to a deployment platform failed. AIDE pushes it again on the next save or deployment.",
   },
-  /** DELETE /api/projects/:id/settings/deployment/env/:key (FR-88): nothing is deleted when Vercel can't delete it. */
+  /** DELETE /api/projects/:id/settings/deployment/env/:key (FR-145): nothing is deleted when a platform can't delete it. */
   deploymentEnvDelete: {
     FORBIDDEN: "Only project Owners can delete environment variables.",
-    UPSTREAM_ERROR: "Vercel couldn't delete it, so nothing was deleted. Try again in a moment.",
+    UPSTREAM_ERROR: "A deployment platform couldn't delete it, so nothing was deleted. Try again in a moment.",
   },
   /** POST /api/projects/:id/deployments/preview · /:deploymentId/redeploy (FR-90, FR-91). */
   deploy: {
     FORBIDDEN: "Only Contributors and Owners can deploy a preview, and only Owners can redeploy production.",
-    UPSTREAM_ERROR: "Vercel failed or couldn't be reached, so no deployment was created. Try again in a moment.",
+    UPSTREAM_ERROR: "The deployment platform failed or couldn't be reached, so no deployment was created. Try again in a moment.",
   },
   /** POST /api/projects/:id/deployments/:deploymentId/promote (FR-91). */
   promoteDeployment: {
     FORBIDDEN: "Only project Owners can promote a production deployment.",
     INVALID_DEPLOYMENT:
       "This deployment can't be promoted: only a ready production deployment can. The list now shows the latest.",
-    UPSTREAM_ERROR: "Vercel failed or couldn't be reached, so nothing was promoted. Try again in a moment.",
+    UPSTREAM_ERROR: "The deployment platform failed or couldn't be reached, so nothing was promoted. Try again in a moment.",
   },
   /** PATCH /api/projects/:id/settings/llm (FR-79). */
   llmBinding: {
@@ -441,6 +449,7 @@ export const contextualErrorMessages = {
     NOT_FOUND:
       "We couldn't find that repository, or the access token can't see it. Check the URL and the token's repository access.",
     CREDENTIAL_NOT_OWNER: "You can only use one of your own Vercel connections. Pick another, or skip deployment.",
+    PLATFORM_GIT_NOT_CONNECTED: "{platform} can't see this repository. Connect it in {platform}, then try again.",
   },
   /** POST /api/projects `git` with `mode: gitlab` (FR-132, FR-136, FR-141): the bound connection and the picked project. */
   createProjectGitLab: {
@@ -780,6 +789,16 @@ export function platformConnectionMessage(error: unknown, provider: { id: string
   return errorMessage(error, context).replaceAll("{provider}", provider.name);
 }
 
+/**
+ * Codes recorded on deployments and events before v4 renamed them (D-V4-4: VERCEL_* → PLATFORM_*). They are no
+ * longer API codes, so they aren't in `errorMessages`; copyForCode() still reads them so history stays readable.
+ */
+const legacyCodeCopy: Readonly<Record<string, string>> = {
+  VERCEL_GIT_NOT_CONNECTED: "Vercel couldn't see this repository.",
+  VERCEL_PLAN_LIMIT: "The Vercel plan didn't allow this.",
+  VERCEL_ERROR: "Vercel reported the build or deployment as failed. The build log says why.",
+};
+
 function isErrorCode(code: unknown): code is ErrorCode {
   return typeof code === "string" && Object.hasOwn(errorMessages, code);
 }
@@ -794,12 +813,53 @@ export function copyForCode(
   host?: GitHostTerms,
 ): string | null {
   if (!isErrorCode(code)) {
-    return null;
+    return typeof code === "string" && Object.hasOwn(legacyCodeCopy, code) ? (legacyCodeCopy[code] ?? null) : null;
   }
   const overrides: Partial<Record<ErrorCode, string>> | undefined = context
     ? contextualErrorMessages[context]
     : undefined;
   return withGitHost(overrides?.[code] ?? errorMessages[code], host);
+}
+
+/** SPEC §6 `{platform}`: the display name of a deployment platform id (ProblemDetails `platform`, a target's provider). */
+export const platformNames: Readonly<Record<string, string>> = {
+  vercel: "Vercel",
+  netlify: "Netlify",
+  cloudflare: "Cloudflare",
+  render: "Render",
+  railway: "Railway",
+  github_pages: "GitHub Pages",
+  supabase: "Supabase",
+  fake: "the Fake provider",
+};
+
+/** Fills `{platform}` (unknown or missing: "the platform"), capitalising the first letter of the result. */
+export function withPlatform(text: string, platform: string | null | undefined): string {
+  if (!text.includes("{platform}")) {
+    return text;
+  }
+  const name = (platform ? platformNames[platform] : undefined) ?? "the platform";
+  const filled = text.replaceAll("{platform}", name);
+  return filled.charAt(0).toUpperCase() + filled.slice(1);
+}
+
+/** PLATFORM_PLAN_LIMIT: "Your {platform} plan doesn't allow this. {detail}" with the platform's reason, when there is one. */
+function withPlanDetail(code: ErrorCode | null, text: string, detail: string | null | undefined): string {
+  const d = detail?.trim();
+  return code === "PLATFORM_PLAN_LIMIT" && d ? `${text} ${d}` : text;
+}
+
+/**
+ * FR-144: copy for a code recorded on a deployment target or deployment (the setup job's `errorCode`, a failed
+ * deployment), naming its platform; `detail` is the platform's reason for PLATFORM_PLAN_LIMIT. `null` for unknown codes.
+ */
+export function platformCopy(
+  code: string | null | undefined,
+  platform: string | null | undefined,
+  detail?: string | null,
+): string | null {
+  const copy = copyForCode(code);
+  return copy === null || !isErrorCode(code) ? copy : withPlanDetail(code, withPlatform(copy, platform), detail);
 }
 
 const statusFallback: Partial<Record<number, ErrorCode>> = {
@@ -825,6 +885,7 @@ interface ProblemBody {
   errorCode?: string;
   reason?: string;
   installUrl?: string;
+  platform?: string;
   errors?: Record<string, string[]>;
   details?: string[];
   unverifiableScopes?: unknown;
@@ -848,6 +909,8 @@ export class ApiError extends Error {
   readonly violations: readonly StackViolation[];
   /** ProblemDetails `unverifiableScopes` (CONNECTION_SCOPE_INSUFFICIENT on a Bitbucket token, FR-134). */
   readonly unverifiableScopes: readonly string[];
+  /** ProblemDetails `platform` (PLATFORM_* codes, FR-144): the platform id that fills `{platform}` in the copy. */
+  readonly platform: string | null;
 
   constructor(init: {
     status: number;
@@ -861,6 +924,7 @@ export class ApiError extends Error {
     installUrl?: string | null;
     violations?: readonly StackViolation[];
     unverifiableScopes?: readonly string[];
+    platform?: string | null;
   }) {
     super(init.title ?? `Request failed with HTTP ${String(init.status)}`);
     this.name = "ApiError";
@@ -874,6 +938,7 @@ export class ApiError extends Error {
     this.installUrl = init.installUrl ?? null;
     this.violations = init.violations ?? [];
     this.unverifiableScopes = init.unverifiableScopes ?? [];
+    this.platform = init.platform ?? null;
   }
 }
 
@@ -905,6 +970,7 @@ export function toApiError(error: unknown, response: Response): ApiError {
     unverifiableScopes: Array.isArray(body.unverifiableScopes)
       ? body.unverifiableScopes.filter((d): d is string => typeof d === "string")
       : [],
+    platform: typeof body.platform === "string" ? body.platform : null,
   });
 }
 
@@ -1070,7 +1136,12 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
       }
     }
     if (error.errorCode) {
-      return messageFor(error.errorCode, context);
+      const generic = error.message.startsWith("Request failed with HTTP");
+      return withPlanDetail(
+        error.errorCode,
+        withPlatform(messageFor(error.errorCode, context), error.platform),
+        generic ? null : error.message,
+      );
     }
     if (error.status === 501) {
       return notImplementedMessage;

@@ -49,10 +49,10 @@ public class PlatformConnectionRulesTests
     [Fact]
     public void FR142_Vercel_keeps_its_v2_classification_and_Railway_reads_GraphQL_errors()
     {
-        Assert.Equal(PlatformFailure.Rejected, PlatformConnectionRules.FromVercel(VercelFailure.CredentialRejected));
-        Assert.Equal(PlatformFailure.MissingPermissions, PlatformConnectionRules.FromVercel(VercelFailure.Forbidden));
-        Assert.Equal(PlatformFailure.RateLimited, PlatformConnectionRules.FromVercel(VercelFailure.RateLimited));
-        Assert.Equal(PlatformFailure.Upstream, PlatformConnectionRules.FromVercel(VercelFailure.PlanLimit));
+        Assert.Equal(PlatformFailure.Rejected, PlatformConnectionRules.FromVercel(DeploymentFailure.CredentialRejected));
+        Assert.Equal(PlatformFailure.MissingPermissions, PlatformConnectionRules.FromVercel(DeploymentFailure.Forbidden));
+        Assert.Equal(PlatformFailure.RateLimited, PlatformConnectionRules.FromVercel(DeploymentFailure.RateLimited));
+        Assert.Equal(PlatformFailure.Upstream, PlatformConnectionRules.FromVercel(DeploymentFailure.PlanLimit));
         Assert.Equal(PlatformFailure.Rejected, PlatformConnectionRules.ClassifyRailwayError("Not Authorized"));
         Assert.Equal(PlatformFailure.RateLimited, PlatformConnectionRules.ClassifyRailwayError("Rate limit exceeded"));
         Assert.Equal(PlatformFailure.NotFound, PlatformConnectionRules.ClassifyRailwayError("Project not found"));
@@ -139,7 +139,7 @@ public class PlatformConnectionRulesTests
         Assert.Equal(["frontend", "backend"], EnumStrings.Values<DeploymentComponent>());
         Assert.Equal(["not_configured", "configuring", "ready", "attention", "error"], EnumStrings.Values<DeploymentTargetStatus>());
         Assert.Equal(["deploy", "rollback", "promote"], EnumStrings.Values<DeploymentKind>());
-        Assert.Equal(["user", "derived"], EnumStrings.Values<DeploymentEnvSource>());
+        Assert.Equal(["user", "derived", "required"], EnumStrings.Values<DeploymentEnvSource>());
     }
 
     [Theory]

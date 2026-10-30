@@ -21,6 +21,8 @@ export const connectionKeys = {
   llmProviders: () => [...connectionKeys.all, 'llm-providers'] as const,
   /** GET /api/me/connections/platforms (FR-142; Vercel connections included, FR-87). */
   platforms: () => [...connectionKeys.all, 'platforms'] as const,
+  /** GET /api/me/connections/platforms/:id/resources?type= (FR-142 picker data). */
+  platformResources: (id: string, type: string) => [...connectionKeys.all, 'platforms', id, 'resources', type] as const,
   adminLlmPolicy: () => ['admin', 'integrations', 'llm'] as const,
 }
 

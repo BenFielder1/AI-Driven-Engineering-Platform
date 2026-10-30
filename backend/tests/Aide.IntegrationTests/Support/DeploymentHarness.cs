@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using Aide.Api.Features.Deployments;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
@@ -32,14 +33,15 @@ public static class DeploymentHarness
             services.AddHttpClient(VercelDeploymentProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => vercel)));
 
     /// <summary>A valid connection of <paramref name="userId"/> whose token is <paramref name="token"/> (encrypted as in production).</summary>
-    public static async Task<Guid> SeedConnectionAsync(WebApplicationFactory<Program> app, Guid userId, string token = "vcp_seededToken0123456789", string? teamId = null)
+    public static async Task<Guid> SeedConnectionAsync(
+        WebApplicationFactory<Program> app, Guid userId, string token = "vcp_seededToken0123456789", string? teamId = null, PlatformProvider provider = PlatformProvider.Vercel)
     {
         ArgumentNullException.ThrowIfNull(app);
         var protector = app.Services.GetRequiredService<ISecretProtectors>().ForPurpose(SecretPurposes.PlatformToken);
         var connection = new PlatformConnection
         {
             UserId = userId,
-            Provider = PlatformProvider.Vercel,
+            Provider = provider,
             Label = "Personal",
             SecretEncrypted = protector.Protect(token),
             Last4 = token[^4..],
@@ -56,6 +58,59 @@ public static class DeploymentHarness
         });
         return connection.Id;
     }
+
+    /// <summary>FR-144: a Next.js (full-stack) composition deployed to Vercel: one frontend target card.</summary>
+    public static readonly object VercelStack = new { frontend = new { pack = "fe-nextjs", path = "." }, deploy = new { frontendHost = "deploy-vercel" } };
+
+    /// <summary>FR-146: a React SPA on GitHub Pages calling a FastAPI backend on Railway (cross-origin).</summary>
+    public static readonly object PagesAndRailwayStack = new
+    {
+        frontend = new { pack = "fe-react-vite", path = "frontend" },
+        backend = new { pack = "be-fastapi", path = "backend" },
+        deploy = new { frontendHost = "deploy-github-pages", backendHost = "deploy-railway" },
+    };
+
+    /// <summary>Sets the composition of the project's version in development (Owner, <c>PUT /api/projects/:id/stack</c>).</summary>
+    public static async Task SetStackAsync(HttpClient client, Guid projectId, object stack)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        var response = await client.PutAsJsonAsync($"/api/projects/{projectId}/stack", stack, Ct);
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync(Ct));
+    }
+
+    public static string SettingsPath(Guid projectId) => $"/api/projects/{projectId}/settings/deployment";
+
+    public static string TargetPath(Guid projectId, string component) => $"{SettingsPath(projectId)}/targets/{component}";
+
+    /// <summary>FR-144 <c>PUT …/targets/:component</c>.</summary>
+    public static Task<HttpResponseMessage> PutTargetAsync(HttpClient client, Guid projectId, string component, object body)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        return client.PutAsJsonAsync(TargetPath(projectId, component), body, Ct);
+    }
+
+    /// <summary>Settings → Deployment as <paramref name="client"/> sees it.</summary>
+    public static async Task<DeploymentSettingsDto> SettingsAsync(HttpClient client, Guid projectId)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        return await ProjectApi.ReadAsync<DeploymentSettingsDto>(await client.GetAsync(new Uri(SettingsPath(projectId), UriKind.Relative), Ct));
+    }
+
+    /// <summary>Puts the target (expecting 202) and runs its queued <c>deployment_setup</c> job to the end; returns the job.</summary>
+    public static async Task<Job> SetUpTargetAsync(WebApplicationFactory<Program> app, HttpClient client, Guid projectId, string component, object body)
+    {
+        await ProjectApi.ReadAsync<DeploymentTargetDto>(await PutTargetAsync(client, projectId, component, body), System.Net.HttpStatusCode.Accepted);
+        var job = await SetupJobAsync(app, projectId);
+        await SettleAsync(app, job.Id);
+        return await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.Id == job.Id, Ct));
+    }
+
+    /// <summary>The project's newest <c>deployment_setup</c> job.</summary>
+    public static Task<Job> SetupJobAsync(WebApplicationFactory<Program> app, Guid projectId) =>
+        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
+            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DeploymentSetup)
+            .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
+            .FirstAsync(Ct));
 
     /// <summary>A frontend deployment target (v2 settings) bound to <paramref name="connectionId"/> and linked to the Vercel project.</summary>
     public static Task BindAsync(

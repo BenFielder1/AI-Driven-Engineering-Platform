@@ -99,59 +99,75 @@ public sealed class DeploymentContractTests(AideApiFactory factory)
     // ---------------------------------------------------------------- FR-88 Settings → Deployment
 
     [Fact]
-    public async Task FR88_Deployment_settings_are_readable_by_members_and_editable_by_Owners()
+    public async Task FR144_Deployment_settings_are_readable_by_members_and_targets_editable_by_Owners()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory, git: PatGit);
+        await DeploymentHarness.SetStackAsync(fixture.Owner.Client, fixture.Project.Id, DeploymentHarness.VercelStack);
         var path = $"{fixture.Path}/settings/deployment";
+        var target = $"{path}/targets/frontend";
         var own = await SeedConnectionAsync(fixture.Owner.User!.Id);
-        var body = new { provider = "vercel", connectionId = own, vercelProjectId = "prj_abc" };
+        var body = new { provider = "vercel", connectionId = own, link = new { resourceId = "prj_abc" } };
 
         await Problems.AssertAsync(await fixture.Outsider.Client.GetAsync(U(path), Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
         Assert.Equal(HttpStatusCode.OK, (await fixture.Viewer.Client.GetAsync(U(path), Ct)).StatusCode);
+        using (var anonymous = new ApiSession(factory))
+        {
+            await Problems.AssertAsync(await anonymous.Client.GetAsync(U(path), Ct), HttpStatusCode.Unauthorized, ErrorCodes.Unauthenticated);
+            await Problems.AssertAsync(await anonymous.Client.PutAsJsonAsync(target, body, Ct), HttpStatusCode.Unauthorized, ErrorCodes.Unauthenticated);
+        }
 
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(fixture.Outsider.Client, path, body), HttpStatusCode.NotFound, ErrorCodes.NotFound);
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(fixture.Viewer.Client, path, body), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(fixture.Contributor.Client, path, body), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(fixture.Owner.Client, path, body), HttpStatusCode.BadGateway, ErrorCodes.UpstreamError);
+        await Problems.AssertAsync(await fixture.Outsider.Client.PutAsJsonAsync(target, body, Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
+        await Problems.AssertAsync(await fixture.Viewer.Client.PutAsJsonAsync(target, body, Ct), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
+        await Problems.AssertAsync(await fixture.Contributor.Client.PutAsJsonAsync(target, body, Ct), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
+        await Problems.AssertAsync(await fixture.Contributor.Client.DeleteAsync(U(target), Ct), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
+        Assert.Equal(HttpStatusCode.Accepted, (await fixture.Owner.Client.PutAsJsonAsync(target, body, Ct)).StatusCode);
     }
 
     [Fact]
-    public async Task FR88_Binding_another_users_connection_is_CREDENTIAL_NOT_OWNER_and_an_unknown_one_NOT_FOUND()
+    public async Task FR144_Binding_another_users_connection_is_CREDENTIAL_NOT_OWNER_and_an_unknown_one_NOT_FOUND()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory, git: PatGit);
-        var path = $"{fixture.Path}/settings/deployment";
+        await DeploymentHarness.SetStackAsync(fixture.Owner.Client, fixture.Project.Id, DeploymentHarness.VercelStack);
+        var target = $"{fixture.Path}/settings/deployment/targets/frontend";
         var contributors = await SeedConnectionAsync(fixture.Contributor.User!.Id);
+        var link = new { resourceId = "prj_abc" };
 
         await Problems.AssertAsync(
-            await ProjectApi.PatchAsync(fixture.Owner.Client, path, new { provider = "vercel", connectionId = contributors }), HttpStatusCode.Forbidden, ErrorCodes.CredentialNotOwner);
+            await fixture.Owner.Client.PutAsJsonAsync(target, new { provider = "vercel", connectionId = contributors, link }, Ct), HttpStatusCode.Forbidden, ErrorCodes.CredentialNotOwner);
         await Problems.AssertAsync(
-            await ProjectApi.PatchAsync(fixture.Owner.Client, path, new { provider = "vercel", connectionId = Guid.CreateVersion7() }), HttpStatusCode.NotFound, ErrorCodes.NotFound);
+            await fixture.Owner.Client.PutAsJsonAsync(target, new { provider = "vercel", connectionId = Guid.CreateVersion7(), link }, Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
     }
 
     [Theory]
-    [InlineData("""{"provider":"vercel","vercelProjectId":"prj_a","create":{"name":"todo"}}""", "create")]
-    [InlineData("""{"provider":"vercel","create":{"name":"Todo App"}}""", "create.name")]
-    [InlineData("""{"provider":"vercel","create":{"name":"todo","rootDirectory":"../x"}}""", "create.rootDirectory")]
-    [InlineData("""{"provider":"fake"}""", "provider")]
-    [InlineData("""{"provider":null,"vercelProjectId":"prj_a"}""", "provider")]
-    public async Task FR88_Invalid_deployment_settings_are_VALIDATION_400(string body, string field)
+    [InlineData("""{"provider":"vercel","connectionId":"{c}","link":{"resourceId":"prj_a"},"create":{"name":"todo"}}""", "create")]
+    [InlineData("""{"provider":"vercel","connectionId":"{c}"}""", "create")]
+    [InlineData("""{"provider":"vercel","connectionId":"{c}","create":{"name":"Todo App"}}""", "create.name")]
+    [InlineData("""{"provider":"vercel","connectionId":"{c}","link":{"resourceId":"prj a"}}""", "link.resourceId")]
+    [InlineData("""{"provider":"vercel","link":{"resourceId":"prj_a"}}""", "connectionId")]
+    public async Task FR144_Invalid_targets_are_VALIDATION_400(string body, string field)
     {
         using var owner = await ApiSession.RegisterAsync(factory);
         var project = await ProjectApi.CreateAsync(owner.Client, git: PatGit);
+        await DeploymentHarness.SetStackAsync(owner.Client, project.Id, DeploymentHarness.VercelStack);
+        var connection = await SeedConnectionAsync(owner.User!.Id);
 
-        var response = await owner.Client.PatchAsync(U($"/api/projects/{project.Id}/settings/deployment"), Json(body), Ct);
+        var response = await owner.Client.PutAsync(
+            U($"/api/projects/{project.Id}/settings/deployment/targets/frontend"), Json(body.Replace("{c}", connection.ToString(), StringComparison.Ordinal)), Ct);
 
         var problem = await Problems.AssertAsync(response, HttpStatusCode.BadRequest, ErrorCodes.Validation);
         Assert.True(problem.GetProperty("errors").TryGetProperty(field, out _), problem.ToString());
     }
 
     [Fact]
-    public async Task FR88_A_Local_Git_project_cannot_deploy_VALIDATION()
+    public async Task FR144_S9_A_Local_Git_project_cannot_set_up_a_real_target_VALIDATION()
     {
         using var owner = await ApiSession.RegisterAsync(factory);
         var project = await ProjectApi.CreateAsync(owner.Client);
+        await DeploymentHarness.SetStackAsync(owner.Client, project.Id, DeploymentHarness.VercelStack);
+        var connection = await SeedConnectionAsync(owner.User!.Id);
 
-        var response = await ProjectApi.PatchAsync(owner.Client, $"/api/projects/{project.Id}/settings/deployment", new { provider = "vercel", vercelProjectId = "prj_a" });
+        var response = await owner.Client.PutAsJsonAsync(
+            $"/api/projects/{project.Id}/settings/deployment/targets/frontend", new { provider = "vercel", connectionId = connection, link = new { resourceId = "prj_a" } }, Ct);
 
         var problem = await Problems.AssertAsync(response, HttpStatusCode.BadRequest, ErrorCodes.Validation);
         Assert.True(problem.GetProperty("errors").TryGetProperty("provider", out _), problem.ToString());
