@@ -352,7 +352,7 @@ public sealed class DeploymentSettingsTests(AideApiFactory factory)
         Assert.Equal((DeploymentTargetStatus.NotConfigured, (string?)null, (DeploymentTargetBindingDto?)null), (backend.Status, backend.ResourceId, backend.Binding));
         Assert.False(settings.Env.Variables.Single(v => v.Key == "VITE_API_BASE_URL").HasValue);
         Assert.False(await ProjectApi.WithDbAsync(app, db => db.DeploymentEnvVars.AnyAsync(v => v.ProjectId == id && v.Source == DeploymentEnvSource.Derived, Ct)));
-        Assert.Contains(await LifecycleSeed.EventsAsync(app, id, EventTypes.SettingsUpdated), e => e.Payload.Contains("\"cleared\":true", StringComparison.Ordinal));
+        Assert.Contains(await LifecycleSeed.EventsAsync(app, id, EventTypes.SettingsUpdated), e => JsonDocument.Parse(e.Payload).RootElement.TryGetProperty("cleared", out var cleared) && cleared.ValueKind == JsonValueKind.True);
         await Problems.AssertAsync(await owner.Client.DeleteAsync(new Uri(DeploymentHarness.TargetPath(id, "backend"), UriKind.Relative), Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
     }
 

@@ -4,7 +4,7 @@ import { api, apiJson, projectState, waitForDraft, waitForPendingGate } from './
 
 /**
  * v2 E2E helpers (NFR-TEST2): Fake LLM + Local Git + the Fake deployment provider (§4.15: READY after 2 polls at
- * https://fake-<sha8>.vercel.test). Everything here talks to the real API or the real UI; no fixed waits.
+ * https://fake-<sha8>-<component>.<provider>.test, §4.20). Everything here talks to the real API or the real UI; no fixed waits.
  */
 
 export const AGENT_TIMEOUT = 60_000
@@ -102,8 +102,12 @@ export async function waitForDeployment(
   return found as unknown as DeploymentDto
 }
 
-/** §4.15: the Fake provider's URL for a commit. */
-export const fakeUrl = (sha: string) => `https://fake-${sha.slice(0, 8).toLowerCase()}.vercel.test`
+/**
+ * §4.15, §4.20: the Fake provider's URL for a commit of a target, `https://fake-<sha8>-<component>.<provider>.test`
+ * (the wizard's Vercel deployment is the frontend target on `vercel`).
+ */
+export const fakeUrl = (sha: string, component: 'frontend' | 'backend' = 'frontend', provider = 'vercel') =>
+  `https://fake-${sha.slice(0, 8).toLowerCase()}-${component}.${provider}.test`
 
 export async function approveDraftViaApi(context: BrowserContext, projectId: string, type: string) {
   const draft = await waitForDraft(context, projectId, type, AGENT_TIMEOUT)

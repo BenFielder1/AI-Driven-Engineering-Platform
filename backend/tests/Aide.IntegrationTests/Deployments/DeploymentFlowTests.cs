@@ -425,5 +425,6 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         Assert.Single(vercel.Requests, r => r.Method == "POST" && r.Path == "/v10/projects/prj_todo/promote/dpl_old");
     }
 
-    private static string FakeUrl(string sha) => FakeDeploymentRules.Url(sha);
+    /// <summary>§4.20 Fake URL of the frontend target (bound as Vercel): <c>https://fake-&lt;sha8&gt;-frontend.vercel.test</c>.</summary>
+    private static string FakeUrl(string sha) => FakeDeploymentRules.Url(sha, DeploymentComponent.Frontend, DeploymentProvider.Vercel);
 }
