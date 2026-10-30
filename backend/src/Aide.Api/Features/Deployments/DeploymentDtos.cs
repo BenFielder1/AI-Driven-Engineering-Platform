@@ -15,7 +15,13 @@ public sealed record DeploymentUserDto(Guid Id, string Name);
 /// A failed deployment carries <c>errorCode</c> (<c>PLATFORM_ERROR</c>, formerly <c>VERCEL_ERROR</c>; <c>DEPLOYMENT_TIMEOUT</c>), <c>errorMessage</c> and
 /// <c>buildLogTail</c> (the end of the build log). <c>trigger</c> is <c>auto</c> (AIDE, after execution or the release
 /// merge), <c>manual</c>, <c>promote</c> or <c>redeploy</c>; <c>triggeredBy</c> is <c>null</c> for <c>auto</c> (or a
-/// deleted user). <c>promotedFromDeploymentId</c> is the earlier production deployment a <c>promote</c> row promoted.
+/// deleted user). <c>promotedFromDeploymentId</c> is the earlier production deployment a <c>promote</c> (or
+/// <c>rollback</c>) row made current again.
+/// FR-150, FR-151: <c>component</c> (<c>frontend</c>, <c>backend</c>), <c>kind</c> (<c>deploy</c>, <c>rollback</c>,
+/// <c>promote</c>), <c>platform</c> (the target's host; <c>provider</c> is <c>fake</c> in Fake mode), <c>current</c> (the
+/// deployment production serves now, per component), <c>canRollback</c> with <c>rollbackBlockedReason</c> when false
+/// (<c>unsupported</c>, <c>not_production</c>, <c>not_ready</c>, <c>unknown_at_platform</c>, <c>current</c>), and
+/// <c>olderThanLatestMigration</c> (the rollback dialog's database warning; <c>null</c> = unknown, until M30 databases).
 /// </summary>
 public sealed record DeploymentDto(
     Guid Id,
@@ -36,7 +42,20 @@ public sealed record DeploymentDto(
     DeploymentUserDto? TriggeredBy,
     Guid? PromotedFromDeploymentId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? ReadyAt);
+    DateTimeOffset? ReadyAt,
+    DeploymentComponent Component,
+    DeploymentKind Kind,
+    DeploymentProvider Platform,
+    bool Current,
+    bool CanRollback,
+    string? RollbackBlockedReason,
+    bool? OlderThanLatestMigration);
+
+/// <summary>
+/// FR-151: the production URL of one component on the project overview: its platform, the URL (<c>null</c> until known)
+/// and the deployment production serves now (<c>null</c> before the first ready production deployment).
+/// </summary>
+public sealed record ComponentProductionUrlDto(DeploymentComponent Component, DeploymentProvider Provider, string? Url, Guid? DeploymentId);
 
 /// <summary>
 /// FR-90: the preview deployment a review cycle waited for (<c>compliance_report.external_checks.preview</c>): its id, final

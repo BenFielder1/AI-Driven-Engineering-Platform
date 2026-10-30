@@ -112,7 +112,8 @@ public sealed class DeploymentAccess(AideDbContext db, ISecretProtectors protect
             return Result.Failure<DeploymentContext>(new DomainError(ErrorCodes.CredentialInvalid, $"The bound {platform} token can't be decrypted; its owner needs to add it again."));
         }
 
-        return Result.Success(new DeploymentContext(target, connection, new DeploymentAuth(token, connection.Metadata.TeamId), provider, repo));
+        var slug = connection.Metadata.Accounts.FirstOrDefault(a => a.Id == connection.AccountId)?.Slug ?? connection.AccountId;
+        return Result.Success(new DeploymentContext(target, connection, new DeploymentAuth(token, connection.Metadata.TeamId, connection.AccountId, slug), provider, repo));
     }
 
     /// <summary>

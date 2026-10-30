@@ -64,7 +64,7 @@ public sealed partial class DeploymentSetupJobHandler(
         catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.RateLimited)
         {
             var until = JobPolicy.DeferUntil(now, ex.RetryAt ?? now + TimeSpan.FromMinutes(1));
-            throw new JobDeferredException($"The platform's rate limit is reached; setup waits until {until:u}.", until);
+            throw new JobDeferredException($"{ErrorCodes.PlatformRateLimited}: {DeploymentPlatforms.DisplayName(ex.Platform)} is rate limiting requests; setup waits until {until:u}.", until);
         }
         catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.Upstream)
         {

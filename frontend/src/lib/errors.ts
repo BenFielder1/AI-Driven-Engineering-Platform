@@ -92,10 +92,12 @@ export const errorMessages = {
   PLATFORM_GIT_NOT_CONNECTED: "{platform} can't see this repository. Connect it in {platform}, then verify again.",
   PLATFORM_PLAN_LIMIT: "Your {platform} plan doesn't allow this.",
   PLATFORM_ERROR: "{platform} returned an error. Try again later.",
+  // A job code (FR-150, §6): the platform answered 429, so the deployment job backs off and retries.
+  PLATFORM_RATE_LIMITED: "{platform} is rate limiting deployments. AIDE will retry.",
   DEPLOYMENT_ACTION_UNSUPPORTED: "{platform} doesn't support this action.",
   DEPLOYMENT_NOT_CONFIGURED:
     "Deployment isn't set up for this project. An Owner can set up the deployment targets in Settings → Deployment.",
-  INVALID_DEPLOYMENT: "Only a ready production deployment can be promoted.",
+  INVALID_DEPLOYMENT: "Only a ready production deployment can be rolled back to.",
   DEPLOYMENT_TIMEOUT: "The deployment didn't finish within 30 minutes, so AIDE stopped waiting for it.",
   // Import an existing repository (FR-73)
   TAG_NOT_FOUND: "That tag isn't in the repository. Pick another released version, or choose Never released.",
@@ -393,12 +395,13 @@ export const contextualErrorMessages = {
     FORBIDDEN: "Only Contributors and Owners can deploy a preview, and only Owners can redeploy production.",
     UPSTREAM_ERROR: "The deployment platform failed or couldn't be reached, so no deployment was created. Try again in a moment.",
   },
-  /** POST /api/projects/:id/deployments/:deploymentId/promote (FR-91). */
-  promoteDeployment: {
-    FORBIDDEN: "Only project Owners can promote a production deployment.",
+  /** POST /api/projects/:id/deployments/:deploymentId/rollback (FR-91, FR-150; `/promote` is its v2 alias). */
+  rollbackDeployment: {
+    FORBIDDEN: "Only project Owners can roll back a production deployment.",
     INVALID_DEPLOYMENT:
-      "This deployment can't be promoted: only a ready production deployment can. The list now shows the latest.",
-    UPSTREAM_ERROR: "The deployment platform failed or couldn't be reached, so nothing was promoted. Try again in a moment.",
+      "This deployment can't be rolled back to: only a ready production deployment that isn't live can. The list now shows the latest.",
+    DEPLOYMENT_ACTION_UNSUPPORTED: "{platform} doesn't support rollback, so nothing changed.",
+    UPSTREAM_ERROR: "The deployment platform failed or couldn't be reached, so nothing was rolled back. Try again in a moment.",
   },
   /** PATCH /api/projects/:id/settings/llm (FR-79). */
   llmBinding: {

@@ -11,36 +11,62 @@ import { useDocumentTitle } from '../../lib/use-document-title'
 import { useProjectAccess } from '../projects/project-context'
 import { RelativeTime } from '../projects/relative-time'
 import { DeployPreviewButton, RedeployButton } from './deploy-buttons'
-import { canPromote, deploymentTargetLabels, liveProduction, shortSha, triggeredByLabel } from './deployment-format'
+import {
+  componentLabels,
+  currentProduction,
+  isCloudflarePages,
+  deploymentProviderLabels,
+  deploymentTargetLabels,
+  rollbackBlockedCopy,
+  rollbackWording,
+  shortSha,
+  triggeredByLabel,
+} from './deployment-format'
 import { DeploymentLink, DeploymentStatusPill } from './deployment-parts'
-import { deploymentTargets, useDeployments, type Deployment, type DeploymentTarget } from './deployments-api'
-import { PromoteDeploymentDialog } from './promote-dialog'
+import { DeploymentProviderLogo } from './deployment-provider-logo'
+import {
+  deploymentComponents,
+  deploymentTargets,
+  useDeploymentSettings,
+  useDeployments,
+  type Deployment,
+  type DeploymentComponent,
+  type DeploymentTarget,
+} from './deployments-api'
+import { RollbackDeploymentDialog } from './rollback-dialog'
 
-type TargetFilter = DeploymentTarget | 'all'
+type EnvironmentFilter = DeploymentTarget | 'all'
+type ComponentFilter = DeploymentComponent | 'all'
 
 /**
- * /projects/:id/deployments (FR-90, FR-91, SPEC §7.2): every deployment with target, version, SHA, state (a live pill
- * while queued or building), URL, time and who triggered it; a target filter; Promote (Owners, ready production) and
- * Redeploy (previews: writers; production: Owners). Not configured: an empty state pointing at Settings → Deployment.
+ * /projects/:id/deployments (FR-90, FR-91, FR-150, FR-151, SPEC §7): every deployment with component, environment,
+ * provider, version, SHA, state (a live pill while queued or building), URL, time, who triggered it and a "Current"
+ * badge; component and environment filters (sent to the API); rollback per provider capability (Owners, worded as the
+ * platform words it; a production row that can't be rolled back to says why, as text) and Redeploy (previews:
+ * writers; production: Owners). Not configured: an empty state pointing at Settings → Deployment.
  */
 export function DeploymentsPage() {
   const { project, can, readOnly, releaseVersionId } = useProjectAccess()
   useDocumentTitle(`Deployments · ${project.name}`)
-  const [target, setTarget] = useState<TargetFilter>('all')
-  const [promoting, setPromoting] = useState<Deployment | null>(null)
+  const [environment, setEnvironment] = useState<EnvironmentFilter>('all')
+  const [component, setComponent] = useState<ComponentFilter>('all')
+  const [rollingBack, setRollingBack] = useState<Deployment | null>(null)
   const enabled = project.deploymentsEnabled
   // A past version (FR-62) lists only its own deployments.
   const deployments = useDeployments(
     project.id,
-    { target: target === 'all' ? undefined : target, releaseVersionId: readOnly ? releaseVersionId : undefined },
+    {
+      component: component === 'all' ? undefined : component,
+      environment: environment === 'all' ? undefined : environment,
+      releaseVersionId: readOnly ? releaseVersionId : undefined,
+    },
     enabled,
   )
-  // "Live" is known from the production rows whatever the filter shows.
-  const production = useDeployments(
-    project.id,
-    { target: 'production', releaseVersionId: readOnly ? releaseVersionId : undefined },
-    enabled && target === 'preview',
-  )
+  const rows = deployments.data ?? []
+  // FR-150: Cloudflare Workers and Pages roll back differently; the target's resource id (`pages:<project>`) says which.
+  const settings = useDeploymentSettings(project.id, enabled && rows.some((d) => d.platform === 'cloudflare'))
+  const cloudflarePages = (c: DeploymentComponent) =>
+    settings.data?.targets.some((t) => t.component === c && t.provider === 'cloudflare' && isCloudflarePages(t.resourceId)) ?? false
   const owner = can('manageDeployment')
   const writer = can('deployPreview')
 
@@ -51,7 +77,7 @@ export function DeploymentsPage() {
           Deployments
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Preview deployments of the version branch and production deployments of each release.
+          Preview deployments of the version branch and production deployments of each release, per component.
         </p>
       </div>
       {enabled && writer && <DeployPreviewButton projectId={project.id} />}
@@ -68,8 +94,8 @@ export function DeploymentsPage() {
           title="Deployment isn't set up"
           description={
             owner
-              ? 'Set up Vercel in Settings → Deployment to deploy previews of each run and production on every release.'
-              : 'An Owner can set up Vercel in Settings → Deployment.'
+              ? 'Set up the deployment targets in Settings → Deployment to deploy previews of each run and production on every release.'
+              : 'An Owner can set up the deployment targets in Settings → Deployment.'
           }
           action={
             owner ? (
@@ -87,25 +113,34 @@ export function DeploymentsPage() {
     )
   }
 
-  const rows = deployments.data ?? []
-  const live = liveProduction(target === 'preview' ? (production.data ?? []) : rows)
-
   const columns: DataTableColumn<Deployment>[] = [
     {
-      key: 'target',
-      header: 'Target',
+      key: 'component',
+      header: 'Component',
       primary: true,
       cell: (d) => (
         <span className="flex flex-wrap items-center gap-2">
-          {deploymentTargetLabels[d.target]}
-          {d.id === live?.id && (
-            <span className="rounded-full bg-success/15 px-2 text-xs font-medium" data-testid="deployment-live">
-              Live
+          {componentLabels[d.component]}
+          {d.current && (
+            <span className="rounded-full bg-success/15 px-2 text-xs font-medium" data-testid="deployment-current">
+              Current
             </span>
           )}
         </span>
       ),
-      sortValue: (d) => d.target,
+      sortValue: (d) => d.component,
+    },
+    { key: 'environment', header: 'Environment', cell: (d) => deploymentTargetLabels[d.target], sortValue: (d) => d.target },
+    {
+      key: 'provider',
+      header: 'Provider',
+      cell: (d) => (
+        <span className="inline-flex items-center gap-1.5">
+          <DeploymentProviderLogo provider={d.platform} />
+          {deploymentProviderLabels[d.platform]}
+        </span>
+      ),
+      sortValue: (d) => d.platform,
     },
     { key: 'version', header: 'Version', cell: (d) => <span className="font-mono">{d.releaseVersion}</span>, sortValue: (d) => d.releaseVersion },
     {
@@ -127,20 +162,28 @@ export function DeploymentsPage() {
       cell: (d) => {
         const mayRedeploy = d.target === 'preview' ? writer : owner
         const active = d.status === 'queued' || d.status === 'building'
+        const action = rollbackWording(d.platform, cloudflarePages(d.component)).action
+        // FR-151: reasons are always visible text, never hover-only.
+        const blocked = d.target === 'production' && !d.canRollback ? rollbackBlockedCopy(d) : null
         return (
-          <span className="flex flex-wrap gap-2">
-            {owner && canPromote(d, live) && (
+          <span className="flex flex-wrap items-center gap-2">
+            {owner && d.canRollback && (
               <Button
                 variant="secondary"
-                aria-label={`Promote ${d.releaseVersion} (${shortSha(d.gitSha)})`}
+                aria-label={`${action} ${d.releaseVersion} (${shortSha(d.gitSha)})`}
                 onClick={() => {
-                  setPromoting(d)
+                  setRollingBack(d)
                 }}
               >
-                Promote
+                {action}
               </Button>
             )}
             {mayRedeploy && !active && <RedeployButton projectId={project.id} deployment={d} />}
+            {blocked && (
+              <span className="text-xs text-muted-foreground" data-testid="rollback-blocked">
+                {blocked}
+              </span>
+            )}
           </span>
         )
       },
@@ -164,7 +207,7 @@ export function DeploymentsPage() {
           <EmptyState
             variant="no_data"
             headingLevel={3}
-            title={target === 'all' ? 'No deployments yet' : `No ${deploymentTargetLabels[target].toLowerCase()} deployments yet`}
+            title={environment === 'all' && component === 'all' ? 'No deployments yet' : 'No deployments match these filters'}
             description="AIDE deploys a preview when execution opens or updates the pull request, and production after each release."
           />
         }
@@ -175,17 +218,33 @@ export function DeploymentsPage() {
   return (
     <section aria-labelledby="deployments-title" className="flex flex-col gap-4">
       {header}
-      <div className="max-w-xs">
+      <div role="group" aria-label="Filter deployments" className="grid gap-3 sm:max-w-lg sm:grid-cols-2">
         <SelectField
-          id="deployments-target"
-          label="Target"
-          value={target}
+          id="deployments-component"
+          label="Component"
+          value={component}
           onChange={(e) => {
             const value = e.target.value
-            setTarget(value === 'preview' || value === 'production' ? value : 'all')
+            setComponent(value === 'frontend' || value === 'backend' ? value : 'all')
           }}
         >
-          <option value="all">All targets</option>
+          <option value="all">All components</option>
+          {deploymentComponents.map((c) => (
+            <option key={c} value={c}>
+              {componentLabels[c]}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          id="deployments-environment"
+          label="Environment"
+          value={environment}
+          onChange={(e) => {
+            const value = e.target.value
+            setEnvironment(value === 'preview' || value === 'production' ? value : 'all')
+          }}
+        >
+          <option value="all">All environments</option>
           {deploymentTargets.map((t) => (
             <option key={t} value={t}>
               {deploymentTargetLabels[t]}
@@ -194,13 +253,14 @@ export function DeploymentsPage() {
         </SelectField>
       </div>
       {body}
-      {promoting && (
-        <PromoteDeploymentDialog
+      {rollingBack && (
+        <RollbackDeploymentDialog
           projectId={project.id}
-          deployment={promoting}
-          current={live}
+          deployment={rollingBack}
+          cloudflarePages={cloudflarePages(rollingBack.component)}
+          current={currentProduction(rows, rollingBack.component)}
           onClose={() => {
-            setPromoting(null)
+            setRollingBack(null)
           }}
         />
       )}

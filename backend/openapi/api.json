@@ -7293,7 +7293,7 @@
         "tags": [
           "Deployments"
         ],
-        "summary": "The project's deployments, newest first (members, FR-91): target, version, SHA, state, URL, time and who triggered it. Filter by target (preview, production) and releaseVersionId.",
+        "summary": "The project's deployments, newest first (members, FR-151): component, environment, provider, version, SHA, state, URL, time, who triggered it, and whether each can be rolled back to. Filter by component (frontend, backend), environment (preview, production; `target` is the v2 name) and releaseVersionId.",
         "operationId": "ListDeployments",
         "parameters": [
           {
@@ -7322,6 +7322,28 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "component",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "frontend",
+                "backend"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "preview",
+                "production"
+              ],
+              "type": "string"
             }
           }
         ],
@@ -7454,12 +7476,122 @@
         }
       }
     },
+    "/api/projects/{id}/deployments/{deploymentId}/rollback": {
+      "post": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Make an earlier ready production deployment current again (Owner, FR-150), per the provider: Vercel promote, Netlify restore, Cloudflare Workers version at 100 %, Cloudflare Pages rollback. Git and the database are left alone. Records a rollback row (promote on Vercel).",
+        "operationId": "RollbackDeployment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "deploymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "INVALID_DEPLOYMENT (not a ready production deployment, unknown at the platform, or already current), DEPLOYMENT_ACTION_UNSUPPORTED (the provider has no rollback, e.g. GitHub Pages; extension platform) or DEPLOYMENT_NOT_CONFIGURED",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known)",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the action is allowed again.",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR (the platform failed or couldn't be reached)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/deployments/{deploymentId}/promote": {
       "post": {
         "tags": [
           "Deployments"
         ],
-        "summary": "Promote an earlier ready production deployment (Owner, FR-91): a production rollback that leaves Git alone. Records a new promote row. 409 INVALID_DEPLOYMENT when the deployment isn't a ready production deployment.",
+        "summary": "v2 name of rollback, kept as an alias for Vercel (FR-91, FR-150): the same action as POST …/rollback.",
         "operationId": "PromoteDeployment",
         "parameters": [
           {
@@ -7532,8 +7664,27 @@
               }
             }
           },
+          "429": {
+            "description": "UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known)",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the action is allowed again.",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "502": {
-            "description": "UPSTREAM_ERROR (Vercel failed or couldn't be reached)",
+            "description": "UPSTREAM_ERROR (the platform failed or couldn't be reached)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14425,6 +14576,37 @@
         },
         "description": "One review cycle's result in the compliance trend (FR-41). `threshold` is the compliance threshold that cycle was\ndecided against (the report's snapshot; the project's threshold may have changed since)."
       },
+      "ComponentProductionUrlDto": {
+        "required": [
+          "component",
+          "provider",
+          "url",
+          "deploymentId"
+        ],
+        "type": "object",
+        "properties": {
+          "component": {
+            "$ref": "#/components/schemas/DeploymentComponent"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/DeploymentProvider"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "deploymentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "FR-151: the production URL of one component on the project overview: its platform, the URL (`null` until known)\nand the deployment production serves now (`null` before the first ready production deployment)."
+      },
       "ConfirmApprovalLinkRequest": {
         "type": "object",
         "properties": {
@@ -15363,7 +15545,14 @@
           "triggeredBy",
           "promotedFromDeploymentId",
           "createdAt",
-          "readyAt"
+          "readyAt",
+          "component",
+          "kind",
+          "platform",
+          "current",
+          "canRollback",
+          "rollbackBlockedReason",
+          "olderThanLatestMigration"
         ],
         "type": "object",
         "properties": {
@@ -15460,9 +15649,36 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "component": {
+            "$ref": "#/components/schemas/DeploymentComponent"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DeploymentKind"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/DeploymentProvider"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "canRollback": {
+            "type": "boolean"
+          },
+          "rollbackBlockedReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "olderThanLatestMigration": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
-        "description": "A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |\ncanceled`. `url` is the deployment URL once known, `inspectorUrl` Vercel's inspector page. `gitRef`\nand `gitSha` are what was deployed; `releaseVersion` is the version (e.g. `1.2.0`) of\n`releaseVersionId`; `releaseId` is the release attempt of a production deployment (`null` for previews).\nA failed deployment carries `errorCode` (`PLATFORM_ERROR`, formerly `VERCEL_ERROR`; `DEPLOYMENT_TIMEOUT`), `errorMessage` and\n`buildLogTail` (the end of the build log). `trigger` is `auto` (AIDE, after execution or the release\nmerge), `manual`, `promote` or `redeploy`; `triggeredBy` is `null` for `auto` (or a\ndeleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` row promoted."
+        "description": "A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |\ncanceled`. `url` is the deployment URL once known, `inspectorUrl` Vercel's inspector page. `gitRef`\nand `gitSha` are what was deployed; `releaseVersion` is the version (e.g. `1.2.0`) of\n`releaseVersionId`; `releaseId` is the release attempt of a production deployment (`null` for previews).\nA failed deployment carries `errorCode` (`PLATFORM_ERROR`, formerly `VERCEL_ERROR`; `DEPLOYMENT_TIMEOUT`), `errorMessage` and\n`buildLogTail` (the end of the build log). `trigger` is `auto` (AIDE, after execution or the release\nmerge), `manual`, `promote` or `redeploy`; `triggeredBy` is `null` for `auto` (or a\ndeleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` (or\n`rollback`) row made current again.\nFR-150, FR-151: `component` (`frontend`, `backend`), `kind` (`deploy`, `rollback`,\n`promote`), `platform` (the target's host; `provider` is `fake` in Fake mode), `current` (the\ndeployment production serves now, per component), `canRollback` with `rollbackBlockedReason` when false\n(`unsupported`, `not_production`, `not_ready`, `unknown_at_platform`, `current`), and\n`olderThanLatestMigration` (the rollback dialog's database warning; `null` = unknown, until M30 databases)."
       },
       "DeploymentEnvInventoryDto": {
         "required": [
@@ -15579,6 +15795,14 @@
           "production"
         ],
         "description": "Deployment environment (FR-147, FR-149), also a Vercel env target (FR-88). Wire values: `preview`,\n            `production`."
+      },
+      "DeploymentKind": {
+        "enum": [
+          "deploy",
+          "rollback",
+          "promote"
+        ],
+        "description": "What a deployment row does (FR-150, §5). Wire values: `deploy`, `rollback`, `promote`."
       },
       "DeploymentOriginModelDto": {
         "required": [
@@ -15914,7 +16138,8 @@
           "auto",
           "manual",
           "promote",
-          "redeploy"
+          "redeploy",
+          "rollback"
         ],
         "description": "Why a deployment row exists (FR-90, FR-91). Wire values: `auto` (AIDE after execution or release),\n            `manual`, `promote`, `redeploy`."
       },
@@ -19832,7 +20057,8 @@
           "executionStatus",
           "pullRequest",
           "latestRelease",
-          "latestDeployment"
+          "latestDeployment",
+          "productionUrls"
         ],
         "type": "object",
         "properties": {
@@ -19936,9 +20162,15 @@
                 "$ref": "#/components/schemas/DeploymentDto"
               }
             ]
+          },
+          "productionUrls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComponentProductionUrlDto"
+            }
           }
         },
-        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`\ncounts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the\nexecution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened\nit (FR-36), else `null`. `latestRelease` is the latest release attempt of the current release version (FR-42,\nFR-43), else `null`. Artifacts, steps, review and gates are those of the current release version\n`releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was\n`projectVersion` (D-V2-11). `suggestedNextVersion` prefills \"Start new version\" (FR-60: the next minor of the\nreleased version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:\nnone), for the overview and `aide status`."
+        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`\ncounts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the\nexecution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened\nit (FR-36), else `null`. `latestRelease` is the latest release attempt of the current release version (FR-42,\nFR-43), else `null`. Artifacts, steps, review and gates are those of the current release version\n`releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was\n`projectVersion` (D-V2-11). `suggestedNextVersion` prefills \"Start new version\" (FR-60: the next minor of the\nreleased version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:\nnone), for the overview and `aide status`. `productionUrls` (FR-151) is the production URL of each component\nwith a deployment target: the target's production URL (its stable domain), else the URL of the deployment production serves now."
       },
       "ProjectStatus": {
         "enum": [

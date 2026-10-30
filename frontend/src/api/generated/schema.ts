@@ -1348,7 +1348,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's deployments, newest first (members, FR-91): target, version, SHA, state, URL, time and who triggered it. Filter by target (preview, production) and releaseVersionId. */
+        /** The project's deployments, newest first (members, FR-151): component, environment, provider, version, SHA, state, URL, time, who triggered it, and whether each can be rolled back to. Filter by component (frontend, backend), environment (preview, production; `target` is the v2 name) and releaseVersionId. */
         get: operations["ListDeployments"];
         put?: never;
         post?: never;
@@ -1375,6 +1375,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/deployments/{deploymentId}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make an earlier ready production deployment current again (Owner, FR-150), per the provider: Vercel promote, Netlify restore, Cloudflare Workers version at 100 %, Cloudflare Pages rollback. Git and the database are left alone. Records a rollback row (promote on Vercel). */
+        post: operations["RollbackDeployment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/deployments/{deploymentId}/promote": {
         parameters: {
             query?: never;
@@ -1384,7 +1401,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Promote an earlier ready production deployment (Owner, FR-91): a production rollback that leaves Git alone. Records a new promote row. 409 INVALID_DEPLOYMENT when the deployment isn't a ready production deployment. */
+        /** v2 name of rollback, kept as an alias for Vercel (FR-91, FR-150): the same action as POST …/rollback. */
         post: operations["PromoteDeployment"];
         delete?: never;
         options?: never;
@@ -3165,6 +3182,17 @@ export interface components {
             /** Format: double */
             threshold: number;
         };
+        /**
+         * @description FR-151: the production URL of one component on the project overview: its platform, the URL (`null` until known)
+         *     and the deployment production serves now (`null` before the first ready production deployment).
+         */
+        ComponentProductionUrlDto: {
+            component: components["schemas"]["DeploymentComponent"];
+            provider: components["schemas"]["DeploymentProvider"];
+            url: null | string;
+            /** Format: uuid */
+            deploymentId: null | string;
+        };
         /** @description Confirms the decision of a one-click approval link; `comment` is optional (feedback on reject). */
         ConfirmApprovalLinkRequest: {
             comment?: null | string;
@@ -3528,7 +3556,13 @@ export interface components {
          *     A failed deployment carries `errorCode` (`PLATFORM_ERROR`, formerly `VERCEL_ERROR`; `DEPLOYMENT_TIMEOUT`), `errorMessage` and
          *     `buildLogTail` (the end of the build log). `trigger` is `auto` (AIDE, after execution or the release
          *     merge), `manual`, `promote` or `redeploy`; `triggeredBy` is `null` for `auto` (or a
-         *     deleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` row promoted.
+         *     deleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` (or
+         *     `rollback`) row made current again.
+         *     FR-150, FR-151: `component` (`frontend`, `backend`), `kind` (`deploy`, `rollback`,
+         *     `promote`), `platform` (the target's host; `provider` is `fake` in Fake mode), `current` (the
+         *     deployment production serves now, per component), `canRollback` with `rollbackBlockedReason` when false
+         *     (`unsupported`, `not_production`, `not_ready`, `unknown_at_platform`, `current`), and
+         *     `olderThanLatestMigration` (the rollback dialog's database warning; `null` = unknown, until M30 databases).
          */
         DeploymentDto: {
             /** Format: uuid */
@@ -3556,6 +3590,13 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             readyAt: null | string;
+            component: components["schemas"]["DeploymentComponent"];
+            kind: components["schemas"]["DeploymentKind"];
+            platform: components["schemas"]["DeploymentProvider"];
+            current: boolean;
+            canRollback: boolean;
+            rollbackBlockedReason: null | string;
+            olderThanLatestMigration: null | boolean;
         };
         /** @description The environment inventory (FR-145): the frontend pack's public prefix (`NEXT_PUBLIC_`, `VITE_`, or `null`) and the rows. */
         DeploymentEnvInventoryDto: {
@@ -3596,6 +3637,11 @@ export interface components {
          * @enum {unknown}
          */
         DeploymentEnvironment: "preview" | "production";
+        /**
+         * @description What a deployment row does (FR-150, §5). Wire values: `deploy`, `rollback`, `promote`.
+         * @enum {unknown}
+         */
+        DeploymentKind: "deploy" | "rollback" | "promote";
         /**
          * @description FR-146: the composition's origin model (`same-origin`, `proxy`, `cross-origin`; `null` API only), the
          *     stack-packs vocabulary's (`packModel`: `same-origin` or `cross-origin`), the models the Owner may switch
@@ -3710,7 +3756,7 @@ export interface components {
          *                 `manual`, `promote`, `redeploy`.
          * @enum {unknown}
          */
-        DeploymentTrigger: "auto" | "manual" | "promote" | "redeploy";
+        DeploymentTrigger: "auto" | "manual" | "promote" | "redeploy" | "rollback";
         /** @description A user named on a deployment or binding: "connected by &lt;name&gt;", "triggered by &lt;name&gt;". */
         DeploymentUserDto: {
             /** Format: uuid */
@@ -5122,7 +5168,8 @@ export interface components {
          *     `releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was
          *     `projectVersion` (D-V2-11). `suggestedNextVersion` prefills "Start new version" (FR-60: the next minor of the
          *     released version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:
-         *     none), for the overview and `aide status`.
+         *     none), for the overview and `aide status`. `productionUrls` (FR-151) is the production URL of each component
+         *     with a deployment target: the target's production URL (its stable domain), else the URL of the deployment production serves now.
          */
         ProjectStateDto: {
             /** Format: uuid */
@@ -5149,6 +5196,7 @@ export interface components {
             pullRequest: null | components["schemas"]["PullRequestSummaryDto"];
             latestRelease: null | components["schemas"]["ReleaseSummaryDto"];
             latestDeployment: null | components["schemas"]["DeploymentDto"];
+            productionUrls: components["schemas"]["ComponentProductionUrlDto"][];
         };
         /**
          * @description Project status (§4.1: status follows phase; `released`, `rolled_back` and `awaiting_merge` are special).
@@ -11682,6 +11730,8 @@ export interface operations {
             query?: {
                 target?: "preview" | "production";
                 releaseVersionId?: string;
+                component?: "frontend" | "backend";
+                environment?: "preview" | "production";
             };
             header?: never;
             path: {
@@ -11796,6 +11846,85 @@ export interface operations {
             };
         };
     };
+    RollbackDeployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                deploymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description INVALID_DEPLOYMENT (not a ready production deployment, unknown at the platform, or already current), DEPLOYMENT_ACTION_UNSUPPORTED (the provider has no rollback, e.g. GitHub Pages; extension platform) or DEPLOYMENT_NOT_CONFIGURED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     PromoteDeployment: {
         parameters: {
             query?: never;
@@ -11853,7 +11982,18 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;

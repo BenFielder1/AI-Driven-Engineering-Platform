@@ -259,12 +259,13 @@ test('NFR-TEST2, FR-55–FR-66, FR-90, FR-91: 0.1.0 is released live on Vercel, 
   expect(problem.errorCode).toBe('ROLLBACK_BLOCKED')
   expect(problem.details).toContain('reason: version_released')
 
-  // FR-91: the Deployments page lists both production deployments; 0.2.0's is live; an earlier one can be promoted.
+  // FR-91, FR-151: the Deployments page lists both production deployments; 0.2.0's is current; an earlier one can be
+  // promoted (Vercel's and the Fake's wording, FR-150).
   await page.goto(`/projects/${projectId}/deployments`)
-  await page.getByLabel('Target').selectOption('production')
+  await page.getByLabel('Environment').selectOption('production')
   const table = page.getByRole('table', { name: /^Deployments, newest first/ })
   await expect(table.getByRole('row')).toHaveCount(3)
-  const liveRow = table.getByRole('row').filter({ has: page.getByTestId('deployment-live') })
+  const liveRow = table.getByRole('row').filter({ has: page.getByTestId('deployment-current') })
   await expect(liveRow).toHaveCount(1)
   await expect(liveRow).toContainText('0.2.0')
   await table.getByRole('button', { name: /^Promote 0\.1\.0 / }).click()

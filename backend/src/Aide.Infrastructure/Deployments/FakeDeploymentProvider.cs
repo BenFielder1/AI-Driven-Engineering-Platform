@@ -108,7 +108,7 @@ public sealed class FakeDeploymentProvider(DeploymentProvider platform, IWorking
         });
 
     public Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, CancellationToken cancellationToken) =>
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken) =>
         Task.FromResult<ProviderDeployment?>(null);
 
     public Task CancelAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken) => Task.CompletedTask;

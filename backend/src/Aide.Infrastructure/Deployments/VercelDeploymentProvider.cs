@@ -114,7 +114,7 @@ public sealed class VercelDeploymentProvider(VercelApiClient client) : IDeployme
         client.GetBuildLogAsync(auth, deploymentId, cancellationToken);
 
     public Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, CancellationToken cancellationToken)
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
         return aideDeploymentId is { } id

@@ -6,6 +6,7 @@ import { platformDb, seedPlatformConnection, type StoredPlatformConnection } fro
 import { problem } from './problem'
 import {
   access,
+  currentDeploymentOf,
   currentVersionOf,
   forbidden,
   isOwnerLevel,
@@ -53,6 +54,9 @@ export const deploymentDb = {
   envDeleteFails: false,
 }
 
+/** Deployments the platform never reported (tests add ids): `unknown_at_platform` (FR-151). */
+export const unknownAtPlatform = new Set<string>()
+
 /** The v2 name of the knobs (the wizard's Vercel flow). */
 export const vercelDb = deploymentDb
 
@@ -63,6 +67,7 @@ export function resetDeploymentDb() {
   deploymentDb.pagesPermissionMissing = false
   deploymentDb.envSyncFails = false
   deploymentDb.envDeleteFails = false
+  unknownAtPlatform.clear()
 }
 
 /** §4.20 capabilities per provider. */
@@ -364,19 +369,35 @@ export function seedEnvVar(p: StoredProject, overrides: Partial<StoredEnvVar> & 
 
 let deploymentClock = Date.parse('2026-09-05T10:00:00Z')
 
-/** Appends a deployment. Defaults: a ready preview of the current version by AIDE, one minute after the previous one. */
+/** FR-150: the row a rollback records is `promote` on Vercel (v2 wording), `rollback` elsewhere. */
+const rollbackTrigger = (platform: Provider): 'promote' | 'rollback' =>
+  platform === 'vercel' || platform === 'fake' ? 'promote' : 'rollback'
+
+/**
+ * Appends a deployment. Defaults: a ready preview of the frontend on Vercel at the current version by AIDE, one minute
+ * after the previous one. `current`, `canRollback` and `rollbackBlockedReason` are worked out when it is listed.
+ */
 export function seedDeployment(p: StoredProject, overrides: Partial<Deployment> = {}): Deployment {
   const list = (p.deployments ??= [])
   deploymentClock += 60_000
   const version = currentVersionOf(p)
   const sha = overrides.gitSha ?? `${String(list.length + 1).padStart(2, '0')}a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f`.slice(0, 40)
   const target = overrides.target ?? 'preview'
+  const platform = overrides.platform ?? overrides.provider ?? 'vercel'
+  const trigger = overrides.trigger ?? 'auto'
   const d: Deployment = {
     id: nextId(),
     target,
-    provider: 'vercel',
+    provider: platform,
+    component: 'frontend',
+    platform,
+    kind: trigger === 'promote' ? 'promote' : trigger === 'rollback' ? 'rollback' : 'deploy',
+    current: false,
+    canRollback: false,
+    rollbackBlockedReason: null,
+    olderThanLatestMigration: null,
     status: 'ready',
-    url: `https://inventory-${sha.slice(0, 8)}.vercel.app`,
+    url: `https://inventory-${sha.slice(0, 8)}.${platform === 'vercel' ? 'vercel.app' : 'example.app'}`,
     inspectorUrl: null,
     gitRef: target === 'production' ? 'main' : (version?.branchName ?? 'aide/project/v0.1.0'),
     gitSha: sha,
@@ -386,7 +407,7 @@ export function seedDeployment(p: StoredProject, overrides: Partial<Deployment> 
     errorCode: null,
     errorMessage: null,
     buildLogTail: null,
-    trigger: 'auto',
+    trigger,
     triggeredBy: null,
     promotedFromDeploymentId: null,
     createdAt: new Date(deploymentClock).toISOString(),
@@ -589,6 +610,37 @@ function readinessOf(p: StoredProject, t: Target): Schemas['ReadinessItemDto'][]
 
 /** A target with a linked resource (FR-144): deployments can run. */
 const configured = (p: StoredProject) => p.deployment?.targets.some((t) => t.resourceId !== null) ?? false
+
+/** §4.20: whether a platform can make an earlier deployment current again (GitHub Pages can't). */
+const canRollBackOn = (platform: Provider) => capabilitiesOf(platform).rollback
+
+/** FR-150, FR-151: why a deployment can't be rolled back to (`null`: it can), in the API's order. */
+function blockedReason(p: StoredProject, d: Deployment): string | null {
+  if (!canRollBackOn(d.platform)) {
+    return 'unsupported'
+  }
+  if (d.target !== 'production') {
+    return 'not_production'
+  }
+  if (d.status !== 'ready') {
+    return 'not_ready'
+  }
+  if (unknownAtPlatform.has(d.id)) {
+    return 'unknown_at_platform'
+  }
+  return currentDeploymentOf(p, d.component)?.id === d.id ? 'current' : null
+}
+
+/** The derived fields of a listed deployment (FR-150, FR-151). */
+function withRollbackState(p: StoredProject, d: Deployment): Deployment {
+  const reason = blockedReason(p, d)
+  return {
+    ...d,
+    current: currentDeploymentOf(p, d.component)?.id === d.id,
+    canRollback: reason === null,
+    rollbackBlockedReason: reason,
+  }
+}
 
 /** Who may redeploy (FR-90, FR-91): previews need a writer, production an Owner. */
 function mayDeploy(a: Exclude<ReturnType<typeof access>, Response>, target: Schemas['DeploymentEnvironment']) {
@@ -842,13 +894,17 @@ export const deploymentHandlers = [
       return a
     }
     const q = new URL(request.url).searchParams
-    const target = q.get('target')
+    const environment = q.get('environment') ?? q.get('target')
+    const component = q.get('component')
     const versionId = q.get('releaseVersionId')
+    const p = a.project
     return HttpResponse.json<Deployment[]>(
-      [...(a.project.deployments ?? [])]
-        .filter((d) => !target || d.target === target)
+      [...(p.deployments ?? [])]
+        .filter((d) => !environment || d.target === environment)
+        .filter((d) => !component || d.component === component)
         .filter((d) => !versionId || d.releaseVersionId === versionId)
-        .sort((x, y) => y.createdAt.localeCompare(x.createdAt)),
+        .sort((x, y) => y.createdAt.localeCompare(x.createdAt))
+        .map((d) => withRollbackState(p, d)),
     )
   }),
 
@@ -915,33 +971,51 @@ export const deploymentHandlers = [
     return HttpResponse.json<Deployment>(created, { status: 202 })
   }),
 
-  http.post('*/api/projects/:id/deployments/:deploymentId/promote', async ({ request, params }) => {
-    const a = ownerMutation(request, params.id)
-    if (a instanceof Response) {
-      return a
-    }
-    await record(request)
-    const source = a.project.deployments?.find((d) => d.id === params.deploymentId)
-    if (!source) {
-      return notFound('The deployment was not found.')
-    }
-    if (source.target !== 'production' || source.status !== 'ready') {
-      return problem(409, 'INVALID_DEPLOYMENT', 'Only a ready production deployment can be promoted.')
-    }
-    const created = seedDeployment(a.project, {
-      target: 'production',
-      gitRef: source.gitRef,
-      gitSha: source.gitSha,
-      releaseVersionId: source.releaseVersionId,
-      releaseVersion: source.releaseVersion,
-      releaseId: source.releaseId,
-      url: source.url,
-      status: 'ready',
-      trigger: 'promote',
-      triggeredBy: userRef(a.userId),
-      promotedFromDeploymentId: source.id,
-      createdAt: new Date().toISOString(),
-    })
-    return HttpResponse.json<Deployment>(created, { status: 202 })
-  }),
+  // FR-150: rollback per provider capability; `/promote` is its v2 alias.
+  ...(['rollback', 'promote'] as const).map((action) =>
+    http.post(`*/api/projects/:id/deployments/:deploymentId/${action}`, async ({ request, params }) => {
+      const a = ownerMutation(request, params.id)
+      if (a instanceof Response) {
+        return a
+      }
+      await record(request)
+      const source = a.project.deployments?.find((d) => d.id === params.deploymentId)
+      if (!source) {
+        return notFound('The deployment was not found.')
+      }
+      if (!configured(a.project)) {
+        return problem(409, 'DEPLOYMENT_NOT_CONFIGURED', 'The project has no deployment settings.')
+      }
+      if (!canRollBackOn(source.platform)) {
+        return problem(409, 'DEPLOYMENT_ACTION_UNSUPPORTED', 'The platform has no rollback.', { platform: source.platform })
+      }
+      if (source.target !== 'production' || source.status !== 'ready' || unknownAtPlatform.has(source.id)) {
+        return problem(409, 'INVALID_DEPLOYMENT', 'Only a ready production deployment can be rolled back to.')
+      }
+      if (deploymentDb.down) {
+        return problem(502, 'UPSTREAM_ERROR', 'The platform could not be reached.')
+      }
+      const trigger = rollbackTrigger(source.platform)
+      const created = seedDeployment(a.project, {
+        target: 'production',
+        component: source.component,
+        provider: source.provider,
+        platform: source.platform,
+        gitRef: source.gitRef,
+        gitSha: source.gitSha,
+        releaseVersionId: source.releaseVersionId,
+        releaseVersion: source.releaseVersion,
+        releaseId: source.releaseId,
+        url: source.url,
+        status: 'ready',
+        trigger,
+        kind: trigger,
+        triggeredBy: userRef(a.userId),
+        promotedFromDeploymentId: source.id,
+        olderThanLatestMigration: source.olderThanLatestMigration,
+        createdAt: new Date().toISOString(),
+      })
+      return HttpResponse.json<Deployment>(withRollbackState(a.project, created), { status: 202 })
+    }),
+  ),
 ]

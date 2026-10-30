@@ -170,7 +170,7 @@ public class DeploymentRulesTests
         Assert.Equal(["queued", "building", "ready", "error", "canceled"], EnumStrings.Values<DeploymentStatus>());
         Assert.Equal(["preview", "production"], EnumStrings.Values<DeploymentEnvironment>());
         Assert.Equal(["vercel", "fake", "netlify", "cloudflare", "render", "railway", "github_pages"], EnumStrings.Values<DeploymentProvider>());
-        Assert.Equal(["auto", "manual", "promote", "redeploy"], EnumStrings.Values<DeploymentTrigger>());
+        Assert.Equal(["auto", "manual", "promote", "redeploy", "rollback"], EnumStrings.Values<DeploymentTrigger>());
     }
 
     [Fact]

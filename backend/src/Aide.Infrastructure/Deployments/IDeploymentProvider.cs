@@ -23,11 +23,15 @@ public sealed class DeploymentOptions
     public bool UseFake => string.Equals(Provider?.Trim(), "Fake", StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>A user's token and, for a team-scoped token, its team (sent as <c>teamId</c> on every team resource).</summary>
-public sealed record DeploymentAuth(string Token, string? TeamId)
+/// <summary>
+/// A user's token and, for a team-scoped Vercel token, its team (sent as <c>teamId</c> on every team resource). For
+/// Netlify and Cloudflare, the connection's account (<see cref="AccountId"/>) and its slug (Netlify's
+/// <c>account_slug</c>).
+/// </summary>
+public sealed record DeploymentAuth(string Token, string? TeamId, string? AccountId = null, string? AccountSlug = null)
 {
     /// <summary>Redacted: the token never reaches a log.</summary>
-    public override string ToString() => $"DeploymentAuth {{ TeamId = {TeamId} }}";
+    public override string ToString() => $"DeploymentAuth {{ TeamId = {TeamId}, AccountId = {AccountId} }}";
 }
 
 /// <summary>FR-87: who a token belongs to: the Vercel user, the team of a team-scoped token, and the token's expiry.</summary>

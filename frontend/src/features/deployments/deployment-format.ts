@@ -40,6 +40,7 @@ export const deploymentTriggerLabels: Record<Schemas['DeploymentTrigger'], strin
   manual: 'Manual',
   promote: 'Promote',
   redeploy: 'Redeploy',
+  rollback: 'Rollback',
 }
 
 export const deploymentProviderLabels: Record<Schemas['DeploymentProvider'], string> = {
@@ -64,10 +65,19 @@ export function triggeredByLabel(d: Pick<Deployment, 'trigger' | 'triggeredBy'>)
   return `${who} (${deploymentTriggerLabels[d.trigger]})`
 }
 
-/** A failed deployment's reason: the recorded code's copy (naming its platform), plus the platform's message when there is one. */
-export function deploymentFailure(d: Pick<Deployment, 'errorCode' | 'errorMessage' | 'provider'>): string | null {
-  const copy = platformCopy(d.errorCode, d.provider)
-  const message = d.errorMessage?.trim()
+/**
+ * A failed deployment's reason: the recorded code's copy (naming its platform), plus the platform's message when there
+ * is one. A message the job prefixed with a known code ("PLATFORM_RATE_LIMITED: …") reads through that code's copy.
+ */
+export function deploymentFailure(
+  d: Pick<Deployment, 'errorCode' | 'errorMessage' | 'provider'> & Partial<Pick<Deployment, 'platform'>>,
+): string | null {
+  const platform = d.platform ?? d.provider
+  const raw = d.errorMessage?.trim()
+  const prefixed = raw ? /^([A-Z][A-Z_]+):\s*(.*)$/s.exec(raw) : null
+  const prefixCopy = prefixed ? platformCopy(prefixed[1], platform) : null
+  const copy = prefixCopy ?? platformCopy(d.errorCode, platform)
+  const message = prefixCopy ? prefixed?.[2]?.trim() : raw
   if (copy && message) {
     return `${copy} ${message}`
   }
@@ -204,13 +214,89 @@ export const envSourceTones: Record<Schemas['DeploymentEnvSource'], StatusTone> 
   required: 'warning',
 }
 
-/** The production deployment Vercel serves now: the newest ready production row (a promote is a new row). */
-export function liveProduction(deployments: readonly Deployment[]): Deployment | undefined {
-  return deployments
-    .filter((d) => d.target === 'production' && d.status === 'ready')
-    .reduce<Deployment | undefined>((best, d) => (!best || d.createdAt > best.createdAt ? d : best), undefined)
+/** The production deployment a component serves now (FR-151: the API's `current` flag). */
+export function currentProduction(deployments: readonly Deployment[], component: DeploymentComponent): Deployment | undefined {
+  return deployments.find((d) => d.current && d.target === 'production' && d.component === component)
 }
 
-/** FR-91: only a ready production deployment that isn't the live one can be promoted. */
-export const canPromote = (d: Deployment, live: Deployment | undefined) =>
-  d.target === 'production' && d.status === 'ready' && d.id !== live?.id
+/** FR-150: a Cloudflare target in Pages mode has the resource id `pages:<project>`; a Workers target's is the script name. */
+export const isCloudflarePages = (resourceId: string | null) => resourceId !== null && /^pages:./.test(resourceId)
+
+/** FR-150: how each platform words making an earlier deployment current. */
+export interface RollbackWording {
+  /** The row button ("Restore"). */
+  action: string
+  /** The dialog title. */
+  title: (version: string) => string
+  /** What the platform does, one sentence. */
+  explanation: string
+  /** The confirm button and its pending label. */
+  confirm: string
+  pending: string
+  /** The success toast. */
+  started: (what: string) => string
+}
+
+/**
+ * FR-150 wording per platform: Vercel "Promote", Netlify "Restore", Cloudflare Workers "Deploy this version",
+ * Cloudflare Pages, Render and Railway "Roll back". `cloudflarePages`: the Cloudflare target links a Pages project.
+ */
+export function rollbackWording(platform: Schemas['DeploymentProvider'], cloudflarePages = false): RollbackWording {
+  const name = deploymentProviderLabels[platform]
+  if (platform === 'vercel' || platform === 'fake') {
+    return {
+      action: 'Promote',
+      title: (v) => `Promote ${v} to production?`,
+      explanation: `${platform === 'fake' ? 'The Fake provider' : name} serves this deployment at the production URL again.`,
+      confirm: 'Promote to production',
+      pending: 'Promoting…',
+      started: (what) => `Promoting ${what} to production.`,
+    }
+  }
+  if (platform === 'netlify') {
+    return {
+      action: 'Restore',
+      title: (v) => `Restore ${v} to production?`,
+      explanation: 'Netlify restores this deploy, so it is published at the production URL again.',
+      confirm: 'Restore to production',
+      pending: 'Restoring…',
+      started: (what) => `Restoring ${what} to production.`,
+    }
+  }
+  if (platform === 'cloudflare' && !cloudflarePages) {
+    return {
+      action: 'Deploy this version',
+      title: (v) => `Deploy version ${v} to production?`,
+      explanation: 'Cloudflare deploys this Worker version to 100 % of production traffic.',
+      confirm: 'Deploy this version',
+      pending: 'Deploying…',
+      started: (what) => `Deploying ${what} to production.`,
+    }
+  }
+  return {
+    action: 'Roll back',
+    title: (v) => `Roll back production to ${v}?`,
+    explanation: `${name} rolls production back to this deployment.`,
+    confirm: 'Roll back',
+    pending: 'Rolling back…',
+    started: (what) => `Rolling production back to ${what}.`,
+  }
+}
+
+/** FR-151: why a production row has no rollback action, as visible text (`null`: nothing to say). */
+export function rollbackBlockedCopy(d: Pick<Deployment, 'rollbackBlockedReason' | 'platform'>): string | null {
+  const name = deploymentProviderLabels[d.platform]
+  switch (d.rollbackBlockedReason) {
+    case 'unsupported':
+      return `${name} doesn't support rollback`
+    case 'not_ready':
+      return 'Only a ready deployment can be rolled back to'
+    case 'unknown_at_platform':
+      return `${name} has no record of this deployment, so it can't be rolled back to`
+    case 'not_production':
+      return 'Only production deployments can be rolled back to'
+    default:
+      // `current` (the badge says so), null, or a reason this client doesn't know.
+      return null
+  }
+}

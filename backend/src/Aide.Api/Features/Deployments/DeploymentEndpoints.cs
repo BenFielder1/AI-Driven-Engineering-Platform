@@ -24,6 +24,8 @@ namespace Aide.Api.Features.Deployments;
 /// </summary>
 public static class DeploymentEndpoints
 {
+    private const string RollbackRateLimited429 = "UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known)";
+
     public static IEndpointRouteBuilder MapDeploymentEndpoints(this IEndpointRouteBuilder app)
     {
         var settings = app.MapGroup("/api/projects/{id:guid}/settings/deployment")
@@ -94,7 +96,7 @@ public static class DeploymentEndpoints
 
         deployments.MapGet("/", ListDeployments)
             .WithName("ListDeployments")
-            .WithSummary("The project's deployments, newest first (members, FR-91): target, version, SHA, state, URL, time and who triggered it. Filter by target (preview, production) and releaseVersionId.")
+            .WithSummary("The project's deployments, newest first (members, FR-151): component, environment, provider, version, SHA, state, URL, time, who triggered it, and whether each can be rolled back to. Filter by component (frontend, backend), environment (preview, production; `target` is the v2 name) and releaseVersionId.")
             .Produces<IReadOnlyList<DeploymentDto>>()
             .ProducesValidationProblem();
 
@@ -109,16 +111,33 @@ public static class DeploymentEndpoints
                 (StatusCodes.Status409Conflict, "DEPLOYMENT_NOT_CONFIGURED (no deployment settings or no bound connection) or DEPLOYMENT_ACTION_UNSUPPORTED (the frontend's provider has no previews, e.g. GitHub Pages; extension platform)"),
                 (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (Vercel failed or couldn't be reached)"));
 
-        deployments.MapPost("/{deploymentId:guid}/promote", PromoteDeployment)
-            .WithName("PromoteDeployment")
-            .WithSummary("Promote an earlier ready production deployment (Owner, FR-91): a production rollback that leaves Git alone. Records a new promote row. 409 INVALID_DEPLOYMENT when the deployment isn't a ready production deployment.")
+        deployments.MapPost("/{deploymentId:guid}/rollback", RollbackDeployment)
+            .WithName("RollbackDeployment")
+            .WithSummary("Make an earlier ready production deployment current again (Owner, FR-150), per the provider: Vercel promote, Netlify restore, Cloudflare Workers version at 100 %, Cloudflare Pages rollback. Git and the database are left alone. Records a rollback row (promote on Vercel).")
             .Produces<DeploymentDto>(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
             .ProducesProblem(StatusCodes.Status502BadGateway)
+            .WithRetryAfterOn429()
+            .WithResponseDescriptions(
+                (StatusCodes.Status409Conflict, "INVALID_DEPLOYMENT (not a ready production deployment, unknown at the platform, or already current), DEPLOYMENT_ACTION_UNSUPPORTED (the provider has no rollback, e.g. GitHub Pages; extension platform) or DEPLOYMENT_NOT_CONFIGURED"),
+                (StatusCodes.Status429TooManyRequests, RollbackRateLimited429),
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (the platform failed or couldn't be reached)"));
+
+        deployments.MapPost("/{deploymentId:guid}/promote", RollbackDeployment)
+            .WithName("PromoteDeployment")
+            .WithSummary("v2 name of rollback, kept as an alias for Vercel (FR-91, FR-150): the same action as POST …/rollback.")
+            .Produces<DeploymentDto>(StatusCodes.Status202Accepted)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ProducesProblem(StatusCodes.Status502BadGateway)
+            .WithRetryAfterOn429()
             .WithResponseDescriptions(
                 (StatusCodes.Status409Conflict, "INVALID_DEPLOYMENT (not a ready production deployment), DEPLOYMENT_ACTION_UNSUPPORTED (the provider has no rollback, e.g. GitHub Pages; extension platform) or DEPLOYMENT_NOT_CONFIGURED"),
-                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (Vercel failed or couldn't be reached)"));
+                (StatusCodes.Status429TooManyRequests, RollbackRateLimited429),
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (the platform failed or couldn't be reached)"));
 
         deployments.MapPost("/{deploymentId:guid}/redeploy", RedeployDeployment)
             .WithName("RedeployDeployment")
@@ -252,6 +271,18 @@ public static class DeploymentEndpoints
             return ApiProblems.Validation(validation.Error!);
         }
 
+        // §4.20: a Cloudflare Workers target shares runtime secrets between preview and production.
+        List<DeploymentComponent> components = request.AppliesTo is { Count: > 0 } applies ? [.. applies] : [DeploymentComponent.Frontend];
+        var workers = await db.DeploymentTargets.AsNoTracking()
+            .Where(t => t.ProjectId == id && t.Provider == DeploymentProvider.Cloudflare && components.Contains(t.Component))
+            .Select(t => t.ResourceId)
+            .ToListAsync(cancellationToken);
+        if (workers.Any(r => !DeploymentRollbackRules.IsCloudflarePages(r))
+            && CloudflareRules.ValidateRuntimeSecret(request.Sensitive, [.. request.Targets]) is { IsFailure: true } secretRule)
+        {
+            return ApiProblems.Validation(secretRule.Error!);
+        }
+
         var now = Now(time);
         var variable = await db.DeploymentEnvVars.FirstOrDefaultAsync(v => v.ProjectId == id && v.Key == key, cancellationToken);
         if (variable is null)
@@ -368,7 +399,9 @@ public static class DeploymentEndpoints
         AideDbContext db,
         CancellationToken cancellationToken,
         [WireEnum(typeof(DeploymentEnvironment))] string? target = null,
-        Guid? releaseVersionId = null)
+        Guid? releaseVersionId = null,
+        [WireEnum(typeof(DeploymentComponent))] string? component = null,
+        [WireEnum(typeof(DeploymentEnvironment))] string? environment = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -376,8 +409,11 @@ public static class DeploymentEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        DeploymentEnvironment? filter = target is not null && EnumStrings.TryParse<DeploymentEnvironment>(target, out var parsed) ? parsed : null;
-        return TypedResults.Ok(await DeploymentReader.ListAsync(db, id, filter, releaseVersionId, cancellationToken));
+        // FR-151: `environment` (v4) wins over the v2 name `target`.
+        var environmentText = environment ?? target;
+        DeploymentEnvironment? filter = environmentText is not null && EnumStrings.TryParse<DeploymentEnvironment>(environmentText, out var parsed) ? parsed : null;
+        DeploymentComponent? componentFilter = component is not null && EnumStrings.TryParse<DeploymentComponent>(component, out var c) ? c : null;
+        return TypedResults.Ok(await DeploymentReader.ListAsync(db, id, filter, releaseVersionId, cancellationToken, component: componentFilter));
     }
 
     private static async Task<Results<Accepted<DeploymentDto>, ProblemHttpResult>> CreatePreviewDeployment(
@@ -438,7 +474,12 @@ public static class DeploymentEndpoints
         return await AcceptedAsync(db, id, deployment, cancellationToken);
     }
 
-    private static async Task<Results<Accepted<DeploymentDto>, ProblemHttpResult>> PromoteDeployment(
+    /// <summary>
+    /// FR-150 (and v2 FR-91 promote, its alias): makes an earlier ready production deployment current by the provider's
+    /// rollback (<see cref="DeploymentRollbackRules.MethodFor"/>) and records a <c>rollback</c> row (<c>promote</c> on
+    /// Vercel) pointing at the same platform deployment, which the Deployments page then shows as current.
+    /// </summary>
+    private static async Task<Results<Accepted<DeploymentDto>, ProblemHttpResult>> RollbackDeployment(
         Guid id,
         Guid deploymentId,
         IProjectAccess access,
@@ -446,6 +487,7 @@ public static class DeploymentEndpoints
         AideDbContext db,
         DeploymentAccess deployments,
         TimeProvider time,
+        HttpContext httpContext,
         CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(id, ProjectAction.ManageDeployments, cancellationToken);
@@ -460,10 +502,14 @@ public static class DeploymentEndpoints
             return DeploymentNotFound();
         }
 
-        var promotable = DeploymentActionRules.CanPromote(source.Environment, source.Status);
-        if (promotable.IsFailure)
+        // FR-150: a valid rollback target first (409), then the target's configuration.
+        var platform = (await DeploymentAccess.TargetAsync(db, id, source.Component, cancellationToken))?.Provider ?? source.Provider;
+        var current = await DeploymentReader.CurrentProductionAsync(db, id, cancellationToken);
+        var isCurrent = DeploymentReader.ServesProduction(source, current.GetValueOrDefault(source.Component));
+        var allowed = DeploymentRollbackRules.CanRollback(platform, source.Environment, source.Status, source.ProviderDeploymentId, isCurrent);
+        if (allowed.IsFailure)
         {
-            return ApiProblems.FromError(promotable.Error!);
+            return allowed.Error!.Code == ErrorCodes.DeploymentActionUnsupported ? ApiProblems.Platform(allowed.Error!, platform) : ApiProblems.FromError(allowed.Error!);
         }
 
         var context = await deployments.ResolveAsync(id, cancellationToken, component: source.Component);
@@ -472,18 +518,10 @@ public static class DeploymentEndpoints
             return context.Error!.Code == ErrorCodes.DeploymentNotConfigured ? ApiProblems.FromError(context.Error!) : ApiProblems.Of(ErrorCodes.UpstreamError, context.Error!.Message);
         }
 
-        // FR-150: only where the provider can make an earlier deployment current (GitHub Pages can't).
-        if (!context.Value.Provider.Capabilities.Rollback)
-        {
-            return ApiProblems.Platform(
-                new DomainError(ErrorCodes.DeploymentActionUnsupported, $"{DeploymentPlatforms.DisplayName(context.Value.Target.Provider)} doesn't support this action."),
-                context.Value.Target.Provider);
-        }
-
         var now = Now(time);
         try
         {
-            // FR-91: Vercel re-points production at the earlier build (no rebuild); Git is left alone.
+            // FR-150: the platform re-points production at the earlier build (no rebuild); Git and the database are left alone.
             await context.Value.Provider.RollbackAsync(context.Value.Auth, context.Value.TargetRef, source.ProviderDeploymentId, cancellationToken);
         }
         catch (DeploymentProviderException ex)
@@ -494,20 +532,34 @@ public static class DeploymentEndpoints
                 await db.SaveChangesAsync(cancellationToken);
             }
 
-            return ex.Failure == DeploymentFailure.NotFound
-                ? ApiProblems.Of(ErrorCodes.InvalidDeployment, "The platform no longer has this deployment, so it can't be promoted.")
-                : ApiProblems.Of(ErrorCodes.UpstreamError, DeploymentSettingsService.Message(ex));
+            if (ex.Failure == DeploymentFailure.RateLimited)
+            {
+                // FR-150: the platform's 429 is passed on with its wait, not as a 502.
+                ResponseDocs.SetRetryAfter(httpContext, ex.RetryAt is { } at && at > now ? at - now : null);
+                return ApiProblems.Of(
+                    ErrorCodes.UpstreamRateLimited, $"{DeploymentPlatforms.DisplayName(platform)} is rate limiting requests. Try the rollback again in a few minutes.");
+            }
+
+            return ex.Failure switch
+            {
+                DeploymentFailure.NotSupported => ApiProblems.Platform(
+                    new DomainError(ErrorCodes.DeploymentActionUnsupported, $"{DeploymentPlatforms.DisplayName(platform)} doesn't support this action."), platform),
+                DeploymentFailure.NotFound or DeploymentFailure.Rejected => ApiProblems.Of(
+                    ErrorCodes.InvalidDeployment, $"{DeploymentPlatforms.DisplayName(platform)} can't roll back to this deployment: {DeploymentSettingsService.Message(ex)}"),
+                _ => ApiProblems.Of(ErrorCodes.UpstreamError, DeploymentSettingsService.Message(ex)),
+            };
         }
 
-        var promoted = new Deployment
+        var trigger = DeploymentRollbackRules.TriggerFor(platform);
+        var rolledBack = new Deployment
         {
             ProjectId = id,
             ReleaseVersionId = source.ReleaseVersionId,
             ReleaseId = source.ReleaseId,
             Provider = source.Provider,
-            TargetId = source.TargetId,
+            TargetId = source.TargetId ?? context.Value.Target.Id,
             Component = source.Component,
-            Kind = DeploymentKind.Promote,
+            Kind = DeploymentTargetRules.KindOf(trigger),
             Environment = DeploymentEnvironment.Production,
             ProviderDeploymentId = source.ProviderDeploymentId,
             Url = source.Url,
@@ -515,16 +567,16 @@ public static class DeploymentEndpoints
             GitRef = source.GitRef,
             GitSha = source.GitSha,
             Status = DeploymentStatus.Ready,
-            Trigger = DeploymentTrigger.Promote,
+            Trigger = trigger,
             TriggeredBy = grant.Value.UserId,
             PromotedFromDeploymentId = source.Id,
             CreatedAt = now,
             ReadyAt = now,
             UpdatedAt = now,
         };
-        db.Deployments.Add(promoted);
-        DeploymentEvents.Created(db, promoted, await DeploymentScheduler.VersionTextAsync(db, source.ReleaseVersionId, cancellationToken), currentUser.Actor, now);
-        return await AcceptedAsync(db, id, promoted, cancellationToken);
+        db.Deployments.Add(rolledBack);
+        DeploymentEvents.Created(db, rolledBack, await DeploymentScheduler.VersionTextAsync(db, source.ReleaseVersionId, cancellationToken), currentUser.Actor, now);
+        return await AcceptedAsync(db, id, rolledBack, cancellationToken);
     }
 
     private static async Task<Results<Accepted<DeploymentDto>, ProblemHttpResult>> RedeployDeployment(
@@ -566,7 +618,7 @@ public static class DeploymentEndpoints
         }
 
         var redeploy = await scheduler.AddAsync(
-            new NewDeployment(id, deployment.ReleaseVersionId, deployment.ReleaseId, deployment.Environment, deployment.GitRef, deployment.GitSha, DeploymentTrigger.Redeploy, grant.Value.UserId),
+            new NewDeployment(id, deployment.ReleaseVersionId, deployment.ReleaseId, deployment.Environment, deployment.GitRef, deployment.GitSha, DeploymentTrigger.Redeploy, grant.Value.UserId, deployment.Component),
             currentUser.Actor,
             Now(time),
             cancellationToken);

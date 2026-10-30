@@ -219,11 +219,14 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
         });
         services.AddSingleton<VercelEnvWriteLimiter>();
-        // §4.20: one provider per platform (Vercel and GitHub Pages real; the others Fake-only until their slices).
+        // §4.20: one provider per platform (Vercel, Netlify, Cloudflare and GitHub Pages real; Render and Railway Fake-only until M30).
         services.AddSingleton<VercelApiClient>();
         services.AddSingleton<FakeVercelClient>();
         services.AddSingleton<VercelDeploymentProvider>();
         services.AddSingleton<GitHubPagesDeploymentProvider>();
+        services.AddSingleton<NetlifyDeployRateLimiter>();
+        services.AddSingleton<NetlifyDeploymentProvider>();
+        services.AddSingleton<CloudflareDeploymentProvider>();
         services.AddSingleton<IDeploymentProviderResolver, DeploymentProviderResolver>();
 
         // Platform connections (FR-142, §4.20, §4.21): each platform's REST or GraphQL API on its fixed host (§8: never

@@ -109,7 +109,7 @@ public sealed partial class DeploymentJobHandler(
         {
             // NFR-REL2: back off until the reset without counting an attempt (nothing changed).
             var until = JobPolicy.DeferUntil(now, ex.RetryAt ?? now + TimeSpan.FromMinutes(1));
-            throw new JobDeferredException($"The platform's rate limit is reached; the deployment poll waits until {until:u}.", until);
+            throw new JobDeferredException($"{ErrorCodes.PlatformRateLimited}: {DeploymentPlatforms.DisplayName(ex.Platform)} is rate limiting deployments; the deployment waits until {until:u}.", until);
         }
         catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.CredentialRejected)
         {
@@ -148,7 +148,7 @@ public sealed partial class DeploymentJobHandler(
         var target = context.TargetRef;
         if (ProductionDeploymentRules.Adopts(deployment.Environment, deployment.Trigger, context.Provider.Kind))
         {
-            if (await context.Provider.FindDeploymentForShaAsync(context.Auth, target, DeploymentEnvironment.Production, deployment.GitSha, null, cancellationToken) is { } adopted)
+            if (await context.Provider.FindDeploymentForShaAsync(context.Auth, target, DeploymentEnvironment.Production, deployment.GitSha, null, null, cancellationToken) is { } adopted)
             {
                 deployment.ProviderDeploymentId = adopted.Id;
                 Apply(deployment, adopted);
@@ -163,7 +163,7 @@ public sealed partial class DeploymentJobHandler(
         }
 
         // §4.15 idempotency: an earlier attempt may have created it (its save failed, or the create timed out).
-        if (await context.Provider.FindDeploymentForShaAsync(context.Auth, target, deployment.Environment, deployment.GitSha, deployment.Id, cancellationToken) is { } earlier)
+        if (await context.Provider.FindDeploymentForShaAsync(context.Auth, target, deployment.Environment, deployment.GitSha, deployment.Id, deployment.CreatedAt, cancellationToken) is { } earlier)
         {
             deployment.ProviderDeploymentId = earlier.Id;
             Apply(deployment, earlier);
@@ -173,7 +173,14 @@ public sealed partial class DeploymentJobHandler(
 
         await envSync.PushPendingAsync(context, cancellationToken);
         var created = await context.Provider.DeployAsync(
-            context.Auth, new DeployRequest(deployment.Id, target, deployment.Environment, deployment.GitRef, deployment.GitSha), cancellationToken);
+            context.Auth, new DeployRequest(
+                deployment.Id,
+                target,
+                deployment.Environment,
+                deployment.GitRef,
+                deployment.GitSha,
+                !ProductionDeploymentRules.Adopts(deployment.Environment, deployment.Trigger, context.Provider.Kind)),
+            cancellationToken);
         deployment.ProviderDeploymentId = created.Id;
         _created = (created.Id, context.Auth, context.Provider, target);
         Apply(deployment, created);
@@ -183,6 +190,12 @@ public sealed partial class DeploymentJobHandler(
 
     private void Apply(Deployment deployment, ProviderDeployment observed)
     {
+        // §4.20: a provider may replace the deployment (Netlify re-triggers a branch build of the wrong commit once).
+        if (deployment.ProviderDeploymentId.Length > 0 && !string.IsNullOrEmpty(observed.Id) && observed.Id != deployment.ProviderDeploymentId)
+        {
+            deployment.ProviderDeploymentId = observed.Id;
+        }
+
         deployment.Url = observed.Url ?? deployment.Url;
         deployment.InspectorUrl = observed.InspectorUrl ?? deployment.InspectorUrl;
         var status = observed.Status;
@@ -259,7 +272,8 @@ public sealed partial class DeploymentJobHandler(
                     && await db.DeploymentTargets.FirstOrDefaultAsync(
                         t => t.ProjectId == deployment.ProjectId && t.Component == deployment.Component, cancellationToken) is { } settings)
                 {
-                    settings.ProductionUrl = _productionUrl ?? deployment.Url;
+                    // §4.20: the stable production URL (the provider's alias) wins; a known URL is never wiped by a null.
+                    settings.ProductionUrl = DeploymentTargetRules.ProductionUrlAfterReady(_productionUrl, deployment.Url, settings.ProductionUrl);
                     settings.UpdatedAt = now;
                 }
             }
@@ -302,7 +316,7 @@ public sealed partial class DeploymentJobHandler(
         var context = resolved.Value;
         try
         {
-            if (await context.Provider.FindDeploymentForShaAsync(context.Auth, context.TargetRef, deployment.Environment, deployment.GitSha, deployment.Id, cancellationToken) is { } orphan)
+            if (await context.Provider.FindDeploymentForShaAsync(context.Auth, context.TargetRef, deployment.Environment, deployment.GitSha, deployment.Id, deployment.CreatedAt, cancellationToken) is { } orphan)
             {
                 await CancelQuietlyAsync(context.Provider, context.Auth, context.TargetRef, orphan.Id, cancellationToken);
             }

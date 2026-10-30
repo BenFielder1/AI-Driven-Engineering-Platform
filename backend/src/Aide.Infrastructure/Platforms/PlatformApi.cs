@@ -145,8 +145,13 @@ public sealed class PlatformHttp(IHttpClientFactory clients, TimeProvider time)
 {
     private const int MaxMessageLength = 300;
 
-    public async Task<JsonDocument> SendAsync(
-        PlatformProvider provider, string clientName, HttpMethod method, string path, string token, object? body, CancellationToken cancellationToken)
+    public Task<JsonDocument> SendAsync(
+        PlatformProvider provider, string clientName, HttpMethod method, string path, string token, object? body, CancellationToken cancellationToken) =>
+        SendContentAsync(provider, clientName, method, path, token, body is null ? null : JsonContent.Create(body), cancellationToken);
+
+    /// <summary>As <see cref="SendAsync"/> with a prepared body (e.g. a multipart form); the content is disposed.</summary>
+    public async Task<JsonDocument> SendContentAsync(
+        PlatformProvider provider, string clientName, HttpMethod method, string path, string token, HttpContent? content, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentException.ThrowIfNullOrEmpty(token);
@@ -154,10 +159,7 @@ public sealed class PlatformHttp(IHttpClientFactory clients, TimeProvider time)
         using var request = new HttpRequestMessage(method, path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        if (body is not null)
-        {
-            request.Content = JsonContent.Create(body);
-        }
+        request.Content = content;
 
         HttpResponseMessage response;
         try

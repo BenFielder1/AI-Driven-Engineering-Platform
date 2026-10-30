@@ -628,7 +628,8 @@ public static partial class ProjectEndpoints
                 .FirstOrDefaultAsync(cancellationToken) is { } latestRelease
                 ? ReleaseRecords.ToSummary(latestRelease, project.MergeStrategy)
                 : null,
-            LatestDeployment: await Deployments.DeploymentReader.LatestAsync(db, id, cancellationToken));
+            LatestDeployment: await Deployments.DeploymentReader.LatestAsync(db, id, cancellationToken),
+            ProductionUrls: await Deployments.DeploymentReader.ProductionUrlsAsync(db, id, cancellationToken));
     }
 
     /// <summary>FR-88, §7.2: the project has deployment settings, so its navigation shows Deployments.</summary>

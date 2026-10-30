@@ -222,7 +222,8 @@ public class DeploymentTargetSetupTests
 
         Assert.True(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.Vercel));
         Assert.True(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.GithubPages));
-        Assert.False(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.Netlify));
+        Assert.True(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.Netlify));
+        Assert.True(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.Cloudflare));
         Assert.False(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.Render));
 
         foreach (var provider in DeploymentPlatforms.Hosted)

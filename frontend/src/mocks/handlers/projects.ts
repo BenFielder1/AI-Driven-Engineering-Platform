@@ -752,6 +752,26 @@ function pullRequestSummary(pr: Schemas['PullRequestDto'] | null | undefined): S
   return { provider, baseBranch, headBranch, number, url, openedAt }
 }
 
+/** FR-150, FR-151: the production deployment a component serves now: its newest ready production row. */
+export function currentDeploymentOf(
+  p: StoredProject,
+  component: Schemas['DeploymentComponent'],
+): Schemas['DeploymentDto'] | undefined {
+  return (p.deployments ?? [])
+    .filter((d) => d.target === 'production' && d.status === 'ready' && d.component === component)
+    .reduce<Schemas['DeploymentDto'] | undefined>((best, d) => (!best || d.createdAt > best.createdAt ? d : best), undefined)
+}
+
+/** FR-151: /state's production URL of each set-up target (the current deployment's, else the target's own). */
+function productionUrlsOf(p: StoredProject): Schemas['ComponentProductionUrlDto'][] {
+  return (p.deployment?.targets ?? [])
+    .filter((t) => t.resourceId !== null)
+    .map((t) => {
+      const current = currentDeploymentOf(p, t.component)
+      return { component: t.component, provider: t.provider, url: current?.url ?? t.productionUrl, deploymentId: current?.id ?? null }
+    })
+}
+
 /** GET /state for a stored project; `pendingGates` comes from its gates. */
 export function stateDto(p: StoredProject): State {
   return {
@@ -765,6 +785,7 @@ export function stateDto(p: StoredProject): State {
     suggestedNextVersion: suggestedNextVersion(p),
     executionPaused: p.executionPaused,
     executionStatus: executionRunStatus(p),
+    productionUrls: productionUrlsOf(p),
     ...p.state,
     pendingGates: p.gates
       .filter((g) => g.status === 'pending')

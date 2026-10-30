@@ -33,9 +33,21 @@ public static class DeploymentTargetRules
             target.ConnectionId is not null || !DeploymentPlatforms.NeedsConnection(target.Provider), !string.IsNullOrEmpty(target.ResourceId));
     }
 
+    /// <summary>
+    /// §4.20: the target's production URL once a production deployment is ready: the provider's stable production URL
+    /// (<paramref name="alias"/>), else the deployment's URL, else the one already known (never wiped by a provider that
+    /// reports neither, e.g. a Cloudflare Workers production build).
+    /// </summary>
+    public static string? ProductionUrlAfterReady(string? alias, string? deploymentUrl, string? known) =>
+        !string.IsNullOrEmpty(alias) ? alias : !string.IsNullOrEmpty(deploymentUrl) ? deploymentUrl : known;
+
     /// <summary>§5: what a deployment row does, from why it exists: a promote re-points production, anything else deploys.</summary>
-    public static DeploymentKind KindOf(DeploymentTrigger trigger) =>
-        trigger == DeploymentTrigger.Promote ? DeploymentKind.Promote : DeploymentKind.Deploy;
+    public static DeploymentKind KindOf(DeploymentTrigger trigger) => trigger switch
+    {
+        DeploymentTrigger.Promote => DeploymentKind.Promote,
+        DeploymentTrigger.Rollback => DeploymentKind.Rollback,
+        _ => DeploymentKind.Deploy,
+    };
 }
 
 /// <summary>

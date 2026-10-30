@@ -38,8 +38,12 @@ public sealed record DeploymentSetupResult(string ResourceId, string Name, strin
 /// </summary>
 public sealed record ProviderTargetCheck(bool? GitAccess, string? GitMessage, bool? PreviewReady);
 
-/// <summary>§4.20 <c>DeployAsync {environment, ref, sha}</c>; <see cref="AideDeploymentId"/> is the idempotency key.</summary>
-public sealed record DeployRequest(Guid AideDeploymentId, DeploymentTargetRef Target, DeploymentEnvironment Environment, string GitRef, string GitSha);
+/// <summary>
+/// §4.20 <c>DeployAsync {environment, ref, sha}</c>; <see cref="AideDeploymentId"/> is the idempotency key.
+/// <see cref="Rebuild"/>: a redeploy or manual deploy builds anew and never adopts the platform's existing build of the
+/// commit (an adopt-only production, Cloudflare Pages, retries that build instead).
+/// </summary>
+public sealed record DeployRequest(Guid AideDeploymentId, DeploymentTargetRef Target, DeploymentEnvironment Environment, string GitRef, string GitSha, bool Rebuild = false);
 
 /// <summary>§4.20 env sync: writes per (key, environment) and the platform ids to delete.</summary>
 public sealed record DeploymentEnvSyncRequest(IReadOnlyList<DeploymentEnvWrite> Writes, IReadOnlyList<string> Deletes);
@@ -83,9 +87,12 @@ public interface IDeploymentProvider
     /// <summary>
     /// The deployment of <paramref name="sha"/>: with <paramref name="aideDeploymentId"/>, the one an earlier attempt created
     /// for that AIDE row; without, the one the platform made by itself (production adoption, FR-149). <c>null</c>: none.
+    /// <paramref name="createdAfter"/> (the AIDE row's creation time, given with <paramref name="aideDeploymentId"/>): a
+    /// platform that can't tag its builds with the row (Cloudflare) adopts only builds created at or after it, so a
+    /// redeploy or manual deploy never adopts an earlier build of the same commit.
     /// </summary>
     Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, CancellationToken cancellationToken);
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken);
 
     Task CancelAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken);
 
@@ -105,7 +112,7 @@ public interface IDeploymentProviderResolver
 }
 
 /// <summary>
-/// §4.20 seam for platforms AIDE can't call for real yet (Netlify and Cloudflare: slice 3; Render and Railway: M30): every
+/// §4.20 seam for platforms AIDE can't call for real yet (Render and Railway, until M30): every
 /// operation is <c>PLATFORM_ERROR</c> "not supported yet". Their Fake mode works.
 /// </summary>
 public sealed class UnsupportedDeploymentProvider(DeploymentProvider platform) : IDeploymentProvider
@@ -134,7 +141,7 @@ public sealed class UnsupportedDeploymentProvider(DeploymentProvider platform) :
     public Task<string?> GetBuildLogTailAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken) => throw NotSupported();
 
     public Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, CancellationToken cancellationToken) =>
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken) =>
         throw NotSupported();
 
     public Task CancelAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken) => throw NotSupported();

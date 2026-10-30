@@ -10,8 +10,15 @@ import { ErrorState } from '../../components/ui/states'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { cn } from '../../lib/utils'
 import { ActivityFeed } from '../activity/activity-feed'
-import { deploymentTargetLabels, shortSha, triggeredByLabel } from '../deployments/deployment-format'
+import {
+  componentLabels,
+  deploymentProviderLabels,
+  deploymentTargetLabels,
+  shortSha,
+  triggeredByLabel,
+} from '../deployments/deployment-format'
 import { DeploymentLink, DeploymentStatusPill } from '../deployments/deployment-parts'
+import { DeploymentProviderLogo } from '../deployments/deployment-provider-logo'
 import { GateHistory } from '../gates/gate-history'
 import { PendingGatesPanel } from '../gates/pending-gates-panel'
 import { LifecycleCard } from '../lifecycle/lifecycle-card'
@@ -88,6 +95,27 @@ function LatestDeployment({ deployment: d }: { deployment: ProjectState['latestD
         {triggeredByLabel(d)} · <RelativeTime iso={d.createdAt} />
       </p>
     </div>
+  )
+}
+
+/** FR-151: the production URL of each component, with its provider. */
+function ProductionUrls({ urls }: { urls: ProjectState['productionUrls'] }) {
+  return (
+    <dl className="flex flex-col gap-2" data-testid="production-urls">
+      {urls.map((u) => (
+        <div key={u.component} className="flex flex-col gap-0.5 text-sm">
+          <dt className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
+            <span className="font-medium text-foreground">{componentLabels[u.component]}</span>
+            <span aria-hidden="true">·</span>
+            <DeploymentProviderLogo provider={u.provider} />
+            {deploymentProviderLabels[u.provider]}
+          </dt>
+          <dd className="min-w-0">
+            <DeploymentLink url={u.url} />
+          </dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 
@@ -256,6 +284,11 @@ export function ProjectOverviewPage() {
               }
             >
               <LatestDeployment deployment={s.latestDeployment} />
+            </Card>
+          )}
+          {s.productionUrls.length > 0 && (
+            <Card title="Production URLs">
+              <ProductionUrls urls={s.productionUrls} />
             </Card>
           )}
           <Card title="Review">

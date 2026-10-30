@@ -311,6 +311,13 @@ public static class ErrorCodes
     public const string BitbucketRateLimited = "BITBUCKET_RATE_LIMITED";
 
     /// <summary>
+    /// §6 job code (FR-149, §4.20): a deployment platform rate limited a background job (429), or AIDE's own limit held it
+    /// back before calling (Netlify: 3 deploys a minute and 100 a day per account). The job waits for <c>Retry-After</c> (or
+    /// the limit's window) without counting an attempt.
+    /// </summary>
+    public const string PlatformRateLimited = "PLATFORM_RATE_LIMITED";
+
+    /// <summary>
     /// FR-143, §6 (409 when an Owner sets up a GitHub Pages target): the AIDE GitHub App (or its installation) lacks the
     /// Pages permission. The ProblemDetails carries <c>platform</c> and the App settings link (<c>installUrl</c>).
     /// </summary>

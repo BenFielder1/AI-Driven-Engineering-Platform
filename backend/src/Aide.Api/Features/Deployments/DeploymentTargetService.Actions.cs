@@ -323,7 +323,7 @@ public sealed partial class DeploymentTargetService
 
             var content = files[0].Content;
             return target.Provider == DeploymentProvider.Netlify
-                ? content.Contains("aide/", StringComparison.Ordinal) ? BranchControlState.Ok : BranchControlState.Missing
+                ? NetlifyRules.IgnoresAideBranches(content) ? BranchControlState.Ok : BranchControlState.Missing
                 : VercelConfigRules.DisablesAideBranches(content) ? BranchControlState.Ok : BranchControlState.Missing;
         }
         catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException)

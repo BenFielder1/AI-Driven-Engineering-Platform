@@ -357,7 +357,8 @@ public sealed record GateSummaryDto(Guid Id, GateType Type, DateTimeOffset Creat
 /// <c>releaseVersionId</c> (the version in development, else the latest released; §4.10). <c>checkpoint</c> was
 /// <c>projectVersion</c> (D-V2-11). <c>suggestedNextVersion</c> prefills "Start new version" (FR-60: the next minor of the
 /// released version). <c>latestDeployment</c> is the project's newest deployment of any target (FR-90, FR-91; <c>null</c>:
-/// none), for the overview and <c>aide status</c>.
+/// none), for the overview and <c>aide status</c>. <c>productionUrls</c> (FR-151) is the production URL of each component
+/// with a deployment target: the target's production URL (its stable domain), else the URL of the deployment production serves now.
 /// </summary>
 public sealed record ProjectStateDto(
     Guid ProjectId,
@@ -378,7 +379,8 @@ public sealed record ProjectStateDto(
     ExecutionRunStatus ExecutionStatus,
     PullRequestSummaryDto? PullRequest,
     ReleaseSummaryDto? LatestRelease,
-    Deployments.DeploymentDto? LatestDeployment);
+    Deployments.DeploymentDto? LatestDeployment,
+    IReadOnlyList<Deployments.ComponentProductionUrlDto> ProductionUrls);
 
 /// <summary>A project member (FR-8).</summary>
 public sealed record MemberDto(Guid UserId, string Email, string Name, string? AvatarUrl, ProjectRole Role, DateTimeOffset CreatedAt);

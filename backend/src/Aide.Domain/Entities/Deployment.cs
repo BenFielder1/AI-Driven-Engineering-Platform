@@ -263,6 +263,9 @@ public enum DeploymentTrigger
     Manual = 1,
     Promote = 2,
     Redeploy = 3,
+
+    /// <summary>FR-150: an Owner rolled production back to an earlier deployment (Netlify restore, Cloudflare version, Pages rollback).</summary>
+    Rollback = 4,
 }
 
 /// <summary>What a deployment row does (FR-150, §5). Wire values: <c>deploy</c>, <c>rollback</c>, <c>promote</c>.</summary>

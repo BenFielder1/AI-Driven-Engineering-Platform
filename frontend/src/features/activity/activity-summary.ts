@@ -526,7 +526,10 @@ function describeDeployment(type: string, payload: Payload): string | null {
     return `${subject} ready${url ? ` at ${url}` : ""}`;
   }
   if (type === "DEPLOYMENT_CREATED") {
-    const trigger = oneOf(payload, "trigger", ["auto", "manual", "promote", "redeploy"] as const);
+    const trigger = oneOf(payload, "trigger", ["auto", "manual", "promote", "redeploy", "rollback"] as const);
+    if (trigger === "rollback") {
+      return `${subject} rolled back`;
+    }
     return trigger === "promote" ? `${subject} promoted` : trigger === "redeploy" ? `${subject} redeployed` : `${subject} created`;
   }
   const status = oneOf(payload, "status", ["queued", "building", "ready", "error", "canceled"] as const);

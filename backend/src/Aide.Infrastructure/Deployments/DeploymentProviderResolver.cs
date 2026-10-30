@@ -8,7 +8,7 @@ namespace Aide.Infrastructure.Deployments;
 /// <summary>
 /// §9, §4.20: the provider for a platform id. In Fake mode (<c>Deployments:Provider=Fake</c>), and for v2's explicit
 /// <c>fake</c> provider, every platform is its <see cref="FakeDeploymentProvider"/>. Otherwise Vercel and GitHub Pages are
-/// real, and Netlify, Cloudflare, Render and Railway are <see cref="UnsupportedDeploymentProvider"/> until their slices.
+/// real (Netlify and Cloudflare since slice 3), and Render and Railway are <see cref="UnsupportedDeploymentProvider"/> until their slices.
 /// </summary>
 public sealed class DeploymentProviderResolver(
     IOptions<DeploymentOptions> options,
@@ -16,6 +16,8 @@ public sealed class DeploymentProviderResolver(
     FakeVercelClient fakeVercel,
     VercelDeploymentProvider vercel,
     GitHubPagesDeploymentProvider pages,
+    NetlifyDeploymentProvider netlify,
+    CloudflareDeploymentProvider cloudflare,
     IWorkingCopies workingCopies) : IDeploymentProviderResolver
 {
     /// <summary>Fake poll counts, shared by every Fake platform (deployment ids are unique).</summary>
@@ -38,6 +40,8 @@ public sealed class DeploymentProviderResolver(
         {
             DeploymentProvider.Vercel => vercel,
             DeploymentProvider.GithubPages => pages,
+            DeploymentProvider.Netlify => netlify,
+            DeploymentProvider.Cloudflare => cloudflare,
             _ => new UnsupportedDeploymentProvider(platform),
         };
     }

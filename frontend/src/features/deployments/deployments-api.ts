@@ -27,6 +27,10 @@ export const deploymentTargets = ['preview', 'production'] as const satisfies re
 export const isActiveDeployment = (status: DeploymentStatus) => status === 'queued' || status === 'building'
 
 export interface DeploymentListParams {
+  /** FR-151 filters. */
+  component?: DeploymentComponent | undefined
+  environment?: DeploymentTarget | undefined
+  /** The v2 name of `environment`, still accepted by the API. */
   target?: DeploymentTarget | undefined
   releaseVersionId?: string | undefined
 }
@@ -41,7 +45,7 @@ export const deploymentKeys = {
 /** While a deployment is queued or building, refetch every 10 s as a fallback to the live events (§4.15 cadence). */
 const ACTIVE_REFETCH_MS = 10_000
 
-/** FR-91: the project's deployments, newest first, optionally by target and release version. */
+/** FR-91, FR-151: the project's deployments, newest first, optionally by component, environment and release version. */
 export function useDeployments(projectId: string, params: DeploymentListParams = {}, enabled = true) {
   return useQuery({
     queryKey: deploymentKeys.list(projectId, params),
@@ -51,6 +55,8 @@ export function useDeployments(projectId: string, params: DeploymentListParams =
           params: {
             path: { id: projectId },
             query: {
+              ...(params.component ? { component: params.component } : {}),
+              ...(params.environment ? { environment: params.environment } : {}),
               ...(params.target ? { target: params.target } : {}),
               ...(params.releaseVersionId ? { releaseVersionId: params.releaseVersionId } : {}),
             },
@@ -231,13 +237,16 @@ export function useRedeployDeployment(projectId: string) {
   })
 }
 
-/** FR-91: promote an earlier ready production deployment (Owner): a production rollback that leaves Git alone. */
-export function usePromoteDeployment(projectId: string) {
+/**
+ * FR-91, FR-150: make an earlier ready production deployment current again (Owner), with the platform's own action
+ * (Vercel promote, Netlify restore, Cloudflare version deploy, Render/Railway rollback). Git is left alone.
+ */
+export function useRollbackDeployment(projectId: string) {
   const invalidate = useInvalidateDeployments(projectId)
   return useMutation({
     mutationFn: async (deploymentId: string) =>
       unwrap(
-        await api.POST('/api/projects/{id}/deployments/{deploymentId}/promote', {
+        await api.POST('/api/projects/{id}/deployments/{deploymentId}/rollback', {
           params: { path: { id: projectId, deploymentId } },
         }),
       ),
