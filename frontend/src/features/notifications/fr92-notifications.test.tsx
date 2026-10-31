@@ -66,6 +66,10 @@ const allTypes: Schemas['NotificationType'][] = [
   'connection_invalid',
   'llm_binding_cleared',
   'git_binding_cleared',
+  'database_provisioning_failed',
+  'database_expiring',
+  'migration_failed',
+  'deployment_target_attention',
 ]
 
 describe('FR-92: v2 notification types in the UI', () => {
@@ -179,6 +183,11 @@ describe('FR-92: v2 notification types in the UI', () => {
         'DEPLOYMENT_PREVIEW_READY',
         'CONNECTION_INVALID',
         'LLM_BINDING_CLEARED',
+        'GIT_BINDING_CLEARED',
+        'DATABASE_PROVISIONING_FAILED',
+        'DATABASE_EXPIRING',
+        'MIGRATION_RUN_FAILED',
+        'DEPLOYMENT_TARGET_FAILED',
       ].sort(),
     )
     // Not notifying: deployment bookkeeping, merges seen on GitHub, versions and presets.

@@ -14,7 +14,7 @@ internal static class ExitCodes
     /// <summary>
     /// FR-93: release-version errors are conflicts with the project's versions or tags whatever their HTTP status
     /// (<c>VERSION_INVALID</c> is a 400), so scripts can tell them apart from other failures. FR-156 adds
-    /// <c>LLM_PROVIDER_UNAVAILABLE</c>.
+    /// <c>STACK_INCOMPATIBLE</c>, <c>STACK_LOCKED</c> and <c>LLM_PROVIDER_UNAVAILABLE</c>.
     /// </summary>
     public static readonly IReadOnlySet<string> ConflictErrorCodes = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -27,6 +27,10 @@ internal static class ExitCodes
 
         // FR-156: the chosen LLM provider is disabled on the server or not usable by the caller (a 400).
         "LLM_PROVIDER_UNAVAILABLE",
+
+        // FR-156: the stack choices break a compatibility rule (a 400), or the stack can no longer change (a 409).
+        "STACK_INCOMPATIBLE",
+        "STACK_LOCKED",
     };
 
     /// <summary>401/403 → auth, 409 → conflict, anything else that failed → error.</summary>

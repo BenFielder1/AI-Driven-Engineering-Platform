@@ -86,7 +86,7 @@ public sealed partial class DatabaseProvisioningJobHandler(
                 await FailAsync(row, connection, ErrorCodes.DatabaseProvisioningFailed, poll.Detail ?? "The platform reported the database as failed.", cancellationToken);
             }
 
-            await CompleteAsync(row, connection, poll, provider, auth.Value.Auth, now, cancellationToken);
+            await CompleteAsync(row, connection, poll, provider, auth.Value.Auth, payload.Mode, now, cancellationToken);
         }
         catch (DatabaseProviderException ex) when (ex.Failure == DeploymentFailure.RateLimited)
         {
@@ -162,7 +162,7 @@ public sealed partial class DatabaseProvisioningJobHandler(
     }
 
     private async Task CompleteAsync(
-        ManagedDatabase row, ManagedDatabaseConnection connection, DatabasePoll poll, IDatabaseProvider provider, DatabaseAuth auth, DateTimeOffset now, CancellationToken cancellationToken)
+        ManagedDatabase row, ManagedDatabaseConnection connection, DatabasePoll poll, IDatabaseProvider provider, DatabaseAuth auth, DatabaseSetupMode mode, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var stored = (poll.Connection ?? connection) with { Step = ManagedDatabaseService.StepSyncingEnv, JobId = connection.JobId, ErrorMessage = null };
 
@@ -181,6 +181,28 @@ public sealed partial class DatabaseProvisioningJobHandler(
         }
 
         secrets.SetConnection(row, stored with { Step = null });
+
+        // FR-155: saved with the status, so a job retried after the env sync below doesn't lose or repeat it. A Supabase
+        // project linked while paused warns as the sweep would have.
+        if (row.Status == ManagedDatabaseStatus.Paused && row.Provider == ManagedDatabaseProvider.Supabase)
+        {
+            db.AddEvent(
+                EventTypes.DatabaseExpiring,
+                row.ProjectId,
+                new { databaseId = row.Id, environment = row.Environment.ToWire(), provider = row.Provider.ToWire(), reason = ManagedDatabaseRules.ExpiringReasonPaused, expiresAt = row.ExpiresAt },
+                SystemActor.Name,
+                now);
+        }
+        else
+        {
+            db.AddEvent(
+                EventTypes.DatabaseProvisioned,
+                row.ProjectId,
+                new { databaseId = row.Id, environment = row.Environment.ToWire(), provider = row.Provider.ToWire(), mode = mode.ToWire(), status = row.Status.ToWire(), expiresAt = row.ExpiresAt },
+                SystemActor.Name,
+                now);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         await databases.SyncDerivedAsync(row.ProjectId, SystemActor.Name, cancellationToken);
         db.AddEvent(
@@ -242,6 +264,7 @@ public sealed partial class DatabaseProvisioningJobHandler(
         row.Status = ManagedDatabaseStatus.Error;
         row.UpdatedAt = time.GetUtcNow();
         secrets.SetConnection(row, connection with { Step = code, ErrorMessage = clean });
+        DatabaseEvents.ProvisioningFailed(db, row, code, row.UpdatedAt);
         await db.SaveChangesAsync(cancellationToken);
         LogFailed(logger, row.ProjectId, row.Environment, code);
         throw new JobFailedException(clean, transient: false, code);
@@ -301,6 +324,19 @@ public sealed class DatabaseProvisioningJobEndedHook(ManagedDatabaseSecrets secr
             row.Status = ManagedDatabaseStatus.Error;
             row.UpdatedAt = time.GetUtcNow();
             secrets.SetConnection(row, connection with { Step = ErrorCodes.UpstreamError, ErrorMessage = job.Error });
+            DatabaseEvents.ProvisioningFailed(db, row, ErrorCodes.UpstreamError, row.UpdatedAt);
         }
     }
+}
+
+/// <summary>FR-155: the audit event of a failed database setup (it notifies Owners); never the message, which may quote the platform.</summary>
+internal static class DatabaseEvents
+{
+    public static void ProvisioningFailed(AideDbContext db, ManagedDatabase row, string errorCode, DateTimeOffset now) =>
+        db.AddEvent(
+            EventTypes.DatabaseProvisioningFailed,
+            row.ProjectId,
+            new { databaseId = row.Id, environment = row.Environment.ToWire(), provider = row.Provider.ToWire(), errorCode },
+            SystemActor.Name,
+            now);
 }

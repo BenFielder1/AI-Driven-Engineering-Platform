@@ -16,11 +16,16 @@ import {
   phases,
   reviewDecisions,
 } from "../projects/labels";
+import { jobDetailCodes, platformCopy } from "../../lib/errors";
 import { gitHostTermsOf } from "../../lib/git-host";
+import { databaseProviderLabel } from "../deployments/database-format";
+import { componentLabels, deploymentProviderLabels } from "../deployments/deployment-format";
 import { stackLayerLabels } from "../stack/stack-model";
 import type { ActivityItem } from "./activity-api";
 
 type Payload = ActivityItem["payload"];
+
+const platformDisplayNames: Readonly<Record<string, string>> = deploymentProviderLabels;
 
 /** Looks up a release version's semver by id (FR-63: "1.2.0 · checkpoint 4"); may return `undefined`. */
 export type VersionNameLookup = (releaseVersionId: string) => string | undefined;
@@ -578,6 +583,232 @@ function describeConnection(type: string, payload: Payload): string | null {
   }
 }
 
+/** FR-155: the v4 events the admin log words like the activity feed; older events keep the server's summary there. */
+export const fr155EventTypes: ReadonlySet<string> = new Set([
+  "STACK_CHANGED",
+  "STACK_DETECTED",
+  "GIT_HOST_INSTANCE_CHANGED",
+  "GIT_BINDING_CLEARED",
+  "DEPLOYMENT_TARGET_CONFIGURED",
+  "DEPLOYMENT_TARGET_FAILED",
+  "DATABASE_PROVISIONED",
+  "DATABASE_PROVISIONING_FAILED",
+  "DATABASE_EXPIRING",
+  "DATABASE_RESET",
+  "MIGRATION_RUN_STARTED",
+  "MIGRATION_RUN_COMPLETED",
+  "MIGRATION_RUN_FAILED",
+  "PREVIEW_ROLLOUT_COMPLETED",
+]);
+
+const environments = ["preview", "production"] as const;
+
+/** "1 Nov 2026" from an ISO timestamp, or `null`. */
+function dateOf(payload: Payload, key: string): string | null {
+  const iso = str(payload, key);
+  const date = iso ? new Date(iso) : null;
+  return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date) : null;
+}
+
+const shortShaOf = (payload: Payload, key = "gitSha"): string | null => str(payload, key)?.slice(0, 7) ?? null;
+
+/** Adds an event's error copy (lib/errors) as a second sentence, when it says more than the event's own line. */
+const withCopy = (line: string, copy: string | null | undefined): string => (copy ? `${line}. ${copy}` : line);
+
+/** A payload list's length, or 0 when it's missing. */
+const lengthOf = (payload: Payload, key: string): number => {
+  const value = payload[key];
+  return Array.isArray(value) ? value.length : 0;
+};
+
+/** FR-118, FR-155: "Stack detected at the base of 1.3.0 (abcdef1): 3 suggestions, 1 conflict". */
+function describeStackDetected(payload: Payload): string {
+  const v = str(payload, "version");
+  const sha = shortShaOf(payload, "baseCommitSha");
+  const base = `Stack detected${v ? ` at the base of ${v}` : ""}${sha ? ` (${sha})` : ""}`;
+  const counts: [string, string][] = [
+    ["suggestions", "suggestion"],
+    ["conflicts", "conflict"],
+    ["mismatches", "mismatch"],
+  ];
+  const parts = counts.flatMap(([key, one]) => {
+    const n = lengthOf(payload, key);
+    return n > 0 ? [plural(n, one, one === "mismatch" ? "mismatches" : `${one}s`)] : [];
+  });
+  return parts.length > 0 ? `${base}: ${parts.join(", ")}` : base;
+}
+
+const instanceChanges = { created: "added", updated: "changed", removed: "removed" } as const;
+const instanceChangeKinds = Object.keys(instanceChanges) as (keyof typeof instanceChanges)[];
+
+/** FR-130, FR-155 (project-less, admin log): `GitLab instance "Acme" added`. */
+function describeGitHostInstance(payload: Payload): string | null {
+  const change = oneOf(payload, "change", instanceChangeKinds);
+  const kind = oneOf(payload, "kind", ["gitlab", "bitbucket"] as const);
+  if (!change || !kind) {
+    return null;
+  }
+  const name = str(payload, "name");
+  return `${gitHostTermsOf(kind).host} instance${name ? ` "${name}"` : ""} ${instanceChanges[change]}`;
+}
+
+/** Why a project's Git binding was cleared (FR-136; backend GitBindingClearedReason). */
+const gitBindingClearedReasons: Readonly<Record<string, (host: string) => string>> = {
+  owner_role_lost: () => "the Owner who bound it is no longer an Owner",
+  member_removed: () => "the Owner who bound it left the project",
+  connection_deleted: () => "the connection was deleted",
+  connection_invalid: (host) => `${host} rejected the connection`,
+};
+
+/** FR-136, FR-155: "GitLab connection unbound: the connection was deleted; an Owner re-binds it in Settings → Git". */
+function describeGitBindingCleared(payload: Payload): string {
+  const provider = oneOf(payload, "provider", ["gitlab", "bitbucket"] as const);
+  const host = provider ? gitHostTermsOf(provider).host : "Git";
+  const reason = str(payload, "reason");
+  const why = reason && Object.hasOwn(gitBindingClearedReasons, reason) ? gitBindingClearedReasons[reason]?.(host) : undefined;
+  return `${host} connection unbound${why ? `: ${why}` : ""}; an Owner re-binds it in Settings → Git`;
+}
+
+const targetProvider = (payload: Payload): string | null => {
+  const provider = str(payload, "provider");
+  return provider ? (platformDisplayNames[provider] ?? provider) : null;
+};
+
+/** The target's subject: "Frontend deployment target", "Backend deployment target" or "Deployment target". */
+const targetSubject = (payload: Payload): string => {
+  const component = oneOf(payload, "component", ["frontend", "backend"] as const);
+  return component ? `${componentLabels[component]} deployment target` : "Deployment target";
+};
+
+const targetFailureWords: Readonly<Record<string, (platform: string) => string>> = {
+  git_access_lost: (platform) => `${platform} can no longer reach the repository`,
+  token_invalid: (platform) => `${platform} rejected the connection's token`,
+  setup_failed: () => "its setup failed",
+  readiness_failed: () => "a readiness check failed",
+};
+
+/** FR-144, FR-155: "Frontend deployment target set up on Netlify". */
+function describeTargetConfigured(payload: Payload): string {
+  const provider = targetProvider(payload);
+  const base = `${targetSubject(payload)} set up${provider ? ` on ${provider}` : ""}`;
+  return payload.status === "attention" ? `${base}; it needs attention` : base;
+}
+
+/** FR-144, FR-155: "Frontend deployment target on Netlify needs attention: Netlify rejected the connection's token". */
+function describeTargetFailed(payload: Payload): string {
+  const provider = targetProvider(payload);
+  const reason = str(payload, "reason");
+  const words = reason && Object.hasOwn(targetFailureWords, reason) ? targetFailureWords[reason]?.(provider ?? "The platform") : undefined;
+  const base = `${targetSubject(payload)}${provider ? ` on ${provider}` : ""} needs attention${words ? `: ${words}` : ""}`;
+  return reason === "setup_failed" || reason === "readiness_failed"
+    ? withCopy(base, platformCopy(str(payload, "errorCode"), str(payload, "provider")))
+    : base;
+}
+
+/** "Preview database on Render Postgres". */
+const databaseSubject = (payload: Payload): string => {
+  const env = oneOf(payload, "environment", environments);
+  const provider = str(payload, "provider");
+  return `${env ? deploymentTargetWords[env] : "Project"} database${provider ? ` on ${databaseProviderLabel(provider)}` : ""}`;
+};
+
+const databaseModeWords = { create: "created", link: "linked", external: "connected" } as const;
+const databaseModes = Object.keys(databaseModeWords) as (keyof typeof databaseModeWords)[];
+
+/** The copy of a job's error code, leaving out the codes that only repeat the line ("Creating the database failed."). */
+function jobCopy(payload: Payload, platform: string | null): string | null {
+  const code = str(payload, "errorCode");
+  return code && !jobDetailCodes.has(code) ? platformCopy(code, platform) : null;
+}
+
+/** FR-152, FR-153, FR-155: managed database and migration run events. */
+function describeDatabase(type: string, payload: Payload): string | null {
+  const subject = databaseSubject(payload);
+  const provider = str(payload, "provider");
+  switch (type) {
+    case "DATABASE_PROVISIONED": {
+      const mode = oneOf(payload, "mode", databaseModes);
+      const expires = dateOf(payload, "expiresAt");
+      const base = `${subject} ${mode ? databaseModeWords[mode] : "available"}`;
+      return expires ? `${base} (expires ${expires})` : base;
+    }
+    case "DATABASE_PROVISIONING_FAILED":
+      return withCopy(`${subject}: setup failed`, jobCopy(payload, provider));
+    case "DATABASE_EXPIRING": {
+      if (payload.reason === "paused") {
+        return `${subject} is paused: restore the project to keep using it`;
+      }
+      const expires = dateOf(payload, "expiresAt");
+      return expires ? `${subject} expires on ${expires}` : `${subject} expires soon`;
+    }
+    case "DATABASE_RESET": {
+      // FR-148: the reset only ever applies to the preview database; older payloads don't name the environment.
+      const where = provider ? ` on ${databaseProviderLabel(provider)}` : "";
+      // A `manual` reset (Railway) only records that someone reset it on the platform; AIDE ran nothing.
+      return payload.method === "reset_schema" || payload.method === "reset_schema_external"
+        ? `Preview database${where} reset: its schema was emptied`
+        : `Preview database${where} recorded as reset`;
+    }
+    default:
+      return null;
+  }
+}
+
+/** FR-153, FR-154, FR-155: "Production migration run (abcdef1) applied 3 files". */
+function describeMigrationRun(type: string, payload: Payload): string | null {
+  const env = oneOf(payload, "environment", environments);
+  const sha = shortShaOf(payload);
+  const subject = `${env ? deploymentTargetWords[env] : "Database"} migration run${sha ? ` (${sha})` : ""}`;
+  switch (type) {
+    case "MIGRATION_RUN_STARTED":
+      return `${subject} started`;
+    case "MIGRATION_RUN_COMPLETED": {
+      const applied = count(payload, "applied");
+      if (applied === null) {
+        return `${subject} completed`;
+      }
+      return applied === 0 ? `${subject} completed: nothing new to apply` : `${subject} applied ${plural(applied, "file")}`;
+    }
+    case "MIGRATION_RUN_FAILED": {
+      // FR-154: a host-mode pre-deploy has no run of its own (`runId` null), only the deployment that ran it.
+      const line = str(payload, "runId")
+        ? `${subject} failed`
+        : `${env ? deploymentTargetWords[env] : "Database"} migrations${sha ? ` (${sha})` : ""} failed during the deployment`;
+      return withCopy(line, jobCopy(payload, null));
+    }
+    default:
+      return null;
+  }
+}
+
+/** FR-147, FR-155: "Preview rollout (abcdef1) succeeded: Frontend at https://…, Backend at https://…". */
+function describePreviewRollout(payload: Payload): string | null {
+  const state = oneOf(payload, "state", ["succeeded", "failed", "blocked", "canceled"] as const);
+  if (!state) {
+    return null;
+  }
+  const sha = shortShaOf(payload);
+  const subject = `Preview rollout${sha ? ` (${sha})` : ""}`;
+  switch (state) {
+    case "succeeded": {
+      const live = (Array.isArray(payload.components) ? (payload.components as unknown[]) : []).flatMap((c) => {
+        if (typeof c !== "object" || c === null) {
+          return [];
+        }
+        const { component, url } = c as { component?: unknown; url?: unknown };
+        return (component === "frontend" || component === "backend") && typeof url === "string" && url
+          ? [`${componentLabels[component]} at ${url}`]
+          : [];
+      });
+      return live.length > 0 ? `${subject} succeeded: ${live.join(", ")}` : `${subject} succeeded`;
+    }
+    case "canceled":
+      return `${subject} replaced by a newer preview`;
+    default:
+      return withCopy(`${subject} ${state}`, platformCopy(str(payload, "errorCode"), null) ?? str(payload, "message"));
+  }
+}
+
 /**
  * FR-50: the one-line description shown in the activity feed, built from the event's type and payload with the same
  * labels the rest of the UI uses. Unknown types and payloads that don't match the expected shape fall back to the
@@ -664,6 +895,35 @@ export function describeActivity(
     case "PULL_REQUEST_FAILED":
     case "PULL_REQUEST_FORGOTTEN":
       text = describePullRequest(type, payload);
+      break;
+    case "STACK_DETECTED":
+      text = describeStackDetected(payload);
+      break;
+    case "GIT_HOST_INSTANCE_CHANGED":
+      text = describeGitHostInstance(payload);
+      break;
+    case "GIT_BINDING_CLEARED":
+      text = describeGitBindingCleared(payload);
+      break;
+    case "DEPLOYMENT_TARGET_CONFIGURED":
+      text = describeTargetConfigured(payload);
+      break;
+    case "DEPLOYMENT_TARGET_FAILED":
+      text = describeTargetFailed(payload);
+      break;
+    case "DATABASE_PROVISIONED":
+    case "DATABASE_PROVISIONING_FAILED":
+    case "DATABASE_EXPIRING":
+    case "DATABASE_RESET":
+      text = describeDatabase(type, payload);
+      break;
+    case "MIGRATION_RUN_STARTED":
+    case "MIGRATION_RUN_COMPLETED":
+    case "MIGRATION_RUN_FAILED":
+      text = describeMigrationRun(type, payload);
+      break;
+    case "PREVIEW_ROLLOUT_COMPLETED":
+      text = describePreviewRollout(payload);
       break;
     default:
       text = describeArtifact(type, payload);

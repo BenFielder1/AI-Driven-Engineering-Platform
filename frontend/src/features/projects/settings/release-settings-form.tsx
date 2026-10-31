@@ -40,7 +40,13 @@ const strategyOptions = (git: GitSettings) => {
   }))
 }
 
-const toValues = (g: GitSettings): ReleaseValues => ({ mergeStrategy: g.mergeStrategy, tagPrefix: g.tagPrefix })
+/** M28: a strategy this host doesn't offer (Bitbucket's squash or fast-forward held after a host change) can't be sent back. */
+const heldUnavailable = (g: GitSettings) => !mergeStrategiesFor(g.mode).includes(g.mergeStrategy)
+
+const toValues = (g: GitSettings): ReleaseValues => ({
+  mergeStrategy: heldUnavailable(g) ? 'aide_merges' : g.mergeStrategy,
+  tagPrefix: g.tagPrefix,
+})
 
 /**
  * Settings → Git → Release (FR-64, FR-65, §4.10; Owner): the merge strategy and the tag prefix, with a live preview of
@@ -97,6 +103,12 @@ export function ReleaseSettingsForm({ projectId, git }: { projectId: string; git
         errors={[...serverErrors.map((message) => ({ message })), ...(isSubmitted ? fieldErrorSummary(errors, fieldIds) : [])]}
       />
       <div className="mt-2 flex flex-col gap-5">
+        {heldUnavailable(git) && (
+          <p data-testid="merge-strategy-unavailable" className="text-sm text-muted-foreground">
+            This project is set to &ldquo;{mergeStrategyLabel(git.mergeStrategy, gitHostTerms(git.mode))}&rdquo;, which{' '}
+            {gitHostTerms(git.mode).host} doesn&apos;t offer. Pick a strategy below and save to replace it.
+          </p>
+        )}
         <RadioGroup
           legend="Merge strategy"
           id={fieldIds.mergeStrategy}

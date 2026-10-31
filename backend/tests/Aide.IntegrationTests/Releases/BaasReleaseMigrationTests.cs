@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Aide.Api.Features.Databases;
+using Aide.Api.Features.Deployments;
 using Aide.Api.Features.Release;
 using Aide.Domain.Common;
 using Aide.Domain.Databases;
@@ -9,6 +10,7 @@ using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;
+using Aide.Infrastructure.Persistence.Conversion;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -111,6 +113,29 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task FR153_S4_21_FR155_A_release_that_failed_unmerged_after_its_migrations_applied_says_so_and_the_run_has_its_events()
+    {
+        var app = App();
+        var (fixture, _, _) = await ReleasableWithMigrationAsync(app, "create table orders (id bigint primary key);\n");
+        using var _ = fixture;
+        var id = fixture.Project.Id;
+        await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunStarted));
+        var completed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunCompleted)).Payload);
+        Assert.Equal(("production", 1), (completed.GetProperty("environment").GetString(), completed.GetProperty("applied").GetInt32()));
+        Assert.Empty(await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunFailed));
+
+        // The state a closed PR leaves: the migrations were applied, the merge never happened.
+        await ProjectApi.WithDbAsync(app, db => db.Releases.Where(r => r.ProjectId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, ReleaseStatus.Failed).SetProperty(r => r.MergeCommitSha, (string?)null), Ct));
+
+        var dto = await ProjectApi.ReadAsync<ReleaseDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/releases/latest", UriKind.Relative), Ct));
+        Assert.True(dto.MigrationsAppliedNotMerged);
+    }
+
+    [Fact]
     public async Task FR153_S4_21_GitHub_migrates_the_PR_remote_head_and_pins_the_merge_to_it_not_the_stale_local_branch()
     {
         using var remote = await BareRemote.CreateAsync(Ct);
@@ -192,6 +217,68 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
         Assert.False(await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AnyAsync(r => r.ProjectId == id, Ct)));
         Assert.Equal(mainBefore, await TestGit.RunAsync(directory, Ct, "rev-parse", "main"));
         Assert.Equal(ProjectStatus.Releasing, (await LifecycleSeed.ProjectAsync(app, id)).Status);
+    }
+
+    [Theory]
+    [InlineData(ManagedDatabaseStatus.Paused)]
+    [InlineData(ManagedDatabaseStatus.Error)]
+    [InlineData(ManagedDatabaseStatus.Provisioning)]
+    public async Task FR153_FR155_A_production_database_that_cant_take_migrations_blocks_the_merge_with_a_failed_run(ManagedDatabaseStatus status)
+    {
+        var app = App();
+        var (fixture, _, mainBefore) = await ReleasableWithMigrationAsync(app, "create table orders (id bigint primary key);\n");
+        using var _ = fixture;
+        var id = fixture.Project.Id;
+        await ProjectApi.WithDbAsync(app, db => db.ManagedDatabases.Where(d => d.ProjectId == id).ExecuteUpdateAsync(s => s.SetProperty(d => d.Status, status), Ct));
+
+        await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        var release = await ProjectApi.WithDbAsync(app, db => db.Releases.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
+        Assert.Equal((ReleaseStatus.Failed, ErrorCodes.MigrationFailed, (string?)null), (release.Status, release.ErrorCode, release.MergeCommitSha));
+        Assert.Equal(mainBefore, await TestGit.RunAsync(WorkingCopy(id), Ct, "rev-parse", "main"));
+        var run = await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
+        Assert.Equal((MigrationRunStatus.Failed, ErrorCodes.MigrationFailed, (Guid?)run.Id), (run.Status, run.ErrorCode, release.MigrationRunId));
+        Assert.Empty(run.Applied);
+        var failed = Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunFailed));
+        Assert.Contains(await LifecycleSeed.NotificationJobsAsync(app, id), j => j.Payload.Contains(failed.Id.ToString(), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FR153_FR155_A_paused_preview_database_fails_the_preview_rollout_with_a_failed_run()
+    {
+        var app = App();
+        var (fixture, branchHead, _) = await ReleasableWithMigrationAsync(app, "create table orders (id bigint primary key);\n");
+        using var _ = fixture;
+        var id = fixture.Project.Id;
+        await ProjectApi.WithDbAsync(app, db => db.ManagedDatabases.Where(d => d.ProjectId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.Environment, DeploymentEnvironment.Preview).SetProperty(d => d.Status, ManagedDatabaseStatus.Paused), Ct));
+        var job = await ProjectApi.WithDbAsync(app, async db =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            var versionId = await db.ReleaseVersions.AsNoTracking().Where(v => v.ProjectId == id).Select(v => v.Id).SingleAsync(Ct);
+            var queued = new Job
+            {
+                Type = JobTypes.PreviewRollout,
+                ProjectId = id,
+                Status = JobStatus.Queued,
+                Payload = AideJson.Serialize(new RolloutJobPayload(id, DeploymentEnvironment.Preview, versionId, null, "aide/test", branchHead, DeploymentTrigger.Auto, null, now)),
+                RunAfter = now,
+                CreatedAt = now,
+            };
+            db.Jobs.Add(queued);
+            await db.SaveChangesAsync(Ct);
+            return queued;
+        });
+
+        await DeploymentHarness.SettleRolloutAsync(app, id, job.Id);
+
+        var run = await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
+        Assert.Equal((DeploymentEnvironment.Preview, MigrationRunStatus.Failed, ErrorCodes.MigrationFailed), (run.Environment, run.Status, run.ErrorCode));
+        Assert.Empty(run.Applied);
+        Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunFailed));
+        var completed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.PreviewRolloutCompleted)).Payload);
+        Assert.Equal(("failed", ErrorCodes.MigrationFailed), (completed.GetProperty("state").GetString(), completed.GetProperty("errorCode").GetString()));
     }
 
     [Fact]

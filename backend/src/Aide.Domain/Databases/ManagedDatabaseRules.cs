@@ -18,6 +18,26 @@ public enum DatabaseSetupMode
 public sealed record DatabaseStateMapping(ManagedDatabaseStatus Status, bool Terminal);
 
 /// <summary>
+/// FR-153: what an environment's database means for a Supabase BaaS migration step. <see cref="Absent"/> skips the step;
+/// <see cref="Unavailable"/> is a real database that can't take migrations now, so the step runs and fails.
+/// </summary>
+public enum DatabaseMigrationTarget
+{
+    Absent = 0,
+    Usable = 1,
+    Unavailable = 2,
+}
+
+/// <summary>What a provider reports for an existing database (FR-155 sweep): its state and its expiry (<c>null</c>: it doesn't expire).</summary>
+public sealed record DatabaseLiveState(ManagedDatabaseStatus Status, DateTimeOffset? ExpiresAt);
+
+/// <summary>
+/// FR-155: what the expiry sweep does to a database: its next stored status and expiry, and the reason Owners are told
+/// (<c>null</c>: a silent change).
+/// </summary>
+public sealed record DatabaseSweepChange(ManagedDatabaseStatus Status, DateTimeOffset? ExpiresAt, string? ExpiringReason);
+
+/// <summary>
 /// FR-152, FR-153, §4.21: the pure rules of managed databases: which provider the composition allows, the PUT checks,
 /// the provider state mappings (Supabase, Render), Supabase's create body and pooler URLs, Render's names and expiry, the
 /// Railway reference, the provisioning poll (10 s, 10-minute ceiling), and the card's connection summary (no secrets).
@@ -213,6 +233,56 @@ public static partial class ManagedDatabaseRules
     /// <summary>The status a stored available database shows now (<c>expiring</c> once within 7 days of its expiry).</summary>
     public static ManagedDatabaseStatus Effective(ManagedDatabaseStatus status, DateTimeOffset? expiresAt, DateTimeOffset now) =>
         status == ManagedDatabaseStatus.Available && IsExpiring(expiresAt, now) ? ManagedDatabaseStatus.Expiring : status;
+
+    /// <summary><c>DATABASE_EXPIRING.reason</c>: the database's <c>expiresAt</c> is within 7 days.</summary>
+    public const string ExpiringReasonExpiry = "expiry";
+
+    /// <summary><c>DATABASE_EXPIRING.reason</c>: the Supabase project is paused.</summary>
+    public const string ExpiringReasonPaused = "paused";
+
+    /// <summary>
+    /// FR-155 expiry sweep (<c>null</c>: nothing changes). The stored status makes the warning once-only: <c>available →
+    /// expiring</c> warns (within 7 days of the expiry) and <c>available → paused</c> warns (Supabase <c>INACTIVE</c>), while a
+    /// database already there stays quiet unless its date moved within the window, which announces the new date. A renewed
+    /// expiry or a restored project goes back to <c>available</c> silently, so a later expiry or pause warns again; a date
+    /// the provider moved is always stored. <paramref name="live"/> is what the provider just said (<c>null</c>: it couldn't
+    /// be asked or has nothing to say, so the stored expiry stands).
+    /// </summary>
+    public static DatabaseSweepChange? ExpirySweep(
+        ManagedDatabaseProvider provider, ManagedDatabaseStatus status, DateTimeOffset? expiresAt, DatabaseLiveState? live, DateTimeOffset now)
+    {
+        if (provider == ManagedDatabaseProvider.Supabase)
+        {
+            return (status, live?.Status) switch
+            {
+                (ManagedDatabaseStatus.Available or ManagedDatabaseStatus.Expiring, ManagedDatabaseStatus.Paused) => new(ManagedDatabaseStatus.Paused, expiresAt, ExpiringReasonPaused),
+                (ManagedDatabaseStatus.Paused, ManagedDatabaseStatus.Available) => new(ManagedDatabaseStatus.Available, expiresAt, null),
+                _ => null,
+            };
+        }
+
+        var known = live is null ? expiresAt : live.ExpiresAt;
+        return status switch
+        {
+            ManagedDatabaseStatus.Available when IsExpiring(known, now) => new(ManagedDatabaseStatus.Expiring, known, ExpiringReasonExpiry),
+            ManagedDatabaseStatus.Available when known != expiresAt => new(ManagedDatabaseStatus.Available, known, null),
+            ManagedDatabaseStatus.Expiring when !IsExpiring(known, now) => new(ManagedDatabaseStatus.Available, known, null),
+            ManagedDatabaseStatus.Expiring when known != expiresAt => new(ManagedDatabaseStatus.Expiring, known, ExpiringReasonExpiry),
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// FR-153, §4.21: available and expiring databases take migrations. A paused, failed or still provisioning one that has
+    /// a real resource or connection is <see cref="DatabaseMigrationTarget.Unavailable"/>: its migrations must fail visibly
+    /// and block the merge, never count as "nothing to migrate". Removed, or never set up: absent.
+    /// </summary>
+    public static DatabaseMigrationTarget MigrationTarget(ManagedDatabaseStatus status, bool hasDatabase) => status switch
+    {
+        ManagedDatabaseStatus.Available or ManagedDatabaseStatus.Expiring => DatabaseMigrationTarget.Usable,
+        ManagedDatabaseStatus.Paused or ManagedDatabaseStatus.Error or ManagedDatabaseStatus.Provisioning when hasDatabase => DatabaseMigrationTarget.Unavailable,
+        _ => DatabaseMigrationTarget.Absent,
+    };
 
     /// <summary>§4.21: the provisioning poll gives up 10 minutes after it started.</summary>
     public static bool TimedOut(DateTimeOffset startedAt, DateTimeOffset now) => now - startedAt >= ProvisioningCeiling;

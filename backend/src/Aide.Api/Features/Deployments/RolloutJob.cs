@@ -20,7 +20,8 @@ namespace Aide.Api.Features.Deployments;
 /// runner again on the merge commit after the merge (idempotent: recorded versions are skipped, and only merged files
 /// exist there), so commits pushed after the release job's pre-merge run (<c>releases.migration_run_id</c>, kept) are
 /// migrated too. The post-merge run is linked to the release by its <c>release_id</c> and merge commit, and is the
-/// rollout's migrations step. A failed production migration step writes <c>DEPLOYMENT_FAILED</c> (Owners are told, FR-91).</item>
+/// rollout's migrations step. A failed production migration step writes <c>DEPLOYMENT_FAILED</c> for the audit trail; Owners
+/// are told by the run's <c>MIGRATION_RUN_FAILED</c> (FR-155).</item>
 /// <item>Backend and frontend: a deployment row with <c>rollout_id</c> = this job's id, polled by its <c>deployment</c> job
 /// (production: adopts the platform's own build of the merge commit within 60 s, else creates one; an automatic row of the
 /// release that already exists is adopted, so the rollout is idempotent per <c>(release_id, component)</c>). The frontend
@@ -274,8 +275,9 @@ public sealed partial class RolloutJobHandler(
     }
 
     /// <summary>
-    /// FR-91 parity, §4.21: the merged code's production migrations failed after the merge: Owners are told through the
-    /// deployment-failed notification (<c>DEPLOYMENT_FAILED</c>, component <c>migrations</c>, no deployment row).
+    /// FR-91 parity, §4.21: the merged code's production migrations failed after the merge: recorded as
+    /// <c>DEPLOYMENT_FAILED</c> (component <c>migrations</c>, no deployment row). FR-155: the notification is the run's
+    /// <c>migration_failed</c>, so this one doesn't notify again (<see cref="Domain.Notifications.NotificationRules.Notifies"/>).
     /// </summary>
     private async Task ProductionMigrationFailedAsync(RolloutJobPayload payload, string? code, CancellationToken cancellationToken)
     {

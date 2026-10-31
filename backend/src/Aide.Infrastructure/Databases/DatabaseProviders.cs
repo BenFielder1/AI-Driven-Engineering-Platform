@@ -27,6 +27,9 @@ public sealed class ExternalDatabaseProvider : IDatabaseProvider
             : new DatabasePoll(ManagedDatabaseStatus.Available, true, null, database.Connection));
     }
 
+    public Task<DatabaseLiveState?> ReadStateAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken) =>
+        Task.FromResult<DatabaseLiveState?>(null);
+
     public Task RestoreAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken) =>
         throw new DatabaseProviderException(DeploymentFailure.Rejected, 400, "An External database has no restore action.", ManagedDatabaseProvider.External);
 
@@ -111,6 +114,17 @@ public sealed class FakeDatabaseProvider(ManagedDatabaseProvider kind, Concurren
             _ => connection with { Url = $"postgresql://aide:fake@fake-db-{env}.test:5432/{slug}" },
         };
         return Task.FromResult(new DatabasePoll(ManagedDatabaseStatus.Available, true, null, connection, Region: "fake-region", Plan: "free"));
+    }
+
+    /// <summary>FR-155: a Supabase resource whose id contains <c>paused</c> reads as paused; the others have nothing to say.</summary>
+    public Task<DatabaseLiveState?> ReadStateAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        ArgumentNullException.ThrowIfNull(resourceId);
+        Check(auth);
+        return Task.FromResult<DatabaseLiveState?>(kind != ManagedDatabaseProvider.Supabase
+            ? null
+            : new DatabaseLiveState(resourceId.Contains("paused", StringComparison.Ordinal) ? ManagedDatabaseStatus.Paused : ManagedDatabaseStatus.Available, null));
     }
 
     public Task RestoreAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken)

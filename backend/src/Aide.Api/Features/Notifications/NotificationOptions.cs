@@ -26,6 +26,9 @@ public sealed class NotificationOptions
     /// <summary>How often pending gates are checked for reminders and overdue flags (FR-15: hourly).</summary>
     public TimeSpan GateSweepInterval { get; set; } = TimeSpan.FromHours(1);
 
+    /// <summary>How often the database expiry sweep job is queued (FR-155: hourly; each run reads each Supabase project once).</summary>
+    public TimeSpan DatabaseExpirySweepInterval { get; set; } = TimeSpan.FromHours(1);
+
     /// <summary>Timeout of one Slack, Teams or webhook request (at most <see cref="DeliveryPolicy.MaxSendTimeout"/>).</summary>
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
@@ -64,7 +67,7 @@ public static class NotificationServiceCollectionExtensions
     {
         services.AddOptions<NotificationOptions>()
             .BindConfiguration(NotificationOptions.SectionName)
-            .Validate(o => o.DeliverySweepInterval > TimeSpan.Zero && o.GateSweepInterval > TimeSpan.Zero, "Notifications sweep intervals must be positive.")
+            .Validate(o => o.DeliverySweepInterval > TimeSpan.Zero && o.GateSweepInterval > TimeSpan.Zero && o.DatabaseExpirySweepInterval > TimeSpan.Zero, "Notifications sweep intervals must be positive.")
             .Validate(o => DeliveryPolicy.IsValidSendTimeout(o.RequestTimeout), "Notifications:RequestTimeout must be positive and at most 60 seconds (well inside the delivery claim lease).")
             .Validate(o => o.SweepBatchSize >= 1, "Notifications:SweepBatchSize must be at least 1.")
             .ValidateOnStart();

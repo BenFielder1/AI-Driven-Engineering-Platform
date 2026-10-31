@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Globalization;
+using System.Text.Json.Nodes;
 using Aide.Cli.Api;
 using Aide.Cli.Config;
 
@@ -230,25 +231,33 @@ internal static class ProjectCommands
     public static Command BuildStatus(CommandFactory factory)
     {
         var id = ProjectIdArgument();
-        var command = new Command("status", "Show a project's lifecycle state: phase, status, released and in-development versions, checkpoint, preset, artifacts, execution, review, gates and the latest deployment.") { id };
+        var command = new Command("status", "Show a project's lifecycle state: phase, status, released and in-development versions, checkpoint, preset, stack composition, production URLs, artifacts, execution, review, gates, the latest deployment and the latest migration run. With --json: the API's project state plus stack and latestMigrationRun.") { id };
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
             var projectId = context.Get(id);
             var state = await context.Api().GetAsync<ProjectStateDto>($"api/projects/{projectId}/state", cancellationToken).ConfigureAwait(false);
             if (context.Json)
             {
-                await context.WriteRawJsonAsync(state.Raw).ConfigureAwait(false);
+                // FR-156: the API's state, plus what status adds to it for people.
+                var stackJson = await context.Api().GetAsync<JsonNode>($"api/projects/{projectId}/stack", cancellationToken).ConfigureAwait(false);
+                var runsJson = await context.Api().GetAsync<JsonNode>($"api/projects/{projectId}/migrations", cancellationToken).ConfigureAwait(false);
+                var combined = JsonNode.Parse(state.Raw)!.AsObject();
+                combined["stack"] = stackJson.Value.DeepClone();
+                combined["latestMigrationRun"] = (runsJson.Value as JsonArray)?.FirstOrDefault()?.DeepClone();
+                await context.Out.WriteLineAsync(ApiJson.ToIndentedJson(combined)).ConfigureAwait(false);
                 return ExitCodes.Success;
             }
 
             var project = await context.Api().GetAsync<ProjectDto>($"api/projects/{projectId}", cancellationToken).ConfigureAwait(false);
-            await context.Out.WriteLineAsync(FormatState(project.Value, state.Value)).ConfigureAwait(false);
+            var stack = await context.Api().GetAsync<ProjectStackDto>($"api/projects/{projectId}/stack", cancellationToken).ConfigureAwait(false);
+            var runs = await context.Api().GetAsync<List<MigrationRunDto>>($"api/projects/{projectId}/migrations", cancellationToken).ConfigureAwait(false);
+            await context.Out.WriteLineAsync(FormatState(project.Value, state.Value, stack.Value, runs.Value.FirstOrDefault())).ConfigureAwait(false);
             return ExitCodes.Success;
         });
         return command;
     }
 
-    internal static string FormatState(ProjectDto project, ProjectStateDto s)
+    internal static string FormatState(ProjectDto project, ProjectStateDto s, ProjectStackDto stack, MigrationRunDto? latestMigration)
     {
         var lines = new List<string>
         {
@@ -262,6 +271,8 @@ internal static class ProjectCommands
                 ("In development", s.DevelopmentVersion is { } development ? $"{development} (checkpoint {Output.Num(s.Checkpoint)})" : "-"),
                 ("Checkpoint", Output.Num(s.Checkpoint)),
                 ("Preset", VersionCommands.PresetText(project.PresetName ?? project.PresetId, project.PresetVersion)),
+                ("Stack", StackCommands.Summary(stack.Composition)),
+                .. ProductionUrlRows(s),
                 ("Approval mode", project.ApprovalMode),
                 ("Execution", s.ExecutionPaused ? $"{s.ExecutionStatus} (paused)" : s.ExecutionStatus),
                 ("Steps", string.Create(CultureInfo.InvariantCulture,
@@ -273,6 +284,7 @@ internal static class ProjectCommands
                 ("Latest release", s.LatestRelease is null ? "-" : $"{s.LatestRelease.Tag} ({s.LatestRelease.Status})"),
                 ("Latest deployment", s.LatestDeployment is not { } d ? "-"
                     : $"{d.Target} {d.ReleaseVersion} {VersionCommands.StatusText(d)} {d.Url ?? string.Empty}".TrimEnd() + $" ({Output.Time(d.CreatedAt)})"),
+                ("Latest migration", latestMigration is null ? "-" : DatabaseCommands.Summary(latestMigration)),
             ]),
             string.Empty,
             "Artifacts:",
@@ -295,6 +307,12 @@ internal static class ProjectCommands
 
         return string.Join(Environment.NewLine, lines);
     }
+
+    /// <summary>FR-156: a row per deployment target with its production URL; one dash when there are no targets.</summary>
+    private static IEnumerable<(string Key, string Value)> ProductionUrlRows(ProjectStateDto s) =>
+        s.ProductionUrls is { Count: > 0 } urls
+            ? urls.Select(u => ($"Production {u.Component}", $"{u.Url ?? "-"} ({u.Provider})"))
+            : [("Production URLs", "-")];
 
     /// <summary>Reads a file, or stdin when <paramref name="path"/> is `-`.</summary>
     internal static string ReadText(string path, Hosting.ITerminal terminal)

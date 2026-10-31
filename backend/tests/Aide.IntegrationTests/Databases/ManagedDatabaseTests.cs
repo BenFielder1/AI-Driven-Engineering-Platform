@@ -76,6 +76,8 @@ public sealed class ManagedDatabaseTests(AideApiFactory factory)
         var runs = await DeploymentHarness.SettleAsync(app, (await ProvisioningJobAsync(app, id)).Id);
 
         Assert.Equal(3, runs);
+        var provisioned = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.DatabaseProvisioned)).Payload);
+        Assert.Equal(("production", "supabase", "available"), (provisioned.GetProperty("environment").GetString(), provisioned.GetProperty("provider").GetString(), provisioned.GetProperty("status").GetString()));
         var settings = await DeploymentHarness.SettingsAsync(owner.Client, id);
         var card = settings.Databases.Single(d => d.Environment == DeploymentEnvironment.Production);
         Assert.Equal(("available", "succeeded"), (card.Status, card.Provisioning?.State));

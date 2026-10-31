@@ -48,7 +48,7 @@ public sealed partial class GitLabAdmin(
         return instance is null ? null : ToDto(instance, await CountsAsync([id], cancellationToken));
     }
 
-    public async Task<Result<AdminGitLabInstanceDto>> CreateAsync(Guid adminId, CreateGitLabInstanceRequest request, CancellationToken cancellationToken)
+    public async Task<Result<AdminGitLabInstanceDto>> CreateAsync(Guid adminId, CreateGitLabInstanceRequest request, string actor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         var name = GitLabRules.ValidateInstanceName(request.Name);
@@ -101,6 +101,7 @@ public sealed partial class GitLabAdmin(
             UpdatedAt = now,
         };
         db.GitHostInstances.Add(row);
+        AddChanged(row, "created", actor, now);
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -114,7 +115,7 @@ public sealed partial class GitLabAdmin(
         return Result.Success(ToDto(instances.ToInstance(row), new Dictionary<Guid, (int, int)>()));
     }
 
-    public async Task<Result<AdminGitLabInstanceDto>> UpdateAsync(Guid id, UpdateGitLabInstanceRequest request, CancellationToken cancellationToken)
+    public async Task<Result<AdminGitLabInstanceDto>> UpdateAsync(Guid id, UpdateGitLabInstanceRequest request, string actor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         var row = await db.GitHostInstances.FirstOrDefaultAsync(i => i.Id == id && i.Kind == GitHostKind.Gitlab, cancellationToken);
@@ -219,6 +220,7 @@ public sealed partial class GitLabAdmin(
         }
 
         row.UpdatedAt = time.GetUtcNow();
+        AddChanged(row, "updated", actor, row.UpdatedAt);
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -259,7 +261,7 @@ public sealed partial class GitLabAdmin(
     /// FR-130: removes an instance no project uses (<c>CONFLICT</c> otherwise), with its users' connections and sign-in links.
     /// gitlab.com and configured instances can't be removed (disable them instead).
     /// </summary>
-    public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result> DeleteAsync(Guid id, string actor, CancellationToken cancellationToken)
     {
         var row = await db.GitHostInstances.FirstOrDefaultAsync(i => i.Id == id && i.Kind == GitHostKind.Gitlab, cancellationToken);
         if (row is null)
@@ -287,6 +289,7 @@ public sealed partial class GitLabAdmin(
         var connections = await db.GitConnections.Where(c => c.InstanceId == id).ExecuteDeleteAsync(cancellationToken);
         await db.UserExternalLogins.Where(l => l.InstanceId == id).ExecuteDeleteAsync(cancellationToken);
         db.GitHostInstances.Remove(row);
+        AddChanged(row, "removed", actor, time.GetUtcNow());
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -300,6 +303,15 @@ public sealed partial class GitLabAdmin(
         LogRemoved(logger, id, connections);
         return Result.Success();
     }
+
+    /// <summary>FR-155: <c>GIT_HOST_INSTANCE_CHANGED</c> (no project; never a secret).</summary>
+    private void AddChanged(GitHostInstance row, string change, string actor, DateTimeOffset now) =>
+        db.AddEvent(
+            EventTypes.GitHostInstanceChanged,
+            null,
+            new { instanceId = row.Id, kind = row.Kind.ToWire(), change, name = row.Name, baseUrl = row.BaseUrl, enabled = row.Enabled },
+            actor,
+            now);
 
     private Result<string?> Normalize(string? baseUrl, bool allowInsecureHttp)
     {

@@ -20001,7 +20001,11 @@
           "deployment_failed",
           "preview_ready",
           "llm_binding_cleared",
-          "git_binding_cleared"
+          "git_binding_cleared",
+          "database_provisioning_failed",
+          "database_expiring",
+          "migration_failed",
+          "deployment_target_attention"
         ],
         "description": "Events a notification channel can subscribe to (FR-47, FR-92). Wire values are snake_case and equal the notification\ntypes (`NotificationRules.ChannelTypes`); the personal `connection_invalid` never goes to project channels."
       },
@@ -20079,7 +20083,11 @@
           "preview_ready",
           "connection_invalid",
           "llm_binding_cleared",
-          "git_binding_cleared"
+          "git_binding_cleared",
+          "database_provisioning_failed",
+          "database_expiring",
+          "migration_failed",
+          "deployment_target_attention"
         ],
         "description": "The kind of an in-app notification (FR-47, FR-15). The project channel events (`NotificationEvent`) plus\n`gate_reminder`, the 24-hour reminder of a pending gate, and the personal `connection_invalid` (FR-92).\nWire values are snake_case."
       },

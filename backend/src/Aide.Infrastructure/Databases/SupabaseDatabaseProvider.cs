@@ -71,6 +71,14 @@ public sealed class SupabaseDatabaseProvider(PlatformHttp http) : IDatabaseProvi
         return Result(created.RootElement, id, true);
     }
 
+    public async Task<DatabaseLiveState?> ReadStateAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        ArgumentNullException.ThrowIfNull(resourceId);
+        using var project = await SendAsync(auth, HttpMethod.Get, $"projects/{Uri.EscapeDataString(resourceId)}", null, cancellationToken);
+        return new DatabaseLiveState(ManagedDatabaseRules.SupabaseState(Text(project.RootElement, "status")).Status, null);
+    }
+
     public async Task<DatabasePoll> PollAsync(DatabaseAuth auth, DatabaseRef database, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(auth);

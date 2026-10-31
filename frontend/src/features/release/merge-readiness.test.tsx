@@ -179,7 +179,7 @@ describe('Awaiting merge (FR-65)', () => {
     await renderRoute(`/projects/${project.id}/settings/danger`)
     const button = await screen.findByRole('button', { name: 'Roll back…' })
     expect(button).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByText(rollbackAwaitingMergeMessage())).toBeInTheDocument()
+    expect(await screen.findByText(rollbackAwaitingMergeMessage())).toBeInTheDocument()
   })
 
   it('FR65_FR92_activity_lines_for_awaiting_merge_merged_externally_and_pr_closed', () => {

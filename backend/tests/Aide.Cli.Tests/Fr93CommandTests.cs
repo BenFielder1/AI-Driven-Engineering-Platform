@@ -267,7 +267,7 @@ public sealed class Fr93CommandTests : IDisposable
         project["presetName"] = "Next.js + Supabase";
         project["presetVersion"] = "1.0.0";
         _cli.Respond(r => FakeHttpHandler.Json(HttpStatusCode.OK,
-            r.RequestUri!.AbsolutePath.EndsWith("/state", StringComparison.Ordinal) ? state.ToJsonString() : project.ToJsonString()));
+            Samples.StatusBody(r, state.ToJsonString(), project.ToJsonString())));
 
         var run = await _cli.RunAsync("status", Samples.ProjectId);
 
@@ -283,7 +283,7 @@ public sealed class Fr93CommandTests : IDisposable
     public async Task FR93_status_without_preset_or_deployment_shows_none_and_a_dash()
     {
         _cli.Respond(r => FakeHttpHandler.Json(HttpStatusCode.OK,
-            r.RequestUri!.AbsolutePath.EndsWith("/state", StringComparison.Ordinal) ? Samples.State : Samples.Project));
+            Samples.StatusBody(r, Samples.State, Samples.Project)));
 
         var run = await _cli.RunAsync("status", Samples.ProjectId);
 

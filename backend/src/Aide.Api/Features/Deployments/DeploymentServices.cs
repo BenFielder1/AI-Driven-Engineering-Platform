@@ -29,6 +29,8 @@ public static class DeploymentServiceCollectionExtensions
         services.AddScoped<Databases.MigrationRunService>();
         services.AddScoped<IJobEndedHook, Databases.DatabaseProvisioningJobEndedHook>();
         services.AddJobHandler<Databases.DatabaseProvisioningJobHandler>(JobTypes.DatabaseProvisioning);
+        services.AddScoped<Databases.DatabaseExpirySweepService>();
+        services.AddJobHandler<Databases.DatabaseExpirySweepJobHandler>(JobTypes.DatabaseExpirySweep);
         services.AddScoped<IJobEndedHook, DeploymentJobEndedHook>();
         services.AddJobHandler<DeploymentJobHandler>(JobTypes.Deployment);
 

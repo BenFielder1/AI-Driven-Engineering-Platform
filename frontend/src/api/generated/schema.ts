@@ -5013,7 +5013,7 @@ export interface components {
          *     types (`NotificationRules.ChannelTypes`); the personal `connection_invalid` never goes to project channels.
          * @enum {unknown}
          */
-        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "llm_binding_cleared" | "git_binding_cleared";
+        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention";
         /**
          * @description A page of the caller's notifications, newest first. `unreadCount` counts all the caller's unread notifications
          *     (not just this page). Load more with `before` = `nextBefore`; `null` on the last page.
@@ -5040,7 +5040,7 @@ export interface components {
          *     Wire values are snake_case.
          * @enum {unknown}
          */
-        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared" | "git_binding_cleared";
+        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention";
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfAdminAgentRunDto: {
             items: components["schemas"]["AdminAgentRunDto"][];

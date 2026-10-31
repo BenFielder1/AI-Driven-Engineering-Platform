@@ -57,4 +57,20 @@ public enum NotificationEvent
     /// <summary>FR-136: the project's Git binding (GitLab or Bitbucket connection) was cleared.</summary>
     [JsonStringEnumMemberName("git_binding_cleared")]
     GitBindingCleared = 14,
+
+    /// <summary>FR-155: setting up a database failed.</summary>
+    [JsonStringEnumMemberName("database_provisioning_failed")]
+    DatabaseProvisioningFailed = 15,
+
+    /// <summary>FR-155: a Render free database expires within 7 days, or a Supabase project is paused.</summary>
+    [JsonStringEnumMemberName("database_expiring")]
+    DatabaseExpiring = 16,
+
+    /// <summary>FR-155: a migration failed.</summary>
+    [JsonStringEnumMemberName("migration_failed")]
+    MigrationFailed = 17,
+
+    /// <summary>FR-155: the platform lost Git access, or the deployment target's token is invalid.</summary>
+    [JsonStringEnumMemberName("deployment_target_attention")]
+    DeploymentTargetAttention = 18,
 }

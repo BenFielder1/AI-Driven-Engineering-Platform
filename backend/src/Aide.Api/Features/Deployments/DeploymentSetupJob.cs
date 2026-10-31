@@ -114,6 +114,7 @@ public sealed partial class DeploymentSetupJobHandler(
             new { projectId = target.ProjectId, section = "deployment", component = target.Component.ToWire(), changes = ResourceChange, resourceId = target.ResourceId },
             SystemActor.Name,
             target.UpdatedAt);
+        DeploymentTargetEvents.Configured(db, target, SystemActor.Name, target.UpdatedAt);
         await db.SaveChangesAsync(cancellationToken);
 
         // FR-153: Supabase Auth URLs follow the frontend's URLs.
@@ -167,6 +168,13 @@ public sealed partial class DeploymentSetupJobHandler(
                 target.Status = DeploymentTargetStatus.Error;
                 target.StatusReason = code;
                 target.UpdatedAt = time.GetUtcNow();
+                DeploymentTargetEvents.Failed(
+                    db,
+                    target,
+                    code == ErrorCodes.PlatformGitNotConnected ? DeploymentTargetFailureReasons.GitAccessLost : DeploymentTargetFailureReasons.SetupFailed,
+                    code,
+                    SystemActor.Name,
+                    target.UpdatedAt);
                 await db.SaveChangesAsync(cancellationToken);
             }
 
@@ -217,6 +225,7 @@ public sealed class DeploymentSetupJobEndedHook(TimeProvider time) : IJobEndedHo
             target.Status = DeploymentTargetStatus.Error;
             target.StatusReason = ErrorCodes.UpstreamError;
             target.UpdatedAt = time.GetUtcNow();
+            DeploymentTargetEvents.Failed(db, target, DeploymentTargetFailureReasons.SetupFailed, ErrorCodes.UpstreamError, SystemActor.Name, target.UpdatedAt);
         }
     }
 }

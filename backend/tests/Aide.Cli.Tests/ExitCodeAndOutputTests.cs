@@ -65,14 +65,16 @@ public sealed class ExitCodeAndOutputTests : IDisposable
     [Fact]
     public async Task FR52_status_json_prints_the_project_state_and_exits_0()
     {
-        _cli.LoggedIn().Respond(_ => FakeHttpHandler.Json(HttpStatusCode.OK, Samples.State));
+        _cli.LoggedIn().Respond(r => FakeHttpHandler.Json(HttpStatusCode.OK, Samples.StatusBody(r, Samples.State, Samples.Project)));
 
         var run = await _cli.RunAsync("status", Samples.ProjectId, "--json");
 
         Assert.Equal(ExitCodes.Success, run.ExitCode);
-        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(Samples.State), JsonNode.Parse(run.Out)), run.Out);
+        var output = JsonNode.Parse(run.Out)!.AsObject();
+        Assert.True(output.Remove("stack") && output.Remove("latestMigrationRun"), run.Out); // FR-156 adds these two
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(Samples.State), output), run.Out);
         Assert.Empty(run.Error);
-        var request = Assert.Single(_cli.Requests);
+        var request = _cli.Requests[0];
         Assert.Equal(HttpMethod.Get, request.Method);
         Assert.Equal($"http://localhost:8080/api/projects/{Samples.ProjectId}/state", request.Uri.ToString());
         Assert.Equal($"Bearer {CliTestHarness.Token}", request.Authorization);
@@ -95,7 +97,7 @@ public sealed class ExitCodeAndOutputTests : IDisposable
     public async Task FR52_status_human_output_shows_phase_status_and_name()
     {
         _cli.LoggedIn().Respond(r => FakeHttpHandler.Json(
-            HttpStatusCode.OK, r.RequestUri!.AbsolutePath.EndsWith("/state", StringComparison.Ordinal) ? Samples.State : Samples.Project));
+            HttpStatusCode.OK, Samples.StatusBody(r, Samples.State, Samples.Project)));
 
         var run = await _cli.RunAsync("status", Samples.ProjectId);
 

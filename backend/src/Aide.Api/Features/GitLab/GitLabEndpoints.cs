@@ -290,7 +290,7 @@ public static class GitLabEndpoints
     private static async Task<Results<Created<AdminGitLabInstanceDto>, ValidationProblem, ProblemHttpResult>> CreateAdminGitLabInstance(
         CreateGitLabInstanceRequest request, GitLabAdmin admin, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        var result = await admin.CreateAsync(currentUser.RequiredUserId, request, cancellationToken);
+        var result = await admin.CreateAsync(currentUser.RequiredUserId, request, currentUser.Actor, cancellationToken);
         if (result.IsFailure)
         {
             return result.Error!.Code == ErrorCodes.Validation ? ApiProblems.Validation(result.Error) : ApiProblems.FromError(result.Error);
@@ -300,9 +300,9 @@ public static class GitLabEndpoints
     }
 
     private static async Task<Results<Ok<AdminGitLabInstanceDto>, ValidationProblem, ProblemHttpResult>> UpdateAdminGitLabInstance(
-        Guid instanceId, UpdateGitLabInstanceRequest request, GitLabAdmin admin, CancellationToken cancellationToken)
+        Guid instanceId, UpdateGitLabInstanceRequest request, GitLabAdmin admin, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        var result = await admin.UpdateAsync(instanceId, request, cancellationToken);
+        var result = await admin.UpdateAsync(instanceId, request, currentUser.Actor, cancellationToken);
         if (result.IsFailure)
         {
             return result.Error!.Code == ErrorCodes.Validation ? ApiProblems.Validation(result.Error) : ApiProblems.FromError(result.Error);
@@ -323,9 +323,9 @@ public static class GitLabEndpoints
         return TypedResults.Ok(result.Value);
     }
 
-    private static async Task<Results<NoContent, ProblemHttpResult>> DeleteAdminGitLabInstance(Guid instanceId, GitLabAdmin admin, CancellationToken cancellationToken)
+    private static async Task<Results<NoContent, ProblemHttpResult>> DeleteAdminGitLabInstance(Guid instanceId, GitLabAdmin admin, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        var result = await admin.DeleteAsync(instanceId, cancellationToken);
+        var result = await admin.DeleteAsync(instanceId, currentUser.Actor, cancellationToken);
         return result.IsFailure ? ApiProblems.FromError(result.Error!) : TypedResults.NoContent();
     }
 

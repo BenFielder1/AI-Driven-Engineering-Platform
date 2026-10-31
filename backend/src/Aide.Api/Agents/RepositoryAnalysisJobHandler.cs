@@ -2,6 +2,7 @@ using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Stack;
 using Aide.Api.Features.Versions;
 using Aide.Api.Jobs;
+using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
@@ -125,6 +126,25 @@ public sealed partial class RepositoryAnalysisJobHandler(
         {
             LogSkipped(logger, "the version stopped being the project's version in development while the analyst ran");
             return;
+        }
+
+        // FR-155: saved with the summary it informed; a redelivery that finds its own stored summary doesn't repeat it.
+        if (stack.Detection is { } report && db.Entry(summary).State == EntityState.Added)
+        {
+            db.AddEvent(
+                EventTypes.StackDetected,
+                project.Id,
+                new
+                {
+                    releaseVersionId = version.Id,
+                    version = version.Version,
+                    baseCommitSha = version.BaseCommitSha,
+                    suggestions = report.Suggestions.Select(s => new { choice = s.Choice, option = s.Option, path = s.Path, mode = s.Mode }),
+                    conflicts = report.Conflicts.Select(c => c.Choice),
+                    mismatches = report.Mismatches,
+                },
+                SystemActor.Name,
+                produced.CompletedAt);
         }
 
         try

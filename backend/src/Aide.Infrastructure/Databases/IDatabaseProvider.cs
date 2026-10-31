@@ -83,6 +83,12 @@ public interface IDatabaseProvider
     /// <summary>Reads the database's state; once available, its connection details.</summary>
     Task<DatabasePoll> PollAsync(DatabaseAuth auth, DatabaseRef database, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// FR-155: the state of an existing database, read-only (unlike <see cref="PollAsync"/>, which may create API keys);
+    /// <c>null</c> when the provider has no state worth reading.
+    /// </summary>
+    Task<DatabaseLiveState?> ReadStateAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken);
+
     /// <summary>Restores a paused database (Supabase <c>POST /projects/{ref}/restore</c>); others: <see cref="DeploymentFailure.Rejected"/>.</summary>
     Task RestoreAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken);
 

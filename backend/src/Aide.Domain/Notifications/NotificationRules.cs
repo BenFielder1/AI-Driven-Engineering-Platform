@@ -1,4 +1,5 @@
 using Aide.Domain.Common;
+using Aide.Domain.Deployments;
 using Aide.Domain.Gates;
 
 namespace Aide.Domain.Notifications;
@@ -30,6 +31,9 @@ public sealed record NotificationJobPayload(Guid? ProjectId, NotificationType Ty
 /// <summary>FR-47, FR-15, §2: which events notify, whom, through which channel subscription, and under which key.</summary>
 public static class NotificationRules
 {
+    /// <summary>The <c>component</c> of a <c>DEPLOYMENT_FAILED</c> event about production migrations, which have no deployment row.</summary>
+    public const string MigrationsComponent = "migrations";
+
     /// <summary>The notification an audit event raises, or <c>null</c> when it raises none.</summary>
     public static NotificationType? ForEvent(string eventType) => eventType switch
     {
@@ -49,8 +53,29 @@ public static class NotificationRules
         EventTypes.ConnectionInvalid => NotificationType.ConnectionInvalid,
         EventTypes.LlmBindingCleared => NotificationType.LlmBindingCleared,
         EventTypes.GitBindingCleared => NotificationType.GitBindingCleared,
+        EventTypes.DatabaseProvisioningFailed => NotificationType.DatabaseProvisioningFailed,
+        EventTypes.DatabaseExpiring => NotificationType.DatabaseExpiring,
+        EventTypes.MigrationRunFailed => NotificationType.MigrationFailed,
+        EventTypes.DeploymentTargetFailed => NotificationType.DeploymentTargetAttention,
         _ => null,
     };
+
+    /// <summary>
+    /// FR-155: whether an event that maps to a type (<see cref="ForEvent"/>) really notifies. A failed target only tells
+    /// Owners when the platform lost Git access or the token is invalid (a refused setup shows on the card its Owner is
+    /// looking at). A failed migration tells them once, as <c>migration_failed</c>: the <c>DEPLOYMENT_FAILED</c> written for
+    /// the same failure stays in the audit trail without a second notification.
+    /// </summary>
+    public static bool Notifies(NotificationFacts facts)
+    {
+        ArgumentNullException.ThrowIfNull(facts);
+        return facts.Type switch
+        {
+            NotificationType.DeploymentTargetAttention => DeploymentTargetFailureReasons.NeedsOwner(facts.Reason),
+            NotificationType.DeploymentFailed => facts.Component != MigrationsComponent && facts.ErrorCode != ErrorCodes.MigrationFailed,
+            _ => true,
+        };
+    }
 
     /// <summary>Gate notifications are keyed by the gate (one per gate), the others by the event that raised them.</summary>
     public static bool IsAboutGate(NotificationType type) =>
@@ -58,7 +83,8 @@ public static class NotificationRules
 
     /// <summary>
     /// Recipients: Owners for what needs an Owner's action (gates, drafts to approve, blocked steps, failed runs, budget,
-    /// failed releases, releases awaiting a merge, failed deployments, cleared LLM and Git bindings); every member for outcomes
+    /// failed releases, releases awaiting a merge, failed deployments, cleared LLM and Git bindings, failed or expiring
+    /// databases, failed migrations, deployment targets that need attention); every member for outcomes
     /// (review completed, release completed, rollback, preview ready); the connection's owner alone for an invalid connection.
     /// </summary>
     public static RecipientScope Recipients(NotificationType type) => type switch
@@ -81,6 +107,22 @@ public static class NotificationRules
         IsPersonal(type) ? null
         : type == NotificationType.GateReminder ? NotificationType.GateRequired.ToWire()
         : type.ToWire();
+
+    /// <summary>
+    /// Whether a project channel subscribed to <paramref name="events"/> receives <paramref name="type"/>. FR-155: a channel
+    /// subscribed to <c>deployment_failed</c> also receives <c>migration_failed</c>, because migration failures used to reach
+    /// it under that name. A notification is delivered once per channel however many of its events match.
+    /// </summary>
+    public static bool ChannelReceives(NotificationType type, IEnumerable<string> events)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+        if (ChannelEvent(type) is not { } channelEvent)
+        {
+            return false;
+        }
+
+        return events.Any(e => e == channelEvent || (type == NotificationType.MigrationFailed && e == NotificationType.DeploymentFailed.ToWire()));
+    }
 
     /// <summary>The event types a project channel can subscribe to: every type but the reminder (it follows <c>gate_required</c>) and personal ones.</summary>
     public static IReadOnlyList<NotificationType> ChannelTypes { get; } =
@@ -113,10 +155,11 @@ public static class NotificationRules
     /// <summary>
     /// The app page a notification opens (a relative path; never an approval token). <paramref name="artifactType"/> picks
     /// the artifact page of <c>artifact_ready</c>; <paramref name="deploymentTarget"/> picks the page that redeploys a failed
-    /// deployment (production: Release; preview: Review). Personal and project-less notifications open <c>/connections</c>
-    /// or the projects list.
+    /// deployment (production: Release; preview: Review), and of a failed host-mode migration, which has no run on the
+    /// Migrations page (<paramref name="hasMigrationRun"/>). Personal and project-less notifications open
+    /// <c>/connections</c> or the projects list.
     /// </summary>
-    public static string LinkPath(NotificationType type, Guid? projectId, string? artifactType = null, string? deploymentTarget = null)
+    public static string LinkPath(NotificationType type, Guid? projectId, string? artifactType = null, string? deploymentTarget = null, bool hasMigrationRun = false)
     {
         if (type == NotificationType.ConnectionInvalid)
         {
@@ -135,6 +178,10 @@ public static class NotificationRules
             NotificationType.RunFailed or NotificationType.BudgetExceeded => $"/projects/{id:D}/runs",
             NotificationType.ReviewCompleted or NotificationType.PreviewReady => $"/projects/{id:D}/review",
             NotificationType.DeploymentFailed when deploymentTarget == "preview" => $"/projects/{id:D}/review",
+            NotificationType.MigrationFailed when hasMigrationRun => $"/projects/{id:D}/migrations",
+            NotificationType.MigrationFailed when deploymentTarget == "preview" => $"/projects/{id:D}/review",
+            NotificationType.MigrationFailed => $"/projects/{id:D}/release",
+            NotificationType.DatabaseProvisioningFailed or NotificationType.DatabaseExpiring or NotificationType.DeploymentTargetAttention => $"/projects/{id:D}/settings/deployment",
             NotificationType.ReleaseAwaitingMerge or NotificationType.DeploymentFailed => $"/projects/{id:D}/release",
             NotificationType.LlmBindingCleared => $"/projects/{id:D}/settings/llm",
             NotificationType.GitBindingCleared => $"/projects/{id:D}/settings/git",

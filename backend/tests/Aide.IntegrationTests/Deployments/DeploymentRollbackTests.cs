@@ -27,6 +27,35 @@ public sealed class DeploymentRollbackTests(AideApiFactory factory)
     private static Uri U(string path) => new(path, UriKind.Relative);
 
     [Fact]
+    public async Task FR150_A_host_mode_backend_deploy_older_than_the_latest_is_olderThanLatestMigration()
+    {
+        var app = DeploymentHarness.Fake(factory);
+        using var fixture = await ProjectApi.FixtureAsync(app, git: PatGit);
+        var old = await SeedAsync(app, fixture.Project, DeploymentProvider.Render, DeploymentEnvironment.Production, "dpl_old", -10, DeploymentComponent.Backend);
+        var latest = await SeedAsync(app, fixture.Project, DeploymentProvider.Render, DeploymentEnvironment.Production, "dpl_latest", -5, DeploymentComponent.Backend);
+        await ProjectApi.WithDbAsync(app, async db =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            db.ManagedDatabases.Add(new ManagedDatabase
+            {
+                ProjectId = fixture.Project.Id,
+                Environment = DeploymentEnvironment.Production,
+                Provider = ManagedDatabaseProvider.Render,
+                ResourceId = "dpg-rollback",
+                Status = ManagedDatabaseStatus.Available,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            await db.SaveChangesAsync(Ct);
+        });
+
+        var list = await fixture.Viewer.Client.GetFromJsonAsync<List<DeploymentDto>>(U($"{fixture.Path}/deployments?environment=production"), ApiSession.Json, Ct);
+
+        Assert.True(Assert.Single(list!, d => d.Id == old).OlderThanLatestMigration);
+        Assert.False(Assert.Single(list!, d => d.Id == latest).OlderThanLatestMigration);
+    }
+
+    [Fact]
     public async Task FR150_Netlify_rollback_restores_the_deploy_and_records_a_rollback_row_shown_as_current()
     {
         var netlify = new FakeGitHubApi().On(HttpMethod.Post, "/api/v1/sites/site_1/deploys/dpl_old/restore", HttpStatusCode.OK, """{"id":"dpl_old","state":"ready"}""");

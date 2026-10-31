@@ -128,6 +128,10 @@ public sealed partial class DeploymentJobHandler(
         {
             LogRefused(logger, deployment.Id, ex.Failure, ex.Status);
             Fail(deployment, ErrorCodes.PlatformError, SecretRedaction.SanitizeProviderError(DeploymentSettingsService.Message(ex)));
+            if (ex.Failure == DeploymentFailure.GitNotConnected)
+            {
+                await GitAccessLostAsync(deployment, now, cancellationToken);
+            }
         }
 
         var decision = DeploymentPollRules.Decide(deployment.CreatedAt, now, deployment.Status, DeploymentPollRules.MinInterval(context.Provider.Kind));
@@ -260,6 +264,19 @@ public sealed partial class DeploymentJobHandler(
         deployment.ErrorMessage = message;
     }
 
+    /// <summary>FR-155: the platform lost Git access, seen by a deployment: a ready target needs attention until a verify passes (once, as it leaves ready).</summary>
+    private async Task GitAccessLostAsync(Deployment deployment, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var target = await db.DeploymentTargets.FirstOrDefaultAsync(t => t.ProjectId == deployment.ProjectId && t.Component == deployment.Component, cancellationToken);
+        if (target is { Status: DeploymentTargetStatus.Ready })
+        {
+            target.Status = DeploymentTargetStatus.Attention;
+            target.StatusReason = ReadinessRules.GitAccess;
+            target.UpdatedAt = now;
+            DeploymentTargetEvents.Failed(db, target, DeploymentTargetFailureReasons.GitAccessLost, ErrorCodes.PlatformGitNotConnected, SystemActor.Name, now);
+        }
+    }
+
     /// <summary>Records the row's change with its events and saves; a concurrent change retries the job.</summary>
     private async Task FinishAsync(Deployment deployment, DeploymentStatus before, string? version, DateTimeOffset now, CancellationToken cancellationToken, bool notifyOwners = false)
     {
@@ -286,6 +303,17 @@ public sealed partial class DeploymentJobHandler(
             else if (deployment.Status == DeploymentStatus.Error && (notifyOwners || deployment.Environment == DeploymentEnvironment.Production))
             {
                 DeploymentEvents.Failed(db, deployment, version, SystemActor.Name, now);
+            }
+
+            // FR-154, FR-155: a platform-run ORM migration failed: Owners are told it is the migration, in any environment.
+            if (deployment.Status == DeploymentStatus.Error && deployment.ErrorCode == ErrorCodes.MigrationFailed)
+            {
+                db.AddEvent(
+                    EventTypes.MigrationRunFailed,
+                    deployment.ProjectId,
+                    new { runId = (Guid?)null, deploymentId = deployment.Id, environment = deployment.Environment.ToWire(), releaseId = deployment.ReleaseId, gitSha = deployment.GitSha, errorCode = deployment.ErrorCode },
+                    SystemActor.Name,
+                    now);
             }
 
             LogState(logger, deployment.Id, deployment.Environment, deployment.Status);

@@ -219,6 +219,19 @@ public static class EventTypes
     public const string StackChanged = "STACK_CHANGED";
 
     /// <summary>
+    /// FR-118, FR-128, FR-155: the stack detector's report of a version's base commit was used by the Repository Analyst (the
+    /// first point where detection has a project: <c>POST /api/stack/detect</c> runs before one exists):
+    /// <c>{releaseVersionId, version, baseCommitSha, suggestions[{choice, option, path, mode}], conflicts[choice], mismatches}</c>.
+    /// </summary>
+    public const string StackDetected = "STACK_DETECTED";
+
+    /// <summary>
+    /// FR-130, FR-133, FR-155: an Admin changed a Git host instance: <c>{instanceId, kind, change, name, baseUrl, enabled}</c>
+    /// (<c>change</c>: <c>created</c>, <c>updated</c> or <c>removed</c>; never a secret). Written with <c>project_id</c> null.
+    /// </summary>
+    public const string GitHostInstanceChanged = "GIT_HOST_INSTANCE_CHANGED";
+
+    /// <summary>
     /// FR-70: the Repository Analyst stored a locked <c>codebase_summary</c>: <c>{artifactId, type, version,
     /// releaseVersionId, agentRunId}</c>. No gate: the summary is auto-locked.
     /// </summary>
@@ -257,12 +270,51 @@ public static class EventTypes
     /// </summary>
     public const string PreviewRolloutCompleted = "PREVIEW_ROLLOUT_COMPLETED";
 
+    /// <summary>
+    /// FR-144, FR-155: a deployment target's setup finished: <c>{targetId, component, provider, resourceId, status}</c>.
+    /// </summary>
+    public const string DeploymentTargetConfigured = "DEPLOYMENT_TARGET_CONFIGURED";
+
+    /// <summary>
+    /// FR-144, FR-155: a deployment target failed or needs attention: <c>{targetId, component, provider, reason, errorCode}</c>
+    /// (<see cref="Deployments.DeploymentTargetFailureReasons"/>). Owners get <c>deployment_target_attention</c> only when
+    /// the platform lost Git access or the token is invalid (<see cref="Notifications.NotificationRules.Notifies"/>).
+    /// </summary>
+    public const string DeploymentTargetFailed = "DEPLOYMENT_TARGET_FAILED";
+
+    /// <summary>
+    /// FR-152, FR-155: a database became available through its provisioning job (created, linked, External or restored):
+    /// <c>{databaseId, environment, provider, mode, status, expiresAt}</c>.
+    /// </summary>
+    public const string DatabaseProvisioned = "DATABASE_PROVISIONED";
+
+    /// <summary>
+    /// FR-152, FR-155: provisioning a database failed: <c>{databaseId, environment, provider, errorCode}</c>. Owners get
+    /// <c>database_provisioning_failed</c>.
+    /// </summary>
+    public const string DatabaseProvisioningFailed = "DATABASE_PROVISIONING_FAILED";
+
+    /// <summary>
+    /// §4.21, FR-155: a database is about to go away: a Render free database within 7 days of its expiry, or a paused
+    /// Supabase project: <c>{databaseId, environment, provider, reason, expiresAt}</c> (<c>reason</c>:
+    /// <see cref="Databases.ManagedDatabaseRules.ExpiringReasonExpiry"/> or <see cref="Databases.ManagedDatabaseRules.ExpiringReasonPaused"/>).
+    /// Owners get <c>database_expiring</c>.
+    /// </summary>
+    public const string DatabaseExpiring = "DATABASE_EXPIRING";
+
     /// <summary>FR-148, FR-155: an Owner reset the preview database: <c>{databaseId, provider, method, migrationRunId}</c>.</summary>
     public const string DatabaseReset = "DATABASE_RESET";
 
+    /// <summary>FR-153, FR-155: a Supabase BaaS migration run started: <c>{runId, environment, releaseId, gitSha}</c>.</summary>
+    public const string MigrationRunStarted = "MIGRATION_RUN_STARTED";
+
+    /// <summary>FR-153, FR-155: a Supabase BaaS migration run succeeded: <c>{runId, environment, releaseId, gitSha, applied}</c> (<c>applied</c>: how many files).</summary>
+    public const string MigrationRunCompleted = "MIGRATION_RUN_COMPLETED";
+
     /// <summary>
-    /// FR-153, FR-155: a Supabase BaaS migration run failed: <c>{runId, environment, releaseId, gitSha, errorCode}</c>
-    /// (never SQL or row data).
+    /// FR-153, FR-154, FR-155: a migration failed: a Supabase BaaS run (<c>{runId, environment, releaseId, gitSha, errorCode}</c>)
+    /// or a host-mode platform pre-deploy (<c>runId</c> null, with <c>deploymentId</c>); never SQL or row data. Owners get
+    /// <c>migration_failed</c>.
     /// </summary>
     public const string MigrationRunFailed = "MIGRATION_RUN_FAILED";
 
@@ -298,9 +350,9 @@ public static class EventTypes
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
-        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady, PreviewRolloutCompleted, DatabaseReset, MigrationRunFailed, MergedHeadMismatch],
+        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady, PreviewRolloutCompleted, DatabaseReset, MigrationRunStarted, MigrationRunCompleted, MigrationRunFailed, MergedHeadMismatch, DeploymentTargetConfigured, DeploymentTargetFailed, DatabaseProvisioned, DatabaseProvisioningFailed, DatabaseExpiring],
         [EventCategory.Rollback] = [RollbackCompleted],
-        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, GitBindingCleared, PresetChanged, StackChanged],
+        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, GitBindingCleared, GitHostInstanceChanged, PresetChanged, StackChanged, StackDetected],
         [EventCategory.Integrity] = [IntegrityAlert],
     };
 
@@ -319,6 +371,9 @@ public static class EventTypes
         ReleaseFailed,
         DeploymentFailed,
         MigrationRunFailed,
+        DeploymentTargetFailed,
+        DatabaseProvisioningFailed,
+        DatabaseExpiring,
         ArtifactCorrupted,
         IntegrityAlert,
     };

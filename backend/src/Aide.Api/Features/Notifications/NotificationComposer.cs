@@ -24,6 +24,9 @@ public sealed record ComposedNotification(
 {
     public Guid? RecipientUserId { get; init; }
 
+    /// <summary>FR-155: <c>false</c> when the event is recorded without a notification (<see cref="NotificationRules.Notifies"/>).</summary>
+    public bool Notifies { get; init; } = true;
+
     public string Key => NotificationRules.Key(Type, SourceId);
 }
 
@@ -94,10 +97,11 @@ public sealed class NotificationComposer(AideDbContext db)
             projectName,
             sourceId,
             NotificationMessages.Compose(read),
-            NotificationRules.LinkPath(type, projectId, read.ArtifactType, read.DeploymentEnvironment),
+            NotificationRules.LinkPath(type, projectId, read.ArtifactType, read.DeploymentEnvironment, HasRunId(payload)),
             null)
         {
             RecipientUserId = NotificationRules.IsPersonal(type) ? UserId(payload) : null,
+            Notifies = NotificationRules.Notifies(read),
         };
     }
 
@@ -117,6 +121,22 @@ public sealed class NotificationComposer(AideDbContext db)
         catch (JsonException)
         {
             return null;
+        }
+    }
+
+    /// <summary>Whether a <c>MIGRATION_RUN_FAILED</c> payload names a recorded run (host-mode migrations have none).</summary>
+    private static bool HasRunId(string payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("runId", out var value)
+                && value.ValueKind == JsonValueKind.String;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 
@@ -154,10 +174,17 @@ public sealed class NotificationComposer(AideDbContext db)
             Tag = Text(root, "tag"),
             FromVersion = Int(root, "fromCheckpoint") ?? Int(root, "fromVersion"),
             TargetVersion = Int(root, "targetCheckpoint") ?? Int(root, "targetVersion"),
-            Reason = type is NotificationType.Rollback or NotificationType.LlmBindingCleared or NotificationType.GitBindingCleared ? Text(root, "reason") : null,
+            Reason = type is NotificationType.Rollback or NotificationType.LlmBindingCleared or NotificationType.GitBindingCleared
+                or NotificationType.DatabaseExpiring or NotificationType.DeploymentTargetAttention
+                ? Text(root, "reason")
+                : null,
             PullRequestUrl = Text(root, "pullRequestUrl"),
             Provider = Text(root, "provider"),
-            DeploymentEnvironment = Text(root, "target"),
+            DeploymentEnvironment = Text(root, "target") ?? Text(root, "environment"),
+            Component = Text(root, "component"),
+            ExpiresAt = root.TryGetProperty("expiresAt", out var expiresAt) && expiresAt.ValueKind == JsonValueKind.String && expiresAt.TryGetDateTimeOffset(out var expiry)
+                ? expiry
+                : null,
             DeploymentUrl = Text(root, "url"),
             ReleaseVersion = Text(root, "releaseVersion"),
             MergeReasons = root.TryGetProperty("reasons", out var reasons) && reasons.ValueKind == JsonValueKind.Array

@@ -6,6 +6,7 @@ import { Badge } from '../../components/ui/badge'
 import { SelectField } from '../../components/ui/select-field'
 import { TextField } from '../../components/ui/text-field'
 import { useDocumentTitle } from '../../lib/use-document-title'
+import { describeActivity, fr155EventTypes } from '../activity/activity-summary'
 import { eventCategories, eventCategoryLabels } from '../projects/labels'
 import { RelativeTime } from '../projects/relative-time'
 import { ADMIN_PAGE_SIZE, useAdminEvents, type AdminEvent, type AdminEventsQuery } from './admin-api'
@@ -67,7 +68,7 @@ function EventRow({ event }: { event: AdminEvent }) {
   return (
     <tr className="border-b border-border/40 transition-colors last:border-b-0 hover:bg-muted/40">
       <th scope="row" className={`${bodyCell} text-left font-normal`}>
-        <span className="font-medium">{event.summary}</span>
+        <span className="font-medium">{fr155EventTypes.has(event.type) ? describeActivity(event) : event.summary}</span>
         <code className="mt-0.5 block text-xs text-muted-foreground">{event.type}</code>
         <details className="mt-1">
           <summary className="cursor-pointer text-xs text-primary underline underline-offset-4">Payload</summary>

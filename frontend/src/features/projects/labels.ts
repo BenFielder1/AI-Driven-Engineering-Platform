@@ -318,6 +318,10 @@ export const notificationEvents = [
   'preview_ready',
   'llm_binding_cleared',
   'git_binding_cleared',
+  'database_provisioning_failed',
+  'database_expiring',
+  'migration_failed',
+  'deployment_target_attention',
 ] as const satisfies readonly Schemas['NotificationEvent'][]
 
 export const notificationEventLabels: Record<Schemas['NotificationEvent'], string> = {
@@ -337,6 +341,10 @@ export const notificationEventLabels: Record<Schemas['NotificationEvent'], strin
   preview_ready: 'Preview ready',
   llm_binding_cleared: 'LLM connection unbound',
   git_binding_cleared: 'Git connection unbound',
+  database_provisioning_failed: 'Database setup failed',
+  database_expiring: 'Database expiring',
+  migration_failed: 'Migration failed',
+  deployment_target_attention: 'Deployment target needs attention',
 }
 
 /**
@@ -360,6 +368,10 @@ export const notificationTypes = [
   'preview_ready',
   'llm_binding_cleared',
   'git_binding_cleared',
+  'database_provisioning_failed',
+  'database_expiring',
+  'migration_failed',
+  'deployment_target_attention',
   'connection_invalid',
 ] as const satisfies readonly Schemas['NotificationType'][]
 

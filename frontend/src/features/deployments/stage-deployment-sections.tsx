@@ -24,10 +24,10 @@ function NotConfigured({ owner, projectId, what }: { owner: boolean; projectId: 
           params={{ projectId, section: 'deployment' }}
           className="font-medium text-primary underline underline-offset-2"
         >
-          Set up Vercel in Settings → Deployment
+          Set up deployment in Settings → Deployment
         </Link>
       ) : (
-        'An Owner can set up Vercel in Settings → Deployment.'
+        'An Owner can set up deployment in Settings → Deployment.'
       )}
     </p>
   )

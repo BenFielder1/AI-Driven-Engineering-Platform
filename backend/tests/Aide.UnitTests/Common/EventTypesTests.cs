@@ -71,7 +71,7 @@ public partial class EventTypesTests
     [Fact]
     public void FR51_Every_other_event_type_has_outcome_ok()
     {
-        Assert.Equal(15, EventTypes.Failures.Count);
+        Assert.Equal(18, EventTypes.Failures.Count);
         Assert.All(AllTypes.Except(EventTypes.Failures), t => Assert.Equal(EventOutcome.Ok, EventTypes.OutcomeOf(t)));
         Assert.Equal(EventOutcome.Ok, EventTypes.OutcomeOf("NOT_AN_EVENT"));
     }

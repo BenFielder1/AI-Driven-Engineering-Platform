@@ -235,9 +235,9 @@ public static class BitbucketEndpoints
         TypedResults.Ok(await admin.GetAsync(cancellationToken));
 
     private static async Task<Results<Ok<AdminBitbucketIntegrationDto>, ValidationProblem, ProblemHttpResult>> UpdateAdminBitbucket(
-        UpdateBitbucketConsumerRequest request, BitbucketAdmin admin, CancellationToken cancellationToken)
+        UpdateBitbucketConsumerRequest request, BitbucketAdmin admin, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        var result = await admin.UpdateAsync(request, cancellationToken);
+        var result = await admin.UpdateAsync(request, currentUser.Actor, cancellationToken);
         if (result.IsFailure)
         {
             return result.Error!.Code == ErrorCodes.Validation ? ApiProblems.Validation(result.Error) : ApiProblems.FromError(result.Error);
@@ -246,9 +246,9 @@ public static class BitbucketEndpoints
         return TypedResults.Ok(result.Value);
     }
 
-    private static async Task<Results<NoContent, ProblemHttpResult>> DeleteAdminBitbucket(BitbucketAdmin admin, CancellationToken cancellationToken)
+    private static async Task<Results<NoContent, ProblemHttpResult>> DeleteAdminBitbucket(BitbucketAdmin admin, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        var result = await admin.DeleteAsync(cancellationToken);
+        var result = await admin.DeleteAsync(currentUser.Actor, cancellationToken);
         return result.IsFailure ? ApiProblems.FromError(result.Error!) : TypedResults.NoContent();
     }
 

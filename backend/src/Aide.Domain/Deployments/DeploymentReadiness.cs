@@ -140,3 +140,22 @@ public static class ReadinessRules
         return (status, reason);
     }
 }
+
+/// <summary>Why a deployment target failed (<c>DEPLOYMENT_TARGET_FAILED.reason</c>, FR-155). Wire values are snake_case.</summary>
+public static class DeploymentTargetFailureReasons
+{
+    /// <summary>The platform can no longer reach the repository (a verify or a deployment found out).</summary>
+    public const string GitAccessLost = "git_access_lost";
+
+    /// <summary>The platform rejected the bound connection's token.</summary>
+    public const string TokenInvalid = "token_invalid";
+
+    /// <summary>The target's setup failed for another reason (plan limit, missing permission, retries used up).</summary>
+    public const string SetupFailed = "setup_failed";
+
+    /// <summary>A verify found another readiness error (required env vars, branch control).</summary>
+    public const string ReadinessFailed = "readiness_failed";
+
+    /// <summary>FR-155: "deployment target needs attention" is only for lost platform Git access and an invalid token.</summary>
+    public static bool NeedsOwner(string? reason) => reason is GitAccessLost or TokenInvalid;
+}

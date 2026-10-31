@@ -36,4 +36,16 @@ public enum NotificationType
 
     /// <summary>FR-136: the project's Git binding (GitLab or Bitbucket connection) was cleared (Owners; the reason).</summary>
     GitBindingCleared = 16,
+
+    /// <summary>FR-152, FR-155: setting up a database failed (Owners; the error code).</summary>
+    DatabaseProvisioningFailed = 17,
+
+    /// <summary>§4.21, FR-155: a Render free database expires within 7 days, or a Supabase project is paused (Owners; the date).</summary>
+    DatabaseExpiring = 18,
+
+    /// <summary>FR-153, FR-154, FR-155: a migration failed (Owners; the environment and error code).</summary>
+    MigrationFailed = 19,
+
+    /// <summary>FR-144, FR-155: the platform lost Git access, or the target's token is invalid (Owners; the component and platform).</summary>
+    DeploymentTargetAttention = 20,
 }

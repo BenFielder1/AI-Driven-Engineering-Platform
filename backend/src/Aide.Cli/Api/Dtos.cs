@@ -14,7 +14,11 @@ internal sealed record ProblemDetailsDto(
     string? ErrorCode,
     string? TraceId,
     IReadOnlyList<string>? Details,
-    IReadOnlyDictionary<string, string[]>? Errors);
+    IReadOnlyDictionary<string, string[]>? Errors,
+    IReadOnlyList<StackViolationDto>? Violations = null);
+
+/// <summary>FR-116: one broken compatibility rule of a <c>STACK_INCOMPATIBLE</c> problem.</summary>
+internal sealed record StackViolationDto(string Layer, string Option, string Rule, string Reason);
 
 internal sealed record UserDto(Guid Id, string Email, string Name, string SystemRole);
 
@@ -106,7 +110,11 @@ internal sealed record ProjectStateDto(
     string ExecutionStatus,
     PullRequestSummaryDto? PullRequest,
     ReleaseSummaryDto? LatestRelease,
-    DeploymentDto? LatestDeployment = null);
+    DeploymentDto? LatestDeployment = null,
+    IReadOnlyList<ComponentProductionUrlDto>? ProductionUrls = null);
+
+/// <summary>FR-156: a deployment target's production URL, as on the project state.</summary>
+internal sealed record ComponentProductionUrlDto(string Component, string Provider, string? Url);
 
 internal sealed record ActorDto(Guid? Id, string Name, bool IsSystem);
 
@@ -183,7 +191,8 @@ internal sealed record DeploymentDto(
     string Trigger,
     DeploymentUserDto? TriggeredBy,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? ReadyAt);
+    DateTimeOffset? ReadyAt,
+    string? Component = null);
 
 internal sealed record ReleaseVersionCheckpointsDto(int Current, int Max);
 
@@ -204,3 +213,104 @@ internal sealed record ReleaseVersionDto(
     DateTimeOffset? ReleasedAt);
 
 internal sealed record StartReleaseVersionResultDto(ReleaseVersionDto ReleaseVersion, ProjectStateDto State);
+
+// FR-156: stack catalog and compositions (FR-113, FR-116, FR-117, FR-118).
+
+internal sealed record StackLayerDto(string Id, string Name, string? Description);
+
+internal sealed record StackModeDto(string Id, string Name);
+
+internal sealed record StackOptionDto(string Id, string Name, string? Description, IReadOnlyList<StackModeDto>? Modes, string? Mode);
+
+internal sealed record StackChoiceDto(string Id, string Layer, string Name, IReadOnlyList<StackOptionDto> Options);
+
+internal sealed record StackCatalogDto(string Version, string ContentHash, IReadOnlyList<StackLayerDto> Layers, IReadOnlyList<StackChoiceDto> Choices);
+
+internal sealed record StackComponentDto(string Pack, string Path);
+
+internal sealed record StackDataDto(string Pack, string? Mode);
+
+internal sealed record StackVcsDto(string Pack, Guid? InstanceId, bool SelfManaged);
+
+internal sealed record StackDeployDto(string? FrontendHost, string? BackendHost, string? DatabaseHost, string? Local);
+
+internal sealed record StackCaveatDto(string Layer, string Option, string Rule, string Text);
+
+internal sealed record StackCompositionDto(
+    StackComponentDto? Frontend,
+    StackComponentDto? Backend,
+    StackDataDto? Data,
+    StackVcsDto? Vcs,
+    StackDeployDto? Deploy,
+    string? OriginModel,
+    IReadOnlyList<StackCaveatDto>? Caveats);
+
+internal sealed record LegacyPresetDto(string Label);
+
+internal sealed record ProjectStackDto(
+    string? Version,
+    string? VersionStatus,
+    StackCompositionDto? Composition,
+    string? CatalogVersion,
+    bool Locked,
+    string? LockedReason,
+    LegacyPresetDto? LegacyPreset,
+    string? RepoVcs);
+
+internal sealed record StackComponentSelection(string Pack, string? Path);
+
+internal sealed record StackDataSelection(string Pack, string? Mode);
+
+internal sealed record StackVcsSelection(string Pack, Guid? InstanceId, bool? SelfManaged);
+
+internal sealed record StackDeploySelection(string? FrontendHost, string? BackendHost, string? DatabaseHost, string? Local);
+
+/// <summary>The body of <c>PUT /api/projects/:id/stack</c> and the <c>stack</c> of <c>POST /versions</c>: a left-out layer is None.</summary>
+internal sealed record StackCompositionRequest(
+    StackComponentSelection? Frontend,
+    StackComponentSelection? Backend,
+    StackDataSelection? Data,
+    StackVcsSelection? Vcs,
+    StackDeploySelection? Deploy,
+    string? OriginModel);
+
+internal sealed record DetectStackGitRequest(string Provider, Guid? InstanceId, string Repo, string? Ref, string? Token, string? ConnectionId);
+
+internal sealed record DetectStackRequest(DetectStackGitRequest Git);
+
+internal sealed record StackDetectedChoiceDto(string Choice, string Option, string? Path, string? Mode, IReadOnlyList<string> Evidence);
+
+internal sealed record StackDetectionCandidateDto(string Option, string? Path, IReadOnlyList<string> Evidence);
+
+internal sealed record StackDetectionConflictDto(string Choice, IReadOnlyList<StackDetectionCandidateDto> Candidates);
+
+internal sealed record StackDetectionDto(string Ref, string Commit, IReadOnlyList<StackDetectedChoiceDto> Suggestions, IReadOnlyList<StackDetectionConflictDto> Conflicts, bool Truncated);
+
+// FR-156: `aide databases` (the databases of GET /settings/deployment) and `aide migrations`.
+
+internal sealed record DeploymentDatabaseDto(
+    string Environment,
+    string Provider,
+    string Status,
+    string? Name,
+    string? Region,
+    string? Plan,
+    DateTimeOffset? ExpiresAt,
+    bool Paused,
+    string? ResourceUrl,
+    IReadOnlyList<string>? Warnings);
+
+internal sealed record DeploymentDatabasesDto(IReadOnlyList<DeploymentDatabaseDto> Databases);
+
+internal sealed record MigrationFileDto(string Version, string Name);
+
+internal sealed record MigrationRunDto(
+    Guid Id,
+    string Environment,
+    string? Provider,
+    string GitSha,
+    string Status,
+    IReadOnlyList<MigrationFileDto>? Files,
+    long TotalMs,
+    string? ErrorCode,
+    DateTimeOffset StartedAt);

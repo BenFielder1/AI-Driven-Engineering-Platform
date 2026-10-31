@@ -103,6 +103,15 @@ public sealed class RenderPostgresProvider(PlatformHttp http, TimeProvider time)
         return new DatabasePoll(state.Status, true, null, connection, expiresAt, region, plan);
     }
 
+    public async Task<DatabaseLiveState?> ReadStateAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        ArgumentNullException.ThrowIfNull(resourceId);
+        using var postgres = await SendAsync(auth, HttpMethod.Get, $"postgres/{Uri.EscapeDataString(resourceId)}", null, cancellationToken);
+        var expiresAt = Time(postgres.RootElement, "expiresAt");
+        return new DatabaseLiveState(ManagedDatabaseRules.RenderState(Text(postgres.RootElement, "status"), expiresAt, time.GetUtcNow()).Status, expiresAt);
+    }
+
     public Task RestoreAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken) =>
         throw new DatabaseProviderException(DeploymentFailure.Rejected, 400, "Render Postgres has no restore action; resume it in the Render dashboard.", Render);
 

@@ -69,3 +69,36 @@ internal static class DeploymentBindings
         return cleared;
     }
 }
+
+/// <summary>FR-155: the audit events of a deployment target's setup and failures (never a secret or a platform message).</summary>
+internal static class DeploymentTargetEvents
+{
+    public static void Configured(AideDbContext db, DeploymentTarget target, string actor, DateTimeOffset now) =>
+        db.AddEvent(
+            EventTypes.DeploymentTargetConfigured,
+            target.ProjectId,
+            new { targetId = target.Id, component = target.Component.ToWire(), provider = target.Provider.ToWire(), resourceId = target.ResourceId, status = target.Status.ToWire() },
+            actor,
+            now);
+
+    public static void Failed(AideDbContext db, DeploymentTarget target, string reason, string? errorCode, string actor, DateTimeOffset now) =>
+        db.AddEvent(
+            EventTypes.DeploymentTargetFailed,
+            target.ProjectId,
+            new { targetId = target.Id, component = target.Component.ToWire(), provider = target.Provider.ToWire(), reason, errorCode },
+            actor,
+            now);
+
+    /// <summary>
+    /// FR-155: a connection just became invalid: every target bound to it, in any project, needs attention (one event each;
+    /// the caller only calls this on the transition, so a repeated rejection stays quiet). The caller saves.
+    /// </summary>
+    public static async Task TokenInvalidAsync(AideDbContext db, Guid connectionId, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var targets = await db.DeploymentTargets.AsNoTracking().Where(t => t.ConnectionId == connectionId).ToListAsync(cancellationToken);
+        foreach (var target in targets)
+        {
+            Failed(db, target, DeploymentTargetFailureReasons.TokenInvalid, ErrorCodes.CredentialInvalid, actor, now);
+        }
+    }
+}

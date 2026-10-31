@@ -29,6 +29,15 @@ const termsByProvider: Record<Schemas['GitProvider'], GitHostTerms> = {
   bitbucket: { host: 'Bitbucket', pr: 'pull request', prTitle: 'Pull request', prShort: 'PR', release: null },
 }
 
+/** FR-140: host-neutral terms, for copy shown before the project's Git host is known (or when it can't be loaded). */
+export const unknownGitHost: GitHostTerms = {
+  host: 'the Git host',
+  pr: 'pull or merge request',
+  prTitle: 'Pull or merge request',
+  prShort: 'PR/MR',
+  release: null,
+}
+
 export function gitHostTerms(provider: Schemas['GitProvider'] | null | undefined): GitHostTerms {
   return provider ? termsByProvider[provider] : github
 }

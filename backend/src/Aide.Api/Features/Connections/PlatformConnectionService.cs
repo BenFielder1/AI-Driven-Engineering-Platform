@@ -161,7 +161,7 @@ public sealed partial class PlatformConnectionService(
         if (!Protector.TryUnprotect(connection.SecretEncrypted, out var token) || token.Length == 0)
         {
             // A token that can't be decrypted (lost key ring) can never work again: it has to be added anew.
-            SetStatus(connection, PlatformConnectionStatus.Invalid, null, "unreadable", actor, now);
+            await SetStatusAsync(connection, PlatformConnectionStatus.Invalid, null, "unreadable", actor, now, cancellationToken);
         }
         else
         {
@@ -179,7 +179,7 @@ public sealed partial class PlatformConnectionService(
             }
             catch (PlatformApiException ex) when (PlatformConnectionRules.StatusAfter(ex.Failure, ex.MissingPermissions.Count) is { } status)
             {
-                SetStatus(connection, status, ex.MissingPermissions, "rejected", actor, now);
+                await SetStatusAsync(connection, status, ex.MissingPermissions, "rejected", actor, now, cancellationToken);
                 LogChecked(logger, connection.Id, connection.Provider, connection.Status, ex.Status);
             }
             catch (PlatformApiException ex)
@@ -256,7 +256,7 @@ public sealed partial class PlatformConnectionService(
         }
 
         connection.LastValidatedAt = now;
-        Invalidate(db, connection, projectId, "rejected", actor, now);
+        await InvalidateAsync(db, connection, projectId, "rejected", actor, now, cancellationToken);
     }
 
     /// <summary>Runs <paramref name="call"/> with the caller's connection's token; a rejection or missing permission is recorded.</summary>
@@ -279,7 +279,7 @@ public sealed partial class PlatformConnectionService(
         var now = Now();
         if (!Protector.TryUnprotect(connection.SecretEncrypted, out var token) || token.Length == 0)
         {
-            SetStatus(connection, PlatformConnectionStatus.Invalid, null, "unreadable", actor, now);
+            await SetStatusAsync(connection, PlatformConnectionStatus.Invalid, null, "unreadable", actor, now, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             return Result.Failure<T>(PlatformConnectionRules.UseError(connection.Provider, PlatformFailure.Rejected));
         }
@@ -295,7 +295,7 @@ public sealed partial class PlatformConnectionService(
             // status, as the permission may be optional.
             if (ex.Failure == PlatformFailure.Rejected)
             {
-                SetStatus(connection, PlatformConnectionStatus.Invalid, null, "rejected", actor, now);
+                await SetStatusAsync(connection, PlatformConnectionStatus.Invalid, null, "rejected", actor, now, cancellationToken);
                 connection.LastValidatedAt = now;
                 await db.SaveChangesAsync(cancellationToken);
             }
@@ -330,11 +330,11 @@ public sealed partial class PlatformConnectionService(
     }
 
     /// <summary>Sets the status (with the missing permissions for <c>insufficient_scope</c>); becoming invalid notifies the owner.</summary>
-    private void SetStatus(PlatformConnection connection, PlatformConnectionStatus status, IReadOnlyList<string>? missing, string reason, string actor, DateTimeOffset now)
+    private async Task SetStatusAsync(PlatformConnection connection, PlatformConnectionStatus status, IReadOnlyList<string>? missing, string reason, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         if (status == PlatformConnectionStatus.Invalid)
         {
-            Invalidate(db, connection, null, reason, actor, now);
+            await InvalidateAsync(db, connection, null, reason, actor, now, cancellationToken);
             return;
         }
 
@@ -345,7 +345,7 @@ public sealed partial class PlatformConnectionService(
         }
     }
 
-    private static void Invalidate(AideDbContext db, PlatformConnection connection, Guid? projectId, string reason, string actor, DateTimeOffset now)
+    private static async Task InvalidateAsync(AideDbContext db, PlatformConnection connection, Guid? projectId, string reason, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var before = connection.Status;
         connection.Status = PlatformConnectionStatus.Invalid;
@@ -357,6 +357,9 @@ public sealed partial class PlatformConnectionService(
                 new { connectionId = connection.Id, userId = connection.UserId, provider = connection.Provider.ToWire(), reason },
                 actor,
                 now);
+
+            // FR-155: the targets bound to it need an Owner's attention.
+            await Deployments.DeploymentTargetEvents.TokenInvalidAsync(db, connection.Id, actor, now, cancellationToken);
         }
     }
 

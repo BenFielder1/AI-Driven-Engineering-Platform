@@ -261,8 +261,22 @@ public sealed partial class DeploymentTargetService
             branch,
             BranchControlPath(target.Provider, target.RootDirectory),
             previewReady));
+        var statusBefore = target.Status;
         (target.Status, target.StatusReason) = ReadinessRules.StatusAfterVerify(target.Status, target.StatusReason, items);
         target.UpdatedAt = now;
+
+        // FR-155: once, as the target leaves ready. A connection problem was reported when the connection became invalid.
+        if (statusBefore == DeploymentTargetStatus.Ready && target.Status == DeploymentTargetStatus.Attention && target.StatusReason != ReadinessRules.Connection)
+        {
+            DeploymentTargetEvents.Failed(
+                db,
+                target,
+                target.StatusReason == ReadinessRules.GitAccess ? DeploymentTargetFailureReasons.GitAccessLost : DeploymentTargetFailureReasons.ReadinessFailed,
+                null,
+                actor,
+                now);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         var dto = await TargetDtoAsync(projectId, component, callerRole == ProjectRole.Owner, items, cancellationToken);
         return (new DeploymentVerifyDto(dto, dto.Readiness), null);

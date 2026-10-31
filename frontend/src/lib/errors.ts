@@ -285,8 +285,13 @@ export const contextualErrorMessages = {
   /** PATCH /api/projects/:id/settings/git — the release settings: merge strategy and tag prefix (FR-64, FR-65, §4.10). */
   releaseSettings: {
     CONFLICT:
-      "The tag prefix can't change while a release is in progress or awaiting its merge on GitHub. Try again once the release finishes.",
+      "The tag prefix can't change while a release is in progress or awaiting its merge on the Git host. Try again once the release finishes.",
     FORBIDDEN: "Only project Owners can change the release settings.",
+  },
+  /** GET /api/projects/:id/releases/:releaseId/notes (FR-140, D-V4-7): Bitbucket's release notes. */
+  releaseNotes: {
+    NOT_FOUND: "These release notes are no longer available. The release tag on the Git host still holds them.",
+    FORBIDDEN: "You don't have access to this project's release notes. Ask an Owner for access.",
   },
   /** GET /api/projects/:id/git/merge-readiness (FR-84). */
   mergeReadiness: {
@@ -907,7 +912,7 @@ export function platformCopy(
 }
 
 /** SPEC §6 job codes whose copy ends with ": {detail}." (the job's recorded message). */
-const detailCodes: ReadonlySet<string> = new Set(["MIGRATION_FAILED", "DATABASE_PROVISIONING_FAILED"]);
+export const jobDetailCodes: ReadonlySet<string> = new Set(["MIGRATION_FAILED", "DATABASE_PROVISIONING_FAILED"]);
 
 /**
  * FR-152, FR-153: copy for a code recorded on a database's provisioning job or a migration run, naming the platform.
@@ -921,7 +926,7 @@ export function withJobDetail(
 ): string | null {
   const copy = platformCopy(code, platform, detail);
   const d = detail?.trim().replace(/\.+$/, "");
-  if (copy === null || !code || !detailCodes.has(code) || !d) {
+  if (copy === null || !code || !jobDetailCodes.has(code) || !d) {
     return copy;
   }
   return `${copy.replace(/\.$/, "")}: ${d}.`;
@@ -1077,7 +1082,7 @@ export const rollbackBlockedMessages = {
   versionReleased:
     "This version is released and closed, so it can't be rolled back. Start a new version to make changes.",
   releasePartiallyApplied:
-    "A rollback isn't possible because the release is partially applied: it's awaiting its merge on GitHub, or it was merged or tagged but didn't finish. Merge or close the pull request, or retry the release, first.",
+    "A rollback isn't possible because the release is partially applied: it's awaiting its merge on the Git host, or it was merged or tagged but didn't finish. Merge or close the pull or merge request, or retry the release, first.",
   /**
    * Shown before asking: the release is awaiting its merge on the Git host (FR-65; the API says
    * release_partially_applied). Host-aware (FR-140): show it through rollbackAwaitingMergeMessage().

@@ -1,5 +1,8 @@
 using System.Globalization;
+using Aide.Domain.Databases;
+using Aide.Domain.Deployments;
 using Aide.Domain.Gates;
+using Aide.Domain.GitHosts;
 
 namespace Aide.Domain.Notifications;
 
@@ -56,6 +59,12 @@ public sealed record NotificationFacts(NotificationType Type, string ProjectName
 
     /// <summary>FR-92: the provider of an invalid connection or a cleared binding (<c>anthropic</c>, <c>openai</c>, <c>github</c>, <c>vercel</c>).</summary>
     public string? Provider { get; init; }
+
+    /// <summary>FR-155: the deployment target's component (<c>frontend</c>, <c>backend</c>), or <c>migrations</c> on a <c>DEPLOYMENT_FAILED</c>.</summary>
+    public string? Component { get; init; }
+
+    /// <summary>FR-155: when the database expires.</summary>
+    public DateTimeOffset? ExpiresAt { get; init; }
 }
 
 /// <summary>A composed notification: a short title and a one-paragraph body (plain text, no secrets, no tokens).</summary>
@@ -112,17 +121,20 @@ public static class NotificationMessages
                 $"{project}: rolled back to checkpoint {Opt(facts.TargetVersion)}",
                 $"{project} was rolled back from checkpoint {Opt(facts.FromVersion)} to checkpoint {Opt(facts.TargetVersion)}.{reason}"),
             NotificationType.ReleaseAwaitingMerge => (
-                $"{project}: release {facts.Tag ?? string.Empty} awaits a merge on GitHub".Replace("  ", " ", StringComparison.Ordinal),
-                $"AIDE can't merge the pull request of {project}{(facts.PullRequestUrl is { } url ? $" ({OneLine(url, 300)})" : string.Empty)} itself. Merge it on GitHub; AIDE then tags the merge commit and completes the release.{MergeReasonsText(facts.MergeReasons)}"),
+                $"{project}: release {facts.Tag ?? string.Empty} awaits a merge on {GitHostNames.Display(facts.Provider)}".Replace("  ", " ", StringComparison.Ordinal),
+                $"AIDE can't merge the pull request of {project}{(facts.PullRequestUrl is { } url ? $" ({OneLine(url, 300)})" : string.Empty)} itself. Merge it on {GitHostNames.Display(facts.Provider)}; AIDE then tags the merge commit and completes the release.{MergeReasonsText(facts.MergeReasons)}"),
+            NotificationType.DeploymentFailed when facts.Component == NotificationRules.MigrationsComponent => (
+                $"{project}: {Target(facts)} migrations{VersionText(facts)} failed",
+                $"The {Target(facts)} database migrations of {project}{VersionText(facts)} failed{CodeText(facts)}. The release stands; an Owner can fix the migration and redeploy from the Release page."),
             NotificationType.DeploymentFailed => (
                 $"{project}: {Target(facts)} deployment{VersionText(facts)} failed",
-                $"The Vercel {Target(facts)} deployment of {project}{VersionText(facts)} failed{(facts.ErrorCode is { } code ? $" ({OneLine(code, 60)})" : string.Empty)}. "
+                $"The {Target(facts)} deployment of {project}{VersionText(facts)} failed{CodeText(facts)}. "
                 + (facts.DeploymentEnvironment == "preview"
-                    ? "Check the project's Vercel connection, then redeploy from the Review page."
+                    ? "Check the project's deployment connection, then redeploy from the Review page."
                     : "The release stands; an Owner can redeploy from the Release page.")),
             NotificationType.PreviewReady => (
                 $"{project}: preview{VersionText(facts)} is ready",
-                $"The Vercel preview of {project}{VersionText(facts)} is ready{(facts.DeploymentUrl is { } url ? $" at {OneLine(url, 300)}" : string.Empty)}."),
+                $"The preview of {project}{VersionText(facts)} is ready{(facts.DeploymentUrl is { } url ? $" at {OneLine(url, 300)}" : string.Empty)}."),
             NotificationType.ConnectionInvalid => (
                 $"Your {ConnectionName(facts.Provider)} connection is invalid",
                 $"{ProviderName(facts.Provider)} rejected the credentials of your {ConnectionName(facts.Provider)} connection{(project.Length > 0 ? $" while it was used for {project}" : string.Empty)}, so it is marked invalid. Reconnect it or replace its key on the Connections page."),
@@ -132,6 +144,24 @@ public static class NotificationMessages
             NotificationType.GitBindingCleared => (
                 $"{project}: {ConnectionName(facts.Provider)} connection unbound",
                 $"The {ConnectionName(facts.Provider)} connection bound to {project} was cleared: {BindingClearedReason(facts.Reason)}. Git work (push, merge request, release) fails until an Owner re-binds their own connection in the project's Git settings."),
+            NotificationType.DatabaseProvisioningFailed => (
+                $"{project}: {Target(facts)} database setup failed",
+                $"Setting up the {Target(facts)} {DatabaseName(facts.Provider)} of {project} failed{CodeText(facts)}. An Owner can see the reason and try again in Settings → Deployment."),
+            NotificationType.DatabaseExpiring when facts.Reason == ManagedDatabaseRules.ExpiringReasonPaused => (
+                $"{project}: {Target(facts)} database is paused",
+                $"The {Target(facts)} {DatabaseName(facts.Provider)} of {project} is paused, so the app can't reach it. An Owner can restore it in Settings → Deployment."),
+            NotificationType.DatabaseExpiring => (
+                $"{project}: {Target(facts)} database expires{DateText(facts)}",
+                $"The {Target(facts)} {DatabaseName(facts.Provider)} of {project} expires{DateText(facts)}. Upgrade its plan or move to another database before then, or its data is lost."),
+            NotificationType.MigrationFailed => (
+                $"{project}: {Target(facts)} migration failed",
+                $"A {Target(facts)} database migration of {project} failed{CodeText(facts)}. Fix the migration, then roll out again."),
+            NotificationType.DeploymentTargetAttention when facts.Reason == DeploymentTargetFailureReasons.TokenInvalid => (
+                $"{project}: {facts.Component ?? "deployment"} target needs attention",
+                $"{ProviderName(facts.Provider)} rejected the token of the {facts.Component ?? "deployment"} target of {project}. Its owner needs to add a new token, and an Owner to bind it in Settings → Deployment."),
+            NotificationType.DeploymentTargetAttention => (
+                $"{project}: {facts.Component ?? "deployment"} target needs attention",
+                $"{ProviderName(facts.Provider)} can no longer access the repository of the {facts.Component ?? "deployment"} target of {project}. Connect it on the platform, then verify the target in Settings → Deployment."),
             _ => ($"{project}: update", $"There is an update on {project}."),
         };
 
@@ -179,6 +209,7 @@ public static class NotificationMessages
         "render" => "Render",
         "railway" => "Railway",
         "supabase" => "Supabase",
+        "github_pages" => "GitHub Pages",
         null or "" => "The provider",
         _ => OneLine(provider, 40),
     };
@@ -191,6 +222,22 @@ public static class NotificationMessages
         "connection_invalid" => "the host rejected the connection",
         null or "" => "the binding is no longer valid",
         _ => Humanize(reason),
+    };
+
+    private static string CodeText(NotificationFacts facts) =>
+        facts.ErrorCode is { } code ? $" ({OneLine(code, 60)})" : string.Empty;
+
+    /// <summary>" on 2026-11-07" (UTC), or " soon" when the date is unknown.</summary>
+    private static string DateText(NotificationFacts facts) =>
+        facts.ExpiresAt is { } at ? $" on {at.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}" : " soon";
+
+    /// <summary>"Render Postgres database", "Supabase project".</summary>
+    private static string DatabaseName(string? provider) => provider switch
+    {
+        "supabase" => "Supabase project",
+        "render" => "Render Postgres database",
+        "railway" => "Railway Postgres database",
+        _ => "database",
     };
 
     private static string VersionText(NotificationFacts facts) =>

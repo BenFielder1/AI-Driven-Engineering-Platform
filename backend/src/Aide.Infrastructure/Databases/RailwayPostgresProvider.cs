@@ -114,6 +114,9 @@ public sealed class RailwayPostgresProvider(PlatformHttp http) : IDatabaseProvid
         return new DatabasePoll(mapped.Status, mapped.Terminal, status is null ? "Waiting for the first deployment" : $"Railway deployment {status}", connection);
     }
 
+    public Task<DatabaseLiveState?> ReadStateAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken) =>
+        Task.FromResult<DatabaseLiveState?>(null);
+
     public Task RestoreAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken) =>
         throw new DatabaseProviderException(DeploymentFailure.Rejected, 400, "Railway Postgres has no restore action.", Railway);
 

@@ -68,7 +68,12 @@ function ReleaseNotes({ projectId, release }: { projectId: string; release: Rele
   }
   if (notes.isError) {
     return (
-      <ErrorState error={notes.error} title="The release notes couldn't load" onRetry={() => void notes.refetch()} />
+      <ErrorState
+        error={notes.error}
+        context="releaseNotes"
+        title="The release notes couldn't load"
+        onRetry={() => void notes.refetch()}
+      />
     )
   }
   const text = notes.data.notes?.trim() ? notes.data.notes : null

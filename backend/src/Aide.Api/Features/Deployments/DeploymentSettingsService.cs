@@ -164,6 +164,11 @@ public sealed partial class DeploymentSettingsService(
         {
             db.AddEvent(EventTypes.SettingsUpdated, projectId, new { projectId, section = "deployment", changes }, actor, now);
         }
+
+        if (changes.Contains("vercelProject"))
+        {
+            DeploymentTargetEvents.Configured(db, settings, actor, now);
+        }
     }
 
     /// <summary>The problem for a failed <see cref="PrepareAsync"/> (FR-144 codes carry <c>platform</c> and the fix link).</summary>

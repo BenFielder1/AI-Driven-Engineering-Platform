@@ -41,7 +41,7 @@ public sealed class ConfigTests : IDisposable
 
         await _cli.RunAsync("status", Samples.ProjectId, "--json");
 
-        Assert.Equal("localhost:8080", Assert.Single(_cli.Requests).Uri.Authority);
+        Assert.Equal("localhost:8080", Assert.Single(_cli.Requests.Select(r => r.Uri.Authority).Distinct()));
     }
 
     [Theory]
@@ -64,7 +64,7 @@ public sealed class ConfigTests : IDisposable
         var run = await _cli.RunAsync(args);
 
         Assert.Equal(ExitCodes.Success, run.ExitCode);
-        Assert.Equal(expectedAuthority, Assert.Single(_cli.Requests).Uri.Authority);
+        Assert.Equal(expectedAuthority, Assert.Single(_cli.Requests.Select(r => r.Uri.Authority).Distinct()));
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public sealed class ConfigTests : IDisposable
 
         await _cli.RunAsync("status", Samples.ProjectId, "--json");
 
-        Assert.Equal("Bearer aide_pat_from_env_111111111111", Assert.Single(_cli.Requests).Authorization);
+        Assert.Equal("Bearer aide_pat_from_env_111111111111", Assert.Single(_cli.Requests.Select(r => r.Authorization).Distinct()));
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public sealed class ConfigTests : IDisposable
 
         await _cli.RunAsync("status", Samples.ProjectId, "--json");
 
-        Assert.Equal($"https://aide.test:8080/api/projects/{Samples.ProjectId}/state", Assert.Single(_cli.Requests).Uri.ToString());
+        Assert.Equal($"https://aide.test:8080/api/projects/{Samples.ProjectId}/state", _cli.Requests[0].Uri.ToString());
     }
 
     [Fact]

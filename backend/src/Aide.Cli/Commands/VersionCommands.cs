@@ -1,10 +1,11 @@
 using System.CommandLine;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Aide.Cli.Api;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>FR-93: `aide version start`, `aide versions`, `aide deployments`.</summary>
+/// <summary>FR-93, FR-156: `aide version start`, `aide versions`, `aide deployments`.</summary>
 internal static class VersionCommands
 {
     /// <summary>FR-156, FR-129: what <c>aide version start --preset</c> prints before exiting 2 (usage).</summary>
@@ -37,10 +38,15 @@ internal static class VersionCommands
             "start",
             "Start a new release version of a released project (Owner only). The project goes back to refinement at checkpoint 1 " +
             "with the request as its idea. Exit 4 for VERSION_INVALID, VERSION_NOT_GREATER, VERSION_IN_PROGRESS, TAG_EXISTS, " +
-            "RELEASE_NOT_MERGED or NOT_RELEASED.")
+            "RELEASE_NOT_MERGED, NOT_RELEASED or STACK_INCOMPATIBLE. Stack options change the named layers of the current composition; " +
+            "without any, the new version keeps it.")
         {
             id, version, request, preset,
         };
+
+        // FR-156: the stack flags replace --preset, also under the names --stack-frontend and so on.
+        var stackFlags = new StackFlags(stackAliases: true);
+        stackFlags.AddTo(command);
 
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
@@ -52,8 +58,22 @@ internal static class VersionCommands
             var projectId = context.Get(id);
             var text = ReadRequest(context.Get(request) ?? string.Empty, context.Host.Terminal);
             var body = new JsonObject { ["version"] = context.Get(version)?.Trim(), ["request"] = text };
+            var picks = stackFlags.Read(context);
+            string? originWarning = null;
+            if (picks.Any)
+            {
+                var current = await context.Api().GetAsync<ProjectStackDto>($"api/projects/{projectId}/stack", cancellationToken).ConfigureAwait(false);
+                var merged = StackFlags.Merge(current.Value.Composition, picks);
+                body["stack"] = JsonSerializer.SerializeToNode(merged, ApiJson.Options);
+                originWarning = StackFlags.OriginChange(current.Value.Composition?.OriginModel, merged.OriginModel);
+            }
 
             var started = await context.Api().PostAsync<StartReleaseVersionResultDto>($"api/projects/{projectId}/versions", body, cancellationToken).ConfigureAwait(false);
+            if (originWarning is not null)
+            {
+                await context.Host.Error.WriteLineAsync(originWarning).ConfigureAwait(false);
+            }
+
             if (context.Json)
             {
                 await context.WriteRawJsonAsync(started.Raw).ConfigureAwait(false);
@@ -104,12 +124,16 @@ internal static class VersionCommands
     public static Command BuildDeployments(CommandFactory factory)
     {
         var id = ProjectCommands.ProjectIdArgument();
-        var target = new Option<string?>("--target", "-t") { Description = "Only preview or production deployments." };
+        var target = new Option<string?>("--target", "-t") { Description = "Only preview or production deployments (the v2 name of --env)." };
         target.AcceptOnlyFromAmong("preview", "production");
-        var command = new Command("deployments", "List a project's deployments, newest first: target, version, SHA, state, URL, time and who triggered it.") { id, target };
+        var environment = new Option<string?>("--env") { Description = "Only preview or production deployments." };
+        environment.AcceptOnlyFromAmong("preview", "production");
+        var component = new Option<string?>("--component") { Description = "Only the frontend's or the backend's deployments." };
+        component.AcceptOnlyFromAmong("frontend", "backend");
+        var command = new Command("deployments", "List a project's deployments, newest first: target, component, version, SHA, state, URL, time and who triggered it.") { id, target, environment, component };
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
-            var path = AideApiClient.WithQuery($"api/projects/{context.Get(id)}/deployments", ("target", context.Get(target)));
+            var path = AideApiClient.WithQuery($"api/projects/{context.Get(id)}/deployments", ("target", context.Get(target)), ("environment", context.Get(environment)), ("component", context.Get(component)));
             var result = await context.Api().GetAsync<List<DeploymentDto>>(path, cancellationToken).ConfigureAwait(false);
             if (context.Json)
             {
@@ -118,10 +142,10 @@ internal static class VersionCommands
             }
 
             await context.Out.WriteLineAsync(result.Value.Count == 0 ? "No deployments." : Output.Table(
-                ["ID", "TARGET", "VERSION", "SHA", "STATUS", "URL", "CREATED", "BY"],
+                ["ID", "TARGET", "COMPONENT", "VERSION", "SHA", "STATUS", "URL", "CREATED", "BY"],
                 result.Value.Select(d => (IReadOnlyList<string>)
                 [
-                    d.Id.ToString(), d.Target, d.ReleaseVersion, ShortSha(d.GitSha), StatusText(d), d.Url ?? "-", Output.Time(d.CreatedAt), TriggeredBy(d),
+                    d.Id.ToString(), d.Target, d.Component ?? "-", d.ReleaseVersion, ShortSha(d.GitSha), StatusText(d), d.Url ?? "-", Output.Time(d.CreatedAt), TriggeredBy(d),
                 ]))).ConfigureAwait(false);
             return ExitCodes.Success;
         });

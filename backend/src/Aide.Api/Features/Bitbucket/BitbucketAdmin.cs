@@ -39,7 +39,7 @@ public sealed partial class BitbucketAdmin(
     }
 
     /// <summary>FR-133: saves the consumer key and (when sent) secret. <c>CONFLICT</c> when the consumer is configured.</summary>
-    public async Task<Result<AdminBitbucketIntegrationDto>> UpdateAsync(UpdateBitbucketConsumerRequest request, CancellationToken cancellationToken)
+    public async Task<Result<AdminBitbucketIntegrationDto>> UpdateAsync(UpdateBitbucketConsumerRequest request, string actor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         var clientId = request.ClientId.Trim();
@@ -74,6 +74,7 @@ public sealed partial class BitbucketAdmin(
         }
 
         row.Row.UpdatedAt = time.GetUtcNow();
+        AddChanged(row.Row, "updated", actor);
         await db.SaveChangesAsync(cancellationToken);
         LogSaved(logger);
         return Result.Success(await GetAsync(cancellationToken));
@@ -84,7 +85,7 @@ public sealed partial class BitbucketAdmin(
     /// OAuth connections become invalid at their next refresh; API-token connections keep working. <c>CONFLICT</c> when the
     /// consumer is configured.
     /// </summary>
-    public async Task<Result> DeleteAsync(CancellationToken cancellationToken)
+    public async Task<Result> DeleteAsync(string actor, CancellationToken cancellationToken)
     {
         var row = await RowAsync(cancellationToken);
         if (row.Configured)
@@ -95,6 +96,7 @@ public sealed partial class BitbucketAdmin(
         row.Row.OauthClientId = string.Empty;
         row.Row.OauthClientSecretEncrypted = string.Empty;
         row.Row.UpdatedAt = time.GetUtcNow();
+        AddChanged(row.Row, "removed", actor);
         await db.SaveChangesAsync(cancellationToken);
         LogRemoved(logger);
         return Result.Success();
@@ -107,6 +109,15 @@ public sealed partial class BitbucketAdmin(
         var row = await db.GitHostInstances.FirstAsync(i => i.Id == info.InstanceId, cancellationToken);
         return (row, info.Source == GitHostInstanceSource.Configuration);
     }
+
+    /// <summary>FR-155: <c>GIT_HOST_INSTANCE_CHANGED</c> (no project; never a secret).</summary>
+    private void AddChanged(GitHostInstance row, string change, string actor) =>
+        db.AddEvent(
+            EventTypes.GitHostInstanceChanged,
+            null,
+            new { instanceId = row.Id, kind = row.Kind.ToWire(), change, name = row.Name, baseUrl = row.BaseUrl, enabled = row.Enabled },
+            actor,
+            row.UpdatedAt);
 
     private static DomainError Configured() =>
         new(ErrorCodes.Conflict, "The Bitbucket consumer is configured in the server's environment (Bitbucket__OAuth__*), which takes precedence. Change it there.");

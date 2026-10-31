@@ -25,6 +25,22 @@ internal static class Samples
          "tokenBudget":null,"tokensUsed":0,"executionPaused":false,"myRole":"owner","createdAt":"2026-10-10T10:00:00Z","updatedAt":"2026-10-10T10:00:00Z"}
         """;
 
+    public const string EmptyStack = """
+        {"releaseVersionId":"0199f2a0-6666-7000-8000-000000000001","version":"0.1.0","versionStatus":"in_development","composition":null,
+         "catalogVersion":null,"catalogHash":null,"currentCatalogVersion":"2026.10.1","currentCatalogHash":"h1","locked":false,"lockedReason":null,
+         "stackChange":{"baseHasCode":false,"layersChanged":[],"isStackChange":false},"legacyPreset":null,"repoVcs":null}
+        """;
+
+    /// <summary>The body `aide status` gets for each request: the state, the project, no stack and no migration runs (FR-156).</summary>
+    public static string StatusBody(HttpRequestMessage request, string state, string project)
+    {
+        var path = request.RequestUri!.AbsolutePath;
+        return path.EndsWith("/state", StringComparison.Ordinal) ? state
+            : path.EndsWith("/stack", StringComparison.Ordinal) ? EmptyStack
+            : path.EndsWith("/migrations", StringComparison.Ordinal) ? "[]"
+            : project;
+    }
+
     public const string ProjectsPage = """
         {"items":[{"id":"0199f2a0-1111-7000-8000-000000000001","name":"Todo app","slug":"todo-app","currentPhase":"review","status":"reviewing",
           "checkpoint":6,"releasedVersion":"1.1.0","developmentVersion":"1.2.0","approvalMode":"strict","myRole":"owner","createdAt":"2026-10-10T10:00:00Z","updatedAt":"2026-10-10T11:00:00Z"}],

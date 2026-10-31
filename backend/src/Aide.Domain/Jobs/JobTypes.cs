@@ -88,6 +88,12 @@ public static class JobTypes
     public const string PreviewDatabaseReset = "preview_database_reset";
 
     /// <summary>
+    /// FR-155: looks for databases about to go away (a Render free database within 7 days of its expiry, a paused Supabase
+    /// project), writing <c>DATABASE_EXPIRING</c> once per expiry. Queued periodically, with no project.
+    /// </summary>
+    public const string DatabaseExpirySweep = "database_expiry_sweep";
+
+    /// <summary>
     /// FR-47: fan out one notification-worthy event (or a gate reminder, FR-15): in-app notifications for its recipients,
     /// one delivery row per subscribed project channel, then a first delivery attempt. Queued in the event's transaction.
     /// </summary>
