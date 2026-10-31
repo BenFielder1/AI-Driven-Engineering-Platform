@@ -48,6 +48,8 @@ public sealed partial class ReleaseJobHandler(
     ReleaseCompletion completion,
     GitHubReleasePublisher publisher,
     Git.MergeReadinessService readiness,
+    Databases.MigrationRunService migrations,
+    IWorkingCopies workingCopies,
     TimeProvider time,
     ILogger<ReleaseJobHandler> logger) : IJobHandler
 {
@@ -102,8 +104,29 @@ public sealed partial class ReleaseJobHandler(
             return;
         }
 
+        // §4.21: Supabase BaaS production migrations run before the code reaches the default branch (platforms deploy it on
+        // merge): immediately before AIDE merges, or as the release enters awaiting_merge (manual). A failure blocks the merge,
+        // and the merge is pinned to the commit they ran on.
+        var migrated = await MigrateProductionAsync(project, release.Id, working.Branch, cancellationToken);
+        if (migrated.Failed)
+        {
+            return;
+        }
+
         // FR-65: the manual strategy never merges; the release then waits for the merge on GitHub (or in the Local repository).
         var merge = MergeReadinessRules.AideMerges(project.MergeStrategy);
+
+        // §4.21: when readiness shows the PR can't merge, the migrations didn't run, so AIDE never calls an unpinned merge:
+        // a conflict fails the release as FR-43 does (MERGE_CONFLICT with the files); a PR that isn't open is released
+        // without merging (merged elsewhere: tagged; closed: PR_CLOSED), as the providers do for those states.
+        if (merge && migrated.Blocked == MergeReadinessReasonCode.MergeConflict)
+        {
+            await FailConflictedAsync(release.Id, working, migrated.Head!, cancellationToken);
+            return;
+        }
+
+        var notOpen = merge && migrated.Blocked == MergeReadinessReasonCode.PrNotOpen;
+        merge &= !notOpen;
         var request = new ReleaseRequest(
             working.Branch,
             release.Tag,
@@ -118,14 +141,23 @@ public sealed partial class ReleaseJobHandler(
             RecordedMergeCommitSha = release.MergeCommitSha,
             MergeSubmitted = release.MergeSubmittedAt is not null,
             OnMergeSubmitting = ct => RecordMergeSubmittedAsync(release.Id, ct),
+            ExpectedHeadSha = migrated.Head,
         };
         var outcome = await working.Provider.ReleaseAsync(working.Connection, request, working.Token, cancellationToken);
         switch (outcome.Kind)
         {
             case ReleaseOutcomeKind.Released:
+                if (outcome.MergedHeadMismatch is { } mergedHead)
+                {
+                    await RecordMergedHeadMismatchAsync(project.Id, release.Id, migrated.Head, mergedHead, outcome.MergeCommitSha, cancellationToken);
+                }
+
                 var url = outcome.ReleaseUrl ?? await publisher.PublishAsync(release, outcome.Tag ?? release.Tag, cancellationToken);
                 await completion.SucceedAsync(release.Id, outcome, url, mergedExternally: outcome.MergedExternally, cancellationToken);
                 return;
+            case ReleaseOutcomeKind.AwaitingMerge when notOpen:
+                // Readiness said the PR wasn't open, but it is (reopened meanwhile): look again, migrating first.
+                throw new JobFailedException("The pull request is open again; the release retries and runs the production migrations first.", transient: true, ErrorCodes.GitError);
             case ReleaseOutcomeKind.AwaitingMerge:
                 await completion.AwaitMergeAsync(release.Id, project.MergeStrategy, await AwaitingReasonsAsync(project, outcome, cancellationToken), cancellationToken);
                 return;
@@ -183,6 +215,151 @@ public sealed partial class ReleaseJobHandler(
         db.ChangeTracker.Clear();
         return true;
     }
+
+    /// <summary>
+    /// §4.21, FR-153: runs the Supabase BaaS migrations of the PR head on the production database and records the run on
+    /// the release (<c>releases.migration_run_id</c>). The head is exactly the commit the provider will merge: the fetched
+    /// remote-tracking branch (which the host's PR head must equal), else the local branch (Local Git); the merge is then
+    /// pinned to it (<see cref="ReleaseRequest.ExpectedHeadSha"/>). A succeeded run counts only for that same commit: a head
+    /// that moved runs the migrations again first. Skipped when the project isn't BaaS (host mode migrates on the platform,
+    /// FR-154), when the attempt already merged or submitted its merge, and when merge readiness shows the PR can't merge at
+    /// all (a conflict, or not open): unmerged migrations never run against production for nothing. <c>Failed</c>: the run
+    /// failed and the release was failed with its code (<c>MIGRATION_FAILED</c>, <c>MIGRATION_HISTORY_DIVERGED</c>); nothing
+    /// is merged then. <c>Head</c>: the commit migrated (the merge pin), or <c>null</c> when nothing ran.
+    /// </summary>
+    private async Task<(bool Failed, string? Head, MergeReadinessReasonCode? Blocked)> MigrateProductionAsync(Project project, Guid releaseId, string branch, CancellationToken cancellationToken)
+    {
+        var release = await db.Releases.AsNoTracking().FirstAsync(r => r.Id == releaseId, cancellationToken);
+        if (release.MergeCommitSha is not null || release.MergeSubmittedAt is not null
+            || !await migrations.HasMigrationStepAsync(project.Id, DeploymentEnvironment.Production, cancellationToken))
+        {
+            return (false, null, null);
+        }
+
+        var head = await MergeHeadAsync(project.Id, branch, cancellationToken)
+            ?? throw new JobFailedException("The version branch can't be read to run the production migrations.", transient: true, ErrorCodes.GitError);
+        if (release.MigrationRunId is { } runId
+            && await db.DatabaseMigrationRuns.AsNoTracking().AnyAsync(r => r.Id == runId && r.Status == MigrationRunStatus.Succeeded && r.GitSha == head, cancellationToken))
+        {
+            return (false, head, null);
+        }
+
+        // Unknown readiness (an error, a rate limit) doesn't block: the migrations run and the merge is pinned to them.
+        if (await BlockingReasonAsync(project, cancellationToken) is { } blocked)
+        {
+            LogMigrationsDeferred(logger, project.Id);
+            return (false, head, blocked);
+        }
+
+        DatabaseMigrationRun run;
+        try
+        {
+            run = await migrations.RunAsync(project.Id, DeploymentEnvironment.Production, release.ReleaseVersionId, release.Id, head, cancellationToken);
+        }
+        catch (Databases.MigrationTargetMissingException)
+        {
+            return (false, null, null);
+        }
+
+        db.ChangeTracker.Clear();
+        var tracked = await db.Releases.FirstAsync(r => r.Id == releaseId, cancellationToken);
+        tracked.MigrationRunId = run.Id;
+        await SaveAsync(cancellationToken);
+        db.ChangeTracker.Clear();
+        if (run.Status == MigrationRunStatus.Succeeded)
+        {
+            return (false, head, null);
+        }
+
+        await FailAsync(
+            releaseId,
+            run.ErrorCode ?? ErrorCodes.MigrationFailed,
+            $"The production database migrations failed, so nothing was merged: {run.ErrorMessage ?? "see the migration run"}",
+            [],
+            cancellationToken);
+        return (true, null, null);
+    }
+
+    /// <summary>
+    /// FR-43 for a BaaS release blocked before its migrations: the conflicting files from a trial merge of the head into the
+    /// default branch, and the release fails with <c>MERGE_CONFLICT</c>. A trial merge that is clean (readiness was stale)
+    /// retries the release.
+    /// </summary>
+    private async Task FailConflictedAsync(Guid releaseId, PreparedWorkingCopy working, string head, CancellationToken cancellationToken)
+    {
+        var files = await workingCopies.TrialMergeConflictsAsync(working.Connection.ProjectId, working.Provider.ComparisonBaseRef(working.Connection), head, cancellationToken);
+        if (files.Count == 0)
+        {
+            throw new JobFailedException("Merge readiness reported a conflict the branch no longer has; the release retries.", transient: true, ErrorCodes.GitError);
+        }
+
+        await FailAsync(
+            releaseId,
+            ErrorCodes.MergeConflict,
+            $"The pull request from {working.Branch} conflicts with {working.Connection.DefaultBranch} in {files.Count} file(s). Resolve them on the project branch, then retry the release.",
+            files,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// The commit the provider merges (as the GitHub, GitLab and Bitbucket providers resolve it): the fetched
+    /// remote-tracking branch, else the local branch (Local Git has no remote).
+    /// </summary>
+    private async Task<string?> MergeHeadAsync(Guid projectId, string branch, CancellationToken cancellationToken) =>
+        await workingCopies.ResolveCommitAsync(projectId, $"refs/remotes/{GitRemote.Name}/{branch}", cancellationToken)
+        ?? await workingCopies.ResolveCommitAsync(projectId, $"refs/heads/{branch}", cancellationToken);
+
+    /// <summary>
+    /// Why merge readiness says the PR can't be merged at all: <c>merge_conflict</c> (first) or <c>pr_not_open</c>;
+    /// <c>null</c> when it can, or when readiness is unknown (that doesn't block).
+    /// </summary>
+    private async Task<MergeReadinessReasonCode?> BlockingReasonAsync(Project project, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var computed = await readiness.ComputeAsync(project.Id, cancellationToken);
+            if (computed.IsFailure)
+            {
+                return null;
+            }
+
+            var codes = computed.Value.Reasons.Select(r => r.Code).ToList();
+            return codes.Contains(MergeReadinessReasonCode.MergeConflict) ? MergeReadinessReasonCode.MergeConflict
+                : codes.Contains(MergeReadinessReasonCode.PrNotOpen) ? MergeReadinessReasonCode.PrNotOpen
+                : null;
+        }
+        catch (Exception ex) when (ex is Infrastructure.GitHub.GitHubRateLimitedException or Infrastructure.GitLab.GitLabRateLimitedException
+            or Infrastructure.Bitbucket.BitbucketRateLimitedException)
+        {
+            LogReadinessRateLimited(logger, project.Id);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// §4.21: the host merged another head than the one migrated before the merge (Bitbucket can't pin it): logged and
+    /// recorded (<c>MERGED_HEAD_MISMATCH</c>); the production rollout's post-merge run on the merge commit is relied on.
+    /// </summary>
+    private async Task RecordMergedHeadMismatchAsync(
+        Guid projectId, Guid releaseId, string? expectedHead, string mergedHead, string? mergeCommitSha, CancellationToken cancellationToken)
+    {
+        LogMergedHeadMismatch(logger, projectId, mergedHead, expectedHead);
+        db.ChangeTracker.Clear();
+        db.AddEvent(
+            EventTypes.MergedHeadMismatch,
+            projectId,
+            new { releaseId, expectedHeadSha = expectedHead, mergedHeadSha = mergedHead, mergeCommitSha },
+            SystemActor.Name,
+            time.GetUtcNow());
+        await SaveAsync(cancellationToken);
+        db.ChangeTracker.Clear();
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId}: the host merged head {MergedHead}, not the migrated head {ExpectedHead}; the post-merge production run migrates it")]
+    private static partial void LogMergedHeadMismatch(ILogger logger, Guid projectId, string mergedHead, string? expectedHead);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: production migrations wait: merge readiness shows the PR can't merge")]
+    private static partial void LogMigrationsDeferred(ILogger logger, Guid projectId);
 
     /// <summary>
     /// Puts the merge commit on the attempt as soon as the merge exists, before tagging: a rollback then knows the release was

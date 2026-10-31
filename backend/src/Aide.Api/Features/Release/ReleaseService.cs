@@ -159,7 +159,10 @@ public static class ReleaseRecords
     /// <param name="release">The release attempt.</param>
     /// <param name="mergeStrategy">The project's merge strategy (FR-65).</param>
     /// <param name="productionDeployment">FR-91: the release's production deployment, if any.</param>
-    public static ReleaseDto ToDto(ReleaseEntity release, MergeStrategy mergeStrategy, Deployments.DeploymentDto? productionDeployment = null)
+    /// <param name="rollout">FR-149: the release's production rollout, if any.</param>
+    /// <param name="appliedNotMerged">§4.21: migrations were applied to production but the release failed unmerged.</param>
+    public static ReleaseDto ToDto(
+        ReleaseEntity release, MergeStrategy mergeStrategy, Deployments.DeploymentDto? productionDeployment = null, Deployments.RolloutDto? rollout = null, bool appliedNotMerged = false)
     {
         ArgumentNullException.ThrowIfNull(release);
         return new ReleaseDto(
@@ -180,7 +183,11 @@ public static class ReleaseRecords
             release.AwaitingMergeSince,
             Git.MergeReasonsJson.Read(release.MergeReasons),
             mergeStrategy,
-            productionDeployment);
+            productionDeployment,
+            release.MigrationRunId,
+            appliedNotMerged,
+            rollout,
+            Deployments.RolloutReader.LiveOn(rollout));
     }
 
     /// <summary>The latest attempt for the project state (FR-42, FR-43, FR-65).</summary>
@@ -213,7 +220,8 @@ public static class ReleaseRecords
 }
 
 /// <summary>FR-42, FR-43: release history and the Owner's retry of a failed release.</summary>
-public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, GitHubReleasePublisher publisher, TimeProvider time, ILogger<ReleaseService> logger)
+public sealed partial class ReleaseService(
+    AideDbContext db, JobEnqueuer jobs, GitHubReleasePublisher publisher, Deployments.RolloutReader rollouts, TimeProvider time, ILogger<ReleaseService> logger)
 {
     /// <summary>
     /// FR-43 <c>POST /release</c>: <see cref="ReleaseRules.CanRetry"/> (<c>NOT_RELEASING</c>, <c>RELEASE_IN_PROGRESS</c>), then the
@@ -267,7 +275,23 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, G
             .ToListAsync(cancellationToken);
         var strategy = await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken);
         var production = await Deployments.DeploymentReader.ProductionByReleaseAsync(db, [.. releases.Select(r => r.Id)], cancellationToken);
-        return [.. releases.Select(r => ReleaseRecords.ToDto(r, strategy, production.GetValueOrDefault(r.Id)))];
+        var rolledOut = await rollouts.ForReleasesAsync(projectId, releases, cancellationToken);
+        var notMerged = await AppliedNotMergedAsync(releases, cancellationToken);
+        return [.. releases.Select(r => ReleaseRecords.ToDto(r, strategy, production.GetValueOrDefault(r.Id), rolledOut.GetValueOrDefault(r.Id), notMerged.Contains(r.Id)))];
+    }
+
+    /// <summary>§4.21: the failed, unmerged releases whose production migration run applied migrations.</summary>
+    private async Task<HashSet<Guid>> AppliedNotMergedAsync(IReadOnlyList<ReleaseEntity> releases, CancellationToken cancellationToken)
+    {
+        var runIds = releases.Where(r => r.Status == ReleaseStatus.Failed && r.MergeCommitSha is null && r.MigrationRunId is not null).Select(r => r.MigrationRunId!.Value).ToList();
+        if (runIds.Count == 0)
+        {
+            return [];
+        }
+
+        var runs = await db.DatabaseMigrationRuns.AsNoTracking().Where(r => runIds.Contains(r.Id)).Select(r => new { r.Id, r.Applied }).ToListAsync(cancellationToken);
+        var applied = runs.Where(r => r.Applied.Count > 0).Select(r => r.Id).ToHashSet();
+        return [.. releases.Where(r => r.MigrationRunId is { } id && runIds.Contains(id) && applied.Contains(id)).Select(r => r.Id)];
     }
 
     /// <summary>
@@ -315,7 +339,10 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, G
         }
 
         var production = await Deployments.DeploymentReader.ProductionByReleaseAsync(db, [release.Id], cancellationToken);
-        return ReleaseRecords.ToDto(release, await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken), production.GetValueOrDefault(release.Id));
+        var rolledOut = await rollouts.ForReleasesAsync(projectId, [release], cancellationToken);
+        var notMerged = await AppliedNotMergedAsync([release], cancellationToken);
+        return ReleaseRecords.ToDto(
+            release, await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken), production.GetValueOrDefault(release.Id), rolledOut.GetValueOrDefault(release.Id), notMerged.Contains(release.Id));
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: release at checkpoint {Checkpoint} retried (attempt {Attempt})")]

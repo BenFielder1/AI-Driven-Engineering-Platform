@@ -29,7 +29,9 @@ public sealed record DatabaseProvisioningDto(
 /// plan, expiry, the dashboard link (<c>resourceUrl</c>), a connection summary without secrets (host, port, database), the
 /// Supabase permissions the connection lacks (e.g. "API Key Secrets: Read"), the provisioning job, and <c>warnings</c>
 /// (<c>render_free_expiry</c>, <c>supabase_free_pausing</c>, <c>supabase_free_project_limit</c>,
-/// <c>preview_uses_production_database</c>). Secrets are never returned.
+/// <c>preview_uses_production_database</c>). Secrets are never returned. FR-148: on the preview card,
+/// <c>resetRecommended</c> is true when the preview database has migrations the version branch no longer has (e.g. after a
+/// rollback that removed migrations): offer "Reset preview database" (<c>POST …/databases/preview/reset</c>).
 /// </summary>
 public sealed record DeploymentDatabaseDto(
     DeploymentEnvironment Environment,
@@ -52,7 +54,8 @@ public sealed record DeploymentDatabaseDto(
     IReadOnlyList<string> MissingPermissions,
     DatabaseProvisioningDto? Provisioning,
     IReadOnlyList<string> Warnings,
-    DateTimeOffset? UpdatedAt);
+    DateTimeOffset? UpdatedAt,
+    bool ResetRecommended = false);
 
 /// <summary>FR-152: provision a database: region (Supabase: a region code or americas/emea/apac; Render: defaults to the backend's), plan, and an optional name.</summary>
 public sealed record CreateManagedDatabaseRequest

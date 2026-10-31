@@ -21,7 +21,9 @@ public sealed record DeploymentUserDto(Guid Id, string Name);
 /// <c>promote</c>), <c>platform</c> (the target's host; <c>provider</c> is <c>fake</c> in Fake mode), <c>current</c> (the
 /// deployment production serves now, per component), <c>canRollback</c> with <c>rollbackBlockedReason</c> when false
 /// (<c>unsupported</c>, <c>not_production</c>, <c>not_ready</c>, <c>unknown_at_platform</c>, <c>current</c>), and
-/// <c>olderThanLatestMigration</c> (the rollback dialog's database warning; <c>null</c> = unknown, until M30 databases).
+/// <c>olderThanLatestMigration</c> (FR-150, the rollback dialog's database warning: the production deployment was created
+/// before the latest migration reached production — the latest Supabase BaaS production run that applied files, or in host
+/// mode the latest ready production backend deploy whose pre-deploy ran; <c>null</c> = no migration known, or a preview).
 /// </summary>
 public sealed record DeploymentDto(
     Guid Id,
@@ -58,9 +60,11 @@ public sealed record DeploymentDto(
 public sealed record ComponentProductionUrlDto(DeploymentComponent Component, DeploymentProvider Provider, string? Url, Guid? DeploymentId);
 
 /// <summary>
-/// FR-90: the preview deployment a review cycle waited for (<c>compliance_report.external_checks.preview</c>): its id, final
-/// (or last seen) <c>status</c>, <c>url</c> and <c>buildLogTail</c>, how long review waited (<c>waitedSeconds</c>, up to 20
-/// minutes; <c>null</c> when it didn't wait) and whether it gave up waiting (<c>timedOut</c>).
+/// FR-90, FR-147: the preview a review cycle waited for (<c>compliance_report.external_checks.preview</c>): the frontend (else
+/// backend) preview deployment's id (the rollout id when nothing deployed, e.g. a blocked rollout), its final (or last
+/// seen) <c>status</c>, <c>url</c> and <c>buildLogTail</c>, how long review waited (<c>waitedSeconds</c>, up to 30 minutes;
+/// <c>null</c> when it didn't wait) and whether it gave up waiting (<c>timedOut</c>). FR-147: <c>rollout</c> is the whole
+/// preview rollout review waited for (every component and the migration run; <c>null</c> for v2 reports).
 /// </summary>
 public sealed record PreviewCheckDto(
     Guid DeploymentId,
@@ -68,7 +72,8 @@ public sealed record PreviewCheckDto(
     string? Url,
     string? BuildLogTail,
     int? WaitedSeconds,
-    bool TimedOut);
+    bool TimedOut,
+    RolloutDto? Rollout = null);
 
 /// <summary>FR-88: create a new Vercel project linked to the GitHub repo (framework <c>nextjs</c>).</summary>
 public sealed record CreateVercelProjectRequest

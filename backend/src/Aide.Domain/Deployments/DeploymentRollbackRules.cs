@@ -144,11 +144,4 @@ public static class DeploymentRollbackRules
             _ => Result.Failure(new DomainError(ErrorCodes.InvalidDeployment, "This deployment is already the current production deployment.")),
         };
     }
-
-    /// <summary>
-    /// FR-150 seam (M30): whether the deployment is older than the latest migration applied to its environment's database.
-    /// Databases arrive in M30, so this is <c>null</c> (unknown) until then.
-    /// </summary>
-    public static bool? OlderThanLatestMigration(DateTimeOffset deploymentCreatedAt, DateTimeOffset? latestMigrationAppliedAt) =>
-        latestMigrationAppliedAt is { } applied ? deploymentCreatedAt < applied : null;
 }

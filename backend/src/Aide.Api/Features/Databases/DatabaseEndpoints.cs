@@ -29,7 +29,7 @@ public static class DatabaseEndpoints
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION (body, environment) or STACK_INCOMPATIBLE (the composition's database host doesn't allow this provider)"),
+                (StatusCodes.Status400BadRequest, "VALIDATION (body, environment; link.resourceId or external.connectionString when it is the other environment's database: the preview database must be separate from production) or STACK_INCOMPATIBLE (the composition's database host doesn't allow this provider)"),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection)"),
                 (StatusCodes.Status404NotFound, "NOT_FOUND (project or connection)"),
                 (StatusCodes.Status409Conflict, "CONFLICT (changed concurrently)"));
@@ -57,6 +57,17 @@ public static class DatabaseEndpoints
                 (StatusCodes.Status409Conflict, "DEPLOYMENT_ACTION_UNSUPPORTED (not Supabase), CONFLICT (not paused, or changed concurrently) or DEPLOYMENT_NOT_CONFIGURED (the connection is gone)"),
                 (StatusCodes.Status429TooManyRequests, "UPSTREAM_RATE_LIMITED (Supabase's 429; Retry-After)"),
                 (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR"));
+
+        databases.MapPost("/preview/reset", ResetPreviewDatabase)
+            .WithName("ResetPreviewDatabase")
+            .WithSummary("Reset the preview database (Owner, FR-148): a preview_database_reset job empties its schema (Supabase, External: AIDE connects; Render: over its external URL; Railway: the Owner empties it in Railway and AIDE records the reset) and, for Supabase BaaS, re-applies the base commit's migrations. Clears PREVIEW_DATABASE_DIVERGED; the next backend preview's pre-deploy re-applies every migration. Answers 202 with the job and method.")
+            .Produces<PreviewDatabaseResetDto>(StatusCodes.Status202Accepted)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .WithResponseDescriptions(
+                (StatusCodes.Status400BadRequest, "VALIDATION (the preview database isn't separate from production: AIDE never resets it)"),
+                (StatusCodes.Status404NotFound, "NOT_FOUND (project, or no preview database)"),
+                (StatusCodes.Status409Conflict, "INVALID_STATE (a preview rollout or reset is running, or the preview database isn't available yet)"));
 
         var migrations = app.MapGroup("/api/projects/{id:guid}/migrations")
             .WithTags("Deployments")
@@ -103,6 +114,21 @@ public static class DatabaseEndpoints
         }
 
         return TypedResults.Accepted($"/api/projects/{id}/settings/deployment", card!);
+    }
+
+    private static async Task<Results<Accepted<PreviewDatabaseResetDto>, ProblemHttpResult>> ResetPreviewDatabase(
+        Guid id, IProjectAccess access, ICurrentUser currentUser, PreviewDatabaseResetService resets, CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.ManageDeployments, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        var (reset, error) = await resets.ResetAsync(id, currentUser.Actor, cancellationToken);
+        return error is not null
+            ? ApiProblems.FromError(error)
+            : TypedResults.Accepted($"/api/projects/{id}/deployments/preview", reset!);
     }
 
     private static async Task<Results<NoContent, ValidationProblem, ProblemHttpResult>> DeleteManagedDatabase(

@@ -27,7 +27,7 @@ public sealed partial class ReleaseCompletion(
     AideDbContext db,
     LifecycleWriter writer,
     JobEnqueuer jobs,
-    Deployments.DeploymentScheduler deployments,
+    Deployments.RolloutScheduler rollouts,
     TimeProvider time,
     ILogger<ReleaseCompletion> logger)
 {
@@ -132,7 +132,8 @@ public sealed partial class ReleaseCompletion(
             .Where(s => s.ProjectId == release.ProjectId)
             .Select(s => s.DefaultBranch)
             .FirstOrDefaultAsync(cancellationToken) ?? "main";
-        await deployments.AutoProductionAsync(release, defaultBranch, now, cancellationToken);
+        // FR-149 (amends FR-91): the production rollout of the merge commit (migrations → backend → frontend).
+        await rollouts.EnqueueProductionAsync(release, defaultBranch, now, cancellationToken);
         await SaveAsync(cancellationToken);
         LogReleased(logger, release.ProjectId, release.Tag, outcome.AlreadyTagged, mergedExternally);
     }

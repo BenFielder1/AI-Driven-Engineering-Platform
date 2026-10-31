@@ -186,6 +186,40 @@ public static class DeploymentHarness
         return maxRuns;
     }
 
+    /// <summary>FR-147, FR-149: the project's newest rollout job of <paramref name="type"/> (<c>preview_rollout</c> by default).</summary>
+    public static Task<Job> RolloutJobAsync(WebApplicationFactory<Program> app, Guid projectId, string type = JobTypes.PreviewRollout) =>
+        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
+            .Where(j => j.ProjectId == projectId && j.Type == type)
+            .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
+            .FirstAsync(Ct));
+
+    /// <summary>
+    /// FR-147, FR-149: drives a rollout to its end: runs the rollout job, then settles every queued deployment job of the
+    /// project, until the rollout stops deferring itself (at most <paramref name="maxRounds"/> rounds); returns the rounds.
+    /// </summary>
+    public static async Task<int> SettleRolloutAsync(WebApplicationFactory<Program> app, Guid projectId, Guid rolloutJobId, int maxRounds = 10)
+    {
+        for (var round = 1; round <= maxRounds; round++)
+        {
+            if (!await RunOnceAsync(app, rolloutJobId))
+            {
+                return round;
+            }
+
+            var deploying = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
+                .Where(j => j.ProjectId == projectId && j.Type == JobTypes.Deployment && j.Status == JobStatus.Queued)
+                .Select(j => j.Id)
+                .ToListAsync(Ct));
+            foreach (var jobId in deploying)
+            {
+                await SettleAsync(app, jobId);
+            }
+        }
+
+        Assert.Fail($"Rollout {rolloutJobId} still running after {maxRounds} rounds.");
+        return maxRounds;
+    }
+
     public static Task<Deployment> DeploymentAsync(WebApplicationFactory<Program> app, Guid deploymentId) =>
         ProjectApi.WithDbAsync(app, db => db.Deployments.AsNoTracking().SingleAsync(d => d.Id == deploymentId, Ct));
 

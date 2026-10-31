@@ -111,13 +111,13 @@ public class DeploymentPollingTests
         Assert.Equal(T0, first.WaitingSince);
         Assert.Equal(T0.AddSeconds(10), first.RecheckAt);
 
-        var later = PreviewReviewRules.Decide(status, T0, T0.AddMinutes(19));
+        var later = PreviewReviewRules.Decide(status, T0, T0.AddMinutes(29));
         Assert.True(later.Wait);
         Assert.Equal(T0, later.WaitingSince);
     }
 
     [Fact]
-    public void FR90_Review_proceeds_when_the_preview_finishes_or_after_20_minutes()
+    public void FR90_FR147_Review_proceeds_when_the_preview_finishes_or_after_30_minutes()
     {
         var ready = PreviewReviewRules.Decide(DeploymentStatus.Ready, T0, T0.AddMinutes(3));
         Assert.False(ready.Wait);
@@ -128,10 +128,10 @@ public class DeploymentPollingTests
         Assert.False(immediately.Wait);
         Assert.Null(immediately.WaitedSeconds);
 
-        var gaveUp = PreviewReviewRules.Decide(DeploymentStatus.Building, T0, T0.AddMinutes(20));
+        var gaveUp = PreviewReviewRules.Decide(DeploymentStatus.Building, T0, T0.AddMinutes(30));
         Assert.False(gaveUp.Wait);
         Assert.True(gaveUp.TimedOut);
-        Assert.Equal(1200, gaveUp.WaitedSeconds);
+        Assert.Equal(1800, gaveUp.WaitedSeconds);
     }
 
     [Fact]
@@ -174,11 +174,12 @@ public class DeploymentPollingTests
     // ------------------------------------------------------------------ FR-91 production
 
     [Fact]
-    public void FR91_The_automatic_production_deployment_looks_for_Vercels_own_for_30_seconds()
+    public void FR91_FR149_The_automatic_production_deployment_looks_for_the_platforms_own_for_60_seconds()
     {
         Assert.Equal(T0.AddSeconds(10), ProductionDeploymentRules.LookAgainAt(T0, T0));
-        Assert.Equal(T0.AddSeconds(30), ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(25)));
-        Assert.Null(ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(30)));
+        Assert.Equal(T0.AddSeconds(35), ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(25)));
+        Assert.Equal(T0.AddSeconds(60), ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(55)));
+        Assert.Null(ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(60)));
         Assert.True(ProductionDeploymentRules.Adopts(DeploymentEnvironment.Production, DeploymentTrigger.Auto, DeploymentProvider.Vercel));
         Assert.False(ProductionDeploymentRules.Adopts(DeploymentEnvironment.Production, DeploymentTrigger.Auto, DeploymentProvider.Fake));
         Assert.False(ProductionDeploymentRules.Adopts(DeploymentEnvironment.Production, DeploymentTrigger.Redeploy, DeploymentProvider.Vercel));

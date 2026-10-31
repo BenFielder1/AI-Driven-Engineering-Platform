@@ -133,8 +133,11 @@ public static class DeploymentPollRules
 /// </summary>
 public static class ProductionDeploymentRules
 {
-    /// <summary>How long after recording the deployment AIDE looks for Vercel's own deployment of the SHA before creating one.</summary>
-    public static readonly TimeSpan AdoptWindow = TimeSpan.FromSeconds(30);
+    /// <summary>
+    /// How long after recording the deployment AIDE looks for the platform's own deployment of the SHA before creating one
+    /// (FR-149: matched within 60 s; v2 waited 30 s).
+    /// </summary>
+    public static readonly TimeSpan AdoptWindow = TimeSpan.FromSeconds(60);
 
     /// <summary>How often Vercel's deployments are looked at again during <see cref="AdoptWindow"/>.</summary>
     public static readonly TimeSpan AdoptRecheck = TimeSpan.FromSeconds(10);
@@ -180,7 +183,8 @@ public sealed record PreviewWaitDecision(bool Wait, DateTimeOffset? RecheckAt, D
 /// </summary>
 public static class PreviewReviewRules
 {
-    public static readonly TimeSpan WaitLimit = TimeSpan.FromMinutes(20);
+    /// <summary>FR-147: review waits up to 30 minutes for the whole preview rollout (the v2 deployment ceiling).</summary>
+    public static readonly TimeSpan WaitLimit = TimeSpan.FromMinutes(30);
 
     public static readonly TimeSpan RecheckInterval = TimeSpan.FromSeconds(10);
 

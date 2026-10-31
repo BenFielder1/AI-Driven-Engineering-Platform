@@ -125,8 +125,9 @@ public class RenderRailwayRulesTests
     {
         Assert.Equal(Now.AddSeconds(20), ProductionDeploymentRules.LookAgainAt(Now, Now, RailwayRules.MinPollInterval));
         Assert.Equal(Now.AddSeconds(40), ProductionDeploymentRules.LookAgainAt(Now, Now.AddSeconds(20), RailwayRules.MinPollInterval));
-        Assert.Null(ProductionDeploymentRules.LookAgainAt(Now, Now.AddSeconds(40), RailwayRules.MinPollInterval));
-        Assert.Equal(Now.AddSeconds(30), ProductionDeploymentRules.LookAgainAt(Now, Now.AddSeconds(25)));
+        Assert.Equal(Now.AddSeconds(60), ProductionDeploymentRules.LookAgainAt(Now, Now.AddSeconds(40), RailwayRules.MinPollInterval));
+        Assert.Null(ProductionDeploymentRules.LookAgainAt(Now, Now.AddSeconds(60), RailwayRules.MinPollInterval));
+        Assert.Equal(Now.AddSeconds(35), ProductionDeploymentRules.LookAgainAt(Now, Now.AddSeconds(25)));
     }
 
     [Fact]

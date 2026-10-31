@@ -54,6 +54,8 @@ export const deploymentDb = {
   envDeleteFails: false,
   /** FR-152: the next database provisioning job fails with this code and message. */
   provisioningFailure: null as { errorCode: string; errorMessage: string } | null,
+  /** FR-148: a preview rollout or reset is running: the preview database reset answers 409 INVALID_STATE. */
+  previewResetBusy: false,
 }
 
 /** Deployments the platform never reported (tests add ids): `unknown_at_platform` (FR-151). */
@@ -70,7 +72,9 @@ export function resetDeploymentDb() {
   deploymentDb.envSyncFails = false
   deploymentDb.envDeleteFails = false
   deploymentDb.provisioningFailure = null
+  deploymentDb.previewResetBusy = false
   unknownAtPlatform.clear()
+  previewEnvironments.clear()
 }
 
 /** §4.20 capabilities per provider. */
@@ -174,6 +178,7 @@ export function makeDatabase(
     provisioning: null,
     warnings: [],
     updatedAt: null,
+    resetRecommended: false,
     ...overrides,
   }
 }
@@ -803,6 +808,160 @@ function userRef(userId: string) {
   return { id: userId, name: user?.name ?? 'Unknown' }
 }
 
+// ---- Preview environment and rollouts (FR-147, FR-148, FR-149) ----
+
+type Rollout = Schemas['RolloutDto']
+type RolloutStep = Schemas['RolloutStepDto']
+type PreviewEnvironment = Schemas['PreviewEnvironmentDto']
+
+/** A seeded preview environment, and the rollouts the next GETs return in turn (a progressing rollout). */
+interface StoredPreview {
+  env: PreviewEnvironment
+  progression: Rollout[]
+}
+
+/** Seeded preview environments by project id (cleared by resetDeploymentDb). */
+const previewEnvironments = new Map<string, StoredPreview>()
+
+/** The note the API gives a GitHub Pages frontend in a preview rollout (FR-147). */
+export const GITHUB_PAGES_PREVIEW_NOTE = 'GitHub Pages has no preview deployments, so the frontend preview is skipped.'
+
+/** One rollout step: a pending step of the given kind unless overridden. */
+export function makeRolloutStep(step: Schemas['RolloutStepKind'], overrides: Partial<RolloutStep> = {}): RolloutStep {
+  return {
+    step,
+    state: 'pending',
+    provider: null,
+    deploymentId: null,
+    status: null,
+    url: null,
+    inspectorUrl: null,
+    buildLogTail: null,
+    errorCode: null,
+    errorMessage: null,
+    migrationRunId: null,
+    note: null,
+    canRedeploy: false,
+    ...overrides,
+  }
+}
+
+/** A rollout of the current version's branch: a running preview rollout with no steps unless overridden. */
+export function makeRollout(p: StoredProject, overrides: Partial<Rollout> = {}): Rollout {
+  const version = currentVersionOf(p)
+  return {
+    rolloutId: nextId(),
+    environment: 'preview',
+    state: 'running',
+    releaseVersionId: version?.id ?? '',
+    releaseId: null,
+    gitRef: version?.branchName ?? 'aide/project/v0.1.0',
+    gitSha: '7c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2a9c',
+    errorCode: null,
+    errorMessage: null,
+    steps: [],
+    requestedAt: '2026-09-05T10:00:00Z',
+    ...overrides,
+  }
+}
+
+/**
+ * FR-147: seeds the project's preview environment. `progression` are the rollouts the next GETs return one at a time
+ * (the last one stays), so a test can watch a running rollout finish.
+ */
+export function seedPreviewEnvironment(p: StoredProject, env: Partial<PreviewEnvironment> = {}, progression: Rollout[] = []) {
+  const stored: StoredPreview = {
+    env: { current: null, notes: [], databaseDiverged: false, divergedMessage: null, ...env },
+    progression: [...progression],
+  }
+  previewEnvironments.set(p.id, stored)
+  return stored.env
+}
+
+const isActive = (status: Schemas['DeploymentStatus']) => status === 'queued' || status === 'building'
+
+/** A step's state from a deployment's status. */
+const stepStateOf = (status: Schemas['DeploymentStatus']): Schemas['RolloutStepState'] =>
+  status === 'ready' ? 'succeeded' : status === 'error' ? 'failed' : status === 'canceled' ? 'skipped' : 'running'
+
+/** A rollout's state from its steps (blocked and canceled are only ever seeded). */
+function rolloutStateOf(steps: readonly RolloutStep[]): Schemas['RolloutState'] {
+  if (steps.some((s) => s.state === 'failed')) {
+    return 'failed'
+  }
+  return steps.some((s) => s.state === 'pending' || s.state === 'running') ? 'running' : 'succeeded'
+}
+
+/** A deployment step from a deployment row (`canRedeploy` once it finished). */
+export function rolloutStepOf(d: Deployment): RolloutStep {
+  return makeRolloutStep(d.component, {
+    state: stepStateOf(d.status),
+    provider: d.provider,
+    deploymentId: d.id,
+    status: d.status,
+    url: d.url,
+    inspectorUrl: d.inspectorUrl,
+    buildLogTail: d.buildLogTail,
+    errorCode: d.errorCode,
+    errorMessage: d.errorMessage,
+    canRedeploy: !isActive(d.status),
+  })
+}
+
+/**
+ * Without a seeded environment, the newest preview rollout is built from the current version's preview deployments:
+ * one step per component that has one (backend first), as the API does for a v2 single-Vercel project.
+ */
+function derivedPreview(p: StoredProject): PreviewEnvironment {
+  const version = currentVersionOf(p)
+  const previews = [...(p.deployments ?? [])]
+    .filter((d) => d.target === 'preview' && (!version || d.releaseVersionId === version.id))
+    .sort((x, y) => y.createdAt.localeCompare(x.createdAt))
+  const newest = previews[0]
+  if (!newest) {
+    return { current: null, notes: [], databaseDiverged: false, divergedMessage: null }
+  }
+  const steps = (['backend', 'frontend'] as const)
+    .map((c) => previews.find((d) => d.component === c))
+    .filter((d): d is Deployment => d !== undefined)
+    .map(rolloutStepOf)
+  return {
+    current: makeRollout(p, {
+      rolloutId: newest.id,
+      state: rolloutStateOf(steps),
+      gitRef: newest.gitRef,
+      gitSha: newest.gitSha,
+      releaseVersionId: newest.releaseVersionId,
+      steps,
+      requestedAt: newest.createdAt,
+    }),
+    notes: [],
+    databaseDiverged: false,
+    divergedMessage: null,
+  }
+}
+
+function previewOf(p: StoredProject): PreviewEnvironment {
+  const stored = previewEnvironments.get(p.id)
+  if (!stored) {
+    return derivedPreview(p)
+  }
+  const next = stored.progression.shift()
+  if (next) {
+    stored.env.current = next
+  }
+  return stored.env
+}
+
+/** FR-148: how the reset is done on each database host. */
+const resetMethods: Record<DatabaseProvider, Schemas['PreviewResetMethod']> = {
+  supabase: 'reset_schema',
+  render: 'reset_schema_external',
+  railway: 'manual',
+  external: 'reset_schema_external',
+  fake: 'reset_schema',
+}
+
 export const deploymentHandlers = [
   // ---- Settings → Deployment (FR-144–FR-146) ----
   http.get('*/api/projects/:id/settings/deployment', ({ params }) => {
@@ -1186,6 +1345,15 @@ export const deploymentHandlers = [
     )
   }),
 
+  // ---- Preview environment (FR-147) and preview database reset (FR-148) ----
+  http.get('*/api/projects/:id/deployments/preview', ({ params }) => {
+    const a = access(params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    return HttpResponse.json<PreviewEnvironment>(previewOf(a.project))
+  }),
+
   http.post('*/api/projects/:id/deployments/preview', async ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
@@ -1202,6 +1370,10 @@ export const deploymentHandlers = [
     if (!configured(a.project)) {
       return problem(409, 'DEPLOYMENT_NOT_CONFIGURED', 'The project has no deployment settings.')
     }
+    const stored = previewEnvironments.get(a.project.id)
+    if (stored?.env.databaseDiverged) {
+      return problem(409, 'PREVIEW_DATABASE_DIVERGED', 'The preview database has migrations the version branch no longer has.')
+    }
     const created = seedDeployment(a.project, {
       target: 'preview',
       status: 'queued',
@@ -1210,7 +1382,46 @@ export const deploymentHandlers = [
       triggeredBy: userRef(a.userId),
       createdAt: new Date().toISOString(),
     })
-    return HttpResponse.json<Deployment>(created, { status: 202 })
+    const rollout = makeRollout(a.project, {
+      gitRef: created.gitRef,
+      gitSha: created.gitSha,
+      releaseVersionId: created.releaseVersionId,
+      steps: [rolloutStepOf(created)],
+      requestedAt: created.createdAt,
+    })
+    if (stored) {
+      stored.env.current = rollout
+      stored.progression = []
+    }
+    return HttpResponse.json<Rollout>(rollout, { status: 202 })
+  }),
+
+  http.post('*/api/projects/:id/settings/deployment/databases/preview/reset', async ({ request, params }) => {
+    const a = ownerMutation(request, params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    await record(request)
+    const db = deploymentOf(a.project).databases.find((x) => x.environment === 'preview')
+    if (!db || db.status === 'not_configured') {
+      return notFound('The project has no preview database.')
+    }
+    if (deploymentDb.previewResetBusy) {
+      return problem(409, 'INVALID_STATE', 'A preview rollout or reset is running. Wait for it to finish, then reset the preview database.')
+    }
+    if (db.status !== 'available') {
+      return problem(409, 'INVALID_STATE', "The preview database isn't available yet; wait for it, then reset it.")
+    }
+    db.resetRecommended = false
+    const stored = previewEnvironments.get(a.project.id)
+    if (stored) {
+      stored.env.databaseDiverged = false
+      stored.env.divergedMessage = null
+    }
+    return HttpResponse.json<Schemas['PreviewDatabaseResetDto']>(
+      { jobId: nextId(), method: resetMethods[db.provider as DatabaseProvider] },
+      { status: 202 },
+    )
   }),
 
   http.post('*/api/projects/:id/deployments/:deploymentId/redeploy', async ({ request, params }) => {

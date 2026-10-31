@@ -25,15 +25,24 @@ public interface IMigrationSession : IAsyncDisposable
 /// <c>supabase_migrations.schema_migrations (version text primary key, statements text[], name text)</c>, created as the CLI
 /// does when missing (<c>CREATE SCHEMA/TABLE IF NOT EXISTS</c>, <c>ADD COLUMN IF NOT EXISTS</c>).
 /// </summary>
-public sealed class NpgsqlMigrationSqlExecutor : IMigrationSqlExecutor
+public sealed class NpgsqlMigrationSqlExecutor : IMigrationSqlExecutor, IDatabaseSchemaReset
 {
+    /// <summary>
+    /// FR-148, §4.21: the session advisory lock the runner and the preview reset both hold on the target database (advisory
+    /// locks are per database), so a reset never interleaves with a migration run.
+    /// </summary>
+    public const string LockSql = "SELECT pg_advisory_lock(hashtext('aide_supabase_migrations'))";
+
+    /// <summary>Releases <see cref="LockSql"/>.</summary>
+    public const string UnlockSql = "SELECT pg_advisory_unlock(hashtext('aide_supabase_migrations'))";
+
     public async Task<IMigrationSession> OpenAsync(string connectionString, CancellationToken cancellationToken)
     {
         var connection = new NpgsqlConnection(connectionString);
         try
         {
             await connection.OpenAsync(cancellationToken);
-            await using (var command = new NpgsqlCommand("SELECT pg_advisory_lock(hashtext('aide_supabase_migrations'))", connection))
+            await using (var command = new NpgsqlCommand(LockSql, connection))
             {
                 command.CommandTimeout = 120;
                 await command.ExecuteNonQueryAsync(cancellationToken);
@@ -47,6 +56,45 @@ public sealed class NpgsqlMigrationSqlExecutor : IMigrationSqlExecutor
             throw;
         }
     }
+
+    /// <summary>
+    /// FR-148: drops <c>public</c> and the CLI history, recreates <c>public</c> (with Supabase's default grants when asked),
+    /// in one transaction under the runner's advisory lock.
+    /// </summary>
+    public async Task ResetAsync(string connectionString, bool supabaseGrants, CancellationToken cancellationToken)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using (var command = new NpgsqlCommand(LockSql, connection))
+        {
+            command.CommandTimeout = 120;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var reset = new NpgsqlCommand(supabaseGrants ? ResetSql + SupabaseGrantsSql : ResetSql, connection, transaction) { CommandTimeout = 600 })
+        {
+            await reset.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    private const string ResetSql = """
+        DROP SCHEMA IF EXISTS supabase_migrations CASCADE;
+        DROP SCHEMA IF EXISTS public CASCADE;
+        CREATE SCHEMA public;
+        GRANT ALL ON SCHEMA public TO CURRENT_USER;
+        GRANT USAGE ON SCHEMA public TO PUBLIC;
+        """;
+
+    private const string SupabaseGrantsSql = """
+        GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+        GRANT ALL ON SCHEMA public TO postgres, service_role;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+        """;
 
     private sealed class Session(NpgsqlConnection connection) : IMigrationSession
     {
@@ -107,7 +155,7 @@ public sealed class NpgsqlMigrationSqlExecutor : IMigrationSqlExecutor
             {
                 if (connection.State == System.Data.ConnectionState.Open)
                 {
-                    await using var unlock = new NpgsqlCommand("SELECT pg_advisory_unlock(hashtext('aide_supabase_migrations'))", connection);
+                    await using var unlock = new NpgsqlCommand(UnlockSql, connection);
                     await unlock.ExecuteNonQueryAsync();
                 }
             }

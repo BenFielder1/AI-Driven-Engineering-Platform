@@ -238,7 +238,10 @@ public static class DependencyInjection
         services.AddSingleton<Databases.RailwayPostgresProvider>();
         services.AddSingleton<Databases.ExternalDatabaseProvider>();
         services.AddSingleton<Databases.IDatabaseProviderResolver, Databases.DatabaseProviderResolver>();
-        services.AddSingleton<Databases.IMigrationSqlExecutor, Databases.NpgsqlMigrationSqlExecutor>();
+        services.AddSingleton<Databases.NpgsqlMigrationSqlExecutor>();
+        services.AddSingleton<Databases.FakeAwareMigrationSqlExecutor>();
+        services.AddSingleton<Databases.IMigrationSqlExecutor>(sp => sp.GetRequiredService<Databases.FakeAwareMigrationSqlExecutor>());
+        services.AddSingleton<Databases.IDatabaseSchemaReset>(sp => sp.GetRequiredService<Databases.FakeAwareMigrationSqlExecutor>());
         services.AddSingleton<Databases.SupabaseMigrationRunner>();
 
         // Platform connections (FR-142, §4.20, §4.21): each platform's REST or GraphQL API on its fixed host (§8: never

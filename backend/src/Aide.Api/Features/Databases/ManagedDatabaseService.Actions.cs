@@ -84,6 +84,27 @@ public sealed partial class ManagedDatabaseService
 
         var rows = await db.ManagedDatabases.Where(d => d.ProjectId == projectId).ToListAsync(cancellationToken);
         var row = rows.FirstOrDefault(d => d.Environment == environment);
+        var linkId = request.Link?.ResourceId.Trim();
+
+        // §4.21: the preview database is never production's (either side may be the one being set): a reset or an
+        // unmerged migration would otherwise reach production. A create that adopts by name is checked by the job.
+        if (mode is DatabaseSetupMode.Link or DatabaseSetupMode.External)
+        {
+            var wanted = new DatabaseIdentity(
+                provider,
+                mode == DatabaseSetupMode.Link ? linkId : null,
+                mode == DatabaseSetupMode.Link && provider == ManagedDatabaseProvider.Supabase ? linkId : null,
+                [request.External?.ConnectionString]);
+            if (rows.Any(other => other.Environment != environment && other.Status != ManagedDatabaseStatus.Removed
+                && DatabaseSeparationRules.Same(wanted, DatabaseIdentity.Of(other, secrets.Connection(other)))))
+            {
+                return (null, new DomainError(ErrorCodes.Validation, DatabaseSeparationRules.NotSeparateMessage)
+                {
+                    Field = mode == DatabaseSetupMode.Link ? "link.resourceId" : "external.connectionString",
+                });
+            }
+        }
+
         var name = await NameAsync(projectId, environment, request.Create?.Name, rows, cancellationToken);
         if (row is null)
         {
@@ -91,7 +112,6 @@ public sealed partial class ManagedDatabaseService
             db.ManagedDatabases.Add(row);
         }
 
-        var linkId = request.Link?.ResourceId.Trim();
         var keepsResource = row.Provider == provider && row.ResourceId is not null && mode == DatabaseSetupMode.Link && linkId == row.ResourceId;
         if (!keepsResource)
         {

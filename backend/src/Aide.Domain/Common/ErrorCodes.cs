@@ -338,6 +338,9 @@ public static class ErrorCodes
     /// <summary>FR-147, FR-148 (409): the preview database has migrations the branch no longer has; reset it to continue.</summary>
     public const string PreviewDatabaseDiverged = "PREVIEW_DATABASE_DIVERGED";
 
+    /// <summary>FR-148, §6 (409): the action can't run in the current state, e.g. a preview database reset while a preview rollout runs.</summary>
+    public const string InvalidState = "INVALID_STATE";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {
@@ -417,6 +420,7 @@ public static class ErrorCodes
         [InvalidDeployment] = 409,
         [DeploymentActionUnsupported] = 409,
         [PreviewDatabaseDiverged] = 409,
+        [InvalidState] = 409,
         [LinkExpired] = 410,
         [LinkUsed] = 409,
     };

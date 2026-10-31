@@ -115,7 +115,7 @@ public sealed partial class PullRequestJobHandler(
     IWorkingCopies workingCopies,
     AgentJobInputs inputs,
     LifecycleService lifecycle,
-    Deployments.DeploymentScheduler deployments,
+    Deployments.RolloutScheduler rollouts,
     Microsoft.Extensions.Options.IOptions<Notifications.AppOptions> appOptions,
     TimeProvider time,
     ILogger<PullRequestJobHandler> logger) : IJobHandler
@@ -211,12 +211,13 @@ public sealed partial class PullRequestJobHandler(
             version.PullRequestNumber = opened.Number;
             version.PullRequestUrl = opened.Url;
 
-            // FR-90: the PR opened or updated, so its head is deployed as a preview (when Vercel is set up); the review that
-            // follows waits for it. Recorded in this transaction, built by the deployment job.
+            // FR-147 (replaces FR-90's per-run preview): the PR opened or updated, so its head is rolled out to the preview
+            // environment (when deployment is set up); the review that follows waits for the rollout. Queued in this
+            // transaction, run by the preview_rollout job.
             var head = comparison?.HeadSha ?? await HeadAsync(project.Id, working.Branch, cancellationToken);
             if (head is not null)
             {
-                await deployments.AutoPreviewAsync(project.Id, version.Id, working.Branch, head, now, cancellationToken);
+                await rollouts.EnqueuePreviewAsync(project.Id, version.Id, working.Branch, head, Domain.Entities.DeploymentTrigger.Auto, null, now, cancellationToken);
             }
         }
 

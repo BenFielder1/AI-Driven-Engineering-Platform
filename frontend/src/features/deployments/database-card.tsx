@@ -24,6 +24,7 @@ import {
   provisioningStepLabels,
 } from './database-format'
 import { DatabaseSetupForm } from './database-setup-form'
+import { ResetPreviewDatabase } from './preview-database-reset'
 import { safeUrl, targetBindingSummary } from './deployment-format'
 import { useDeleteManagedDatabase, useRestoreManagedDatabase, type DatabaseCard } from './deployments-api'
 
@@ -234,7 +235,8 @@ function PausedNotice({ project, database: db, canManage }: { project: Project; 
 /**
  * Settings → Deployment database card (FR-152, §4.21): the provider, whose connection it uses, status, region, plan,
  * expiry, the dashboard link and connection summary, provisioning progress or failure, missing Supabase permissions,
- * warnings, and Paused with Restore. Owners provision, link or enter an External database and unlink it; other
+ * warnings, and Paused with Restore. The preview card offers "Reset preview database" to Owners (FR-148), prominently
+ * when a rollback removed migrations or the database diverged (`resetRecommended`). Owners provision, link or enter an External database and unlink it; other
  * members read it.
  */
 export function DatabaseCardView({ project, database: db, canManage }: { project: Project; database: DatabaseCard; canManage: boolean }) {
@@ -285,6 +287,18 @@ export function DatabaseCardView({ project, database: db, canManage }: { project
             </li>
           ))}
         </ul>
+      )}
+      {db.environment === 'preview' && db.resetRecommended && (
+        <Alert tone="warning" title="Reset recommended">
+          <p data-testid="database-reset-recommended">
+            The preview database has migrations the version branch no longer has (for example, after a rollback removed
+            them), so the next preview deployment is blocked until it&apos;s reset.
+            {canManage ? " Resetting drops the preview data; production isn't touched." : ' A project Owner can reset it.'}
+          </p>
+        </Alert>
+      )}
+      {db.environment === 'preview' && canManage && configured && !active && (
+        <ResetPreviewDatabase projectId={project.id} variant={db.resetRecommended ? 'primary' : 'secondary'} />
       )}
       {showForm && (
         <DatabaseSetupForm

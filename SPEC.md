@@ -1135,6 +1135,7 @@ Notes:
 | `GITLAB_RATE_LIMITED`, `BITBUCKET_RATE_LIMITED` | job code | Host rate limit during a job | "{host} is rate limiting requests. AIDE will retry." |
 | `DEPLOYMENT_ACTION_UNSUPPORTED` | 409 | Provider can't roll back or promote | "{platform} doesn't support this action." |
 | `PREVIEW_DATABASE_DIVERGED` | 409 | Preview DB has migrations the branch no longer has | "The preview database has migrations this branch no longer has. Reset the preview database to continue." |
+| `INVALID_STATE` | 409 | The action conflicts with work in progress (e.g. a preview reset while a rollout or reset runs, or the database isn't available yet) *(build, 2026-10-31)* | "This can't be done right now: {reason}." |
 | `MIGRATION_FAILED` | job code | Migration run failed | "A database migration failed: {detail}." |
 | `MIGRATION_HISTORY_DIVERGED` | job code | Recorded migration changed or disappeared | "The database's migration history doesn't match the repository." |
 | `DATABASE_PROVISIONING_FAILED` | job code | Provisioning failed | "Creating the database failed: {detail}." |

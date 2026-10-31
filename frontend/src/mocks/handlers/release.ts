@@ -52,6 +52,10 @@ export function seedRelease(
     mergeReasons: null,
     mergeStrategy: p.git.mergeStrategy,
     productionDeployment: null,
+    migrationRunId: null,
+    migrationsAppliedNotMerged: false,
+    rollout: null,
+    liveOn: [],
     ...overrides,
   }
   releases.push(release)

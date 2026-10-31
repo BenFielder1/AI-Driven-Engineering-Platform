@@ -1365,9 +1365,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** The project's persistent preview environment (members, FR-147, FR-148): the current preview rollout with each step (Supabase BaaS migrations → backend → frontend: state, URL, log tail, redeploy), notes (hosts without previews, preview using the production database) and whether the preview database diverged from the version branch (reset it to continue). */
+        get: operations["GetPreviewEnvironment"];
         put?: never;
-        /** Deploy the head of the version branch as a preview now (writer, FR-90); AIDE polls it (§4.15). 409 DEPLOYMENT_NOT_CONFIGURED without deployment settings. */
+        /** Roll the head of the version branch out to the preview environment now (writer, FR-147): a preview_rollout job deploys Supabase BaaS migrations, then the backend, then the frontend, each waiting for ready. Answers 202 with the queued rollout. */
         post: operations["CreatePreviewDeployment"];
         delete?: never;
         options?: never;
@@ -1455,6 +1456,23 @@ export interface paths {
         put?: never;
         /** Restore a paused Supabase project (Owner, FR-152, §4.21 "Paused"): POST /projects/{ref}/restore, then a database_provisioning job polls until it is available. Answers 202 with the card (provisioning). */
         post: operations["RestoreManagedDatabase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/databases/preview/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset the preview database (Owner, FR-148): a preview_database_reset job empties its schema (Supabase, External: AIDE connects; Render: over its external URL; Railway: the Owner empties it in Railway and AIDE records the reset) and, for Supabase BaaS, re-applies the base commit's migrations. Clears PREVIEW_DATABASE_DIVERGED; the next backend preview's pre-deploy re-applies every migration. Answers 202 with the job and method. */
+        post: operations["ResetPreviewDatabase"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3649,7 +3667,9 @@ export interface components {
          *     plan, expiry, the dashboard link (`resourceUrl`), a connection summary without secrets (host, port, database), the
          *     Supabase permissions the connection lacks (e.g. "API Key Secrets: Read"), the provisioning job, and `warnings`
          *     (`render_free_expiry`, `supabase_free_pausing`, `supabase_free_project_limit`,
-         *     `preview_uses_production_database`). Secrets are never returned.
+         *     `preview_uses_production_database`). Secrets are never returned. FR-148: on the preview card,
+         *     `resetRecommended` is true when the preview database has migrations the version branch no longer has (e.g. after a
+         *     rollback that removed migrations): offer "Reset preview database" (`POST …/databases/preview/reset`).
          */
         DeploymentDatabaseDto: {
             environment: components["schemas"]["DeploymentEnvironment"];
@@ -3675,6 +3695,8 @@ export interface components {
             warnings: string[];
             /** Format: date-time */
             updatedAt: null | string;
+            /** @default false */
+            resetRecommended: boolean;
         };
         /**
          * @description A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |
@@ -3690,7 +3712,9 @@ export interface components {
          *     `promote`), `platform` (the target's host; `provider` is `fake` in Fake mode), `current` (the
          *     deployment production serves now, per component), `canRollback` with `rollbackBlockedReason` when false
          *     (`unsupported`, `not_production`, `not_ready`, `unknown_at_platform`, `current`), and
-         *     `olderThanLatestMigration` (the rollback dialog's database warning; `null` = unknown, until M30 databases).
+         *     `olderThanLatestMigration` (FR-150, the rollback dialog's database warning: the production deployment was created
+         *     before the latest migration reached production — the latest Supabase BaaS production run that applied files, or in host
+         *     mode the latest ready production backend deploy whose pre-deploy ran; `null` = no migration known, or a preview).
          */
         DeploymentDto: {
             /** Format: uuid */
@@ -4677,6 +4701,16 @@ export interface components {
             resourceId: string;
         };
         /**
+         * @description FR-149: where a released version is live: the component, the host (`provider` and its `providerName`, e.g.
+         *     "Netlify") and the production `url` — for "Released 0.1.0 · live on Netlify and Render".
+         */
+        LiveTargetDto: {
+            component: components["schemas"]["DeploymentComponent"];
+            provider: components["schemas"]["DeploymentProvider"];
+            providerName: string;
+            url: null | string;
+        };
+        /**
          * @description The connection bound to a project (FR-79), shown to every member as e.g. "Anthropic · connected by Ana (••••a1b2)".
          *     Never contains the key. `credentialId` only lets the binding Owner recognise their own connection; nobody else can
          *     bind it (`CREDENTIAL_NOT_OWNER`).
@@ -5162,9 +5196,11 @@ export interface components {
             detail: null | string;
         };
         /**
-         * @description FR-90: the preview deployment a review cycle waited for (`compliance_report.external_checks.preview`): its id, final
-         *     (or last seen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 20
-         *     minutes; `null` when it didn't wait) and whether it gave up waiting (`timedOut`).
+         * @description FR-90, FR-147: the preview a review cycle waited for (`compliance_report.external_checks.preview`): the frontend (else
+         *     backend) preview deployment's id (the rollout id when nothing deployed, e.g. a blocked rollout), its final (or last
+         *     seen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 30 minutes;
+         *     `null` when it didn't wait) and whether it gave up waiting (`timedOut`). FR-147: `rollout` is the whole
+         *     preview rollout review waited for (every component and the migration run; `null` for v2 reports).
          */
         PreviewCheckDto: {
             /** Format: uuid */
@@ -5175,7 +5211,36 @@ export interface components {
             /** Format: int32 */
             waitedSeconds: null | number;
             timedOut: boolean;
+            rollout?: null | components["schemas"]["RolloutDto"];
         };
+        /**
+         * @description FR-148: the queued reset: its `jobId` and `method` (`reset_schema`: AIDE empties the schema, Supabase BaaS
+         *     then re-applies the base commit's migrations; `reset_schema_external`: Render, over its external URL;
+         *     `manual`: Railway — empty the preview Postgres in Railway, AIDE records the reset). The next backend preview's
+         *     pre-deploy re-applies every migration. Progress: `GET …/deployments/preview` (`databaseDiverged`).
+         */
+        PreviewDatabaseResetDto: {
+            /** Format: uuid */
+            jobId: string;
+            method: components["schemas"]["PreviewResetMethod"];
+        };
+        /**
+         * @description FR-147 Review page: the project's persistent preview environment: the `current` (newest) preview rollout, or
+         *     `null` before the first; `notes` for the page (e.g. "Preview uses the production database without this
+         *     version's migrations", FR-154); and `databaseDiverged` with its `divergedMessage` when the preview database has
+         *     migrations the version branch no longer has (FR-148: the Owner sees "Reset preview database").
+         */
+        PreviewEnvironmentDto: {
+            current: null | components["schemas"]["RolloutDto"];
+            notes: string[];
+            databaseDiverged: boolean;
+            divergedMessage: null | string;
+        };
+        /**
+         * @description How AIDE resets a preview database (FR-148).
+         * @enum {unknown}
+         */
+        PreviewResetMethod: "none" | "reset_schema" | "reset_schema_external" | "manual";
         ProblemDetails: {
             type?: null | string;
             title?: null | string;
@@ -5651,6 +5716,11 @@ export interface components {
          *     merge request's head moved since review (409) fails with `GIT_ERROR`. `mergeStrategy` is the project's current merge strategy (FR-65).
          *     `productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including
          *     redeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release.
+         *     FR-149: `rollout` is the release's production rollout timeline (migration run → backend → frontend with states and
+         *     URLs; `null` before it is queued) and `liveOn` where it is live (ready components with their host and URL, for
+         *     "Released 0.1.0 · live on Netlify and Render"). §4.21: `migrationRunId` is the Supabase BaaS production migration
+         *     run (before the merge); `migrationsAppliedNotMerged` is true when it applied migrations but the release failed
+         *     without merging (e.g. the PR was closed): the next version must keep those migration files.
          */
         ReleaseDto: {
             /** Format: uuid */
@@ -5678,6 +5748,12 @@ export interface components {
             mergeReasons: null | components["schemas"]["MergeReadinessReasonDto"][];
             mergeStrategy: components["schemas"]["MergeStrategy"];
             productionDeployment: null | components["schemas"]["DeploymentDto"];
+            /** Format: uuid */
+            migrationRunId?: null | string;
+            /** @default false */
+            migrationsAppliedNotMerged: boolean;
+            rollout?: null | components["schemas"]["RolloutDto"];
+            liveOn?: null | components["schemas"]["LiveTargetDto"][];
         };
         /**
          * @description FR-140, D-V4-7: AIDE's full release notes of a release attempt, for a host without Releases (Bitbucket: the annotated
@@ -5841,6 +5917,68 @@ export interface components {
             targetCheckpoint: number;
             reason: string;
         };
+        /**
+         * @description A preview or production rollout (FR-147, FR-149): `rolloutId` (the job id, = `deployments.rolloutId`), the
+         *     commit, its overall `state` (`running`, `succeeded`, `failed`, `blocked` — FR-148
+         *     `PREVIEW_DATABASE_DIVERGED`, reset the preview database —, `canceled` when a newer preview replaced it), the
+         *     error when it stopped, and its `steps` in order (migrations → backend → frontend).
+         */
+        RolloutDto: {
+            /** Format: uuid */
+            rolloutId: null | string;
+            environment: components["schemas"]["DeploymentEnvironment"];
+            state: components["schemas"]["RolloutState"];
+            /** Format: uuid */
+            releaseVersionId: string;
+            /** Format: uuid */
+            releaseId: null | string;
+            gitRef: string;
+            gitSha: string;
+            errorCode: null | string;
+            errorMessage: null | string;
+            steps: components["schemas"]["RolloutStepDto"][];
+            /** Format: date-time */
+            requestedAt: string;
+        };
+        /**
+         * @description A rollout's overall state. Wire values: `running`, `succeeded`, `failed`, `blocked`, `canceled`.
+         * @enum {unknown}
+         */
+        RolloutState: "running" | "succeeded" | "failed" | "blocked" | "canceled";
+        /**
+         * @description One step of a rollout (FR-147, FR-149): `step` (`migrations`, `backend`, `frontend`) and its
+         *     `state`. A deployment step names its `deploymentId`, `provider` (the host), `status`, `url`,
+         *     `inspectorUrl`, `buildLogTail` (masked) and error; `canRedeploy` is true when it finished (redeploy with
+         *     `POST …/deployments/{deploymentId}/redeploy`). The migrations step names its `migrationRunId` (details at
+         *     `GET …/migrations/{runId}`). `note` explains a skipped step (e.g. GitHub Pages has no previews).
+         */
+        RolloutStepDto: {
+            step: components["schemas"]["RolloutStepKind"];
+            state: components["schemas"]["RolloutStepState"];
+            provider: null | components["schemas"]["DeploymentProvider"];
+            /** Format: uuid */
+            deploymentId: null | string;
+            status: null | components["schemas"]["DeploymentStatus"];
+            url: null | string;
+            inspectorUrl: null | string;
+            buildLogTail: null | string;
+            errorCode: null | string;
+            errorMessage: null | string;
+            /** Format: uuid */
+            migrationRunId: null | string;
+            note: null | string;
+            canRedeploy: boolean;
+        };
+        /**
+         * @description A step of a preview or production rollout (FR-147, FR-149), in dependency order. Wire values: `migrations`, `backend`, `frontend`.
+         * @enum {unknown}
+         */
+        RolloutStepKind: "migrations" | "backend" | "frontend";
+        /**
+         * @description The state of a rollout step. Wire values: `pending`, `running`, `succeeded`, `failed`, `skipped`.
+         * @enum {unknown}
+         */
+        RolloutStepState: "pending" | "running" | "succeeded" | "failed" | "skipped";
         /** @description An artifact version a run used as input (FR-23). */
         RunInputArtifactDto: {
             type: components["schemas"]["ArtifactType"];
@@ -11970,6 +12108,46 @@ export interface operations {
             };
         };
     };
+    GetPreviewEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewEnvironmentDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     CreatePreviewDeployment: {
         parameters: {
             query?: never;
@@ -11987,7 +12165,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeploymentDto"];
+                    "application/json": components["schemas"]["RolloutDto"];
                 };
             };
             /** @description Unauthorized */
@@ -12017,7 +12195,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description DEPLOYMENT_NOT_CONFIGURED (no deployment settings or no bound connection) or DEPLOYMENT_ACTION_UNSUPPORTED (the frontend's provider has no previews, e.g. GitHub Pages; extension platform) */
+            /** @description DEPLOYMENT_NOT_CONFIGURED (no deployment target with a resource and bound connection), PREVIEW_DATABASE_DIVERGED (the preview database has migrations the branch no longer has: reset it first), DEPLOYMENT_ACTION_UNSUPPORTED (no target has previews, e.g. only GitHub Pages), INVALID_STATE (a preview database reset is queued or running) or CONFLICT (no version branch yet) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -12026,7 +12204,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            /** @description UPSTREAM_ERROR */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -12288,7 +12466,7 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentDatabaseDto"];
                 };
             };
-            /** @description VALIDATION (body, environment) or STACK_INCOMPATIBLE (the composition's database host doesn't allow this provider) */
+            /** @description VALIDATION (body, environment; link.resourceId or external.connectionString when it is the other environment's database: the preview database must be separate from production) or STACK_INCOMPATIBLE (the composition's database host doesn't allow this provider) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -12478,6 +12656,73 @@ export interface operations {
             };
             /** @description UPSTREAM_ERROR */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ResetPreviewDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewDatabaseResetDto"];
+                };
+            };
+            /** @description VALIDATION (the preview database isn't separate from production: AIDE never resets it) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project, or no preview database) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description INVALID_STATE (a preview rollout or reset is running, or the preview database isn't available yet) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

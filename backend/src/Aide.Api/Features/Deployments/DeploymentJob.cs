@@ -68,7 +68,8 @@ public sealed partial class DeploymentJobHandler(
 
         if (deployment.Environment == DeploymentEnvironment.Preview
             && await db.Deployments.AnyAsync(
-                d => d.ProjectId == deployment.ProjectId && d.Environment == DeploymentEnvironment.Preview && d.Id != deployment.Id && d.CreatedAt > deployment.CreatedAt,
+                d => d.ProjectId == deployment.ProjectId && d.Environment == DeploymentEnvironment.Preview && d.Component == deployment.Component
+                    && d.Id != deployment.Id && d.CreatedAt > deployment.CreatedAt,
                 cancellationToken))
         {
             deployment.Status = DeploymentStatus.Canceled;
@@ -206,7 +207,10 @@ public sealed partial class DeploymentJobHandler(
 
         if (deployment.Status == DeploymentStatus.Error)
         {
-            deployment.ErrorCode ??= ErrorCodes.PlatformError;
+            // FR-154: a backend whose pre-deploy (the platform-run ORM migration) failed records a migration failure.
+            deployment.ErrorCode ??= deployment.Component == DeploymentComponent.Backend && RolloutRules.IsPreDeployFailure(observed.ErrorMessage)
+                ? ErrorCodes.MigrationFailed
+                : ErrorCodes.PlatformError;
             deployment.ErrorMessage ??= observed.ErrorMessage ?? "The platform build failed.";
         }
 

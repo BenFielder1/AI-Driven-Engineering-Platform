@@ -26,6 +26,11 @@ namespace Aide.Api.Features.Release;
 /// merge request's head moved since review (409) fails with <c>GIT_ERROR</c>. <c>mergeStrategy</c> is the project's current merge strategy (FR-65).
 /// <c>productionDeployment</c> is the release's production deployment (FR-91: the newest for this release attempt, including
 /// redeploys; <c>null</c> when deployment isn't configured or not created yet). A failed one doesn't undo the release.
+/// FR-149: <c>rollout</c> is the release's production rollout timeline (migration run → backend → frontend with states and
+/// URLs; <c>null</c> before it is queued) and <c>liveOn</c> where it is live (ready components with their host and URL, for
+/// "Released 0.1.0 · live on Netlify and Render"). §4.21: <c>migrationRunId</c> is the Supabase BaaS production migration
+/// run (before the merge); <c>migrationsAppliedNotMerged</c> is true when it applied migrations but the release failed
+/// without merging (e.g. the PR was closed): the next version must keep those migration files.
 /// </summary>
 public sealed record ReleaseDto(
     Guid Id,
@@ -45,7 +50,11 @@ public sealed record ReleaseDto(
     DateTimeOffset? AwaitingMergeSince,
     IReadOnlyList<MergeReadinessReasonDto>? MergeReasons,
     MergeStrategy MergeStrategy,
-    Deployments.DeploymentDto? ProductionDeployment);
+    Deployments.DeploymentDto? ProductionDeployment,
+    Guid? MigrationRunId = null,
+    bool MigrationsAppliedNotMerged = false,
+    Deployments.RolloutDto? Rollout = null,
+    IReadOnlyList<Deployments.LiveTargetDto>? LiveOn = null);
 
 /// <summary>
 /// FR-140, D-V4-7: AIDE's full release notes of a release attempt, for a host without Releases (Bitbucket: the annotated

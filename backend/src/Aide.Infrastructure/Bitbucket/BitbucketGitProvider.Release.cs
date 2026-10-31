@@ -215,6 +215,7 @@ internal sealed partial class BitbucketGitProvider
 
         string mergeSha;
         var mergedExternally = false;
+        string? mergedHeadMismatch = null;
         if (mergedState)
         {
             if (pr.MergeCommit is not { } merged)
@@ -272,6 +273,15 @@ internal sealed partial class BitbucketGitProvider
                 return ReleaseOutcome.Failed(ErrorCodes.GitError, $"The project branch '{request.Branch}' isn't in the working copy; the release retries with a fresh fetch.", transient: true);
             }
 
+            // §4.21: with pre-merge production migrations, a pull request head Bitbucket doesn't report can't be checked.
+            if (pr.SourceCommit is null && request.ExpectedHeadSha is { Length: > 0 })
+            {
+                return ReleaseOutcome.Failed(
+                    ErrorCodes.GitError,
+                    $"Bitbucket didn't report the head of pull request #{id}, so AIDE can't confirm it is the commit the production migrations ran on; the release retries.",
+                    transient: true);
+            }
+
             // The merge is of the head AIDE fetched (and reviewed): a different pull request head means the branch moved.
             if (pr.SourceCommit is { } prHead && !BitbucketProjectRules.SameCommit(prHead, head))
             {
@@ -281,6 +291,12 @@ internal sealed partial class BitbucketGitProvider
                     transient: true);
             }
 
+            // §4.21: only the commit the production migrations ran on is merged.
+            if (request.HeadMovedSinceMigrations(head) is { } moved)
+            {
+                return moved;
+            }
+
             var merge = await MergeAsync(settings, access, request, id, head, cancellationToken);
             if (merge.Outcome is { } stopped)
             {
@@ -288,6 +304,14 @@ internal sealed partial class BitbucketGitProvider
             }
 
             mergeSha = merge.Sha!;
+
+            // §4.21: Bitbucket's merge call can't pin the head; a different merged head is recorded (the production
+            // rollout's post-merge run on the merge commit migrates whatever it added).
+            if (request.ExpectedHeadSha is { Length: > 0 } expected && merge.Source is { } mergedHead && !BitbucketProjectRules.SameCommit(mergedHead, expected))
+            {
+                LogMergedHeadMismatch(logger, settings.ProjectId, id, mergedHead, expected);
+                mergedHeadMismatch = mergedHead;
+            }
         }
 
         // The merge is on record as soon as it is known (before resolving the full hash and tagging).
@@ -316,14 +340,19 @@ internal sealed partial class BitbucketGitProvider
             return ToReleaseFailure(releaseFailure);
         }
 
-        return ReleaseOutcome.Released(mergeSha, request.Tag, alreadyTagged: false) with { MergedExternally = mergedExternally, ReleaseUrl = release.Url };
+        return ReleaseOutcome.Released(mergeSha, request.Tag, alreadyTagged: false) with
+        {
+            MergedExternally = mergedExternally,
+            ReleaseUrl = release.Url,
+            MergedHeadMismatch = mergedHeadMismatch,
+        };
     }
 
     /// <summary>
     /// FR-140: AIDE's merge of pull request <paramref name="id"/>: the merged commit, or the outcome that ends the attempt
     /// (awaiting the merge, the conflicts, a failure).
     /// </summary>
-    private async Task<(string? Sha, ReleaseOutcome? Outcome)> MergeAsync(
+    private async Task<(string? Sha, string? Source, ReleaseOutcome? Outcome)> MergeAsync(
         GitConnectionSettings settings, Access access, ReleaseRequest request, int id, string head, CancellationToken cancellationToken)
     {
         var repo = settings.RepoFullName!;
@@ -345,7 +374,7 @@ internal sealed partial class BitbucketGitProvider
                 var refusal = BitbucketMergeResult.ClassifyMergeError(merge.ConflictStatus!.Value);
                 LogMergeRefused(logger, settings.ProjectId, id, merge.ConflictStatus.Value);
                 var reason = Clean($"{refusal.Message} {merge.ConflictReason}");
-                return (null, refusal.Kind switch
+                return (null, null, refusal.Kind switch
                 {
                     HostMergeFailureKind.AwaitingMerge when refusal.Reason is null =>
                         await ConflictAsync(settings, request, head, cancellationToken) ?? ReleaseOutcome.Awaiting(reason, refused: true),
@@ -364,7 +393,7 @@ internal sealed partial class BitbucketGitProvider
                     if (after.Value is { State: "MERGED", MergeCommit: { } done })
                     {
                         LogMerged(logger, settings.ProjectId, id, done);
-                        return (done, null);
+                        return (done, after.Value.SourceCommit, null);
                     }
 
                     if (attempt < MergeTimeoutAttempts && after.Value is { State: "OPEN" })
@@ -373,7 +402,7 @@ internal sealed partial class BitbucketGitProvider
                     }
                 }
 
-                return (null, ToReleaseFailure(mergeFailure));
+                return (null, null, ToReleaseFailure(mergeFailure));
             }
 
             var answer = merge.Value!;
@@ -383,7 +412,7 @@ internal sealed partial class BitbucketGitProvider
                 var task = await FollowMergeTaskAsync(settings, access, id, answer.TaskPath, cancellationToken);
                 if (task.Outcome is { } taskOutcome)
                 {
-                    return (null, taskOutcome);
+                    return (null, null, taskOutcome);
                 }
 
                 mergedPr = task.PullRequest;
@@ -391,11 +420,11 @@ internal sealed partial class BitbucketGitProvider
 
             if (mergedPr?.MergeCommit is not { } sha)
             {
-                return (null, ReleaseOutcome.Failed(ErrorCodes.GitError, $"Bitbucket merged pull request #{id} but returned no merge commit.", transient: true));
+                return (null, null, ReleaseOutcome.Failed(ErrorCodes.GitError, $"Bitbucket merged pull request #{id} but returned no merge commit.", transient: true));
             }
 
             LogMerged(logger, settings.ProjectId, id, sha);
-            return (sha, null);
+            return (sha, mergedPr.SourceCommit, null);
         }
     }
 
@@ -637,6 +666,9 @@ internal sealed partial class BitbucketGitProvider
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Merged pull request #{Id} of project {ProjectId} as {Sha}")]
     private static partial void LogMerged(ILogger logger, Guid projectId, int id, string sha);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Bitbucket merged pull request #{Id} of project {ProjectId} at head {MergedHead}, not the migrated head {ExpectedHead}; the post-merge production run migrates it")]
+    private static partial void LogMergedHeadMismatch(ILogger logger, Guid projectId, int id, string mergedHead, string expectedHead);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Created the annotated tag {Tag} of Bitbucket project {ProjectId}")]
     private static partial void LogTagCreated(ILogger logger, Guid projectId, string tag);

@@ -71,6 +71,23 @@ public static class JobTypes
     public const string DatabaseProvisioning = "database_provisioning";
 
     /// <summary>
+    /// FR-147: deploys the PR head to the project's persistent preview environment in dependency order — Supabase BaaS
+    /// preview migrations, then the backend (its pre-deploy migrates its preview database), then the frontend — each step
+    /// waiting for <c>ready</c> (the job defers itself). Its deployment rows carry <c>rollout_id</c> = this job's id.
+    /// </summary>
+    public const string PreviewRollout = "preview_rollout";
+
+    /// <summary>
+    /// FR-149: after the release merge, deploys every target in order (Supabase BaaS migrations, backend, frontend),
+    /// adopting the platform's own deployment of the merge commit within 60 s or creating one; idempotent per
+    /// <c>(release_id, component)</c>.
+    /// </summary>
+    public const string ProductionRollout = "production_rollout";
+
+    /// <summary>FR-148: resets the preview database (schema reset; Supabase BaaS re-applies the base commit's migrations).</summary>
+    public const string PreviewDatabaseReset = "preview_database_reset";
+
+    /// <summary>
     /// FR-47: fan out one notification-worthy event (or a gate reminder, FR-15): in-app notifications for its recipients,
     /// one delivery row per subscribed project channel, then a first delivery attempt. Queued in the event's transaction.
     /// </summary>

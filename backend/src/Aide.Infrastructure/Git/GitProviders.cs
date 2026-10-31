@@ -375,6 +375,12 @@ internal sealed partial class GitHubGitProvider(
                         transient: true);
                 }
 
+                // §4.21: only the commit the production migrations ran on is merged (the merge call pins it).
+                if (request.HeadMovedSinceMigrations(head) is { } moved)
+                {
+                    return moved;
+                }
+
                 var merge = await MergePullAsync(client, pull, number, ReleaseRules.MergeTitle(request.ProjectName, tagName), head, token!, cancellationToken);
                 if (merge.Sha is not { } sha)
                 {
@@ -1007,6 +1013,12 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
                 await workingCopies.CreateTagAsync(
                     id, request.Tag, mergedBySomeone, ReleaseRules.TagMessage(request.ProjectName, request.Tag, request.Version), cancellationToken);
                 return ReleaseOutcome.Released(mergedBySomeone, request.Tag, alreadyTagged: false) with { MergedExternally = true };
+            }
+
+            // §4.21: only the commit the production migrations ran on is merged.
+            if (request.HeadMovedSinceMigrations(head) is { } moved)
+            {
+                return moved;
             }
 
             var merged = await workingCopies.MergeIntoDefaultAsync(

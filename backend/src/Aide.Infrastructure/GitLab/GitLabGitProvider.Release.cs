@@ -325,6 +325,12 @@ internal sealed partial class GitLabGitProvider
                     transient: true);
             }
 
+            // §4.21: only the commit the production migrations ran on is merged (the merge call pins it with sha).
+            if (request.HeadMovedSinceMigrations(head) is { } moved)
+            {
+                return moved;
+            }
+
             var project = await ApiAsync(settings, access, (c, t) => c.GetProjectAsync(t, repoId, cancellationToken), cancellationToken);
             if (project.Failure is { } projectFailure)
             {

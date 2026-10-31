@@ -21,6 +21,14 @@ export type ReadinessState = Schemas['ReadinessState']
 /** FR-152: one database card per environment. */
 export type DatabaseCard = Schemas['DeploymentDatabaseDto']
 export type ManagedDatabaseProvider = Schemas['ManagedDatabaseProvider']
+/** FR-147, FR-149: a preview or production rollout and its steps (migrations, backend, frontend). */
+export type Rollout = Schemas['RolloutDto']
+export type RolloutStep = Schemas['RolloutStepDto']
+export type RolloutState = Schemas['RolloutState']
+export type RolloutStepState = Schemas['RolloutStepState']
+export type PreviewEnvironment = Schemas['PreviewEnvironmentDto']
+export type LiveTarget = Schemas['LiveTargetDto']
+export type PreviewResetMethod = Schemas['PreviewResetMethod']
 
 export const deploymentComponents = ['frontend', 'backend'] as const satisfies readonly DeploymentComponent[]
 
@@ -43,6 +51,8 @@ export const deploymentKeys = {
   all: (id: string) => [...projectKeys.detail(id), 'deployments'] as const,
   list: (id: string, params: DeploymentListParams) => [...deploymentKeys.all(id), 'list', params] as const,
   settings: (id: string) => [...projectKeys.detail(id), 'deployment-settings'] as const,
+  /** Under `all`, so a new or redeployed deployment refreshes the preview environment too. */
+  preview: (id: string) => [...deploymentKeys.all(id), 'preview-environment'] as const,
 }
 
 /** While a deployment is queued or building, refetch every 10 s as a fallback to the live events (§4.15 cadence). */
@@ -219,7 +229,21 @@ function useInvalidateDeployments(projectId: string) {
     ])
 }
 
-/** FR-90: deploy the version branch head as a preview now (writer). */
+/** Polling while the current preview rollout runs (a fallback to the live events). An object so tests can shorten it. */
+export const previewRolloutPolling = { runningMs: 10_000 }
+
+/** FR-147: the project's persistent preview environment (the current rollout, notes, divergence), for any member. */
+export function usePreviewEnvironment(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: deploymentKeys.preview(projectId),
+    queryFn: async ({ signal }) =>
+      unwrap(await api.GET('/api/projects/{id}/deployments/preview', { params: { path: { id: projectId } }, signal })),
+    enabled,
+    refetchInterval: (query) => (query.state.data?.current?.state === 'running' ? previewRolloutPolling.runningMs : false),
+  })
+}
+
+/** FR-147: deploy the version branch head as a preview rollout now (writer); answers 202 with the rollout. */
 export function useCreatePreviewDeployment(projectId: string) {
   const invalidate = useInvalidateDeployments(projectId)
   return useMutation({
@@ -321,5 +345,26 @@ export function useRestoreManagedDatabase(projectId: string, environment: Deploy
       ),
     onSuccess: replace,
     onSettled: () => queryClient.invalidateQueries({ queryKey: deploymentKeys.settings(projectId) }),
+  })
+}
+
+/**
+ * FR-148 (Owner): reset the preview database (it drops the preview data); answers 202 with the job and how it is done
+ * (`manual` on Railway: the Owner empties it there). Refreshes the cards and the preview environment's divergence.
+ */
+export function useResetPreviewDatabase(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async () =>
+      unwrap(
+        await api.POST('/api/projects/{id}/settings/deployment/databases/preview/reset', {
+          params: { path: { id: projectId } },
+        }),
+      ),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: deploymentKeys.settings(projectId) }),
+        queryClient.invalidateQueries({ queryKey: deploymentKeys.preview(projectId) }),
+      ]),
   })
 }

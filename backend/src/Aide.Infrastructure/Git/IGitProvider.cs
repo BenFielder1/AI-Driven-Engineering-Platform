@@ -276,6 +276,22 @@ public sealed record ReleaseRequest(
     /// then waits for the release). An exception from it ends the release (nothing is merged).
     /// </summary>
     public Func<CancellationToken, Task>? OnMergeSubmitting { get; init; }
+
+    /// <summary>
+    /// FR-153, §4.21: the branch head the production migrations ran on (Supabase BaaS). AIDE merges only this commit: a
+    /// fetched head (which the host's PR head must equal, and the merge call pins) that differs fails the attempt
+    /// transiently, and the retry runs the migrations again on the new head first. <c>null</c>: no pre-merge migrations.
+    /// </summary>
+    public string? ExpectedHeadSha { get; init; }
+
+    /// <summary>The transient failure for a head that isn't <see cref="ExpectedHeadSha"/>; <c>null</c> when it is (or no pin).</summary>
+    public ReleaseOutcome? HeadMovedSinceMigrations(string head) =>
+        ExpectedHeadSha is { Length: > 0 } expected && !string.Equals(expected, head, StringComparison.OrdinalIgnoreCase)
+            ? ReleaseOutcome.Failed(
+                ErrorCodes.GitError,
+                $"The project branch moved to {head[..Math.Min(12, head.Length)]} after the production migrations ran on {expected[..Math.Min(12, expected.Length)]}; nothing was merged and the release runs the migrations again for the new head.",
+                transient: true)
+            : null;
 }
 
 /// <summary>How a release attempt ended at the provider.</summary>
@@ -350,6 +366,12 @@ public sealed record ReleaseOutcome(
     /// failure; the release job looks again shortly without counting an attempt.
     /// </summary>
     public bool MergePending { get; init; }
+
+    /// <summary>
+    /// FR-153, §4.21: the pull request head the host actually merged, when it differs from
+    /// <see cref="ReleaseRequest.ExpectedHeadSha"/> (a host that can't pin its merge, Bitbucket); <c>null</c> otherwise.
+    /// </summary>
+    public string? MergedHeadMismatch { get; init; }
 }
 
 /// <summary>The project PR to open (FR-36).</summary>

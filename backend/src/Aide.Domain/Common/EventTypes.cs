@@ -251,6 +251,28 @@ public static class EventTypes
     /// </summary>
     public const string DeploymentPreviewReady = "DEPLOYMENT_PREVIEW_READY";
 
+    /// <summary>
+    /// FR-147, FR-155: a preview rollout finished: <c>{rolloutId, releaseVersionId, gitSha, state, components[{component,
+    /// status, url}], migrationRunId}</c>.
+    /// </summary>
+    public const string PreviewRolloutCompleted = "PREVIEW_ROLLOUT_COMPLETED";
+
+    /// <summary>FR-148, FR-155: an Owner reset the preview database: <c>{databaseId, provider, method, migrationRunId}</c>.</summary>
+    public const string DatabaseReset = "DATABASE_RESET";
+
+    /// <summary>
+    /// FR-153, FR-155: a Supabase BaaS migration run failed: <c>{runId, environment, releaseId, gitSha, errorCode}</c>
+    /// (never SQL or row data).
+    /// </summary>
+    public const string MigrationRunFailed = "MIGRATION_RUN_FAILED";
+
+    /// <summary>
+    /// FR-153, §4.21: the host merged a pull request head other than the commit the pre-merge production migrations ran on
+    /// (Bitbucket can't pin its merge): <c>{releaseId, expectedHeadSha, mergedHeadSha, mergeCommitSha}</c>. The production
+    /// rollout's post-merge run on the merge commit applies whatever the merged head added.
+    /// </summary>
+    public const string MergedHeadMismatch = "MERGED_HEAD_MISMATCH";
+
     // Rollback (FR-44, FR-45)
     public const string RollbackCompleted = "ROLLBACK_COMPLETED";
 
@@ -276,7 +298,7 @@ public static class EventTypes
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
-        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady],
+        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady, PreviewRolloutCompleted, DatabaseReset, MigrationRunFailed, MergedHeadMismatch],
         [EventCategory.Rollback] = [RollbackCompleted],
         [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, GitBindingCleared, PresetChanged, StackChanged],
         [EventCategory.Integrity] = [IntegrityAlert],
@@ -296,6 +318,7 @@ public static class EventTypes
         ReviewFailed,
         ReleaseFailed,
         DeploymentFailed,
+        MigrationRunFailed,
         ArtifactCorrupted,
         IntegrityAlert,
     };

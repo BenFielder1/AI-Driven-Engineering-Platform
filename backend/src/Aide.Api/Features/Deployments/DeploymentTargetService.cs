@@ -29,6 +29,7 @@ public sealed partial class DeploymentTargetService(
     Git.GitHubRepoAccess github,
     IGitHubAppStore apps,
     Infrastructure.Git.IWorkingCopies workingCopies,
+    RolloutReader rollouts,
     JobEnqueuer jobs,
     TimeProvider time,
     ILogger<DeploymentTargetService> logger)
@@ -59,6 +60,13 @@ public sealed partial class DeploymentTargetService(
         }
 
         var databases = await databaseCards.CardsAsync(projectId, new Databases.StackCompositionView(composition?.Deploy.DatabaseHost), callerRole, cancellationToken);
+
+        // FR-148: offer the reset when the preview database has migrations the branch no longer has (e.g. after a rollback).
+        if (databases.Any(d => d.Environment == DeploymentEnvironment.Preview))
+        {
+            var diverged = (await rollouts.DivergedAsync(projectId, cancellationToken)).Count > 0;
+            databases = [.. databases.Select(d => d.Environment == DeploymentEnvironment.Preview ? d with { ResetRecommended = diverged } : d)];
+        }
         return new DeploymentSettingsDto(
             targets,
             databases,

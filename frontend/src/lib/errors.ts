@@ -167,6 +167,9 @@ export const errorMessages = {
   // provisioning job or a migration run; `{detail}` is added by withJobDetail() when the job recorded a message.
   PREVIEW_DATABASE_DIVERGED:
     "The preview database has migrations this branch no longer has. Reset the preview database to continue.",
+  // FR-148, §6 (409): the action can't run in the current state (e.g. a preview rollout or reset is running). errorMessage()
+  // adds the server's reason: "This can't be done right now. {reason}".
+  INVALID_STATE: "This can't be done right now. Wait for the running work to finish, then try again.",
   MIGRATION_FAILED: "A database migration failed.",
   MIGRATION_HISTORY_DIVERGED: "The database's migration history doesn't match the repository.",
   DATABASE_PROVISIONING_FAILED: "Creating the database failed.",
@@ -403,6 +406,11 @@ export const contextualErrorMessages = {
     CREDENTIAL_INVALID:
       "The platform rejected the bound connection's token. Replace the token under Connections, then try again.",
     UPSTREAM_ERROR: "The database platform failed or couldn't be reached, so nothing was restored. Try again in a moment.",
+  },
+  /** POST /api/projects/:id/settings/deployment/databases/preview/reset (FR-148). */
+  databaseReset: {
+    FORBIDDEN: "Only project Owners can reset the preview database.",
+    NOT_FOUND: "There's no preview database to reset. Set one up first.",
   },
   /** POST /api/projects/:id/settings/deployment/targets/:component/verify (FR-144). */
   deploymentVerify: {
@@ -1190,6 +1198,12 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
       const blocked = rollbackBlockedMessage(error);
       if (blocked) {
         return blocked;
+      }
+    }
+    if (error.errorCode === "INVALID_STATE") {
+      const reason = error.message.startsWith("Request failed with HTTP") ? "" : error.message.trim();
+      if (reason) {
+        return `This can't be done right now. ${/[.!?]$/.test(reason) ? reason : `${reason}.`}`;
       }
     }
     if (error.errorCode) {

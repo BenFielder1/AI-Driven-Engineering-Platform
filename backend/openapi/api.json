@@ -7395,11 +7395,61 @@
       }
     },
     "/api/projects/{id}/deployments/preview": {
+      "get": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "The project's persistent preview environment (members, FR-147, FR-148): the current preview rollout with each step (Supabase BaaS migrations → backend → frontend: state, URL, log tail, redeploy), notes (hosts without previews, preview using the production database) and whether the preview database diverged from the version branch (reset it to continue).",
+        "operationId": "GetPreviewEnvironment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewEnvironmentDto"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "Deployments"
         ],
-        "summary": "Deploy the head of the version branch as a preview now (writer, FR-90); AIDE polls it (§4.15). 409 DEPLOYMENT_NOT_CONFIGURED without deployment settings.",
+        "summary": "Roll the head of the version branch out to the preview environment now (writer, FR-147): a preview_rollout job deploys Supabase BaaS migrations, then the backend, then the frontend, each waiting for ready. Answers 202 with the queued rollout.",
         "operationId": "CreatePreviewDeployment",
         "parameters": [
           {
@@ -7438,7 +7488,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeploymentDto"
+                  "$ref": "#/components/schemas/RolloutDto"
                 }
               }
             }
@@ -7454,7 +7504,7 @@
             }
           },
           "409": {
-            "description": "DEPLOYMENT_NOT_CONFIGURED (no deployment settings or no bound connection) or DEPLOYMENT_ACTION_UNSUPPORTED (the frontend's provider has no previews, e.g. GitHub Pages; extension platform)",
+            "description": "DEPLOYMENT_NOT_CONFIGURED (no deployment target with a resource and bound connection), PREVIEW_DATABASE_DIVERGED (the preview database has migrations the branch no longer has: reset it first), DEPLOYMENT_ACTION_UNSUPPORTED (no target has previews, e.g. only GitHub Pages), INVALID_STATE (a preview database reset is queued or running) or CONFLICT (no version branch yet)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7464,7 +7514,7 @@
             }
           },
           "502": {
-            "description": "UPSTREAM_ERROR (Vercel failed or couldn't be reached)",
+            "description": "UPSTREAM_ERROR",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7865,7 +7915,7 @@
             }
           },
           "400": {
-            "description": "VALIDATION (body, environment) or STACK_INCOMPATIBLE (the composition's database host doesn't allow this provider)",
+            "description": "VALIDATION (body, environment; link.resourceId or external.connectionString when it is the other environment's database: the preview database must be separate from production) or STACK_INCOMPATIBLE (the composition's database host doesn't allow this provider)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8067,6 +8117,88 @@
           },
           "502": {
             "description": "UPSTREAM_ERROR",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings/deployment/databases/preview/reset": {
+      "post": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Reset the preview database (Owner, FR-148): a preview_database_reset job empties its schema (Supabase, External: AIDE connects; Render: over its external URL; Railway: the Owner empties it in Railway and AIDE records the reset) and, for Supabase BaaS, re-applies the base commit's migrations. Clears PREVIEW_DATABASE_DIVERGED; the next backend preview's pre-deploy re-applies every migration. Answers 202 with the job and method.",
+        "operationId": "ResetPreviewDatabase",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND (project, or no preview database)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewDatabaseResetDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION (the preview database isn't separate from production: AIDE never resets it)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "INVALID_STATE (a preview rollout or reset is running, or the preview database isn't available yet)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16176,9 +16308,13 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "resetRecommended": {
+            "type": "boolean",
+            "default": false
           }
         },
-        "description": "FR-152 database card (Settings → Deployment `databases[]`, one per environment when the composition has a\ndatabase host or a database is set): `provider` (`supabase`, `render`, `railway`, `external`,\n`fake`), `status` (`not_configured`, `provisioning`, `available`, `error`, `paused`,\n`expiring`, `removed`), the composition's `hostOption`, the binding (\"connected by\"), the resource, region,\nplan, expiry, the dashboard link (`resourceUrl`), a connection summary without secrets (host, port, database), the\nSupabase permissions the connection lacks (e.g. \"API Key Secrets: Read\"), the provisioning job, and `warnings`\n(`render_free_expiry`, `supabase_free_pausing`, `supabase_free_project_limit`,\n`preview_uses_production_database`). Secrets are never returned."
+        "description": "FR-152 database card (Settings → Deployment `databases[]`, one per environment when the composition has a\ndatabase host or a database is set): `provider` (`supabase`, `render`, `railway`, `external`,\n`fake`), `status` (`not_configured`, `provisioning`, `available`, `error`, `paused`,\n`expiring`, `removed`), the composition's `hostOption`, the binding (\"connected by\"), the resource, region,\nplan, expiry, the dashboard link (`resourceUrl`), a connection summary without secrets (host, port, database), the\nSupabase permissions the connection lacks (e.g. \"API Key Secrets: Read\"), the provisioning job, and `warnings`\n(`render_free_expiry`, `supabase_free_pausing`, `supabase_free_project_limit`,\n`preview_uses_production_database`). Secrets are never returned. FR-148: on the preview card,\n`resetRecommended` is true when the preview database has migrations the version branch no longer has (e.g. after a\nrollback that removed migrations): offer \"Reset preview database\" (`POST …/databases/preview/reset`)."
       },
       "DeploymentDto": {
         "required": [
@@ -16333,7 +16469,7 @@
             ]
           }
         },
-        "description": "A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |\ncanceled`. `url` is the deployment URL once known, `inspectorUrl` Vercel's inspector page. `gitRef`\nand `gitSha` are what was deployed; `releaseVersion` is the version (e.g. `1.2.0`) of\n`releaseVersionId`; `releaseId` is the release attempt of a production deployment (`null` for previews).\nA failed deployment carries `errorCode` (`PLATFORM_ERROR`, formerly `VERCEL_ERROR`; `DEPLOYMENT_TIMEOUT`), `errorMessage` and\n`buildLogTail` (the end of the build log). `trigger` is `auto` (AIDE, after execution or the release\nmerge), `manual`, `promote` or `redeploy`; `triggeredBy` is `null` for `auto` (or a\ndeleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` (or\n`rollback`) row made current again.\nFR-150, FR-151: `component` (`frontend`, `backend`), `kind` (`deploy`, `rollback`,\n`promote`), `platform` (the target's host; `provider` is `fake` in Fake mode), `current` (the\ndeployment production serves now, per component), `canRollback` with `rollbackBlockedReason` when false\n(`unsupported`, `not_production`, `not_ready`, `unknown_at_platform`, `current`), and\n`olderThanLatestMigration` (the rollback dialog's database warning; `null` = unknown, until M30 databases)."
+        "description": "A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |\ncanceled`. `url` is the deployment URL once known, `inspectorUrl` Vercel's inspector page. `gitRef`\nand `gitSha` are what was deployed; `releaseVersion` is the version (e.g. `1.2.0`) of\n`releaseVersionId`; `releaseId` is the release attempt of a production deployment (`null` for previews).\nA failed deployment carries `errorCode` (`PLATFORM_ERROR`, formerly `VERCEL_ERROR`; `DEPLOYMENT_TIMEOUT`), `errorMessage` and\n`buildLogTail` (the end of the build log). `trigger` is `auto` (AIDE, after execution or the release\nmerge), `manual`, `promote` or `redeploy`; `triggeredBy` is `null` for `auto` (or a\ndeleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` (or\n`rollback`) row made current again.\nFR-150, FR-151: `component` (`frontend`, `backend`), `kind` (`deploy`, `rollback`,\n`promote`), `platform` (the target's host; `provider` is `fake` in Fake mode), `current` (the\ndeployment production serves now, per component), `canRollback` with `rollbackBlockedReason` when false\n(`unsupported`, `not_production`, `not_ready`, `unknown_at_platform`, `current`), and\n`olderThanLatestMigration` (FR-150, the rollback dialog's database warning: the production deployment was created\nbefore the latest migration reached production — the latest Supabase BaaS production run that applied files, or in host\nmode the latest ready production backend deploy whose pre-deploy ran; `null` = no migration known, or a preview)."
       },
       "DeploymentEnvInventoryDto": {
         "required": [
@@ -19064,6 +19200,33 @@
         },
         "description": "FR-144: link an existing platform resource (from `GET /api/me/connections/platforms/:id/resources`)."
       },
+      "LiveTargetDto": {
+        "required": [
+          "component",
+          "provider",
+          "providerName",
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "component": {
+            "$ref": "#/components/schemas/DeploymentComponent"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/DeploymentProvider"
+          },
+          "providerName": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-149: where a released version is live: the component, the host (`provider` and its `providerName`, e.g.\n\"Netlify\") and the production `url` — for \"Released 0.1.0 · live on Netlify and Render\"."
+      },
       "LlmBindingDto": {
         "required": [
           "credentialId",
@@ -20390,9 +20553,82 @@
           },
           "timedOut": {
             "type": "boolean"
+          },
+          "rollout": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RolloutDto"
+              }
+            ]
           }
         },
-        "description": "FR-90: the preview deployment a review cycle waited for (`compliance_report.external_checks.preview`): its id, final\n(or last seen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 20\nminutes; `null` when it didn't wait) and whether it gave up waiting (`timedOut`)."
+        "description": "FR-90, FR-147: the preview a review cycle waited for (`compliance_report.external_checks.preview`): the frontend (else\nbackend) preview deployment's id (the rollout id when nothing deployed, e.g. a blocked rollout), its final (or last\nseen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 30 minutes;\n`null` when it didn't wait) and whether it gave up waiting (`timedOut`). FR-147: `rollout` is the whole\npreview rollout review waited for (every component and the migration run; `null` for v2 reports)."
+      },
+      "PreviewDatabaseResetDto": {
+        "required": [
+          "jobId",
+          "method"
+        ],
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "method": {
+            "$ref": "#/components/schemas/PreviewResetMethod"
+          }
+        },
+        "description": "FR-148: the queued reset: its `jobId` and `method` (`reset_schema`: AIDE empties the schema, Supabase BaaS\nthen re-applies the base commit's migrations; `reset_schema_external`: Render, over its external URL;\n`manual`: Railway — empty the preview Postgres in Railway, AIDE records the reset). The next backend preview's\npre-deploy re-applies every migration. Progress: `GET …/deployments/preview` (`databaseDiverged`)."
+      },
+      "PreviewEnvironmentDto": {
+        "required": [
+          "current",
+          "notes",
+          "databaseDiverged",
+          "divergedMessage"
+        ],
+        "type": "object",
+        "properties": {
+          "current": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RolloutDto"
+              }
+            ]
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "databaseDiverged": {
+            "type": "boolean"
+          },
+          "divergedMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-147 Review page: the project's persistent preview environment: the `current` (newest) preview rollout, or\n`null` before the first; `notes` for the page (e.g. \"Preview uses the production database without this\nversion's migrations\", FR-154); and `databaseDiverged` with its `divergedMessage` when the preview database has\nmigrations the version branch no longer has (FR-148: the Owner sees \"Reset preview database\")."
+      },
+      "PreviewResetMethod": {
+        "enum": [
+          "none",
+          "reset_schema",
+          "reset_schema_external",
+          "manual"
+        ],
+        "description": "How AIDE resets a preview database (FR-148)."
       },
       "ProblemDetails": {
         "type": "object",
@@ -21906,9 +22142,39 @@
                 "$ref": "#/components/schemas/DeploymentDto"
               }
             ]
+          },
+          "migrationRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "migrationsAppliedNotMerged": {
+            "type": "boolean",
+            "default": false
+          },
+          "rollout": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RolloutDto"
+              }
+            ]
+          },
+          "liveOn": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/LiveTargetDto"
+            }
           }
         },
-        "description": "A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint\n`checkpoint`. `status` is `in_progress` while the release job is queued or running, then\n`succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`, or\n`awaiting_merge` (FR-65) when the merge was refused or the strategy is `manual`: `awaitingMergeSince` is\nwhen it started waiting and `mergeReasons` are the merge-readiness reasons (FR-84) recorded then (`null`\notherwise); the merge poll then completes it once the PR is merged on GitHub (§4.14).\nA failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict\n`conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`\nfor Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).\n`completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`\n(e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails\nthe release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.\nFailure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,\n`GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and\n`MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can\nretry with `POST /release`. `githubReleaseUrl` is the host release created for the tag: the GitHub Release\n(FR-64), the GitLab Release, or the Bitbucket annotated tag's page (FR-140; Bitbucket has no Releases); `null` for\nLocal or before it exists. AIDE's full release notes of a succeeded Bitbucket release (the tag's message, FR-140,\nD-V4-7) are read with `GET …/releases/{releaseId}/notes`. A GitLab merge refused because the\nmerge request's head moved since review (409) fails with `GIT_ERROR`. `mergeStrategy` is the project's current merge strategy (FR-65).\n`productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including\nredeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release."
+        "description": "A release attempt (FR-42 amended by FR-64, FR-43) of release version `releaseVersionId`, approved at checkpoint\n`checkpoint`. `status` is `in_progress` while the release job is queued or running, then\n`succeeded` (merged into the default branch and tagged `tag`, `mergeCommitSha` set) or `failed`, or\n`awaiting_merge` (FR-65) when the merge was refused or the strategy is `manual`: `awaitingMergeSince` is\nwhen it started waiting and `mergeReasons` are the merge-readiness reasons (FR-84) recorded then (`null`\notherwise); the merge poll then completes it once the PR is merged on GitHub (§4.14).\nA failed release carries `errorCode` (e.g. `MERGE_CONFLICT`) and `errorMessage`; on a merge conflict\n`conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`\nfor Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).\n`completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`\n(e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails\nthe release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.\nFailure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,\n`GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and\n`MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can\nretry with `POST /release`. `githubReleaseUrl` is the host release created for the tag: the GitHub Release\n(FR-64), the GitLab Release, or the Bitbucket annotated tag's page (FR-140; Bitbucket has no Releases); `null` for\nLocal or before it exists. AIDE's full release notes of a succeeded Bitbucket release (the tag's message, FR-140,\nD-V4-7) are read with `GET …/releases/{releaseId}/notes`. A GitLab merge refused because the\nmerge request's head moved since review (409) fails with `GIT_ERROR`. `mergeStrategy` is the project's current merge strategy (FR-65).\n`productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including\nredeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release.\nFR-149: `rollout` is the release's production rollout timeline (migration run → backend → frontend with states and\nURLs; `null` before it is queued) and `liveOn` where it is live (ready components with their host and URL, for\n\"Released 0.1.0 · live on Netlify and Render\"). §4.21: `migrationRunId` is the Supabase BaaS production migration\nrun (before the merge); `migrationsAppliedNotMerged` is true when it applied migrations but the release failed\nwithout merging (e.g. the PR was closed): the next version must keep those migration files."
       },
       "ReleaseNotesDto": {
         "required": [
@@ -22383,6 +22649,205 @@
           }
         },
         "description": "Roll the project back to an earlier checkpoint (FR-44, FR-63, §4.8, §4.10). `targetCheckpoint` must be below the\ncurrent checkpoint, recorded in the release version in development, and not a release-phase checkpoint; `reason` is\nrecorded on the rollback and its state transition."
+      },
+      "RolloutDto": {
+        "required": [
+          "rolloutId",
+          "environment",
+          "state",
+          "releaseVersionId",
+          "releaseId",
+          "gitRef",
+          "gitSha",
+          "errorCode",
+          "errorMessage",
+          "steps",
+          "requestedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "rolloutId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "environment": {
+            "$ref": "#/components/schemas/DeploymentEnvironment"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RolloutState"
+          },
+          "releaseVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "releaseId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "gitRef": {
+            "type": "string"
+          },
+          "gitSha": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errorMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RolloutStepDto"
+            }
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "A preview or production rollout (FR-147, FR-149): `rolloutId` (the job id, = `deployments.rolloutId`), the\ncommit, its overall `state` (`running`, `succeeded`, `failed`, `blocked` — FR-148\n`PREVIEW_DATABASE_DIVERGED`, reset the preview database —, `canceled` when a newer preview replaced it), the\nerror when it stopped, and its `steps` in order (migrations → backend → frontend)."
+      },
+      "RolloutState": {
+        "enum": [
+          "running",
+          "succeeded",
+          "failed",
+          "blocked",
+          "canceled"
+        ],
+        "description": "A rollout's overall state. Wire values: `running`, `succeeded`, `failed`, `blocked`, `canceled`."
+      },
+      "RolloutStepDto": {
+        "required": [
+          "step",
+          "state",
+          "provider",
+          "deploymentId",
+          "status",
+          "url",
+          "inspectorUrl",
+          "buildLogTail",
+          "errorCode",
+          "errorMessage",
+          "migrationRunId",
+          "note",
+          "canRedeploy"
+        ],
+        "type": "object",
+        "properties": {
+          "step": {
+            "$ref": "#/components/schemas/RolloutStepKind"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RolloutStepState"
+          },
+          "provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentProvider"
+              }
+            ]
+          },
+          "deploymentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentStatus"
+              }
+            ]
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inspectorUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "buildLogTail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errorMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "migrationRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "canRedeploy": {
+            "type": "boolean"
+          }
+        },
+        "description": "One step of a rollout (FR-147, FR-149): `step` (`migrations`, `backend`, `frontend`) and its\n`state`. A deployment step names its `deploymentId`, `provider` (the host), `status`, `url`,\n`inspectorUrl`, `buildLogTail` (masked) and error; `canRedeploy` is true when it finished (redeploy with\n`POST …/deployments/{deploymentId}/redeploy`). The migrations step names its `migrationRunId` (details at\n`GET …/migrations/{runId}`). `note` explains a skipped step (e.g. GitHub Pages has no previews)."
+      },
+      "RolloutStepKind": {
+        "enum": [
+          "migrations",
+          "backend",
+          "frontend"
+        ],
+        "description": "A step of a preview or production rollout (FR-147, FR-149), in dependency order. Wire values: `migrations`, `backend`, `frontend`."
+      },
+      "RolloutStepState": {
+        "enum": [
+          "pending",
+          "running",
+          "succeeded",
+          "failed",
+          "skipped"
+        ],
+        "description": "The state of a rollout step. Wire values: `pending`, `running`, `succeeded`, `failed`, `skipped`."
       },
       "RunInputArtifactDto": {
         "required": [

@@ -154,6 +154,7 @@ public class ErrorCodesTests
             ["CONNECTION_SCOPE_INSUFFICIENT"] = 400,
             ["UPSTREAM_RATE_LIMITED"] = 429,
             ["PREVIEW_DATABASE_DIVERGED"] = 409,
+            ["INVALID_STATE"] = 409,
         };
 
         foreach (var (code, status) in expected)

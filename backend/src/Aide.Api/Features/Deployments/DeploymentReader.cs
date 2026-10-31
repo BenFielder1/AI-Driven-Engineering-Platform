@@ -133,9 +133,11 @@ public static class DeploymentReader
             .Select(t => new { t.Id, t.ProjectId, t.Component, t.Provider })
             .ToListAsync(cancellationToken);
         var current = new Dictionary<Guid, IReadOnlyDictionary<DeploymentComponent, Deployment>>();
+        var migrations = new Dictionary<Guid, MigrationMarks>();
         foreach (var projectId in projectIds)
         {
             current[projectId] = await CurrentProductionAsync(db, projectId, cancellationToken);
+            migrations[projectId] = await MigrationMarksAsync(db, projectId, cancellationToken);
         }
 
         return
@@ -153,9 +155,48 @@ public static class DeploymentReader
                     r.TriggeredBy is { } by && users.TryGetValue(by, out var name) ? new DeploymentUserDto(by, name) : null,
                     platform,
                     serving?.Id == r.Id,
-                    ServesProduction(r, serving));
+                    ServesProduction(r, serving),
+                    migrations[r.ProjectId].For(r.Component));
             }),
         ];
+    }
+
+    /// <summary>
+    /// FR-150: when the latest migration reached production (<see cref="MigrationWarningRules"/>): Supabase BaaS → the
+    /// newest successful production run that applied a file (applies to every component); host mode (a production
+    /// database without AIDE runs) → the newest ready production backend deploy (its pre-deploy ran; backend only).
+    /// </summary>
+    private sealed record MigrationMarks(DateTimeOffset? Baas, DateTimeOffset? HostBackend)
+    {
+        public DateTimeOffset? For(DeploymentComponent component) =>
+            MigrationWarningRules.Latest(Baas, component == DeploymentComponent.Backend ? HostBackend : null);
+    }
+
+    private static async Task<MigrationMarks> MigrationMarksAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
+    {
+        var runs = await db.DatabaseMigrationRuns.AsNoTracking()
+            .Where(r => r.ProjectId == projectId && r.Environment == DeploymentEnvironment.Production && r.Status == MigrationRunStatus.Succeeded)
+            .Select(r => new { r.FinishedAt, r.Applied })
+            .ToListAsync(cancellationToken);
+        if (runs.Count > 0)
+        {
+            return new MigrationMarks(runs.Where(r => r.Applied.Count > 0).Max(r => r.FinishedAt), null);
+        }
+
+        var hostMode = await db.ManagedDatabases.AsNoTracking()
+            .AnyAsync(d => d.ProjectId == projectId && d.Environment == DeploymentEnvironment.Production && d.Status != ManagedDatabaseStatus.Removed, cancellationToken);
+        if (!hostMode)
+        {
+            return new MigrationMarks(null, null);
+        }
+
+        var latest = await db.Deployments.AsNoTracking()
+            .Where(d => d.ProjectId == projectId && d.Environment == DeploymentEnvironment.Production && d.Component == DeploymentComponent.Backend
+                && d.Kind == DeploymentKind.Deploy && d.Status == DeploymentStatus.Ready)
+            .OrderByDescending(d => d.CreatedAt)
+            .Select(d => (DateTimeOffset?)d.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        return new MigrationMarks(null, latest);
     }
 
     /// <summary>
@@ -178,7 +219,9 @@ public static class DeploymentReader
     /// component). <paramref name="servesProduction"/>: production serves its platform deployment (<see cref="ServesProduction"/>;
     /// defaults to <paramref name="current"/>), so it is blocked from rollback with reason <c>current</c>.
     /// </summary>
-    public static DeploymentDto ToDto(Deployment d, string releaseVersion, DeploymentUserDto? triggeredBy, DeploymentProvider? platform = null, bool current = false, bool? servesProduction = null)
+    public static DeploymentDto ToDto(
+        Deployment d, string releaseVersion, DeploymentUserDto? triggeredBy, DeploymentProvider? platform = null, bool current = false, bool? servesProduction = null,
+        DateTimeOffset? latestMigrationAt = null)
     {
         ArgumentNullException.ThrowIfNull(d);
         var host = platform ?? d.Provider;
@@ -209,6 +252,6 @@ public static class DeploymentReader
             current,
             blocked is null,
             blocked,
-            DeploymentRollbackRules.OlderThanLatestMigration(d.CreatedAt, null));
+            d.Environment == DeploymentEnvironment.Production ? MigrationWarningRules.OlderThanLatestMigration(d.CreatedAt, latestMigrationAt) : null);
     }
 }

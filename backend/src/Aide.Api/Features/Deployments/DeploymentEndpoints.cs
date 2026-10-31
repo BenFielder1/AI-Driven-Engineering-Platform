@@ -100,16 +100,21 @@ public static class DeploymentEndpoints
             .Produces<IReadOnlyList<DeploymentDto>>()
             .ProducesValidationProblem();
 
+        deployments.MapGet("/preview", GetPreviewEnvironment)
+            .WithName("GetPreviewEnvironment")
+            .WithSummary("The project's persistent preview environment (members, FR-147, FR-148): the current preview rollout with each step (Supabase BaaS migrations → backend → frontend: state, URL, log tail, redeploy), notes (hosts without previews, preview using the production database) and whether the preview database diverged from the version branch (reset it to continue).")
+            .Produces<PreviewEnvironmentDto>();
+
         deployments.MapPost("/preview", CreatePreviewDeployment)
             .WithName("CreatePreviewDeployment")
-            .WithSummary("Deploy the head of the version branch as a preview now (writer, FR-90); AIDE polls it (§4.15). 409 DEPLOYMENT_NOT_CONFIGURED without deployment settings.")
-            .Produces<DeploymentDto>(StatusCodes.Status202Accepted)
+            .WithSummary("Roll the head of the version branch out to the preview environment now (writer, FR-147): a preview_rollout job deploys Supabase BaaS migrations, then the backend, then the frontend, each waiting for ready. Answers 202 with the queued rollout.")
+            .Produces<RolloutDto>(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithResponseDescriptions(
-                (StatusCodes.Status409Conflict, "DEPLOYMENT_NOT_CONFIGURED (no deployment settings or no bound connection) or DEPLOYMENT_ACTION_UNSUPPORTED (the frontend's provider has no previews, e.g. GitHub Pages; extension platform)"),
-                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (Vercel failed or couldn't be reached)"));
+                (StatusCodes.Status409Conflict, "DEPLOYMENT_NOT_CONFIGURED (no deployment target with a resource and bound connection), PREVIEW_DATABASE_DIVERGED (the preview database has migrations the branch no longer has: reset it first), DEPLOYMENT_ACTION_UNSUPPORTED (no target has previews, e.g. only GitHub Pages), INVALID_STATE (a preview database reset is queued or running) or CONFLICT (no version branch yet)"),
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR"));
 
         deployments.MapPost("/{deploymentId:guid}/rollback", RollbackDeployment)
             .WithName("RollbackDeployment")
@@ -416,12 +421,24 @@ public static class DeploymentEndpoints
         return TypedResults.Ok(await DeploymentReader.ListAsync(db, id, filter, releaseVersionId, cancellationToken, component: componentFilter));
     }
 
-    private static async Task<Results<Accepted<DeploymentDto>, ProblemHttpResult>> CreatePreviewDeployment(
+    private static async Task<Results<Ok<PreviewEnvironmentDto>, ProblemHttpResult>> GetPreviewEnvironment(
+        Guid id, IProjectAccess access, RolloutReader reader, CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        return TypedResults.Ok(await reader.PreviewAsync(id, cancellationToken));
+    }
+
+    private static async Task<Results<Accepted<RolloutDto>, ProblemHttpResult>> CreatePreviewDeployment(
         Guid id,
         IProjectAccess access,
-        ICurrentUser currentUser,
         AideDbContext db,
-        DeploymentScheduler scheduler,
+        RolloutScheduler rollouts,
+        RolloutReader reader,
         WorkingCopyPreparer preparer,
         IWorkingCopies workingCopies,
         TimeProvider time,
@@ -438,15 +455,15 @@ public static class DeploymentEndpoints
             return NotConfigured();
         }
 
-        // §4.20: a provider without previews (GitHub Pages) can't deploy one, as promote checks rollback.
-        var provider = await db.DeploymentTargets.AsNoTracking()
-            .Where(t => t.ProjectId == id && t.Component == DeploymentComponent.Frontend)
-            .Select(t => (DeploymentProvider?)t.Provider)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (provider is { } platform && !DeploymentPlatforms.Capabilities(platform).Previews)
+        // §4.20: when no target has previews (only GitHub Pages), there is nothing to roll out.
+        var providers = await db.DeploymentTargets.AsNoTracking()
+            .Where(t => t.ProjectId == id && t.ResourceId != null)
+            .Select(t => t.Provider)
+            .ToListAsync(cancellationToken);
+        if (providers.Count > 0 && providers.All(p => !DeploymentPlatforms.Capabilities(p).Previews))
         {
             return ApiProblems.Platform(
-                new DomainError(ErrorCodes.DeploymentActionUnsupported, $"{DeploymentPlatforms.DisplayName(platform)} doesn't support this action."), platform);
+                new DomainError(ErrorCodes.DeploymentActionUnsupported, $"{DeploymentPlatforms.DisplayName(providers[0])} doesn't support this action."), providers[0]);
         }
 
         var version = await db.CurrentReleaseVersionAsync(id, cancellationToken);
@@ -466,13 +483,40 @@ public static class DeploymentEndpoints
             return ApiProblems.Of(ErrorCodes.Conflict, "The version branch can't be read yet; try again once execution has committed a step.");
         }
 
-        var deployment = await scheduler.AddAsync(
-            new NewDeployment(id, version.Id, null, DeploymentEnvironment.Preview, branch, sha, DeploymentTrigger.Manual, grant.Value.UserId),
-            currentUser.Actor,
-            Now(time),
-            cancellationToken);
-        return await AcceptedAsync(db, id, deployment, cancellationToken);
+        // FR-148: a reset in progress answers first (the database may still look diverged until it runs; checked again below
+        // under the lock), then a preview database with migrations this branch no longer has must be reset first.
+        if (await rollouts.PreviewResetPendingAsync(id, cancellationToken))
+        {
+            return ResetPending();
+        }
+
+        var missing = await rollouts.DivergedAsync(id, sha, cancellationToken);
+        if (missing.Count > 0)
+        {
+            return ApiProblems.Of(ErrorCodes.PreviewDatabaseDiverged, PreviewDatabaseRules.Describe(missing));
+        }
+
+        // FR-148: under the project lock (as the preview reset), so a rollout is never queued beside a pending reset.
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await Projects.ProjectLocks.LockProjectAsync(db, id, cancellationToken);
+        if (await rollouts.PreviewResetPendingAsync(id, cancellationToken))
+        {
+            return ResetPending();
+        }
+
+        var job = await rollouts.EnqueuePreviewAsync(id, version.Id, branch, sha, DeploymentTrigger.Manual, grant.Value.UserId, Now(time), cancellationToken);
+        if (job is null)
+        {
+            return NotConfigured();
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return TypedResults.Accepted($"/api/projects/{id}/deployments/preview", await reader.ForJobAsync(job, cancellationToken));
     }
+
+    private static ProblemHttpResult ResetPending() =>
+        ApiProblems.Of(ErrorCodes.InvalidState, "The preview database is being reset. Wait for it to finish, then deploy the preview.");
 
     /// <summary>
     /// FR-150 (and v2 FR-91 promote, its alias): makes an earlier ready production deployment current by the provider's
@@ -618,7 +662,9 @@ public static class DeploymentEndpoints
         }
 
         var redeploy = await scheduler.AddAsync(
-            new NewDeployment(id, deployment.ReleaseVersionId, deployment.ReleaseId, deployment.Environment, deployment.GitRef, deployment.GitSha, DeploymentTrigger.Redeploy, grant.Value.UserId, deployment.Component),
+            new NewDeployment(
+                id, deployment.ReleaseVersionId, deployment.ReleaseId, deployment.Environment, deployment.GitRef, deployment.GitSha, DeploymentTrigger.Redeploy, grant.Value.UserId,
+                deployment.Component, deployment.RolloutId),
             currentUser.Actor,
             Now(time),
             cancellationToken);

@@ -71,16 +71,6 @@ public class DeploymentRollbackRulesTests
     }
 
     [Fact]
-    public void FR150_The_migration_warning_is_unknown_until_databases_exist()
-    {
-        var at = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
-
-        Assert.Null(DeploymentRollbackRules.OlderThanLatestMigration(at, null));
-        Assert.True(DeploymentRollbackRules.OlderThanLatestMigration(at, at.AddDays(1)));
-        Assert.False(DeploymentRollbackRules.OlderThanLatestMigration(at, at.AddDays(-1)));
-    }
-
-    [Fact]
     public void FR144_A_Cloudflare_target_is_in_Pages_mode_when_its_resource_id_is_pages_prefixed()
     {
         Assert.True(DeploymentRollbackRules.IsCloudflarePages("pages:site"));

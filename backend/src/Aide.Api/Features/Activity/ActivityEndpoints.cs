@@ -240,6 +240,10 @@ internal static class ActivitySummary
             EventTypes.DeploymentUpdated => $"{Get("target") ?? "Deployment"} deployment {Get("status") ?? "updated"}{(Get("errorCode") is { } code ? $" ({code})" : string.Empty)}",
             EventTypes.DeploymentFailed => $"{Get("target") ?? "Production"} deployment failed: {Get("errorCode") ?? "error"}",
             EventTypes.DeploymentPreviewReady => $"Preview ready{(Get("url") is { } url ? $" at {url}" : string.Empty)}",
+            EventTypes.PreviewRolloutCompleted => $"Preview rollout {Get("state") ?? "finished"}{(Get("errorCode") is { } rolloutCode ? $" ({rolloutCode})" : string.Empty)}",
+            EventTypes.DatabaseReset => $"Preview database reset ({Get("method") ?? "reset_schema"})",
+            EventTypes.MigrationRunFailed => $"{Get("environment") ?? "Database"} migration run failed: {Get("errorCode") ?? "error"}",
+            EventTypes.MergedHeadMismatch => $"The host merged {Short(Get("mergedHeadSha"))}, not the migrated head {Short(Get("expectedHeadSha"))}; the production rollout migrates the merge commit",
             EventTypes.DeadLetterRetried => $"Dead-lettered {Get("jobType") ?? "?"} job retried by an Admin",
             _ when Get("type") is { } artifactType && Get("version") is { } version
                 => $"{Humanize(type)}: {artifactType} v{version}",
@@ -252,6 +256,9 @@ internal static class ActivitySummary
         payload.TryGetPropertyValue("layersChanged", out var node) && node is JsonArray layers && layers.Count > 0
             ? string.Join(", ", layers.Select(l => l?.ToString() ?? "?"))
             : "no layers";
+
+    /// <summary>A commit id shortened to 12 characters ("?" when missing).</summary>
+    private static string Short(string? sha) => sha is null ? "?" : sha[..Math.Min(12, sha.Length)];
 
     /// <summary><c>ARTIFACT_APPROVED</c> → "Artifact approved".</summary>
     private static string Humanize(string type)

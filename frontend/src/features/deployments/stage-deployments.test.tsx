@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
-import { seedDeployment, seedDeploymentSettings, seedVercelConnection } from '../../mocks/handlers/deployments'
+import { makeRollout, makeRolloutStep, seedDeployment, seedDeploymentSettings, seedVercelConnection } from '../../mocks/handlers/deployments'
 import { makeReleaseVersion, type StoredProject } from '../../mocks/handlers/projects'
 import { seedRelease } from '../../mocks/handlers/release'
 import { categoryScores, seedComplianceReport, seedReviewPhase } from '../../mocks/handlers/review'
@@ -105,6 +105,34 @@ describe('Review page → preview deployment (FR-90)', () => {
     const preview = within(await screen.findByRole('region', { name: 'External checks' })).getByTestId('report-preview')
     expect(preview).toHaveTextContent('Review stopped waiting for the preview')
     expect(preview).toHaveTextContent('after 20 min')
+  })
+
+  it('FR147_cycle_detail_rollout: a v4 cycle shows the whole preview rollout it waited for, read-only', async () => {
+    const project = seedProjectAs('owner', (p) => {
+      seedReviewPhase(p)
+      const rollout = makeRollout(p, {
+        state: 'failed',
+        steps: [
+          makeRolloutStep('backend', { state: 'failed', provider: 'render', status: 'error', deploymentId: 'be', errorMessage: 'Pre-deploy exited with 1.', buildLogTail: LOG, canRedeploy: true }),
+          makeRolloutStep('frontend', { state: 'skipped', provider: 'netlify', note: 'Not started because the backend preview failed.' }),
+        ],
+      })
+      seedComplianceReport(p, {
+        externalChecks: {
+          checks: [],
+          checksWaitedSeconds: null,
+          checksTimedOut: false,
+          preview: { deploymentId: 'be', status: 'error', url: null, buildLogTail: LOG, waitedSeconds: 60, timedOut: false, rollout },
+        },
+      })
+    })
+    await openReview(project)
+    const preview = within(await screen.findByRole('region', { name: 'External checks' })).getByTestId('report-preview')
+    expect(within(preview).getByTestId('rollout-state')).toHaveTextContent('Failed')
+    expect(preview).toHaveTextContent('a failed preview migration a critical data model finding')
+    expect(within(within(preview).getByTestId('rollout-step-backend')).getByTestId('deployment-failure')).toHaveTextContent('Pre-deploy exited with 1.')
+    expect(within(preview).getByTestId('rollout-step-frontend')).toHaveTextContent('Skipped: Not started because the backend preview failed.')
+    expect(within(preview).queryByRole('button', { name: /Redeploy/ })).not.toBeInTheDocument()
   })
 
   it('FR90_viewer_cannot_redeploy', async () => {

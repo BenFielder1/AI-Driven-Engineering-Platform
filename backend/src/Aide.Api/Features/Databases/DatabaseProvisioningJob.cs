@@ -27,6 +27,7 @@ public sealed partial class DatabaseProvisioningJobHandler(
     ManagedDatabaseService databases,
     ManagedDatabaseSecrets secrets,
     IDatabaseProviderResolver providers,
+    DatabaseSeparation separation,
     TimeProvider time,
     ILogger<DatabaseProvisioningJobHandler> logger) : IJobHandler
 {
@@ -117,6 +118,14 @@ public sealed partial class DatabaseProvisioningJobHandler(
         secrets.SetConnection(row, connection with { Step = payload.Mode == DatabaseSetupMode.Create ? ManagedDatabaseService.StepCreating : ManagedDatabaseService.StepLinking });
         await db.SaveChangesAsync(cancellationToken);
 
+        // §4.21: the other environment's database may have been linked since the PUT: never touch it (a linked Supabase
+        // project would get a new password).
+        if (payload.Mode == DatabaseSetupMode.Link)
+        {
+            var linked = new DatabaseIdentity(row.Provider, payload.ResourceId, row.Provider == ManagedDatabaseProvider.Supabase ? payload.ResourceId : null, []);
+            await EnsureSeparateAsync(row, connection, linked, cancellationToken);
+        }
+
         // §4.21: AIDE generates the password of what it creates, and resets a linked Supabase project's it doesn't hold.
         var needsPassword = payload.Mode == DatabaseSetupMode.Create
             ? row.Provider is ManagedDatabaseProvider.Supabase or ManagedDatabaseProvider.Railway
@@ -126,6 +135,9 @@ public sealed partial class DatabaseProvisioningJobHandler(
             auth,
             new DatabaseSetupRequest(row.ProjectId, row.Environment, payload.Mode, payload.Name, payload.Region, payload.Plan, payload.ResourceId, password, host),
             cancellationToken);
+
+        // §4.21: a create can adopt an existing resource by name; it must not be the other environment's database.
+        await EnsureSeparateAsync(row, connection, new DatabaseIdentity(row.Provider, result.ResourceId, null, []), cancellationToken);
         row.ResourceId = result.ResourceId;
         row.Region = result.Region ?? row.Region;
         row.Plan = result.Plan ?? row.Plan;
@@ -153,6 +165,9 @@ public sealed partial class DatabaseProvisioningJobHandler(
         ManagedDatabase row, ManagedDatabaseConnection connection, DatabasePoll poll, IDatabaseProvider provider, DatabaseAuth auth, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var stored = (poll.Connection ?? connection) with { Step = ManagedDatabaseService.StepSyncingEnv, JobId = connection.JobId, ErrorMessage = null };
+
+        // §4.21: checked again with the connection details the platform returned, before they are saved.
+        await EnsureSeparateAsync(row, connection, DatabaseIdentity.Of(row, stored), cancellationToken);
         row.Status = poll.Status == ManagedDatabaseStatus.Expiring ? ManagedDatabaseStatus.Available : poll.Status;
         row.ExpiresAt = poll.ExpiresAt;
         row.Region = poll.Region ?? row.Region;
@@ -201,6 +216,23 @@ public sealed partial class DatabaseProvisioningJobHandler(
             };
             platform.LastValidatedAt = now;
         }
+    }
+
+    /// <summary>
+    /// §4.21: when <paramref name="identity"/> is the other environment's database, this database forgets the resource and
+    /// its secrets and becomes <c>error</c> (<c>VALIDATION</c>), and the job fails for good; otherwise nothing.
+    /// </summary>
+    private async Task EnsureSeparateAsync(ManagedDatabase row, ManagedDatabaseConnection connection, DatabaseIdentity identity, CancellationToken cancellationToken)
+    {
+        if (!await separation.SharesOtherEnvironmentAsync(row.ProjectId, row.Environment, identity, cancellationToken))
+        {
+            return;
+        }
+
+        row.ResourceId = null;
+        secrets.SetPassword(row, null);
+        var cleared = new ManagedDatabaseConnection { Name = connection.Name, ConnectedByUserId = connection.ConnectedByUserId, JobId = connection.JobId };
+        await FailAsync(row, cleared, ErrorCodes.Validation, $"{DatabaseSeparationRules.NotSeparateMessage}: this is the {(row.Environment == DeploymentEnvironment.Preview ? "production" : "preview")} database. Choose another one.", cancellationToken);
     }
 
     /// <summary>Records the failure on the database (saved), then fails the job for good.</summary>

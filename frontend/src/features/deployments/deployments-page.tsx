@@ -10,7 +10,7 @@ import { ErrorState, LoadingState } from '../../components/ui/states'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { useProjectAccess } from '../projects/project-context'
 import { RelativeTime } from '../projects/relative-time'
-import { DeployPreviewButton, RedeployButton } from './deploy-buttons'
+import { DeployPreviewButton, RedeployButton, redeployTargetOf } from './deploy-buttons'
 import {
   componentLabels,
   currentProduction,
@@ -178,7 +178,7 @@ export function DeploymentsPage() {
                 {action}
               </Button>
             )}
-            {mayRedeploy && !active && <RedeployButton projectId={project.id} deployment={d} />}
+            {mayRedeploy && !active && <RedeployButton projectId={project.id} deployment={redeployTargetOf(d)} />}
             {blocked && (
               <span className="text-xs text-muted-foreground" data-testid="rollback-blocked">
                 {blocked}
