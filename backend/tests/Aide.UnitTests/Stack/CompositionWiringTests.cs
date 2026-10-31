@@ -279,6 +279,28 @@ public sealed class CompositionWiringTests
     }
 
     [Fact]
+    public void FR126_FR129_The_Fake_Next_js_full_stack_plan_writes_route_handlers_that_cover_the_specs_endpoints()
+    {
+        var stack = Of("fe-nextjs", "none", "none", null, null);
+        var reply = new FakePlanGeneratorResponder().Respond(Rendered(AgentKind.PlanGenerator, new()
+        {
+            ["PROJECT_REQUEST"] = "# Demo: Recipe Finder\n\n## Summary\nRecipes.",
+            ["TECHNICAL_SPECIFICATION"] = "## 2. Functional Requirements\n- **FR-1** x. Given a, when b, then c.",
+            ["MAX_FILES_PER_STEP"] = "20",
+            ["STACK_GUIDANCE"] = StackGuidance.Plan(stack, repoEmpty: true),
+        }));
+
+        var plan = PlanDocument.ParseAgentOutput(reply, 20, PlanAgents.ForStack(stack, repoEmpty: true, new HashSet<string>(StringComparer.Ordinal)));
+
+        Assert.True(plan.IsSuccess, plan.Error is null ? null : string.Join(" | ", plan.Error.Details));
+        var step = Assert.Single(plan.Value, s => s.Agent == StackAgents.FrontendEngineer);
+        var path = Assert.Single(step.Files, f => f.Path.EndsWith("/route.ts", StringComparison.Ordinal)).Path;
+        Assert.Equal("frontend/src/app/api/recipes/route.ts", path);
+        SourceFile[] files = [new SourceFile(path, FakeStackScripts.Content(StackAgents.FrontendEngineer, path, "Demo", 3, "Pages")!)];
+        Assert.Empty(DeterministicChecks.EndpointCoverage(["/api/recipes", "/api/recipes/{id}"], files));
+    }
+
+    [Fact]
     public void FR126_A_health_endpoint_missing_from_the_backend_is_a_minor_feature_coverage_finding()
     {
         var finding = Assert.Single(StackReviewChecks.Run(Aspnet(), new StackReviewInput([new SourceFile("backend/src/App.Api/Program.cs", "var app = builder.Build();\n")])));

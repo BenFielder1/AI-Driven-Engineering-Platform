@@ -158,6 +158,13 @@ public static class FakeStackScripts
         if (c.FrontendPack is { } frontend && c.Has(StackAgents.FrontendEngineer))
         {
             var files = FrontendFiles(frontend, c.FrontendPath!, r, rs, suffix).ToList();
+
+            // FR-120: Next.js full-stack has no backend layer, so its route handlers carry the spec's endpoints.
+            if (frontend == "fe-nextjs" && c.BackendPack is null)
+            {
+                files.Add((P(c.FrontendPath!, $"src/app/api/{rs}{suffix}/route.ts"), "create"));
+            }
+
             if (c.BackendPack is not null && c.ContractFiles.Count > 0 && frontend is "fe-react-vite" or "fe-vue" or "fe-vanilla" or "fe-nextjs")
             {
                 files.Add((P(c.FrontendPath!, "src/api/generated/schema.d.ts"), action));
@@ -258,6 +265,13 @@ public static class FakeStackScripts
                 return $"// {header}\n// Health: {live}, {ready}\n";
             default:
                 break;
+        }
+
+        // A Next.js route handler is named by its folder (src/app/api/recipes/route.ts).
+        if (fileName.Equals("route.ts", StringComparison.Ordinal) && segments.Length >= 3 && segments[^3] == "api")
+        {
+            var resources = ResourceOf(segments[^2]);
+            return $"// {header}\n// Routes: GET/POST /api/{resources}, GET/PUT/DELETE /api/{resources}/:id\n";
         }
 
         // Endpoint files name the spec's endpoints, so the review's endpoint check finds them.
