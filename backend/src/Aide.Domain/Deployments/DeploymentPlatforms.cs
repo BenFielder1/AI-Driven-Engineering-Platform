@@ -164,6 +164,7 @@ public static class DeploymentPlatforms
         DeploymentProvider.Render =>
         [
             "Free web services sleep after 15 minutes without traffic.",
+            "Free web services have no pre-deploy command: the container runs migrations at start (single instance).",
             "Free Render Postgres expires after 30 days.",
         ],
         DeploymentProvider.Railway => ["The Free and Trial plans limit usage and allow 100 API requests an hour."],

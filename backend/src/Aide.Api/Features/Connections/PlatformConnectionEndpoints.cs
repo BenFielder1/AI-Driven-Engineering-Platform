@@ -97,7 +97,7 @@ public static class PlatformConnectionEndpoints
 
         group.MapGet("/{id:guid}/resources", ListPlatformConnectionResources)
             .WithName("ListPlatformConnectionResources")
-            .WithSummary("FR-142 picker: the connection's resources of a type (default: the provider's first): Vercel projects; Netlify sites; Cloudflare workers or projects (Pages); Render services or regions; Railway projects or regions; Supabase projects, orgs or regions. accountId scopes the list (default: the connection's account). A type the provider doesn't list → 400 VALIDATION.")
+            .WithSummary("FR-142 picker: the connection's resources of a type (default: the provider's first): Vercel projects; Netlify sites; Cloudflare workers or projects (Pages); Render services, regions or databases (Render Postgres); Railway projects, regions or databases (Postgres services); Supabase projects, orgs or regions. accountId scopes the list (default: the connection's account). A type the provider doesn't list → 400 VALIDATION.")
             .Produces<IReadOnlyList<PlatformResourceDto>>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)

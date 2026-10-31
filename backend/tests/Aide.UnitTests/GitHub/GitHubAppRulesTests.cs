@@ -28,6 +28,8 @@ public class GitHubAppRulesTests
                 ["workflows"] = "write",
                 ["administration"] = "write",
                 ["pages"] = "write",
+                ["actions_variables"] = "write",
+                ["actions"] = "write",
                 ["metadata"] = "read",
                 ["checks"] = "read",
                 ["statuses"] = "read",

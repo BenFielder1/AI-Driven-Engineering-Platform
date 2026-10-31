@@ -427,7 +427,7 @@ internal sealed partial class GitHubGitProvider(
                 return ReleaseOutcome.Failed(ErrorCodes.GitError, reason, transient);
             }
 
-            return ReleaseOutcome.Released(mergeSha, tagName, alreadyTagged: false) with { MergedExternally = mergedExternally };
+            return ReleaseOutcome.Released(mergeSha, tagName, alreadyTagged: false) with { MergedExternally = mergedExternally, MergedHead = pr.Merged ? pr.HeadSha : null };
         }
         catch (GitCommandException ex)
         {
@@ -1012,7 +1012,7 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
 
                 await workingCopies.CreateTagAsync(
                     id, request.Tag, mergedBySomeone, ReleaseRules.TagMessage(request.ProjectName, request.Tag, request.Version), cancellationToken);
-                return ReleaseOutcome.Released(mergedBySomeone, request.Tag, alreadyTagged: false) with { MergedExternally = true };
+                return ReleaseOutcome.Released(mergedBySomeone, request.Tag, alreadyTagged: false) with { MergedExternally = true, MergedHead = head };
             }
 
             // §4.21: only the commit the production migrations ran on is merged.

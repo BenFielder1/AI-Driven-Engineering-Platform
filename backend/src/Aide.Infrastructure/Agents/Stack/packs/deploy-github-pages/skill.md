@@ -35,6 +35,7 @@ jobs:
         env:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}   # cross-origin only; the frontend's prefix
+          # plus one line per other public inventory variable the frontend reads, e.g. VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       - run: cp frontend/dist/index.html frontend/dist/404.html   # SPA fallback (SPAs only)
       - uses: actions/upload-pages-artifact@v4
         with: { path: frontend/dist }
@@ -60,6 +61,7 @@ jobs:
 
 ## Environment variables
 - Only build-time public values, from `env:` in the workflow or repository variables (`vars.X`). No runtime secrets exist: everything in the bundle is public.
+- AIDE syncs the project's public inventory variables (production values) to repository variables under the same names, and removes deleted ones. Pass each one the frontend reads to the build step as `NAME: ${{ vars.NAME }}`. Sensitive variables are never sent, so never read a secret here.
 - Cross-origin: the API URL (`VITE_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, or Angular config) comes from a repository variable; the backend's `CORS_ALLOWED_ORIGINS` includes the Pages origin (`https://<user>.github.io`).
 
 ## Database

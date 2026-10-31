@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
@@ -66,9 +67,176 @@ public sealed class GitHubPagesDeploymentProvider(GitHubApi api) : IDeploymentPr
             : new ProviderTargetCheck(false, "GitHub Pages builds from a branch, not the Pages workflow; set the target up again.", null);
     }
 
-    /// <summary>§4.20: GitHub Pages has no environment variables of its own (build values live in the workflow).</summary>
-    public Task<IReadOnlyList<DeploymentEnvWritten>> SyncEnvAsync(DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvSyncRequest request, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<DeploymentEnvWritten>>([]);
+    /// <summary>
+    /// FR-145, FR-146, §4.22: build-time values reach the Pages workflow as repository Actions variables
+    /// (<c>/repos/{o}/{r}/actions/variables</c>), which it reads as <c>vars.X</c>. Only production values are written (Pages
+    /// has no previews, so a preview value is recorded and sent nowhere). A variable <see cref="GitHubPagesRules.EnvRefusal"/>
+    /// refuses is never sent (one written earlier is removed) and comes back <see cref="DeploymentEnvWritten.Refused"/>.
+    /// Write: <c>PATCH</c>, then <c>POST</c> if it doesn't exist. Delete: <c>DELETE</c>; already gone is fine. One variable
+    /// GitHub won't take comes back refused with its reason and the others still go; what stops the batch is what would stop
+    /// them all too (a rejected token, a missing permission, a rate limit). A failed call keeps the variable's id on its
+    /// refused result, so the repository variable isn't forgotten and the next sync (its <c>syncError</c> makes it pending)
+    /// updates or deletes it again. A failed delete of a removed key is thrown after the rest.
+    /// </summary>
+    public async Task<IReadOnlyList<DeploymentEnvWritten>> SyncEnvAsync(DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvSyncRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        ArgumentNullException.ThrowIfNull(request);
+        var (owner, repo) = Repo(target);
+        var basePath = $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repo)}/actions/variables";
+        var written = new List<DeploymentEnvWritten>();
+        foreach (var key in request.Writes.GroupBy(w => w.Key, StringComparer.Ordinal))
+        {
+            var refusal = key.Select(w => GitHubPagesRules.EnvRefusal(w.Key, w.Value, w.Public, w.Sensitive)).FirstOrDefault(r => r is not null);
+            try
+            {
+                if (refusal is not null)
+                {
+                    if (key.Any(w => w.ExistingId is not null))
+                    {
+                        await DeleteVariableAsync(auth, basePath, key.Key, cancellationToken);
+                    }
+
+                    written.AddRange(key.Select(w => new DeploymentEnvWritten(w.Key, w.Target, string.Empty, refusal)));
+                    continue;
+                }
+
+                if (key.FirstOrDefault(w => w.Target == DeploymentEnvironment.Production) is { } production)
+                {
+                    await UpsertVariableAsync(auth, basePath, production, cancellationToken);
+                }
+
+                written.AddRange(key.Select(w => new DeploymentEnvWritten(w.Key, w.Target, GitHubPagesRules.EnvId(w.Key, w.Target))));
+            }
+            catch (DeploymentProviderException ex) when (OnlyThisVariable(ex))
+            {
+                var reason = refusal is null ? ex.Message : $"{refusal} The old value is still in the repository's variables; AIDE tries to remove it again at the next sync. ({ex.Message})";
+                written.AddRange(key.Select(w => new DeploymentEnvWritten(w.Key, w.Target, w.ExistingId ?? string.Empty, reason)));
+            }
+        }
+
+        DeploymentProviderException? deleteFailure = null;
+        foreach (var key in request.Deletes.Select(GitHubPagesRules.ProductionKeyOf).OfType<string>().Distinct(StringComparer.Ordinal))
+        {
+            try
+            {
+                await DeleteVariableAsync(auth, basePath, key, cancellationToken);
+            }
+            catch (DeploymentProviderException ex) when (OnlyThisVariable(ex))
+            {
+                deleteFailure ??= ex;
+            }
+        }
+
+        return deleteFailure is null ? written : throw deleteFailure;
+    }
+
+    /// <summary>A failure that says nothing about the next variable: not a rejected token, a missing permission or a rate limit.</summary>
+    private static bool OnlyThisVariable(DeploymentProviderException ex) =>
+        ex.Failure is not (DeploymentFailure.CredentialRejected or DeploymentFailure.PermissionMissing or DeploymentFailure.RateLimited);
+
+    /// <summary>
+    /// FR-145, FR-146: the push of the merge commit starts the workflow, so a variable synced after that run started isn't in
+    /// its build. Such a run is cancelled if it is still going (its stale bundle never replaces the site), then re-run with
+    /// <c>POST …/actions/runs/{id}/rerun</c>, which needs Actions write. No run yet: it reads the new values when it starts.
+    /// </summary>
+    public async Task<BuildRefresh> RefreshBuildAsync(DeploymentAuth auth, DeploymentTargetRef target, string sha, DateTimeOffset variablesSyncedAt, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        var (owner, repo) = Repo(target);
+        var basePath = $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repo)}";
+        var run = await RunAsync(auth, basePath, sha, cancellationToken);
+        if (run?.Id is not { } id || !GitHubPagesRules.BuildPredatesVariables(run.Status, run.StartedAt, run.Attempt, variablesSyncedAt))
+        {
+            return BuildRefresh.UpToDate;
+        }
+
+        var runPath = $"{basePath}/actions/runs/{Uri.EscapeDataString(id)}";
+        if (run.Status != "completed")
+        {
+            try
+            {
+                using var _ = await ActionsCall(() => api.SendAsync(HttpMethod.Post, $"{runPath}/cancel", auth.Token, null, cancellationToken));
+            }
+            catch (DeploymentProviderException ex) when (ex.Status == 409)
+            {
+                // Finishing already: the next look finds it completed.
+            }
+
+            return BuildRefresh.Stopping;
+        }
+
+        using var rerun = await ActionsCall(() => api.SendAsync(HttpMethod.Post, $"{runPath}/rerun", auth.Token, null, cancellationToken));
+        return BuildRefresh.Restarted;
+    }
+
+    /// <summary><see cref="Call"/>, with a 403 naming the permission a re-run needs.</summary>
+    private static async Task<T> ActionsCall<T>(Func<Task<T>> call)
+    {
+        try
+        {
+            return await Call(call);
+        }
+        catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.PermissionMissing)
+        {
+            throw new DeploymentProviderException(
+                DeploymentFailure.PermissionMissing,
+                ex.Status,
+                "The Pages build started before its variables were synced, and re-running it needs the AIDE GitHub App's (or PAT's) Actions (read & write) permission: accept it on the installation, then redeploy.",
+                platform: Pages);
+        }
+    }
+
+    private async Task UpsertVariableAsync(DeploymentAuth auth, string basePath, DeploymentEnvWrite write, CancellationToken cancellationToken)
+    {
+        var body = new { name = write.Key, value = write.Value };
+        var path = $"{basePath}/{Uri.EscapeDataString(write.Key)}";
+        try
+        {
+            using var _ = await VariablesCall(() => api.SendAsync(HttpMethod.Patch, path, auth.Token, body, cancellationToken));
+        }
+        catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.NotFound)
+        {
+            try
+            {
+                using var _ = await VariablesCall(() => api.SendAsync(HttpMethod.Post, basePath, auth.Token, body, cancellationToken));
+            }
+            catch (DeploymentProviderException conflict) when (conflict.Status == 409)
+            {
+                // Another sync created it in between.
+                using var _ = await VariablesCall(() => api.SendAsync(HttpMethod.Patch, path, auth.Token, body, cancellationToken));
+            }
+        }
+    }
+
+    private async Task DeleteVariableAsync(DeploymentAuth auth, string basePath, string key, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var _ = await VariablesCall(() => api.SendAsync(HttpMethod.Delete, $"{basePath}/{Uri.EscapeDataString(key)}", auth.Token, null, cancellationToken));
+        }
+        catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.NotFound)
+        {
+            // Already gone.
+        }
+    }
+
+    /// <summary><see cref="Call"/>, with a 403 naming the permission: installations from before it must accept it.</summary>
+    private static async Task<T> VariablesCall<T>(Func<Task<T>> call)
+    {
+        try
+        {
+            return await Call(call);
+        }
+        catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.PermissionMissing)
+        {
+            throw new DeploymentProviderException(
+                DeploymentFailure.PermissionMissing,
+                ex.Status,
+                "The AIDE GitHub App (or PAT) needs the Variables (read & write) permission: update the App's permissions in GitHub, then accept them on the installation.",
+                platform: Pages);
+        }
+    }
 
     /// <summary>Production only: the push of the merge commit runs the Pages workflow, so AIDE follows that commit's run.</summary>
     public Task<ProviderDeployment> DeployAsync(DeploymentAuth auth, DeployRequest request, CancellationToken cancellationToken)
@@ -142,7 +310,7 @@ public sealed class GitHubPagesDeploymentProvider(GitHubApi api) : IDeploymentPr
     public Task RollbackAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken) =>
         throw new DeploymentProviderException(DeploymentFailure.NotSupported, null, "GitHub Pages has no rollback.", platform: Pages);
 
-    private sealed record WorkflowRun(string? Status, string? Conclusion, string? HtmlUrl);
+    private sealed record WorkflowRun(string? Status, string? Conclusion, string? HtmlUrl, string? Id = null, DateTimeOffset? StartedAt = null, int Attempt = 1);
 
     /// <summary>The Pages workflow's newest run on <paramref name="sha"/> (by its path, else a run named like Pages), or <c>null</c>.</summary>
     private async Task<WorkflowRun?> RunAsync(DeploymentAuth auth, string basePath, string sha, CancellationToken cancellationToken)
@@ -161,7 +329,15 @@ public sealed class GitHubPagesDeploymentProvider(GitHubApi api) : IDeploymentPr
             run = items.FirstOrDefault(r => Text(r, "name")?.Contains("pages", StringComparison.OrdinalIgnoreCase) ?? false);
         }
 
-        return run.ValueKind == JsonValueKind.Object ? new WorkflowRun(Text(run, "status"), Text(run, "conclusion"), Text(run, "html_url")) : null;
+        return run.ValueKind == JsonValueKind.Object
+            ? new WorkflowRun(
+                Text(run, "status"),
+                Text(run, "conclusion"),
+                Text(run, "html_url"),
+                Text(run, "id"),
+                DateTimeOffset.TryParse(Text(run, "run_started_at"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var started) ? started : null,
+                int.TryParse(Text(run, "run_attempt"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var attempt) ? attempt : 1)
+            : null;
     }
 
     private static (string Owner, string Repo) Repo(DeploymentTargetRef target)

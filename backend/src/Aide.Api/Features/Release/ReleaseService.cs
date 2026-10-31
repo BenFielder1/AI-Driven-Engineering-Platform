@@ -280,18 +280,23 @@ public sealed partial class ReleaseService(
         return [.. releases.Select(r => ReleaseRecords.ToDto(r, strategy, production.GetValueOrDefault(r.Id), rolledOut.GetValueOrDefault(r.Id), notMerged.Contains(r.Id)))];
     }
 
-    /// <summary>§4.21: the failed, unmerged releases whose production migration run applied migrations.</summary>
+    /// <summary>
+    /// §4.21: the failed, unmerged releases where any production migration run applied migrations (not only the newest: a
+    /// re-run on a moved head can apply nothing new, or fail, after an earlier run applied files).
+    /// </summary>
     private async Task<HashSet<Guid>> AppliedNotMergedAsync(IReadOnlyList<ReleaseEntity> releases, CancellationToken cancellationToken)
     {
-        var runIds = releases.Where(r => r.Status == ReleaseStatus.Failed && r.MergeCommitSha is null && r.MigrationRunId is not null).Select(r => r.MigrationRunId!.Value).ToList();
-        if (runIds.Count == 0)
+        var releaseIds = releases.Where(r => r.Status == ReleaseStatus.Failed && r.MergeCommitSha is null && r.MigrationRunId is not null).Select(r => r.Id).ToList();
+        if (releaseIds.Count == 0)
         {
             return [];
         }
 
-        var runs = await db.DatabaseMigrationRuns.AsNoTracking().Where(r => runIds.Contains(r.Id)).Select(r => new { r.Id, r.Applied }).ToListAsync(cancellationToken);
-        var applied = runs.Where(r => r.Applied.Count > 0).Select(r => r.Id).ToHashSet();
-        return [.. releases.Where(r => r.MigrationRunId is { } id && runIds.Contains(id) && applied.Contains(id)).Select(r => r.Id)];
+        var runs = await db.DatabaseMigrationRuns.AsNoTracking()
+            .Where(r => r.ReleaseId != null && releaseIds.Contains(r.ReleaseId.Value) && r.Environment == DeploymentEnvironment.Production)
+            .Select(r => new { r.ReleaseId, r.Applied })
+            .ToListAsync(cancellationToken);
+        return [.. runs.Where(r => r.Applied.Count > 0).Select(r => r.ReleaseId!.Value)];
     }
 
     /// <summary>

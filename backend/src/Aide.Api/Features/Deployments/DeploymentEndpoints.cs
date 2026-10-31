@@ -441,6 +441,7 @@ public static class DeploymentEndpoints
         RolloutReader reader,
         WorkingCopyPreparer preparer,
         IWorkingCopies workingCopies,
+        Databases.MigrationRunService migrations,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -450,17 +451,19 @@ public static class DeploymentEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        if (!await DeploymentScheduler.ConfiguredAsync(db, id, cancellationToken))
+        // §4.21: a preview database's migrations are something to roll out, even with no target set up.
+        if (!await rollouts.HasStepsAsync(id, DeploymentEnvironment.Preview, cancellationToken))
         {
             return NotConfigured();
         }
 
-        // §4.20: when no target has previews (only GitHub Pages), there is nothing to roll out.
+        // §4.20: when no target has previews (only GitHub Pages) and no migrations run, there is nothing to roll out.
         var providers = await db.DeploymentTargets.AsNoTracking()
             .Where(t => t.ProjectId == id && t.ResourceId != null)
             .Select(t => t.Provider)
             .ToListAsync(cancellationToken);
-        if (providers.Count > 0 && providers.All(p => !DeploymentPlatforms.Capabilities(p).Previews))
+        if (providers.Count > 0 && providers.All(p => !DeploymentPlatforms.Capabilities(p).Previews)
+            && !await migrations.HasMigrationStepAsync(id, DeploymentEnvironment.Preview, cancellationToken))
         {
             return ApiProblems.Platform(
                 new DomainError(ErrorCodes.DeploymentActionUnsupported, $"{DeploymentPlatforms.DisplayName(providers[0])} doesn't support this action."), providers[0]);

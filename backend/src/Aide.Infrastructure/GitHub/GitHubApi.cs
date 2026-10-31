@@ -575,7 +575,7 @@ public sealed partial class GitHubApi(IHttpClientFactory clients, TimeProvider t
         using var response = await SendRawAsync(client, request, cancellationToken);
         if (response.IsSuccessStatusCode)
         {
-            return response.StatusCode == HttpStatusCode.NoContent
+            return response.StatusCode == HttpStatusCode.NoContent || response.Content.Headers.ContentLength == 0
                 ? JsonDocument.Parse("{}")
                 : await ReadJsonAsync(response, cancellationToken);
         }

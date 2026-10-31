@@ -49,6 +49,9 @@ public static class RenderRules
     /// <summary>The prefix of a pre-deploy failure's message, so later steps (M30 slice 3) can tell it from a build failure.</summary>
     public const string PreDeployFailedMessage = "Render: the pre-deploy command failed (pre_deploy_failed).";
 
+    /// <summary>FR-154: Render's free instance type, which has no pre-deploy command.</summary>
+    public const string FreePlan = "free";
+
     /// <summary>§4.20: Render allows 30 log requests a minute per user.</summary>
     public const int LogRequestsPerMinute = 30;
 
@@ -71,6 +74,19 @@ public static class RenderRules
 
     /// <summary>Whether the deploy failed in its pre-deploy command (the migration), not its build.</summary>
     public static bool IsPreDeployFailure(string? status) => string.Equals(status?.Trim(), PreDeployFailed, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>FR-154: whether <paramref name="plan"/> is Render's free instance type.</summary>
+    public static bool IsFreePlan(string? plan) => string.Equals(plan?.Trim(), FreePlan, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// FR-154: the build configuration on <paramref name="plan"/>. Free instances have no pre-deploy command: the deploy
+    /// engineer's container runs the migrate command at start (single instance), a caveat in the readiness plan notes.
+    /// </summary>
+    public static DeploymentBuildConfig ConfigForPlan(DeploymentBuildConfig config, string? plan)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        return IsFreePlan(plan) && config.PreDeployCommand is not null ? config with { PreDeployCommand = null } : config;
+    }
 
     /// <summary>
     /// FR-144: the service for <paramref name="component"/>: Next.js (a start command) a Node web service, another
@@ -106,7 +122,7 @@ public static class RenderRules
             docker ? null : config.BuildCommand,
             docker ? null : config.StartCommand,
             null,
-            config.PreDeployCommand,
+            ConfigForPlan(config, plan).PreDeployCommand,
             config.HealthCheckPath,
             plan,
             region);

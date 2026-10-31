@@ -1308,7 +1308,7 @@
         "tags": [
           "Connections"
         ],
-        "summary": "FR-142 picker: the connection's resources of a type (default: the provider's first): Vercel projects; Netlify sites; Cloudflare workers or projects (Pages); Render services or regions; Railway projects or regions; Supabase projects, orgs or regions. accountId scopes the list (default: the connection's account). A type the provider doesn't list → 400 VALIDATION.",
+        "summary": "FR-142 picker: the connection's resources of a type (default: the provider's first): Vercel projects; Netlify sites; Cloudflare workers or projects (Pages); Render services, regions or databases (Render Postgres); Railway projects, regions or databases (Postgres services); Supabase projects, orgs or regions. accountId scopes the list (default: the connection's account). A type the provider doesn't list → 400 VALIDATION.",
         "operationId": "ListPlatformConnectionResources",
         "parameters": [
           {
@@ -1330,7 +1330,8 @@
                 "projects",
                 "workers",
                 "orgs",
-                "regions"
+                "regions",
+                "databases"
               ],
               "type": "string"
             }
@@ -20877,6 +20878,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "previewMigrationsEnabled": {
+            "type": "boolean",
+            "default": false
           }
         },
         "description": "A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null`\nfor an Admin who isn't a member); a `null` `tokenBudget` means unlimited. `checkpoint` is the lifecycle\ncheckpoint within the current release version `releaseVersionId` (§4.10, D-V2-11: was `projectVersion`);\n`releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the\nversion in development (`null`: none) (FR-62). `idea` is the request of the version in development.\n`presetId`, `presetName` and `presetVersion` are history (FR-129): the retired v2 preset the current release\nversion was pinned to before it was migrated to a composition (all `null`: never pinned to a preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so\nthe Deployments page is in its navigation (§7.2). `stackPacks` are the pack ids of the current release version's\nstack composition (FR-117, §5; empty: no stack), e.g. `[\"fe-react-vite\", \"be-aspnet\", \"vcs-github\"]`."

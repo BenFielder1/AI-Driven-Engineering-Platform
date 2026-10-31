@@ -2,7 +2,10 @@ using System.Net;
 using System.Text.Json;
 using Aide.Api.Features.Databases;
 using Aide.Api.Features.Deployments;
+using Aide.Api.Features.Projects;
 using Aide.Api.Features.Release;
+using Aide.Api.Features.Review;
+using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Databases;
 using Aide.Domain.Entities;
@@ -54,7 +57,7 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
     }
 
     /// <summary>An available Supabase production database (the Fake <c>*.test</c> pooler host: the runner's in-memory history).</summary>
-    private static async Task SeedProductionSupabaseAsync(WebApplicationFactory<Program> app, Guid id)
+    internal static async Task SeedProductionSupabaseAsync(WebApplicationFactory<Program> app, Guid id)
     {
         await using (var scope = app.Services.CreateAsyncScope())
         {
@@ -98,7 +101,15 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
         Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.Release).Status);
         var release = await ProjectApi.WithDbAsync(app, db => db.Releases.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
         Assert.Equal(ReleaseStatus.Succeeded, release.Status);
-        var run = await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
+        var runs = await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AsNoTracking().Where(r => r.ProjectId == id).OrderBy(r => r.StartedAt).ToListAsync(Ct));
+        Assert.Equal(2, runs.Count);
+        var run = runs[0];
+
+        // §4.21: no target is set up, so the rollout is migrations-only: its run on the merge commit has nothing left to apply.
+        Assert.Equal((MigrationRunStatus.Succeeded, release.MergeCommitSha, (Guid?)release.Id), (runs[1].Status, runs[1].GitSha, runs[1].ReleaseId));
+        Assert.Empty(runs[1].Applied);
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.ProductionRollout).Status);
+        Assert.Empty(await DeploymentHarness.DeploymentsAsync(app, id));
         Assert.Equal(
             (DeploymentEnvironment.Production, MigrationRunStatus.Succeeded, branchHead, (Guid?)release.Id, (Guid?)run.Id),
             (run.Environment, run.Status, run.GitSha, run.ReleaseId, release.MigrationRunId));
@@ -109,7 +120,7 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
         var dto = await ProjectApi.ReadAsync<ReleaseDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/releases/latest", UriKind.Relative), Ct));
         Assert.Equal((run.Id, false), (dto.MigrationRunId, dto.MigrationsAppliedNotMerged));
         var listed = await ProjectApi.ReadAsync<List<MigrationRunDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/migrations", UriKind.Relative), Ct));
-        Assert.Equal(release.Id, Assert.Single(listed).ReleaseId);
+        Assert.All(listed, r => Assert.Equal(release.Id, r.ReleaseId));
     }
 
     [Fact]
@@ -122,9 +133,13 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
         await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
         await AgentJobs.RunQueuedAsync(app, id);
 
-        Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunStarted));
-        var completed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunCompleted)).Payload);
-        Assert.Equal(("production", 1), (completed.GetProperty("environment").GetString(), completed.GetProperty("applied").GetInt32()));
+        // The pre-merge run applied the file; the migrations-only rollout's run on the merge commit had nothing left.
+        Assert.Equal(2, (await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunStarted)).Count);
+        var completions = (await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunCompleted)).Select(e => LifecycleSeed.Payload(e.Payload)).ToList();
+        Assert.Equal(2, completions.Count);
+        var completed = Assert.Single(completions, c => c.GetProperty("applied").GetInt32() == 1);
+        Assert.Equal("production", completed.GetProperty("environment").GetString());
+        Assert.Single(completions, c => c.GetProperty("applied").GetInt32() == 0);
         Assert.Empty(await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunFailed));
 
         // The state a closed PR leaves: the migrations were applied, the merge never happened.
@@ -181,7 +196,7 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
 
         var job = Assert.Single(jobs, j => j.Type == JobTypes.Release);
         Assert.True(job.Status == JobStatus.Succeeded, job.LastError);
-        var run = await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
+        var run = await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AsNoTracking().Where(r => r.ProjectId == id).OrderBy(r => r.StartedAt).FirstAsync(Ct));
         Assert.Equal((MigrationRunStatus.Succeeded, remoteHead), (run.Status, run.GitSha));
         Assert.Equal(["20261031000000"], run.Applied.Select(a => a.Version));
         Assert.NotEqual(remoteHead, await TestGit.RunAsync(WorkingCopy(id), Ct, "rev-parse", $"refs/heads/{branch[0]}"));
@@ -242,6 +257,62 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
         Assert.Empty(run.Applied);
         var failed = Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunFailed));
         Assert.Contains(await LifecycleSeed.NotificationJobsAsync(app, id), j => j.Payload.Contains(failed.Id.ToString(), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FR147_S4_21_A_preview_database_with_no_target_set_up_gets_a_migrations_only_rollout()
+    {
+        var app = App();
+        var (fixture, branchHead, _) = await ReleasableWithMigrationAsync(app, "create table orders (id bigint primary key);\n");
+        using var _ = fixture;
+        var id = fixture.Project.Id;
+        await ProjectApi.WithDbAsync(app, db => db.ManagedDatabases.Where(d => d.ProjectId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.Environment, DeploymentEnvironment.Preview), Ct));
+        var versionId = await DeploymentHarness.VersionIdAsync(app, id);
+
+        Guid rolloutId;
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var rollouts = scope.ServiceProvider.GetRequiredService<RolloutScheduler>();
+            rolloutId = (await rollouts.EnqueuePreviewAsync(id, versionId, "aide/test", branchHead, DeploymentTrigger.Auto, null, DateTimeOffset.UtcNow, Ct))!.Id;
+            await scope.ServiceProvider.GetRequiredService<AideDbContext>().SaveChangesAsync(Ct);
+        }
+
+        await DeploymentHarness.SettleRolloutAsync(app, id, rolloutId);
+
+        var run = await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
+        Assert.Equal((DeploymentEnvironment.Preview, MigrationRunStatus.Succeeded, branchHead), (run.Environment, run.Status, run.GitSha));
+        Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.MigrationRunCompleted));
+        var completed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.PreviewRolloutCompleted)).Payload);
+        Assert.Equal("succeeded", completed.GetProperty("state").GetString());
+        Assert.Equal(0, completed.GetProperty("components").GetArrayLength());
+
+        // The Review panel is told, and a succeeded migrations-only rollout is recorded as ready, not canceled.
+        var dto = await ProjectApi.ReadAsync<ProjectDto>(await fixture.Viewer.Client.GetAsync(new Uri(fixture.Path, UriKind.Relative), Ct));
+        Assert.Equal((true, false), (dto.PreviewMigrationsEnabled, dto.DeploymentsEnabled));
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var project = await scope.ServiceProvider.GetRequiredService<AideDbContext>().Projects.AsNoTracking().SingleAsync(p => p.Id == id, Ct);
+            var collected = await scope.ServiceProvider.GetRequiredService<PreviewCollector>().CollectAsync(project, new LifecycleJobPayload(id, project.Checkpoint, "test"), Ct);
+            Assert.Equal(DeploymentStatus.Ready, collected!.Check.Status);
+        }
+
+        // A manual re-run is accepted, as after restoring a paused database.
+        await ProjectApi.ReadAsync<RolloutDto>(await fixture.Contributor.Client.PostAsync(new Uri($"{fixture.Path}/deployments/preview", UriKind.Relative), null, Ct), HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task FR149_A_project_with_no_target_and_no_BaaS_database_gets_no_rollout()
+    {
+        var app = App();
+        using var fixture = await ReleaseFlowTests.ReleasableAsync(app);
+        var id = fixture.Project.Id;
+
+        await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
+        var jobs = await AgentJobs.RunQueuedAsync(app, id);
+
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.Release).Status);
+        Assert.DoesNotContain(jobs, j => j.Type is JobTypes.ProductionRollout or JobTypes.PreviewRollout);
     }
 
     [Fact]

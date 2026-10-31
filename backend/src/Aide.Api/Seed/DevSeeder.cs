@@ -1,5 +1,8 @@
 using System.Security.Cryptography;
 using Aide.Api.Auth;
+using Aide.Api.Features.Connections;
+using Aide.Api.Features.Databases;
+using Aide.Api.Features.Deployments;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Release;
@@ -15,6 +18,7 @@ using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Stack;
+using Aide.Infrastructure.Databases;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
@@ -54,8 +58,12 @@ public sealed class SeedOptions
 /// <para>
 /// §9 (v4): a third demo project, <see cref="DemoBaasProjectName"/>, on <c>fe-vue</c> + <c>data-supabase</c> (BaaS), starts in
 /// <b>specification</b>: its project request is locked and the spec generation job is queued. Marker:
-/// <see cref="EventTypes.DemoStackProjectSeeded"/>. No database is provisioned (the Fake database provider arrives with the
-/// database milestone).
+/// <see cref="EventTypes.DemoStackProjectSeeded"/>.
+/// </para>
+/// <para>
+/// §9 (v4), only where deployments and databases are both Fake (<see cref="SeedFakeHostsAsync"/>): the released demo is
+/// hosted (Netlify, Render, Render Postgres) and the BaaS demo gets its Fake Supabase database, each set up through the same
+/// services as Settings → Deployment with the seed Admin's own Fake connections. With real providers they stay hostless.
 /// </para>
 /// <para>
 /// DEP-V2: on a database seeded under v1, the demo project (still in refinement) is upgraded once to released 0.1.0 when
@@ -156,12 +164,14 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         Guid? presetProjectId = null;
         Guid? baasProjectId = null;
         Guid? upgradedProjectId = null;
+        AppUser? admin;
+        var usesFakeHosts = UsesFakeHosts(services);
 
         await using (var transaction = await db.Database.BeginTransactionAsync(cancellationToken))
         {
             await accounts.LockAccountsAsync(cancellationToken);
 
-            var admin = await services.GetRequiredService<UserManager<AppUser>>().FindByEmailAsync(AdminEmail);
+            admin = await services.GetRequiredService<UserManager<AppUser>>().FindByEmailAsync(AdminEmail);
             if (admin is null)
             {
                 (admin, newPassword) = await CreateAdminAsync(services, cancellationToken);
@@ -174,7 +184,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
 
             if (!await DemoAlreadySeededAsync(services, db, admin, cancellationToken))
             {
-                demoProjectId = await CreateDemoProjectAsync(services, db, admin, cancellationToken);
+                demoProjectId = await CreateDemoProjectAsync(services, db, admin, usesFakeHosts, cancellationToken);
             }
             else if (!await db.Events.AnyAsync(e => e.Type == EventTypes.DemoProjectReleaseUpgraded, cancellationToken))
             {
@@ -197,6 +207,12 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         if (newPassword is not null)
         {
             LogAdminSeeded(logger, AdminEmail, newPassword);
+        }
+
+        // §9: after the commit, as the setup services hold their own transaction and project lock.
+        if (usesFakeHosts && admin is not null)
+        {
+            await SeedFakeHostsAsync(services, admin.Id, demoProjectId, baasProjectId, cancellationToken);
         }
 
         if (demoProjectId is { } projectId)
@@ -363,7 +379,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         return true;
     }
 
-    private static async Task<Guid> CreateDemoProjectAsync(IServiceProvider services, AideDbContext db, AppUser admin, CancellationToken cancellationToken)
+    private static async Task<Guid> CreateDemoProjectAsync(IServiceProvider services, AideDbContext db, AppUser admin, bool fakeHosts, CancellationToken cancellationToken)
     {
         var creator = services.GetRequiredService<ProjectCreator>();
         var created = await creator.CreateAsync(
@@ -381,6 +397,11 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
                     Backend = new StackComponentSelection { Pack = "be-aspnet" },
                     Data = new StackDataSelection { Pack = "data-efcore-postgres" },
                     Vcs = new StackVcsSelection { Pack = "vcs-github" },
+
+                    // §9: Fake hosts, only where the Fake providers run them.
+                    Deploy = fakeHosts
+                        ? new StackDeploySelection { FrontendHost = "deploy-netlify", BackendHost = "deploy-render", DatabaseHost = "render-postgres" }
+                        : null,
                 },
             },
             admin.Id,
@@ -395,6 +416,70 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         AddMarker(services, db, created.Value.Id);
         await db.SaveChangesAsync(cancellationToken);
         await MarkDemoReleasedAsync(services, db, created.Value, cancellationToken);
+        return created.Value.Id;
+    }
+
+    /// <summary>§9: Fake hosts need both Fake providers: deployments (<c>Deployments:Provider=Fake</c>) and databases (<c>Databases:Provider=Fake</c>).</summary>
+    private static bool UsesFakeHosts(IServiceProvider services) =>
+        services.GetRequiredService<DeploymentAccess>().UsesFake && services.GetRequiredService<IDatabaseProviderResolver>().UsesFake;
+
+    /// <summary>
+    /// §9: sets up the Fake hosts of the demos created by this seed run, through the services behind Settings → Deployment
+    /// (their jobs finish on the API's workers). Connections are the seed Admin's own, with Fake tokens. A refusal is logged
+    /// and leaves a usable demo, whose card offers the setup.
+    /// </summary>
+    private async Task SeedFakeHostsAsync(IServiceProvider services, Guid adminId, Guid? releasedDemoId, Guid? baasDemoId, CancellationToken cancellationToken)
+    {
+        if (releasedDemoId is { } released)
+        {
+            var targets = services.GetRequiredService<DeploymentTargetService>();
+            if (await FakeConnectionAsync(services, adminId, PlatformProvider.Netlify, cancellationToken) is { } netlify)
+            {
+                var (_, failure) = await targets.PutAsync(
+                    released, DeploymentComponent.Frontend, new PutDeploymentTargetRequest { Provider = DeploymentProvider.Netlify, ConnectionId = netlify, Create = new CreateDeploymentResourceRequest { Name = "demo-todo-web" } }, adminId, true, SystemActor.Name, cancellationToken);
+                LogIfRefused(released, failure?.Error);
+            }
+
+            if (await FakeConnectionAsync(services, adminId, PlatformProvider.Render, cancellationToken) is { } render)
+            {
+                var (_, failure) = await targets.PutAsync(
+                    released, DeploymentComponent.Backend, new PutDeploymentTargetRequest { Provider = DeploymentProvider.Render, ConnectionId = render, Create = new CreateDeploymentResourceRequest { Name = "demo-todo-api" } }, adminId, true, SystemActor.Name, cancellationToken);
+                LogIfRefused(released, failure?.Error);
+                var (_, error) = await services.GetRequiredService<ManagedDatabaseService>().PutAsync(
+                    released, DeploymentEnvironment.Production, new PutManagedDatabaseRequest { Provider = ManagedDatabaseProvider.Render, ConnectionId = render, Create = new CreateManagedDatabaseRequest() }, adminId, true, SystemActor.Name, cancellationToken);
+                LogIfRefused(released, error);
+            }
+        }
+
+        if (baasDemoId is { } baas && await FakeConnectionAsync(services, adminId, PlatformProvider.Supabase, cancellationToken) is { } supabase)
+        {
+            var (_, error) = await services.GetRequiredService<ManagedDatabaseService>().PutAsync(
+                baas, DeploymentEnvironment.Production, new PutManagedDatabaseRequest { Provider = ManagedDatabaseProvider.Supabase, ConnectionId = supabase, Create = new CreateManagedDatabaseRequest { Region = "eu-west-2" } }, adminId, true, SystemActor.Name, cancellationToken);
+            LogIfRefused(baas, error);
+        }
+
+        void LogIfRefused(Guid projectId, DomainError? refused)
+        {
+            if (refused is not null)
+            {
+                LogFakeHostRefused(logger, projectId, refused.Code);
+            }
+        }
+    }
+
+    /// <summary>The seed Admin's Fake connection of <paramref name="provider"/> (created through the connection service, which checks it with the Fake).</summary>
+    private async Task<Guid?> FakeConnectionAsync(IServiceProvider services, Guid adminId, PlatformProvider provider, CancellationToken cancellationToken)
+    {
+        var created = await services.GetRequiredService<PlatformConnectionService>().CreateAsync(
+            adminId,
+            new CreatePlatformConnectionRequest { Provider = provider, Label = "Demo (Fake)", Token = $"fake_seed_{provider.ToWire()}" },
+            cancellationToken);
+        if (created.IsFailure)
+        {
+            LogFakeHostRefused(logger, adminId, created.Error!.Code);
+            return null;
+        }
+
         return created.Value.Id;
     }
 
@@ -740,6 +825,9 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Dev seed could not create the Local repository of demo project {ProjectId}; it is released without a tagged commit")]
     private static partial void LogDemoRepositoryFailed(ILogger logger, Exception exception, Guid projectId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Dev seed couldn't set up a Fake host for {Id}: {Code}")]
+    private static partial void LogFakeHostRefused(ILogger logger, Guid id, string code);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Dev seed failed")]
     private static partial void LogSeedFailed(ILogger logger, Exception exception);

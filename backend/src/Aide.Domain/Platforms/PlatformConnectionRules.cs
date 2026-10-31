@@ -33,6 +33,9 @@ public enum PlatformResourceType
     Workers = 3,
     Orgs = 4,
     Regions = 5,
+
+    /// <summary>FR-152: Postgres databases to link (Render Postgres, Railway Postgres services).</summary>
+    Databases = 6,
 }
 
 /// <summary>
@@ -206,14 +209,17 @@ public static partial class PlatformConnectionRules
     public static bool NotifiesInvalid(PlatformConnectionStatus before, PlatformConnectionStatus after) =>
         after == PlatformConnectionStatus.Invalid && before != PlatformConnectionStatus.Invalid;
 
+    /// <summary>FR-152: whether a Railway service runs a Postgres image (the database link picker lists only those).</summary>
+    public static bool IsPostgresImage(string? image) => image?.Contains("postgres", StringComparison.OrdinalIgnoreCase) == true;
+
     /// <summary>FR-142: what each provider's picker lists; the first is the default when no type is asked for.</summary>
     public static IReadOnlyList<PlatformResourceType> ResourceTypes(PlatformProvider provider) => provider switch
     {
         PlatformProvider.Vercel => [PlatformResourceType.Projects],
         PlatformProvider.Netlify => [PlatformResourceType.Sites],
         PlatformProvider.Cloudflare => [PlatformResourceType.Workers, PlatformResourceType.Projects],
-        PlatformProvider.Render => [PlatformResourceType.Services, PlatformResourceType.Regions],
-        PlatformProvider.Railway => [PlatformResourceType.Projects, PlatformResourceType.Regions],
+        PlatformProvider.Render => [PlatformResourceType.Services, PlatformResourceType.Regions, PlatformResourceType.Databases],
+        PlatformProvider.Railway => [PlatformResourceType.Projects, PlatformResourceType.Regions, PlatformResourceType.Databases],
         PlatformProvider.Supabase => [PlatformResourceType.Projects, PlatformResourceType.Orgs, PlatformResourceType.Regions],
         _ => [],
     };

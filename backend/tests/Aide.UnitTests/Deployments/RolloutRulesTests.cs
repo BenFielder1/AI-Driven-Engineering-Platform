@@ -9,6 +9,17 @@ namespace Aide.UnitTests.Deployments;
 /// <summary>FR-147, FR-148, FR-149, FR-150, FR-153, FR-154: rollout planning and sequencing, findings, divergence, reset, migration warning.</summary>
 public class RolloutRulesTests
 {
+    [Theory]
+    [InlineData(RolloutState.Succeeded, true, DeploymentStatus.Ready)]
+    [InlineData(RolloutState.Failed, true, DeploymentStatus.Error)]
+    [InlineData(RolloutState.Blocked, true, DeploymentStatus.Error)]
+    [InlineData(RolloutState.Running, true, DeploymentStatus.Building)]
+    [InlineData(RolloutState.Running, false, DeploymentStatus.Building)]
+    [InlineData(RolloutState.Succeeded, false, DeploymentStatus.Canceled)]
+    [InlineData(RolloutState.Blocked, false, DeploymentStatus.Canceled)]
+    public void FR147_S4_21_A_rollout_that_deployed_nothing_records_what_happened(RolloutState state, bool migrationRan, DeploymentStatus expected) =>
+        Assert.Equal(expected, PreviewReviewRules.StatusWithoutDeployment(state, migrationRan));
+
     private static readonly DateTimeOffset T0 = new(2026, 10, 31, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly RolloutTarget NetlifyFrontend = new(DeploymentComponent.Frontend, DeploymentProvider.Netlify, true);

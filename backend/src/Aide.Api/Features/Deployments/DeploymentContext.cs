@@ -147,7 +147,12 @@ public sealed class DeploymentAccess(AideDbContext db, ISecretProtectors protect
                 null,
                 git.ExternalRepoId,
                 fullName,
-                branch);
+                branch)
+            {
+                GitConnectionId = git.GitConnectionId,
+                InstanceId = git.InstanceId,
+                WebUrl = ProjectSettingsRules.RepoWebUrl(git.Provider, git.RepoUrl, fullName),
+            };
         }
 
         return DeploymentRepoRef.Local with { DefaultBranch = branch };

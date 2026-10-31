@@ -136,6 +136,29 @@ describe('Review page → preview deployment (FR-90)', () => {
     expect(within(preview).queryByRole('button', { name: /Redeploy/ })).not.toBeInTheDocument()
   })
 
+  it('FR147_S4_21_a_preview_database_with_no_target_shows_the_panel_and_its_deploy_button', async () => {
+    const project = seedProjectAs('owner', (p) => {
+      p.currentPhase = 'review'
+      p.status = 'reviewing'
+      p.previewMigrationsEnabled = true
+    })
+    await openReview(project)
+    const panel = await screen.findByRole('region', { name: 'Preview deployment' })
+    expect(await within(panel).findByText(/No preview yet/)).toBeInTheDocument()
+    expect(within(panel).queryByTestId('deployment-not-configured')).not.toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Deploy preview' })).toBeInTheDocument()
+  })
+
+  it('FR90_a_project_with_neither_targets_nor_a_preview_database_stays_not_configured', async () => {
+    const project = seedProjectAs('owner', (p) => {
+      p.currentPhase = 'review'
+      p.status = 'reviewing'
+    })
+    await openReview(project)
+    const panel = await screen.findByRole('region', { name: 'Preview deployment' })
+    expect(within(panel).getByTestId('deployment-not-configured')).toBeInTheDocument()
+  })
+
   it('FR90_viewer_cannot_redeploy', async () => {
     const project = seedFailedPreview('viewer')
     await openReview(project)

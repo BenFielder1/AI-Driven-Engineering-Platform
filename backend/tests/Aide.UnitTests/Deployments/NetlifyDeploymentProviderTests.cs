@@ -17,7 +17,7 @@ public class NetlifyDeploymentProviderTests
         var stub = new PlatformStub();
         var time = new ManualTime(Now);
         var http = new PlatformHttp(new PlatformStubFactory(stub), time);
-        return (new NetlifyDeploymentProvider(http, new NetlifyDeployRateLimiter(time)), stub, time);
+        return (new NetlifyDeploymentProvider(http, new NetlifyDeployRateLimiter(time), new RecordingRepoLinks()), stub, time);
     }
 
     [Fact]
@@ -66,18 +66,6 @@ public class NetlifyDeploymentProviderTests
             Auth, new DeploymentSetupRequest(Target(DeploymentProvider.Netlify, null), true, "todo-web", null, null, null), TestContext.Current.CancellationToken));
 
         Assert.Equal(DeploymentFailure.PlanLimit, ex.Failure);
-    }
-
-    [Fact]
-    public async Task FR144_GitLab_create_is_not_automated_yet()
-    {
-        var (provider, _, _) = Create();
-        var gitlab = new DeploymentRepoRef("gitlab", "acme", "todo", null, "99", "acme/todo", "main");
-
-        var ex = await Assert.ThrowsAsync<DeploymentProviderException>(() => provider.SetupTargetAsync(
-            Auth, new DeploymentSetupRequest(Target(DeploymentProvider.Netlify, null, repo: gitlab), true, "todo-web", null, null, null), TestContext.Current.CancellationToken));
-
-        Assert.Equal(DeploymentFailure.NotSupported, ex.Failure);
     }
 
     [Fact]

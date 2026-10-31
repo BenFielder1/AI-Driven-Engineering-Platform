@@ -50,7 +50,8 @@ public sealed record ProjectDto(
     string? PresetName,
     string? PresetVersion,
     bool DeploymentsEnabled,
-    IReadOnlyList<string> StackPacks);
+    IReadOnlyList<string> StackPacks,
+    bool PreviewMigrationsEnabled = false);
 
 /// <summary>
 /// §7.2: the projects-list KPI row, over the projects matching the list's filters. <c>active</c>: not <c>released</c> (any

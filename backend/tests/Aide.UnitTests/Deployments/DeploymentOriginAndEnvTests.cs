@@ -170,6 +170,60 @@ public class DeploymentOriginAndEnvTests
         Assert.Contains(result.Error.Details, d => d.StartsWith("public:", StringComparison.Ordinal));
     }
 
+    private static string Jwt(string payloadJson)
+    {
+        static string Url(string text) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        return $"{Url("""{"alg":"HS256","typ":"JWT"}""")}.{Url(payloadJson)}.c2lnbmF0dXJl";
+    }
+
+    [Theory]
+    [InlineData("VITE_X", "postgres://user:pw@host/db")]
+    [InlineData("VITE_X", "POSTGRESQL://user:pw@host:5432/db")]
+    [InlineData("VITE_X", "mysql://u:p@h/d")]
+    [InlineData("VITE_X", "mongodb+srv://u:p@cluster.example.net/d")]
+    [InlineData("VITE_X", "rediss://default:p@h:6379")]
+    [InlineData("VITE_X", "jdbc:postgresql://h/d")]
+    [InlineData("VITE_X", "Host=h;Database=d;Username=u;Password=p")]
+    [InlineData("VITE_X", "Server=h;Database=d;User Id=u; pwd = p;")]
+    [InlineData("VITE_DB_URL", "x")]
+    [InlineData("VITE_DATABASE_URL", "x")]
+    [InlineData("NEXT_PUBLIC_REDIS_URI", "x")]
+    [InlineData("VITE_CONNECTION_STRING", "x")]
+    public void FR145_S8_A_database_url_is_never_public(string key, string value)
+    {
+        Assert.True(EnvInventoryRules.LooksSecret(key, value));
+        Assert.True(EnvInventoryRules.ValidateUser(key, value, Both, null, true, NoDerivedKeys).IsFailure);
+    }
+
+    [Theory]
+    [InlineData("VITE_SUPABASE_URL", "https://abc.supabase.co")]
+    [InlineData("VITE_API_BASE_URL", "https://postgres.example.com/api")]
+    [InlineData("VITE_DB_ENGINE", "postgres")]
+    [InlineData("VITE_DOCS", "https://example.com/reset?password=1")]
+    [InlineData("VITE_DB_URL_DOCS", "https://example.com/docs")]
+    [InlineData("VITE_LABEL", "my-redis://not-a-scheme")]
+    [InlineData("VITE_SETTINGS", "Host=h;Port=5")]
+    [InlineData("VITE_TOKENISH", "eyJnot.a-jwt.value")]
+    public void FR145_Near_misses_of_the_database_patterns_stay_public(string key, string value) =>
+        Assert.False(EnvInventoryRules.LooksSecret(key, value));
+
+    [Fact]
+    public void FR145_S8_A_service_role_JWT_is_refused_by_its_decoded_payload_and_an_anon_one_passes()
+    {
+        var serviceRole = Jwt("""{"iss":"supabase","ref":"abcd","role":"service_role"}""");
+        var anon = Jwt("""{"iss":"supabase","ref":"abcd","role":"anon"}""");
+
+        Assert.DoesNotContain("service_role", serviceRole, StringComparison.Ordinal);
+        Assert.True(EnvInventoryRules.LooksSecret("VITE_SUPABASE_KEY", serviceRole));
+        Assert.True(EnvInventoryRules.LooksSecret("VITE_SUPABASE_KEY", $"key {serviceRole} end"));
+        Assert.NotNull(GitHubPagesRules.EnvRefusal("VITE_SUPABASE_KEY", serviceRole, true, false));
+        Assert.False(EnvInventoryRules.LooksSecret("VITE_SUPABASE_KEY", anon));
+        Assert.Null(GitHubPagesRules.EnvRefusal("VITE_SUPABASE_KEY", anon, true, false));
+        Assert.True(EnvInventoryRules.ValidateUser("VITE_SUPABASE_KEY", anon, Both, null, true, NoDerivedKeys).IsSuccess);
+        Assert.False(EnvInventoryRules.LooksSecret("VITE_X", Jwt("[1,2]")));
+        Assert.False(EnvInventoryRules.LooksSecret("VITE_X", Jwt("""{"role":7}""")));
+    }
+
     [Fact]
     public void FR145_The_same_secret_is_accepted_when_it_is_not_public()
     {

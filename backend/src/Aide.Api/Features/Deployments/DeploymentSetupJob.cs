@@ -95,6 +95,12 @@ public sealed partial class DeploymentSetupJobHandler(
                 return;
             }
 
+            // FR-154: a free Render service, created or linked, has no pre-deploy command, so the card doesn't show one.
+            if (target.Provider == DeploymentProvider.Render)
+            {
+                target.BuildConfig = RenderRules.ConfigForPlan(target.BuildConfig, result.Plan ?? payload.Plan);
+            }
+
             await ApplyResultAsync(target, result, now, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }

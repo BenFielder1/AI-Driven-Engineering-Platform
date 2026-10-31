@@ -55,6 +55,31 @@ export const deploymentKeys = {
   preview: (id: string) => [...deploymentKeys.all(id), 'preview-environment'] as const,
 }
 
+/** FR-144: reads Settings → Deployment (`useDeploymentSettings`, and the wizard's wait for a target's setup). */
+export async function fetchDeploymentSettings(projectId: string, signal?: AbortSignal) {
+  return unwrap(await api.GET('/api/projects/{id}/settings/deployment', { params: { path: { id: projectId } }, signal }))
+}
+
+/** FR-144 `PUT …/targets/:component`; answers 202 with the target (setup job). */
+export async function putDeploymentTarget(projectId: string, component: DeploymentComponent, body: Schemas['PutDeploymentTargetRequest']) {
+  return unwrap(
+    await api.PUT('/api/projects/{id}/settings/deployment/targets/{component}', {
+      params: { path: { id: projectId, component } },
+      body,
+    }),
+  )
+}
+
+/** FR-152 `PUT …/databases/:environment`; answers 202 with the card (provisioning job). The body can hold a secret: never kept. */
+export async function putManagedDatabase(projectId: string, environment: DeploymentTarget, body: Schemas['PutManagedDatabaseRequest']) {
+  return unwrap(
+    await api.PUT('/api/projects/{id}/settings/deployment/databases/{environment}', {
+      params: { path: { id: projectId, environment } },
+      body,
+    }),
+  )
+}
+
 /** While a deployment is queued or building, refetch every 10 s as a fallback to the live events (§4.15 cadence). */
 const ACTIVE_REFETCH_MS = 10_000
 
@@ -97,8 +122,7 @@ const setupRunning = (s: DeploymentSettings | undefined) =>
 export function useDeploymentSettings(projectId: string, enabled = true) {
   return useQuery({
     queryKey: deploymentKeys.settings(projectId),
-    queryFn: async ({ signal }) =>
-      unwrap(await api.GET('/api/projects/{id}/settings/deployment', { params: { path: { id: projectId } }, signal })),
+    queryFn: ({ signal }) => fetchDeploymentSettings(projectId, signal),
     enabled,
     refetchInterval: (query) => (setupRunning(query.state.data) ? deploymentSettingsPolling.setupMs : false),
   })
@@ -130,13 +154,7 @@ export function usePutDeploymentTarget(projectId: string, component: DeploymentC
   const replace = useReplaceTarget(projectId)
   const invalidate = useInvalidateTargets(projectId)
   return useMutation({
-    mutationFn: async (body: Schemas['PutDeploymentTargetRequest']) =>
-      unwrap(
-        await api.PUT('/api/projects/{id}/settings/deployment/targets/{component}', {
-          params: { path: { id: projectId, component } },
-          body,
-        }),
-      ),
+    mutationFn: (body: Schemas['PutDeploymentTargetRequest']) => putDeploymentTarget(projectId, component, body),
     onSuccess: replace,
     onSettled: invalidate,
   })
@@ -304,13 +322,7 @@ export function usePutManagedDatabase(projectId: string, environment: Deployment
   const invalidate = useInvalidateTargets(projectId)
   return useMutation({
     gcTime: 0,
-    mutationFn: async (body: Schemas['PutManagedDatabaseRequest']) =>
-      unwrap(
-        await api.PUT('/api/projects/{id}/settings/deployment/databases/{environment}', {
-          params: { path: { id: projectId, environment } },
-          body,
-        }),
-      ),
+    mutationFn: (body: Schemas['PutManagedDatabaseRequest']) => putManagedDatabase(projectId, environment, body),
     onSuccess: replace,
     onSettled: invalidate,
   })

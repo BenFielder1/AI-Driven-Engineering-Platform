@@ -372,8 +372,7 @@ public sealed record EnvInventoryRow(
 /// <item>Rows: derived variables first claim their keys, then user variables, then the packs' required variables that have
 /// neither (flagged <c>required</c>), ordered by key.</item>
 /// <item>A user variable can't use a derived key, and a public one (by flag or by the frontend's public prefix) can't look
-/// secret: its key matches <c>SECRET</c>, <c>SERVICE_ROLE</c>, <c>PRIVATE</c> or <c>PASSWORD</c>, or its value holds
-/// <c>sb_secret_</c>, <c>sk_live</c> or a private key (§4.18 secret patterns).</item>
+/// secret: see <see cref="LooksSecret"/> (§4.18 secret patterns, §8).</item>
 /// </list>
 /// </summary>
 public static partial class EnvInventoryRules
@@ -442,11 +441,55 @@ public static partial class EnvInventoryRules
             || (!string.IsNullOrEmpty(publicPrefix) && key.StartsWith(publicPrefix, StringComparison.Ordinal));
     }
 
-    /// <summary>§4.18 secret patterns: the key names a secret, or the value holds a secret key.</summary>
+    /// <summary>
+    /// §4.18 secret patterns, §8: the key names a secret or a database URL (<c>SECRET</c>, <c>SERVICE_ROLE</c>, <c>PRIVATE</c>,
+    /// <c>PASSWORD</c>, <c>VITE_DB_URL</c>, <c>CONNECTION_STRING</c>), or the value holds a secret key, a database connection
+    /// URI, an ADO-style connection string with a password, or a JWT whose payload has the role <c>service_role</c>. A JWT
+    /// with another role (Supabase's legacy anon key) is public by design.
+    /// </summary>
     public static bool LooksSecret(string key, string? value)
     {
         ArgumentNullException.ThrowIfNull(key);
-        return SecretKeyPattern().IsMatch(key) || (value is not null && SecretValuePattern().IsMatch(value));
+        return SecretKeyPattern().IsMatch(key)
+            || (value is not null
+                && (SecretValuePattern().IsMatch(value)
+                    || DatabaseUriPattern().IsMatch(value)
+                    || AdoPasswordPattern().IsMatch(value)
+                    || HoldsServiceRoleJwt(value)));
+    }
+
+    /// <summary>A legacy Supabase key is base64url, so the literal <c>service_role</c> never appears: its payload has to be decoded.</summary>
+    private static bool HoldsServiceRoleJwt(string value)
+    {
+        foreach (Match match in JwtPattern().Matches(value))
+        {
+            if (string.Equals(JwtRole(match.Groups["payload"].Value), "service_role", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The <c>role</c> claim of a base64url JWT payload; <c>null</c> when it isn't readable JSON or has none.</summary>
+    private static string? JwtRole(string payload)
+    {
+        var base64 = payload.Replace('-', '+').Replace('_', '/');
+        base64 = base64.PadRight(base64.Length + ((4 - (base64.Length % 4)) % 4), '=');
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(Convert.FromBase64String(base64));
+            return doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("role", out var role)
+                && role.ValueKind == System.Text.Json.JsonValueKind.String
+                ? role.GetString()
+                : null;
+        }
+        catch (Exception ex) when (ex is FormatException or System.Text.Json.JsonException or ArgumentException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -499,11 +542,28 @@ public static partial class EnvInventoryRules
     public static bool IsPublic(string key, bool? requested, string? publicPrefix) =>
         HasPublicPrefix(key, publicPrefix) || (requested ?? false);
 
-    [GeneratedRegex(@"SECRET|SERVICE_?ROLE|PRIVATE|PASSWORD", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(
+        @"SECRET|SERVICE_?ROLE|PRIVATE|PASSWORD|CONNECTION_?STRING|(^|_)(DATABASE|DB|DIRECT|POSTGRES|POSTGRESQL|PG|MYSQL|MARIADB|MONGO|MONGODB|REDIS|MSSQL|SQLSERVER)_(URL|URI|DSN)$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        matchTimeoutMilliseconds: 1000)]
     private static partial Regex SecretKeyPattern();
 
     [GeneratedRegex(@"sb_secret_|sk_live|PRIVATE KEY-----|service_role", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex SecretValuePattern();
+
+    /// <summary>A connection URI of a database scheme, also inside <c>jdbc:…</c>; not <c>https://postgres.example.com</c> or the bare word.</summary>
+    [GeneratedRegex(
+        @"(?<![A-Za-z0-9+.\-])(postgres|postgresql|pgsql|mysql|mysql2|mariadb|mongodb|mongodb\+srv|redis|rediss|sqlserver|mssql|oracle|cockroachdb|sqlite|clickhouse|cassandra|couchdb|neo4j)://",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        matchTimeoutMilliseconds: 1000)]
+    private static partial Regex DatabaseUriPattern();
+
+    /// <summary>An ADO-style <c>Key=value;</c> pair holding a password; not a <c>?password=</c> URL query.</summary>
+    [GeneratedRegex(@"(^|;)\s*(password|pwd)\s*=", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex AdoPasswordPattern();
+
+    [GeneratedRegex(@"(?<![A-Za-z0-9_\-])eyJ[A-Za-z0-9_\-]+\.(?<payload>[A-Za-z0-9_\-]+)\.[A-Za-z0-9_\-]*", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex JwtPattern();
 }
 
 /// <summary>Turns collected <c>field: message</c> problems into a <c>VALIDATION</c> result (as <c>ProjectRules</c>).</summary>

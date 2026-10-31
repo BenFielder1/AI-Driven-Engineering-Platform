@@ -78,6 +78,15 @@ const serverFields: Record<string, keyof EnvValues> = {
   targets: 'preview',
 }
 
+/** §4.23: the v2 Supabase variables migrated projects keep as user variables. */
+const LEGACY_SUPABASE_VARIABLES: readonly string[] = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY']
+
+/** §4.23: the legacy user variables to suggest deleting, once linking Supabase added the derived publishable key. */
+function legacySupabaseVariables(variables: readonly DeploymentEnvVar[]): string[] {
+  const linked = variables.some((v) => v.source === 'derived' && v.key.endsWith('SUPABASE_PUBLISHABLE_KEY'))
+  return linked ? variables.filter((v) => v.source === 'user' && LEGACY_SUPABASE_VARIABLES.includes(v.key)).map((v) => v.key) : []
+}
+
 export interface EnvDraft {
   key: string
   appliesTo: readonly DeploymentComponent[]
@@ -365,6 +374,7 @@ export function EnvInventorySection({ projectId, inventory, canManage }: { proje
   }
 
   const missing = inventory.variables.filter((v) => v.source === 'required').length
+  const legacySupabase = legacySupabaseVariables(inventory.variables)
 
   return (
     <section aria-labelledby="env-inventory-title" className="flex flex-col gap-3">
@@ -390,6 +400,14 @@ export function EnvInventorySection({ projectId, inventory, canManage }: { proje
       {missing > 0 && (
         <Alert tone="warning" title={`${String(missing)} required variable${missing === 1 ? ' is' : 's are'} missing`}>
           <p>The stack needs {missing === 1 ? 'it' : 'them'}. Deployments without {missing === 1 ? 'it' : 'them'} are likely to fail.</p>
+        </Alert>
+      )}
+      {legacySupabase.length > 0 && (
+        <Alert tone="info" title="Legacy Supabase variables can go">
+          <p data-testid="legacy-supabase-hint">
+            The Supabase connection now provides the publishable and secret keys as derived variables. Once the app no longer reads them, delete{' '}
+            {legacySupabase.join(', ')}.
+          </p>
         </Alert>
       )}
       {notice && (

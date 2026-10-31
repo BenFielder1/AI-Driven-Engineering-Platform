@@ -348,6 +348,61 @@ public sealed class DevSeederTests(AideApiFactory factory)
         });
     }
 
+    [Fact]
+    public async Task S9_Under_the_Fake_providers_the_released_demo_has_Fake_hosts_and_the_BaaS_demo_a_Fake_Supabase_database()
+    {
+        var connectionString = await factory.CreateMigratedDatabaseAsync(Ct);
+        await using var app = factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting($"ConnectionStrings:{DependencyInjection.ConnectionStringName}", connectionString);
+            b.UseSetting("Deployments:Provider", "Fake");
+            b.UseSetting("Deployments:AllowFake", "true");
+            b.UseSetting("Databases:Provider", "Fake");
+        });
+        await SeedAsync(app);
+        await SeedAsync(app);
+
+        await WithDbAsync(app, async db =>
+        {
+            var released = await db.Projects.SingleAsync(p => p.Name == DevSeeder.DemoProjectName, Ct);
+            var version = await db.ReleaseVersions.SingleAsync(v => v.ProjectId == released.Id, Ct);
+            var deploy = Domain.Stack.StackCompositionJson.Deserialize(version.StackComposition)!.Deploy;
+            Assert.Equal(("deploy-netlify", "deploy-render", "render-postgres"), (deploy.FrontendHost, deploy.BackendHost, deploy.DatabaseHost));
+            var targets = await db.DeploymentTargets.Where(t => t.ProjectId == released.Id).OrderBy(t => t.Component).Select(t => t.Provider).ToListAsync(Ct);
+            Assert.Equal(2, targets.Count);
+            Assert.Contains(DeploymentProvider.Netlify, targets);
+            Assert.Contains(DeploymentProvider.Render, targets);
+            Assert.Equal(ManagedDatabaseProvider.Render, (await db.ManagedDatabases.SingleAsync(d => d.ProjectId == released.Id, Ct)).Provider);
+
+            var baas = await db.Projects.SingleAsync(p => p.Name == DevSeeder.DemoBaasProjectName, Ct);
+            var database = await db.ManagedDatabases.SingleAsync(d => d.ProjectId == baas.Id, Ct);
+            Assert.Equal((ManagedDatabaseProvider.Supabase, DeploymentEnvironment.Production), (database.Provider, database.Environment));
+
+            // Seeded once: a second run adds no connection.
+            Assert.Equal(3, await db.PlatformConnections.CountAsync(Ct));
+        });
+    }
+
+    [Fact]
+    public async Task S9_With_real_providers_the_demos_stay_without_hosts_and_connections()
+    {
+        var connectionString = await factory.CreateMigratedDatabaseAsync(Ct);
+        await using var app = factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting($"ConnectionStrings:{DependencyInjection.ConnectionStringName}", connectionString);
+            b.UseSetting("Deployments:Provider", "Vercel");
+            b.UseSetting("Databases:Provider", "Platform");
+        });
+        await SeedAsync(app);
+
+        await WithDbAsync(app, async db =>
+        {
+            Assert.False(await db.DeploymentTargets.AnyAsync(Ct));
+            Assert.False(await db.ManagedDatabases.AnyAsync(Ct));
+            Assert.False(await db.PlatformConnections.AnyAsync(Ct));
+        });
+    }
+
     private async Task<WebApplicationFactory<Program>> AppAsync() => App(await factory.CreateMigratedDatabaseAsync(Ct));
 
     private WebApplicationFactory<Program> App(string connectionString) =>

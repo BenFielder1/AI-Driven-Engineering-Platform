@@ -182,9 +182,9 @@ test('NFR-TEST2, FR-55–FR-66, FR-90, FR-91: 0.1.0 is released live on Vercel, 
   await page.getByRole('button', { name: 'Roll back…' }).click()
   const rollback = page.getByRole('alertdialog', { name: 'Roll back the project' })
   const targetSelect = rollback.getByLabel('Checkpoint to restore')
-  await expect(targetSelect.locator('option')).not.toHaveCount(1)
+  // The placeholder plus at least two checkpoints; 0 options means the list hasn't rendered yet.
+  await expect.poll(() => targetSelect.locator('option').count()).toBeGreaterThan(2)
   const optionTexts = (await targetSelect.locator('option').allTextContents()).slice(1)
-  expect(optionTexts.length).toBeGreaterThan(1)
   for (const text of optionTexts) {
     expect(text).toMatch(/^0\.2\.0 · checkpoint \d+ · /)
   }

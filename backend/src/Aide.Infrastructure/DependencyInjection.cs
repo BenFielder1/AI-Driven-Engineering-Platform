@@ -225,6 +225,7 @@ public static class DependencyInjection
         services.AddSingleton<VercelDeploymentProvider>();
         services.AddSingleton<GitHubPagesDeploymentProvider>();
         services.AddSingleton<NetlifyDeployRateLimiter>();
+        services.AddSingleton<IGitHostRepoLinks, GitHostRepoLinks>();
         services.AddSingleton<NetlifyDeploymentProvider>();
         services.AddSingleton<CloudflareDeploymentProvider>();
         services.AddSingleton<RenderLogRateLimiter>();

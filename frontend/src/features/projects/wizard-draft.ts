@@ -1,8 +1,10 @@
 import { wizardDefaults, wizardShape, type WizardValues } from './schemas'
+import { hostSecretFields } from './wizard-host-fields'
 
 /**
  * FR-159, SPEC §7 UI rules: "Add a connection" opens Connections in the same tab and the wizard comes back with its
- * state, kept in session storage (this tab only, cleared when the tab closes). The Git access token is never stored.
+ * state, kept in session storage (this tab only, cleared when the tab closes). The Git access token and External
+ * connection strings are never stored.
  */
 export const WIZARD_DRAFT_KEY = 'aide.new-project-wizard.draft'
 
@@ -28,10 +30,16 @@ function read(): string | null {
   }
 }
 
-/** Saves the wizard's values (without the access token) and step. */
+const withoutSecrets = (values: WizardValues): WizardValues => ({
+  ...values,
+  gitToken: '',
+  ...Object.fromEntries(hostSecretFields.map((f) => [f, ''])),
+})
+
+/** Saves the wizard's values (without the access token or connection strings) and step. */
 export function saveWizardDraft(values: WizardValues, step: number): void {
   try {
-    storage()?.setItem(WIZARD_DRAFT_KEY, JSON.stringify({ values: { ...values, gitToken: '' }, step }))
+    storage()?.setItem(WIZARD_DRAFT_KEY, JSON.stringify({ values: withoutSecrets(values), step }))
   } catch {
     // Quota or blocked storage: nothing is kept.
   }
@@ -60,7 +68,7 @@ export function readWizardDraft(): WizardDraft | null {
     const stored = typeof parsed.values === 'object' && parsed.values !== null ? parsed.values : {}
     const values = wizardShape.safeParse({ ...wizardDefaults, ...stored })
     const step = typeof parsed.step === 'number' && Number.isInteger(parsed.step) && parsed.step >= 0 ? parsed.step : 0
-    return values.success ? { values: { ...values.data, gitToken: '' }, step } : null
+    return values.success ? { values: withoutSecrets(values.data), step } : null
   } catch {
     return null
   }

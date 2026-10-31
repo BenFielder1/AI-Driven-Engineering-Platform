@@ -554,6 +554,35 @@ const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]{0,255}$/
 const SECRET_KEY = /SECRET|SERVICE_?ROLE|PRIVATE|PASSWORD/i
 const SECRET_VALUE = /sb_secret_|sk_live|PRIVATE KEY-----|service_role/
 
+const hostProviderOfOption: Readonly<Record<string, Provider>> = {
+  'deploy-vercel': 'vercel',
+  'deploy-netlify': 'netlify',
+  'deploy-cloudflare': 'cloudflare',
+  'deploy-github-pages': 'github_pages',
+  'deploy-render': 'render',
+  'deploy-railway': 'railway',
+}
+
+const databaseProviderOfOption: Readonly<Record<string, DatabaseProvider>> = {
+  supabase: 'supabase',
+  'render-postgres': 'render',
+  'railway-postgres': 'railway',
+  external: 'external',
+}
+
+/** FR-144, FR-152: a created project's target and database cards, from its composition's hosts (nothing set up yet). */
+export function seedHostsFromComposition(p: StoredProject, deploy: Schemas['StackCompositionDto']['deploy']) {
+  const frontend = hostProviderOfOption[deploy.frontendHost ?? '']
+  const backend = hostProviderOfOption[deploy.backendHost ?? '']
+  const database = databaseProviderOfOption[deploy.databaseHost ?? '']
+  if (!frontend && !backend && !database) {
+    return
+  }
+  const d = deploymentOf(p)
+  d.targets = [...(frontend ? [makeTarget('frontend', frontend)] : []), ...(backend ? [makeTarget('backend', backend)] : [])]
+  d.databases = database ? [makeDatabase('production', database), makeDatabase('preview', database)] : []
+}
+
 /** FR-88 wizard (`POST /projects` `deployment`): v2's Vercel flow, now the project's frontend target (FR-144). */
 export function applyVercelSetup(
   p: StoredProject,
@@ -1367,7 +1396,7 @@ export const deploymentHandlers = [
     if (a.level === 'viewer') {
       return forbidden()
     }
-    if (!configured(a.project)) {
+    if (!configured(a.project) && a.project.previewMigrationsEnabled !== true) {
       return problem(409, 'DEPLOYMENT_NOT_CONFIGURED', 'The project has no deployment settings.')
     }
     const stored = previewEnvironments.get(a.project.id)

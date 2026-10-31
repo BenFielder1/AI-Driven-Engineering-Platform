@@ -71,7 +71,7 @@ public sealed partial class PreviewCollector(AideDbContext db, RolloutReader rol
 
         // The check names the frontend preview (else the backend); a rollout that deployed nothing names itself.
         var primary = rollout.Steps.LastOrDefault(s => s.DeploymentId is not null);
-        var status = primary?.Status ?? (rollout.State == RolloutState.Running ? DeploymentStatus.Building : DeploymentStatus.Canceled);
+        var status = primary?.Status ?? PreviewReviewRules.StatusWithoutDeployment(rollout.State, rollout.Steps.Any(s => s.Step == RolloutStepKind.Migrations && s.MigrationRunId is not null));
         var check = new PreviewCheckDto(
             primary?.DeploymentId ?? job.Id, status, primary?.Url, primary?.BuildLogTail, waited, decision.TimedOut, rollout);
         return new CollectedPreview(check, await FindingsAsync(rollout, cancellationToken));

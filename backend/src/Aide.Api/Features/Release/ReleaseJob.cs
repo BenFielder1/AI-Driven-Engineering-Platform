@@ -49,6 +49,8 @@ public sealed partial class ReleaseJobHandler(
     GitHubReleasePublisher publisher,
     Git.MergeReadinessService readiness,
     Databases.MigrationRunService migrations,
+    ProductionMigrationGate gate,
+    Deployments.DeploymentEnvSync envSync,
     IWorkingCopies workingCopies,
     TimeProvider time,
     ILogger<ReleaseJobHandler> logger) : IJobHandler
@@ -105,8 +107,8 @@ public sealed partial class ReleaseJobHandler(
         }
 
         // §4.21: Supabase BaaS production migrations run before the code reaches the default branch (platforms deploy it on
-        // merge): immediately before AIDE merges, or as the release enters awaiting_merge (manual). A failure blocks the merge,
-        // and the merge is pinned to the commit they ran on.
+        // merge), once merge readiness passes: immediately before AIDE merges, or as the release enters awaiting_merge
+        // (manual). A failure blocks the merge, and the merge is pinned to the commit they ran on.
         var migrated = await MigrateProductionAsync(project, release.Id, working.Branch, cancellationToken);
         if (migrated.Failed)
         {
@@ -116,17 +118,22 @@ public sealed partial class ReleaseJobHandler(
         // FR-65: the manual strategy never merges; the release then waits for the merge on GitHub (or in the Local repository).
         var merge = MergeReadinessRules.AideMerges(project.MergeStrategy);
 
-        // §4.21: when readiness shows the PR can't merge, the migrations didn't run, so AIDE never calls an unpinned merge:
-        // a conflict fails the release as FR-43 does (MERGE_CONFLICT with the files); a PR that isn't open is released
-        // without merging (merged elsewhere: tagged; closed: PR_CLOSED), as the providers do for those states.
+        // §4.21: when readiness hasn't passed, the migrations didn't run, so AIDE never calls an unpinned merge: a conflict
+        // fails the release as FR-43 does (MERGE_CONFLICT with the files); a PR that isn't open is released without merging
+        // (merged elsewhere: tagged; closed: PR_CLOSED), as the providers do for those states; anything else (a review, checks)
+        // awaits the merge as a refused merge does (FR-65), and the merge poll migrates once readiness passes.
         if (merge && migrated.Blocked == MergeReadinessReasonCode.MergeConflict)
         {
             await FailConflictedAsync(release.Id, working, migrated.Head!, cancellationToken);
             return;
         }
 
+        // FR-145, FR-146: the merge push starts a GitHub Pages build, so its pending variables go first (a failure doesn't block).
+        await envSync.PushPendingBeforeMergeAsync(project.Id, SystemActor.Name, cancellationToken);
+        db.ChangeTracker.Clear();
+
         var notOpen = merge && migrated.Blocked == MergeReadinessReasonCode.PrNotOpen;
-        merge &= !notOpen;
+        merge &= migrated.Blocked is null;
         var request = new ReleaseRequest(
             working.Branch,
             release.Tag,
@@ -153,13 +160,17 @@ public sealed partial class ReleaseJobHandler(
                 }
 
                 var url = outcome.ReleaseUrl ?? await publisher.PublishAsync(release, outcome.Tag ?? release.Tag, cancellationToken);
-                await completion.SucceedAsync(release.Id, outcome, url, mergedExternally: outcome.MergedExternally, cancellationToken);
+                var unmigrated = outcome.MergedExternally ? await gate.UnmigratedMergeAsync(release, outcome.MergedHead, working.Branch, cancellationToken) : null;
+                await completion.SucceedAsync(release.Id, outcome, url, mergedExternally: outcome.MergedExternally, cancellationToken, unmigrated);
                 return;
             case ReleaseOutcomeKind.AwaitingMerge when notOpen:
                 // Readiness said the PR wasn't open, but it is (reopened meanwhile): look again, migrating first.
                 throw new JobFailedException("The pull request is open again; the release retries and runs the production migrations first.", transient: true, ErrorCodes.GitError);
             case ReleaseOutcomeKind.AwaitingMerge:
-                await completion.AwaitMergeAsync(release.Id, project.MergeStrategy, await AwaitingReasonsAsync(project, outcome, cancellationToken), cancellationToken);
+                var awaitingReasons = await AwaitingReasonsAsync(project, outcome, cancellationToken);
+
+                // §4.21: readiness blocked AIDE's merge and has changed since (or can't be read now): the attempt still says why it waits.
+                await completion.AwaitMergeAsync(release.Id, project.MergeStrategy, awaitingReasons.Count == 0 ? migrated.Reasons : awaitingReasons, cancellationToken);
                 return;
             case ReleaseOutcomeKind.Conflict:
                 await FailAsync(release.Id, ErrorCodes.MergeConflict, outcome.Reason!, outcome.ConflictingFiles, cancellationToken);
@@ -222,53 +233,45 @@ public sealed partial class ReleaseJobHandler(
     /// remote-tracking branch (which the host's PR head must equal), else the local branch (Local Git); the merge is then
     /// pinned to it (<see cref="ReleaseRequest.ExpectedHeadSha"/>). A succeeded run counts only for that same commit: a head
     /// that moved runs the migrations again first. Skipped when the project isn't BaaS (host mode migrates on the platform,
-    /// FR-154), when the attempt already merged or submitted its merge, and when merge readiness shows the PR can't merge at
-    /// all (a conflict, or not open): unmerged migrations never run against production for nothing. <c>Failed</c>: the run
-    /// failed and the release was failed with its code (<c>MIGRATION_FAILED</c>, <c>MIGRATION_HISTORY_DIVERGED</c>); nothing
-    /// is merged then. <c>Head</c>: the commit migrated (the merge pin), or <c>null</c> when nothing ran.
+    /// FR-154), when the attempt already merged or submitted its merge, and when merge readiness hasn't passed
+    /// (<see cref="ProductionMigrationRules.BlockingReason"/>): unmerged migrations never run against production for nothing.
+    /// <c>Failed</c>: the run failed and the release was failed with its code (<c>MIGRATION_FAILED</c>,
+    /// <c>MIGRATION_HISTORY_DIVERGED</c>); nothing is merged then. <c>Head</c>: the commit migrated (the merge pin), or
+    /// <c>null</c> when nothing ran.
     /// </summary>
-    private async Task<(bool Failed, string? Head, MergeReadinessReasonCode? Blocked)> MigrateProductionAsync(Project project, Guid releaseId, string branch, CancellationToken cancellationToken)
+    private async Task<PreMergeMigration> MigrateProductionAsync(Project project, Guid releaseId, string branch, CancellationToken cancellationToken)
     {
         var release = await db.Releases.AsNoTracking().FirstAsync(r => r.Id == releaseId, cancellationToken);
         if (release.MergeCommitSha is not null || release.MergeSubmittedAt is not null
             || !await migrations.HasMigrationStepAsync(project.Id, DeploymentEnvironment.Production, cancellationToken))
         {
-            return (false, null, null);
+            return PreMergeMigration.None;
         }
 
-        var head = await MergeHeadAsync(project.Id, branch, cancellationToken)
+        var head = await gate.HeadAsync(project.Id, branch, cancellationToken)
             ?? throw new JobFailedException("The version branch can't be read to run the production migrations.", transient: true, ErrorCodes.GitError);
         if (release.MigrationRunId is { } runId
             && await db.DatabaseMigrationRuns.AsNoTracking().AnyAsync(r => r.Id == runId && r.Status == MigrationRunStatus.Succeeded && r.GitSha == head, cancellationToken))
         {
-            return (false, head, null);
+            return new PreMergeMigration(false, head, null, []);
         }
 
         // Unknown readiness (an error, a rate limit) doesn't block: the migrations run and the merge is pinned to them.
-        if (await BlockingReasonAsync(project, cancellationToken) is { } blocked)
+        var ready = await gate.ReadinessAsync(project.Id, cancellationToken);
+        if (ready.Blocked is { } blocked)
         {
             LogMigrationsDeferred(logger, project.Id);
-            return (false, head, blocked);
+            return new PreMergeMigration(false, head, blocked, ready.Reasons);
         }
 
-        DatabaseMigrationRun run;
-        try
+        if (await gate.RunAsync(release, head, cancellationToken) is not { } run)
         {
-            run = await migrations.RunAsync(project.Id, DeploymentEnvironment.Production, release.ReleaseVersionId, release.Id, head, cancellationToken);
-        }
-        catch (Databases.MigrationTargetMissingException)
-        {
-            return (false, null, null);
+            return PreMergeMigration.None;
         }
 
-        db.ChangeTracker.Clear();
-        var tracked = await db.Releases.FirstAsync(r => r.Id == releaseId, cancellationToken);
-        tracked.MigrationRunId = run.Id;
-        await SaveAsync(cancellationToken);
-        db.ChangeTracker.Clear();
         if (run.Status == MigrationRunStatus.Succeeded)
         {
-            return (false, head, null);
+            return new PreMergeMigration(false, head, null, []);
         }
 
         await FailAsync(
@@ -277,7 +280,16 @@ public sealed partial class ReleaseJobHandler(
             $"The production database migrations failed, so nothing was merged: {run.ErrorMessage ?? "see the migration run"}",
             [],
             cancellationToken);
-        return (true, null, null);
+        return new PreMergeMigration(true, null, null, []);
+    }
+
+    /// <summary>
+    /// What <see cref="MigrateProductionAsync"/> did: <c>Failed</c> (the release was failed), the commit migrated, and why
+    /// merge readiness hasn't passed, with its reasons.
+    /// </summary>
+    private sealed record PreMergeMigration(bool Failed, string? Head, MergeReadinessReasonCode? Blocked, IReadOnlyList<Git.MergeReadinessReasonDto> Reasons)
+    {
+        public static PreMergeMigration None { get; } = new(false, null, null, []);
     }
 
     /// <summary>
@@ -302,41 +314,6 @@ public sealed partial class ReleaseJobHandler(
     }
 
     /// <summary>
-    /// The commit the provider merges (as the GitHub, GitLab and Bitbucket providers resolve it): the fetched
-    /// remote-tracking branch, else the local branch (Local Git has no remote).
-    /// </summary>
-    private async Task<string?> MergeHeadAsync(Guid projectId, string branch, CancellationToken cancellationToken) =>
-        await workingCopies.ResolveCommitAsync(projectId, $"refs/remotes/{GitRemote.Name}/{branch}", cancellationToken)
-        ?? await workingCopies.ResolveCommitAsync(projectId, $"refs/heads/{branch}", cancellationToken);
-
-    /// <summary>
-    /// Why merge readiness says the PR can't be merged at all: <c>merge_conflict</c> (first) or <c>pr_not_open</c>;
-    /// <c>null</c> when it can, or when readiness is unknown (that doesn't block).
-    /// </summary>
-    private async Task<MergeReadinessReasonCode?> BlockingReasonAsync(Project project, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var computed = await readiness.ComputeAsync(project.Id, cancellationToken);
-            if (computed.IsFailure)
-            {
-                return null;
-            }
-
-            var codes = computed.Value.Reasons.Select(r => r.Code).ToList();
-            return codes.Contains(MergeReadinessReasonCode.MergeConflict) ? MergeReadinessReasonCode.MergeConflict
-                : codes.Contains(MergeReadinessReasonCode.PrNotOpen) ? MergeReadinessReasonCode.PrNotOpen
-                : null;
-        }
-        catch (Exception ex) when (ex is Infrastructure.GitHub.GitHubRateLimitedException or Infrastructure.GitLab.GitLabRateLimitedException
-            or Infrastructure.Bitbucket.BitbucketRateLimitedException)
-        {
-            LogReadinessRateLimited(logger, project.Id);
-            return null;
-        }
-    }
-
-    /// <summary>
     /// §4.21: the host merged another head than the one migrated before the merge (Bitbucket can't pin it): logged and
     /// recorded (<c>MERGED_HEAD_MISMATCH</c>); the production rollout's post-merge run on the merge commit is relied on.
     /// </summary>
@@ -358,7 +335,7 @@ public sealed partial class ReleaseJobHandler(
     [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId}: the host merged head {MergedHead}, not the migrated head {ExpectedHead}; the post-merge production run migrates it")]
     private static partial void LogMergedHeadMismatch(ILogger logger, Guid projectId, string mergedHead, string? expectedHead);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: production migrations wait: merge readiness shows the PR can't merge")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: production migrations wait: merge readiness hasn't passed")]
     private static partial void LogMigrationsDeferred(ILogger logger, Guid projectId);
 
     /// <summary>
@@ -557,6 +534,7 @@ public static class ReleaseServiceCollectionExtensions
     {
         services.AddScoped<ReleaseService>();
         services.AddScoped<ReleaseCompletion>();
+        services.AddScoped<ProductionMigrationGate>();
         services.AddScoped<GitHubReleasePublisher>();
         services.AddScoped<IJobEndedHook, MergePollJobEndedHook>();
         services.AddJobHandler<MergePollJobHandler>(JobTypes.MergePoll);

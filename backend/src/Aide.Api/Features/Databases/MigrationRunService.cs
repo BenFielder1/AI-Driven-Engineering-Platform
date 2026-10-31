@@ -70,6 +70,16 @@ public sealed partial class MigrationRunService(
         await IsBaasAsync(projectId, cancellationToken) && (await TargetAsync(projectId, environment, cancellationToken)).Target != DatabaseMigrationTarget.Absent;
 
     /// <summary>
+    /// §4.21: whether the environment's database can take migrations and changed after <paramref name="since"/> (restored or
+    /// linked again), so a run that failed before then is worth trying again.
+    /// </summary>
+    public async Task<bool> UsableSinceAsync(Guid projectId, DeploymentEnvironment environment, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        var (row, target) = await TargetAsync(projectId, environment, cancellationToken);
+        return row is not null && target == DatabaseMigrationTarget.Usable && row.UpdatedAt > since;
+    }
+
+    /// <summary>
     /// Runs the migrations of <paramref name="gitSha"/> on the environment's database and records the run (saved). A failed
     /// preparation or a missing database is a failed run (<c>MIGRATION_FAILED</c>) so the caller always has one. §4.21: a
     /// preview run on a database that isn't separate from production (same resource or connection) runs nothing and is a

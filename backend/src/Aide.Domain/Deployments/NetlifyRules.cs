@@ -7,6 +7,12 @@ namespace Aide.Domain.Deployments;
 /// <summary>A Netlify deploy-creation decision (§4.20): go ahead now, or wait until <see cref="RetryAt"/>.</summary>
 public sealed record NetlifyDeployLimitDecision(bool Allowed, DateTimeOffset? RetryAt);
 
+/// <summary>A deploy key on Netlify (<c>GET /deploy_keys</c>): its id and public key.</summary>
+public sealed record NetlifyDeployKey(string Id, string? PublicKey);
+
+/// <summary>A deploy key on a repository: its public key and whether it is read-only.</summary>
+public sealed record RepoDeployKey(string? PublicKey, bool ReadOnly);
+
 /// <summary>
 /// §4.20 Netlify: deploy states, the deploy-creation limit (3 a minute and 100 a day per account, enforced before calling),
 /// env contexts per AIDE environment, the provider deployment id (the deploy id, plus the commit and branch a preview must
@@ -23,6 +29,34 @@ public static class NetlifyRules
 
     /// <summary>The Netlify GitHub App install page (FR-144 <c>PLATFORM_GIT_NOT_CONNECTED</c> link).</summary>
     public const string GitHubInstallUrl = "https://github.com/apps/netlify/installations/new";
+
+    /// <summary>§4.20, D-V4-16: the title of the deploy key and the description of the webhook AIDE adds to the repository.</summary>
+    public const string RepoLinkTitle = "Netlify (added by AIDE)";
+
+    /// <summary>§8: the only URL AIDE points a repository webhook at, for <c>gitlab</c> or <c>bitbucket</c>.</summary>
+    public static string WebhookUrl(string? host) => host is "gitlab" or "bitbucket"
+        ? $"https://api.netlify.com/hooks/{host}"
+        : throw new ArgumentOutOfRangeException(nameof(host), host, "Netlify is linked by webhook only for GitLab and Bitbucket.");
+
+    /// <summary>Whether two OpenSSH public keys are the same key: type and data match, whatever the comment.</summary>
+    public static bool SamePublicKey(string? left, string? right)
+    {
+        var a = left?.Split((char[]?)null, 3, StringSplitOptions.RemoveEmptyEntries);
+        var b = right?.Split((char[]?)null, 3, StringSplitOptions.RemoveEmptyEntries);
+        return a is { Length: >= 2 } && b is { Length: >= 2 }
+            && string.Equals(a[0], b[0], StringComparison.Ordinal) && string.Equals(a[1], b[1], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// §4.20 idempotent link: the Netlify deploy key already on the repository from an earlier attempt, or <c>null</c>. A
+    /// key the repository lets push doesn't count (§8: keys for Netlify are read-only).
+    /// </summary>
+    public static string? ReusableDeployKey(IEnumerable<NetlifyDeployKey> netlifyKeys, IReadOnlyCollection<RepoDeployKey> repoKeys)
+    {
+        ArgumentNullException.ThrowIfNull(netlifyKeys);
+        ArgumentNullException.ThrowIfNull(repoKeys);
+        return netlifyKeys.FirstOrDefault(n => repoKeys.Any(r => r.ReadOnly && SamePublicKey(r.PublicKey, n.PublicKey)))?.Id;
+    }
 
     /// <summary>
     /// §4.20 state mapping: <c>new</c>, <c>pending_review</c>, <c>accepted</c>, <c>enqueued</c> → queued; <c>building</c>,

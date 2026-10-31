@@ -254,7 +254,9 @@ internal static class ActivitySummary
             EventTypes.MigrationRunStarted => $"{Get("environment") ?? "Database"} migration run started",
             EventTypes.MigrationRunCompleted => $"{Get("environment") ?? "Database"} migration run applied {Get("applied") ?? "0"} file(s)",
             EventTypes.MigrationRunFailed => $"{Get("environment") ?? "Database"} migration run failed: {Get("errorCode") ?? "error"}",
-            EventTypes.MergedHeadMismatch => $"The host merged {Short(Get("mergedHeadSha"))}, not the migrated head {Short(Get("expectedHeadSha"))}; the production rollout migrates the merge commit",
+            EventTypes.MergedHeadMismatch => Get("expectedHeadSha") is null
+                ? $"{Short(Get("mergedHeadSha"))} was merged before AIDE ran the production migrations; the production rollout migrates the merge commit"
+                : $"The host merged {Short(Get("mergedHeadSha"))}, not the migrated head {Short(Get("expectedHeadSha"))}; the production rollout migrates the merge commit",
             EventTypes.DeadLetterRetried => $"Dead-lettered {Get("jobType") ?? "?"} job retried by an Admin",
             _ when Get("type") is { } artifactType && Get("version") is { } version
                 => $"{Humanize(type)}: {artifactType} v{version}",

@@ -76,7 +76,8 @@ public static class GitHubRules
     /// <summary>
     /// §4.14: the App's repository permissions in the manifest: Contents, Pull requests, Workflows and Administration
     /// write (Administration is for "Create repository"; the Admin may untick it), Pages write (FR-143: GitHub Pages
-    /// deployments), Metadata, Checks and Commit statuses read. User permission: email addresses read (sign-in needs a
+    /// deployments), Variables write (FR-145, FR-146: GitHub Pages build-time values), Actions write (FR-145: re-running a
+    /// Pages build that started before its variables were synced), Metadata, Checks and Commit statuses read. User permission: email addresses read (sign-in needs a
     /// verified email).
     /// </summary>
     public static IReadOnlyDictionary<string, string> ManifestPermissions { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -86,6 +87,8 @@ public static class GitHubRules
         ["workflows"] = "write",
         ["administration"] = "write",
         ["pages"] = "write",
+        ["actions_variables"] = "write",
+        ["actions"] = "write",
         ["metadata"] = "read",
         ["checks"] = "read",
         ["statuses"] = "read",
@@ -128,6 +131,16 @@ public static class GitHubRules
     public static GitHubPagesAccess PagesPermission(IReadOnlyDictionary<string, string>? permissions) =>
         permissions is null ? GitHubPagesAccess.Unknown
         : permissions.TryGetValue("pages", out var level) && level == "write" ? GitHubPagesAccess.Granted
+        : GitHubPagesAccess.Missing;
+
+    /// <summary>
+    /// FR-145, FR-146: whether permissions GitHub reported include Variables write, which syncing GitHub Pages build-time
+    /// values needs. App registrations and installations from before this permission report <c>missing</c> until updated
+    /// and accepted.
+    /// </summary>
+    public static GitHubPagesAccess VariablesPermission(IReadOnlyDictionary<string, string>? permissions) =>
+        permissions is null ? GitHubPagesAccess.Unknown
+        : permissions.TryGetValue("actions_variables", out var level) && level == "write" ? GitHubPagesAccess.Granted
         : GitHubPagesAccess.Missing;
 
     /// <summary>GitHub's account type (<c>User</c>, <c>Organization</c>; <c>Bot</c> and others count as users).</summary>

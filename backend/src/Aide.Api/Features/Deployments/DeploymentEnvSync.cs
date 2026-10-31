@@ -31,6 +31,7 @@ public sealed partial class DeploymentEnvSync(AideDbContext db, DeploymentAccess
 
         var writes = new List<DeploymentEnvWrite>();
         var deletes = new List<string>();
+        var secret = new List<DeploymentEnvVar>();
         foreach (var v in mine)
         {
             if (ValuesOf(v) is not { } values)
@@ -39,16 +40,41 @@ public sealed partial class DeploymentEnvSync(AideDbContext db, DeploymentAccess
                 continue;
             }
 
+            // FR-145, §8: whatever saved it, a public variable that looks secret never leaves AIDE; one sent earlier is removed.
+            if (v.Public && values.Values.Any(value => EnvInventoryRules.LooksSecret(v.Key, value)))
+            {
+                deletes.AddRange(ScopedIds(v.VercelEnvIds, component).Values);
+                secret.Add(v);
+                continue;
+            }
+
             var plan = EnvSyncRules.Plan([.. values.Keys], ScopedIds(v.VercelEnvIds, component));
-            writes.AddRange(plan.Writes.Select(w => new DeploymentEnvWrite(v.Key, values[w.Target], w.Target, v.Sensitive, w.ExistingVercelId)));
+            writes.AddRange(plan.Writes.Select(w => new DeploymentEnvWrite(v.Key, values[w.Target], w.Target, v.Sensitive, w.ExistingVercelId, v.Public)));
             deletes.AddRange(plan.Deletes.Select(d => d.VercelId));
         }
 
-        var written = await context.Provider.SyncEnvAsync(context.Auth, context.TargetRef, new DeploymentEnvSyncRequest(writes, deletes), cancellationToken);
+        IReadOnlyList<DeploymentEnvWritten> written = writes.Count == 0 && deletes.Count == 0
+            ? []
+            : await context.Provider.SyncEnvAsync(context.Auth, context.TargetRef, new DeploymentEnvSyncRequest(writes, deletes), cancellationToken);
+        foreach (var v in secret)
+        {
+            v.VercelEnvIds = MergeIds(v.VercelEnvIds, component, null);
+            v.SyncError = $"{char.ToUpperInvariant(EnvInventoryRules.PublicSecretMessage[0])}{EnvInventoryRules.PublicSecretMessage[1..]}, so this variable isn't sent.";
+        }
+
         var now = time.GetUtcNow();
         foreach (var v in mine.Where(v => writes.Any(w => w.Key == v.Key)))
         {
-            v.VercelEnvIds = MergeIds(v.VercelEnvIds, component, written.Where(w => w.Key == v.Key).ToDictionary(w => w.Target, w => w.Id));
+            var results = written.Where(w => w.Key == v.Key).ToList();
+            v.VercelEnvIds = MergeIds(v.VercelEnvIds, component, results.Where(w => w.Refused is null || w.Id.Length > 0).ToDictionary(w => w.Target, w => w.Id));
+
+            // A variable the platform can't take was never sent: it keeps its local value and says why (FR-145).
+            if (results.FirstOrDefault(w => w.Refused is not null) is { } refused)
+            {
+                v.SyncError = refused.Refused;
+                continue;
+            }
+
             v.SyncedAt = now;
             v.SyncError = null;
         }
@@ -158,11 +184,15 @@ public sealed partial class DeploymentEnvSync(AideDbContext db, DeploymentAccess
     public async Task PushPendingAsync(DeploymentContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
+
+        // Before FR-145 reached GitHub Pages its sync wrote nothing yet marked variables synced: one without an id still has to go.
+        var pages = context.Target.Provider == DeploymentProvider.GithubPages;
         var pending = (await db.DeploymentEnvVars
-            .Where(v => v.ProjectId == context.Target.ProjectId && (v.SyncedAt == null || v.SyncError != null))
+            .Where(v => v.ProjectId == context.Target.ProjectId && (pages || v.SyncedAt == null || v.SyncError != null))
             .OrderBy(v => v.Key)
             .ToListAsync(cancellationToken))
-            .Where(v => AppliesTo(v, context.Target.Component))
+            .Where(v => AppliesTo(v, context.Target.Component)
+                && (v.SyncedAt == null || v.SyncError != null || ScopedIds(v.VercelEnvIds, context.Target.Component).Count == 0))
             .ToList();
         try
         {
@@ -176,6 +206,55 @@ public sealed partial class DeploymentEnvSync(AideDbContext db, DeploymentAccess
             }
 
             LogPendingFailed(logger, ex.Failure, ex.Status);
+        }
+    }
+
+    /// <summary>
+    /// FR-145, FR-146: a GitHub Pages build starts on the merge push and reads its variables then, so the pending ones go
+    /// before the merge (and, under <c>manual</c>, as the release enters <c>awaiting_merge</c>; a person's merge can't be
+    /// preceded otherwise). Never blocks the release: a failure stays on the variables as <c>syncError</c> with a warning, a
+    /// rejected token marks the connection invalid, and the post-merge deployment job tries again. Saves its changes.
+    /// </summary>
+    public async Task PushPendingBeforeMergeAsync(Guid projectId, string actor, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var target = await db.DeploymentTargets.AsNoTracking().FirstOrDefaultAsync(
+                t => t.ProjectId == projectId && t.Provider == DeploymentProvider.GithubPages && t.ResourceId != null, cancellationToken);
+            if (target is null)
+            {
+                return;
+            }
+
+            var context = await access.ResolveAsync(target, cancellationToken);
+            if (context.IsFailure)
+            {
+                LogBeforeMergeUnavailable(logger, projectId, context.Error!.Code);
+                return;
+            }
+
+            try
+            {
+                await PushPendingAsync(context.Value, cancellationToken);
+            }
+            catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.CredentialRejected)
+            {
+                await access.MarkInvalidAsync(context.Value.Connection?.Id, projectId, actor, time.GetUtcNow(), cancellationToken);
+                var message = DeploymentSettingsService.Message(ex);
+                foreach (var v in db.ChangeTracker.Entries<DeploymentEnvVar>().Select(e => e.Entity).Where(v => v.ProjectId == projectId && AppliesTo(v, target.Component) && (v.SyncedAt == null || v.SyncError != null)))
+                {
+                    v.SyncError = message;
+                }
+
+                LogPendingFailed(logger, ex.Failure, ex.Status);
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            LogBeforeMergeFailed(logger, ex, projectId);
+            db.ChangeTracker.Clear();
         }
     }
 
@@ -239,6 +318,12 @@ public sealed partial class DeploymentEnvSync(AideDbContext db, DeploymentAccess
     }
 
     private static string Prefix(DeploymentComponent component) => component == DeploymentComponent.Frontend ? string.Empty : $"{component.ToWire()}:";
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId}: the GitHub Pages target can't be reached before the merge ({Code}); the build may miss pending variables")]
+    private static partial void LogBeforeMergeUnavailable(ILogger logger, Guid projectId, string code);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId}: pushing pending GitHub Pages variables before the merge failed; the release goes ahead")]
+    private static partial void LogBeforeMergeFailed(ILogger logger, Exception exception, Guid projectId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Pushed {VarCount} environment variable(s) to the {Component} target ({Writes} writes, {Deletes} deletes)")]
     private static partial void LogPushed(ILogger logger, DeploymentComponent component, int varCount, int writes, int deletes);

@@ -14,7 +14,8 @@ internal static class ProjectMapping
     /// <param name="myRole">The caller's project role.</param>
     /// <param name="preset">The retired preset the current release version was migrated from (history, FR-129).</param>
     /// <param name="deploymentsEnabled">FR-88: the project has deployment settings.</param>
-    public static ProjectDto ToDto(Project p, ProjectRole? myRole, Stack.ProjectPresetRef preset, bool deploymentsEnabled) => new(
+    /// <param name="previewMigrationsEnabled">FR-147, §4.21: a preview rollout has a migration step, even with no target.</param>
+    public static ProjectDto ToDto(Project p, ProjectRole? myRole, Stack.ProjectPresetRef preset, bool deploymentsEnabled, bool previewMigrationsEnabled) => new(
         p.Id,
         p.Name,
         p.Slug,
@@ -39,7 +40,8 @@ internal static class ProjectMapping
         preset.PresetName,
         preset.PresetVersion,
         deploymentsEnabled,
-        [.. p.StackPacks]);
+        [.. p.StackPacks],
+        previewMigrationsEnabled);
 
     /// <param name="s">The project's Git settings.</param>
     /// <param name="branchName">The working branch of the project's current release version (§4.10), if recorded.</param>

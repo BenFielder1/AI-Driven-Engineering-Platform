@@ -4,7 +4,6 @@ import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
-import type { Schemas } from '../../api/client'
 import { panelClass } from '../../components/shared/panel-class'
 import { StatusBadge } from '../../components/shared/status-badge'
 import { Alert, ErrorSummary } from '../../components/ui/alert'
@@ -12,17 +11,10 @@ import { Button } from '../../components/ui/button'
 import { buttonClasses } from '../../components/ui/button-classes'
 import { ConfirmDialog } from '../../components/ui/confirm-dialog'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
-import { RadioGroup } from '../../components/ui/radio-group'
-import { SelectField } from '../../components/ui/select-field'
-import { ErrorState, LoadingState } from '../../components/ui/states'
-import { TextField } from '../../components/ui/text-field'
 import { errorMessage, isApiError, platformCopy } from '../../lib/errors'
-import { Link } from '../../lib/navigation'
 import { cn } from '../../lib/utils'
 import { useCurrentUser } from '../auth/auth-api'
-import { connectionLabel, credentialStatusLabels } from '../connections/connection-format'
 import { CredentialStatusBadge } from '../connections/credential-status-badge'
-import { isPlatformProvider, usePlatformConnections, usePlatformResources } from '../connections/platform-connections-api'
 import type { Project } from '../projects/projects-api'
 import {
   capabilityLines,
@@ -48,6 +40,8 @@ import {
   useVerifyDeploymentTarget,
   type TargetCard,
 } from './deployments-api'
+import { targetRequestBody } from './host-setup-body'
+import { HostSetupFields } from './host-setup-fields'
 import { PlatformGitAlert } from './platform-git-alert'
 
 const providerName = (t: Pick<TargetCard, 'provider'>) => deploymentProviderLabels[t.provider]
@@ -406,32 +400,10 @@ function TargetSetupForm({ project, target: t, onDone }: { project: Project; tar
   })
   const mode = useWatch({ control, name: 'mode' })
   const connectionId = useWatch({ control, name: 'connectionId' })
-  const platform = isPlatformProvider(t.provider) ? t.provider : undefined
-  const connections = usePlatformConnections({ enabled: t.canBind && platform !== undefined, ...(platform ? { provider: platform } : {}) })
-  const own = connections.data ?? []
-  const selected = own.find((c) => c.id === connectionId)
-  const resources = usePlatformResources(mode === 'link' && connectionId ? connectionId : null, pickerType)
 
   const onSubmit = handleSubmit((v) => {
     setFailure(null)
-    // GitHub Pages: the provider only. Others: always the chosen connection; `keep` is a rebind (no create or link).
-    const body: Schemas['PutDeploymentTargetRequest'] = !t.needsConnection
-      ? { provider: t.provider }
-      : {
-          provider: t.provider,
-          connectionId: v.connectionId,
-          ...(v.mode === 'create'
-            ? {
-                create: {
-                  name: v.name.trim(),
-                  ...(v.region.trim() ? { region: v.region.trim() } : {}),
-                  ...(v.plan.trim() ? { plan: v.plan.trim() } : {}),
-                },
-              }
-            : v.mode === 'link'
-              ? { link: { resourceId: v.resourceId.trim() } }
-              : {}),
-        }
+    const body = targetRequestBody(t.provider, t.needsConnection, { ...v, connectionString: '' })
     put.mutate(body, {
       onSuccess: () => {
         toast.success(`Setting up the ${t.component} on ${name}.`)
@@ -471,115 +443,33 @@ function TargetSetupForm({ project, target: t, onDone }: { project: Project; tar
     >
       <ErrorSummary title="Check the target's settings" errors={isSubmitted ? fieldErrorSummary(errors, ids) : []} />
       {failure !== null && <SetupError error={failure} target={t} />}
-      {t.needsConnection && (
-        <div className="flex flex-col gap-2">
-          {connections.isPending && <LoadingState label={`Loading your ${name} connections…`} />}
-          {connections.isError && (
-            <ErrorState error={connections.error} title={`Your ${name} connections couldn't load`} onRetry={() => void connections.refetch()} />
-          )}
-          {connections.isSuccess && (
-            <SelectField
-              id={ids.connectionId}
-              label={`${name} connection`}
-              hint="Bind one of your own tokens. Every deployment of this target uses it, whoever triggers it."
-              error={errors.connectionId?.message}
-              {...register('connectionId')}
-            >
-              <option value="">Pick a connection</option>
-              {own.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {connectionLabel(c)}
-                  {c.accountName ? ` · ${c.accountName}` : ''}
-                  {c.status === 'valid' ? '' : ` (${credentialStatusLabels[c.status].toLowerCase()})`}
-                </option>
-              ))}
-            </SelectField>
-          )}
-          {connections.isSuccess && own.length === 0 && (
-            <p className="text-sm text-muted-foreground">You have no {name} connections yet.</p>
-          )}
-          {selected?.status === 'invalid' && (
-            <p className="text-sm text-destructive">{name} rejected this token; setting up with it will fail.</p>
-          )}
-          <p>
-            <Link to="/connections" className="text-sm font-medium text-primary underline underline-offset-2">
-              Add a token in Connections
-            </Link>
-          </p>
-        </div>
-      )}
       {t.needsConnection ? (
-        <>
-          <RadioGroup
-            id={ids.mode}
-            legend={`Which ${name} ${noun} deploys the ${t.component}?`}
-            inputProps={register('mode')}
-            error={errors.mode?.message}
-            options={modeOptions}
-          />
-          {mode === 'create' && (
-            <div className="grid gap-4 sm:grid-cols-3">
-              <TextField
-                id={ids.name}
-                label="Name"
-                autoComplete="off"
-                spellCheck={false}
-                maxLength={100}
-                className="sm:col-span-3"
-                error={errors.name?.message}
-                {...register('name')}
-              />
-              <TextField
-                id={ids.region}
-                label="Region (optional)"
-                hint={`${name}'s default when empty.`}
-                autoComplete="off"
-                spellCheck={false}
-                maxLength={64}
-                error={errors.region?.message}
-                {...register('region')}
-              />
-              <TextField
-                id={ids.plan}
-                label="Plan (optional)"
-                hint={`${name}'s default when empty.`}
-                autoComplete="off"
-                spellCheck={false}
-                maxLength={64}
-                error={errors.plan?.message}
-                {...register('plan')}
-              />
-            </div>
-          )}
-          {mode === 'link' &&
-            (pickerType === null ? (
-              <TextField
-                id={ids.resourceId}
-                label={`${name} ${noun} id`}
-                autoComplete="off"
-                spellCheck={false}
-                maxLength={200}
-                error={errors.resourceId?.message}
-                {...register('resourceId')}
-              />
-            ) : !connectionId ? (
-              <p className="text-sm text-muted-foreground">Pick a connection first: the list shows what it can reach.</p>
-            ) : resources.isPending ? (
-              <LoadingState label={`Loading your ${name} ${noun}s…`} />
-            ) : resources.isError ? (
-              <ErrorState error={resources.error} title={`Your ${name} ${noun}s couldn't load`} onRetry={() => void resources.refetch()} />
-            ) : (
-              <SelectField id={ids.resourceId} label={`Existing ${noun}`} error={errors.resourceId?.message} {...register('resourceId')}>
-                <option value="">{resources.data.length === 0 ? `No ${noun}s found` : `Pick a ${noun}`}</option>
-                {resources.data.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                    {r.detail ? ` · ${r.detail}` : ''}
-                  </option>
-                ))}
-              </SelectField>
-            ))}
-        </>
+        <HostSetupFields
+          ids={ids}
+          provider={t.provider}
+          platformName={name}
+          noun={noun}
+          connectionsEnabled={t.canBind}
+          connectionHint="Bind one of your own tokens. Every deployment of this target uses it, whoever triggers it."
+          register={(field) => register(field)}
+          errors={{
+            connectionId: errors.connectionId?.message,
+            mode: errors.mode?.message,
+            name: errors.name?.message,
+            region: errors.region?.message,
+            plan: errors.plan?.message,
+            resourceId: errors.resourceId?.message,
+          }}
+          mode={mode}
+          connectionId={connectionId}
+          modeLegend={`Which ${name} ${noun} deploys the ${t.component}?`}
+          modeOptions={modeOptions}
+          pickerType={pickerType}
+          linkIdLabel={`${name} ${noun} id`}
+          nameField={{ label: 'Name', hint: '', maxLength: 100 }}
+          regionField={{ hint: `${name}'s default when empty.` }}
+          planField={{ hint: `${name}'s default when empty.` }}
+        />
       ) : (
         <p className="text-sm text-muted-foreground">
           {name} needs no extra connection: AIDE uses the project&apos;s GitHub App installation (or its access token) and turns

@@ -74,7 +74,7 @@ public sealed partial class RenderDeploymentProvider(PlatformHttp http, RenderLo
             target,
             RenderRules.ServiceSpec(target.Component, target.BuildConfig, target.RootDirectory, production.Name, true, request.Plan ?? production.Plan, request.Region ?? production.Region, target.Repo.DefaultBranch),
             cancellationToken);
-        return new DeploymentSetupResult(production.Id, production.Name, production.Url, preview.Id, preview.Url);
+        return new DeploymentSetupResult(production.Id, production.Name, production.Url, preview.Id, preview.Url) { Plan = production.Plan };
     }
 
     public async Task<ProviderTargetCheck> VerifyTargetAsync(DeploymentAuth auth, DeploymentTargetRef target, CancellationToken cancellationToken)

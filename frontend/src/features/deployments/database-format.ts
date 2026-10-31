@@ -33,15 +33,13 @@ export const databaseResourceNouns: Readonly<Record<string, string>> = {
 /** The connection's picker for Link (FR-142 `GET …/resources`); `null`: the Owner types the id. */
 export const databasePickerTypes: Readonly<Record<string, PlatformResourceType | null>> = {
   supabase: 'projects',
-  render: null,
-  railway: null,
+  render: 'databases',
+  railway: 'databases',
   fake: null,
 }
 
 /** The id to type for Link when there's no picker. */
 export const databaseLinkIdLabels: Readonly<Record<string, string>> = {
-  render: 'Render Postgres id (dpg-…)',
-  railway: 'Railway Postgres service id',
   fake: 'Database id',
 }
 

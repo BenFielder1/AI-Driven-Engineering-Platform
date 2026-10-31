@@ -41,9 +41,11 @@ public sealed partial class ReleaseCompletion(
     /// version and nothing in development, and <c>RELEASE_COMPLETED</c> (after <c>RELEASE_MERGED_EXTERNALLY</c> when the merge
     /// happened on GitHub). If the project moved on meanwhile, the Git facts are recorded on the attempt only. FR-91: with
     /// Vercel set up, the production deployment of the merge commit is recorded and queued in the same transaction (a
-    /// failed deployment never undoes the release, D-V2-10).
+    /// failed deployment never undoes the release, D-V2-10). §4.21: <paramref name="unmigrated"/> writes
+    /// <c>MERGED_HEAD_MISMATCH</c> in the same transaction.
     /// </summary>
-    public async Task SucceedAsync(Guid releaseId, ReleaseOutcome outcome, string? githubReleaseUrl, bool mergedExternally, CancellationToken cancellationToken)
+    public async Task SucceedAsync(
+        Guid releaseId, ReleaseOutcome outcome, string? githubReleaseUrl, bool mergedExternally, CancellationToken cancellationToken, UnmigratedMerge? unmigrated = null)
     {
         ArgumentNullException.ThrowIfNull(outcome);
         db.ChangeTracker.Clear();
@@ -85,6 +87,16 @@ public sealed partial class ReleaseCompletion(
         else
         {
             LogProjectMoved(logger, project.Id, release.Checkpoint);
+        }
+
+        if (unmigrated is not null)
+        {
+            db.AddEvent(
+                EventTypes.MergedHeadMismatch,
+                release.ProjectId,
+                new { releaseId = release.Id, expectedHeadSha = unmigrated.ExpectedHeadSha, mergedHeadSha = unmigrated.MergedHeadSha, mergeCommitSha = release.MergeCommitSha },
+                SystemActor.Name,
+                now);
         }
 
         var provider = await ReleaseRecords.ProviderAsync(db, release.ProjectId, cancellationToken);

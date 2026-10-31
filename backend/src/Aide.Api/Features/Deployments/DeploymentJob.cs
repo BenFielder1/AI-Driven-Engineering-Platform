@@ -151,6 +151,12 @@ public sealed partial class DeploymentJobHandler(
     private async Task<DateTimeOffset?> StartAsync(Deployment deployment, DeploymentContext context, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var target = context.TargetRef;
+        var pages = context.Target.Provider == DeploymentProvider.GithubPages && deployment.Environment == DeploymentEnvironment.Production;
+        if (pages && await SyncPagesBuildAsync(deployment, context, now, cancellationToken) is { } buildChecked)
+        {
+            return buildChecked;
+        }
+
         if (ProductionDeploymentRules.Adopts(deployment.Environment, deployment.Trigger, context.Provider.Kind))
         {
             if (await context.Provider.FindDeploymentForShaAsync(context.Auth, target, DeploymentEnvironment.Production, deployment.GitSha, null, null, cancellationToken) is { } adopted)
@@ -176,7 +182,11 @@ public sealed partial class DeploymentJobHandler(
             return null;
         }
 
-        await envSync.PushPendingAsync(context, cancellationToken);
+        if (!pages)
+        {
+            await envSync.PushPendingAsync(context, cancellationToken);
+        }
+
         var created = await context.Provider.DeployAsync(
             context.Auth, new DeployRequest(
                 deployment.Id,
@@ -191,6 +201,37 @@ public sealed partial class DeploymentJobHandler(
         Apply(deployment, created);
         LogCreated(logger, deployment.Id, deployment.Environment);
         return null;
+    }
+
+    /// <summary>
+    /// FR-145, FR-146: GitHub Pages builds on the merge push, before this job runs: the sync happens first, even when the
+    /// run is adopted, and a run that started before the newest synced variable is replaced
+    /// (<see cref="IDeploymentProvider.RefreshBuildAsync"/>), so the production build holds the values. Returns when to look
+    /// again while that happens. After the deployment ceiling AIDE stops replacing it and the poll times it out. A refused
+    /// re-run fails the deployment with its reason rather than letting a stale build count as ready.
+    /// </summary>
+    private async Task<DateTimeOffset?> SyncPagesBuildAsync(Deployment deployment, DeploymentContext context, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await envSync.PushPendingAsync(context, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        var syncedAt = (await db.DeploymentEnvVars.AsNoTracking()
+                .Where(v => v.ProjectId == deployment.ProjectId && v.Public && v.SyncedAt != null)
+                .ToListAsync(cancellationToken))
+            .Where(v => DeploymentEnvSync.AppliesTo(v, deployment.Component))
+            .Max(v => v.SyncedAt);
+        if (syncedAt is not { } newest || DeploymentPollRules.IsTimedOut(deployment.CreatedAt, now))
+        {
+            return null;
+        }
+
+        var refreshed = await context.Provider.RefreshBuildAsync(context.Auth, context.TargetRef, deployment.GitSha, newest, cancellationToken);
+        if (refreshed == BuildRefresh.UpToDate)
+        {
+            return null;
+        }
+
+        LogBuildRefreshed(logger, deployment.Id, refreshed);
+        return now + DeploymentPollRules.FastInterval;
     }
 
     private void Apply(Deployment deployment, ProviderDeployment observed)
@@ -373,6 +414,9 @@ public sealed partial class DeploymentJobHandler(
             LogCancelFailed(logger, Guid.Empty, ex.Failure);
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deployment {DeploymentId}: the Pages build started before its variables were synced ({Refresh})")]
+    private static partial void LogBuildRefreshed(ILogger logger, Guid deploymentId, BuildRefresh refresh);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cancelled provider deployment {ProviderDeploymentId}: no AIDE deployment polls it")]
     private static partial void LogOrphanCancelled(ILogger logger, string providerDeploymentId);

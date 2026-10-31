@@ -143,6 +143,28 @@ public sealed class GitLabReleaseTests(AideApiFactory factory)
     // ---------- FR-140: aide_merges ----------
 
     [Fact]
+    public async Task FR153_S4_21_GitLab_still_checking_is_unknown_readiness_so_a_BaaS_release_migrates_and_merges_instead_of_waiting()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var gitlab = new GitLabState(remote);
+        var (app, fixture) = await SetUpAsync(gitlab, remote, fakeDatabases: true);
+        using var session = fixture;
+        var id = fixture.Project.Id;
+        await BaasReleaseMigrationTests.SeedProductionSupabaseAsync(app, id);
+        await ReleaseFlowTests.StartExecutionAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        gitlab.DetailedStatus = "checking";
+        await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        Assert.Equal(1, gitlab.Api.Count(HttpMethod.Put, MergeRequest + "/merge"));
+        Assert.Equal(ReleaseStatus.Succeeded, (await LatestAsync(fixture.Viewer.Client, id)).Status);
+        var run = await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AsNoTracking().Where(r => r.ProjectId == id).OrderBy(r => r.StartedAt).FirstAsync(Ct));
+        Assert.Equal((MigrationRunStatus.Succeeded, gitlab.HeadAtMerge), (run.Status, run.GitSha));
+    }
+
+    [Fact]
     public async Task FR140_Given_aide_merges_when_the_release_job_succeeds_then_the_MR_is_merged_a_GitLab_Release_v0_1_0_exists_on_the_merged_commit_and_it_reads_Released_0_1_0()
     {
         using var remote = await BareRemote.CreateAsync(Ct);
@@ -376,16 +398,22 @@ public sealed class GitLabReleaseTests(AideApiFactory factory)
     // ---------- helpers ----------
 
     /// <summary>The app over <paramref name="gitlab"/> with the bare remote as the git host, and a GitLab project bound to its Owner's connection.</summary>
-    private async Task<(WebApplicationFactory<Program> App, ProjectFixture Fixture)> SetUpAsync(GitLabState gitlab, BareRemote remote)
+    private async Task<(WebApplicationFactory<Program> App, ProjectFixture Fixture)> SetUpAsync(GitLabState gitlab, BareRemote remote, bool fakeDatabases = false)
     {
+        var settings = new Dictionary<string, string>
+        {
+            ["GitLab:GitBaseUrlOverride"] = remote.BaseUrl,
+            ["GitLab:AllowInsecureGitBaseUrl"] = "true",
+        };
+        if (fakeDatabases)
+        {
+            settings["Databases:Provider"] = "Fake";
+        }
+
         var app = GitLabHarness.App(
             AgentJobs.WithResponders(factory, new FakeCodeReviewResponder(new FakeCodeReviewScript { ScoresByCycle = [0.93m] })),
             gitlab.Api,
-            settings: new Dictionary<string, string>
-            {
-                ["GitLab:GitBaseUrlOverride"] = remote.BaseUrl,
-                ["GitLab:AllowInsecureGitBaseUrl"] = "true",
-            });
+            settings: settings);
         var instance = await GitLabHarness.SeedInstanceAsync(app, gitlab.BaseUrl, oauth: false);
         var owner = await ApiSession.RegisterAsync(app);
         var connection = await GitLabHarness.SeedConnectionAsync(app, owner.User!.Id, instance, Token);

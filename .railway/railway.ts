@@ -21,6 +21,16 @@ import { database, defineRailway, project, service, volume } from 'railway/iac'
 
 // FR-107 / FR-112: variables set per environment in Railway, never in git (deploy/railway/variables.md). IaC ignores
 // these names, so setting or removing one in either environment needs no change here and never shows up as drift.
+// §4.24: the first index after the catalog entries shipped in appsettings.json (Anthropic 7 entries, OpenAI 2).
+const catalogExtensionVariables = (
+  [
+    ['Anthropic', 7],
+    ['OpenAI', 2],
+  ] as const
+).flatMap(([provider, index]) =>
+  ['Id', 'Name', 'MaxOutputTokens', 'ContextTokens', 'Recommended'].map((field) => `Llm__Providers__${provider}__Catalog__${String(index)}__${field}`),
+)
+
 const operatorSetApiVariables = [
   // Required secret: one-click approval links (FR-48), 64 random characters, different per environment.
   'Approvals__SigningKey',
@@ -28,11 +38,14 @@ const operatorSetApiVariables = [
   'Llm__AllowSystemKeys',
   'Llm__Providers__Anthropic__ApiKey',
   'Llm__Providers__OpenAI__ApiKey',
-  // Optional: output-token ceiling (FR-160) and streaming timeouts (FR-161). Catalog extensions
-  // (`Llm__Providers__<P>__Catalog__<n>__*`) are added here by exact name when an environment needs one.
+  // Optional: output-token ceiling (FR-160) and streaming timeouts (FR-161).
   'Llm__MaxOutputTokensCeiling',
   'Llm__StreamIdleTimeout',
   'Llm__RequestTimeout',
+  // Optional: model catalog extensions (§4.24), the entry after the ones shipped in appsettings.json. Listed by exact name:
+  // whether `variables.ignore` takes wildcards isn't established, and a wrong guess would plan deleting a set variable.
+  // A further entry (or another index) is added here by exact name first.
+  ...catalogExtensionVariables,
   // Optional: GitHub App override (all five or none) and v1 OAuth sign-in.
   'GitHub__App__AppId',
   'GitHub__App__ClientId',
@@ -53,6 +66,8 @@ const operatorSetApiVariables = [
   // Optional: Bitbucket Cloud OAuth consumer override (M28).
   'Bitbucket__OAuth__ClientId',
   'Bitbucket__OAuth__ClientSecret',
+  // Optional: how often the database expiry sweep runs (FR-155).
+  'Notifications__DatabaseExpirySweepInterval',
   // Optional: email channel (FR-47).
   'Smtp__Host',
   'Smtp__Port',

@@ -77,6 +77,25 @@ public class RenderRailwayRulesTests
         Assert.Equal(("./Dockerfile", "."), (docker.GetProperty("dockerfilePath").GetString(), docker.GetProperty("dockerContext").GetString()));
     }
 
+    [Theory]
+    [InlineData("free", null)]
+    [InlineData("FREE", null)]
+    [InlineData("starter", MigrateCommand)]
+    [InlineData(null, MigrateCommand)]
+    public void FR154_A_free_Render_instance_has_no_pre_deploy_command_and_a_paid_one_keeps_it(string? plan, string? expected)
+    {
+        var config = DeploymentBuildRules.Derive(AspNetOnRender(), DeploymentComponent.Backend, DeploymentProvider.Render, MigrateCommand);
+
+        foreach (var preview in new[] { false, true })
+        {
+            var spec = RenderRules.ServiceSpec(DeploymentComponent.Backend, config.Config, config.RootDirectory, "todo-api", preview, plan, null, "main");
+            Assert.Equal(expected, spec.PreDeployCommand);
+        }
+
+        // The free-plan caveat is recorded in the readiness plan notes (§4.20).
+        Assert.Contains(DeploymentPlatforms.PlanNotes(DeploymentProvider.Render), n => n.Contains("migrations at start", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void FR147_The_Render_preview_service_is_named_dash_preview_with_auto_deploy_off()
     {

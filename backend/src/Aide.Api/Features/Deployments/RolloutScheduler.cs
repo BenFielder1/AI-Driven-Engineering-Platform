@@ -30,12 +30,25 @@ public sealed record RolloutJobPayload(
 /// applied. One preview rollout per project: queuing one cancels older queued ones (a running one sees the newer job and
 /// stops). The production rollout is queued once per release.
 /// </summary>
-public sealed partial class RolloutScheduler(AideDbContext db, JobEnqueuer jobs, IWorkingCopies workingCopies, ILogger<RolloutScheduler> logger)
+public sealed partial class RolloutScheduler(
+    AideDbContext db,
+    JobEnqueuer jobs,
+    IWorkingCopies workingCopies,
+    Databases.MigrationRunService migrations,
+    ILogger<RolloutScheduler> logger)
 {
     private const int MaxPaths = 100_000;
 
     /// <summary>
-    /// FR-147: queues the preview rollout of <paramref name="sha"/>; <c>null</c> when deployment isn't set up. In a
+    /// A rollout has something to do: a target can deploy, or (§4.21) a Supabase BaaS database of that environment takes the
+    /// migrations, even with every target left for later: a migrations-only rollout.
+    /// </summary>
+    public async Task<bool> HasStepsAsync(Guid projectId, DeploymentEnvironment environment, CancellationToken cancellationToken) =>
+        await DeploymentScheduler.ConfiguredAsync(db, projectId, cancellationToken)
+        || await migrations.HasMigrationStepAsync(projectId, environment, cancellationToken);
+
+    /// <summary>
+    /// FR-147: queues the preview rollout of <paramref name="sha"/>; <c>null</c> when it would have no steps. In a
     /// transaction it takes the project lock first (the preview reset takes it too, FR-148); a rollout queued while a reset
     /// is queued or running waits for the reset (<see cref="RolloutJobHandler"/>).
     /// </summary>
@@ -47,7 +60,7 @@ public sealed partial class RolloutScheduler(AideDbContext db, JobEnqueuer jobs,
             await Projects.ProjectLocks.LockProjectAsync(db, projectId, cancellationToken);
         }
 
-        if (!await DeploymentScheduler.ConfiguredAsync(db, projectId, cancellationToken))
+        if (!await HasStepsAsync(projectId, DeploymentEnvironment.Preview, cancellationToken))
         {
             return null;
         }
@@ -73,7 +86,7 @@ public sealed partial class RolloutScheduler(AideDbContext db, JobEnqueuer jobs,
     public async Task<Job?> EnqueueProductionAsync(Domain.Entities.Release release, string defaultBranch, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(release);
-        if (release.MergeCommitSha is not { Length: > 0 } sha || !await DeploymentScheduler.ConfiguredAsync(db, release.ProjectId, cancellationToken))
+        if (release.MergeCommitSha is not { Length: > 0 } sha || !await HasStepsAsync(release.ProjectId, DeploymentEnvironment.Production, cancellationToken))
         {
             return null;
         }

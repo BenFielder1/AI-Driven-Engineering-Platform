@@ -12,8 +12,9 @@ import type { WizardValues } from './schemas'
 import { deploymentFieldIds } from './wizard-deployment-ids'
 
 /**
- * FR-88 wizard step "Deployment" (optional): skip, or Vercel with one of the caller's own connections and a new
- * (name, root directory) or existing Vercel project. Whether a Local repository can deploy is the server's call.
+ * FR-88 wizard step "Deployment" (optional) for "No stack (general)", which chose no hosts: skip, or Vercel with one of the
+ * caller's own connections and a new (name, root directory) or existing Vercel project (`deployment` on create). Whether a
+ * Local repository can deploy is the server's call. A composed stack sets up its hosts in `WizardHostsStep`.
  */
 export function WizardDeploymentStep({
   register,
@@ -22,12 +23,10 @@ export function WizardDeploymentStep({
 }: {
   register: UseFormRegister<WizardValues>
   errors: FieldErrors<WizardValues>
-  values: Pick<WizardValues, 'gitMode' | 'stackKind' | 'stackFrontendHost' | 'deploymentMode' | 'vercelProjectMode' | 'vercelConnectionId'>
+  values: Pick<WizardValues, 'gitMode' | 'deploymentMode' | 'vercelProjectMode' | 'vercelConnectionId'>
 }) {
   const vercel = values.deploymentMode === 'vercel'
   const connections = usePlatformConnections({ enabled: vercel, provider: 'vercel' })
-  // FR-114: the composed stack's frontend host is Vercel.
-  const stackDeploysToVercel = values.stackKind === 'compose' && values.stackFrontendHost === 'deploy-vercel'
 
   const own = connections.data ?? []
   const selected = own.find((c) => c.id === values.vercelConnectionId)
@@ -43,9 +42,7 @@ export function WizardDeploymentStep({
           {
             value: 'vercel',
             label: 'Vercel',
-            description: stackDeploysToVercel
-              ? 'The stack you chose deploys the frontend to Vercel: a preview of every run and production on every release.'
-              : 'A preview of every run and production on every release (for a Next.js app).',
+            description: 'A preview of every run and production on every release (for a Next.js app).',
           },
         ]}
       />

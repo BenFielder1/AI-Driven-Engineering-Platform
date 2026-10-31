@@ -98,3 +98,9 @@ internal static class PlatformFixtures
         new DeploymentBuildConfig { BuildCommand = "npm run build", OutputDirectory = "dist" },
         repo ?? GitHubRepo);
 }
+
+/// <summary>HttpClients for any client name, served by one stub (GitHub's relative paths get its base; GitLab and Bitbucket send absolute URLs).</summary>
+internal sealed class AnyHostStubFactory(HttpMessageHandler handler) : IHttpClientFactory
+{
+    public HttpClient CreateClient(string name) => new(handler, disposeHandler: false) { BaseAddress = new Uri("https://api.github.com/") };
+}

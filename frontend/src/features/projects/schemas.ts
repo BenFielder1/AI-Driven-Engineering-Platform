@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { checkRootDirectory, checkVercelProjectName } from '../deployments/vercel-project-rules'
 import { checkNewVersion, DEFAULT_INITIAL_VERSION, normalizeVersion } from '../versions/semver'
 import { approvalModes, type agentKeys } from './labels'
+import { hostFieldDefaults, hostFieldNames, type HostFieldName } from './wizard-host-fields'
+import { hostChecks } from './wizard-hosts'
 
 /**
  * Client-side validation mirroring the API's limits (backend ProjectLimits / ProjectDefaults). Numeric inputs are
@@ -215,6 +217,8 @@ export const wizardShape = z.object({
   vercelProjectName: str,
   vercelRootDirectory: str,
   vercelProjectId: str,
+  /** §7 Deployment step of a composed stack: one set of flat fields per target and database (wizard-host-fields). */
+  ...(Object.fromEntries(hostFieldNames.map((name) => [name, str])) as Record<HostFieldName, typeof str>),
   /** FR-159 AI model section: '' until a usable provider is chosen (an unusable one is never preselected). */
   llmProvider: z.enum(['anthropic', 'openai', 'ollama', 'fake', '']),
   /** One of the caller's own connections for the provider, or '' (system key, keyless, or none shown). */
@@ -312,8 +316,12 @@ export const wizardSchema = wizardShape.superRefine((v, ctx) => {
     addCheck(ctx, 'stackData', v.stackData ? null : 'Choose the data layer, or None.')
     addCheck(ctx, 'stackVcs', v.stackVcs ? null : 'Choose the version control host.')
   }
-  // FR-88: the server decides whether a Local project can deploy (VALIDATION unless it runs the Fake provider).
-  if (v.deploymentMode === 'vercel') {
+  // §7: the hosts chosen in the Deployment step of a composed stack.
+  for (const [field, message] of hostChecks(v)) {
+    addCheck(ctx, field, message)
+  }
+  // FR-88: without a stack, the server decides whether a Local project can deploy (VALIDATION unless it runs the Fake provider).
+  if (v.stackKind === 'general' && v.deploymentMode === 'vercel') {
     addCheck(ctx, 'vercelConnectionId', v.vercelConnectionId ? null : 'Pick one of your Vercel connections, or skip deployment.')
     if (v.vercelProjectMode === 'create') {
       addCheck(ctx, 'vercelProjectName', checkVercelProjectName(v.vercelProjectName))
@@ -378,6 +386,7 @@ export const wizardDefaults: WizardValues = {
   vercelProjectName: '',
   vercelRootDirectory: '',
   vercelProjectId: '',
+  ...hostFieldDefaults,
   llmProvider: '',
   llmCredentialId: '',
   llmDefaultModel: '',

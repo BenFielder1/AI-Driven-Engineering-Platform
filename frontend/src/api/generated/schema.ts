@@ -373,7 +373,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** FR-142 picker: the connection's resources of a type (default: the provider's first): Vercel projects; Netlify sites; Cloudflare workers or projects (Pages); Render services or regions; Railway projects or regions; Supabase projects, orgs or regions. accountId scopes the list (default: the connection's account). A type the provider doesn't list → 400 VALIDATION. */
+        /** FR-142 picker: the connection's resources of a type (default: the provider's first): Vercel projects; Netlify sites; Cloudflare workers or projects (Pages); Render services, regions or databases (Render Postgres); Railway projects, regions or databases (Postgres services); Supabase projects, orgs or regions. accountId scopes the list (default: the connection's account). A type the provider doesn't list → 400 VALIDATION. */
         get: operations["ListPlatformConnectionResources"];
         put?: never;
         post?: never;
@@ -5319,6 +5319,8 @@ export interface components {
             presetVersion: null | string;
             deploymentsEnabled: boolean;
             stackPacks: string[];
+            /** @default false */
+            previewMigrationsEnabled: boolean;
         };
         /**
          * @description A project event pushed live to everyone viewing the project (FR-46): the SignalR `projectEvent` message.
@@ -7561,7 +7563,7 @@ export interface operations {
     ListPlatformConnectionResources: {
         parameters: {
             query?: {
-                type?: "sites" | "services" | "projects" | "workers" | "orgs" | "regions";
+                type?: "sites" | "services" | "projects" | "workers" | "orgs" | "regions" | "databases";
                 accountId?: string;
             };
             header?: never;

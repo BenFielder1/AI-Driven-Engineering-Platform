@@ -12,6 +12,15 @@ public sealed record DeploymentRepoRef(
     string? Host, string? Owner, string? Name, long? GitHubRepoId, string? ExternalId, string? FullName, string DefaultBranch)
 {
     public static DeploymentRepoRef Local { get; } = new(null, null, null, null, null, null, "main");
+
+    /// <summary>FR-136: the binding Owner's Git connection (GitLab, Bitbucket); <c>null</c> when unbound.</summary>
+    public Guid? GitConnectionId { get; init; }
+
+    /// <summary>FR-136: the Git host instance the repository is on (GitLab, Bitbucket).</summary>
+    public Guid? InstanceId { get; init; }
+
+    /// <summary>The repository's web URL, when known.</summary>
+    public string? WebUrl { get; init; }
 }
 
 /// <summary>A target as a provider sees it (§4.20): the platform, component, resources, build configuration and repository.</summary>
@@ -30,7 +39,11 @@ public sealed record DeploymentTargetRef(
 public sealed record DeploymentSetupRequest(DeploymentTargetRef Target, bool Create, string? Name, string? Region, string? Plan, string? LinkResourceId);
 
 /// <summary>What setup made or found: the resource, its name, and the production and preview resource and URLs when known.</summary>
-public sealed record DeploymentSetupResult(string ResourceId, string Name, string? ProductionUrl, string? PreviewResourceId, string? PreviewUrl);
+public sealed record DeploymentSetupResult(string ResourceId, string Name, string? ProductionUrl, string? PreviewResourceId, string? PreviewUrl)
+{
+    /// <summary>The instance type the platform reports for the resource (Render), when known.</summary>
+    public string? Plan { get; init; }
+}
 
 /// <summary>
 /// FR-144 readiness facts only the platform knows: whether its Git integration reaches the repository (<c>null</c>: unknown),
@@ -98,6 +111,13 @@ public interface IDeploymentProvider
 
     /// <summary>FR-150: make an earlier deployment current (Vercel: promote). Unsupported: <see cref="DeploymentFailure.NotSupported"/>.</summary>
     Task RollbackAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-145, FR-146: for a platform whose build of <paramref name="sha"/> starts by itself on the merge, before AIDE can sync
+    /// (GitHub Pages): replaces a build that started before <paramref name="variablesSyncedAt"/>. Other platforms sync first.
+    /// </summary>
+    Task<BuildRefresh> RefreshBuildAsync(DeploymentAuth auth, DeploymentTargetRef target, string sha, DateTimeOffset variablesSyncedAt, CancellationToken cancellationToken) =>
+        Task.FromResult(BuildRefresh.UpToDate);
 }
 
 /// <summary>§9, §4.20: providers by platform id (the Fake for all in Fake mode) and the Vercel client for connection checks.</summary>

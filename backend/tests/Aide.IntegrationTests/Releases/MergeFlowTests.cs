@@ -447,7 +447,92 @@ public sealed class MergeFlowTests(AideApiFactory factory)
         Assert.Equal(later, await TestGit.RunAsync(workingCopy, Ct, "rev-parse", $"{Tag}^{{commit}}"));
     }
 
+    // ---------- FR-153, §4.21: readiness not passed: production isn't migrated, and AIDE doesn't call the merge ----------
+
+    [Fact]
+    public async Task FR153_S4_21_Review_required_under_aide_merges_awaits_without_migrating_or_merging_then_the_poll_migrates_once_approved()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var github = new GitHubState(remote) { ReviewDecision = "REVIEW_REQUIRED", MergeStateStatus = "BLOCKED", RequiredApprovals = 1 };
+        await using var app = remote.App(BaasReleaseEligible(), github.Api, out _);
+        using var fixture = await GitHubFixtureAsync(app);
+        var id = fixture.Project.Id;
+        github.Branch = BranchOf(fixture);
+        await BaasReleaseMigrationTests.SeedProductionSupabaseAsync(app, id);
+        await ReleaseFlowTests.StartExecutionAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+        await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        var awaiting = await LatestAsync(fixture.Viewer.Client, id);
+        Assert.Equal((ReleaseStatus.AwaitingMerge, (Guid?)null), (awaiting.Status, awaiting.MigrationRunId));
+        Assert.Equal([MergeReadinessReasonCode.ReviewRequired], awaiting.MergeReasons!.Select(r => r.Code));
+        Assert.Equal(0, github.Api.Count(HttpMethod.Put, Pull + "/merge"));
+        Assert.False(await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AnyAsync(r => r.ProjectId == id, Ct)));
+
+        // Still not approved: another poll changes nothing.
+        await AgentJobs.RunCoreAsync(app, await PollJobAsync(app, id));
+        Assert.False(await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AnyAsync(r => r.ProjectId == id, Ct)));
+
+        // Approved: readiness passes (the PR's ETag needn't change), so the poll migrates the head and keeps waiting.
+        github.ReviewDecision = "APPROVED";
+        github.MergeStateStatus = "CLEAN";
+        await AgentJobs.RunCoreAsync(app, await PollJobAsync(app, id));
+
+        var run = await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
+        var head = ReleaseFlowTests.BareSha(remote, $"refs/heads/{github.Branch}");
+        var migrated = await LatestAsync(fixture.Viewer.Client, id);
+        Assert.Equal((MigrationRunStatus.Succeeded, head, (Guid?)run.Id), (run.Status, run.GitSha, migrated.MigrationRunId));
+        Assert.Equal(ReleaseStatus.AwaitingMerge, migrated.Status);
+        Assert.Equal(0, github.Api.Count(HttpMethod.Put, Pull + "/merge"));
+
+        // A person merges that head: nothing to warn about.
+        github.MergedAs(ReleaseFlowTests.MergeInBare(remote, github.Branch));
+        await AgentJobs.RunCoreAsync(app, await PollJobAsync(app, id));
+        Assert.Equal(ReleaseStatus.Succeeded, (await LatestAsync(fixture.Viewer.Client, id)).Status);
+        Assert.Empty(await LifecycleSeed.EventsAsync(app, id, EventTypes.MergedHeadMismatch));
+    }
+
+    [Fact]
+    public async Task FR153_S4_21_Checks_failing_awaits_without_migrating_and_a_merge_anyway_is_recorded_as_unmigrated()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var github = new GitHubState(remote) { RequiredChecks = ["ci / test"] };
+        await using var app = remote.App(BaasReleaseEligible(), github.Api, out _);
+        using var fixture = await GitHubFixtureAsync(app);
+        var id = fixture.Project.Id;
+        github.Branch = BranchOf(fixture);
+        await BaasReleaseMigrationTests.SeedProductionSupabaseAsync(app, id);
+        await ReleaseFlowTests.StartExecutionAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        // The required check fails after the review.
+        github.CheckRuns = [new { name = "ci / test", status = "completed", conclusion = "failure", details_url = (string?)null }];
+        await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        var awaiting = await LatestAsync(fixture.Viewer.Client, id);
+        Assert.Equal(ReleaseStatus.AwaitingMerge, awaiting.Status);
+        Assert.Contains(MergeReadinessReasonCode.ChecksFailing, awaiting.MergeReasons!.Select(r => r.Code));
+        Assert.Equal(0, github.Api.Count(HttpMethod.Put, Pull + "/merge"));
+        Assert.False(await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AnyAsync(r => r.ProjectId == id, Ct)));
+
+        // An admin merges past the failing check: the release completes, and the unmigrated merge is on record.
+        var head = ReleaseFlowTests.BareSha(remote, $"refs/heads/{github.Branch}");
+        var mergeSha = ReleaseFlowTests.MergeInBare(remote, github.Branch);
+        github.MergedAs(mergeSha);
+        await AgentJobs.RunCoreAsync(app, await PollJobAsync(app, id));
+
+        Assert.Equal(ReleaseStatus.Succeeded, (await LatestAsync(fixture.Viewer.Client, id)).Status);
+        var mismatch = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.MergedHeadMismatch)).Payload);
+        Assert.Equal(JsonValueKind.Null, mismatch.GetProperty("expectedHeadSha").ValueKind);
+        Assert.Equal((head, mergeSha), (mismatch.GetProperty("mergedHeadSha").GetString(), mismatch.GetProperty("mergeCommitSha").GetString()));
+    }
+
     // ---------- helpers ----------
+
+    private WebApplicationFactory<Program> BaasReleaseEligible() =>
+        AgentJobs.WithResponders(DeploymentHarness.Fake(factory), new FakeCodeReviewResponder(new FakeCodeReviewScript { ScoresByCycle = [0.93m] }));
 
     private WebApplicationFactory<Program> ReleaseEligible() =>
         AgentJobs.WithResponders(factory, new FakeCodeReviewResponder(new FakeCodeReviewScript { ScoresByCycle = [0.93m] }));
@@ -528,9 +613,9 @@ public sealed class MergeFlowTests(AideApiFactory factory)
 
         public bool Created { get; private set; }
 
-        public string? ReviewDecision { get; init; } = "APPROVED";
+        public string? ReviewDecision { get; set; } = "APPROVED";
 
-        public string? MergeStateStatus { get; init; } = "CLEAN";
+        public string? MergeStateStatus { get; set; } = "CLEAN";
 
         public int RequiredApprovals { get; init; }
 

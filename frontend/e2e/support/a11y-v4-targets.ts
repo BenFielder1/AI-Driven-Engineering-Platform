@@ -62,6 +62,30 @@ export function v4Targets(fixture: () => A11yFixture): A11yTarget[] {
       },
     },
     {
+      name: 'wizard Deployment step of a composed stack (a host being set up, the others later)',
+      path: () => '/projects/new',
+      signedIn: true,
+      ready: (p) => stepHeading(p, 1),
+      prepare: async (p) => {
+        await composing(p)
+        await pickLayer(p, 'React + Vite', 'Backend')
+        await pickLayer(p, 'ASP.NET Core', 'Data')
+        await pickLayer(p, 'EF Core + PostgreSQL', 'Version control')
+        await pickLayer(p, 'GitHub', 'Deployment')
+        await p.getByRole('group', { name: 'Frontend host' }).getByRole('radio', { name: 'Netlify', exact: true }).check()
+        await p.getByRole('group', { name: 'Backend host' }).getByRole('radio', { name: 'Render', exact: true }).check()
+        await expect(p.getByRole('region', { name: 'Stack summary' })).toContainText('Backend engineer')
+        await p.getByRole('button', { name: 'Next', exact: true }).click()
+        await expect(stepHeading(p, 6)).toBeVisible()
+        await p.getByRole('button', { name: 'Next', exact: true }).click()
+        await expect(stepHeading(p, 7)).toBeVisible()
+        const frontend = p.getByRole('region', { name: 'Frontend on Netlify' })
+        await frontend.getByRole('radio', { name: /^Create a new Netlify/ }).check()
+        await frontend.getByLabel('Netlify connection').selectOption({ index: 1 })
+        await expect(p.getByRole('list', { name: 'Readiness checks' })).toBeVisible()
+      },
+    },
+    {
       name: 'wizard AI model section (Advanced open)',
       path: () => '/projects/new',
       signedIn: true,

@@ -345,6 +345,7 @@ internal sealed partial class BitbucketGitProvider
             MergedExternally = mergedExternally,
             ReleaseUrl = release.Url,
             MergedHeadMismatch = mergedHeadMismatch,
+            MergedHead = mergedState ? pr.SourceCommit : null,
         };
     }
 

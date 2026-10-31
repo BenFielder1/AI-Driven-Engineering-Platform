@@ -26,6 +26,7 @@ namespace Aide.Api.Features.Deployments;
 /// (production: adopts the platform's own build of the merge commit within 60 s, else creates one; an automatic row of the
 /// release that already exists is adopted, so the rollout is idempotent per <c>(release_id, component)</c>). The frontend
 /// starts only after the backend is <c>ready</c>, so it builds against the backend preview URL (env synced first).</item>
+/// <item>No target set up: the rollout is its migrations step alone, and completes with no components.</item>
 /// <item>A failure stops the later steps. A preview whose database diverged (FR-148) is blocked with
 /// <c>PREVIEW_DATABASE_DIVERGED</c> before anything deploys.</item>
 /// </list>
@@ -211,8 +212,11 @@ public sealed partial class RolloutJobHandler(
         {
             var run = await migrations.RunAsync(payload.ProjectId, payload.Environment, payload.ReleaseVersionId, payload.ReleaseId, payload.GitSha, cancellationToken);
 
-            // The release keeps the pre-merge run that gated its merge; one merged without it records this run.
-            if (release is { MigrationRunId: null } && run.Status == MigrationRunStatus.Succeeded)
+            // The release keeps the succeeded pre-merge run that gated its merge. One merged without it (no run, or the poll's
+            // last run failed) records this run.
+            if (release is not null && run.Status == MigrationRunStatus.Succeeded
+                && (release.MigrationRunId is not { } recorded
+                    || !await db.DatabaseMigrationRuns.AsNoTracking().AnyAsync(r => r.Id == recorded && r.Status == MigrationRunStatus.Succeeded, cancellationToken)))
             {
                 release.MigrationRunId = run.Id;
                 await db.SaveChangesAsync(cancellationToken);

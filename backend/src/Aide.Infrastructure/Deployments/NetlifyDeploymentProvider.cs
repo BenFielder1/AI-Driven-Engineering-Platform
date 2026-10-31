@@ -12,7 +12,10 @@ namespace Aide.Infrastructure.Deployments;
 /// <item>Create: <c>POST /{account_slug}/sites</c> with <c>repo {provider, id, repo_path, repo_branch, cmd, dir, base,
 /// allowed_branches, installation_id}</c>. GitHub needs the Netlify GitHub App installation id, read from another site of
 /// the account linked to the same GitHub owner; without one: <c>PLATFORM_GIT_NOT_CONNECTED</c>. GitLab and Bitbucket
-/// (deploy key + webhook) aren't automated yet: <c>PLATFORM_ERROR</c>, link an existing site instead.</item>
+/// (D-V4-16): AIDE adds a push webhook to <c>https://api.netlify.com/hooks/&lt;provider&gt;</c> and a read-only deploy key from
+/// <c>POST /deploy_keys</c> to the repository through the project's Git binding (<see cref="IGitHostRepoLinks"/>), then
+/// creates the site with <c>deploy_key_id</c>. A retry reuses what is there. The webhook goes first, so a connection that
+/// can't add it stops setup before anything is made on Netlify.</item>
 /// <item>Link: <c>GET /sites/{id}</c> (linked to this repository, or to none). Both then set branch control:
 /// <c>allowed_branches: [production branch]</c> and Deploy Previews off (<c>skip_prs</c>).</item>
 /// <item>Preview: <c>POST /sites/{id}/builds?branch=&amp;title=aide:&lt;id&gt;</c>; the deploy must be of the PR head
@@ -24,7 +27,7 @@ namespace Aide.Infrastructure.Deployments;
 /// </list>
 /// Deploy creation is limited before calling (<see cref="NetlifyDeployRateLimiter"/>).
 /// </summary>
-public sealed partial class NetlifyDeploymentProvider(PlatformHttp http, NetlifyDeployRateLimiter limiter) : IDeploymentProvider
+public sealed partial class NetlifyDeploymentProvider(PlatformHttp http, NetlifyDeployRateLimiter limiter, IGitHostRepoLinks repoLinks) : IDeploymentProvider
 {
     private const DeploymentProvider Netlify = DeploymentProvider.Netlify;
 
@@ -123,14 +126,10 @@ public sealed partial class NetlifyDeploymentProvider(PlatformHttp http, Netlify
     {
         var target = request.Target;
         var repo = target.Repo;
-        if (repo.Host != "github")
+        var linkedByKey = repo.Host is "gitlab" or "bitbucket";
+        if (repo.Host != "github" && !linkedByKey)
         {
-            // §4.20: GitLab and Bitbucket need a Netlify deploy key on the repository and a push webhook; not automated yet.
-            throw new DeploymentProviderException(
-                DeploymentFailure.NotSupported,
-                null,
-                "Creating a Netlify site for a GitLab or Bitbucket repository isn't automated yet: create the site in Netlify, then link it.",
-                platform: Netlify);
+            throw new DeploymentProviderException(DeploymentFailure.NotSupported, null, "Netlify builds only from a GitHub, GitLab or Bitbucket repository.", platform: Netlify);
         }
 
         var name = string.IsNullOrEmpty(request.Name)
@@ -142,10 +141,23 @@ public sealed partial class NetlifyDeploymentProvider(PlatformHttp http, Netlify
         {
             if (existing.Name == name)
             {
-                return existing.Detail is not null && DeploymentSettingsRules.LinkMatches(existing.Detail, repo.FullName)
-                    ? existing.Id
-                    : throw new DeploymentProviderException(DeploymentFailure.Rejected, 409, "A Netlify site with this name exists already; link it instead or pick another name.", platform: Netlify);
+                if (existing.Detail is null || !DeploymentSettingsRules.LinkMatches(existing.Detail, repo.FullName))
+                {
+                    throw new DeploymentProviderException(DeploymentFailure.Rejected, 409, "A Netlify site with this name exists already; link it instead or pick another name.", platform: Netlify);
+                }
+
+                if (linkedByKey)
+                {
+                    await EnsureWebhookAsync(target, cancellationToken);
+                }
+
+                return existing.Id;
             }
+        }
+
+        if (linkedByKey)
+        {
+            return await CreateSiteWithDeployKeyAsync(auth, target, name, cancellationToken);
         }
 
         var installation = await InstallationIdAsync(auth, repo, cancellationToken)
@@ -172,6 +184,74 @@ public sealed partial class NetlifyDeploymentProvider(PlatformHttp http, Netlify
                 installation_id = installation,
             },
         };
+        return await PostSiteAsync(auth, body, cancellationToken);
+    }
+
+    /// <summary>
+    /// D-V4-16: the webhook, the read-only deploy key, then the site with <c>deploy_key_id</c>. <c>repo.id</c> is sent only
+    /// for a numeric id (GitLab's project id); a Bitbucket repository is named by <c>repo_path</c>.
+    /// </summary>
+    private async Task<string> CreateSiteWithDeployKeyAsync(DeploymentAuth auth, DeploymentTargetRef target, string name, CancellationToken cancellationToken)
+    {
+        await EnsureWebhookAsync(target, cancellationToken);
+        var deployKeyId = await EnsureDeployKeyAsync(auth, target, cancellationToken);
+        var repo = target.Repo;
+        var config = target.BuildConfig;
+        var repoBody = new Dictionary<string, object?>
+        {
+            ["provider"] = repo.Host,
+            ["repo_path"] = repo.FullName,
+            ["repo_branch"] = repo.DefaultBranch,
+            ["cmd"] = config.BuildCommand,
+            ["dir"] = config.OutputDirectory,
+            ["base"] = target.RootDirectory is "" or "." ? null : target.RootDirectory,
+            ["allowed_branches"] = new[] { repo.DefaultBranch },
+            ["deploy_key_id"] = deployKeyId,
+            ["repo_url"] = repo.WebUrl,
+        };
+        if (long.TryParse(repo.ExternalId, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var numericId))
+        {
+            repoBody["id"] = numericId;
+        }
+
+        return await PostSiteAsync(auth, new { name, repo = repoBody }, cancellationToken);
+    }
+
+    private Task EnsureWebhookAsync(DeploymentTargetRef target, CancellationToken cancellationToken) =>
+        repoLinks.EnsurePushWebhookAsync(target.AideProjectId, target.Repo, NetlifyRules.WebhookUrl(target.Repo.Host), NetlifyRules.RepoLinkTitle, cancellationToken);
+
+    /// <summary>
+    /// The id of the Netlify deploy key on the repository: one an earlier attempt added (found by its public key), else a new
+    /// one (<c>POST /deploy_keys</c>) added read-only. A retry after that add finds it, so no duplicate is made.
+    /// </summary>
+    private async Task<string> EnsureDeployKeyAsync(DeploymentAuth auth, DeploymentTargetRef target, CancellationToken cancellationToken)
+    {
+        var onRepo = await repoLinks.ListDeployKeysAsync(target.AideProjectId, target.Repo, cancellationToken);
+        using (var keys = await SendAsync(auth, HttpMethod.Get, "deploy_keys", null, cancellationToken))
+        {
+            var known = Items(keys.RootElement)
+                .Where(k => Text(k, "id") is not null)
+                .Select(k => new NetlifyDeployKey(Text(k, "id")!, Text(k, "public_key")));
+            if (NetlifyRules.ReusableDeployKey(known, onRepo) is { } reusable)
+            {
+                return reusable;
+            }
+        }
+
+        using var created = await SendAsync(auth, HttpMethod.Post, "deploy_keys", null, cancellationToken);
+        var id = Text(created.RootElement, "id");
+        var publicKey = Text(created.RootElement, "public_key");
+        if (id is null || publicKey is null)
+        {
+            throw new DeploymentProviderException(DeploymentFailure.Upstream, null, "Netlify created a deploy key but returned no id or public key.", platform: Netlify);
+        }
+
+        await repoLinks.AddReadOnlyDeployKeyAsync(target.AideProjectId, target.Repo, NetlifyRules.RepoLinkTitle, publicKey, cancellationToken);
+        return id;
+    }
+
+    private async Task<string> PostSiteAsync(DeploymentAuth auth, object body, CancellationToken cancellationToken)
+    {
         using var created = await PlatformDeploymentCalls.Call(
             Netlify,
             () => http.SendAsync(PlatformProvider.Netlify, PlatformHosts.NetlifyClient, HttpMethod.Post, SitesPath(auth), auth.Token, body, cancellationToken),

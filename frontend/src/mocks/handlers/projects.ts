@@ -6,7 +6,7 @@ import { compareSemVer, normalizeVersion, parseSemVer } from '../../features/ver
 import type { ProjectRole } from '../../lib/permissions'
 import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from './auth'
 import { bindCredential, connectionsDb } from './connections'
-import { applyVercelSetup } from './deployments'
+import { applyVercelSetup, seedHostsFromComposition } from './deployments'
 import { githubDb } from './github'
 import { bitbucketDb, bitbucketRefsOf, findBitbucketConnection, findBitbucketRepo } from './bitbucket'
 import { findGitLabConnection, findGitLabRepo, gitlabDb, gitlabRefsOf } from './gitlab'
@@ -53,7 +53,10 @@ export interface StoredProject extends Omit<
     | 'presetName'
     | 'presetVersion'
     | 'deploymentsEnabled'
+    | 'previewMigrationsEnabled'
   > {
+  /** §4.21: a preview rollout has a migration step, even with no target. */
+  previewMigrationsEnabled?: boolean
   members: StoredMember[]
   /**
    * FR-117 Settings → Stack: the composition pinned on the current release version (unset or null: none), and the seed
@@ -577,6 +580,7 @@ export function projectDto(project: StoredProject, userId: string): Project {
     updatedAt: p.updatedAt,
     deploymentsEnabled: p.deployment?.targets.some((t) => t.resourceId !== null || t.status !== 'not_configured') ?? false,
     stackPacks: p.stackPacks,
+    previewMigrationsEnabled: p.previewMigrationsEnabled ?? false,
   }
 }
 
@@ -1128,6 +1132,9 @@ export const projectHandlers = [
       releaseVersions: versions,
       ...(composition ? { stack: { composition }, stackPacks: packsOf(composition) } : {}),
     })
+    if (composition) {
+      seedHostsFromComposition(project, composition.deploy)
+    }
     // FR-88: the optional Deployment step (one of the caller's own Vercel connections; Local can't deploy).
     if (body.deployment) {
       const failed = applyVercelSetup(project, user.id, body.deployment, 'deployment.')

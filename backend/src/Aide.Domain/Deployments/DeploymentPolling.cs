@@ -183,6 +183,19 @@ public sealed record PreviewWaitDecision(bool Wait, DateTimeOffset? RecheckAt, D
 /// </summary>
 public static class PreviewReviewRules
 {
+    /// <summary>
+    /// FR-147, §4.21: the status review records for a rollout that deployed nothing. With a migration run, the rollout's own
+    /// outcome (a migrations-only rollout: ready or error); without one, nothing happened (<c>canceled</c>). Running stays
+    /// building. Display only: findings come from the rollout's steps, so the score doesn't depend on it.
+    /// </summary>
+    public static DeploymentStatus StatusWithoutDeployment(RolloutState state, bool migrationRan) => state switch
+    {
+        RolloutState.Running => DeploymentStatus.Building,
+        RolloutState.Succeeded when migrationRan => DeploymentStatus.Ready,
+        RolloutState.Failed or RolloutState.Blocked when migrationRan => DeploymentStatus.Error,
+        _ => DeploymentStatus.Canceled,
+    };
+
     /// <summary>FR-147: review waits up to 30 minutes for the whole preview rollout (the v2 deployment ceiling).</summary>
     public static readonly TimeSpan WaitLimit = TimeSpan.FromMinutes(30);
 

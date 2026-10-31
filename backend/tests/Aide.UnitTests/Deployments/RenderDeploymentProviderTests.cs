@@ -70,6 +70,19 @@ public class RenderDeploymentProviderTests
     }
 
     [Fact]
+    public async Task FR154_Linking_reports_the_plan_of_the_existing_service()
+    {
+        var (provider, stub, _) = Create();
+        stub.On("GET", "services/srv-p", """{"id":"srv-p","name":"todo-api","repo":"https://github.com/acme/todo","branch":"main","serviceDetails":{"url":"https://todo-api.onrender.com","plan":"free"}}""")
+            .On("GET", "services?", """[{"service":{"id":"srv-v","name":"todo-api-preview","repo":"https://github.com/acme/todo"}}]""");
+
+        var result = await provider.SetupTargetAsync(Auth, new DeploymentSetupRequest(Backend(null, null), false, null, null, null, "srv-p"), Ct);
+
+        Assert.Equal("free", result.Plan);
+        Assert.True(RenderRules.IsFreePlan(result.Plan));
+    }
+
+    [Fact]
     public async Task FR144_Link_reuses_an_existing_dash_preview_service()
     {
         var (provider, stub, _) = Create();

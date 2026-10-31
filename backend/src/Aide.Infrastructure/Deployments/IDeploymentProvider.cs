@@ -51,15 +51,32 @@ public sealed record DeploymentTeam(string Id, string Slug, string Name);
 public sealed record CreateDeploymentProject(
     string Name, string Repo, string? Framework, string RootDirectory, string RepoType = "github", string? BuildCommand = null, string? OutputDirectory = null);
 
+/// <summary>What <see cref="IDeploymentProvider.RefreshBuildAsync"/> found about a build the platform started by itself.</summary>
+public enum BuildRefresh
+{
+    /// <summary>The build has, or will read, the synced values.</summary>
+    UpToDate = 0,
+
+    /// <summary>A build with older values was asked to stop; it can be re-run once it has.</summary>
+    Stopping = 1,
+
+    /// <summary>A build with older values was started again.</summary>
+    Restarted = 2,
+}
+
 /// <summary>One env var write for one target (§4.15): create, or update <see cref="ExistingId"/>. The value is never logged.</summary>
-public sealed record DeploymentEnvWrite(string Key, string Value, DeploymentEnvironment Target, bool Sensitive, string? ExistingId)
+public sealed record DeploymentEnvWrite(string Key, string Value, DeploymentEnvironment Target, bool Sensitive, string? ExistingId, bool Public = false)
 {
     /// <summary>Redacted: the value never reaches a log.</summary>
     public override string ToString() => $"DeploymentEnvWrite {{ Key = {Key}, Target = {Target} }}";
 }
 
-/// <summary>Vercel's id of a written (key, target).</summary>
-public sealed record DeploymentEnvWritten(string Key, DeploymentEnvironment Target, string Id);
+/// <summary>
+/// The platform's id of a written (key, target). <see cref="Refused"/>: the platform can't take this variable (GitHub Pages
+/// and a non-public one) and why; nothing was written and the reason becomes the variable's <c>syncError</c>. A refused
+/// result with an <see cref="Id"/> means the platform still holds that variable (a delete or update failed): the id stays.
+/// </summary>
+public sealed record DeploymentEnvWritten(string Key, DeploymentEnvironment Target, string Id, string? Refused = null);
 
 /// <summary>
 /// FR-90, FR-91: create a deployment of <see cref="GitSha"/> on <see cref="GitRef"/> for the Vercel project. The repository

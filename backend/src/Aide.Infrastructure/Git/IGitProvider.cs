@@ -372,6 +372,12 @@ public sealed record ReleaseOutcome(
     /// <see cref="ReleaseRequest.ExpectedHeadSha"/> (a host that can't pin its merge, Bitbucket); <c>null</c> otherwise.
     /// </summary>
     public string? MergedHeadMismatch { get; init; }
+
+    /// <summary>
+    /// FR-153, §4.21: the pull request head of a merge someone else made, as the host reports it (or the Local branch);
+    /// <c>null</c> when it isn't known or AIDE merged. Compared with the head the production migrations ran on.
+    /// </summary>
+    public string? MergedHead { get; init; }
 }
 
 /// <summary>The project PR to open (FR-36).</summary>

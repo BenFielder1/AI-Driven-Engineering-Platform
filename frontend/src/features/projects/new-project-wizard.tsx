@@ -1,8 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useNavigate } from '../../lib/navigation'
+import { Link, useNavigate } from '../../lib/navigation'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useForm, useWatch, type Path } from 'react-hook-form'
+import { useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
+import { toast } from 'sonner'
 
 import type { Schemas } from '../../api/client'
 import { Alert, ErrorSummary } from '../../components/ui/alert'
@@ -25,16 +27,21 @@ import { RepoPicker } from '../github/repo-picker'
 import { useBitbucketConnections, useBitbucketRepoRefs, type BitbucketRepo } from '../bitbucket/bitbucket-api'
 import { gitlabHost, useGitLabConnections, useGitLabInstances, useGitLabRepoRefs, type GitLabRepo } from '../gitlab/gitlab-api'
 import { connectionLabel } from '../connections/connection-format'
-import { useLlmProviders, type LlmProviderOption } from '../connections/connections-api'
+import { connectionKeys, useLlmProviders, type LlmProviderOption } from '../connections/connections-api'
 import { usePlatformConnections } from '../connections/platform-connections-api'
 import { PlatformGitAlert } from '../deployments/platform-git-alert'
 import { suggestVercelProjectName } from '../deployments/vercel-project-rules'
+import { resourceNouns } from '../deployments/deployment-format'
 import { agentKeys, agentLabels, approvalModeDescriptions, approvalModeLabels, approvalModes, llmProviderLabels } from './labels'
 import { catalogModel } from './model-picker'
 import { useCreateProject } from './projects-api'
 import { ReleasedVersionField } from './released-version-field'
 import { deploymentFieldIds } from './wizard-deployment-ids'
 import { WizardDeploymentStep } from './wizard-deployment-step'
+import { hostField, hostFieldIds, hostFieldNames, hostSecretFields, type HostSlot } from './wizard-host-fields'
+import { applyHostSetups, type HostSetupFailure } from './wizard-host-setup'
+import { hostSlotsOfChoice, hostValues, isHostChosen, wizardHosts, type WizardHost } from './wizard-hosts'
+import { WizardHostsStep } from './wizard-hosts-step'
 import { defaultReleasedTag, releasedOptions, semverOfTag } from './released-versions'
 import {
   limits,
@@ -112,12 +119,13 @@ const fieldIds: Record<Field, string> = {
   stackDetection: 'project-stack-kind',
   ...wizardStackFieldIds,
   ...deploymentFieldIds,
+  ...hostFieldIds,
   ...llmFieldIds,
 }
 
 /**
- * SPEC §7.2 order: Source → Idea (or Request) → Repository → Version → Stack (FR-74) → Configuration → Deployment
- * (FR-88, optional) → Review & create.
+ * SPEC §7 order: Source → Idea (or Request) → Repository → Version → Stack (FR-114) → Configuration → Deployment
+ * (FR-88, optional; the Stack step's hosts for a composed stack) → Review & create.
  */
 const stepKeys = ['source', 'idea', 'repository', 'version', 'stack', 'configuration', 'deployment', 'review'] as const
 type StepKey = (typeof stepKeys)[number]
@@ -129,7 +137,7 @@ const stepFields: Record<StepKey, readonly Field[]> = {
   version: ['initialVersion', 'developmentVersion'],
   stack: ['stackKind', ...wizardStackFieldList],
   configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget', ...llmFields],
-  deployment: ['deploymentMode', 'vercelConnectionId', 'vercelProjectMode', 'vercelProjectName', 'vercelRootDirectory', 'vercelProjectId'],
+  deployment: ['deploymentMode', 'vercelConnectionId', 'vercelProjectMode', 'vercelProjectName', 'vercelRootDirectory', 'vercelProjectId', ...hostFieldNames],
   review: [],
 }
 
@@ -251,7 +259,7 @@ function credentialErrorTarget(error: unknown, v: WizardValues, importing: boole
   if (credentialCode && v.llmCredentialId) {
     return 'llm'
   }
-  if (credentialCode && v.deploymentMode === 'vercel') {
+  if (credentialCode && v.stackKind === 'general' && v.deploymentMode === 'vercel') {
     return 'deployment'
   }
   if (v.gitMode === 'gitlab' || v.gitMode === 'bitbucket') {
@@ -302,9 +310,12 @@ function toGitRequest(v: WizardValues): Schemas['CreateProjectGitRequest'] {
 
 const versionText = (text: string) => normalizeVersion(text) ?? text.trim()
 
-/** FR-88: the optional `deployment` (Vercel with an own connection and a new or existing project). */
+/**
+ * FR-88: the optional `deployment` of "No stack (general)" (Vercel with an own connection and a new or existing project).
+ * A composed stack's hosts are set up after create instead (§7, `applyHostSetups`).
+ */
 function toDeploymentRequest(v: WizardValues): Schemas['CreateProjectDeploymentRequest'] | null {
-  if (v.deploymentMode !== 'vercel') {
+  if (v.stackKind !== 'general' || v.deploymentMode !== 'vercel') {
     return null
   }
   return {
@@ -333,7 +344,7 @@ function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
     maxReviewCycles: Number(v.maxReviewCycles),
     tokenBudget: toBudget(v.tokenBudget),
     git: toGitRequest(v),
-    // FR-88: `deployment` only when Vercel is chosen (skipping omits it).
+    // FR-88: `deployment` only when Vercel is chosen without a stack (skipping omits it).
     ...(deployment ? { deployment } : {}),
     // FR-159: the AI model section.
     ...(llm ? { llm } : {}),
@@ -461,9 +472,20 @@ function AppRepository({
  * for the request, the repository with its released version, and the version to develop. Create navigates to the
  * new project.
  */
+/** FR-88, §7: the name suggested for a new target; a database's name stays empty ("the project's name when empty"). */
+function suggestedHostName(projectName: string, slot: HostSlot): string {
+  const suffix = slot === 'Frontend' ? 'web' : slot === 'Backend' ? 'api' : null
+  return suffix ? `${suggestVercelProjectName(projectName) || 'app'}-${suffix}`.slice(0, 100) : ''
+}
+
 export function NewProjectWizard() {
   const navigate = useNavigate()
   const create = useCreateProject()
+  const queryClient = useQueryClient()
+  /** §7: the project exists and its hosts are being set up; it can't be created again. */
+  const [settingUpHosts, setSettingUpHosts] = useState(false)
+  /** §7: what couldn't be set up after create; the project is usable and Settings → Deployment takes it from there. */
+  const [hostOutcome, setHostOutcome] = useState<{ projectId: string; failures: HostSetupFailure[] } | null>(null)
   /**
    * FR-159: back from Connections ("Add a connection"), the wizard saved in session storage. The authenticated layout
    * renders pages only in the browser, so it is read on the first render (and removed once used).
@@ -534,10 +556,19 @@ export function NewProjectWizard() {
   // Watched so detection re-reads the repository fields (FR-118).
   useWatch({ control, name: ['repoUrl', 'localSourcePath', 'defaultBranch', 'gitToken'] })
 
-  // FR-88: suggest the new Vercel project's name from the project name when the step opens.
+  // FR-88, §7: suggest the new resources' names from the project name when the step opens.
   useEffect(() => {
-    if (key === 'deployment' && !getValues('vercelProjectName')) {
-      setValue('vercelProjectName', suggestVercelProjectName(getValues('name')))
+    if (key !== 'deployment') {
+      return
+    }
+    const suggested = suggestVercelProjectName(getValues('name'))
+    if (!getValues('vercelProjectName')) {
+      setValue('vercelProjectName', suggested)
+    }
+    for (const slot of ['Frontend', 'Backend'] as const) {
+      if (!getValues(hostField(slot, 'Name'))) {
+        setValue(hostField(slot, 'Name'), suggestedHostName(getValues('name'), slot))
+      }
     }
   }, [key, getValues, setValue])
 
@@ -780,6 +811,19 @@ export function NewProjectWizard() {
       for (const [k, field] of Object.entries(wizardStackFields) as [keyof StackSelection, WizardStackField][]) {
         if (getValues(field) !== sel[k]) {
           setValue(field, sel[k], { shouldDirty: true, shouldValidate: getFieldState(field).invalid })
+          // §7: a new host starts its setup afresh: another platform's connection or resource means nothing to it.
+          for (const slot of hostSlotsOfChoice[k] ?? []) {
+            setValue(hostField(slot, 'Mode'), 'skip')
+            setValue(hostField(slot, 'ConnectionId'), '')
+            setValue(hostField(slot, 'ResourceId'), '')
+            setValue(hostField(slot, 'ConnectionString'), '')
+            setValue(hostField(slot, 'Region'), '')
+            setValue(hostField(slot, 'Plan'), '')
+            // Only the suggested name carries over; another is cleared, and the Deployment step suggests one again.
+            if (getValues(hostField(slot, 'Name')) !== suggestedHostName(getValues('name'), slot)) {
+              setValue(hostField(slot, 'Name'), '')
+            }
+          }
         }
       }
     },
@@ -860,12 +904,38 @@ export function NewProjectWizard() {
     goTo(stepIndex(field === 'releasedTag' ? 'repository' : 'version'))
   }
 
+  /**
+   * §7: the project exists; set up the hosts chosen in the Deployment step (a failure leaves a usable project), then go to
+   * it, or stay and say what's left for Settings → Deployment.
+   */
+  const afterCreate = async (projectId: string, values: WizardValues) => {
+    const toProject = () => navigate({ to: '/projects/$projectId', params: { projectId } })
+    const chosen = wizardHosts(values).filter((h) => isHostChosen(values, h.slot))
+    if (chosen.length === 0) {
+      await toProject()
+      return
+    }
+    setSettingUpHosts(true)
+    const failures = await applyHostSetups(projectId, values)
+    for (const field of hostSecretFields) {
+      setValue(field, '')
+    }
+    void queryClient.invalidateQueries({ queryKey: connectionKeys.platforms() })
+    setSettingUpHosts(false)
+    if (failures.length > 0) {
+      setHostOutcome({ projectId, failures })
+      return
+    }
+    toast.success('The project is created and its hosts are being set up. Follow them in Settings → Deployment.')
+    await toProject()
+  }
+
   const submit = handleSubmit(
     (values) => {
       setServerError(null)
       create.mutate(toRequest(values), {
         onSuccess: (project) => {
-          void navigate({ to: '/projects/$projectId', params: { projectId: project.id } })
+          void afterCreate(project.id, values)
         },
         onError: (error) => {
           const importValues = values.source === 'import'
@@ -989,6 +1059,15 @@ export function NewProjectWizard() {
   )
   const titles = stepKeys.map((k) => stepTitle(k, source))
 
+  if (hostOutcome) {
+    return (
+      <>
+        <PageHeader title="New project" />
+        <HostSetupOutcome projectId={hostOutcome.projectId} failures={hostOutcome.failures} />
+      </>
+    )
+  }
+
   return (
     <>
       <PageHeader title="New project" />
@@ -1002,6 +1081,9 @@ export function NewProjectWizard() {
           if (step < LAST_STEP) {
             e.preventDefault()
             void next()
+          } else if (settingUpHosts) {
+            // The project exists already.
+            e.preventDefault()
           } else {
             void submit(e)
           }
@@ -1435,20 +1517,31 @@ export function NewProjectWizard() {
             </>
           )}
 
-          {key === 'deployment' && (
-            <WizardDeploymentStep
-              register={register}
-              errors={errors}
-              values={{ gitMode, stackKind, stackFrontendHost: stackSelection.frontendHost, deploymentMode, vercelProjectMode, vercelConnectionId }}
-            />
-          )}
+          {key === 'deployment' &&
+            (stackKind === 'compose' ? (
+              <WizardHostsStep
+                hosts={wizardHosts({
+                  stackKind,
+                  stackFrontendHost: stackSelection.frontendHost,
+                  stackBackendHost: stackSelection.backendHost,
+                  stackDatabaseHost: stackSelection.databaseHost,
+                })}
+                control={control}
+                register={register}
+                errors={errors}
+                gitMode={gitMode}
+                onAddConnection={saveDraftForConnections}
+              />
+            ) : (
+              <WizardDeploymentStep register={register} errors={errors} values={{ gitMode, deploymentMode, vercelProjectMode, vercelConnectionId }} />
+            ))}
 
           {key === 'review' && <ReviewSummary values={getValues()} llmOptions={llmOptions} onEdit={goTo} />}
         </div>
 
         <div className="mt-6 flex flex-wrap justify-between gap-2">
           {step > 0 ? (
-            <Button variant="secondary" onClick={back}>
+            <Button variant="secondary" onClick={back} disabled={settingUpHosts}>
               Back
             </Button>
           ) : (
@@ -1457,13 +1550,39 @@ export function NewProjectWizard() {
           {step < LAST_STEP ? (
             <Button type="submit">Next</Button>
           ) : (
-            <Button type="submit" pending={create.isPending} pendingLabel="Creating…">
+            <Button type="submit" pending={create.isPending || settingUpHosts} pendingLabel={settingUpHosts ? 'Setting up the hosts…' : 'Creating…'}>
               Create project
             </Button>
           )}
         </div>
       </form>
     </>
+  )
+}
+
+/** §7: the project was created, but part of its hosts' setup wasn't: what failed, and where to finish it. */
+function HostSetupOutcome({ projectId, failures }: { projectId: string; failures: readonly HostSetupFailure[] }) {
+  return (
+    <div className={cn(panelClass, 'flex max-w-2xl flex-col gap-4 p-4 sm:p-6')}>
+      <Alert tone="warning" role="alert" title="The project is created, but part of its deployment setup isn't">
+        <p>Nothing else is affected. Finish these in Settings → Deployment:</p>
+        <ul aria-label="Setup that didn't finish" data-testid="host-setup-failures" className="mt-2 list-disc pl-5">
+          {failures.map((f) => (
+            <li key={f.title}>
+              <span className="font-medium">{f.title}:</span> {f.message}
+            </li>
+          ))}
+        </ul>
+      </Alert>
+      <div className="flex flex-wrap gap-2">
+        <Link to="/projects/$projectId/settings/$section" params={{ projectId, section: 'deployment' }} className={buttonClasses('primary')}>
+          Open Settings → Deployment
+        </Link>
+        <Link to="/projects/$projectId" params={{ projectId }} className={buttonClasses('secondary')}>
+          Go to the project
+        </Link>
+      </div>
+    </div>
   )
 }
 
@@ -1631,8 +1750,55 @@ function BitbucketConnectionSummary({ connectionId }: { connectionId: string }) 
   )
 }
 
-/** FR-88: the Deployment step in the summary ("Vercel", the connection, and the new or existing Vercel project). */
+/** §7: one chosen host in the summary: what happens to it, and the connection (never a connection string). */
+function HostSummary({ host, values }: { host: WizardHost; values: WizardValues }) {
+  const v = hostValues(values, host.slot)
+  const connections = usePlatformConnections({ enabled: isHostChosen(values, host.slot) && host.needsConnection })
+  const connection = connections.data?.find((c) => c.id === v.connectionId)
+  const noun = host.kind === 'target' ? resourceNouns[host.provider] : 'database'
+  const action =
+    !isHostChosen(values, host.slot)
+      ? 'Set up later'
+      : host.provider === 'external'
+        ? 'Connection string entered (not shown)'
+        : v.mode === 'link'
+          ? `Link existing ${noun} ${v.resourceId.trim()}`
+          : !host.needsConnection
+            ? 'Turn on'
+            : v.name.trim()
+              ? `New ${noun} ${v.name.trim()}`
+              : `New ${noun}`
+  return (
+    <>
+      <SummaryRow term={host.title}>{action}</SummaryRow>
+      {isHostChosen(values, host.slot) && host.needsConnection && (
+        <SummaryRow term={`${host.title}: connection`}>{connection ? connectionLabel(connection) : v.connectionId}</SummaryRow>
+      )}
+    </>
+  )
+}
+
+/**
+ * The Deployment step in the summary. A composed stack: its hosts (§7). Without a stack: "Vercel", the connection, and the
+ * new or existing Vercel project (FR-88).
+ */
 function DeploymentSummary({ values }: { values: WizardValues }) {
+  if (values.stackKind === 'compose') {
+    const hosts = wizardHosts(values)
+    return hosts.length === 0 ? (
+      <SummaryRow term="Deployment">No hosts in the stack</SummaryRow>
+    ) : (
+      <>
+        {hosts.map((host) => (
+          <HostSummary key={host.slot} host={host} values={values} />
+        ))}
+      </>
+    )
+  }
+  return <VercelDeploymentSummary values={values} />
+}
+
+function VercelDeploymentSummary({ values }: { values: WizardValues }) {
   const request = toDeploymentRequest(values)
   const connections = usePlatformConnections({ enabled: request !== null, provider: 'vercel' })
   if (!request) {

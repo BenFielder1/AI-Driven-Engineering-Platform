@@ -319,9 +319,10 @@ public static class EventTypes
     public const string MigrationRunFailed = "MIGRATION_RUN_FAILED";
 
     /// <summary>
-    /// FR-153, §4.21: the host merged a pull request head other than the commit the pre-merge production migrations ran on
-    /// (Bitbucket can't pin its merge): <c>{releaseId, expectedHeadSha, mergedHeadSha, mergeCommitSha}</c>. The production
-    /// rollout's post-merge run on the merge commit applies whatever the merged head added.
+    /// FR-153, §4.21: a pull request head was merged other than the commit the pre-merge production migrations ran on
+    /// (Bitbucket can't pin its merge; a person merged on the host before AIDE migrated that head):
+    /// <c>{releaseId, expectedHeadSha, mergedHeadSha, mergeCommitSha}</c>, <c>expectedHeadSha</c> <c>null</c> when no pre-merge
+    /// run succeeded. The production rollout's post-merge run on the merge commit applies whatever the merged head added.
     /// </summary>
     public const string MergedHeadMismatch = "MERGED_HEAD_MISMATCH";
 

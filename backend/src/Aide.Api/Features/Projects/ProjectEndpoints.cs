@@ -349,7 +349,7 @@ public static partial class ProjectEndpoints
 
         return TypedResults.Created(
             $"/api/projects/{project.Id}",
-            ProjectMapping.ToDto(project, ProjectRole.Owner, await presets.ForProjectAsync(project.Id, cancellationToken), preparedDeployment is not null));
+            ProjectMapping.ToDto(project, ProjectRole.Owner, await presets.ForProjectAsync(project.Id, cancellationToken), preparedDeployment is not null, previewMigrationsEnabled: false));
     }
 
     private static async Task<Results<Ok<ProjectDto>, ProblemHttpResult>> GetProject(
@@ -357,6 +357,7 @@ public static partial class ProjectEndpoints
         IProjectAccess access,
         AideDbContext db,
         Stack.RetiredPresets presets,
+        Databases.MigrationRunService migrations,
         CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
@@ -368,7 +369,12 @@ public static partial class ProjectEndpoints
         var project = await db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
         return project is null
             ? ApiProblems.NotFound("The project was not found.")
-            : TypedResults.Ok(ProjectMapping.ToDto(project, grant.Value.ProjectRole, await presets.ForProjectAsync(id, cancellationToken), await DeploymentsEnabledAsync(db, id, cancellationToken)));
+            : TypedResults.Ok(ProjectMapping.ToDto(
+                project,
+                grant.Value.ProjectRole,
+                await presets.ForProjectAsync(id, cancellationToken),
+                await DeploymentsEnabledAsync(db, id, cancellationToken),
+                await migrations.HasMigrationStepAsync(id, DeploymentEnvironment.Preview, cancellationToken)));
     }
 
     private static async Task<Results<Ok<ProjectDto>, ValidationProblem, ProblemHttpResult>> UpdateProject(
@@ -378,6 +384,7 @@ public static partial class ProjectEndpoints
         ICurrentUser currentUser,
         AideDbContext db,
         Stack.RetiredPresets presets,
+        Databases.MigrationRunService migrations,
         TimeProvider time,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
@@ -449,7 +456,12 @@ public static partial class ProjectEndpoints
             LogUpdated(logger, project.Id, changes);
         }
 
-        return TypedResults.Ok(ProjectMapping.ToDto(project, grant.Value.ProjectRole, await presets.ForProjectAsync(id, cancellationToken), await DeploymentsEnabledAsync(db, id, cancellationToken)));
+        return TypedResults.Ok(ProjectMapping.ToDto(
+            project,
+            grant.Value.ProjectRole,
+            await presets.ForProjectAsync(id, cancellationToken),
+            await DeploymentsEnabledAsync(db, id, cancellationToken),
+            await migrations.HasMigrationStepAsync(id, DeploymentEnvironment.Preview, cancellationToken)));
     }
 
     private static async Task<Results<NoContent, ProblemHttpResult>> DeleteProject(

@@ -247,6 +247,12 @@ public sealed partial class DeploymentTargetService
         {
             (gitAccess, gitMessage, gitFix) = (false, pages.Message, pages.Reason);
         }
+        else if (target.Provider == DeploymentProvider.GithubPages && !access.UsesFake
+            && rows.Any(r => r.Public && r.HasValue && r.AppliesTo.Contains(DeploymentComponent.Frontend))
+            && await VariablesPermissionProblemAsync(projectId, cancellationToken) is { } variables)
+        {
+            (gitAccess, gitMessage, gitFix) = (false, variables.Message, variables.Reason);
+        }
 
         var branch = await BranchControlAsync(projectId, target, cancellationToken);
         var items = ReadinessRules.Checklist(new ReadinessInput(
@@ -311,6 +317,26 @@ public sealed partial class DeploymentTargetService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// FR-145, FR-146: <c>PLATFORM_PERMISSION_MISSING</c> when the installation token lacks Variables write, so the project's
+    /// public build-time values can't reach the Pages workflow; <c>null</c> when allowed (or a PAT, which reports nothing).
+    /// </summary>
+    private async Task<DomainError?> VariablesPermissionProblemAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var resolved = await github.ResolveAsync(projectId, cancellationToken);
+        if (resolved.IsFailure)
+        {
+            return resolved.Error;
+        }
+
+        return resolved.Value?.InstallationPermissions is { } permissions && GitHubRules.VariablesPermission(permissions) != GitHubPagesAccess.Granted
+            ? new DomainError(ErrorCodes.PlatformPermissionMissing, "The AIDE GitHub App needs the Variables permission to pass build-time values to GitHub Pages. Update it in GitHub settings, then accept it on the installation.")
+            {
+                Reason = await AppSettingsUrlAsync(cancellationToken),
+            }
+            : null;
     }
 
     /// <summary>§4.18 <c>deploy_branch_control</c> as readiness: Vercel's <c>vercel.json</c>, Netlify's <c>netlify.toml</c> on the default branch.</summary>

@@ -383,7 +383,12 @@ internal sealed partial class GitLabGitProvider
             return ToReleaseFailure(releaseFailure);
         }
 
-        return ReleaseOutcome.Released(mergeSha, request.Tag, alreadyTagged: false) with { MergedExternally = mergedExternally, ReleaseUrl = release.Url };
+        return ReleaseOutcome.Released(mergeSha, request.Tag, alreadyTagged: false) with
+        {
+            MergedExternally = mergedExternally,
+            ReleaseUrl = release.Url,
+            MergedHead = mr.State == "merged" ? mr.Sha : null,
+        };
     }
 
     /// <summary>The GitLab Release (find, else create; a create that races another finds it again).</summary>

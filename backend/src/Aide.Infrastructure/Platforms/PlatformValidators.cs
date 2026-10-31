@@ -272,6 +272,23 @@ public sealed class RenderConnectionValidator(PlatformHttp http) : IPlatformConn
         }
 
         var owner = accountId ?? credential.AccountId;
+        if (type == PlatformResourceType.Databases)
+        {
+            // FR-152: Render Postgres instances to link (GET /v1/postgres, the same list the database provider reads).
+            using var databases = await SendAsync(owner is null ? "postgres?limit=100" : $"postgres?limit=100&ownerId={Uri.EscapeDataString(owner)}", credential, cancellationToken);
+            return
+            [
+                .. Json.Items(databases.RootElement)
+                    .Select(d => Json.Property(d, "postgres").ValueKind == JsonValueKind.Object ? Json.Property(d, "postgres") : d)
+                    .Where(d => Json.Text(d, "id") is not null)
+                    .Select(d => new PlatformResource(
+                        Json.Text(d, "id")!,
+                        Json.Text(d, "name") ?? Json.Text(d, "id")!,
+                        Json.Text(d, "dashboardUrl"),
+                        string.Join(" · ", new[] { Json.Text(d, "region"), Json.Text(d, "plan") }.Where(t => t is not null)))),
+            ];
+        }
+
         var path = owner is null ? "services?limit=100" : $"services?limit=100&ownerId={Uri.EscapeDataString(owner)}";
         using var json = await SendAsync(path, credential, cancellationToken);
         return
@@ -303,6 +320,10 @@ public sealed class RailwayConnectionValidator(PlatformHttp http) : IPlatformCon
     private const string WorkspaceQuery = "query($id: String!) { workspace(workspaceId: $id) { id name } }";
     private const string ProjectsQuery = "query($id: String!) { projects(workspaceId: $id, first: 100) { edges { node { id name } } } }";
     private const string RegionsQuery = "query { regions { name country location } }";
+
+    /// <summary>FR-152: every project's services with their image, to list the Postgres ones (§11: from the schema, unverified against a live account).</summary>
+    private const string PostgresServicesQuery =
+        "query($id: String!) { projects(workspaceId: $id, first: 100) { edges { node { id name services { edges { node { id name serviceInstances { edges { node { source { image } } } } } } } } } } }";
 
     public PlatformProvider Provider => PlatformProvider.Railway;
 
@@ -376,6 +397,23 @@ public sealed class RailwayConnectionValidator(PlatformHttp http) : IPlatformCon
 
         var workspace = accountId ?? credential.AccountId
             ?? throw new PlatformApiException(PlatformFailure.NotFound, null, "Railway: choose a workspace first.");
+        if (type == PlatformResourceType.Databases)
+        {
+            // FR-152: the Postgres services, named with their project: a link only works in the app's own Railway project.
+            using var services = await QueryAsync(PostgresServicesQuery, new { id = workspace }, credential, cancellationToken);
+            return
+            [
+                .. Json.Items(Json.Property(Json.Property(services.RootElement, "data"), "projects"), "edges")
+                    .Select(e => Json.Property(e, "node"))
+                    .SelectMany(project => Json.Items(Json.Property(project, "services"), "edges")
+                        .Select(e => Json.Property(e, "node"))
+                        .Where(s => Json.Text(s, "id") is not null
+                            && Json.Items(Json.Property(s, "serviceInstances"), "edges")
+                                .Any(i => PlatformConnectionRules.IsPostgresImage(Json.Text(Json.Property(Json.Property(i, "node"), "source"), "image"))))
+                        .Select(s => new PlatformResource(Json.Text(s, "id")!, Json.Text(s, "name") ?? Json.Text(s, "id")!, null, Json.Text(project, "name")))),
+            ];
+        }
+
         using var json = await QueryAsync(ProjectsQuery, new { id = workspace }, credential, cancellationToken);
         return
         [

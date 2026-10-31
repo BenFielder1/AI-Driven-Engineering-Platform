@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { errorMessages, withJobDetail } from '../../lib/errors'
 import { seedUser } from '../../mocks/handlers/auth'
-import { makeDatabase, seedNetlifyRenderTargets, seedSupabaseBaas, deploymentOf } from '../../mocks/handlers/deployments'
+import { makeDatabase, seedEnvVar, seedNetlifyRenderTargets, seedSupabaseBaas, deploymentOf } from '../../mocks/handlers/deployments'
 import { seedPlatformConnection } from '../../mocks/handlers/platform-connections'
 import { seedProject, type StoredProject } from '../../mocks/handlers/projects'
 import { seedProjectAs } from '../../test/artifacts'
@@ -71,6 +71,53 @@ describe('Settings → Deployment database cards (FR-152)', () => {
 
     const row = await screen.findByRole('listitem', { name: 'Variable DATABASE_URL' })
     expect(within(row).getByTestId('env-derived-from')).toHaveTextContent('From managed database (Render Postgres) · read-only')
+  })
+
+  it.each([
+    ['render', 'Render Postgres', 'Render', 'Link an existing Render database', 'database'],
+    ['railway', 'Railway Postgres', 'Railway', 'Link an existing Railway Postgres service', 'Postgres service'],
+  ] as const)('FR152_link_picker_%s: linking lists the connection\'s databases instead of asking for a typed id', async (provider, label, platform, linkOption, noun) => {
+    const { user } = await openAsOwner((me, p) => {
+      seedNetlifyRenderTargets(p)
+      deploymentOf(p).databases = [makeDatabase('production', provider)]
+      seedPlatformConnection({ userId: me, provider, label: `${platform} key`, token: 'tok_eeee5555' })
+    })
+    const form = within(await card('Production database')).getByRole('form', { name: `Set up the production database on ${label}` })
+    await user.click(within(form).getByRole('radio', { name: new RegExp(`^${linkOption}`) }))
+    expect(within(form).getByText('Pick a connection first: the list shows what it can reach.')).toBeInTheDocument()
+    await user.selectOptions(await within(form).findByLabelText(`${platform} connection`), within(form).getByRole('option', { name: new RegExp(`${platform} key`) }))
+
+    const picker = await within(form).findByLabelText(`Existing ${noun}`)
+    await user.selectOptions(picker, within(picker).getByRole('option', { name: /inventory-databases/ }))
+    await user.click(within(form).getByRole('button', { name: `Set up ${label}` }))
+    await waitFor(() => {
+      expect(requestsTo('PUT', '/databases/production').at(-1)?.body).toEqual({
+        provider,
+        connectionId: expect.any(String) as string,
+        link: { resourceId: 'databases_1' },
+      })
+    })
+  })
+
+  it('S4_23_legacy_supabase_hint: after linking Supabase, the legacy user variables are suggested for deletion', async () => {
+    await openAsOwner((_me, p) => {
+      seedSupabaseBaas(p)
+      seedEnvVar(p, { key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY' })
+      seedEnvVar(p, { key: 'SUPABASE_SERVICE_ROLE_KEY', sensitive: true })
+      seedEnvVar(p, { key: 'STRIPE_KEY', sensitive: true })
+    })
+    const hint = await screen.findByTestId('legacy-supabase-hint')
+    expect(hint).toHaveTextContent('delete NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.')
+    expect(hint).not.toHaveTextContent('STRIPE_KEY')
+  })
+
+  it('S4_23_legacy_supabase_hint: without the derived Supabase keys there is nothing to suggest yet', async () => {
+    await openAsOwner((_me, p) => {
+      seedNetlifyRenderTargets(p)
+      seedEnvVar(p, { key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY' })
+    })
+    await screen.findByRole('listitem', { name: 'Variable NEXT_PUBLIC_SUPABASE_ANON_KEY' })
+    expect(screen.queryByTestId('legacy-supabase-hint')).not.toBeInTheDocument()
   })
 
   it('FR152_external_secret_field: the connection string is a password field, validated, sent once and never shown', async () => {

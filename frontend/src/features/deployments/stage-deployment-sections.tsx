@@ -42,7 +42,8 @@ function NotConfigured({ owner, projectId, what }: { owner: boolean; projectId: 
  */
 export function PreviewDeploymentSection() {
   const { project, can } = useProjectAccess()
-  const enabled = project.deploymentsEnabled
+  // §4.21: a preview database's migrations roll out with no target set up, so their failures and the reset show here too.
+  const enabled = project.deploymentsEnabled || project.previewMigrationsEnabled
   const preview = usePreviewEnvironment(project.id, enabled)
   const writer = can('deployPreview')
   const owner = can('manageDeployment')

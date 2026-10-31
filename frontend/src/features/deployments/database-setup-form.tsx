@@ -4,19 +4,12 @@ import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
-import type { Schemas } from '../../api/client'
 import { Alert, ErrorSummary } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
-import { RadioGroup } from '../../components/ui/radio-group'
-import { SelectField } from '../../components/ui/select-field'
-import { ErrorState, LoadingState } from '../../components/ui/states'
 import { TextField } from '../../components/ui/text-field'
 import { errorMessage, isApiError, stackIncompatibleMessage } from '../../lib/errors'
-import { Link } from '../../lib/navigation'
 import { useCurrentUser } from '../auth/auth-api'
-import { connectionLabel, credentialStatusLabels } from '../connections/connection-format'
-import { isPlatformProvider, usePlatformConnections, usePlatformResources } from '../connections/platform-connections-api'
 import type { Project } from '../projects/projects-api'
 import {
   databaseLinkIdLabels,
@@ -27,6 +20,8 @@ import {
   environmentLabels,
 } from './database-format'
 import { usePutManagedDatabase, type DatabaseCard, type ManagedDatabaseProvider } from './deployments-api'
+import { databaseRequestBody } from './host-setup-body'
+import { HostSetupFields } from './host-setup-fields'
 
 interface DatabaseValues {
   connectionId: string
@@ -99,24 +94,6 @@ function databaseSchema(db: DatabaseCard) {
     })
 }
 
-function requestBody(db: DatabaseCard, v: DatabaseValues): Schemas['PutManagedDatabaseRequest'] {
-  const provider = db.provider as ManagedDatabaseProvider
-  if (isExternal(db)) {
-    return { provider, external: { connectionString: v.connectionString.trim() } }
-  }
-  const trimmed = (s: string) => (s.trim() ? s.trim() : undefined)
-  const create = { name: trimmed(v.name), region: trimmed(v.region), plan: trimmed(v.plan) }
-  return {
-    provider,
-    ...(db.needsConnection ? { connectionId: v.connectionId } : {}),
-    ...(v.mode === 'create'
-      ? { create: Object.fromEntries(Object.entries(create).filter(([, value]) => value !== undefined)) }
-      : v.mode === 'link'
-        ? { link: { resourceId: v.resourceId.trim() } }
-        : {}),
-  }
-}
-
 function SetupError({ error }: { error: unknown }) {
   const text =
     error instanceof Error && !isApiError(error)
@@ -178,18 +155,10 @@ export function DatabaseSetupForm({ project, database: db, onDone }: { project: 
   })
   const mode = useWatch({ control, name: 'mode' })
   const connectionId = useWatch({ control, name: 'connectionId' })
-  const platform = isPlatformProvider(db.provider) ? db.provider : undefined
-  const connections = usePlatformConnections({
-    enabled: !external && db.needsConnection && platform !== undefined,
-    ...(platform ? { provider: platform } : {}),
-  })
-  const own = connections.data ?? []
-  const selected = own.find((c) => c.id === connectionId)
-  const resources = usePlatformResources(mode === 'link' && connectionId && pickerType ? connectionId : null, pickerType)
 
   const onSubmit = handleSubmit((v) => {
     setFailure(null)
-    put.mutate(requestBody(db, v), {
+    put.mutate(databaseRequestBody(db.provider as ManagedDatabaseProvider, db.needsConnection, v), {
       onSuccess: () => {
         setValue('connectionString', '')
         toast.success(external ? `The ${db.environment} database is saved.` : `Setting up the ${db.environment} database on ${providerName}.`)
@@ -244,121 +213,36 @@ export function DatabaseSetupForm({ project, database: db, onDone }: { project: 
           {...register('connectionString')}
         />
       ) : (
-        <>
-          {db.needsConnection && (
-            <div className="flex flex-col gap-2">
-              {connections.isPending && <LoadingState label={`Loading your ${platformName} connections…`} />}
-              {connections.isError && (
-                <ErrorState error={connections.error} title={`Your ${platformName} connections couldn't load`} onRetry={() => void connections.refetch()} />
-              )}
-              {connections.isSuccess && (
-                <SelectField
-                  id={ids.connectionId}
-                  label={`${platformName} connection`}
-                  hint="Bind one of your own tokens. AIDE uses it to provision, check and restore this database."
-                  error={errors.connectionId?.message}
-                  {...register('connectionId')}
-                >
-                  <option value="">Pick a connection</option>
-                  {own.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {connectionLabel(c)}
-                      {c.accountName ? ` · ${c.accountName}` : ''}
-                      {c.status === 'valid' ? '' : ` (${credentialStatusLabels[c.status].toLowerCase()})`}
-                    </option>
-                  ))}
-                </SelectField>
-              )}
-              {connections.isSuccess && own.length === 0 && <p className="text-sm text-muted-foreground">You have no {platformName} connections yet.</p>}
-              {selected?.status === 'invalid' && (
-                <p className="text-sm text-destructive">{platformName} rejected this token; setting up with it will fail.</p>
-              )}
-              <p>
-                <Link to="/connections" className="text-sm font-medium text-primary underline underline-offset-2">
-                  Add a token in Connections
-                </Link>
-              </p>
-            </div>
-          )}
-          <RadioGroup
-            id={ids.mode}
-            legend={`Which ${platformName} ${noun} is the ${db.environment} database?`}
-            inputProps={register('mode')}
-            error={errors.mode?.message}
-            options={modeOptions}
-          />
-          {mode === 'create' && (
-            <div className="grid gap-4 sm:grid-cols-3">
-              <TextField
-                id={ids.name}
-                label="Name (optional)"
-                hint="The project's name when empty."
-                autoComplete="off"
-                spellCheck={false}
-                maxLength={100}
-                className="sm:col-span-3"
-                error={errors.name?.message}
-                {...register('name')}
-              />
-              {db.provider !== 'railway' && (
-                <TextField
-                  id={ids.region}
-                  label="Region (optional)"
-                  hint={
-                    db.provider === 'supabase'
-                      ? 'A region code (e.g. eu-west-2), or americas, emea or apac.'
-                      : `The backend's region when empty.`
-                  }
-                  autoComplete="off"
-                  spellCheck={false}
-                  maxLength={64}
-                  error={errors.region?.message}
-                  {...register('region')}
-                />
-              )}
-              {db.provider === 'render' && (
-                <TextField
-                  id={ids.plan}
-                  label="Plan (optional)"
-                  hint="Render's default (free) when empty."
-                  autoComplete="off"
-                  spellCheck={false}
-                  maxLength={64}
-                  error={errors.plan?.message}
-                  {...register('plan')}
-                />
-              )}
-            </div>
-          )}
-          {mode === 'link' &&
-            (pickerType === null ? (
-              <TextField
-                id={ids.resourceId}
-                label={databaseLinkIdLabels[db.provider] ?? `${platformName} ${noun} id`}
-                autoComplete="off"
-                spellCheck={false}
-                maxLength={200}
-                error={errors.resourceId?.message}
-                {...register('resourceId')}
-              />
-            ) : !connectionId ? (
-              <p className="text-sm text-muted-foreground">Pick a connection first: the list shows what it can reach.</p>
-            ) : resources.isPending ? (
-              <LoadingState label={`Loading your ${platformName} ${noun}s…`} />
-            ) : resources.isError ? (
-              <ErrorState error={resources.error} title={`Your ${platformName} ${noun}s couldn't load`} onRetry={() => void resources.refetch()} />
-            ) : (
-              <SelectField id={ids.resourceId} label={`Existing ${noun}`} error={errors.resourceId?.message} {...register('resourceId')}>
-                <option value="">{resources.data.length === 0 ? `No ${noun}s found` : `Pick a ${noun}`}</option>
-                {resources.data.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                    {r.detail ? ` · ${r.detail}` : ''}
-                  </option>
-                ))}
-              </SelectField>
-            ))}
-        </>
+        <HostSetupFields
+          ids={ids}
+          provider={db.provider}
+          platformName={platformName}
+          noun={noun}
+          connectionsEnabled={db.needsConnection}
+          connectionHint="Bind one of your own tokens. AIDE uses it to provision, check and restore this database."
+          register={(field) => register(field)}
+          errors={{
+            connectionId: errors.connectionId?.message,
+            mode: errors.mode?.message,
+            name: errors.name?.message,
+            region: errors.region?.message,
+            plan: errors.plan?.message,
+            resourceId: errors.resourceId?.message,
+          }}
+          mode={mode}
+          connectionId={connectionId}
+          modeLegend={`Which ${platformName} ${noun} is the ${db.environment} database?`}
+          modeOptions={modeOptions}
+          pickerType={pickerType}
+          linkIdLabel={databaseLinkIdLabels[db.provider] ?? `${platformName} ${noun} id`}
+          nameField={{ label: 'Name (optional)', hint: "The project's name when empty.", maxLength: 100 }}
+          regionField={
+            db.provider === 'railway'
+              ? null
+              : { hint: db.provider === 'supabase' ? 'A region code (e.g. eu-west-2), or americas, emea or apac.' : `The backend's region when empty.` }
+          }
+          planField={db.provider === 'render' ? { hint: "Render's default (free) when empty." } : null}
+        />
       )}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" pending={put.isPending} pendingLabel="Starting…">

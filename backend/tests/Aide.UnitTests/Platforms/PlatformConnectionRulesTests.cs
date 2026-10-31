@@ -106,6 +106,18 @@ public class PlatformConnectionRulesTests
     }
 
     [Fact]
+    public void FR152_Render_and_Railway_list_databases_to_link_and_only_Postgres_images_count()
+    {
+        Assert.Equal(PlatformResourceType.Databases, PlatformConnectionRules.ResourceType(PlatformProvider.Render, "databases").Value);
+        Assert.Equal(PlatformResourceType.Databases, PlatformConnectionRules.ResourceType(PlatformProvider.Railway, "databases").Value);
+        Assert.Equal(ErrorCodes.Validation, PlatformConnectionRules.ResourceType(PlatformProvider.Vercel, "databases").Error!.Code);
+
+        Assert.True(PlatformConnectionRules.IsPostgresImage("ghcr.io/railwayapp-templates/postgres-ssl:17"));
+        Assert.False(PlatformConnectionRules.IsPostgresImage("redis:7"));
+        Assert.False(PlatformConnectionRules.IsPostgresImage(null));
+    }
+
+    [Fact]
     public void FR142_Picker_types_per_provider_default_to_the_first_and_others_are_VALIDATION()
     {
         Assert.Equal(PlatformResourceType.Projects, PlatformConnectionRules.ResourceType(PlatformProvider.Vercel, null).Value);
@@ -135,7 +147,7 @@ public class PlatformConnectionRulesTests
     {
         Assert.Equal(["vercel", "netlify", "cloudflare", "render", "railway", "supabase"], EnumStrings.Values<PlatformProvider>());
         Assert.Equal(["valid", "invalid", "insufficient_scope", "unchecked"], EnumStrings.Values<PlatformConnectionStatus>());
-        Assert.Equal(["sites", "services", "projects", "workers", "orgs", "regions"], EnumStrings.Values<PlatformResourceType>());
+        Assert.Equal(["sites", "services", "projects", "workers", "orgs", "regions", "databases"], EnumStrings.Values<PlatformResourceType>());
         Assert.Equal(["frontend", "backend"], EnumStrings.Values<DeploymentComponent>());
         Assert.Equal(["not_configured", "configuring", "ready", "attention", "error"], EnumStrings.Values<DeploymentTargetStatus>());
         Assert.Equal(["deploy", "rollback", "promote"], EnumStrings.Values<DeploymentKind>());
