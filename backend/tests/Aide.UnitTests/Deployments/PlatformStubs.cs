@@ -6,7 +6,7 @@ using Aide.Infrastructure.Platforms;
 
 namespace Aide.UnitTests.Deployments;
 
-/// <summary>One request a platform stub saw: method, path and query (after the API base), and body.</summary>
+/// <summary>One request a platform stub saw: method, path and query (after the API base; Railway's keeps its leading slash, <c>/graphql/v2</c>), and body.</summary>
 internal sealed record PlatformCall(string Method, string Path, string Body);
 
 /// <summary>
@@ -42,7 +42,7 @@ internal sealed class PlatformStub : HttpMessageHandler
         var body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
         var uri = request.RequestUri!;
         var path = uri.AbsolutePath;
-        foreach (var prefix in new[] { "/api/v1/", "/client/v4/" })
+        foreach (var prefix in new[] { "/api/v1/", "/client/v4/", "/v1/" })
         {
             if (path.StartsWith(prefix, StringComparison.Ordinal))
             {

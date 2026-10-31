@@ -50,6 +50,12 @@ public sealed class Release
     /// <summary>FR-65/FR-84: merge-readiness reasons the merge was refused, as raw JSON; null when not refused.</summary>
     public string? MergeReasons { get; set; }
 
+    /// <summary>FR-154, §4.21: the Supabase BaaS migration run of this release's production rollout; <c>null</c> when none ran.</summary>
+    public Guid? MigrationRunId { get; set; }
+
+    /// <summary>The release notes (always stored; the Bitbucket notes surface); <c>null</c> for releases before M30.</summary>
+    public string? ReleaseNotes { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     /// <summary>When the attempt reached <c>succeeded</c> or <c>failed</c>; null while <c>in_progress</c> or <c>awaiting_merge</c>.</summary>

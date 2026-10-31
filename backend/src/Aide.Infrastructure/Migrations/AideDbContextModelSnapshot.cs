@@ -649,6 +649,88 @@ namespace Aide.Infrastructure.Migrations
                     b.ToTable("compliance_reports", (string)null);
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.DatabaseMigrationRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Applied")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("applied")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("environment");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<string>("GitSha")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("git_sha");
+
+                    b.Property<Guid>("ManagedDatabaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("managed_database_id");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid?>("ReleaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_id");
+
+                    b.Property<Guid>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_database_migration_runs");
+
+                    b.HasIndex("ManagedDatabaseId")
+                        .HasDatabaseName("ix_database_migration_runs_managed_database_id");
+
+                    b.HasIndex("ReleaseId")
+                        .HasDatabaseName("ix_database_migration_runs_release_id");
+
+                    b.HasIndex("ReleaseVersionId")
+                        .HasDatabaseName("ix_database_migration_runs_release_version_id");
+
+                    b.HasIndex("ProjectId", "StartedAt")
+                        .HasDatabaseName("ix_database_migration_runs_project_id_started_at");
+
+                    b.ToTable("database_migration_runs", (string)null);
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.Deployment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1613,6 +1695,90 @@ namespace Aide.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.ManagedDatabase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ConnectionEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("connection_encrypted");
+
+                    b.Property<Guid?>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DbPasswordEncrypted")
+                        .HasColumnType("text")
+                        .HasColumnName("db_password_encrypted");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("environment");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("Plan")
+                        .HasColumnType("text")
+                        .HasColumnName("plan");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("Region")
+                        .HasColumnType("text")
+                        .HasColumnName("region");
+
+                    b.Property<string>("ResourceId")
+                        .HasColumnType("text")
+                        .HasColumnName("resource_id");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_managed_databases");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_managed_databases_connection_id");
+
+                    b.HasIndex("ProjectId", "Environment")
+                        .IsUnique()
+                        .HasDatabaseName("ux_managed_databases_project_id_environment");
+
+                    b.ToTable("managed_databases", (string)null);
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2207,6 +2373,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("merge_submitted_at");
 
+                    b.Property<Guid?>("MigrationRunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("migration_run_id");
+
                     b.Property<string>("PrUrl")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -2215,6 +2385,10 @@ namespace Aide.Infrastructure.Migrations
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
+
+                    b.Property<string>("ReleaseNotes")
+                        .HasColumnType("text")
+                        .HasColumnName("release_notes");
 
                     b.Property<Guid>("ReleaseVersionId")
                         .HasColumnType("uuid")
@@ -2234,6 +2408,9 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_releases");
+
+                    b.HasIndex("MigrationRunId")
+                        .HasDatabaseName("ix_releases_migration_run_id");
 
                     b.HasIndex("ProjectId", "ReleaseVersionId")
                         .HasDatabaseName("ix_releases_project_id_release_version_id");
@@ -3026,6 +3203,36 @@ namespace Aide.Infrastructure.Migrations
                         .HasConstraintName("fk_compliance_reports_release_versions_release_version_id");
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.DatabaseMigrationRun", b =>
+                {
+                    b.HasOne("Aide.Domain.Entities.ManagedDatabase", null)
+                        .WithMany()
+                        .HasForeignKey("ManagedDatabaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_database_migration_runs_managed_databases_managed_database_");
+
+                    b.HasOne("Aide.Domain.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_database_migration_runs_projects_project_id");
+
+                    b.HasOne("Aide.Domain.Entities.Release", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_database_migration_runs_releases_release_id");
+
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_database_migration_runs_release_versions_release_version_id");
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.Deployment", b =>
                 {
                     b.HasOne("Aide.Domain.Entities.Project", null)
@@ -3194,6 +3401,22 @@ namespace Aide.Infrastructure.Migrations
                         .HasConstraintName("fk_llm_credentials_users_user_id");
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.ManagedDatabase", b =>
+                {
+                    b.HasOne("Aide.Domain.Entities.PlatformConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_managed_databases_platform_connections_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_managed_databases_projects_project_id");
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.Notification", b =>
                 {
                     b.HasOne("Aide.Domain.Entities.Project", null)
@@ -3308,6 +3531,12 @@ namespace Aide.Infrastructure.Migrations
 
             modelBuilder.Entity("Aide.Domain.Entities.Release", b =>
                 {
+                    b.HasOne("Aide.Domain.Entities.DatabaseMigrationRun", null)
+                        .WithMany()
+                        .HasForeignKey("MigrationRunId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_releases_database_migration_runs_migration_run_id");
+
                     b.HasOne("Aide.Domain.Entities.Project", null)
                         .WithMany()
                         .HasForeignKey("ProjectId")

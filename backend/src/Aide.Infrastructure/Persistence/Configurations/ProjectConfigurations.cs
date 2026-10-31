@@ -281,8 +281,13 @@ internal sealed class ReleaseConfiguration : IEntityTypeConfiguration<Release>
         builder.Property(r => r.ErrorCode).HasMaxLength(32);
         builder.Property(r => r.ErrorMessage).HasColumnName("error_message");
         builder.PrimitiveCollection(r => r.ConflictingFiles).HasColumnType("text[]").IsRequired();
+        builder.Property(r => r.ReleaseNotes).HasColumnType("text");
         builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(r => r.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
+
+        // FR-154: the release's Supabase migration run (§5); the run outlives nothing, so deleting it clears the link.
+        builder.HasOne<DatabaseMigrationRun>().WithMany().HasForeignKey(r => r.MigrationRunId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(r => r.MigrationRunId);
 
         // One row per attempt, numbered per (release version, checkpoint): checkpoints restart in every release version,
         // and v1 data may hold several succeeded attempts of one checkpoint (re-release after a rollback).

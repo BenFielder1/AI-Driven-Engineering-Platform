@@ -80,7 +80,19 @@ public static class DerivedEnvRules
             var model = composition.OriginModel;
             var railwaySameOrigin = model == OriginModels.SameOrigin
                 && composition.Deploy.FrontendHost == "deploy-railway" && composition.Deploy.BackendHost == "deploy-railway";
-            if (model == OriginModels.Proxy || railwaySameOrigin)
+            if (railwaySameOrigin && RailwayPrivateOrigin(backend?.Name) is { } privateOrigin)
+            {
+                // FR-146, §4.22: the SPA container proxies /api over Railway's private network; Railway resolves the reference
+                // in each environment (production, aide-preview), so one value serves both.
+                list.Add(new DerivedEnvVar(
+                    ApiOrigin,
+                    FrontendOnly,
+                    new Dictionary<DeploymentEnvironment, string> { [DeploymentEnvironment.Production] = privateOrigin, [DeploymentEnvironment.Preview] = privateOrigin },
+                    Public: false,
+                    Sensitive: false,
+                    $"backend private network ({backendHost})"));
+            }
+            else if (model == OriginModels.Proxy || railwaySameOrigin)
             {
                 list.Add(new DerivedEnvVar(ApiOrigin, FrontendOnly, backendUrls, Public: false, Sensitive: false, $"backend target URL ({backendHost})"));
             }
@@ -103,6 +115,15 @@ public static class DerivedEnvRules
         // M30 (FR-152, FR-153): DATABASE_URL, DIRECT_URL, AIDE_RUN_MIGRATIONS and the Supabase keys from input.Databases.
         return [.. list.OrderBy(v => v.Key, StringComparer.Ordinal)];
     }
+
+    /// <summary>
+    /// FR-146: the backend's origin on Railway's private network as a Railway reference variable,
+    /// <c>http://${{&lt;service&gt;.RAILWAY_PRIVATE_DOMAIN}}:${{&lt;service&gt;.PORT}}</c> (AIDE sets <c>PORT</c> on a backend
+    /// service it creates); <c>null</c> without a service name (the public URLs are used then).
+    /// </summary>
+    public static string? RailwayPrivateOrigin(string? backendServiceName) =>
+        string.IsNullOrWhiteSpace(backendServiceName) ? null
+        : $"http://${{{{{backendServiceName}.RAILWAY_PRIVATE_DOMAIN}}}}:${{{{{backendServiceName}.PORT}}}}";
 
     /// <summary>The keys AIDE derives for <paramref name="input"/> (an Owner can't set them, §4.22).</summary>
     public static IReadOnlySet<string> DerivedKeys(DerivedEnvInput input) =>

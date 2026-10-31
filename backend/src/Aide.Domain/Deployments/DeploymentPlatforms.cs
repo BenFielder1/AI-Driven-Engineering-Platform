@@ -14,8 +14,8 @@ public sealed record DeploymentCapabilities(bool ShaPinned, bool Previews, bool 
 
 /// <summary>
 /// §4.20, FR-144: the deployment providers: which composition host each one is, its capabilities, its display name, the
-/// platform connection it binds, and whether AIDE calls it for real yet (Vercel and GitHub Pages in M29; Netlify and
-/// Cloudflare in slice 3; Render and Railway in M30 — until then only their Fake mode works). Pure.
+/// platform connection it binds, and whether AIDE calls it for real (Vercel and GitHub Pages in M29; Netlify and
+/// Cloudflare in M29 slice 3; Render and Railway in M30). Pure.
 /// </summary>
 public static class DeploymentPlatforms
 {
@@ -116,11 +116,12 @@ public static class DeploymentPlatforms
     public static bool NeedsConnection(DeploymentProvider provider) => ConnectionProvider(provider) is not null;
 
     /// <summary>
-    /// §4.20 build seam: whether AIDE calls the provider's real API in this release (Vercel, Netlify, Cloudflare, GitHub Pages). The others work
-    /// only in Fake mode (<c>Deployments:Provider=Fake</c>); a real call is <c>PLATFORM_ERROR</c> "not supported yet".
+    /// §4.20 build seam: whether AIDE calls the provider's real API in this release (every provider since M30: Render and
+    /// Railway joined Vercel, Netlify, Cloudflare and GitHub Pages). A provider without one works only in Fake mode
+    /// (<c>Deployments:Provider=Fake</c>); a real call is <c>PLATFORM_ERROR</c> "not supported yet".
     /// </summary>
-    public static bool ImplementedForReal(DeploymentProvider provider) =>
-        provider is DeploymentProvider.Vercel or DeploymentProvider.Netlify or DeploymentProvider.Cloudflare or DeploymentProvider.GithubPages or DeploymentProvider.Fake;
+    public static bool ImplementedForReal(DeploymentProvider provider) => provider is DeploymentProvider.Vercel or DeploymentProvider.Netlify
+        or DeploymentProvider.Cloudflare or DeploymentProvider.GithubPages or DeploymentProvider.Render or DeploymentProvider.Railway or DeploymentProvider.Fake;
 
     /// <summary>
     /// FR-149: whether the platform deploys the default branch by itself, so a release's production deployment first adopts

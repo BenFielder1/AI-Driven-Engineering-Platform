@@ -129,7 +129,7 @@ public sealed partial class DeploymentJobHandler(
             Fail(deployment, ErrorCodes.PlatformError, SecretRedaction.SanitizeProviderError(DeploymentSettingsService.Message(ex)));
         }
 
-        var decision = DeploymentPollRules.Decide(deployment.CreatedAt, now, deployment.Status);
+        var decision = DeploymentPollRules.Decide(deployment.CreatedAt, now, deployment.Status, DeploymentPollRules.MinInterval(context.Provider.Kind));
         if (decision.Kind == DeploymentPollDecisionKind.TimedOut)
         {
             Fail(deployment, ErrorCodes.DeploymentTimeout, DeploymentPollRules.TimeoutMessage);
@@ -156,7 +156,7 @@ public sealed partial class DeploymentJobHandler(
                 return null;
             }
 
-            if (ProductionDeploymentRules.LookAgainAt(deployment.CreatedAt, now) is { } again)
+            if (ProductionDeploymentRules.LookAgainAt(deployment.CreatedAt, now, DeploymentPollRules.MinInterval(context.Provider.Kind)) is { } again)
             {
                 return again;
             }
@@ -234,8 +234,10 @@ public sealed partial class DeploymentJobHandler(
                 deployment.BuildLogTail = Deployment.TailOf(SecretScanner.Redact(SecretRedaction.Redact(masked, context.Auth.Token)));
             }
         }
-        catch (DeploymentProviderException ex) when (ex.Failure is not DeploymentFailure.CredentialRejected)
+        catch (DeploymentProviderException ex) when (ex.Failure is not (DeploymentFailure.CredentialRejected or DeploymentFailure.RateLimited))
         {
+            // A rate limit (Render: 30 log reads a minute per user) propagates instead: the poll is deferred without saving,
+            // so the failed state and its log tail are read again after the wait rather than recorded without the log.
             LogNoBuildLog(logger, deployment.Id, ex.Failure);
         }
     }

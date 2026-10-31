@@ -57,6 +57,10 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<Deployment> Deployments => Set<Deployment>();
 
+    public DbSet<ManagedDatabase> ManagedDatabases => Set<ManagedDatabase>();
+
+    public DbSet<DatabaseMigrationRun> DatabaseMigrationRuns => Set<DatabaseMigrationRun>();
+
     public DbSet<Artifact> Artifacts => Set<Artifact>();
 
     public DbSet<ApprovalGate> ApprovalGates => Set<ApprovalGate>();
@@ -126,6 +130,9 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<DeploymentEnvSource>(configurationBuilder);
         MapEnum<DeploymentStatus>(configurationBuilder);
         MapEnum<DeploymentTrigger>(configurationBuilder);
+        MapEnum<ManagedDatabaseProvider>(configurationBuilder);
+        MapEnum<ManagedDatabaseStatus>(configurationBuilder);
+        MapEnum<MigrationRunStatus>(configurationBuilder);
         MapEnum<DriftLevel>(configurationBuilder);
         MapEnum<ReviewDecision>(configurationBuilder);
         MapEnum<EscalationReason>(configurationBuilder);

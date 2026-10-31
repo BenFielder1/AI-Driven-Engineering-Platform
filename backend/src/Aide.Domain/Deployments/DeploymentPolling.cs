@@ -81,10 +81,14 @@ public static class DeploymentPollRules
     /// When to poll next after a poll at <paramref name="now"/> of a deployment recorded at <paramref name="since"/>: 10
     /// seconds later within the first 2 minutes, else 30 seconds later, never after the ceiling (the last poll runs at it).
     /// </summary>
-    public static DateTimeOffset NextPollAt(DateTimeOffset since, DateTimeOffset now)
+    public static DateTimeOffset NextPollAt(DateTimeOffset since, DateTimeOffset now) => NextPollAt(since, now, TimeSpan.Zero);
+
+    /// <summary>As <see cref="NextPollAt(DateTimeOffset, DateTimeOffset)"/>, never sooner than <paramref name="minInterval"/> (§4.20 Railway: 20 s).</summary>
+    public static DateTimeOffset NextPollAt(DateTimeOffset since, DateTimeOffset now, TimeSpan minInterval)
     {
         var elapsed = now - since;
-        var next = now + (elapsed < FastPhase ? FastInterval : SlowInterval);
+        var interval = elapsed < FastPhase ? FastInterval : SlowInterval;
+        var next = now + (interval < minInterval ? minInterval : interval);
         var deadline = since + Ceiling;
         return next > deadline ? (now >= deadline ? now : deadline) : next;
     }
@@ -95,7 +99,15 @@ public static class DeploymentPollRules
     /// After a poll that saw <paramref name="observed"/>: a terminal state finishes (even at the ceiling), otherwise wait
     /// for the next poll unless the 30 minutes are over.
     /// </summary>
-    public static DeploymentPollDecision Decide(DateTimeOffset since, DateTimeOffset now, DeploymentStatus observed)
+    public static DeploymentPollDecision Decide(DateTimeOffset since, DateTimeOffset now, DeploymentStatus observed) =>
+        Decide(since, now, observed, TimeSpan.Zero);
+
+    /// <summary>§4.20: the poll interval floor of a platform (Railway 20 s; others none).</summary>
+    public static TimeSpan MinInterval(DeploymentProvider platform) =>
+        platform == DeploymentProvider.Railway ? RailwayRules.MinPollInterval : TimeSpan.Zero;
+
+    /// <summary>As <see cref="Decide(DateTimeOffset, DateTimeOffset, DeploymentStatus)"/>, polling no sooner than <paramref name="minInterval"/>.</summary>
+    public static DeploymentPollDecision Decide(DateTimeOffset since, DateTimeOffset now, DeploymentStatus observed, TimeSpan minInterval)
     {
         if (DeploymentStates.IsTerminal(observed))
         {
@@ -104,7 +116,7 @@ public static class DeploymentPollRules
 
         return IsTimedOut(since, now)
             ? new DeploymentPollDecision(DeploymentPollDecisionKind.TimedOut, null)
-            : new DeploymentPollDecision(DeploymentPollDecisionKind.Wait, NextPollAt(since, now));
+            : new DeploymentPollDecision(DeploymentPollDecisionKind.Wait, NextPollAt(since, now, minInterval));
     }
 
     /// <summary>The message recorded with <c>DEPLOYMENT_TIMEOUT</c>.</summary>
@@ -131,7 +143,13 @@ public static class ProductionDeploymentRules
     /// With no Vercel deployment of the SHA found at <paramref name="now"/>: wait (the time to look again) while the window is
     /// open, else <c>null</c> (create one).
     /// </summary>
-    public static DateTimeOffset? LookAgainAt(DateTimeOffset recordedAt, DateTimeOffset now)
+    public static DateTimeOffset? LookAgainAt(DateTimeOffset recordedAt, DateTimeOffset now) => LookAgainAt(recordedAt, now, TimeSpan.Zero);
+
+    /// <summary>
+    /// As <see cref="LookAgainAt(DateTimeOffset, DateTimeOffset)"/>, never sooner than <paramref name="minInterval"/> (§4.20
+    /// Railway: 20 s). A floor that overshoots the window's close looks once more after it (then creates), never sooner.
+    /// </summary>
+    public static DateTimeOffset? LookAgainAt(DateTimeOffset recordedAt, DateTimeOffset now, TimeSpan minInterval)
     {
         var closes = recordedAt + AdoptWindow;
         if (now >= closes)
@@ -139,8 +157,8 @@ public static class ProductionDeploymentRules
             return null;
         }
 
-        var next = now + AdoptRecheck;
-        return next > closes ? closes : next;
+        var next = now + (AdoptRecheck < minInterval ? minInterval : AdoptRecheck);
+        return next <= closes ? next : minInterval > AdoptRecheck ? next : closes;
     }
 
     /// <summary>

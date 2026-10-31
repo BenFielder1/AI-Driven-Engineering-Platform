@@ -112,7 +112,7 @@ public interface IDeploymentProviderResolver
 }
 
 /// <summary>
-/// §4.20 seam for platforms AIDE can't call for real yet (Render and Railway, until M30): every
+/// §4.20 seam for a platform AIDE can't call for real (none since M30, when Render and Railway joined): every
 /// operation is <c>PLATFORM_ERROR</c> "not supported yet". Their Fake mode works.
 /// </summary>
 public sealed class UnsupportedDeploymentProvider(DeploymentProvider platform) : IDeploymentProvider

@@ -224,7 +224,8 @@ public class DeploymentTargetSetupTests
         Assert.True(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.GithubPages));
         Assert.True(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.Netlify));
         Assert.True(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.Cloudflare));
-        Assert.False(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.Render));
+        Assert.True(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.Render));
+        Assert.True(DeploymentPlatforms.ImplementedForReal(DeploymentProvider.Railway));
 
         foreach (var provider in DeploymentPlatforms.Hosted)
         {
