@@ -55,6 +55,7 @@ of every API key are in the [README configuration reference](../../README.md#con
 | `GitLab__RequestTimeout` | operator-set (ignored in IaC) | `00:00:20` | no | One GitLab API request. Default `00:00:20` |
 | `Bitbucket__OAuth__ClientId` | operator-set (ignored in IaC) | | no | M28. Optional Bitbucket Cloud OAuth consumer, overriding the one registered in Admin → Integrations. Callback `https://<web-domain>/api/auth/bitbucket/callback` |
 | `Bitbucket__OAuth__ClientSecret` | **secret** (ignored in IaC) | | no | Same as above. Set with `--stdin` |
+| `Notifications__DatabaseExpirySweepInterval` | operator-set (**not** yet ignored in IaC) | `01:00:00` | no | FR-155. How often the database expiry sweep runs. The default suits Railway: leave it unset. To change it, add the exact name to `operatorSetApiVariables` in `railway.ts` first, or the next plan deletes it |
 | `Smtp__Host`, `Smtp__Username`, `Smtp__From`, `Smtp__Port`, `Smtp__EnableSsl`, `Smtp__Timeout` | operator-set (ignored in IaC) | | no | Email channel (FR-47). Leave a key out rather than blank: a blank number fails binding |
 | `Smtp__Password` | **secret** (ignored in IaC) | | no | |
 | `Deployments__AllowFake`, `Deployments__Provider=Fake`, `Databases__Provider=Fake`, `Git__Local__ImportRoot` | — | **unset** | — | Never on Railway (FR-108) |

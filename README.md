@@ -16,14 +16,41 @@ Added in v2:
 - **Release versions.** Each release has a semver version with internal checkpoints. Rollback is limited to the version in development, and a released version is closed. After a merged release you can start the next version. Two badges show the released and in-development versions.
 - **Import an existing repo.** Pick a GitHub repo (or a Local one in E2E) and its released tag. A Repository Analyst writes a codebase summary first.
 - **Repo tools for agents.** Read-only `list_files`, `read_file` and `search_code` run on a credential-free snapshot, with limits and secret redaction.
-- **Tech stack presets.** `nextjs-supabase` and `nextjs-frontend` add specialist agents per plan step, spec sections, a review checklist and protected paths.
+- **Tech stack presets.** `nextjs-supabase` and `nextjs-frontend` added specialist agents per plan step, spec sections, a review checklist and protected paths. v4 retires them (see below).
 - **GitHub App.** An Admin registers it through the manifest flow. Background Git work uses short-lived installation tokens. The personal access token stays as a fallback.
 - **Per-user LLM connections.** A user adds provider keys, and a project Owner binds one to the project.
 - **Merge strategies.** `aide_merges` or `manual`, a merge-poll job, merge readiness, check runs as review input and GitHub Releases.
 - **Vercel deployments.** Preview deployments in review and production deployments on release, with promote and redeploy. A deterministic Fake provider covers tests.
 - **New UI shell** with a side navigation, one page per lifecycle stage, and full execution and review history. More notification types and `aide` commands for versions and deployments.
 
+Added in v3: AIDE's own frontend moved to Next.js with a custom Node server, and AIDE deploys to Railway (`preview` and `production`).
+
+Added in v4:
+
+- **Stack composition.** The wizard's Stack step picks one option per layer from a versioned catalog adapted from the stack-packs: frontend, backend, data, version control and deployment hosts. Compatibility rules run in the backend, and the wizard only renders their answer. The composition is pinned on the release version. The v2 presets became equivalent compositions in a data migration.
+- **Specialist agents with pack skills.** Generic specialists load the skills of the chosen packs. Spec sections, plan rules, protected paths and the review checklist come from the composition.
+- **GitLab and Bitbucket Cloud.** Sign-in, connections, repo picker and create, draft MRs/PRs, merge readiness, CI status, release (GitLab Release, or an annotated tag with notes on Bitbucket) and import. GitLab works on gitlab.com or self-managed instances.
+- **Deployment platforms.** Vercel, Netlify, Cloudflare (Workers Builds, Pages), GitHub Pages, Render and Railway, set per component (frontend, backend). A platform builds from the repo's Git host. AIDE keeps an environment inventory, a persistent preview environment with preview and production rollouts, rollback where the platform supports it, and an origin model (same-origin, proxy or cross-origin).
+- **Managed databases.** Provision, link or enter an external database for Supabase, Render Postgres or Railway Postgres, per environment. Supabase BaaS migrations run through AIDE's own runner just before the merge. ORM migrations run on the platform. Preview databases can be reset, and the preview and production databases must differ.
+- **LLM choice.** Providers are enabled per deployment. The wizard chooses provider, connection and model. Calls stream, each model has its own output limit, and a cut-off answer is continued up to 5 times.
+- **Events and CLI.** New events and notifications (binding cleared, database expiring, migration failed, target needs attention). The CLI gains stack, deployment, database and migration commands.
+
 `SPEC.md` is the source of truth for behaviour. `CLAUDE.md` holds the conventions. `PROGRESS.md` logs build decisions.
+
+## Stack
+
+AIDE's own stack is unchanged in v4. [`STACK.md`](STACK.md) holds the packs and shared conventions.
+
+| Layer | Summary |
+| --- | --- |
+| Frontend | Next.js 16 App Router, React 19, TypeScript strict, TanStack Query, Tailwind 4, Vitest and Playwright. A custom Node server serves it and proxies `/api` |
+| Backend | ASP.NET Core on .NET 10, minimal APIs, hosted background workers, xUnit v3 |
+| Data | EF Core 10 on PostgreSQL 17 (Railway: 18). EF owns the migrations |
+| VCS / CI | Git on GitHub, with GitHub Actions |
+| Deploy | Railway `preview` and `production`, defined in `.railway/railway.ts` and deployed by GitHub Actions |
+| Local | Docker Desktop Kubernetes with Kustomize at http://localhost:8080 |
+
+This is separate from the stack catalog, which describes the stacks of the projects AIDE builds.
 
 ## Architecture
 
@@ -35,8 +62,8 @@ flowchart LR
   Api --> Db[("PostgreSQL 17<br/>data + job/outbox table")]
   Api --> Vol[/"aide-data volume<br/>working copies, Data Protection keys"/]
   Api -.-> LLM["Anthropic / OpenAI / Ollama"]
-  Api -.-> GH["GitHub (Git, API, App)"]
-  Api -.-> Vc["Vercel API"]
+  Api -.-> GH["GitHub / GitLab / Bitbucket (Git, API)"]
+  Api -.-> Pl["Deployment platforms and Supabase APIs"]
   Api -.-> Out["SMTP, Slack, Teams, webhooks"]
   Mig["db-migrate Job (EF bundle)"] --> Db
 ```
@@ -53,8 +80,8 @@ flowchart LR
 backend/
   src/Aide.Api/             endpoints, auth, ProblemDetails, OpenAPI, hosted workers
   src/Aide.Domain/          pure business rules: state machine, gates, versioning, guardian, review scoring
-  src/Aide.Infrastructure/  EF Core (Persistence, Migrations), LLM, Git, GitHub and Vercel providers, notifications,
-                            Agents/Prompts and Agents/Presets (embedded)
+  src/Aide.Infrastructure/  EF Core (Persistence, Migrations), LLM, Git hosts (GitHub, GitLab, Bitbucket), deployment
+                            platforms, databases, notifications, Agents/Prompts and Agents/Stack (embedded catalog)
   src/Aide.Cli/             `aide` .NET global tool
   tests/                    Aide.UnitTests, Aide.IntegrationTests (Testcontainers)
   openapi/api.json          GENERATED contract (committed)
@@ -67,12 +94,19 @@ frontend/
 deploy/
   k8s/base, k8s/overlays/local, k8s/overlays/local-e2e   Kustomize manifests
   scripts/                  deploy-local.sh, teardown-local.sh, smoke.sh, validate-manifests.sh, seed-e2e-repo.sh
-docs/v1, docs/v2/brand      frozen v1 spec and build log; AIDE logo source
+docs/v1, docs/v2, docs/v3   frozen specs and build logs (docs/v2/brand holds the AIDE logo source)
 scripts/ci, scripts/perf    generated-file check, E2E seed for CI, perf scripts (nfr-perf.mjs, v2-perf.mjs)
 docker-compose.yml          dev-loop database only
 ```
 
-Merge and deployment polls are self-deferring jobs in the same table, so a restart resumes them. Presets are data folders under `Aide.Infrastructure/Agents/Presets`, content-hashed and pinned per release version.
+Merge and deployment polls are self-deferring jobs in the same table, so a restart resumes them. The stack catalog (`Aide.Infrastructure/Agents/Stack`: `catalog.json`, `packs/`, `agents/`, `core/`) is content-hashed, and each release version pins the composition and catalog version it was built with.
+
+Stack and origin model:
+
+- The Domain owns the compatibility rules. `POST /api/stack/options` and `/validate` serve the wizard, Settings, the API and the CLI.
+- The origin model says how the browser reaches the backend: `same-origin`, `proxy` or `cross-origin`. The options depend on the chosen frontend, backend and hosts.
+- Database migrations: AIDE itself runs only Supabase BaaS migrations, just before the merge. For ORM stacks, the platform runs the data pack's migrate command (pre-deploy, container start, or the production build when `AIDE_RUN_MIGRATIONS=true`).
+- AIDE's own database migrations run as before: the EF bundle, in the `db-migrate` Job or Railway pre-deploy.
 
 Business rules live in `Aide.Domain`. Endpoints stay thin. The contract flows one way: backend build writes `backend/openapi/api.json`, then `npm run gen:api` writes `frontend/src/api/generated/`. Never hand-edit either. See `CLAUDE.md` for the full rules.
 
@@ -123,7 +157,7 @@ npm --prefix frontend run dev                # http://localhost:3000 (Next.js de
 | API | http://localhost:5080 |
 | Database | localhost:5432 |
 
-The Development environment enables the seed. On first start it creates the Admin `admin@aide.local`, the project "Demo: Todo API" (Fake provider, Local Git, released at `0.1.0`, so you can try "Start new version" at once) and "Demo: Recipe Finder" (`nextjs-frontend` preset, in planning). A v1 database keeps its demo project, and an untouched one is upgraded to a released `0.1.0`. The generated password is logged once at Warning in the `dotnet run` console. Look for `Seeded admin admin@aide.local with password ...`. If you missed it, sign in with another account (the first registered user is Admin) or reset the database volume.
+The Development environment enables the seed. On first start it creates the Admin `admin@aide.local`, the project "Demo: Todo API" (Fake provider, Local Git, released at `0.1.0`, so you can try "Start new version" at once) and "Demo: Recipe Finder" (a migrated v2 preset project, in planning), plus "Demo: Vue Notes" (Vue + Supabase BaaS, in specification). A v1 database keeps its demo project, and an untouched one is upgraded to a released `0.1.0`. The generated password is logged once at Warning in the `dotnet run` console. Look for `Seeded admin admin@aide.local with password ...`. If you missed it, sign in with another account (the first registered user is Admin) or reset the database volume.
 
 New migration: `dotnet ef migrations add <Name> --project src/Aide.Infrastructure --startup-project src/Aide.Api` (from `backend/`). Never edit a committed migration.
 
@@ -147,7 +181,7 @@ The script builds the `aide-api` and `aide-web` images, tags them with the git S
   - `/` returns 307 (to `/projects`) or 200
   - `/login` returns 200 with a `Content-Security-Policy` that has a `'nonce-…'` source, `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff`
   - `/api/health/ready` returns 200 through the proxy. Readiness also fails while migrations are pending or if an embedded preset does not load.
-- **E2E mode:** `./deploy/scripts/deploy-local.sh --e2e` is the only switch. It applies `deploy/k8s/overlays/local-e2e`: `Deployments__Provider=Fake`, `Databases__Provider=Fake`, `Deployments__AllowFake=true`, `Git__Local__ImportRoot=/data/import` and `Llm__DefaultProvider=fake`. It also seeds the Local import repo `/data/import/existing-app` (tags `v0.1.0`, `v0.2.0`) with `seed-e2e-repo.sh`. The API logs a warning on every boot while Fake deployments are on. Use it only for Playwright runs.
+- **E2E mode:** `./deploy/scripts/deploy-local.sh --e2e` is the only switch. It applies `deploy/k8s/overlays/local-e2e`: `Deployments__Provider=Fake`, `Databases__Provider=Fake`, `Deployments__AllowFake=true`, `Git__Local__ImportRoot=/data/import` and `Llm__DefaultProvider=fake`. Fake databases mean no real provisioning or migration runner. It also seeds the Local import repo `/data/import/existing-app` (tags `v0.1.0`, `v0.2.0`) with `seed-e2e-repo.sh`. The API logs a warning on every boot while Fake deployments are on. Use it only for Playwright runs.
 - **Switch back:** run `./deploy/scripts/deploy-local.sh` again without `--e2e`. The API pod restarts with Vercel deployments and no Local import. The seeded repo stays on the volume, unused.
 - **Teardown:** `./deploy/scripts/teardown-local.sh` (no flags) removes workloads, services, config and secrets. It keeps the namespace and the volumes, so data survives.
 - **`--wipe-data`:** `./deploy/scripts/teardown-local.sh --wipe-data` also deletes the whole `aide` namespace: the database and the `aide-data` volume (working copies, encryption keys). You must type `aide` to confirm. Saved project secrets cannot be decrypted afterwards.
@@ -248,7 +282,7 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Bitbucket:OAuth:ClientSecret` | That consumer's secret | none | yes |
 | `Bitbucket:RequestTimeout` | One Bitbucket API request | `00:00:20` | no |
 | `Git:Local:ImportRoot` | Folder under which a Local import (`git.localSourcePath`) must live. Empty disables Local import. E2E and dev only | unset (`/data/import` in the E2E overlay) | no |
-| `Deployments:Provider` | `Vercel` or `Fake`. Fake makes every deployment check deterministic and lets Local Git projects use deployments | `Vercel` (`Fake` in the E2E overlay) | no |
+| `Deployments:Provider` | `Vercel` (the real platform APIs of every deployment provider; the name is historical) or `Fake`. Fake makes every deployment check deterministic and lets Local Git projects use deployments | `Vercel` (`Fake` in the E2E overlay) | no |
 | `Deployments:AllowFake` | Allows `Fake` (for deployments and databases) outside Development and Testing. Without it the API refuses to start with Fake | `false` (`true` in the E2E overlay) | no |
 | `Databases:Provider` | `Platform` or `Fake`. Fake makes database provisioning and the migration runner deterministic, with no network and no real database. Set it with `Deployments:Provider`: each is read on its own | `Platform` (`Fake` in Development and the E2E overlay) | no |
 | `Notifications:AllowPrivateTargets` | Let Slack, Teams, webhooks reach private addresses (local testing only) | `false` | no |
@@ -256,6 +290,7 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Notifications:SweepEnabled` | Run delivery retries and gate reminders | `true` | no |
 | `Notifications:DeliverySweepInterval` | How often due retries run | `00:01:00` | no |
 | `Notifications:GateSweepInterval` | How often gates are checked for reminders | `01:00:00` | no |
+| `Notifications:DatabaseExpirySweepInterval` | How often the `database_expiry_sweep` job is queued: it reads each database's state to raise "database expiring" and mark `expiring`/`paused` (FR-155). Positive | `01:00:00` | no |
 | `Notifications:SweepBatchSize` | Deliveries retried per sweep | `50` | no |
 | `Smtp:Host` | SMTP server. Blank: email skipped, other channels still send | blank | no |
 | `Smtp:Port` | SMTP port | `587` | no |
@@ -282,7 +317,7 @@ Where each value lives:
 | `Deployments:*`, `Git:Local:ImportRoot`, `Llm:DefaultProvider` for E2E | environment variables | `deploy/k8s/overlays/local-e2e/app-config-e2e.yaml` (`--e2e` only) |
 | Other non-secrets | `appsettings*.json` or environment variables | `deploy/k8s/base/configmap.yaml` |
 
-Vercel tokens, user LLM keys, GitHub user tokens, the registered GitHub App and deployment env values are not configuration. They are stored encrypted in the database and are never shown.
+Platform tokens (Vercel, Netlify, Cloudflare, Render, Railway, Supabase), database connection strings, user LLM keys, GitHub, GitLab and Bitbucket user tokens, registered GitLab instances and the Bitbucket consumer, the registered GitHub App and deployment env values are not configuration. They are stored encrypted in the database and are never shown.
 
 ### a. GitHub sign-in (OAuth App)
 
@@ -348,18 +383,18 @@ Default model IDs (from `appsettings.json`):
 
 Override per agent with `Llm__Providers__<Name>__Models__<Agent>`. Agent names: `IdeaRefinement` and the other `AgentKind` values (names are case-insensitive). Costs come from `Llm:Pricing:<model-id>`. Add an entry for any unpriced model, for example `Llm__Pricing__gpt-6-astra__InputPerMTok`. A project token budget caps total tokens.
 
-### c2. Vercel deployments
+### c2. Deployment platforms and managed databases
 
-- Each user adds a Vercel access token under Account, Connections, Vercel. AIDE checks it, stores it encrypted and never shows it again.
-- A project Owner binds a connection in Settings, Deployment (or the wizard). AIDE can create a Vercel project linked to the GitHub repo or link an existing one. Project environment variables are encrypted in AIDE and pushed on save.
-- AIDE creates a preview deployment when execution opens or updates the PR, and review waits for it. A failed build is a critical finding. After the release merge it creates a production deployment. Owners can promote an earlier ready one.
-- Both presets write a `vercel.json` that turns off Vercel's own deploys of `aide/**` branches. The review adds a finding if it is missing.
-- Vercel needs a GitHub-backed project. Without a Vercel account, run in E2E mode (`Deployments__Provider=Fake`).
-- Vercel flows are tested only against stub HTTP and the Fake provider so far.
+- Each user adds a token per platform under Account, Connections: Vercel, Netlify, Cloudflare, Render, Railway, and Supabase for databases. The connection dialog lists the token type and permissions to create. AIDE checks the token, stores it encrypted and never shows it again. GitHub Pages uses the GitHub App instead, which needs its Pages permission (update the App in GitHub after upgrading).
+- A project Owner binds connections in Settings, Deployment: one target per component (frontend, backend) and one database per environment. AIDE can create the resource or link an existing one. The page shows readiness checks with fix links, the origin model, and the environment inventory. Derived variables (database URLs, Supabase keys, API origin) are written by AIDE.
+- A platform must build from the repo's Git host, so some combinations are refused (for example Railway needs GitHub). The stack step shows the reason.
+- Review waits for a preview rollout: migrations, then backend, then frontend. A failed build or migration is a critical finding. After the release merge, a production rollout runs the same steps. Rollback appears per platform where supported.
+- The preview and production databases must be separate. The Owner can reset the preview database from its card.
+- Everything is tested against stub HTTP and the Fake providers only. Real-platform checks are listed in PROGRESS.md "Manual checks". Without accounts, use E2E mode (`Deployments__Provider=Fake`, `Databases__Provider=Fake`).
 
-### c3. Presets
+### c3. Stack composition
 
-`nextjs-supabase` and `nextjs-frontend` live in `backend/src/Aide.Infrastructure/Agents/Presets/`. Pick one in the wizard Stack step. An Owner can change it until the implementation plan is locked, and again when starting a version. Each run records the preset and its version.
+Pick one option per layer in the wizard Stack step, or run `aide stack catalog`. An Owner can change the stack until the implementation plan is locked, and again when starting a version. The catalog is data under `backend/src/Aide.Infrastructure/Agents/Stack/`. Each run records the packs and the catalog version. Projects that used v2 presets were converted to equivalent compositions.
 
 ### d. Notifications
 
@@ -369,6 +404,7 @@ Override per agent with `Llm__Providers__<Name>__Models__<Agent>`. Agent names: 
 - **Slack, Teams, webhook:** configured per project (Settings, Notifications tab). Webhook URLs are stored encrypted. Targets must be public https hosts. For a receiver on your own machine, set `Notifications__AllowPrivateTargets=true`. Use it for local testing only.
 - **Webhook receivers:** a webhook channel needs a signing secret. Each POST has these headers: `X-AIDE-Signature: sha256=<lowercase hex>` (HMAC-SHA256 of the raw body keyed with the secret), `X-AIDE-Timestamp`, `X-AIDE-Delivery`, `X-AIDE-Event` and `Idempotency-Key`. Recompute the HMAC over the raw bytes, compare in constant time, and reject old timestamps.
 - **v2 types:** release awaiting merge and deployment failed (Owners), preview ready (members), connection invalid (the connection's owner only, in-app and account email), LLM binding cleared (Owners). Channels opt in to the new events.
+- **v4 types (Owners):** Git binding cleared, database provisioning failed, database expiring (7 days before a Render free database expires, or when Supabase pauses a project), migration failed, deployment target needs attention. A channel subscribed to `deployment_failed` also receives `migration_failed`.
 - **Retries:** 5 attempts per channel with 1 min, 5 min, 30 min, 2 h backoff. A channel that succeeded is not re-sent.
 
 ## Testing
@@ -422,11 +458,17 @@ Create the token on the Account page of the app (shown once). Then:
 | Command | What it does |
 | --- | --- |
 | `aide projects list` | List your projects (`--search`, `--phase`, `--status`, paging) |
-| `aide project init` | Create a project (like the wizard). A GitHub token is read from `AIDE_GIT_TOKEN` or prompted |
-| `aide status <id>` | Phase, status, released and in-development versions, checkpoint, preset, latest deployment, artifacts, execution, review, gates |
-| `aide version start <id> <semver> --request <text\|@file> [--preset <id>]` | Start a new version of a released project (Owner). `@-` reads stdin |
+| `aide project init` (alias `create`) | Create a project (like the wizard). A GitHub token is read from `AIDE_GIT_TOKEN` or prompted. LLM flags: `--llm-provider <p> --llm-model <id> [--llm-connection <id>]`; omit them for the server's default |
+| `aide status <id>` | Phase, status, released and in-development versions, checkpoint, stack composition, production URLs, latest deployment, latest migration run, artifacts, execution, review, gates. `--json` adds `stack` and `latestMigrationRun` |
+| `aide version start <id> <semver> --request <text\|@file> [stack flags]` | Start a new version of a released project (Owner). `@-` reads stdin. Stack flags are those of `aide stack set`, also as `--stack-frontend` etc. `--preset` exits 2: presets were removed in v4 |
 | `aide versions <id>` | List release versions |
-| `aide deployments <id> [--target preview\|production]` | List deployments |
+| `aide stack catalog` | List the catalog's layers and options |
+| `aide stack show <id>` | Show a project's composition and whether it is locked |
+| `aide stack set <id> [--frontend <opt>] [--backend <opt>] [--data <opt>[:baas]] [--vcs <opt>] [--frontend-host <opt>] [--backend-host <opt>] [--database-host <opt>] [--local compose\|none]` | Change the version in development's stack (Owner). Named layers merge into the current composition; `none` clears a layer. Changing frontend, backend or their hosts resets the origin model, with a warning on stderr. Exit 4 prints `STACK_INCOMPATIBLE` violations or `STACK_LOCKED` |
+| `aide stack detect <repo-url> [--provider <p>] [--ref <ref>] [--instance <id>] [--connection <id>]` | Suggest a stack from a connected repo. Nothing is stored. The provider comes from the URL for github.com, gitlab.com and bitbucket.org. A PAT is read from `AIDE_GIT_TOKEN` |
+| `aide deployments <id> [--component frontend\|backend] [--env preview\|production]` | List deployments (`--target`/`-t` still works as the old name of `--env`) |
+| `aide databases <id>` | List managed databases per environment: provider, status, region, plan, expiry, warnings |
+| `aide migrations <id>` | List migration runs, newest first |
 | `aide artifact list\|history\|show\|approve\|reject\|edit <id> ...` | Work with artifacts. `type` accepts `spec`, `plan` aliases |
 | `aide artifact restore <id> <type> <version>` | Restore an older version as a new draft |
 | `aide execute <id> [--pause\|--resume]` | Start, pause or resume execution |
@@ -445,7 +487,7 @@ Add `--json` for JSON output and `--api-url <url>` to pick a server.
 | `AIDE_CONFIG` | Config file path. Default `%APPDATA%\aide\config.json` or `~/.config/aide/config.json` |
 | Precedence | flag, then environment, then config file, then default |
 
-A saved token is bound to the URL it was saved for and is sent only there. Plain `http` is allowed only for localhost, 127.0.0.1 and ::1. Exit codes: 0 success, 1 error, 2 usage, 3 auth (401/403), 4 conflict (409).
+A saved token is bound to the URL it was saved for and is sent only there. Plain `http` is allowed only for localhost, 127.0.0.1 and ::1. Exit codes: 0 success, 1 error, 2 usage, 3 auth (401/403), 4 conflict (409). `STACK_INCOMPATIBLE`, `STACK_LOCKED` and `LLM_PROVIDER_UNAVAILABLE` exit 4; `VCS_MISMATCH` exits 1.
 
 ## CI
 
@@ -460,4 +502,4 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on pull requests, pushes to `ma
 | images | `api` and `web` images build (no push) |
 | e2e | Three shards on `chromium` against the API (E2E mode: Fake LLM, Fake deployments, Local Git with a seeded import repo) and the Next.js dev server: `v1` specs, `v2` specs (versions, import, preset), and `a11y` |
 
-CI uses no secrets and no real LLM, GitHub or Vercel access. The Firefox, WebKit and Edge projects and the perf scripts run locally or against Kubernetes. The E2E shards have not yet run on GitHub.
+CI uses no secrets and no real LLM, Git host, deployment platform or database access. The Firefox, WebKit and Edge projects and the perf scripts run locally or against Kubernetes. The E2E shards have not yet run on GitHub.

@@ -492,6 +492,7 @@ Each FR names its layer in italics. Acceptance criteria follow the requirement, 
     - Supabase free-plan pausing after 7 days of inactivity
     - the Supabase 2-free-projects limit (`PLATFORM_PLAN_LIMIT`, with "link an existing project instead")
   - The preview database is created automatically with the preview service or environment on Render and Railway. For Supabase it's optional: the Owner links or provisions a second project.
+  - The preview and production databases must be separate. The same provider and resource id, the same Supabase project ref, or the same host, port and database is refused (`VALIDATION`). It is checked on save, in the provisioning job, on reset and before preview migrations. A preview with no database of its own is never reset or migrated *(build, 2026-10-31)*.
   - Given an Owner provisions a Supabase project, when its status reaches `ACTIVE_HEALTHY` and the health check reports db, pooler, auth and rest as healthy, then the card shows `available` and the derived env vars appear (FR-145).
 - **FR-153** *(backend)* **Supabase BaaS** projects:
   - **API keys:** AIDE fetches the project's keys (`GET …/api-keys?reveal=true`), using the **publishable** (`sb_publishable_…`) and **secret** (`sb_secret_…`) keys, and creates them when missing. Legacy `anon`/`service_role` keys are used only for migrated v2 projects that already reference them.
@@ -517,24 +518,27 @@ Each FR names its layer in italics. Acceptance criteria follow the requirement, 
 ### 3.11 Events, notifications and CLI
 
 - **FR-155** *(backend + frontend)* New events (live, activity feed, admin): `STACK_CHANGED`, `STACK_DETECTED`, `GIT_HOST_INSTANCE_CHANGED`, `GIT_BINDING_CLEARED`, `DEPLOYMENT_TARGET_CONFIGURED`, `DEPLOYMENT_TARGET_FAILED`, `DATABASE_PROVISIONED`, `DATABASE_PROVISIONING_FAILED`, `DATABASE_EXPIRING`, `DATABASE_RESET`, `MIGRATION_RUN_STARTED`, `MIGRATION_RUN_COMPLETED`, `MIGRATION_RUN_FAILED`, `PREVIEW_ROLLOUT_COMPLETED`. `PRESET_CHANGED` is retired (its history is kept).
+  - `STACK_DETECTED` is written by the repository analysis job, with the codebase summary. `POST /api/stack/detect` runs before the project exists and writes no event *(build, 2026-10-31)*.
   - New notification types, all sent to Owners:
     - Git binding cleared
     - database provisioning failed
     - database expiring: 7 days before a Render free database expires, or when a Supabase project is paused
     - migration failed
-    - deployment target needs attention: platform Git access lost, or the token is invalid
+    - deployment target needs attention: platform Git access lost, or the token is invalid. A setup or readiness failure writes its event only, except a setup refused with `PLATFORM_GIT_NOT_CONNECTED`, which counts as lost Git access *(build, 2026-10-31)*
+  - **Database expiry** is checked by a `database_expiry_sweep` job queued every `Notifications:DatabaseExpirySweepInterval` (default 1 hour). It reads each database's state without changing the platform, and moves the stored status to `expiring` or `paused`.
+  - **Migration failures:** a failed migration sends Owners one in-app `migration_failed` notification, not `deployment_failed`. Channels subscribed to `deployment_failed` also receive `migration_failed`, so they can't opt out of it separately. A failure before the merge sends both `release_failed` and `migration_failed`.
   - Given a Render free Postgres 7 days from expiry, then Owners get a "database expiring" notification with the date.
 - **FR-156** *(cli + backend)* CLI additions *(amends FR-93)*:
   - **Stack commands:**
     - `aide stack catalog` (layers and options)
     - `aide stack show <id>`
-    - `aide stack set <id> --frontend <opt> --backend <opt> --data <opt>[:baas] --vcs <opt> --frontend-host <p> --backend-host <p> --database-host <p> [--local compose|none]`. It is validated, and prints any violations.
+    - `aide stack set <id> --frontend <opt> --backend <opt> --data <opt>[:baas] --vcs <opt> --frontend-host <p> --backend-host <p> --database-host <p> [--local compose|none]`. It is validated, and prints any violations. The named flags merge over the current composition (the API's PUT replaces the whole document). The origin model resets to its default when the frontend, backend or their hosts change, with a warning on stderr; there is no flag to set it *(build, 2026-10-31)*.
     - `aide stack detect <repo-url>`, for a connected repo
   - **Version start:** `aide version start … --preset` is replaced by the `--stack-*` flags above. `--preset` exits 2 with "presets were removed in v4; use --frontend …".
   - **Project create:** `aide project create` gains `--llm-provider <p> --llm-model <id> [--llm-connection <id>]` (FR-159).
   - **Listings:** `aide deployments <id> [--component frontend|backend] [--env preview|production]`, `aide databases <id>`, `aide migrations <id>`.
-  - `status` includes the composition summary, each target's production URL and the latest migration run.
-  - Exit codes follow v1. `STACK_INCOMPATIBLE`, `STACK_LOCKED` and `LLM_PROVIDER_UNAVAILABLE` → 4.
+  - `status` includes the composition summary, each target's production URL and the latest migration run. With `--json` it adds `stack` and `latestMigrationRun`, which takes 3 requests.
+  - Exit codes follow v1. `STACK_INCOMPATIBLE`, `STACK_LOCKED` and `LLM_PROVIDER_UNAVAILABLE` → 4. `VCS_MISMATCH` stays 1.
   - Given `aide stack set <id> --backend be-aspnet --data data-prisma`, then it exits 4 and prints the `R3` violation.
 
 ### 3.12 LLM providers, models and long outputs
@@ -941,6 +945,7 @@ Worked examples:
     - If a PR is closed without merging after its migrations were applied, the release records "migrations applied, code not merged", and the next version must keep those files (they're on the branch).
   - **Production, host mode:** on the platform, as part of the backend's (or the serverless build's) deployment of the merge commit (FR-154).
   - **Unmerged migrations never run against a production database**, in any mode.
+  - **Unavailable BaaS database:** a Supabase database that is `paused`, `error` or `provisioning` (with a resource or connection), or is being restored, fails the migration step (a failed run and `migration_failed`). That blocks the release or fails the rollout; it doesn't count as having no database *(build, 2026-10-31)*.
 - **SQL Server / External:** AIDE stores and syncs the connection string only. Migrations run on the platform, as in host mode.
 
 ### 4.22 Environment inventory and derived variables
@@ -1049,8 +1054,8 @@ v1 §5 and v2 §5 apply. Changes (all snake_case, UUIDv7, UTC):
 | **managed_database** (new) | id, project_id, environment (`production`/`preview`), provider (`supabase`/`render`/`railway`/`external`/`fake`), connection_id?, resource_id?, region?, plan?, status, connection_encrypted (URIs, keys, pooler config as JSON), db_password_encrypted?, expires_at?, created_at, updated_at, `xmin` | unique (project_id, environment) | |
 | **database_migration_run** (new) | id, project_id, managed_database_id, release_id?, release_version_id, git_sha, environment, status (`running`/`succeeded`/`failed`), applied jsonb (`[{version, name, ms}]`), error_code?, error_message?, started_at, finished_at? | index (project_id, started_at) | Supabase BaaS runner only |
 | deployment_env_var (changed) | + `applies_to text[]` (`frontend`/`backend`), `public bool`, `source` (`user`/`derived`), `derived_from?` | unique (project_id, key) unchanged | Derived rows are written by AIDE only |
-| deployment (changed) | + `target_id`, `component`, `environment` (replaces the `target` preview/production naming; v2 values kept), `kind` (`deploy`/`rollback`/`promote`), `rollout_id?` | unique (release_id, component) where environment = production | |
-| release (changed) | + `migration_run_id?`, `release_notes text` (always stored; the Bitbucket notes surface), `host_release_url?` | | `github_release_url` is renamed to `host_release_url` in the migration |
+| deployment (changed) | + `target_id`, `component`, `environment` (replaces the `target` preview/production naming; v2 values kept), `kind` (`deploy`/`rollback`/`promote`), `rollout_id?` | unique (release_id, component) where environment = production and trigger = auto | `rollout_id` is the rollout job's id: there is no rollouts table *(build, 2026-10-31)* |
+| release (changed) | + `migration_run_id?` (FK set null; the pre-merge run), `release_notes text` (always stored; the Bitbucket notes surface), `merge_submitted_at?` (set just before AIDE asks Bitbucket to merge) | | `github_release_url` is **not** renamed *(build, 2026-10-31)*: it keeps its column and DTO name and holds the host's release URL (GitLab Release, Bitbucket tag page). There is no `host_release_url` |
 
 LLM settings need no schema change. `project_llm_settings` already holds provider, model, agent models and the bound credential. Provider enablement and the model catalog are configuration.
 
@@ -1073,9 +1078,9 @@ The web app and CLI ship together (D-V2-11 precedent). Record the `oasdiff` resu
 | Method | Route | Body / query | Response | Errors (code → status) | Auth |
 | --- | --- | --- | --- | --- | --- |
 | GET | /api/stack/catalog | — | layers, options (chips, source, modes), recommendations, catalog version | — | user |
-| POST | /api/stack/options | partial composition | per-layer options with `state` (`allowed`/`caveat`/`forbidden`/`invalidated`) and `reasons[]` | `VALIDATION → 400` | user |
+| POST | /api/stack/options | partial composition | all nine choices (frontend, backend, data, vcs, frontendHost, backendHost, databaseHost, local, originModel) with `selected`/`default`, each option with `state` (`allowed`/`caveat`/`forbidden`/`invalidated`) and `reasons[]` | `VALIDATION → 400` | user |
 | POST | /api/stack/validate | composition | normalised composition + derived (agents, sections, env names, origin model) | `STACK_INCOMPATIBLE → 400` | user |
-| POST | /api/stack/detect | git {provider, instanceId?, repo, ref?} | suggested composition with evidence | `GIT_NOT_CONNECTED → 409`, `NOT_FOUND → 404` | user |
+| POST | /api/stack/detect | git {provider, instanceId?, repo, ref?, token? (`github_pat` only)} | suggested composition with evidence | `GIT_NOT_CONNECTED → 409`, `NOT_FOUND → 404` | user |
 | GET / PUT | /api/projects/:id/stack | composition | composition (GET: any member) | `STACK_INCOMPATIBLE → 400`, `STACK_LOCKED → 409`, `VCS_MISMATCH → 400` | owner |
 | GET/POST/PATCH/DELETE | /api/admin/integrations/gitlab[/:instanceId] | name, baseUrl, clientId, clientSecret, allowInsecureHttp, enabled | instances (secrets as flags) | `GIT_HOST_NOT_ALLOWED → 400`, `UPSTREAM_ERROR → 502`, `CONFLICT → 409` | admin (browser session) |
 | GET/PUT/DELETE | /api/admin/integrations/bitbucket | clientId, clientSecret | consumer status | `CONFLICT → 409` | admin (browser session) |
@@ -1092,20 +1097,22 @@ The web app and CLI ship together (D-V2-11 precedent). Record the `oasdiff` resu
 | GET/POST/PATCH/DELETE | /api/me/connections/platforms[/:id] · /:id/test | provider, label, token, accountId? | connections (provider, account, scopes, expiry, status) | `CREDENTIAL_INVALID → 400`, `CONNECTION_SCOPE_INSUFFICIENT → 400` | user (browser session) |
 | GET | /api/me/connections/platforms/:id/accounts · /resources | type? (sites, services, projects, workers, orgs, regions) | picker data | `UPSTREAM_ERROR → 502` | user |
 | GET | /api/projects/:id/settings/deployment | — | targets, databases, env inventory, origin model, readiness | — | member |
-| PUT / DELETE | /api/projects/:id/settings/deployment/targets/:component | provider, connectionId, create {name, region?, plan?} \| link {resourceId} | 202 target (setup job) | `STACK_INCOMPATIBLE → 400`, `CREDENTIAL_NOT_OWNER → 403`, `PLATFORM_GIT_NOT_CONNECTED → 409`, `PLATFORM_PLAN_LIMIT → 409`, `PLATFORM_PERMISSION_MISSING → 409`, `UPSTREAM_ERROR → 502` | owner |
+| PUT / DELETE | /api/projects/:id/settings/deployment/targets/:component | provider, connectionId, create {name, region?, plan?} \| link {resourceId}; neither = rebind a target already on that provider (`connectionId` required except for `github_pages`) | 202 target (setup job) | `STACK_INCOMPATIBLE → 400`, `CREDENTIAL_NOT_OWNER → 403`, `PLATFORM_PERMISSION_MISSING → 409`. `PLATFORM_GIT_NOT_CONNECTED`, `PLATFORM_PLAN_LIMIT`, `CREDENTIAL_INVALID`, `NOT_FOUND` and `VALIDATION` come from the setup job onto the target (`status: error`, `statusReason`) *(build, 2026-10-30)* | owner |
 | POST | /api/projects/:id/settings/deployment/targets/:component/verify | — | readiness checklist | — | owner |
-| PUT / DELETE | /api/projects/:id/settings/deployment/databases/:environment | provider, connectionId, create {region, plan} \| link {resourceId} \| external {connectionString} | 202 database (provisioning job) | `STACK_INCOMPATIBLE → 400`, `PLATFORM_PLAN_LIMIT → 409`, `CREDENTIAL_NOT_OWNER → 403`, `UPSTREAM_ERROR → 502` | owner |
+| PUT / DELETE | /api/projects/:id/settings/deployment/databases/:environment | provider, connectionId, create {region, plan} \| link {resourceId} \| external {connectionString} | 202 database (provisioning job). DELETE keeps the row as `removed` with its resource, connection and secrets cleared; migration runs are kept *(build, 2026-10-31)* | `STACK_INCOMPATIBLE → 400`, `VALIDATION → 400` (preview and production not separate), `CREDENTIAL_NOT_OWNER → 403`, `CONFLICT → 409` (project lock), `UPSTREAM_ERROR → 502`. `PLATFORM_PLAN_LIMIT` lands on the card from the job | owner |
+| POST | /api/projects/:id/settings/deployment/databases/:environment/restore *(build, 2026-10-31)* | — | 202 (Supabase: restore a paused project) | `INVALID_STATE → 409`, `CONFLICT → 409` | owner |
 | POST | /api/projects/:id/settings/deployment/databases/preview/reset | — | 202 | `INVALID_STATE → 409` (rollout running) | owner |
 | GET | /api/projects/:id/migrations · /migrations/:runId | releaseVersionId? | migration runs | `NOT_FOUND → 404` | member |
 | GET/PUT/DELETE | /api/projects/:id/settings/deployment/env[/:key] (changed) | + appliesTo[], public | inventory (`hasValue`, `source`, `derivedFrom`) | `VALIDATION → 400` (derived key, secret-looking public value), `UPSTREAM_ERROR → 502` | owner |
-| GET/POST | /api/projects/:id/deployments (changed) · /deployments/preview | component?, environment? / — | deployments / 202 preview rollout | `DEPLOYMENT_NOT_CONFIGURED → 409`, `PREVIEW_DATABASE_DIVERGED → 409` | member / writer |
+| GET/POST | /api/projects/:id/deployments (changed) · /deployments/preview | component?, environment? / — | deployments / GET preview: the current rollout; POST preview: 202 `RolloutDto` (breaking from v2's deployment body; the web app is the only caller) *(build, 2026-10-31)* | `DEPLOYMENT_NOT_CONFIGURED → 409`, `PREVIEW_DATABASE_DIVERGED → 409`, `INVALID_STATE → 409` (a reset is pending) | member / writer |
 | POST | /api/projects/:id/deployments/:deploymentId/rollback (renamed from /promote; /promote kept as an alias for Vercel) · /redeploy | — | 202 deployment | `INVALID_DEPLOYMENT → 409`, `DEPLOYMENT_ACTION_UNSUPPORTED → 409` | owner |
-| PATCH | /api/projects/:id/settings/git (changed) | + connectionId (rebind, GitLab/Bitbucket); mergeStrategy adds `fast_forward` and `squash` (Bitbucket only; build decision 2026-10-29) | section | `CREDENTIAL_NOT_OWNER → 403`, `GIT_NOT_CONNECTED → 409`, `FORBIDDEN → 403` | owner |
+| PATCH | /api/projects/:id/settings/git (changed) | + connectionId (rebind, GitLab/Bitbucket); mergeStrategy adds `fast_forward` and `squash` (Bitbucket only; build decision 2026-10-29; `VALIDATION` on GitHub and GitLab). A project can't be moved onto `gitlab` or `bitbucket` here: `VALIDATION` on `provider`. The binding is set on create or import and changed only by rebind | section | `CREDENTIAL_NOT_OWNER → 403`, `GIT_NOT_CONNECTED → 409`, `FORBIDDEN → 403` | owner |
 | GET | /api/llm/providers (new) | — | enabled providers: `usable`, `reason`, `isDefault`, connections, catalog (id, name, maxOutputTokens, contextTokens, recommended), defaultModel | — | user |
 | PATCH | /api/projects/:id/settings/llm (changed) | as v2 | section (providers filtered to enabled) | + `LLM_PROVIDER_UNAVAILABLE → 400` | owner |
 | POST | /api/projects (changed) | − presetId; + stack (composition); + llm {provider, credentialId?, defaultModel, modelsByAgent?}; git {mode: github_app\|github_pat\|gitlab\|bitbucket\|local, instanceId?, connectionId?, repoId?, repoFullName? …} | 201 project | + `STACK_INCOMPATIBLE`, `VCS_MISMATCH`, `GIT_NOT_CONNECTED`, `LLM_PROVIDER_UNAVAILABLE`, `CREDENTIAL_NOT_OWNER` | user |
 | POST | /api/projects/:id/versions (changed) | − presetId; + stack? (omitted = keep the base version's, re-pinned to the current catalog) | 201 | + `STACK_INCOMPATIBLE` | owner |
 | GET | /api/admin/stack | — | catalog with pack sources, versions, hash, load status | — | admin |
+| GET | /api/projects/:id/releases/:releaseId/notes *(build, 2026-10-29)* | — | the release notes, rebuilt on read (the Bitbucket notes surface; release lists and `/releases/latest` omit them) | `NOT_FOUND → 404` | member |
 
 Notes:
 - **New run and job failure codes:** `GIT_NOT_CONNECTED`, `MIGRATION_FAILED`, `MIGRATION_HISTORY_DIVERGED`, `DATABASE_PROVISIONING_FAILED`, `DATABASE_PROVISIONING_TIMEOUT`, `PLATFORM_ERROR`, `PLATFORM_RATE_LIMITED`, `GITLAB_RATE_LIMITED`, `BITBUCKET_RATE_LIMITED`, `LLM_PROVIDER_UNAVAILABLE`.
@@ -1227,7 +1234,7 @@ v1–v3 §8 apply, plus:
 | Railway `preview` / `production` | Railway | generated `*.up.railway.app` | `Llm__Providers__Ollama__Enabled=false`, `Llm__Providers__Fake__Enabled=false`, `GitLab__AllowPrivateNetworks=false`. Never any Fake deployment or database provider |
 
 - **Optional secrets** (`secrets.env` locally; Railway variables remotely, listed in `deploy/railway/variables.md`): `GitLab__Instances__0__Name`, `__BaseUrl` (empty = gitlab.com), `__ClientId`, `__ClientSecret`; `Bitbucket__OAuth__ClientId`, `Bitbucket__OAuth__ClientSecret`. These override DB-registered entries with the same host.
-- **New config:** `Llm__Providers__<P>__Enabled`, `Llm__Providers__<P>__Catalog__<n>__*`, `Llm__MaxOutputTokensCeiling`, `Llm__StreamIdleTimeout`, `Llm__RequestTimeout` (new default 30 min), `Databases__Provider`, `GitLab__AllowPrivateNetworks`. Add them to `secrets.env.example`, the README configuration table, `.railway/railway.ts` and `deploy/railway/variables.md`.
+- **New config:** `Llm__Providers__<P>__Enabled`, `Llm__Providers__<P>__Catalog__<n>__*`, `Llm__MaxOutputTokensCeiling`, `Llm__StreamIdleTimeout`, `Llm__RequestTimeout` (new default 30 min), `Databases__Provider`, `GitLab__AllowPrivateNetworks`, `Notifications__DatabaseExpirySweepInterval` (default 1 hour). Add them to `secrets.env.example`, the README configuration table, `.railway/railway.ts` and `deploy/railway/variables.md`.
 - **Callbacks** use `App:PublicBaseUrl` (v2): `<base>/api/auth/gitlab/callback`, `<base>/api/auth/bitbucket/callback`. GitLab treats `http://localhost` redirect URIs as "development" but accepts them (§11 check). On Railway they use the environment's web URL.
 - **Egress:** the API reaches `gitlab.com`, Admin-registered GitLab hosts, `api.bitbucket.org`, `bitbucket.org`, `api.netlify.com`, `api.cloudflare.com`, `api.render.com`, `backboard.railway.com`, `api.supabase.com`, and the Supabase pooler hosts (`*.pooler.supabase.com:5432`) for migrations. Docker Desktop and Railway allow this by default, so nothing changes.
 - **Fake providers:** `Deployments:Provider=Fake` (v2) applies to every deployment provider. `Databases:Provider=Fake` fakes provisioning and the migration runner (it records files without a database). Both need `Deployments:AllowFake=true` outside Development/Testing (v2 rule). The E2E overlay sets both.
@@ -1392,3 +1399,10 @@ v1 D1–D21, v2 D-V2-1 to D-V2-15 and v3 D-V3-1 to D-V3-13 stand, except where a
   - **Hosting:** the draft assumed AIDE ran only on Docker Desktop. v4 adds the Railway settings (`GitLab:AllowPrivateNetworks`, provider enablement).
   - **New:** §3.12 and §4.24 (LLM enablement, wizard choice, per-model output limits, streaming, 5 continuations).
   - **Confirmed with Ben:** keep CLI deploys out (D-V4-9), keep the whole draft scope, and 5 continuations (D-V4-25).
+- 2026-10-31 (M31): spec synced with the build decisions of M24-M31.
+  - `github_release_url` is kept, not renamed (section 5), and `deployments.rollout_id` is the rollout job id (no rollouts table).
+  - Section 6 gains the database `restore` and release `notes` routes, the preview rollout `RolloutDto` response, the `INVALID_STATE` uses, `token` on `/stack/detect`, and the rule that platform setup refusals come from the job.
+  - FR-155 and 4.21 gain the `STACK_DETECTED` emission point, the `database_expiry_sweep` job, `migration_failed` delivery and the unavailable-database rule.
+  - FR-152 gains the separate preview and production databases rule.
+  - FR-156 gains the `stack set` merge and origin-model reset.
+  - Section 9 gains `Notifications__DatabaseExpirySweepInterval`.

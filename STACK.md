@@ -2,18 +2,20 @@
 
 2026-10-23 · composed with `compose-stack`
 
-This file records the **target stack for AIDE v3**. v2 (current `SPEC.md`) was built on React + Vite with Docker Desktop
-Kubernetes only. v3 has two main stack changes: **deploy to Railway**, and **convert the frontend to Next.js**. The v3
-`SPEC.md` will give the requirements in detail. This file names the packs and the shared conventions.
+This file records the stack of **AIDE itself**. It is unchanged for v4, which is built on the v3 stack (Next.js frontend,
+Railway deploy). v2 used React + Vite with Docker Desktop Kubernetes only. v3 made two stack changes: **deploy to
+Railway**, and **convert the frontend to Next.js**. v4 adds no pack: its stack catalog describes the stacks of the
+projects AIDE builds, not AIDE's own. `SPEC.md` gives the requirements. This file names the packs and the shared
+conventions.
 
 ## Packs
 | Layer | Pack (skill) | Path in repo | Notes |
 | --- | --- | --- | --- |
-| Frontend | `fe-nextjs` (UI for a separate backend) | `frontend/` | dev port 3000, container port 8080. **v3 change:** replaces `fe-react-vite` (v2: React 19 + Vite 8, TanStack Router, dev port 5173) |
+| Frontend | `fe-nextjs` (UI for a separate backend) | `frontend/` | dev port 3000, container port 8080. Since v3; replaced `fe-react-vite` (v2: React 19 + Vite 8, TanStack Router, dev port 5173) |
 | Backend | `be-aspnet` | `backend/` | .NET 10 minimal APIs, dev port 5080, container port 8080. Unchanged from v2 |
 | Data | `data-efcore-postgres` | inside `backend/` (`Aide.Infrastructure`) | engine: PostgreSQL 17 (Railway: 18, SPEC D-V3-13) · mode: ORM (EF Core owns migrations; bundle at `/app/efbundle`) |
-| VCS / CI | `vcs-github` | `.github/` | default branch: `main`. Build branch for v3: `build/aide-v3` |
-| Deploy | `deploy-railway` (web + api + Postgres) | `.railway/railway.ts` | **v3 change:** new target. See Deploy below |
+| VCS / CI | `vcs-github` | `.github/` | default branch: `main`. Build branch for v4: `build/aide-v4` |
+| Deploy | `deploy-railway` (web + api + Postgres) | `.railway/railway.ts` | Added in v3. See Deploy below |
 | Local | `local-docker-desktop-k8s` | `deploy/k8s/`, `deploy/scripts/` | app URL: http://localhost:8080. Kept from v2; the `web` image becomes the Next.js standalone server |
 
 ## Conventions shared by every pack
@@ -96,13 +98,14 @@ Resolved in v3:
 
 Still open:
 - ⚠ **Data Protection keys live on the `/data` volume** and encrypt credentials stored in the database (the GitHub App
-  key, users' LLM and Vercel tokens). Back up the volume. Losing it makes those secrets unreadable.
+  key, users' LLM and platform tokens, GitLab and Bitbucket client secrets and user tokens, the Supabase PAT, and
+  database passwords and connection strings). Back up the volume. Losing it makes those secrets unreadable.
 - ⚠ **First registered user becomes Admin** (FR-3). On a public Railway URL, register the admin straight after the
   first deploy.
 - **Ollama and Fake are disabled on Railway** (`Llm__Providers__{Ollama,Fake}__Enabled=false`, SPEC FR-157). Local runs
   and CI keep all four LLM providers.
 
-## As built (v3)
+## As built (v3, unchanged in v4)
 - **Frontend:** `frontend/` is on the Next.js App Router (`src/app/`, thin client pages). `server.ts` is a custom Node
   server (Node 24 type stripping) that serves Next, proxies `/api`, sets headers and logs. Standalone image, no nginx.
 - **Railway:** `.railway/railway.ts` defines `web`, `api` and `postgres` for `preview` and `production`. Deploys run

@@ -67,9 +67,11 @@ deploy/
 scripts/ci/check-generated.sh  CI: fails if generated files differ from what is committed
 docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on dispatch)
-SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v3)
+SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v4)
 docs/v1/                    v1 SPEC.md + PROGRESS.md (frozen)
 docs/v2/                    v2 SPEC.md + PROGRESS.md (frozen) + AIDE brand assets
+docs/v3/                    v3 SPEC.md + PROGRESS.md (frozen)
+docs/v4/                    v4 DRAFT_SPEC.md (the draft behind SPEC.md)
 ```
 
 ## Commands
