@@ -528,7 +528,7 @@ Each FR names its layer in italics. Acceptance criteria follow the requirement, 
   - **Stack commands:**
     - `aide stack catalog` (layers and options)
     - `aide stack show <id>`
-    - `aide stack set <id> --frontend <opt> --backend <opt> --data <opt>[:baas|host] --vcs <opt> --frontend-host <p> --backend-host <p> --database-host <p> [--local compose|none]`. It is validated, and prints any violations.
+    - `aide stack set <id> --frontend <opt> --backend <opt> --data <opt>[:baas] --vcs <opt> --frontend-host <p> --backend-host <p> --database-host <p> [--local compose|none]`. It is validated, and prints any violations.
     - `aide stack detect <repo-url>`, for a connected repo
   - **Version start:** `aide version start … --preset` is replaced by the `--stack-*` flags above. `--preset` exits 2 with "presets were removed in v4; use --frontend …".
   - **Project create:** `aide project create` gains `--llm-provider <p> --llm-model <id> [--llm-connection <id>]` (FR-159).
