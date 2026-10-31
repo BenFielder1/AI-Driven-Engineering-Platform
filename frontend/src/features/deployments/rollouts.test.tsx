@@ -23,7 +23,7 @@ import { openSettings, requestsTo, signInAsOwner } from '../../test/project-sett
 import { renderRoute } from '../../test/render'
 import type { ProjectRole } from '../../lib/permissions'
 import { previewRolloutPolling } from './deployments-api'
-import { joinNames, previewResetCopy } from './rollout-format'
+import { joinNames, previewBuildFailureTitles, previewResetCopy } from './rollout-format'
 
 const LOG = 'Running pre-deploy: /app/efbundle\nerror: relation "orders" already exists\nPre-deploy exited with 1.'
 const SHA = '7c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2a9c'
@@ -408,5 +408,21 @@ describe('Rollback dialog → migration warning (FR-150)', () => {
     await user.click(within(list).getByRole('button', { name: 'Roll back 1.0.0 (3333333)' }))
     dialog = await screen.findByRole('alertdialog', { name: 'Roll back production to 1.0.0?' })
     expect(within(dialog).getByTestId('rollback-migration-warning')).toHaveTextContent('Rolling back the backend never rolls back its database.')
+  })
+})
+
+describe('Preview build failure titles (FR-90, FR-147)', () => {
+  it('FR90_preview_build_failure_title: a lone Vercel frontend that failed reads "Vercel preview build failed"; a pre-deploy failure names the migration', () => {
+    expect(previewBuildFailureTitles([makeRolloutStep('frontend', { state: 'failed', provider: 'vercel', status: 'error' })])).toEqual([
+      'Vercel preview build failed',
+    ])
+    expect(
+      previewBuildFailureTitles([
+        makeRolloutStep('frontend', { state: 'skipped' }),
+        makeRolloutStep('backend', { state: 'failed', provider: 'render', status: 'error', errorMessage: 'pre_deploy_failed' }),
+        makeRolloutStep('migrations', { state: 'succeeded' }),
+      ]),
+    ).toEqual(['Backend preview pre-deploy migration failed'])
+    expect(previewBuildFailureTitles([makeRolloutStep('frontend', { state: 'succeeded', provider: 'netlify', status: 'ready' })])).toEqual([])
   })
 })

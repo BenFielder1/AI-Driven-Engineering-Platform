@@ -98,9 +98,11 @@ public sealed partial class ManagedDatabaseService
             if (rows.Any(other => other.Environment != environment && other.Status != ManagedDatabaseStatus.Removed
                 && DatabaseSeparationRules.Same(wanted, DatabaseIdentity.Of(other, secrets.Connection(other)))))
             {
+                // VALIDATION problems take their field map from Details ("field: message"), not Field.
+                var field = mode == DatabaseSetupMode.Link ? "link.resourceId" : "external.connectionString";
                 return (null, new DomainError(ErrorCodes.Validation, DatabaseSeparationRules.NotSeparateMessage)
                 {
-                    Field = mode == DatabaseSetupMode.Link ? "link.resourceId" : "external.connectionString",
+                    Details = [$"{field}: {DatabaseSeparationRules.NotSeparateMessage}."],
                 });
             }
         }

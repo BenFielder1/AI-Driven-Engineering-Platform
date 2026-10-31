@@ -74,3 +74,34 @@ export const previewResetCopy: Record<PreviewResetMethod, string> = {
     "The reset is recorded, but AIDE can't empty a Railway database itself. Empty the preview Postgres in Railway (drop its schema or re-create it), then deploy a preview: its pre-deploy re-applies every migration.",
   none: 'There was nothing to reset.',
 }
+
+/** The host's name as review findings use it (the backend's `DeploymentPlatforms.DisplayName`). */
+const findingHostName = (provider: NonNullable<RolloutStep['provider']>): string =>
+  provider === 'fake' ? 'Fake' : deploymentProviderLabels[provider]
+
+/** Mirrors the backend's `RolloutRules.IsPreDeployFailure`: a backend step whose platform-run migration failed. */
+function isPreDeployFailure(step: RolloutStep): boolean {
+  if (step.step !== 'backend') {
+    return false
+  }
+  const message = step.errorMessage ?? ''
+  return (
+    step.errorCode === 'MIGRATION_FAILED' ||
+    /pre_deploy_failed|pre-deploy/i.test(message) ||
+    message.includes('.aide-fake/fail-migration')
+  )
+}
+
+/**
+ * FR-90, FR-147: the titles of a preview rollout's failed builds, as the report's critical findings name them: a failed
+ * build is "{Host} preview build failed" (v2's "Vercel preview build failed"), a failed backend pre-deploy is "Backend
+ * preview pre-deploy migration failed" (RolloutFindings on the backend).
+ */
+export function previewBuildFailureTitles(steps: readonly RolloutStep[]): string[] {
+  return orderedSteps(steps).flatMap((s) => {
+    if (s.step === 'migrations' || s.status !== 'error' || !s.provider) {
+      return []
+    }
+    return [isPreDeployFailure(s) ? 'Backend preview pre-deploy migration failed' : `${findingHostName(s.provider)} preview build failed`]
+  })
+}

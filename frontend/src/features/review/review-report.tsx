@@ -14,6 +14,7 @@ import {
 } from '../projects/labels'
 import { BuildLogTail, DeploymentLink, DeploymentStatusPill } from '../deployments/deployment-parts'
 import type { PreviewCheck } from '../deployments/deployments-api'
+import { previewBuildFailureTitles } from '../deployments/rollout-format'
 import { RolloutStateBadge, RolloutSteps } from '../deployments/rollout-parts'
 import { CategoryBarsChart } from './category-bars-chart'
 import type { CategoryScore, ComplianceReportDetail, FindingSeverity } from './review-api'
@@ -274,11 +275,16 @@ function PreviewCheckBlock({ preview }: { preview: PreviewCheck | null }) {
           )}
           {preview.rollout ? (
             <>
-              {preview.rollout.state === 'failed' && (
+              {previewBuildFailureTitles(preview.rollout.steps).map((title) => (
+                <Alert key={title} tone="error" title={title}>
+                  <p>This is a critical architecture finding in this report: the optimisation plan has to fix it.</p>
+                </Alert>
+              ))}
+              {preview.rollout.state === 'failed' && previewBuildFailureTitles(preview.rollout.steps).length === 0 && (
                 <Alert tone="error" title="The preview failed">
                   <p>
-                    A failed build or pre-deploy is a critical architecture finding in this report, and a failed preview
-                    migration a critical data model finding: the optimisation plan has to fix it.
+                    A failed preview migration is a critical data model finding in this report: the optimisation plan has
+                    to fix it.
                   </p>
                 </Alert>
               )}
