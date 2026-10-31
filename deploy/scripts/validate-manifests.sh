@@ -49,12 +49,12 @@ for overlay in overlays/local overlays/local-e2e; do
 
   # Mode-specific config must be where expected: Fake deployments only in the E2E variant.
   if [[ "$overlay" == overlays/local-e2e ]]; then
-    for kv in 'Deployments__Provider: Fake' 'Deployments__AllowFake: "true"' 'Git__Local__ImportRoot: /data/import' \
+    for kv in 'Deployments__Provider: Fake' 'Databases__Provider: Fake' 'Deployments__AllowFake: "true"' 'Git__Local__ImportRoot: /data/import' \
               'App__PublicBaseUrl: http://localhost:8080'; do
       grep -qF "$kv" <<<"$RENDERED" || { echo "ERROR: $overlay is missing '$kv'." >&2; exit 1; }
     done
-  elif grep -qE 'Deployments__(Provider|AllowFake)|Git__Local__ImportRoot' <<<"$RENDERED"; then
-    echo "ERROR: $overlay (normal deploy) must not set Fake deployments or a Local import root." >&2
+  elif grep -qE 'Deployments__(Provider|AllowFake)|Databases__Provider|Git__Local__ImportRoot' <<<"$RENDERED"; then
+    echo "ERROR: $overlay (normal deploy) must not set Fake deployments or databases, or a Local import root." >&2
     exit 1
   fi
 

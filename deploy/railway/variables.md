@@ -57,7 +57,7 @@ of every API key are in the [README configuration reference](../../README.md#con
 | `Bitbucket__OAuth__ClientSecret` | **secret** (ignored in IaC) | | no | Same as above. Set with `--stdin` |
 | `Smtp__Host`, `Smtp__Username`, `Smtp__From`, `Smtp__Port`, `Smtp__EnableSsl`, `Smtp__Timeout` | operator-set (ignored in IaC) | | no | Email channel (FR-47). Leave a key out rather than blank: a blank number fails binding |
 | `Smtp__Password` | **secret** (ignored in IaC) | | no | |
-| `Deployments__AllowFake`, `Deployments__Provider=Fake`, `Git__Local__ImportRoot` | — | **unset** | — | Never on Railway (FR-108) |
+| `Deployments__AllowFake`, `Deployments__Provider=Fake`, `Databases__Provider=Fake`, `Git__Local__ImportRoot` | — | **unset** | — | Never on Railway (FR-108) |
 | `Llm__Providers__Anthropic__Enabled`, `Llm__Providers__OpenAI__Enabled` | — | **unset** | — | Default `true`. Never disable both: startup fails unless at least one provider is enabled and `Llm:DefaultProvider` (default `anthropic`) is enabled (FR-157) |
 | `RAILWAY_RUN_UID` | — | **unset** | — | The image starts as root and its entrypoint drops to `$APP_UID` (FR-106, D-V3-10) |
 | `RAILWAY_PRIVATE_DOMAIN`, `RAILWAY_ENVIRONMENT`, … | Railway | | | Injected |

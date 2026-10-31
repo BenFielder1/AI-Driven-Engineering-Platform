@@ -76,7 +76,7 @@ function OptionCard({
     .filter(Boolean)
     .join(' ')
   return (
-    <div className={cn(cardClass, disabled && 'opacity-80')} data-option={option.id} data-state={option.state}>
+    <div className={cn(cardClass, disabled && 'opacity-90')} data-option={option.id} data-state={option.state}>
       <input
         type="radio"
         id={inputId}

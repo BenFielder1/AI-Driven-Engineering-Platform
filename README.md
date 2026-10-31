@@ -147,7 +147,7 @@ The script builds the `aide-api` and `aide-web` images, tags them with the git S
   - `/` returns 307 (to `/projects`) or 200
   - `/login` returns 200 with a `Content-Security-Policy` that has a `'nonce-…'` source, `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff`
   - `/api/health/ready` returns 200 through the proxy. Readiness also fails while migrations are pending or if an embedded preset does not load.
-- **E2E mode:** `./deploy/scripts/deploy-local.sh --e2e` is the only switch. It applies `deploy/k8s/overlays/local-e2e`: `Deployments__Provider=Fake`, `Deployments__AllowFake=true`, `Git__Local__ImportRoot=/data/import` and `Llm__DefaultProvider=fake`. It also seeds the Local import repo `/data/import/existing-app` (tags `v0.1.0`, `v0.2.0`) with `seed-e2e-repo.sh`. The API logs a warning on every boot while Fake deployments are on. Use it only for Playwright runs.
+- **E2E mode:** `./deploy/scripts/deploy-local.sh --e2e` is the only switch. It applies `deploy/k8s/overlays/local-e2e`: `Deployments__Provider=Fake`, `Databases__Provider=Fake`, `Deployments__AllowFake=true`, `Git__Local__ImportRoot=/data/import` and `Llm__DefaultProvider=fake`. It also seeds the Local import repo `/data/import/existing-app` (tags `v0.1.0`, `v0.2.0`) with `seed-e2e-repo.sh`. The API logs a warning on every boot while Fake deployments are on. Use it only for Playwright runs.
 - **Switch back:** run `./deploy/scripts/deploy-local.sh` again without `--e2e`. The API pod restarts with Vercel deployments and no Local import. The seeded repo stays on the volume, unused.
 - **Teardown:** `./deploy/scripts/teardown-local.sh` (no flags) removes workloads, services, config and secrets. It keeps the namespace and the volumes, so data survives.
 - **`--wipe-data`:** `./deploy/scripts/teardown-local.sh --wipe-data` also deletes the whole `aide` namespace: the database and the `aide-data` volume (working copies, encryption keys). You must type `aide` to confirm. Saved project secrets cannot be decrypted afterwards.
@@ -249,7 +249,8 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Bitbucket:RequestTimeout` | One Bitbucket API request | `00:00:20` | no |
 | `Git:Local:ImportRoot` | Folder under which a Local import (`git.localSourcePath`) must live. Empty disables Local import. E2E and dev only | unset (`/data/import` in the E2E overlay) | no |
 | `Deployments:Provider` | `Vercel` or `Fake`. Fake makes every deployment check deterministic and lets Local Git projects use deployments | `Vercel` (`Fake` in the E2E overlay) | no |
-| `Deployments:AllowFake` | Allows `Fake` outside Development and Testing. Without it the API refuses to start with Fake | `false` (`true` in the E2E overlay) | no |
+| `Deployments:AllowFake` | Allows `Fake` (for deployments and databases) outside Development and Testing. Without it the API refuses to start with Fake | `false` (`true` in the E2E overlay) | no |
+| `Databases:Provider` | `Platform` or `Fake`. Fake makes database provisioning and the migration runner deterministic, with no network and no real database. Set it with `Deployments:Provider`: each is read on its own | `Platform` (`Fake` in Development and the E2E overlay) | no |
 | `Notifications:AllowPrivateTargets` | Let Slack, Teams, webhooks reach private addresses (local testing only) | `false` | no |
 | `Notifications:RequestTimeout` | One webhook request, at most 60 s | `00:00:10` | no |
 | `Notifications:SweepEnabled` | Run delivery retries and gate reminders | `true` | no |

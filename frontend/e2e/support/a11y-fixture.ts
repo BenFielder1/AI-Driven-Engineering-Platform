@@ -7,4 +7,6 @@ export interface A11yFixture {
   storageState: Exclude<BrowserContextOptions['storageState'], string | undefined>
   projectId: string
   diffProjectId: string
+  /** SPEC §8 v4: a composed project with Netlify and Render targets and two Render Postgres databases, for Settings → Stack and Deployment. */
+  stackProjectId: string
 }

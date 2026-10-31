@@ -149,14 +149,19 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
     }
 
     [Theory]
-    [InlineData("Production", false, true, false)]
-    [InlineData("Production", true, false, true)]
-    [InlineData("Development", false, false, false)]
-    public async Task S9_The_Fake_provider_guard_refuses_or_warns_outside_Development(string environment, bool allowFake, bool refuses, bool warns)
+    [InlineData("Fake", "Platform", "Production", false, true, false)]
+    [InlineData("Fake", "Platform", "Production", true, false, true)]
+    [InlineData("Fake", "Platform", "Development", false, false, false)]
+    [InlineData("Vercel", "Fake", "Production", false, true, false)]
+    [InlineData("Vercel", "Fake", "Production", true, false, true)]
+    [InlineData("Vercel", "Fake", "Development", false, false, false)]
+    [InlineData("Vercel", "Platform", "Production", false, false, false)]
+    public async Task S9_The_Fake_provider_guard_refuses_or_warns_outside_Development(string deployments, string databases, string environment, bool allowFake, bool refuses, bool warns)
     {
         var logs = new LogSink();
         var guard = new FakeDeploymentProviderGuard(
-            Options.Create(new DeploymentOptions { Provider = "Fake", AllowFake = allowFake }),
+            Options.Create(new DeploymentOptions { Provider = deployments, AllowFake = allowFake }),
+            Options.Create(new Aide.Infrastructure.Databases.DatabaseOptions { Provider = databases }),
             new Env(environment),
             new CapturingLoggerProvider(logs).CreateLogger(nameof(FakeDeploymentProviderGuard)) is var logger ? new Logger(logger) : NullLogger<FakeDeploymentProviderGuard>.Instance);
 

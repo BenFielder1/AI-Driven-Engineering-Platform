@@ -232,7 +232,8 @@ public static class DependencyInjection
         services.AddSingleton<RailwayDeploymentProvider>();
         services.AddSingleton<IDeploymentProviderResolver, DeploymentProviderResolver>();
 
-        // FR-152, FR-153, §4.21: managed database hosts (Fake under Deployments:Provider=Fake) and the Supabase BaaS runner.
+        // FR-152, FR-153, §4.21: managed database hosts (Fake under Databases:Provider=Fake) and the Supabase BaaS runner.
+        services.AddOptions<Databases.DatabaseOptions>().BindConfiguration(Databases.DatabaseOptions.SectionName);
         services.AddSingleton<Databases.SupabaseDatabaseProvider>();
         services.AddSingleton<Databases.RenderPostgresProvider>();
         services.AddSingleton<Databases.RailwayPostgresProvider>();

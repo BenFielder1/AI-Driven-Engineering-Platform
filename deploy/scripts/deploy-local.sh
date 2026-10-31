@@ -5,7 +5,7 @@
 #
 # Usage: deploy-local.sh [--e2e]
 #   (default)  overlays/local: Vercel deployments, no Local import (normal use).
-#   --e2e      overlays/local-e2e (the only switch): Deployments__Provider=Fake + Deployments__AllowFake=true,
+#   --e2e      overlays/local-e2e (the only switch): Deployments__Provider=Fake + Databases__Provider=Fake + Deployments__AllowFake=true,
 #              Git__Local__ImportRoot=/data/import, Llm__DefaultProvider=fake, and seeds the Local import repo
 #              /data/import/existing-app (tags v0.1.0, v0.2.0). For the Playwright suites (SPEC §8). Re-run without
 #              --e2e to switch back; the seeded repo stays on the data volume (harmless, import is off).

@@ -1,9 +1,10 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using Aide.Domain.Common;
 using Aide.Domain.Databases;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Infrastructure.Deployments;
 using Microsoft.Extensions.Options;
 
 namespace Aide.Infrastructure.Databases;
@@ -40,10 +41,12 @@ public sealed class ExternalDatabaseProvider : IDatabaseProvider
 }
 
 /// <summary>
-/// §9 Fake databases (<c>Deployments:Provider=Fake</c>, or the <c>fake</c> provider), emulating <see cref="Kind"/>'s
+/// §9 Fake databases (<c>Databases:Provider=Fake</c>, or the <c>fake</c> provider), emulating <see cref="Kind"/>'s
 /// connection shape. Deterministic: a resource is available on its 2nd poll (never when its name contains <c>never</c>,
 /// for the timeout); tokens starting <c>fake_invalid</c> are rejected, <c>fake_limit</c> hit the plan limit, and
 /// <c>fake_scope</c> lack Supabase's "API Key Secrets: Read" when the keys are read. Restore makes a paused one available.
+/// A created resource belongs to one project and environment, and <see cref="SlugOf"/> gives each resource its own database,
+/// so each has its own migration history in <see cref="FakeAwareMigrationSqlExecutor"/>.
 /// </summary>
 public sealed class FakeDatabaseProvider(ManagedDatabaseProvider kind, ConcurrentDictionary<string, int> polls) : IDatabaseProvider
 {
@@ -66,7 +69,7 @@ public sealed class FakeDatabaseProvider(ManagedDatabaseProvider kind, Concurren
             return Task.FromResult(new DatabaseSetupResult(null, "External", null, null, false, null));
         }
 
-        var id = request.Mode == DatabaseSetupMode.Link ? request.LinkResourceId! : $"fake-{kind.ToWire()}-{request.Environment.ToWire()}-{request.Name}";
+        var id = request.Mode == DatabaseSetupMode.Link ? request.LinkResourceId! : $"fake-{kind.ToWire()}-{request.Environment.ToWire()}-{request.Name}-{request.ProjectId:N}";
         return Task.FromResult(new DatabaseSetupResult(id, request.Name, request.Region ?? "fake-region", request.Plan ?? "free", request.Password is not null, $"https://fake.test/databases/{id}"));
     }
 
@@ -93,7 +96,7 @@ public sealed class FakeDatabaseProvider(ManagedDatabaseProvider kind, Concurren
         }
 
         var env = database.Environment.ToWire();
-        var slug = new string([.. id.Where(char.IsAsciiLetterOrDigit).Take(20)]).ToLowerInvariant();
+        var slug = SlugOf(id);
         var connection = (database.Connection ?? new ManagedDatabaseConnection()) with
         {
             Name = database.Name,
@@ -142,6 +145,16 @@ public sealed class FakeDatabaseProvider(ManagedDatabaseProvider kind, Concurren
                 ? [new AdvisorFinding("rls_disabled_in_public", "ERROR", "RLS Disabled in Public", "Fake finding: a table in public has RLS disabled.", null)]
                 : []);
 
+    /// <summary>
+    /// The 20-character ref of a resource id. A short id (a linked ref) is used as is; a longer one is hashed, because
+    /// generated ids share their first 20 characters and a shared slug would be a shared database.
+    /// </summary>
+    private static string SlugOf(string id)
+    {
+        var text = new string([.. id.Where(char.IsAsciiLetterOrDigit)]).ToLowerInvariant();
+        return text.Length <= 20 ? text : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(id)))[..20];
+    }
+
     private void Check(DatabaseAuth auth)
     {
         if (auth.Token.StartsWith("fake_invalid", StringComparison.Ordinal))
@@ -153,7 +166,7 @@ public sealed class FakeDatabaseProvider(ManagedDatabaseProvider kind, Concurren
 
 /// <summary>§9: the database provider for a host: External always; the Fake in Fake mode or for <c>fake</c>; else the platform's.</summary>
 public sealed class DatabaseProviderResolver(
-    IOptions<DeploymentOptions> options,
+    IOptions<DatabaseOptions> options,
     SupabaseDatabaseProvider supabase,
     RenderPostgresProvider render,
     RailwayPostgresProvider railway,

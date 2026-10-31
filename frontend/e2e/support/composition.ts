@@ -55,6 +55,7 @@ export interface ProjectStackDto {
     backend: { pack: string; path: string | null } | null
     data: { pack: string; mode: string | null } | null
     vcs: { pack: string }
+    deploy: { frontendHost: string | null; backendHost: string | null; databaseHost: string | null; local: string }
     derived: { agents: string[] }
   } | null
   catalogVersion: string | null
@@ -76,9 +77,14 @@ async function pickLayer(page: Page, layer: string, option: string) {
 /**
  * FR-5/FR-114/FR-115: the eight-step wizard from scratch with Local Git and the Stack step composed layer by layer
  * (Frontend → Backend → Data → VCS → Deployment, the hosts left at None); the Stack summary names the specialists.
- * Returns the new project's id.
+ * `hosts` picks the Deployment layer's hosts by their card names instead. Returns the new project's id.
  */
-export async function createComposedProjectInWizard(page: Page, name: string, idea: string): Promise<string> {
+export async function createComposedProjectInWizard(
+  page: Page,
+  name: string,
+  idea: string,
+  { hosts }: { hosts?: { frontend: string; backend: string; database: string } } = {},
+): Promise<string> {
   await page.goto('/projects/new')
   await expect(page.getByRole('heading', { name: 'Step 1 of 8: Source' })).toBeVisible()
   await next(page)
@@ -101,6 +107,12 @@ export async function createComposedProjectInWizard(page: Page, name: string, id
   await pickLayer(page, 'Data', COMPOSITION.data.name)
   await pickLayer(page, 'Version control', COMPOSITION.vcs.name)
   await expect(page.getByRole('heading', { level: 3, name: 'Deployment', exact: true })).toBeVisible()
+  if (hosts) {
+    // FR-115: each host card is in its choice's group (Render is offered for both the frontend and the backend).
+    await page.getByRole('group', { name: 'Frontend host' }).getByRole('radio', { name: hosts.frontend, exact: true }).check()
+    await page.getByRole('group', { name: 'Backend host' }).getByRole('radio', { name: hosts.backend, exact: true }).check()
+    await page.getByRole('group', { name: 'Database host' }).getByRole('radio', { name: hosts.database, exact: true }).check()
+  }
   // FR-115, FR-120: the summary derives the specialists in play from the composition.
   const summary = page.getByRole('region', { name: 'Stack summary' })
   for (const s of COMPOSITION_SPECIALISTS) {

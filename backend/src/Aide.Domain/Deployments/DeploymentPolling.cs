@@ -478,7 +478,7 @@ public enum FakeProviderDecision
     Refused = 3,
 }
 
-/// <summary>§9: <c>Deployments:Provider=Fake</c> is for Development, Testing and explicitly opted-in E2E only. Pure.</summary>
+/// <summary>§9: <c>Deployments:Provider=Fake</c> and <c>Databases:Provider=Fake</c> are for Development, Testing and explicitly opted-in E2E only. Pure.</summary>
 public static class FakeProviderPolicy
 {
     public static FakeProviderDecision Decide(bool useFake, string environmentName, bool allowFake)

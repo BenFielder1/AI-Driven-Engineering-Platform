@@ -13,7 +13,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Aide.IntegrationTests.Support;
 
 /// <summary>
-/// FR-87–FR-91 test helpers: the app with the Fake deployment provider (<c>Deployments:Provider=Fake</c>) or with Vercel
+/// FR-87–FR-91 test helpers: the app with the Fake deployment and database providers (<c>Deployments:Provider=Fake</c>,
+/// <c>Databases:Provider=Fake</c>) or with Vercel
 /// answered by a stub handler (never api.vercel.com), seeded connections and bindings, and driving deployment jobs.
 /// </summary>
 public static class DeploymentHarness
@@ -23,9 +24,9 @@ public static class DeploymentHarness
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    /// <summary>The app with every deployment on the Fake provider.</summary>
+    /// <summary>The app with every deployment and managed database on the Fake provider.</summary>
     public static WebApplicationFactory<Program> Fake(WebApplicationFactory<Program> factory) =>
-        factory.WithWebHostBuilder(b => b.UseSetting("Deployments:Provider", "Fake"));
+        factory.WithWebHostBuilder(b => b.UseSetting("Deployments:Provider", "Fake").UseSetting("Databases:Provider", "Fake"));
 
     /// <summary>The app whose <c>vercel</c> HttpClient is answered by <paramref name="vercel"/> (an in-memory stub).</summary>
     public static WebApplicationFactory<Program> Vercel(WebApplicationFactory<Program> factory, FakeGitHubApi vercel) =>

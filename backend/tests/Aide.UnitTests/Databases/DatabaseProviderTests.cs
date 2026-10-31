@@ -243,6 +243,28 @@ public class DatabaseProviderTests
 
     // ------------------------------------------------------------------ Fake
 
+    [Theory]
+    [InlineData("Fake", true)]
+    [InlineData(" fake ", true)]
+    [InlineData("Platform", false)]
+    [InlineData("", false)]
+    public void S9_Databases_Provider_alone_decides_whether_database_hosts_are_Fake(string configured, bool fake)
+    {
+        var http = Http(new PlatformStub());
+        var resolver = new DatabaseProviderResolver(
+            Microsoft.Extensions.Options.Options.Create(new DatabaseOptions { Provider = configured }),
+            new SupabaseDatabaseProvider(http),
+            new RenderPostgresProvider(http, new ManualTime(Now)),
+            new RailwayPostgresProvider(http),
+            new ExternalDatabaseProvider());
+
+        Assert.Equal(fake, resolver.UsesFake);
+        Assert.Equal(fake, resolver.ForHost(ManagedDatabaseProvider.Supabase) is FakeDatabaseProvider);
+        Assert.Equal(fake, resolver.ForHost(ManagedDatabaseProvider.Render) is FakeDatabaseProvider);
+        Assert.IsType<ExternalDatabaseProvider>(resolver.ForHost(ManagedDatabaseProvider.External));
+        Assert.IsType<FakeDatabaseProvider>(resolver.ForHost(ManagedDatabaseProvider.Fake));
+    }
+
     [Fact]
     public async Task FR152_The_Fake_is_available_on_its_second_poll_with_the_hosts_connection_shape()
     {

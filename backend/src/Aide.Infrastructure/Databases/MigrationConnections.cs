@@ -68,17 +68,20 @@ public static class MigrationConnections
         }
     }
 
-    /// <summary>The Fake store key of a connection string (host and database).</summary>
+    /// <summary>
+    /// The Fake store key of a connection string: host, database and user. As on a real pooler, the host and database name
+    /// can be shared, and the user (<c>postgres.&lt;ref&gt;</c>) says which project it is.
+    /// </summary>
     internal static string FakeKey(string connectionString)
     {
         var builder = new NpgsqlConnectionStringBuilder(connectionString);
-        return $"{builder.Host}/{builder.Database}".ToLowerInvariant();
+        return $"{builder.Host}/{builder.Database}/{builder.Username}".ToLowerInvariant();
     }
 }
 
 /// <summary>
 /// §9: the runner's executor in every mode. A Fake host (<c>*.test</c>, what Fake databases return) uses an in-memory history
-/// per host and database: a file whose SQL contains <see cref="FailMarker"/> fails with SQLSTATE <c>P0001</c>. Any other
+/// per database (host, database and user): a file whose SQL contains <see cref="FailMarker"/> fails with SQLSTATE <c>P0001</c>. Any other
 /// host uses Npgsql (<see cref="NpgsqlMigrationSqlExecutor"/>).
 /// </summary>
 public sealed class FakeAwareMigrationSqlExecutor(NpgsqlMigrationSqlExecutor npgsql) : IMigrationSqlExecutor, IDatabaseSchemaReset

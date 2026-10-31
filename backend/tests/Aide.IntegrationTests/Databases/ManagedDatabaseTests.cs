@@ -13,7 +13,7 @@ namespace Aide.IntegrationTests.Databases;
 
 /// <summary>
 /// FR-152, FR-153, FR-145: managed databases through <c>PUT …/settings/deployment/databases/:environment</c> and the
-/// <c>database_provisioning</c> job, on the Fake database provider (<c>Deployments:Provider=Fake</c>) and External (no
+/// <c>database_provisioning</c> job, on the Fake database provider (<c>Databases:Provider=Fake</c>) and External (no
 /// platform): cards, derived env vars, refusals on the card, timeout, unlinking and the Owner rules.
 /// </summary>
 [Collection(ApiTestGroup.Name)]

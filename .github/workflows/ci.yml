@@ -289,7 +289,7 @@ jobs:
   # "existing" repo (same content as deploy/scripts/seed-e2e-repo.sh, seeded locally: no kubectl in CI).
   # Three parallel shards, each with its own throwaway database and API:
   #   v1    chromium, every spec except the v2 and a11y ones (new specs land here automatically)
-  #   v2    chromium, versions + import + preset (the long agent-driven flows)
+  #   v2    chromium, versions + import (the long agent-driven flows)
   #   a11y  the a11y project (axe; its a11y-setup dependency builds a released project first)
   # Firefox/WebKit/Edge run locally / on Kubernetes, not here, to keep CI time reasonable.
   e2e:
@@ -356,8 +356,9 @@ jobs:
           Llm__Providers__Anthropic__ApiKey: ""
           Llm__Providers__OpenAI__ApiKey: ""
           # Same E2E settings as deploy/k8s/overlays/local-e2e: Fake deployments for Local Git projects (§4.15),
-          # Local import under the seeded root (FR-73).
+          # Fake managed databases and migration runner (§9), Local import under the seeded root (FR-73).
           Deployments__Provider: Fake
+          Databases__Provider: Fake
           Deployments__AllowFake: "true"
           Git__Local__ImportRoot: ${{ env.AIDE_IMPORT_ROOT }}
           # Registration/login limits (5/min per IP) are honoured by the specs' register lock; raising them only
@@ -386,7 +387,8 @@ jobs:
             fi
             sleep 1
           done
-          echo "::warning::Seeded admin password not found in the API log; the admin-integrations a11y scan will skip."
+          echo "::error::Seeded admin password not found in the API log; the admin a11y scans and the migrated preset E2E would skip."
+          exit 1
       - name: Install frontend dependencies and Chromium
         working-directory: frontend
         run: |
@@ -399,15 +401,15 @@ jobs:
           # BASE_URL stays unset: playwright.config.ts then defaults to http://localhost:3000 and (CI=true) runs `npm run build && npm start`.
           BACKEND_URL: http://localhost:5080
         run: |
-          v2_specs='versions|import|preset'
+          v2_specs='versions|import'
           case "$SUITE" in
             v1)
-              mapfile -t specs < <(find e2e -maxdepth 1 -name '*.spec.ts' | sort | grep -vE "/(a11y|$v2_specs)\.spec\.ts$")
+              mapfile -t specs < <(find e2e -maxdepth 1 -name '*.spec.ts' | sort | grep -vE "/(([^/]+\.)?a11y|$v2_specs)\.spec\.ts$")
               echo "v1 specs: ${specs[*]}"
               npx playwright test --project=chromium "${specs[@]}"
               ;;
             v2)
-              npx playwright test --project=chromium e2e/versions.spec.ts e2e/import.spec.ts e2e/preset.spec.ts
+              npx playwright test --project=chromium e2e/versions.spec.ts e2e/import.spec.ts
               ;;
             a11y)
               npx playwright test --project=a11y

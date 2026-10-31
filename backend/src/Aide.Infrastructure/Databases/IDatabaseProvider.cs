@@ -99,6 +99,21 @@ public interface IDatabaseProvider
     Task<IReadOnlyList<AdvisorFinding>> SecurityAdvisorsAsync(DatabaseAuth auth, string resourceId, CancellationToken cancellationToken);
 }
 
+/// <summary>Managed database settings (section <c>Databases</c>, §9).</summary>
+public sealed class DatabaseOptions
+{
+    public const string SectionName = "Databases";
+
+    /// <summary>
+    /// <c>Platform</c> (default): each database uses its host's API. <c>Fake</c>: provisioning and the migration runner are
+    /// deterministic and use no network (Development and E2E, §9). Outside Development and Testing it also needs
+    /// <c>Deployments:AllowFake=true</c>; without it startup fails.
+    /// </summary>
+    public string Provider { get; set; } = "Platform";
+
+    public bool UseFake => string.Equals(Provider?.Trim(), "Fake", StringComparison.OrdinalIgnoreCase);
+}
+
 /// <summary>The provider for a database host: the Fake (emulating the host) in Fake mode or for <c>fake</c>.</summary>
 public interface IDatabaseProviderResolver
 {
