@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { usePathname } from '../../lib/navigation'
 import { canViewAdmin } from '../../lib/permissions'
 import type { User } from '../auth/auth-api'
+import { useDeploymentSettings } from '../deployments/deployments-api'
 import { projectQueryOptions, projectStateQueryOptions } from '../projects/projects-api'
-import { projectIdFromPath, type NavViewer } from './nav-config'
+import { hasSupabaseBaasDatabase, projectIdFromPath, type NavViewer } from './nav-config'
 import { stageStatuses, type StageStatus } from './stage-states'
 
 export interface ShellNav {
@@ -20,6 +21,8 @@ export interface ShellNav {
   developmentVersion: string | null | undefined
   /** FR-88/FR-91: the project has a deployment target, so the Deployments item shows. */
   deploymentsEnabled: boolean
+  /** FR-153: the project has a Supabase BaaS database, so the Migrations item shows (`hasSupabaseBaasDatabase`). */
+  migrationsEnabled: boolean
   /** Lifecycle stage states once /state has loaded. */
   stages: StageStatus[] | undefined
 }
@@ -31,6 +34,9 @@ export function useShellNav(user: User): ShellNav {
   const project = useQuery({ ...projectQueryOptions(projectId ?? ''), enabled: projectId !== undefined })
   // Only once the project loaded: a 403/404 project has no state to show (the layout explains why).
   const state = useQuery({ ...projectStateQueryOptions(projectId ?? ''), enabled: projectId !== undefined && project.isSuccess })
+  // FR-153: only a data-supabase project reads the deployment settings (shared cache with Settings → Deployment).
+  const supabase = projectId !== undefined && project.data?.stackPacks.includes('data-supabase') === true
+  const settings = useDeploymentSettings(projectId ?? '', supabase)
   return {
     pathname,
     viewer: { isAdmin: canViewAdmin(user) },
@@ -39,6 +45,7 @@ export function useShellNav(user: User): ShellNav {
     releasedVersion: projectId ? project.data?.releasedVersion : undefined,
     developmentVersion: projectId ? project.data?.developmentVersion : undefined,
     deploymentsEnabled: projectId ? project.data?.deploymentsEnabled === true : false,
+    migrationsEnabled: supabase && hasSupabaseBaasDatabase(project.data?.stackPacks, settings.data?.databases),
     stages: projectId && state.data ? stageStatuses(state.data) : undefined,
   }
 }

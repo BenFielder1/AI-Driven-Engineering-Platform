@@ -25,6 +25,7 @@ public sealed partial class DeploymentTargetService(
     DeploymentAccess access,
     DeploymentInventoryService inventory,
     DeploymentEnvSync envSync,
+    Databases.ManagedDatabaseService databaseCards,
     Git.GitHubRepoAccess github,
     IGitHubAppStore apps,
     Infrastructure.Git.IWorkingCopies workingCopies,
@@ -57,9 +58,7 @@ public sealed partial class DeploymentTargetService(
             targets.Add(await ToDtoAsync(projectId, component, row, facts, rows, callerRole == ProjectRole.Owner, null, cancellationToken));
         }
 
-        IReadOnlyList<DeploymentDatabaseDto> databases = composition?.Deploy.DatabaseHost is { } host
-            ? [new(DeploymentEnvironment.Production, host, "not_configured"), new(DeploymentEnvironment.Preview, host, "not_configured")]
-            : [];
+        var databases = await databaseCards.CardsAsync(projectId, new Databases.StackCompositionView(composition?.Deploy.DatabaseHost), callerRole, cancellationToken);
         return new DeploymentSettingsDto(
             targets,
             databases,

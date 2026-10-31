@@ -129,6 +129,8 @@ export interface StoredProject extends Omit<
   deploymentEnv?: StoredEnvVar[]
   /** FR-90, FR-91: deployments, any order (the API lists newest first); see mocks/handlers/deployments.ts. */
   deployments?: Schemas['DeploymentDto'][]
+  /** FR-153: Supabase BaaS migration runs, any order (the API lists newest first); see mocks/handlers/migrations.ts. */
+  migrationRuns?: Schemas['MigrationRunDto'][]
 }
 
 export interface StoredStack {

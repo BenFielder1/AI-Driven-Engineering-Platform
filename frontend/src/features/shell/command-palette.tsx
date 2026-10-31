@@ -9,7 +9,12 @@ export function CommandPalette({ open, onOpenChange, nav }: { open: boolean; onO
   const router = useAppRouter()
   const entries = paletteEntries(
     nav.viewer,
-    nav.projectId ? { id: nav.projectId, name: nav.projectName ?? 'Project', deploymentsEnabled: nav.deploymentsEnabled } : undefined,
+    nav.projectId ? {
+          id: nav.projectId,
+          name: nav.projectName ?? 'Project',
+          deploymentsEnabled: nav.deploymentsEnabled,
+          migrationsEnabled: nav.migrationsEnabled,
+        } : undefined,
   )
   const groups = [...new Set(entries.map((e) => e.group))]
 

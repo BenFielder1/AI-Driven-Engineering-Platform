@@ -47,6 +47,9 @@ public static class SecretPurposes
     /// <summary>Deployment environment variable values (<c>deployment_env_vars.value_encrypted</c>, FR-88).</summary>
     public const string DeploymentEnvValue = "Aide.Secrets.DeploymentEnvValue";
 
+    /// <summary>FR-152: a managed database's connection JSON (URIs, keys, pooler) and its password.</summary>
+    public const string ManagedDatabase = "Aide.Secrets.ManagedDatabase";
+
     /// <summary>GitLab OAuth application secrets and the Bitbucket consumer secret
     /// (<c>git_host_instances.oauth_client_secret_encrypted</c>, FR-130, FR-133).</summary>
     public const string GitHostClientSecret = "Aide.Secrets.GitHostClientSecret";

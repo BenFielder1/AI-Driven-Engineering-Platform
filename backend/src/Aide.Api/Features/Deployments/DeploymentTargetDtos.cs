@@ -83,13 +83,6 @@ public sealed record DeploymentTargetDto(
     bool FakeMode);
 
 /// <summary>
-/// A database card (FR-144, FR-152): per environment when the composition has a database host. Until M30 every card is
-/// <c>status: not_configured</c> with the composition's <c>provider</c> (<c>supabase</c>, <c>render-postgres</c>,
-/// <c>railway-postgres</c>, <c>external</c>).
-/// </summary>
-public sealed record DeploymentDatabaseDto(DeploymentEnvironment Environment, string Provider, string Status);
-
-/// <summary>
 /// One row of the environment inventory (FR-145): <c>key</c>, the components it applies to, its environments, whether it is
 /// sensitive or public, its <c>source</c> (<c>user</c>, <c>derived</c>, <c>required</c>), what a derived one comes from
 /// (<c>derivedFrom</c>), a required one's <c>description</c>, <c>hasValue</c> (required rows and derived rows without a
@@ -126,7 +119,7 @@ public sealed record DeploymentOriginModelDto(string? Model, string? PackModel, 
 /// </summary>
 public sealed record DeploymentSettingsDto(
     IReadOnlyList<DeploymentTargetDto> Targets,
-    IReadOnlyList<DeploymentDatabaseDto> Databases,
+    IReadOnlyList<Aide.Api.Features.Databases.DeploymentDatabaseDto> Databases,
     DeploymentEnvInventoryDto Env,
     DeploymentOriginModelDto OriginModel,
     bool CanManage,

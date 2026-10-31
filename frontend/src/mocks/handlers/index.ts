@@ -12,6 +12,7 @@ import { releaseHandlers } from './release'
 import { healthHandlers } from './health'
 import { lifecycleHandlers } from './lifecycle'
 import { llmHandlers } from './llm'
+import { migrationHandlers } from './migrations'
 import { notificationHandlers } from './notifications'
 import { platformConnectionHandlers } from './platform-connections'
 import { projectHandlers } from './projects'
@@ -29,6 +30,7 @@ export const handlers = [
   ...llmHandlers,
   ...platformConnectionHandlers,
   ...deploymentHandlers,
+  ...migrationHandlers,
   ...githubHandlers,
   ...gitlabHandlers,
   ...bitbucketHandlers,

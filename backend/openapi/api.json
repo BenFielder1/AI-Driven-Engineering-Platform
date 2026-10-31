@@ -7787,6 +7787,421 @@
         }
       }
     },
+    "/api/projects/{id}/settings/deployment/databases/{environment}": {
+      "put": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Set the environment's database (Owner, FR-152): provider (the composition's database host; fake in Fake mode), one of the caller's own connections, and one of create {region, plan, name?}, link {resourceId} or external {connectionString} (External only, stored encrypted). Answers 202 with the database card (provisioning); a database_provisioning job creates or links it and polls until available (10 s, 10-minute ceiling), then derived env vars are synced. Job failures (DATABASE_PROVISIONING_FAILED, DATABASE_PROVISIONING_TIMEOUT, PLATFORM_PLAN_LIMIT, CREDENTIAL_INVALID, CONNECTION_SCOPE_INSUFFICIENT, UPSTREAM_ERROR) are on the card's provisioning.",
+        "operationId": "PutManagedDatabase",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutManagedDatabaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND (project or connection)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentDatabaseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION (body, environment) or STACK_INCOMPATIBLE (the composition's database host doesn't allow this provider)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT (changed concurrently)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Unlink the environment's database (Owner, FR-152). The platform resource is never deleted; migration runs stay; derived env vars are recomputed and synced.",
+        "operationId": "DeleteManagedDatabase",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND (project, or no database for the environment)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT (changed concurrently, e.g. by the provisioning job)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings/deployment/databases/{environment}/restore": {
+      "post": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Restore a paused Supabase project (Owner, FR-152, §4.21 \"Paused\"): POST /projects/{ref}/restore, then a database_provisioning job polls until it is available. Answers 202 with the card (provisioning).",
+        "operationId": "RestoreManagedDatabase",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentDatabaseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION (environment) or CREDENTIAL_INVALID (the bound token was rejected)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "DEPLOYMENT_ACTION_UNSUPPORTED (not Supabase), CONFLICT (not paused, or changed concurrently) or DEPLOYMENT_NOT_CONFIGURED (the connection is gone)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "UPSTREAM_RATE_LIMITED (Supabase's 429; Retry-After)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/migrations": {
+      "get": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "The project's Supabase BaaS migration runs, newest first (any member, FR-153, §7 Migrations): environment, commit, files with durations, status, error and advisor findings; ?releaseVersionId filters to one version.",
+        "operationId": "ListMigrationRuns",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "releaseVersionId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MigrationRunDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/migrations/{runId}": {
+      "get": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "One migration run (any member, FR-153).",
+        "operationId": "GetMigrationRun",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationRunDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/phase/advance": {
       "post": {
         "tags": [
@@ -12792,6 +13207,40 @@
         },
         "description": "Result of \"advance to next phase\" (FR-12). When the approval mode requires a gate for the next phase (§4.2),\n`gate` is the pending gate that was created and `state` still shows the current phase; otherwise\n`gate` is `null` and `state` shows the new phase."
       },
+      "AdvisorFindingDto": {
+        "required": [
+          "name",
+          "level",
+          "title",
+          "detail",
+          "remediation"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "remediation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A Supabase security advisor finding recorded on a run (FR-153)."
+      },
       "AgentJobTrigger": {
         "enum": [
           "user_requested",
@@ -14919,6 +15368,34 @@
         },
         "description": "Add an LLM connection (FR-78): `anthropic` or `openai`, a label and the key. The key is checked with\n    the provider before anything is saved."
       },
+      "CreateManagedDatabaseRequest": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "maxLength": 64,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "plan": {
+            "maxLength": 64,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "maxLength": 60,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The resource name; defaults to the project's name (Render preview: `&lt;name&gt;-preview`)."
+          }
+        },
+        "description": "FR-152: provision a database: region (Supabase: a region code or americas/emea/apac; Render: defaults to the backend's), plan, and an optional name."
+      },
       "CreatePlatformConnectionRequest": {
         "required": [
           "provider",
@@ -15283,6 +15760,63 @@
         },
         "description": "A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again."
       },
+      "DatabaseProvisioningDto": {
+        "required": [
+          "jobId",
+          "state",
+          "step",
+          "errorCode",
+          "errorMessage",
+          "startedAt",
+          "finishedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string"
+          },
+          "step": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errorMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "startedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "FR-152: the `database_provisioning` job of a database card: `state` (`queued`, `running`,\n`succeeded`, `failed`), the current `step` (`queued`, `creating`, `linking`,\n`waiting`, `syncing_env`), and on failure the error code (`DATABASE_PROVISIONING_FAILED`,\n`DATABASE_PROVISIONING_TIMEOUT`, `PLATFORM_PLAN_LIMIT`, `CREDENTIAL_INVALID`,\n`CONNECTION_SCOPE_INSUFFICIENT`, `UPSTREAM_ERROR`, `VALIDATION`) and message."
+      },
       "DeadLetterDto": {
         "required": [
           "id",
@@ -15509,7 +16043,25 @@
         "required": [
           "environment",
           "provider",
-          "status"
+          "status",
+          "hostOption",
+          "inComposition",
+          "needsConnection",
+          "binding",
+          "canBind",
+          "resourceId",
+          "name",
+          "region",
+          "plan",
+          "expiresAt",
+          "paused",
+          "canRestore",
+          "resourceUrl",
+          "connectionSummary",
+          "missingPermissions",
+          "provisioning",
+          "warnings",
+          "updatedAt"
         ],
         "type": "object",
         "properties": {
@@ -15521,9 +16073,112 @@
           },
           "status": {
             "type": "string"
+          },
+          "hostOption": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inComposition": {
+            "type": "boolean"
+          },
+          "needsConnection": {
+            "type": "boolean"
+          },
+          "binding": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentTargetBindingDto"
+              }
+            ]
+          },
+          "canBind": {
+            "type": "boolean"
+          },
+          "resourceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "region": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "plan": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "canRestore": {
+            "type": "boolean"
+          },
+          "resourceUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "connectionSummary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "missingPermissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "provisioning": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DatabaseProvisioningDto"
+              }
+            ]
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         },
-        "description": "A database card (FR-144, FR-152): per environment when the composition has a database host. Until M30 every card is\n`status: not_configured` with the composition's `provider` (`supabase`, `render-postgres`,\n`railway-postgres`, `external`)."
+        "description": "FR-152 database card (Settings → Deployment `databases[]`, one per environment when the composition has a\ndatabase host or a database is set): `provider` (`supabase`, `render`, `railway`, `external`,\n`fake`), `status` (`not_configured`, `provisioning`, `available`, `error`, `paused`,\n`expiring`, `removed`), the composition's `hostOption`, the binding (\"connected by\"), the resource, region,\nplan, expiry, the dashboard link (`resourceUrl`), a connection summary without secrets (host, port, database), the\nSupabase permissions the connection lacks (e.g. \"API Key Secrets: Read\"), the provisioning job, and `warnings`\n(`render_free_expiry`, `supabase_free_pausing`, `supabase_free_project_limit`,\n`preview_uses_production_database`). Secrets are never returned."
       },
       "DeploymentDto": {
         "required": [
@@ -16863,6 +17518,19 @@
           }
         },
         "description": "The external inputs a review cycle collected (FR-85, FR-89): the PR head's `checks`, how long review waited for\npending checks (`checksWaitedSeconds`, up to 15 minutes; `null` when it didn't wait) and whether it gave up\nwaiting (`checksTimedOut`, recorded as a warning). `preview` is the preview deployment review waited for\n(FR-90; `null` when none, e.g. Vercel not configured)."
+      },
+      "ExternalDatabaseRequest": {
+        "required": [
+          "connectionString"
+        ],
+        "type": "object",
+        "properties": {
+          "connectionString": {
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "description": "FR-152: an External database's connection string (`postgres://`, `postgresql://` or ADO.NET), stored encrypted and never returned."
       },
       "FileAction": {
         "enum": [
@@ -18737,6 +19405,16 @@
         },
         "description": "FR-1 sign-in."
       },
+      "ManagedDatabaseProvider": {
+        "enum": [
+          "supabase",
+          "render",
+          "railway",
+          "external",
+          "fake"
+        ],
+        "description": "Where a managed database lives (§5). Wire values: `supabase`, `render`, `railway`, `external`, `fake`."
+      },
       "MemberDto": {
         "required": [
           "userId",
@@ -18869,6 +19547,135 @@
           "squash"
         ],
         "description": "FR-65 merge strategy. Wire values: `aide_merges`, `manual`; FR-140 (Bitbucket only): `fast_forward` and\n`squash`, which are `aide_merges` with Bitbucket's `merge_strategy` of that name (`aide_merges` sends\n`merge_commit`)."
+      },
+      "MigrationFileDto": {
+        "required": [
+          "version",
+          "name",
+          "ms"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "description": "One file a migration run applied: version, name and duration (ms)."
+      },
+      "MigrationRunDto": {
+        "required": [
+          "id",
+          "environment",
+          "managedDatabaseId",
+          "provider",
+          "releaseId",
+          "releaseVersionId",
+          "gitSha",
+          "status",
+          "files",
+          "totalMs",
+          "errorCode",
+          "errorMessage",
+          "advisorFindings",
+          "startedAt",
+          "finishedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environment": {
+            "$ref": "#/components/schemas/DeploymentEnvironment"
+          },
+          "managedDatabaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ManagedDatabaseProvider"
+              }
+            ]
+          },
+          "releaseId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "releaseVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gitSha": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MigrationRunStatus"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MigrationFileDto"
+            }
+          },
+          "totalMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "errorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errorMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "advisorFindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdvisorFindingDto"
+            }
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "FR-153, §7 Migrations page: one Supabase BaaS migration run: environment, database, release and version, commit, status\n(`running`, `succeeded`, `failed`), the files applied with durations, the total duration, the error\n(`MIGRATION_FAILED`, `MIGRATION_HISTORY_DIVERGED`) and the advisor findings."
+      },
+      "MigrationRunStatus": {
+        "enum": [
+          "running",
+          "succeeded",
+          "failed"
+        ],
+        "description": "A migration run's state (§5). Wire values: `running`, `succeeded`, `failed`."
       },
       "NotificationChannelDto": {
         "required": [
@@ -20526,6 +21333,55 @@
           }
         },
         "description": "FR-144 (Owner): set up a target. `provider` must be the composition's host for the component (`fake` also in\nFake mode); `connectionId` one of the caller's own connections of that platform (not used by GitHub Pages);\n`create` or `link`, not both (GitHub Pages: neither; setup enables Pages on the repository)."
+      },
+      "PutManagedDatabaseRequest": {
+        "required": [
+          "provider"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/ManagedDatabaseProvider"
+          },
+          "connectionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "create": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CreateManagedDatabaseRequest"
+              }
+            ]
+          },
+          "link": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LinkDeploymentResourceRequest"
+              }
+            ]
+          },
+          "external": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExternalDatabaseRequest"
+              }
+            ]
+          }
+        },
+        "description": "FR-152 (Owner): set the environment's database. `provider` must be the composition's database host (`fake`\nalso in Fake mode); exactly one of `create`, `link` (a resource id from the connection's picker) or\n`external` (External only). `connectionId` is one of the caller's own platform connections (not for External)."
       },
       "ReadinessItemDto": {
         "required": [

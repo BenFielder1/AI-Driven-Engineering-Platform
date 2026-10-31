@@ -232,6 +232,15 @@ public static class DependencyInjection
         services.AddSingleton<RailwayDeploymentProvider>();
         services.AddSingleton<IDeploymentProviderResolver, DeploymentProviderResolver>();
 
+        // FR-152, FR-153, §4.21: managed database hosts (Fake under Deployments:Provider=Fake) and the Supabase BaaS runner.
+        services.AddSingleton<Databases.SupabaseDatabaseProvider>();
+        services.AddSingleton<Databases.RenderPostgresProvider>();
+        services.AddSingleton<Databases.RailwayPostgresProvider>();
+        services.AddSingleton<Databases.ExternalDatabaseProvider>();
+        services.AddSingleton<Databases.IDatabaseProviderResolver, Databases.DatabaseProviderResolver>();
+        services.AddSingleton<Databases.IMigrationSqlExecutor, Databases.NpgsqlMigrationSqlExecutor>();
+        services.AddSingleton<Databases.SupabaseMigrationRunner>();
+
         // Platform connections (FR-142, §4.20, §4.21): each platform's REST or GraphQL API on its fixed host (§8: never
         // configurable, so no SSRF); the Fake for all but Vercel under Deployments:Provider=Fake.
         foreach (var (name, baseUrl) in PlatformHosts.All)

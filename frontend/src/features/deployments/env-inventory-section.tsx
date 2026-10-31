@@ -437,7 +437,7 @@ export function EnvInventorySection({ projectId, inventory, canManage }: { proje
                   <dt className="text-muted-foreground">Environments</dt>
                   <dd data-testid="env-environments">{v.environments.map((t) => deploymentTargetLabels[t]).join(', ')}</dd>
                 </dl>
-                {v.source === 'derived' && v.derivedFrom && <span data-testid="env-derived-from">From {v.derivedFrom} (read-only)</span>}
+                {v.source === 'derived' && v.derivedFrom && <span data-testid="env-derived-from">From {v.derivedFrom} · read-only</span>}
                 {v.description && <span className="text-muted-foreground">{v.description}</span>}
                 {v.source === 'user' && v.updatedAt && (
                   <span>

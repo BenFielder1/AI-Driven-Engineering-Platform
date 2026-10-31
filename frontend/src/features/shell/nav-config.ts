@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   CloudUpload,
   Compass,
+  DatabaseZap,
   FileStack,
   FileText,
   FolderKanban,
@@ -148,6 +149,18 @@ const DEPLOYMENTS_ITEM: NavItem = {
   keywords: ['vercel', 'preview', 'production', 'promote', 'redeploy'],
 }
 
+/**
+ * FR-153, SPEC §7: the Migrations page (Supabase BaaS migration runs), shown after Deployments only when the project has
+ * a Supabase BaaS database (see `hasSupabaseBaasDatabase`).
+ */
+const MIGRATIONS_ITEM: NavItem = {
+  key: 'migrations',
+  label: 'Migrations',
+  to: '/projects/$projectId/migrations',
+  icon: DatabaseZap,
+  keywords: ['database', 'supabase', 'schema', 'sql'],
+}
+
 const PROJECT: NavSection = {
   key: 'project',
   label: 'Project',
@@ -163,6 +176,22 @@ const PROJECT: NavSection = {
 /** What decides the optional project items (FR-54): `deploymentsEnabled` is `ProjectDto.deploymentsEnabled` (FR-88). */
 export interface ProjectNavOptions {
   deploymentsEnabled?: boolean
+  /** FR-153: the project has a Supabase BaaS database (`hasSupabaseBaasDatabase`), so Migrations shows. */
+  migrationsEnabled?: boolean
+}
+
+/**
+ * FR-153 nav rule: the stack's data pack is `data-supabase` (BaaS; `ProjectDto.stackPacks`) and Settings → Deployment
+ * has a Supabase database card that is set up (any status but `not_configured`) in some environment.
+ */
+export function hasSupabaseBaasDatabase(
+  stackPacks: readonly string[] | undefined,
+  databases: readonly { provider: string; status: string }[] | undefined,
+): boolean {
+  return (
+    (stackPacks?.includes('data-supabase') ?? false) &&
+    (databases?.some((d) => d.provider === 'supabase' && d.status !== 'not_configured') ?? false)
+  )
 }
 
 /**
@@ -170,11 +199,12 @@ export interface ProjectNavOptions {
  * (FR-91) shows only when the project has a deployment target.
  */
 export function projectSections(options: ProjectNavOptions = {}): NavSection[] {
-  if (!options.deploymentsEnabled) {
+  const optional = [...(options.deploymentsEnabled ? [DEPLOYMENTS_ITEM] : []), ...(options.migrationsEnabled ? [MIGRATIONS_ITEM] : [])]
+  if (optional.length === 0) {
     return [LIFECYCLE, PROJECT]
   }
   const items = [...PROJECT.items]
-  items.splice(items.length - 1, 0, DEPLOYMENTS_ITEM)
+  items.splice(items.length - 1, 0, ...optional)
   return [LIFECYCLE, { ...PROJECT, items }]
 }
 
@@ -222,7 +252,7 @@ export interface FoundItem {
 export function findNavItem(pathname: string, viewer: NavViewer): FoundItem | undefined {
   const projectId = projectIdFromPath(pathname)
   const candidates: FoundItem[] = projectId
-    ? projectSections({ deploymentsEnabled: true }).flatMap((section) => section.items.map((item) => ({ item, section })))
+    ? projectSections({ deploymentsEnabled: true, migrationsEnabled: true }).flatMap((section) => section.items.map((item) => ({ item, section })))
     : [
         ...workspaceSections(viewer).flatMap((section) => section.items.map((item) => ({ item, section }))),
         ...EXTRA_ITEMS.map((item) => ({ item, section: null })),
@@ -306,7 +336,7 @@ export interface PaletteEntry {
 /** Every page the viewer can go to from ⌘K: the current project's pages first (in project mode), then the workspace. */
 export function paletteEntries(
   viewer: NavViewer,
-  project?: { id: string; name: string; deploymentsEnabled?: boolean },
+  project?: { id: string; name: string; deploymentsEnabled?: boolean; migrationsEnabled?: boolean },
 ): PaletteEntry[] {
   const entries: PaletteEntry[] = []
   const add = (item: NavItem, group: string, params: PathParams = {}) => {
@@ -320,7 +350,7 @@ export function paletteEntries(
     })
   }
   if (project) {
-    for (const section of projectSections({ deploymentsEnabled: project.deploymentsEnabled })) {
+    for (const section of projectSections({ deploymentsEnabled: project.deploymentsEnabled, migrationsEnabled: project.migrationsEnabled })) {
       for (const item of section.items) {
         add(item, `${project.name} · ${section.label}`, { projectId: project.id })
       }

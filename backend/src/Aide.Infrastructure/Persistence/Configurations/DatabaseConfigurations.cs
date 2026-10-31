@@ -49,6 +49,7 @@ internal sealed class DatabaseMigrationRunConfiguration : IEntityTypeConfigurati
         builder.Property(r => r.Environment).IsRequired();
         builder.Property(r => r.Status).IsRequired();
         builder.Property(r => r.Applied).HasJsonbConversion().HasDefaultValueSql("'[]'::jsonb").IsRequired();
+        builder.Property(r => r.AdvisorFindings).HasJsonbConversion().HasDefaultValueSql("'[]'::jsonb").IsRequired();
         builder.Property(r => r.ErrorCode).HasMaxLength(64);
         builder.Property(r => r.ErrorMessage).HasColumnType("text");
         builder.Property(r => r.StartedAt).IsRequired();

@@ -24,6 +24,7 @@ public sealed partial class DeploymentSetupJobHandler(
     DeploymentAccess access,
     DeploymentInventoryService inventory,
     DeploymentEnvSync envSync,
+    Databases.ManagedDatabaseService databases,
     TimeProvider time,
     ILogger<DeploymentSetupJobHandler> logger) : IJobHandler
 {
@@ -114,6 +115,13 @@ public sealed partial class DeploymentSetupJobHandler(
             SystemActor.Name,
             target.UpdatedAt);
         await db.SaveChangesAsync(cancellationToken);
+
+        // FR-153: Supabase Auth URLs follow the frontend's URLs.
+        if (target.Component == DeploymentComponent.Frontend)
+        {
+            await databases.RefreshAuthUrlsAsync(target.ProjectId, cancellationToken);
+        }
+
         LogReady(logger, target.ProjectId, target.Component, target.Status);
     }
 

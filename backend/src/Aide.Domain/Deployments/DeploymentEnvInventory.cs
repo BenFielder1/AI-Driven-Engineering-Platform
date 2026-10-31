@@ -10,20 +10,43 @@ namespace Aide.Domain.Deployments;
 public sealed record DerivedEnvTarget(DeploymentComponent Component, DeploymentProvider Provider, string? Name, string? ProductionUrl, string? PreviewUrl);
 
 /// <summary>
-/// A database as the §4.22 derivation will see it (M30, FR-152/FR-153): its environment and provider. M29 passes none; the
-/// <c>DATABASE_URL</c>, <c>DIRECT_URL</c>, <c>AIDE_RUN_MIGRATIONS</c> and Supabase rows plug in here.
+/// An available database as the §4.22 derivation sees it (FR-152, FR-153): its environment, provider and endpoints.
+/// <see cref="Url"/> is what apps use (Render internal, Railway reference, External, Fake; Supabase: the session pooler
+/// <c>:5432</c>); <see cref="TransactionUrl"/> the Supabase transaction pooler <c>:6543</c>; the Supabase project URL and keys.
 /// </summary>
-public sealed record DerivedEnvDatabase(DeploymentEnvironment Environment, string Provider, string DisplayName);
+public sealed record DerivedEnvDatabase(
+    DeploymentEnvironment Environment,
+    ManagedDatabaseProvider Provider,
+    string? Url,
+    string? TransactionUrl = null,
+    string? SupabaseUrl = null,
+    string? PublishableKey = null,
+    string? SecretKey = null)
+{
+    /// <summary>Never prints the URLs or keys (they hold passwords and the secret key).</summary>
+    public override string ToString() => $"DerivedEnvDatabase {{ Environment = {Environment}, Provider = {Provider} }}";
+}
+
+/// <summary>
+/// The resolved stack's facts the database rows need (§4.22): the app runs on a serverless host in host mode (its host
+/// pack declares <c>AIDE_RUN_MIGRATIONS</c>), the data pack's <c>migrate.needsDirectUrl</c>, and whether the pack rule asks
+/// for the server-side Supabase keys (<c>SUPABASE_SECRET_KEY</c> is required: BaaS with Next.js full-stack).
+/// </summary>
+public sealed record DerivedEnvDatabaseFacts(bool Serverless, bool NeedsDirectUrl, bool SupabaseServerKeys)
+{
+    public static DerivedEnvDatabaseFacts None { get; } = new(false, false, false);
+}
 
 /// <summary>
 /// The inputs of <see cref="DerivedEnvRules.Derive"/>: the composition, the frontend pack's public prefix
-/// (<c>NEXT_PUBLIC_</c>, <c>VITE_</c>, or <c>null</c> for Angular), the targets and the databases.
+/// (<c>NEXT_PUBLIC_</c>, <c>VITE_</c>, or <c>null</c> for Angular), the targets, the available databases and the stack facts.
 /// </summary>
 public sealed record DerivedEnvInput(
     StackComposition? Composition,
     string? PublicPrefix,
     IReadOnlyList<DerivedEnvTarget> Targets,
-    IReadOnlyList<DerivedEnvDatabase> Databases);
+    IReadOnlyList<DerivedEnvDatabase> Databases,
+    DerivedEnvDatabaseFacts? DatabaseFacts = null);
 
 /// <summary>
 /// A variable AIDE derives (§4.22): key, the components it applies to, its value per environment (only the environments
@@ -57,6 +80,12 @@ public static class DerivedEnvRules
     public const string ApiBaseUrl = "API_BASE_URL";
     public const string BackendUrl = "BACKEND_URL";
     public const string CorsAllowedOrigins = "CORS_ALLOWED_ORIGINS";
+    public const string DatabaseUrl = "DATABASE_URL";
+    public const string DirectUrl = "DIRECT_URL";
+    public const string RunMigrations = "AIDE_RUN_MIGRATIONS";
+    public const string SupabaseUrl = "SUPABASE_URL";
+    public const string SupabasePublishableKey = "SUPABASE_PUBLISHABLE_KEY";
+    public const string SupabaseSecretKey = "SUPABASE_SECRET_KEY";
 
     private static readonly DeploymentComponent[] FrontendOnly = [DeploymentComponent.Frontend];
     private static readonly DeploymentComponent[] BackendOnly = [DeploymentComponent.Backend];
@@ -112,8 +141,120 @@ public static class DerivedEnvRules
             }
         }
 
-        // M30 (FR-152, FR-153): DATABASE_URL, DIRECT_URL, AIDE_RUN_MIGRATIONS and the Supabase keys from input.Databases.
+        DeriveDatabaseRows(input, composition, list);
         return [.. list.OrderBy(v => v.Key, StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// FR-145, FR-152–FR-154, §4.22: the database rows. Preview falls back to the production database when it has none of its
+    /// own (FR-154: "preview uses the production database"), except for <c>AIDE_RUN_MIGRATIONS</c>, which is <c>true</c> only
+    /// where the environment has its own database.
+    /// <list type="bullet">
+    /// <item>Host mode (an ORM data pack, the app is the backend or the Next.js full-stack app): <c>DATABASE_URL</c> (Supabase:
+    /// transaction pooler with <c>pgbouncer=true</c> for Prisma on serverless hosts, session pooler otherwise),
+    /// <c>DIRECT_URL</c> when the pack needs it (Prisma; Drizzle on serverless): the session pooler or the same URL, and
+    /// <c>AIDE_RUN_MIGRATIONS</c> on serverless hosts.</item>
+    /// <item>Supabase BaaS: <c>&lt;prefix&gt;SUPABASE_URL</c> and <c>&lt;prefix&gt;SUPABASE_PUBLISHABLE_KEY</c> (public,
+    /// frontend), and, when the pack rule asks, the server-only <c>SUPABASE_URL</c> and sensitive <c>SUPABASE_SECRET_KEY</c>.</item>
+    /// </list>
+    /// </summary>
+    private static void DeriveDatabaseRows(DerivedEnvInput input, StackComposition composition, List<DerivedEnvVar> list)
+    {
+        var facts = input.DatabaseFacts ?? DerivedEnvDatabaseFacts.None;
+        var own = input.Databases.Where(d => d.Url is not null || d.SupabaseUrl is not null).GroupBy(d => d.Environment).ToDictionary(g => g.Key, g => g.First());
+        var effective = new Dictionary<DeploymentEnvironment, DerivedEnvDatabase>();
+        if (own.TryGetValue(DeploymentEnvironment.Production, out var production))
+        {
+            effective[DeploymentEnvironment.Production] = production;
+        }
+
+        if (own.TryGetValue(DeploymentEnvironment.Preview, out var preview) || production is not null)
+        {
+            effective[DeploymentEnvironment.Preview] = preview ?? production!;
+        }
+
+        string Source(DeploymentEnvironment e) => effective.TryGetValue(e, out var d) ? Databases.ManagedDatabaseRules.DisplayName(d.Provider) : "database";
+        var from = effective.Count == 0 ? "database" : string.Join(", ", effective.Values.Select(d => Databases.ManagedDatabaseRules.DisplayName(d.Provider)).Distinct());
+        var baas = composition.Data?.Pack == StackIds.Supabase;
+        IReadOnlyList<DeploymentComponent>? app = composition.Backend is not null ? BackendOnly
+            : composition.Derived.NextjsMode == StackIds.FullStack ? FrontendOnly
+            : null;
+        if (!baas && composition.Data is not null && app is not null)
+        {
+            var prisma = composition.Data.Pack == "data-prisma";
+            var urls = Values(effective, d => d.Provider == ManagedDatabaseProvider.Supabase && facts.Serverless && d.TransactionUrl is { } tx
+                ? (prisma ? Databases.ManagedDatabaseRules.WithPgbouncer(tx) : tx)
+                : d.Url);
+            if (urls.Count > 0)
+            {
+                var guidance = facts.Serverless && effective.Values.Any(d => d.Provider == ManagedDatabaseProvider.Supabase)
+                    ? " (transaction pooler :6543, prepared statements off)" : string.Empty;
+                list.Add(new DerivedEnvVar(DatabaseUrl, app, urls, Public: false, Sensitive: true, $"managed database ({from}){guidance}"));
+            }
+
+            var needsDirect = facts.NeedsDirectUrl || (facts.Serverless && composition.Data.Pack == "data-drizzle");
+            var direct = Values(effective, d => d.Url);
+            if (needsDirect && direct.Count > 0)
+            {
+                list.Add(new DerivedEnvVar(DirectUrl, app, direct, Public: false, Sensitive: true, $"managed database ({from}, session connection for migrations)"));
+            }
+
+            if (facts.Serverless)
+            {
+                var run = new Dictionary<DeploymentEnvironment, string>
+                {
+                    [DeploymentEnvironment.Production] = own.ContainsKey(DeploymentEnvironment.Production) ? "true" : "false",
+                    [DeploymentEnvironment.Preview] = own.ContainsKey(DeploymentEnvironment.Preview) ? "true" : "false",
+                };
+                list.Add(new DerivedEnvVar(RunMigrations, app, run, Public: false, Sensitive: false, "environments with their own database (D-V4-13)"));
+            }
+        }
+
+        if (baas && composition.Frontend is not null)
+        {
+            var projectUrls = Values(effective, d => d.SupabaseUrl);
+            var publishable = Values(effective, d => d.PublishableKey);
+            if (projectUrls.Count > 0)
+            {
+                list.Add(new DerivedEnvVar($"{input.PublicPrefix}{SupabaseUrl}", FrontendOnly, projectUrls, Public: true, Sensitive: false, $"Supabase project ({Source(DeploymentEnvironment.Production)})"));
+            }
+
+            if (publishable.Count > 0)
+            {
+                list.Add(new DerivedEnvVar($"{input.PublicPrefix}{SupabasePublishableKey}", FrontendOnly, publishable, Public: true, Sensitive: false, "Supabase publishable key"));
+            }
+
+            // Server-side keys go to server code only: the backend, else a Next.js full-stack frontend; never a static SPA host.
+            if (facts.SupabaseServerKeys && app is { } server)
+            {
+                // §4.22 Known-issue fix: the server code reads the unprefixed SUPABASE_URL (unless that is the public key already).
+                if (!string.IsNullOrEmpty(input.PublicPrefix) && projectUrls.Count > 0)
+                {
+                    list.Add(new DerivedEnvVar(SupabaseUrl, server, projectUrls, Public: false, Sensitive: false, "Supabase project (server code)"));
+                }
+
+                var secret = Values(effective, d => d.SecretKey);
+                if (secret.Count > 0)
+                {
+                    list.Add(new DerivedEnvVar(SupabaseSecretKey, server, secret, Public: false, Sensitive: true, "Supabase secret key (server code only)"));
+                }
+            }
+        }
+    }
+
+    private static Dictionary<DeploymentEnvironment, string> Values(
+        Dictionary<DeploymentEnvironment, DerivedEnvDatabase> databases, Func<DerivedEnvDatabase, string?> value)
+    {
+        var values = new Dictionary<DeploymentEnvironment, string>();
+        foreach (var (environment, database) in databases)
+        {
+            if (value(database) is { Length: > 0 } v)
+            {
+                values[environment] = v;
+            }
+        }
+
+        return values;
     }
 
     /// <summary>

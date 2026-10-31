@@ -52,6 +52,8 @@ export const deploymentDb = {
   envSyncFails: false,
   /** A platform can't delete env vars: DELETE answers 502 and keeps the variable. */
   envDeleteFails: false,
+  /** FR-152: the next database provisioning job fails with this code and message. */
+  provisioningFailure: null as { errorCode: string; errorMessage: string } | null,
 }
 
 /** Deployments the platform never reported (tests add ids): `unknown_at_platform` (FR-151). */
@@ -67,6 +69,7 @@ export function resetDeploymentDb() {
   deploymentDb.pagesPermissionMissing = false
   deploymentDb.envSyncFails = false
   deploymentDb.envDeleteFails = false
+  deploymentDb.provisioningFailure = null
   unknownAtPlatform.clear()
 }
 
@@ -130,6 +133,50 @@ export function makeTarget(component: Component, provider: Provider, overrides: 
 }
 
 const emptyOrigin = (): Schemas['DeploymentOriginModelDto'] => ({ model: null, packModel: null, options: [], explanation: null })
+
+type DatabaseCard = Schemas['DeploymentDatabaseDto']
+type DatabaseProvider = Schemas['ManagedDatabaseProvider']
+
+/** The composition's host option id of each database provider (the card's `hostOption`). */
+const databaseHostOptions: Record<DatabaseProvider, string> = {
+  supabase: 'supabase',
+  render: 'render-postgres',
+  railway: 'railway-postgres',
+  external: 'external',
+  fake: 'fake',
+}
+
+/** FR-152: a database card, not set up yet unless overridden. */
+export function makeDatabase(
+  environment: Schemas['DeploymentEnvironment'],
+  provider: DatabaseProvider,
+  overrides: Partial<DatabaseCard> = {},
+): DatabaseCard {
+  return {
+    environment,
+    provider,
+    status: 'not_configured',
+    hostOption: databaseHostOptions[provider],
+    inComposition: true,
+    needsConnection: provider !== 'external' && provider !== 'fake',
+    binding: null,
+    canBind: false,
+    resourceId: null,
+    name: null,
+    region: null,
+    plan: null,
+    expiresAt: null,
+    paused: false,
+    canRestore: false,
+    resourceUrl: null,
+    connectionSummary: null,
+    missingPermissions: [],
+    provisioning: null,
+    warnings: [],
+    updatedAt: null,
+    ...overrides,
+  }
+}
 
 /** Deployment settings of a project; unset: no deployment hosts in the composition. */
 export function deploymentOf(p: StoredProject): StoredDeploymentSettings {
@@ -274,10 +321,7 @@ export function seedNetlifyRenderTargets(
         makeTarget('frontend', 'netlify', { buildConfig: feBuild, ...common }),
         makeTarget('backend', 'render', { buildConfig: beBuild, ...common }),
       ]
-  d.databases = [
-    { environment: 'production', provider: 'render-postgres', status: 'not_configured' },
-    { environment: 'preview', provider: 'render-postgres', status: 'not_configured' },
-  ]
+  d.databases = [makeDatabase('production', 'render'), makeDatabase('preview', 'render')]
   d.publicPrefix = 'VITE_'
   d.originModel = {
     model: 'proxy',
@@ -304,6 +348,32 @@ export function seedNetlifyRenderTargets(
       syncedAt: init.configured ? '2026-09-02T10:00:31Z' : null,
     }),
     derivedRow({ key: 'DATABASE_URL', appliesTo: ['backend'], sensitive: true, derivedFrom: 'Render Postgres (production)' }),
+  ]
+  return d
+}
+
+/**
+ * FR-152, FR-153 fixture: a Supabase BaaS project (data pack `data-supabase`, a React SPA on Vercel, no backend) with a
+ * Supabase database card per environment (overridable) and the Supabase-derived frontend variables.
+ */
+export function seedSupabaseBaas(
+  p: StoredProject,
+  init: { production?: Partial<Schemas['DeploymentDatabaseDto']>; preview?: Partial<Schemas['DeploymentDatabaseDto']> } = {},
+): StoredDeploymentSettings {
+  p.stackPacks = ['fe-react', 'data-supabase']
+  const d = deploymentOf(p)
+  d.targets = [makeTarget('frontend', 'vercel', { implementedForReal: true })]
+  d.databases = [makeDatabase('production', 'supabase', init.production), makeDatabase('preview', 'supabase', init.preview)]
+  d.publicPrefix = 'VITE_'
+  d.derived = [
+    derivedRow({
+      key: 'VITE_SUPABASE_URL',
+      appliesTo: ['frontend'],
+      public: true,
+      derivedFrom: 'Supabase project (production)',
+      hasValue: init.production?.status === 'available',
+    }),
+    derivedRow({ key: 'VITE_SUPABASE_PUBLISHABLE_KEY', appliesTo: ['frontend'], public: true, derivedFrom: 'Supabase publishable key' }),
   ]
   return d
 }
@@ -457,7 +527,12 @@ function settingsDto(p: StoredProject, owner: boolean): Settings {
   const d = deploymentOf(p)
   return {
     targets: d.targets.map((t) => ({ ...t, canBind: owner && t.needsConnection, readiness: t.readiness.map((r) => ({ ...r })) })),
-    databases: d.databases.map((db) => ({ ...db })),
+    databases: d.databases.map((db) => ({
+      ...db,
+      canBind: owner && db.needsConnection,
+      missingPermissions: [...db.missingPermissions],
+      warnings: [...db.warnings],
+    })),
     env: { publicPrefix: d.publicPrefix, variables: inventoryOf(p) },
     originModel: { ...d.originModel, options: [...d.originModel.options] },
     canManage: owner,
@@ -573,6 +648,82 @@ function advanceSetups(d: StoredDeploymentSettings) {
   }
 }
 
+interface PendingProvisioning {
+  steps: string[]
+  failure: { errorCode: string; errorMessage: string } | null
+  result: Partial<DatabaseCard>
+}
+
+const pendingProvisionings = new WeakMap<DatabaseCard, PendingProvisioning>()
+
+const databaseLabels: Record<DatabaseProvider, string> = {
+  supabase: 'Supabase',
+  render: 'Render Postgres',
+  railway: 'Railway Postgres',
+  external: 'External database',
+  fake: 'Fake database',
+}
+
+const databaseLabel = (provider: string) => databaseLabels[provider as DatabaseProvider]
+
+/** FR-152: each settings read moves a database's `database_provisioning` job one step on (as the target setup does). */
+function advanceDatabases(d: StoredDeploymentSettings) {
+  for (const db of d.databases) {
+    const pending = pendingProvisionings.get(db)
+    if (!pending || !db.provisioning) {
+      continue
+    }
+    const next = pending.steps.shift()
+    if (next !== undefined) {
+      db.provisioning = { ...db.provisioning, state: 'running', step: next, startedAt: db.provisioning.startedAt ?? new Date().toISOString() }
+      continue
+    }
+    pendingProvisionings.delete(db)
+    const finishedAt = new Date().toISOString()
+    if (pending.failure) {
+      db.status = 'error'
+      db.provisioning = { ...db.provisioning, state: 'failed', step: null, ...pending.failure, finishedAt }
+      continue
+    }
+    Object.assign(db, { status: 'available', updatedAt: finishedAt, ...pending.result })
+    db.provisioning = { ...db.provisioning, state: 'succeeded', step: null, finishedAt }
+    // FR-145: the database's derived variable, with its value now (§4.22).
+    d.derived = [
+      ...d.derived.filter((r) => r.key !== 'DATABASE_URL'),
+      derivedRow({
+        key: 'DATABASE_URL',
+        appliesTo: ['backend'],
+        sensitive: true,
+        derivedFrom: `managed database (${databaseLabel(db.provider)})`,
+        hasValue: true,
+        updatedAt: finishedAt,
+        syncedAt: finishedAt,
+      }),
+    ]
+  }
+}
+
+/** The host, port and database of a connection string, without the user or password (`connectionSummary`). */
+function summaryOf(connectionString: string): string {
+  const uri = /^postgres(?:ql)?:\/\/(?:[^@/]*@)?([^/:?]+)(?::(\d+))?\/([^?]*)/.exec(connectionString)
+  if (uri) {
+    return `${uri[1] ?? ''}:${uri[2] ?? '5432'}/${uri[3] ?? ''}`
+  }
+  const server = /(?:Server|Host)=([^;]+)/i.exec(connectionString)?.[1] ?? 'unknown'
+  const database = /(?:Database|Initial Catalog)=([^;]+)/i.exec(connectionString)?.[1] ?? ''
+  return `${server}/${database}`
+}
+
+const newJob = (): NonNullable<DatabaseCard['provisioning']> => ({
+  jobId: nextId(),
+  state: 'queued',
+  step: 'queued',
+  errorCode: null,
+  errorMessage: null,
+  startedAt: null,
+  finishedAt: null,
+})
+
 const platformLabel: Record<Provider, string> = {
   vercel: 'Vercel',
   netlify: 'Netlify',
@@ -660,6 +811,7 @@ export const deploymentHandlers = [
       return a
     }
     advanceSetups(deploymentOf(a.project))
+    advanceDatabases(deploymentOf(a.project))
     return HttpResponse.json<Settings>(settingsDto(a.project, a.level === 'owner'))
   }),
 
@@ -765,6 +917,132 @@ export const deploymentHandlers = [
       implementedForReal: t.implementedForReal,
     })
     return new HttpResponse(null, { status: 204 })
+  }),
+
+  // ---- Managed databases (FR-152, §4.21) ----
+  http.put('*/api/projects/:id/settings/deployment/databases/:environment', async ({ request, params }) => {
+    const a = ownerMutation(request, params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    const body = (await record(request)) as Schemas['PutManagedDatabaseRequest']
+    const d = deploymentOf(a.project)
+    const db = d.databases.find((x) => x.environment === params.environment)
+    if (!db) {
+      return problem(400, 'VALIDATION', 'The environment has no database host.', {
+        errors: { environment: ['The composition has no database host.'] },
+      })
+    }
+    if (body.provider !== db.provider && !(d.fakeMode && body.provider === 'fake')) {
+      return problem(400, 'STACK_INCOMPATIBLE', "These stack choices don't work together.", {
+        violations: [{ layer: 'database', option: body.provider, rule: 'R7', reason: `The composition's database is ${databaseLabel(db.provider)}` }],
+      })
+    }
+    if (db.provisioning?.state === 'queued' || db.provisioning?.state === 'running') {
+      return problem(409, 'CONFLICT', 'The database is being set up.')
+    }
+    const invalid = (field: string, message: string) =>
+      problem(400, 'VALIDATION', 'The database settings are invalid.', { errors: { [field]: [message] } })
+    let result: Partial<DatabaseCard>
+    let steps: string[]
+    if (db.provider === 'external') {
+      const cs = body.external?.connectionString.trim() ?? ''
+      if (!/^postgres(ql)?:\/\/\S+$/.test(cs) && !cs.includes('=')) {
+        return invalid('external.connectionString', 'Enter a postgres:// URI or an ADO.NET connection string.')
+      }
+      result = { connectionSummary: summaryOf(cs), name: null, resourceId: null }
+      steps = ['syncing_env']
+    } else {
+      if (db.needsConnection) {
+        if (!body.connectionId) {
+          return invalid('connectionId', `Pick one of your own ${databaseLabel(db.provider)} connections.`)
+        }
+        const connection = platformDb.connections.find((c) => c.id === body.connectionId && c.provider === db.provider)
+        if (!connection) {
+          return notFound('The connection was not found.')
+        }
+        if (connection.userId !== a.userId) {
+          return problem(403, 'CREDENTIAL_NOT_OWNER', 'You can only bind your own connection.')
+        }
+        db.binding = bindingOf(connection)
+      }
+      if (body.create && body.link) {
+        return invalid('create', 'Create a database or link one, not both.')
+      }
+      if (!body.create && !body.link && !db.resourceId) {
+        return invalid('create', 'Create a database or link an existing one.')
+      }
+      if (deploymentDb.down) {
+        return upstream()
+      }
+      const name = body.create?.name ?? (body.link ? `linked-${body.link.resourceId}` : (db.name ?? `${a.project.slug}-db`))
+      const region = body.create?.region ?? (db.provider === 'supabase' ? 'eu-west-2' : 'oregon')
+      const plan = body.create?.plan ?? (db.provider === 'railway' ? null : 'free')
+      const resourceId = body.link?.resourceId ?? db.resourceId ?? `${db.provider === 'render' ? 'dpg-' : ''}${nextId().slice(-8)}`
+      result = {
+        name,
+        resourceId,
+        region,
+        plan,
+        resourceUrl: `https://dashboard.example.com/${db.provider}/${resourceId}`,
+        connectionSummary: `${db.provider}.example.com:5432/${name.replace(/-/g, '_')}`,
+        ...(db.provider === 'render' && plan === 'free'
+          ? { warnings: ['render_free_expiry'], expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString() }
+          : {}),
+        ...(db.provider === 'supabase' && plan === 'free' ? { warnings: ['supabase_free_pausing'] } : {}),
+      }
+      steps = [body.link ? 'linking' : 'creating', 'waiting', 'syncing_env']
+    }
+    db.status = 'provisioning'
+    db.updatedAt = new Date().toISOString()
+    db.provisioning = newJob()
+    pendingProvisionings.set(db, { steps, failure: deploymentDb.provisioningFailure, result })
+    return HttpResponse.json<DatabaseCard>({ ...db, canBind: db.needsConnection }, { status: 202 })
+  }),
+
+  http.delete('*/api/projects/:id/settings/deployment/databases/:environment', async ({ request, params }) => {
+    const a = ownerMutation(request, params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    await record(request)
+    const d = deploymentOf(a.project)
+    const i = d.databases.findIndex((x) => x.environment === params.environment)
+    const db = d.databases[i]
+    if (!db) {
+      return notFound('The database was not found.')
+    }
+    d.databases[i] = makeDatabase(db.environment, db.provider as DatabaseProvider, { hostOption: db.hostOption, inComposition: db.inComposition })
+    d.derived = d.derived.map((r) => (r.key === 'DATABASE_URL' ? { ...r, hasValue: false, syncedAt: null } : r))
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post('*/api/projects/:id/settings/deployment/databases/:environment/restore', async ({ request, params }) => {
+    const a = ownerMutation(request, params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    await record(request)
+    const d = deploymentOf(a.project)
+    const db = d.databases.find((x) => x.environment === params.environment)
+    if (!db || db.status === 'not_configured') {
+      return problem(409, 'DEPLOYMENT_NOT_CONFIGURED', 'The database is not set up.')
+    }
+    if (!db.canRestore) {
+      return problem(409, 'DEPLOYMENT_ACTION_UNSUPPORTED', 'The platform cannot restore this database.', { platform: db.provider })
+    }
+    if (!db.paused) {
+      return problem(409, 'CONFLICT', 'The database is not paused.')
+    }
+    if (deploymentDb.down) {
+      return upstream()
+    }
+    db.paused = false
+    db.canRestore = false
+    db.status = 'provisioning'
+    db.provisioning = newJob()
+    pendingProvisionings.set(db, { steps: ['waiting'], failure: null, result: {} })
+    return HttpResponse.json<DatabaseCard>({ ...db, canBind: db.needsConnection }, { status: 202 })
   }),
 
   http.post('*/api/projects/:id/settings/deployment/targets/:component/verify', async ({ request, params }) => {

@@ -61,7 +61,7 @@ describe('Settings → Deployment targets (FR-144)', () => {
 
     const dbs = screen.getByRole('list', { name: 'Databases' })
     expect(within(dbs).getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual(['Production database', 'Preview database'])
-    expect(within(dbs).getAllByText('Database setup arrives with managed databases.')).toHaveLength(2)
+    expect(within(dbs).getAllByTestId('database-provider').map((e) => e.textContent)).toEqual(['Render Postgres', 'Render Postgres'])
     expect(screen.getByText(/deploys with its Fake provider/)).toBeInTheDocument()
   })
 
@@ -304,7 +304,7 @@ describe('Environment inventory (FR-145)', () => {
 
     const derived = await envRow('API_ORIGIN')
     expect(within(derived).getByTestId('env-source')).toHaveTextContent('Derived')
-    expect(within(derived).getByTestId('env-derived-from')).toHaveTextContent('From the backend target on Render (read-only)')
+    expect(within(derived).getByTestId('env-derived-from')).toHaveTextContent('From the backend target on Render · read-only')
     expect(within(derived).queryByRole('button')).not.toBeInTheDocument()
 
     const required = await envRow('JWT_SIGNING_KEY')

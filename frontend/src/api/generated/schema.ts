@@ -1426,6 +1426,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/settings/deployment/databases/{environment}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the environment's database (Owner, FR-152): provider (the composition's database host; fake in Fake mode), one of the caller's own connections, and one of create {region, plan, name?}, link {resourceId} or external {connectionString} (External only, stored encrypted). Answers 202 with the database card (provisioning); a database_provisioning job creates or links it and polls until available (10 s, 10-minute ceiling), then derived env vars are synced. Job failures (DATABASE_PROVISIONING_FAILED, DATABASE_PROVISIONING_TIMEOUT, PLATFORM_PLAN_LIMIT, CREDENTIAL_INVALID, CONNECTION_SCOPE_INSUFFICIENT, UPSTREAM_ERROR) are on the card's provisioning. */
+        put: operations["PutManagedDatabase"];
+        post?: never;
+        /** Unlink the environment's database (Owner, FR-152). The platform resource is never deleted; migration runs stay; derived env vars are recomputed and synced. */
+        delete: operations["DeleteManagedDatabase"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/databases/{environment}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore a paused Supabase project (Owner, FR-152, §4.21 "Paused"): POST /projects/{ref}/restore, then a database_provisioning job polls until it is available. Answers 202 with the card (provisioning). */
+        post: operations["RestoreManagedDatabase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's Supabase BaaS migration runs, newest first (any member, FR-153, §7 Migrations): environment, commit, files with durations, status, error and advisor findings; ?releaseVersionId filters to one version. */
+        get: operations["ListMigrationRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/migrations/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One migration run (any member, FR-153). */
+        get: operations["GetMigrationRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/phase/advance": {
         parameters: {
             query?: never;
@@ -2563,6 +2632,14 @@ export interface components {
             state: components["schemas"]["ProjectStateDto"];
             gate: null | components["schemas"]["GateDto"];
         };
+        /** @description A Supabase security advisor finding recorded on a run (FR-153). */
+        AdvisorFindingDto: {
+            name: string;
+            level: string;
+            title: string;
+            detail: null | string;
+            remediation: null | string;
+        };
         /** @enum {unknown} */
         AgentJobTrigger: "user_requested" | "phase_entered" | "gate_rejected" | "artifact_rejected" | "artifact_corrupted" | null;
         /**
@@ -3312,6 +3389,13 @@ export interface components {
             label: string;
             apiKey: string;
         };
+        /** @description FR-152: provision a database: region (Supabase: a region code or americas/emea/apac; Render: defaults to the backend's), plan, and an optional name. */
+        CreateManagedDatabaseRequest: {
+            region?: null | string;
+            plan?: null | string;
+            /** @description The resource name; defaults to the project's name (Render preview: `&lt;name&gt;-preview`). */
+            name?: null | string;
+        };
         /**
          * @description Add a platform connection (FR-142, §4.20): the provider, a label and the pasted token, plus optionally the account it
          *     is for (`accountId`: a team, account, workspace or organisation id the token reaches; required for a Railway
@@ -3471,6 +3555,25 @@ export interface components {
             expiresAt: null | string;
         };
         /**
+         * @description FR-152: the `database_provisioning` job of a database card: `state` (`queued`, `running`,
+         *     `succeeded`, `failed`), the current `step` (`queued`, `creating`, `linking`,
+         *     `waiting`, `syncing_env`), and on failure the error code (`DATABASE_PROVISIONING_FAILED`,
+         *     `DATABASE_PROVISIONING_TIMEOUT`, `PLATFORM_PLAN_LIMIT`, `CREDENTIAL_INVALID`,
+         *     `CONNECTION_SCOPE_INSUFFICIENT`, `UPSTREAM_ERROR`, `VALIDATION`) and message.
+         */
+        DatabaseProvisioningDto: {
+            /** Format: uuid */
+            jobId: null | string;
+            state: string;
+            step: null | string;
+            errorCode: null | string;
+            errorMessage: null | string;
+            /** Format: date-time */
+            startedAt: null | string;
+            /** Format: date-time */
+            finishedAt: null | string;
+        };
+        /**
          * @description A dead-lettered job (FR-51, §4.9): its type, project, status (`dead`, or `retried` once an Admin retried
          *     it), attempts made, last error and payload; `deadLetteredAt` is when it ran out of attempts.
          */
@@ -3539,14 +3642,39 @@ export interface components {
          */
         DeploymentComponent: "frontend" | "backend";
         /**
-         * @description A database card (FR-144, FR-152): per environment when the composition has a database host. Until M30 every card is
-         *     `status: not_configured` with the composition's `provider` (`supabase`, `render-postgres`,
-         *     `railway-postgres`, `external`).
+         * @description FR-152 database card (Settings → Deployment `databases[]`, one per environment when the composition has a
+         *     database host or a database is set): `provider` (`supabase`, `render`, `railway`, `external`,
+         *     `fake`), `status` (`not_configured`, `provisioning`, `available`, `error`, `paused`,
+         *     `expiring`, `removed`), the composition's `hostOption`, the binding ("connected by"), the resource, region,
+         *     plan, expiry, the dashboard link (`resourceUrl`), a connection summary without secrets (host, port, database), the
+         *     Supabase permissions the connection lacks (e.g. "API Key Secrets: Read"), the provisioning job, and `warnings`
+         *     (`render_free_expiry`, `supabase_free_pausing`, `supabase_free_project_limit`,
+         *     `preview_uses_production_database`). Secrets are never returned.
          */
         DeploymentDatabaseDto: {
             environment: components["schemas"]["DeploymentEnvironment"];
             provider: string;
             status: string;
+            hostOption: null | string;
+            inComposition: boolean;
+            needsConnection: boolean;
+            binding: null | components["schemas"]["DeploymentTargetBindingDto"];
+            canBind: boolean;
+            resourceId: null | string;
+            name: null | string;
+            region: null | string;
+            plan: null | string;
+            /** Format: date-time */
+            expiresAt: null | string;
+            paused: boolean;
+            canRestore: boolean;
+            resourceUrl: null | string;
+            connectionSummary: null | string;
+            missingPermissions: string[];
+            provisioning: null | components["schemas"]["DatabaseProvisioningDto"];
+            warnings: string[];
+            /** Format: date-time */
+            updatedAt: null | string;
         };
         /**
          * @description A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |
@@ -4001,6 +4129,10 @@ export interface components {
             checksWaitedSeconds: null | number;
             checksTimedOut: boolean;
             preview: null | components["schemas"]["PreviewCheckDto"];
+        };
+        /** @description FR-152: an External database's connection string (`postgres://`, `postgresql://` or ADO.NET), stored encrypted and never returned. */
+        ExternalDatabaseRequest: {
+            connectionString: string;
         };
         /**
          * @description Declared action for a file in a plan step (FR-29).
@@ -4675,6 +4807,11 @@ export interface components {
             email: string;
             password: string;
         };
+        /**
+         * @description Where a managed database lives (§5). Wire values: `supabase`, `render`, `railway`, `external`, `fake`.
+         * @enum {unknown}
+         */
+        ManagedDatabaseProvider: "supabase" | "render" | "railway" | "external" | "fake";
         /** @description A project member (FR-8). */
         MemberDto: {
             /** Format: uuid */
@@ -4731,6 +4868,47 @@ export interface components {
          * @enum {unknown}
          */
         MergeStrategy: "aide_merges" | "manual" | "fast_forward" | "squash";
+        /** @description One file a migration run applied: version, name and duration (ms). */
+        MigrationFileDto: {
+            version: string;
+            name: string;
+            /** Format: int64 */
+            ms: number;
+        };
+        /**
+         * @description FR-153, §7 Migrations page: one Supabase BaaS migration run: environment, database, release and version, commit, status
+         *     (`running`, `succeeded`, `failed`), the files applied with durations, the total duration, the error
+         *     (`MIGRATION_FAILED`, `MIGRATION_HISTORY_DIVERGED`) and the advisor findings.
+         */
+        MigrationRunDto: {
+            /** Format: uuid */
+            id: string;
+            environment: components["schemas"]["DeploymentEnvironment"];
+            /** Format: uuid */
+            managedDatabaseId: string;
+            provider: null | components["schemas"]["ManagedDatabaseProvider"];
+            /** Format: uuid */
+            releaseId: null | string;
+            /** Format: uuid */
+            releaseVersionId: string;
+            gitSha: string;
+            status: components["schemas"]["MigrationRunStatus"];
+            files: components["schemas"]["MigrationFileDto"][];
+            /** Format: int64 */
+            totalMs: number;
+            errorCode: null | string;
+            errorMessage: null | string;
+            advisorFindings: components["schemas"]["AdvisorFindingDto"][];
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            finishedAt: null | string;
+        };
+        /**
+         * @description A migration run's state (§5). Wire values: `running`, `succeeded`, `failed`.
+         * @enum {unknown}
+         */
+        MigrationRunStatus: "running" | "succeeded" | "failed";
         /**
          * @description A notification channel (FR-47). Secrets are never returned, only `hasSecret`. For `email` and
          *     `webhook`, `target` is the saved address or URL and the secret is a webhook's HMAC signing key. For
@@ -5309,6 +5487,19 @@ export interface components {
             connectionId?: null | string;
             create?: null | components["schemas"]["CreateDeploymentResourceRequest"];
             link?: null | components["schemas"]["LinkDeploymentResourceRequest"];
+        };
+        /**
+         * @description FR-152 (Owner): set the environment's database. `provider` must be the composition's database host (`fake`
+         *     also in Fake mode); exactly one of `create`, `link` (a resource id from the connection's picker) or
+         *     `external` (External only). `connectionId` is one of the caller's own platform connections (not for External).
+         */
+        PutManagedDatabaseRequest: {
+            provider: components["schemas"]["ManagedDatabaseProvider"];
+            /** Format: uuid */
+            connectionId?: null | string;
+            create?: null | components["schemas"]["CreateManagedDatabaseRequest"];
+            link?: null | components["schemas"]["LinkDeploymentResourceRequest"];
+            external?: null | components["schemas"]["ExternalDatabaseRequest"];
         };
         /** @description One readiness checklist item (FR-144): a stable `id`, `state` (`ok`, `warning`, `error`, `na`), a message and an optional fix link. */
         ReadinessItemDto: {
@@ -12063,6 +12254,313 @@ export interface operations {
             };
             /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PutManagedDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutManagedDatabaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDatabaseDto"];
+                };
+            };
+            /** @description VALIDATION (body, environment) or STACK_INCOMPATIBLE (the composition's database host doesn't allow this provider) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project or connection) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (changed concurrently) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteManagedDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project, or no database for the environment) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (changed concurrently, e.g. by the provisioning job) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RestoreManagedDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDatabaseDto"];
+                };
+            };
+            /** @description VALIDATION (environment) or CREDENTIAL_INVALID (the bound token was rejected) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description DEPLOYMENT_ACTION_UNSUPPORTED (not Supabase), CONFLICT (not paused, or changed concurrently) or DEPLOYMENT_NOT_CONFIGURED (the connection is gone) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Supabase's 429; Retry-After) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListMigrationRuns: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MigrationRunDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetMigrationRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MigrationRunDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

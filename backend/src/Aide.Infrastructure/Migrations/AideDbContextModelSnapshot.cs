@@ -655,6 +655,13 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AdvisorFindings")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("advisor_findings")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<string>("Applied")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

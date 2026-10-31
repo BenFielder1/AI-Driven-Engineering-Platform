@@ -163,6 +163,14 @@ export const errorMessages = {
   // FR-143, §6: GitHub Pages as a frontend host needs the App's Pages permission.
   PLATFORM_PERMISSION_MISSING:
     "The AIDE GitHub App needs the Pages permission. Update it in GitHub settings, then accept it on each installation.",
+  // Managed databases and migrations (FR-147, FR-152, FR-153, §4.21, §6). Job codes are recorded on a database card's
+  // provisioning job or a migration run; `{detail}` is added by withJobDetail() when the job recorded a message.
+  PREVIEW_DATABASE_DIVERGED:
+    "The preview database has migrations this branch no longer has. Reset the preview database to continue.",
+  MIGRATION_FAILED: "A database migration failed.",
+  MIGRATION_HISTORY_DIVERGED: "The database's migration history doesn't match the repository.",
+  DATABASE_PROVISIONING_FAILED: "Creating the database failed.",
+  DATABASE_PROVISIONING_TIMEOUT: "The database took too long to become available.",
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;
@@ -370,6 +378,31 @@ export const contextualErrorMessages = {
     VALIDATION: "Check the target's settings: some fields need attention.",
     UPSTREAM_ERROR: "A service AIDE needs for this failed or couldn't be reached, so nothing changed. Try again in a moment.",
     CONFLICT: "Someone else changed the deployment settings at the same time. The page now shows the latest; try again.",
+  },
+  /** PUT /api/projects/:id/settings/deployment/databases/:environment (FR-152). */
+  databaseSetup: {
+    FORBIDDEN: "Only project Owners can change the databases.",
+    CREDENTIAL_NOT_OWNER:
+      "You can only bind one of your own connections. Pick one of yours, or add a token under Connections.",
+    VALIDATION: "Check the database settings: some fields need attention.",
+    NOT_FOUND: "That connection no longer exists. Pick another one, or add a token under Connections.",
+    UPSTREAM_ERROR: "The database platform failed or couldn't be reached, so nothing changed. Try again in a moment.",
+    CONFLICT: "The database is busy or someone else changed it at the same time. The page now shows the latest; try again.",
+  },
+  /** DELETE /api/projects/:id/settings/deployment/databases/:environment (FR-152). */
+  databaseUnlink: {
+    FORBIDDEN: "Only project Owners can unlink a database.",
+    CONFLICT: "The database is busy (it's being set up or migrated). Try again when it's done.",
+  },
+  /** POST /api/projects/:id/settings/deployment/databases/:environment/restore (FR-152, §4.21 Paused). */
+  databaseRestore: {
+    FORBIDDEN: "Only project Owners can restore a paused database.",
+    DEPLOYMENT_ACTION_UNSUPPORTED: "{platform} can't restore this database, so nothing changed.",
+    CONFLICT: "The database isn't paused any more, or another action is running. The page now shows the latest.",
+    DEPLOYMENT_NOT_CONFIGURED: "This database isn't set up, so there's nothing to restore.",
+    CREDENTIAL_INVALID:
+      "The platform rejected the bound connection's token. Replace the token under Connections, then try again.",
+    UPSTREAM_ERROR: "The database platform failed or couldn't be reached, so nothing was restored. Try again in a moment.",
   },
   /** POST /api/projects/:id/settings/deployment/targets/:component/verify (FR-144). */
   deploymentVerify: {
@@ -863,6 +896,27 @@ export function platformCopy(
 ): string | null {
   const copy = copyForCode(code);
   return copy === null || !isErrorCode(code) ? copy : withPlanDetail(code, withPlatform(copy, platform), detail);
+}
+
+/** SPEC §6 job codes whose copy ends with ": {detail}." (the job's recorded message). */
+const detailCodes: ReadonlySet<string> = new Set(["MIGRATION_FAILED", "DATABASE_PROVISIONING_FAILED"]);
+
+/**
+ * FR-152, FR-153: copy for a code recorded on a database's provisioning job or a migration run, naming the platform.
+ * MIGRATION_FAILED and DATABASE_PROVISIONING_FAILED read "A database migration failed: {detail}." with the recorded
+ * message; PLATFORM_PLAN_LIMIT appends the platform's reason. `null` for unknown codes.
+ */
+export function withJobDetail(
+  code: string | null | undefined,
+  platform: string | null | undefined,
+  detail: string | null | undefined,
+): string | null {
+  const copy = platformCopy(code, platform, detail);
+  const d = detail?.trim().replace(/\.+$/, "");
+  if (copy === null || !code || !detailCodes.has(code) || !d) {
+    return copy;
+  }
+  return `${copy.replace(/\.$/, "")}: ${d}.`;
 }
 
 const statusFallback: Partial<Record<number, ErrorCode>> = {

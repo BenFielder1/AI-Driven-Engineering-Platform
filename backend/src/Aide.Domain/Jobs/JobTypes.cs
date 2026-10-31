@@ -64,6 +64,13 @@ public static class JobTypes
     public const string DeploymentSetup = "deployment_setup";
 
     /// <summary>
+    /// FR-152, §4.21: provisions or links one managed database (or follows a Supabase restore): the platform call, then a
+    /// poll every 10 seconds (deferring itself) until available, within 10 minutes; then the derived env vars are
+    /// recomputed and synced. Progress is on the database.
+    /// </summary>
+    public const string DatabaseProvisioning = "database_provisioning";
+
+    /// <summary>
     /// FR-47: fan out one notification-worthy event (or a gate reminder, FR-15): in-app notifications for its recipients,
     /// one delivery row per subscribed project channel, then a first delivery attempt. Queued in the event's transaction.
     /// </summary>

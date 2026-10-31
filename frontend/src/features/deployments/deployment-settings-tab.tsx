@@ -1,21 +1,14 @@
 import { panelClass } from '../../components/shared/panel-class'
-import { StatusBadge } from '../../components/shared/status-badge'
 import { Alert } from '../../components/ui/alert'
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import { Link } from '../../lib/navigation'
 import { cn } from '../../lib/utils'
 import type { Project } from '../projects/projects-api'
 import { deploymentTargetLabels, originModelLabel, originModelLabels } from './deployment-format'
+import { DatabaseCardView } from './database-card'
 import { DeploymentTargetCard } from './deployment-target-card'
 import { useDeploymentSettings, type DeploymentSettings } from './deployments-api'
 import { EnvInventorySection } from './env-inventory-section'
-
-const databaseProviderLabels: Readonly<Record<string, string>> = {
-  supabase: 'Supabase',
-  'render-postgres': 'Render Postgres',
-  'railway-postgres': 'Railway Postgres',
-  external: 'External database',
-}
 
 /** FR-146: the composition's origin model, the stack-packs vocabulary and the explanation. */
 function OriginModelCard({ projectId, origin }: { projectId: string; origin: DeploymentSettings['originModel'] }) {
@@ -51,8 +44,8 @@ function OriginModelCard({ projectId, origin }: { projectId: string; origin: Dep
   )
 }
 
-/** FR-144: database cards per environment; placeholders until managed databases (FR-152). */
-function DatabaseCards({ databases }: { databases: DeploymentSettings['databases'] }) {
+/** FR-152: one database card per environment (production first), when the composition has a database host. */
+function DatabaseCards({ project, databases, canManage }: { project: Project; databases: DeploymentSettings['databases']; canManage: boolean }) {
   if (databases.length === 0) {
     return null
   }
@@ -61,19 +54,10 @@ function DatabaseCards({ databases }: { databases: DeploymentSettings['databases
       <h3 id="databases-title" className="text-lg">
         Databases
       </h3>
-      <ul aria-label="Databases" className="grid gap-3 sm:grid-cols-2">
+      <ul aria-label="Databases" className="flex flex-col gap-3">
         {databases.map((db) => (
-          <li
-            key={db.environment}
-            aria-label={`${deploymentTargetLabels[db.environment]} database`}
-            className={cn(panelClass, 'flex flex-col gap-2 p-4 text-sm')}
-          >
-            <span className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-semibold">{deploymentTargetLabels[db.environment]} database</span>
-              <StatusBadge tone="neutral">Not set up</StatusBadge>
-            </span>
-            <span>{databaseProviderLabels[db.provider] ?? db.provider}</span>
-            <span className="text-muted-foreground">Database setup arrives with managed databases.</span>
+          <li key={db.environment} aria-label={`${deploymentTargetLabels[db.environment]} database`}>
+            <DatabaseCardView project={project} database={db} canManage={canManage} />
           </li>
         ))}
       </ul>
@@ -118,7 +102,7 @@ export function DeploymentSettingsTab({ project }: { project: Project; canEdit?:
             s.targets.map((t) => <DeploymentTargetCard key={t.component} project={project} target={t} canManage={s.canManage} />)
           )}
         </section>
-        <DatabaseCards databases={s.databases} />
+        <DatabaseCards project={project} databases={s.databases} canManage={s.canManage} />
         <EnvInventorySection projectId={project.id} inventory={s.env} canManage={s.canManage} />
       </div>
     )

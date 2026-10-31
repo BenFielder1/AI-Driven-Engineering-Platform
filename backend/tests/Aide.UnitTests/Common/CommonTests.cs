@@ -153,12 +153,24 @@ public class ErrorCodesTests
             ["GIT_AUTH_FAILED"] = 400,
             ["CONNECTION_SCOPE_INSUFFICIENT"] = 400,
             ["UPSTREAM_RATE_LIMITED"] = 429,
+            ["PREVIEW_DATABASE_DIVERGED"] = 409,
         };
 
         foreach (var (code, status) in expected)
         {
             Assert.Equal(status, ErrorCodes.StatusCodeFor(code));
         }
+    }
+
+    [Fact]
+    public void FR152_FR153_Database_and_migration_failures_are_job_codes_not_http_errors()
+    {
+        Assert.Equal(
+            ("DATABASE_PROVISIONING_FAILED", "DATABASE_PROVISIONING_TIMEOUT", "MIGRATION_FAILED", "MIGRATION_HISTORY_DIVERGED"),
+            (ErrorCodes.DatabaseProvisioningFailed, ErrorCodes.DatabaseProvisioningTimeout, ErrorCodes.MigrationFailed, ErrorCodes.MigrationHistoryDiverged));
+        Assert.All(
+            new[] { ErrorCodes.DatabaseProvisioningFailed, ErrorCodes.DatabaseProvisioningTimeout, ErrorCodes.MigrationFailed, ErrorCodes.MigrationHistoryDiverged },
+            c => Assert.Null(ErrorCodes.StatusCodeFor(c)));
     }
 
     [Fact]

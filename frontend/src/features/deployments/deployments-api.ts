@@ -18,6 +18,9 @@ export type TargetStatus = Schemas['DeploymentTargetStatus']
 export type DeploymentComponent = Schemas['DeploymentComponent']
 export type ReadinessItem = Schemas['ReadinessItemDto']
 export type ReadinessState = Schemas['ReadinessState']
+/** FR-152: one database card per environment. */
+export type DatabaseCard = Schemas['DeploymentDatabaseDto']
+export type ManagedDatabaseProvider = Schemas['ManagedDatabaseProvider']
 
 export const deploymentComponents = ['frontend', 'backend'] as const satisfies readonly DeploymentComponent[]
 
@@ -74,8 +77,11 @@ export function useDeployments(projectId: string, params: DeploymentListParams =
  */
 export const deploymentSettingsPolling = { setupMs: 2_000 }
 
+const jobActive = (state: string | undefined) => state === 'queued' || state === 'running'
+
+/** A target's setup job or a database's provisioning job (FR-152) is still working. */
 const setupRunning = (s: DeploymentSettings | undefined) =>
-  s?.targets.some((t) => t.setup?.state === 'queued' || t.setup?.state === 'running') ?? false
+  (s?.targets.some((t) => jobActive(t.setup?.state)) ?? false) || (s?.databases.some((d) => jobActive(d.provisioning?.state)) ?? false)
 
 /** FR-144: Settings → Deployment (targets, databases, env inventory, origin model), for any member. */
 export function useDeploymentSettings(projectId: string, enabled = true) {
@@ -251,5 +257,69 @@ export function useRollbackDeployment(projectId: string) {
         }),
       ),
     onSettled: invalidate,
+  })
+}
+
+/** Replaces one database card in the cached settings (after PUT or restore), so it updates before the refetch. */
+function useReplaceDatabase(projectId: string) {
+  const queryClient = useQueryClient()
+  return (card: DatabaseCard) => {
+    queryClient.setQueryData<DeploymentSettings>(deploymentKeys.settings(projectId), (old) =>
+      old ? { ...old, databases: old.databases.map((d) => (d.environment === card.environment ? card : d)) } : old,
+    )
+  }
+}
+
+/**
+ * FR-152 (Owner): bind a connection and provision, link or enter an External database; answers 202 with the card
+ * (provisioning job). The body can hold an External connection string, so the mutation is collected as soon as it
+ * has no observer (`gcTime: 0`), as for connection tokens.
+ */
+export function usePutManagedDatabase(projectId: string, environment: DeploymentTarget) {
+  const replace = useReplaceDatabase(projectId)
+  const invalidate = useInvalidateTargets(projectId)
+  return useMutation({
+    gcTime: 0,
+    mutationFn: async (body: Schemas['PutManagedDatabaseRequest']) =>
+      unwrap(
+        await api.PUT('/api/projects/{id}/settings/deployment/databases/{environment}', {
+          params: { path: { id: projectId, environment } },
+          body,
+        }),
+      ),
+    onSuccess: replace,
+    onSettled: invalidate,
+  })
+}
+
+/** FR-152 (Owner): unlink the environment's database (nothing is deleted on the platform). */
+export function useDeleteManagedDatabase(projectId: string, environment: DeploymentTarget) {
+  const invalidate = useInvalidateTargets(projectId)
+  return useMutation({
+    mutationFn: async () => {
+      const { error, response } = await api.DELETE('/api/projects/{id}/settings/deployment/databases/{environment}', {
+        params: { path: { id: projectId, environment } },
+      })
+      if (!response.ok) {
+        throw toApiError(error, response)
+      }
+    },
+    onSettled: invalidate,
+  })
+}
+
+/** FR-152, §4.21 (Owner): restore a paused (Supabase `INACTIVE`) database; answers 202 with the card. */
+export function useRestoreManagedDatabase(projectId: string, environment: DeploymentTarget) {
+  const replace = useReplaceDatabase(projectId)
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async () =>
+      unwrap(
+        await api.POST('/api/projects/{id}/settings/deployment/databases/{environment}/restore', {
+          params: { path: { id: projectId, environment } },
+        }),
+      ),
+    onSuccess: replace,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: deploymentKeys.settings(projectId) }),
   })
 }

@@ -95,6 +95,9 @@ public sealed class DatabaseMigrationRun
 
     public IReadOnlyList<AppliedMigration> Applied { get; set; } = [];
 
+    /// <summary>FR-153: the Supabase security advisor findings read after the run (jsonb, <c>[]</c> when none or not read).</summary>
+    public IReadOnlyList<Databases.AdvisorFinding> AdvisorFindings { get; set; } = [];
+
     public string? ErrorCode { get; set; }
 
     public string? ErrorMessage { get; set; }

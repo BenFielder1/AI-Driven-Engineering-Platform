@@ -9,17 +9,34 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aide.Api.Features.Deployments;
 
-/// <summary>The project's deployment facts: the resolved stack of its current version (or <c>null</c>), the frontend pack's public prefix and the targets.</summary>
-public sealed record DeploymentFacts(StackResolution? Stack, string? PublicPrefix, IReadOnlyList<DeploymentTarget> Targets)
+/// <summary>
+/// The project's deployment facts: the resolved stack of its current version (or <c>null</c>), the frontend pack's public
+/// prefix, the targets, and the usable databases as the derivation sees them (FR-152; values hold secrets, never logged).
+/// </summary>
+public sealed record DeploymentFacts(StackResolution? Stack, string? PublicPrefix, IReadOnlyList<DeploymentTarget> Targets, IReadOnlyList<DerivedEnvDatabase> Databases)
 {
+    public DeploymentFacts(StackResolution? stack, string? publicPrefix, IReadOnlyList<DeploymentTarget> targets)
+        : this(stack, publicPrefix, targets, [])
+    {
+    }
+
     public StackComposition? Composition => Stack?.Composition;
 
-    /// <summary>§4.22 input: the composition, the prefix and the targets (databases from M30).</summary>
+    /// <summary>§4.22 input: the composition, the prefix, the targets, the databases and the stack's database facts.</summary>
     public DerivedEnvInput DerivedInput => new(
         Composition,
         PublicPrefix,
         [.. Targets.Select(t => new DerivedEnvTarget(t.Component, t.Provider, t.Name, t.ProductionUrl, t.PreviewUrl))],
-        []);
+        Databases,
+        DatabaseFacts(Stack));
+
+    /// <summary>§4.22: serverless host mode (the stack requires <c>AIDE_RUN_MIGRATIONS</c>), the data pack's direct-URL need, and the pack rule for the server-side Supabase keys.</summary>
+    public static DerivedEnvDatabaseFacts DatabaseFacts(StackResolution? stack) => stack is null ? DerivedEnvDatabaseFacts.None : new(
+        stack.Env.Any(e => e.Key == DerivedEnvRules.RunMigrations),
+        stack.Packs.FirstOrDefault(p => p.Layer == StackLayers.Data)?.Pack.Manifest.Migrate?.NeedsDirectUrl ?? false,
+        stack.Env.Any(e => e.Key == DerivedEnvRules.SupabaseSecretKey));
+
+    public override string ToString() => $"DeploymentFacts {{ Targets = {Targets.Count}, Databases = {Databases.Count} }}";
 }
 
 /// <summary>A variable AIDE no longer writes under its old platform ids: the ids to delete on the targets of its components.</summary>
@@ -37,6 +54,7 @@ public sealed record DerivedRecompute(IReadOnlyList<DeploymentEnvVar> Changed, I
 public sealed partial class DeploymentInventoryService(
     AideDbContext db,
     VersionStackLoader stacks,
+    Databases.ManagedDatabaseSecrets databaseSecrets,
     DeploymentAccess access,
     TimeProvider time,
     ILogger<DeploymentInventoryService> logger)
@@ -46,7 +64,8 @@ public sealed partial class DeploymentInventoryService(
         var stack = (await stacks.CurrentAsync(projectId, cancellationToken, readBase: false)).Stack;
         var prefix = stack?.Packs.FirstOrDefault(p => p.Layer == StackLayers.Frontend)?.Pack.Manifest.PublicEnvPrefix;
         var targets = await db.DeploymentTargets.AsNoTracking().Where(t => t.ProjectId == projectId).ToListAsync(cancellationToken);
-        return new DeploymentFacts(stack, prefix, targets);
+        var databases = await db.ManagedDatabases.AsNoTracking().Where(d => d.ProjectId == projectId).ToListAsync(cancellationToken);
+        return new DeploymentFacts(stack, prefix, targets, [.. databases.Select(databaseSecrets.ForDerivation).OfType<DerivedEnvDatabase>()]);
     }
 
     /// <summary>The inventory rows (no values).</summary>

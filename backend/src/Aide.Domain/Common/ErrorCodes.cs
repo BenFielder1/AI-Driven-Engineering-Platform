@@ -323,6 +323,21 @@ public static class ErrorCodes
     /// </summary>
     public const string PlatformPermissionMissing = "PLATFORM_PERMISSION_MISSING";
 
+    /// <summary>FR-152, §4.21 (job code): provisioning or linking a managed database failed; recorded on the database card.</summary>
+    public const string DatabaseProvisioningFailed = "DATABASE_PROVISIONING_FAILED";
+
+    /// <summary>FR-152, §4.21 (job code): the database wasn't available within 10 minutes of polling.</summary>
+    public const string DatabaseProvisioningTimeout = "DATABASE_PROVISIONING_TIMEOUT";
+
+    /// <summary>FR-153, §4.21 (job code): a migration file failed to apply (its transaction rolled back).</summary>
+    public const string MigrationFailed = "MIGRATION_FAILED";
+
+    /// <summary>FR-153, §4.21 (job code): a recorded migration version's file changed or disappeared from the repository.</summary>
+    public const string MigrationHistoryDiverged = "MIGRATION_HISTORY_DIVERGED";
+
+    /// <summary>FR-147, FR-148 (409): the preview database has migrations the branch no longer has; reset it to continue.</summary>
+    public const string PreviewDatabaseDiverged = "PREVIEW_DATABASE_DIVERGED";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {
@@ -401,6 +416,7 @@ public static class ErrorCodes
         [DeploymentNotConfigured] = 409,
         [InvalidDeployment] = 409,
         [DeploymentActionUnsupported] = 409,
+        [PreviewDatabaseDiverged] = 409,
         [LinkExpired] = 410,
         [LinkUsed] = 409,
     };
