@@ -12,10 +12,11 @@ AIDE (AI-Driven Engineering Framework) coordinates specialised AI agents through
 | v2 | [`docs/v2/SPEC.md`](docs/v2/SPEC.md) | [`docs/v2/PROGRESS.md`](docs/v2/PROGRESS.md) | Built and merged (PR #13). Frozen; never edit except to fix links |
 | v3 | [`docs/v3/SPEC.md`](docs/v3/SPEC.md) | [`docs/v3/PROGRESS.md`](docs/v3/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
 | v4 | [`docs/v4/SPEC.md`](docs/v4/SPEC.md) | [`docs/v4/PROGRESS.md`](docs/v4/PROGRESS.md) | Built and merged (PR #27). Frozen; never edit except to fix links |
+| v5 | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: issue tracker imports, commit co-authorship, stack inference with an Analysis phase, shared deployment projects, local PostgreSQL 18 |
 
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/v<N>/` and add a row here.
-- **v4 is an increment on v3 (and v1, v2):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94, v4 at FR-113), and the spec-verifier checks the requirements of v1–v4.
-- **Scaffolding:** v2 and v4 M0 were baseline checks, and v3 migrated the frontend in place. Never re-scaffold the repo.
+- **v5 is an increment on v4 (and v1–v3):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94, v4 at FR-113, v5 at FR-163), and the spec-verifier checks the requirements of v1–v5.
+- **Scaffolding:** v2, v4 and v5 M0 were baseline checks, and v3 migrated the frontend in place. Never re-scaffold the repo.
 - Version assets (e.g. the logo in `docs/v2/brand/`) live under `docs/v<N>/`.
 
 ## Stack
@@ -67,7 +68,7 @@ deploy/
 scripts/ci/check-generated.sh  CI: fails if generated files differ from what is committed
 docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on dispatch)
-SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v4)
+SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v5)
 docs/                       Store SPEC.md + PROGRESS.md + research for each version
 ```
 
