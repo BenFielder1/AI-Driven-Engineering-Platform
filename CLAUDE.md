@@ -11,7 +11,7 @@ AIDE (AI-Driven Engineering Framework) coordinates specialised AI agents through
 | v1 | [`docs/v1/SPEC.md`](docs/v1/SPEC.md) | [`docs/v1/PROGRESS.md`](docs/v1/PROGRESS.md) | Built and merged (PR #1). Frozen; never edit except to fix links |
 | v2 | [`docs/v2/SPEC.md`](docs/v2/SPEC.md) | [`docs/v2/PROGRESS.md`](docs/v2/PROGRESS.md) | Built and merged (PR #13). Frozen; never edit except to fix links |
 | v3 | [`docs/v3/SPEC.md`](docs/v3/SPEC.md) | [`docs/v3/PROGRESS.md`](docs/v3/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
-| v4 | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: stack composition from stack-packs (replaces presets), GitLab + Bitbucket, deployment platforms and managed databases, LLM choice at creation and long outputs. Draft: [`docs/v4/DRAFT_SPEC.md`](docs/v4/DRAFT_SPEC.md) |
+| v4 | [`docs/v4/SPEC.md`](docs/v4/SPEC.md) | [`docs/v4/PROGRESS.md`](docs/v4/PROGRESS.md) | Built and merged (PR #27). Frozen; never edit except to fix links |
 
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/v<N>/` and add a row here.
 - **v4 is an increment on v3 (and v1, v2):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94, v4 at FR-113), and the spec-verifier checks the requirements of v1–v4.
@@ -68,10 +68,7 @@ scripts/ci/check-generated.sh  CI: fails if generated files differ from what is 
 docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on dispatch)
 SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v4)
-docs/v1/                    v1 SPEC.md + PROGRESS.md (frozen)
-docs/v2/                    v2 SPEC.md + PROGRESS.md (frozen) + AIDE brand assets
-docs/v3/                    v3 SPEC.md + PROGRESS.md (frozen)
-docs/v4/                    v4 DRAFT_SPEC.md (the draft behind SPEC.md)
+docs/                       Store SPEC.md + PROGRESS.md + research for each version
 ```
 
 ## Commands
