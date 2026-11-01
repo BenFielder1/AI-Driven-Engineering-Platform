@@ -324,7 +324,7 @@ Each FR names its layer in italics. Acceptance criteria follow the requirement, 
 - **FR-140** *(backend)* **Release** *(amends FR-64/65)*:
   - **GitLab merge:** `PUT …/merge` with:
     - `sha`: the reviewed head (409 = the head moved, so re-review is required)
-    - `squash` per the project's merge strategy
+    - `squash` per the GitLab project's `squash_option` (AIDE's `squash` and `fast_forward` strategies are Bitbucket only)
     - `should_remove_source_branch: false`
 
     The merged commit is `merge_commit_sha`, else `squash_commit_sha`, else the head `sha` (fast-forward).
@@ -805,7 +805,7 @@ Worked examples:
 
 ### 4.19 Git hosts (GitLab, Bitbucket)
 
-- **Common:** the provider interface (v2 `IGitProvider`) gains `ListReposAsync`, `ListOwnersAsync`, `CreateRepoAsync`, `GetMergeReadinessAsync`, `GetCommitStatusesAsync`, `FindReleaseRefsAsync` and `PublishReleaseAsync`. They're implemented for GitHub (existing behaviour), GitLab, Bitbucket and Local. Host base URLs are fixed (`https://gitlab.com`, `https://api.bitbucket.org/2.0`, `https://bitbucket.org`), except Admin-registered GitLab instances.
+- **Common:** the provider interface (v2 `IGitProvider`) gains `GetMergeReadinessAsync`, `GetCommitStatusesAsync`, `FindReleaseRefsAsync` and `PublishReleaseAsync`, implemented for GitLab and Bitbucket, and `ListReposAsync`, `ListOwnersAsync` and `CreateRepoAsync`, implemented for GitLab. Bitbucket's repo operations are in its repo service. GitHub keeps its v2 services, and Local has no host, so both answer NotSupported through the interface. Host base URLs are fixed (`https://gitlab.com`, `https://api.bitbucket.org/2.0`, `https://bitbucket.org`), except Admin-registered GitLab instances.
 - **GitLab** (`{base}/api/v4`, `Authorization: Bearer <token>`):
 
   | Operation | Call |
@@ -845,7 +845,7 @@ Worked examples:
 
   Merge strategies map from AIDE's per-project setting: `merge_commit` (default), `squash`, `fast_forward`.
 - **Polling budget** (no webhooks, v2 D-V2-8):
-  - **GitLab:** merge polls every 2 min for an hour, then every 10 min (v2). Status polls every 30 s while waiting, backing off when `RateLimit-Remaining` is below 10 % and on 429 (`Retry-After`).
+  - **GitLab:** merge polls every 2 min for an hour, then every 10 min (v2). Status polls every 30 s while waiting, backing off on 429 (`Retry-After`). Merge polls also back off when `RateLimit-Remaining` is below 10 %.
   - **Bitbucket** allows **1,000 requests per hour per user on repository endpoints**, with no remaining-count headers. So AIDE:
     - keeps a **per-connection token bucket** (900/h for background work)
     - polls a PR no more than once a minute
@@ -855,7 +855,7 @@ Worked examples:
 ### 4.20 Deployment platforms
 
 - **Provider interface** *(generalises v2 `IDeploymentProvider`)*:
-  - **Operations:** `ValidateConnectionAsync`, `ListAccountsAsync`, `ListResourcesAsync` (link picker), `SetupTargetAsync` (create or link, branch control, preview resource), `VerifyTargetAsync` (readiness checklist), `SyncEnvAsync`, `DeployAsync {environment, ref, sha}`, `GetDeploymentAsync`, `GetBuildLogTailAsync`, `FindDeploymentForShaAsync`, `CancelAsync`, `RollbackAsync`.
+  - **Operations:** `ValidateConnectionAsync`, `ListResourcesAsync` (link picker), `SetupTargetAsync` (create or link, branch control, preview resource), `VerifyTargetAsync` (readiness checklist), `SyncEnvAsync`, `DeployAsync {environment, ref, sha}`, `GetDeploymentAsync`, `GetBuildLogTailAsync`, `FindDeploymentForShaAsync`, `CancelAsync`, `RollbackAsync`. Accounts are listed by the platform connection validator (`ListAccountsAsync`), not the deployment provider.
   - **Capabilities record:** `ShaPinned`, `Previews`, `Rollback`, `PerEnvironmentVariables`, `RuntimeSecrets`.
   - **Providers:** Vercel, Netlify, Cloudflare (Workers Builds; Pages adopt-only), Render, Railway, GitHub Pages, Fake.
 - **Deployment states** (v2 §4.15) `queued → building → ready | error | canceled`, mapped per provider. The table gives the auth, create/link and branch-control calls:
@@ -920,7 +920,7 @@ Worked examples:
 ### 4.21 Managed databases and migrations
 
 - **Database states:** `provisioning → available | error`, plus `paused` (Supabase `INACTIVE`), `expiring` (Render free, within 7 days of `expiresAt`) and `removed`. Polling every 10 s, with a 10-minute ceiling (`DATABASE_PROVISIONING_TIMEOUT`).
-- **Supabase** (`https://api.supabase.com/v1`, scoped PAT, 120 requests/min per user per endpoint; 429 with `X-RateLimit-Reset`):
+- **Supabase** (`https://api.supabase.com/v1`, scoped PAT, 120 requests/min per user per endpoint; 429 with `X-RateLimit-Reset`; AIDE doesn't pre-limit Supabase calls: a 429 waits for that reset, without counting an attempt):
 
   | Step | Call |
   | --- | --- |
@@ -953,7 +953,7 @@ Worked examples:
     - **During `awaiting_merge`** *(build, 2026-10-31)*: while the PR is open, the merge poll runs the migrations on its current head once readiness passes, and again when the head moves. Readiness that can't be read waits for the next poll. A failed run sends `migration_failed` and the release keeps waiting; it runs again when the head moves or the database becomes usable again. `releases.migration_run_id` is the attempt's newest pre-merge run, until a succeeded production rollout run replaces a failed one after a person merges.
     - **Merged without migrating** *(build, 2026-10-31)*: AIDE can't stop a merge on the host. A merge of a head no pre-merge run succeeded on writes `MERGED_HEAD_MISMATCH` (`expectedHeadSha` null when none succeeded), and the migrations of that head first run in the production rollout, possibly after the platform auto-deployed the code.
   - **Production, host mode:** on the platform, as part of the backend's (or the serverless build's) deployment of the merge commit (FR-154).
-  - **Unmerged migrations never run against a production database**, in any mode.
+  - **Migrations from a branch that hasn't reached release never run against a production database.** Supabase BaaS applies a release's migrations just before its merge, as above.
   - **Unavailable BaaS database:** a Supabase database that is `paused`, `error` or `provisioning` (with a resource or connection), or is being restored, fails the migration step (a failed run and `migration_failed`). That blocks the release or fails the rollout; it doesn't count as having no database *(build, 2026-10-31)*.
 - **SQL Server / External:** AIDE stores and syncs the connection string only. Migrations run on the platform, as in host mode.
 
@@ -1082,7 +1082,7 @@ v1 §6 and v2 §6 apply. All new routes are under `/api`, with a ProblemDetails 
 - `/settings/deployment` changes shape to targets + databases.
 - Vercel-specific error codes are replaced by provider-neutral ones: `VERCEL_GIT_NOT_CONNECTED` → `PLATFORM_GIT_NOT_CONNECTED`, `VERCEL_PLAN_LIMIT` → `PLATFORM_PLAN_LIMIT`, `VERCEL_ERROR` → `PLATFORM_ERROR`.
 
-The web app and CLI ship together (D-V2-11 precedent). Record the `oasdiff` result in PROGRESS.md.
+The web app and CLI ship together (D-V2-11 precedent). Record the contract diff (`oasdiff`, or a manual review when it isn't available) in PROGRESS.md.
 
 | Method | Route | Body / query | Response | Errors (code → status) | Auth |
 | --- | --- | --- | --- | --- | --- |
@@ -1114,7 +1114,7 @@ The web app and CLI ship together (D-V2-11 precedent). Record the `oasdiff` resu
 | GET | /api/projects/:id/migrations · /migrations/:runId | releaseVersionId? | migration runs | `NOT_FOUND → 404` | member |
 | GET/PUT/DELETE | /api/projects/:id/settings/deployment/env[/:key] (changed) | + appliesTo[], public | inventory (`hasValue`, `source`, `derivedFrom`) | `VALIDATION → 400` (derived key, secret-looking public value), `UPSTREAM_ERROR → 502` | owner |
 | GET/POST | /api/projects/:id/deployments (changed) · /deployments/preview | component?, environment? / — | deployments / GET preview: the current rollout; POST preview: 202 `RolloutDto` (breaking from v2's deployment body; the web app is the only caller) *(build, 2026-10-31)* | `DEPLOYMENT_NOT_CONFIGURED → 409`, `PREVIEW_DATABASE_DIVERGED → 409`, `INVALID_STATE → 409` (a reset is pending) | member / writer |
-| POST | /api/projects/:id/deployments/:deploymentId/rollback (renamed from /promote; /promote kept as an alias for Vercel) · /redeploy | — | 202 deployment | `INVALID_DEPLOYMENT → 409`, `DEPLOYMENT_ACTION_UNSUPPORTED → 409` | owner |
+| POST | /api/projects/:id/deployments/:deploymentId/rollback (renamed from /promote; /promote kept as an alias for Vercel) · /redeploy | — | 202 deployment | `INVALID_DEPLOYMENT → 409`, `DEPLOYMENT_ACTION_UNSUPPORTED → 409`, `FORBIDDEN → 403` | rollback: owner; redeploy: writer for preview, owner for production |
 | PATCH | /api/projects/:id/settings/git (changed) | + connectionId (rebind, GitLab/Bitbucket); mergeStrategy adds `fast_forward` and `squash` (Bitbucket only; build decision 2026-10-29; `VALIDATION` on GitHub and GitLab). A project can't be moved onto `gitlab` or `bitbucket` here: `VALIDATION` on `provider`. The binding is set on create or import and changed only by rebind | section | `CREDENTIAL_NOT_OWNER → 403`, `GIT_NOT_CONNECTED → 409`, `FORBIDDEN → 403` | owner |
 | GET | /api/llm/providers (new) | — | enabled providers: `usable`, `reason`, `isDefault`, connections, catalog (id, name, maxOutputTokens, contextTokens, recommended), defaultModel | — | user |
 | PATCH | /api/projects/:id/settings/llm (changed) | as v2 | section (providers filtered to enabled) | + `LLM_PROVIDER_UNAVAILABLE → 400` | owner |
@@ -1207,7 +1207,7 @@ v1–v3 §8 apply, plus:
   - **LLM providers:** a disabled provider can't be reached through any API path (FR-157). The Fake LLM provider is off on Railway.
 - **Reliability:**
   - Setup, provisioning, rollout, migration and poll work are jobs in the v1 job table (outbox, leases, retries), and a restart resumes them.
-  - Per-provider rate budgets (§4.19–§4.21) are enforced in one shared limiter keyed by connection. Rate-limit waits never count as failed attempts.
+  - Per-provider rate budgets (§4.19–§4.21) are enforced by a limiter per provider, keyed by connection or account. Rate-limit waits never count as failed attempts.
   - Migration runs are idempotent by `(managed_database_id, version)`. A crashed run resumes from the last committed file.
   - Streaming LLM calls hold one connection per running agent for up to `Llm:RequestTimeout`. The existing worker concurrency limits apply.
 - **Performance:**
