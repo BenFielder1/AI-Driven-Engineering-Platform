@@ -177,6 +177,18 @@ export const errorMessages = {
   MIGRATION_HISTORY_DIVERGED: "The database's migration history doesn't match the repository.",
   DATABASE_PROVISIONING_FAILED: "Creating the database failed.",
   DATABASE_PROVISIONING_TIMEOUT: "The database took too long to become available.",
+  // Issue trackers (FR-165–FR-173, §6). `{tracker}`, `{detail}`, `{size}` and `{limit}` are completed by trackerCopy().
+  TRACKER_SITE_NOT_ALLOWED: "Enter your Jira Cloud site, like acme.atlassian.net.",
+  TRACKER_NOT_CONNECTED: "Connect {tracker} to do this.",
+  TRACKER_PERMISSION_MISSING: "The AIDE GitHub App needs the Issues permission. Update it in GitHub settings.",
+  TRACKER_QUERY_INVALID: "{tracker} couldn't run that query: {detail}",
+  TRACKER_RATE_LIMITED: "{tracker} is rate limiting requests. AIDE will retry.",
+  TRACKER_IMPORT_FAILED: "The import from {tracker} failed: {detail}",
+  SOURCE_ITEMS_TOO_LARGE:
+    "These items are too large for the AI model ({size} of {limit}). Remove some items or choose a larger model.",
+  // FR-172: a spec warning, never a failure (D-V5-6).
+  UNCOVERED_SOURCE_ITEMS:
+    "Some imported items aren't cited by any requirement. This is a warning: the specification can still be approved.",
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;
@@ -363,6 +375,31 @@ export const contextualErrorMessages = {
     NOT_FOUND: "That connection no longer exists. The list now shows the latest.",
     CREDENTIAL_INVALID:
       "{provider} rejected this token, so it wasn't saved. Check that you copied the whole token, that it hasn't expired or been revoked, and that it is the type of token described above.",
+  },
+  /** FR-165 Jira: the email and token are checked together. */
+  jiraConnection: {
+    CREDENTIAL_INVALID:
+      "Jira rejected this email and token, so nothing was saved. Check the site and email, and that you copied the whole token.",
+  },
+  /** FR-166 Linear: a personal API key. */
+  linearConnection: {
+    CREDENTIAL_INVALID: "Linear rejected this key, so nothing was saved. Check that you copied the whole key and that it is active.",
+  },
+  /** GET /api/me/trackers/:provider/containers · POST …/search (FR-169). `{tracker}` is completed by trackerBrowseMessage(). */
+  trackerBrowse: {
+    CONNECTION_SCOPE_INSUFFICIENT: "The {tracker} token doesn't have read access to this.",
+    CREDENTIAL_NOT_OWNER: "That connection belongs to someone else. Use one of your own.",
+    NOT_FOUND: "{tracker} couldn't find that, or the connection can't see it.",
+    UPSTREAM_RATE_LIMITED: "{tracker} is rate limiting requests. Try again in a few minutes.",
+    UPSTREAM_ERROR: "{tracker} returned an error or couldn't be reached. Try again later.",
+  },
+  /** POST and DELETE /api/projects/:id/sources[/:importId[/reimport]] (FR-171, FR-173). */
+  sourceImport: {
+    WRONG_PHASE: "Tracker items can only change during Refinement. New work belongs in a new version, or after a rollback.",
+    FORBIDDEN: "Only Contributors and Owners can change the source items.",
+    CREDENTIAL_NOT_OWNER: "That connection belongs to someone else. Use one of your own.",
+    NOT_FOUND: "That import or connection no longer exists. The list now shows the latest.",
+    CONFLICT: "Someone else changed the source items at the same time. The list now shows the latest; try again.",
   },
   /** FR-142 Vercel: the v2 copy (FR-87), naming team tokens. */
   vercelConnection: {
@@ -710,6 +747,7 @@ export type ErrorContext = keyof typeof contextualErrorMessages;
 const retryAfterContexts: ReadonlySet<ErrorContext> = new Set<ErrorContext>([
   "bitbucketConnection",
   "platformConnection",
+  "trackerBrowse",
   "bitbucketRepos",
   "createBitbucketRepo",
   "createProjectBitbucket",
@@ -848,6 +886,47 @@ export function platformConnectionMessage(error: unknown, provider: { id: string
     : undefined;
   const context = code !== null && overrides?.[code] ? providerContext : "platformConnection";
   return errorMessage(error, context).replaceAll("{provider}", provider.name);
+}
+
+type TrackerCopyCode =
+  | "TRACKER_NOT_CONNECTED"
+  | "TRACKER_QUERY_INVALID"
+  | "TRACKER_RATE_LIMITED"
+  | "TRACKER_IMPORT_FAILED"
+  | "SOURCE_ITEMS_TOO_LARGE";
+
+/** SPEC §6: the tracker codes whose copy has placeholders. The server composes them in full, so its title wins. */
+const composedTrackerCodes: ReadonlySet<string> = new Set<TrackerCopyCode>([
+  "TRACKER_NOT_CONNECTED",
+  "TRACKER_QUERY_INVALID",
+  "TRACKER_RATE_LIMITED",
+  "TRACKER_IMPORT_FAILED",
+  "SOURCE_ITEMS_TOO_LARGE",
+]);
+
+/** SPEC §6: tracker copy with its placeholders filled. No placeholder ever reaches the screen. */
+export function trackerCopy(code: TrackerCopyCode, tracker?: string | null, detail?: string | null): string {
+  const d = detail?.trim() ?? "";
+  switch (code) {
+    case "TRACKER_NOT_CONNECTED":
+      return errorMessages.TRACKER_NOT_CONNECTED.replace("{tracker}", tracker ?? "this tracker");
+    case "TRACKER_QUERY_INVALID":
+      return errorMessages.TRACKER_QUERY_INVALID.replace("{tracker}", tracker ?? "The tracker").replace("{detail}", d === "" ? "the query is invalid" : d);
+    case "TRACKER_RATE_LIMITED":
+      return errorMessages.TRACKER_RATE_LIMITED.replace("{tracker}", tracker ?? "The tracker");
+    case "TRACKER_IMPORT_FAILED":
+      return errorMessages.TRACKER_IMPORT_FAILED.replace("{tracker}", tracker ?? "the tracker").replace(
+        "{detail}",
+        d === "" ? "it returned an error or couldn't be reached." : d,
+      );
+    case "SOURCE_ITEMS_TOO_LARGE":
+      return errorMessages.SOURCE_ITEMS_TOO_LARGE.replace(" ({size} of {limit})", "");
+  }
+}
+
+/** FR-169: copy for a failed browse call, naming the tracker. */
+export function trackerBrowseMessage(error: unknown, tracker: string): string {
+  return errorMessage(error, "trackerBrowse").replaceAll("{tracker}", tracker);
 }
 
 /**
@@ -1234,6 +1313,11 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
     }
     if (error.errorCode === "DEPLOYMENT_GROUP_INVALID") {
       return deploymentGroupInvalidMessage(error);
+    }
+    if (error.errorCode && composedTrackerCodes.has(error.errorCode)) {
+      return error.message.startsWith("Request failed with HTTP")
+        ? trackerCopy(error.errorCode as TrackerCopyCode)
+        : error.message;
     }
     if (error.errorCode === "INVALID_STATE") {
       const reason = error.message.startsWith("Request failed with HTTP") ? "" : error.message.trim();

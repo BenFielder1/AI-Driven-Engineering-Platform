@@ -13,6 +13,7 @@ namespace Aide.Api.Features.Deployments;
 public sealed partial class FakeDeploymentProviderGuard(
     IOptions<DeploymentOptions> options,
     IOptions<DatabaseOptions> databases,
+    IOptions<Infrastructure.Trackers.TrackerOptions> trackers,
     IHostEnvironment environment,
     ILogger<FakeDeploymentProviderGuard> logger) : IHostedService
 {
@@ -45,6 +46,19 @@ public sealed partial class FakeDeploymentProviderGuard(
                 break;
         }
 
+        switch (FakeProviderPolicy.Decide(trackers.Value.UseFake, environment.EnvironmentName, settings.AllowFake))
+        {
+            case FakeProviderDecision.Refused:
+                throw new InvalidOperationException(
+                    $"Trackers:Provider=Fake is only allowed in Development or Testing (this is {environment.EnvironmentName}). "
+                    + "Set Deployments:AllowFake=true as well to use it for E2E, or leave Trackers:Provider unset.");
+            case FakeProviderDecision.AllowedWithWarning:
+                LogFakeTrackersEnabled(logger, environment.EnvironmentName);
+                break;
+            default:
+                break;
+        }
+
         return Task.CompletedTask;
     }
 
@@ -55,4 +69,7 @@ public sealed partial class FakeDeploymentProviderGuard(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Fake database provider enabled in {Environment} (Deployments:AllowFake) — not for real use")]
     private static partial void LogFakeDatabasesEnabled(ILogger logger, string environment);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Fake issue tracker provider enabled in {Environment} (Deployments:AllowFake) — not for real use")]
+    private static partial void LogFakeTrackersEnabled(ILogger logger, string environment);
 }

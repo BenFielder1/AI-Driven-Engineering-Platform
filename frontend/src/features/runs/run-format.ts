@@ -9,7 +9,9 @@ export function describeRunError(error: string): { title: string | null; message
   const match = /^([A-Z][A-Z_]*): ([\s\S]*)$/.exec(error)
   const code = match?.[1]
   if (match && code && Object.hasOwn(errorMessages, code)) {
-    return { title: errorMessages[code as ErrorCode], message: match[2] ?? '' }
+    const title: string = errorMessages[code as ErrorCode]
+    // Copy with placeholders ("{size} of {limit}") can't be a title: the recorded message has the real values.
+    return { title: /\{\w+\}/.test(title) ? null : title, message: match[2] ?? '' }
   }
   return { title: null, message: error }
 }
@@ -28,6 +30,8 @@ export const runWarningLabels: Readonly<Record<string, string>> = {
   summary_wait_timeout:
     'The codebase summary wasn’t ready after 10 minutes, so the run continued without it.',
   summary_unavailable: 'There was no codebase summary for this version, so the run continued without it.',
+  source_items_unavailable:
+    'An import from an issue tracker failed or wasn’t finished after 10 minutes, so the run continued without those items.',
   output_truncated:
     'The model hit its output limit and was still writing after 5 continuations, so this output may be incomplete.',
   legacy_agent_mapped:

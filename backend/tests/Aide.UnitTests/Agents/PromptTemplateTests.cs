@@ -90,8 +90,8 @@ public class PromptTemplateTests
         Assert.True(PromptTemplate.Parse(AgentKind.SpecGenerator, Source.ReplaceLineEndings("\r\n")).IsSuccess);
 
     [Theory]
-    [InlineData(AgentKind.IdeaRefinement, "4", new[] { "PROJECT_NAME", "IDEA" })]
-    [InlineData(AgentKind.SpecGenerator, "5", new[] { "PROJECT_REQUEST" })]
+    [InlineData(AgentKind.IdeaRefinement, "5", new[] { "PROJECT_NAME", "IDEA" })]
+    [InlineData(AgentKind.SpecGenerator, "6", new[] { "PROJECT_REQUEST" })]
     [InlineData(AgentKind.PlanGenerator, "5", new[] { "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "MAX_FILES_PER_STEP" })]
     [InlineData(AgentKind.CodeGenerator, "4", new[] { "MAX_FILES_PER_STEP", "STEP_NUMBER", "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "STEP_TITLE", "STEP_TASK", "DECLARED_FILES" })]
     [InlineData(AgentKind.CodeReview, "7", new[] { "REVIEW_CYCLE", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "CODE", "MAX_FILES_PER_STEP" })]
@@ -138,7 +138,8 @@ public class PromptTemplateTests
                     .Where(m => !InlineIntegerInputs.Contains(m.Groups["name"].Value));
                 foreach (var occurrence in occurrences)
                 {
-                    var wrapped = new Regex($@"<(?<tag>[a-z][a-z0-9_]*)>\n{Regex.Escape(occurrence.Value)}\n</\k<tag>>");
+                    // §4.26: a data tag may say how far it is trusted (<source_items trust="untrusted">).
+                    var wrapped = new Regex($@"<(?<tag>[a-z][a-z0-9_]*)(?: trust=""untrusted"")?>\n{Regex.Escape(occurrence.Value)}\n</\k<tag>>");
                     Assert.True(wrapped.IsMatch(text), $"{agent.ToWire()}: {occurrence.Value} is not alone in a data tag");
                     Assert.Equal(Regex.Count(text, Regex.Escape(occurrence.Value)), wrapped.Count(text));
                 }

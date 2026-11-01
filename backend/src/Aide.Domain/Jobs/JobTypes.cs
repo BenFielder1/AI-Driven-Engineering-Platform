@@ -51,6 +51,12 @@ public static class JobTypes
     public const string RepositoryAnalysis = "repository_analysis";
 
     /// <summary>
+    /// FR-170: fetches one import's items once, stores them and writes a new locked <c>source_items</c> version. A rate limit defers
+    /// it (<c>Retry-After</c>) without using an attempt.
+    /// </summary>
+    public const string TrackerImport = "tracker_import";
+
+    /// <summary>
     /// FR-90, FR-91, §4.15, NFR-REL2: one deployment row: creates it at the provider (a production deployment first adopts the
     /// one Vercel made for the merge commit) and polls it — every 10 seconds for 2 minutes, then every 30, up to 30 minutes —
     /// by deferring itself between polls, so polling survives restarts.

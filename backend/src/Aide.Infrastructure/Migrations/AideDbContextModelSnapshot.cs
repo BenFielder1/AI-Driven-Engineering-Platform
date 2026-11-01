@@ -2812,6 +2812,138 @@ namespace Aide.Infrastructure.Migrations
                     b.ToTable("state_transitions", (string)null);
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.TrackerImport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Drift")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("drift");
+
+                    b.Property<DateTimeOffset?>("DriftCheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("drift_checked_at");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<Guid?>("GitConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("git_connection_id");
+
+                    b.Property<long?>("GithubUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("github_user_id");
+
+                    b.Property<int>("ItemCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("item_count");
+
+                    b.Property<string>("Items")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("items")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<string>("Options")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("options");
+
+                    b.Property<Guid?>("PlatformConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("platform_connection_id");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("Query")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("query");
+
+                    b.Property<Guid>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
+
+                    b.Property<int>("RenderedBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("rendered_bytes");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<Guid?>("SourceArtifactId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_artifact_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("SupersedesImportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supersedes_import_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tracker_imports");
+
+                    b.HasIndex("GitConnectionId")
+                        .HasDatabaseName("ix_tracker_imports_git_connection_id");
+
+                    b.HasIndex("PlatformConnectionId")
+                        .HasDatabaseName("ix_tracker_imports_platform_connection_id");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_tracker_imports_project_id");
+
+                    b.HasIndex("SourceArtifactId")
+                        .HasDatabaseName("ix_tracker_imports_source_artifact_id");
+
+                    b.HasIndex("SupersedesImportId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tracker_imports_supersedes_import_id")
+                        .HasFilter("supersedes_import_id IS NOT NULL");
+
+                    b.HasIndex("ReleaseVersionId", "Status")
+                        .HasDatabaseName("ix_tracker_imports_release_version_id_status");
+
+                    b.ToTable("tracker_imports", (string)null);
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.UserExternalLogin", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3752,6 +3884,47 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired()
                         .HasConstraintName("fk_state_transitions_release_versions_release_version_id");
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.TrackerImport", b =>
+                {
+                    b.HasOne("Aide.Domain.Entities.GitConnection", null)
+                        .WithMany()
+                        .HasForeignKey("GitConnectionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_tracker_imports_git_connections_git_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.PlatformConnection", null)
+                        .WithMany()
+                        .HasForeignKey("PlatformConnectionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_tracker_imports_platform_connections_platform_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_tracker_imports_projects_project_id");
+
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_tracker_imports_release_versions_release_version_id");
+
+                    b.HasOne("Aide.Domain.Entities.Artifact", null)
+                        .WithMany()
+                        .HasForeignKey("SourceArtifactId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_tracker_imports_artifacts_source_artifact_id");
+
+                    b.HasOne("Aide.Domain.Entities.TrackerImport", null)
+                        .WithMany()
+                        .HasForeignKey("SupersedesImportId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_tracker_imports_tracker_imports_supersedes_import_id");
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.UserExternalLogin", b =>

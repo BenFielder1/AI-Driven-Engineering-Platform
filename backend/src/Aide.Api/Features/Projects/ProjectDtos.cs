@@ -266,6 +266,13 @@ public sealed record CreateProjectRequest
     public Stack.StackCompositionRequest? Stack { get; init; }
 
     /// <summary>
+    /// FR-171 (wizard Idea step): tracker items to import, each a <c>tracker_import</c> job queued with the project. The idea stays required (D-V5-6).
+    /// A failed import never blocks creation. <c>VALIDATION</c> on <c>sourceImports[i].selection.*</c>; another user's connection is
+    /// 403 <c>CREDENTIAL_NOT_OWNER</c>.
+    /// </summary>
+    public IReadOnlyList<Trackers.SourceImportRequest>? SourceImports { get; init; }
+
+    /// <summary>
     /// FR-88 (wizard Deployment step): deploy to Vercel with one of the caller's own Vercel connections, linking an existing
     /// Vercel project or creating one; omitted or <c>null</c> = no deployment (it can be set later in Settings →
     /// Deployment). Needs a GitHub-backed project (400 <c>VALIDATION</c> on <c>deployment.provider</c> for Local).

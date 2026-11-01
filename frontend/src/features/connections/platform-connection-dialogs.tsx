@@ -7,12 +7,16 @@ import { ErrorSummary } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { fieldErrorSummary } from '../../components/ui/form-errors'
 import { ModalDialog } from '../../components/ui/modal-dialog'
+import { SelectField } from '../../components/ui/select-field'
 import { TextField } from '../../components/ui/text-field'
-import { applyFieldErrors, isApiError, platformConnectionMessage } from '../../lib/errors'
+import { applyFieldErrors, errorMessages, isApiError, platformConnectionMessage } from '../../lib/errors'
 import { GitHostLink } from '../git-hosts/git-host-link'
 import {
+  isTrackerPlatform,
   useCreatePlatformConnection,
+  usePlatformResources,
   useRenamePlatformConnection,
+  useUpdateTrackerConnection,
   type PlatformConnection,
   type PlatformProvider,
 } from './platform-connections-api'
@@ -29,8 +33,34 @@ const label = z
   .min(1, { error: 'Give the connection a label, such as "Acme team".' })
   .max(LABEL_MAX, { error: `Labels are at most ${String(LABEL_MAX)} characters.` })
 
+/** FR-165: an optional date from a date field; the connection expires at the start of that day, UTC. */
+const expiryDate = z
+  .string()
+  .refine((v) => v === '' || !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), { error: 'Enter a valid date.' })
+const toExpiresAt = (date: string) => (date === '' ? null : new Date(`${date}T00:00:00Z`).toISOString())
+
+/** The site as Jira shows it: a pasted URL is reduced to its host. */
+const normalizeSite = (site: string) =>
+  site
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+
 const addSchema = (info: PlatformProviderInfo) =>
   z.object({
+    site: z.string().superRefine((v, ctx) => {
+      if (info.id === 'jira' && !/^[a-z0-9-]+\.atlassian\.net$/.test(normalizeSite(v))) {
+        ctx.addIssue({ code: 'custom', message: errorMessages.TRACKER_SITE_NOT_ALLOWED })
+      }
+    }),
+    email: z.string().superRefine((v, ctx) => {
+      if (info.id === 'jira' && !/^[^\s@]+@[^\s@]+$/.test(v.trim())) {
+        ctx.addIssue({ code: 'custom', message: 'Enter your Atlassian account email.' })
+      }
+    }),
+    expiresAt: expiryDate,
+    acceptanceCriteriaField: z.string().trim().max(100, { error: 'The field ID is at most 100 characters.' }),
     label,
     token: z
       .string()
@@ -51,6 +81,10 @@ const idsFor = (provider: PlatformProvider) =>
     label: `${provider}-connection-label`,
     token: `${provider}-connection-token`,
     accountId: `${provider}-connection-account-id`,
+    site: `${provider}-connection-site`,
+    email: `${provider}-connection-email`,
+    expiresAt: `${provider}-connection-expires-at`,
+    acceptanceCriteriaField: `${provider}-connection-ac-field`,
   }) as const
 
 /** FR-142, §4.20/§4.21: exactly what to create on the provider, with a link to its token page. */
@@ -114,7 +148,7 @@ export function AddPlatformConnectionDialog({
     setError,
     setValue,
     formState: { errors, isSubmitted },
-  } = useForm<AddValues>({ resolver: zodResolver(addSchema(info)), defaultValues: { label: '', token: '', accountId: '' } })
+  } = useForm<AddValues>({ resolver: zodResolver(addSchema(info)), defaultValues: { label: '', token: '', accountId: '', site: '', email: '', expiresAt: '', acceptanceCriteriaField: '' } })
 
   const close = () => {
     create.reset()
@@ -125,7 +159,20 @@ export function AddPlatformConnectionDialog({
     setServerErrors([])
     const accountId = info.accountIdField && v.accountId !== '' ? v.accountId : null
     create.mutate(
-      { provider, label: v.label, token: v.token, accountId },
+      {
+        provider,
+        label: v.label,
+        token: v.token,
+        accountId,
+        ...(isTrackerPlatform(provider) ? { expiresAt: toExpiresAt(v.expiresAt) } : {}),
+        ...(provider === 'jira'
+          ? {
+              site: normalizeSite(v.site),
+              email: v.email.trim(),
+              ...(v.acceptanceCriteriaField === '' ? {} : { acceptanceCriteriaField: v.acceptanceCriteriaField }),
+            }
+          : {}),
+      },
       {
         onSuccess: (created) => {
           create.reset()
@@ -134,11 +181,15 @@ export function AddPlatformConnectionDialog({
         onError: (error) => {
           setValue('token', '')
           create.reset()
+          if (isApiError(error, 'TRACKER_SITE_NOT_ALLOWED')) {
+            setError('site', { type: 'server', message: errorMessages.TRACKER_SITE_NOT_ALLOWED }, { shouldFocus: true })
+            return
+          }
           if (isApiError(error, 'CREDENTIAL_INVALID') || isApiError(error, 'CONNECTION_SCOPE_INSUFFICIENT')) {
             setError('token', { type: 'server', message: platformConnectionMessage(error, info) }, { shouldFocus: true })
             return
           }
-          const unmatched = applyFieldErrors(error, setError, ['label', 'token', 'accountId'])
+          const unmatched = applyFieldErrors(error, setError, ['label', 'token', 'accountId', 'site', 'email', 'expiresAt', 'acceptanceCriteriaField'])
           setServerErrors(
             unmatched.length > 0 ? unmatched : isApiError(error, 'VALIDATION') ? [] : [platformConnectionMessage(error, info)],
           )
@@ -164,6 +215,29 @@ export function AddPlatformConnectionDialog({
         />
         <WhatToCreate info={info} />
         <TextField id={ids.label} label="Label" maxLength={LABEL_MAX} autoComplete="off" error={errors.label?.message} {...register('label')} />
+        {provider === 'jira' && (
+          <>
+            <TextField
+              id={ids.site}
+              label="Jira site"
+              hint="Your Jira Cloud address, like acme.atlassian.net."
+              autoComplete="off"
+              spellCheck={false}
+              error={errors.site?.message}
+              {...register('site')}
+            />
+            <TextField
+              id={ids.email}
+              label="Atlassian account email"
+              type="email"
+              hint="Stored encrypted with the token."
+              autoComplete="off"
+              spellCheck={false}
+              error={errors.email?.message}
+              {...register('email')}
+            />
+          </>
+        )}
         <TextField
           id={ids.token}
           label={info.tokenNoun.charAt(0).toUpperCase() + info.tokenNoun.slice(1)}
@@ -186,12 +260,154 @@ export function AddPlatformConnectionDialog({
             {...register('accountId')}
           />
         )}
+        {isTrackerPlatform(provider) && (
+          <TextField
+            id={ids.expiresAt}
+            label="Expiry date (optional)"
+            hint={`${info.name} doesn't report when a token expires. Enter it, and AIDE warns you 14 days before.`}
+            type="date"
+            error={errors.expiresAt?.message}
+            {...register('expiresAt')}
+          />
+        )}
+        {provider === 'jira' && (
+          <TextField
+            id={ids.acceptanceCriteriaField}
+            label="Acceptance criteria field (optional)"
+            hint="The ID of your custom field, like customfield_10042. Or leave it empty and pick it from a list with Edit once the connection is saved."
+            maxLength={100}
+            autoComplete="off"
+            spellCheck={false}
+            error={errors.acceptanceCriteriaField?.message}
+            {...register('acceptanceCriteriaField')}
+          />
+        )}
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" onClick={close} disabled={create.isPending}>
             Cancel
           </Button>
           <Button type="submit" pending={create.isPending} pendingLabel="Checking the token…">
             Add connection
+          </Button>
+        </div>
+      </form>
+    </ModalDialog>
+  )
+}
+
+const trackerEditSchema = z.object({ label, expiresAt: expiryDate, acceptanceCriteriaField: z.string() })
+type TrackerEditValues = z.infer<typeof trackerEditSchema>
+
+/** FR-165: a Jira or Linear connection's label, expiry date and (Jira) acceptance criteria field, picked from `GET /field`. */
+export function EditTrackerConnectionDialog({
+  connection,
+  onClose,
+}: {
+  connection: PlatformConnection
+  onClose: (saved: boolean) => void
+}) {
+  const info = platformProviders[connection.provider]
+  const jira = connection.provider === 'jira'
+  const update = useUpdateTrackerConnection()
+  const fields = usePlatformResources(jira ? connection.id : null, jira ? 'fields' : null)
+  const current = connection.metadata.acceptanceCriteriaField ?? ''
+  const [serverError, setServerError] = useState<string | null>(null)
+  const {
+    register,
+    handleSubmit,
+    setError,
+    formState: { errors },
+  } = useForm<TrackerEditValues>({
+    resolver: zodResolver(trackerEditSchema),
+    defaultValues: {
+      label: connection.label,
+      expiresAt: connection.expiresAt?.slice(0, 10) ?? '',
+      acceptanceCriteriaField: current,
+    },
+  })
+
+  const onSubmit = handleSubmit((v) => {
+    setServerError(null)
+    update.mutate(
+      {
+        id: connection.id,
+        label: v.label,
+        ...(v.expiresAt === '' ? { clearExpiresAt: true } : { expiresAt: toExpiresAt(v.expiresAt) }),
+        ...(jira && fields.isSuccess ? { acceptanceCriteriaField: v.acceptanceCriteriaField } : {}),
+      },
+      {
+        onSuccess: () => {
+          onClose(true)
+        },
+        onError: (error) => {
+          const unmatched = applyFieldErrors(error, setError, ['label', 'expiresAt', 'acceptanceCriteriaField'])
+          if (unmatched.length > 0) {
+            setServerError(unmatched.join(' '))
+          } else if (!isApiError(error, 'VALIDATION')) {
+            setServerError(platformConnectionMessage(error, info))
+          }
+        },
+      },
+    )
+  })
+
+  const title = `Edit "${connection.label}"`
+  return (
+    <ModalDialog
+      open
+      title={title}
+      busy={update.isPending}
+      onClose={() => {
+        onClose(false)
+      }}
+    >
+      <form noValidate onSubmit={(e) => void onSubmit(e)} aria-label="Edit the connection" className="flex flex-col gap-4">
+        <ErrorSummary title="We couldn't save the connection" errors={serverError ? [{ message: serverError }] : []} />
+        <TextField id="tracker-connection-edit-label" label="Label" maxLength={LABEL_MAX} autoComplete="off" error={errors.label?.message} {...register('label')} />
+        <TextField
+          id="tracker-connection-edit-expiry"
+          label="Expiry date (optional)"
+          hint="AIDE warns you 14 days before. Leave it empty if the token doesn't expire."
+          type="date"
+          error={errors.expiresAt?.message}
+          {...register('expiresAt')}
+        />
+        {jira &&
+          (fields.isError ? (
+            <p className="text-sm text-muted-foreground">
+              Jira&apos;s field list couldn&apos;t load, so the acceptance criteria field stays as it is. {platformConnectionMessage(fields.error, info)}
+            </p>
+          ) : fields.isPending ? (
+            <p className="text-sm text-muted-foreground">Loading Jira&apos;s fields…</p>
+          ) : (
+            <SelectField
+              label="Acceptance criteria field (optional)"
+              hint="The custom field AIDE imports as each item's acceptance criteria."
+              error={errors.acceptanceCriteriaField?.message}
+              defaultValue={current}
+              {...register('acceptanceCriteriaField')}
+            >
+              <option value="">None</option>
+              {current !== '' && !fields.data.some((f) => f.id === current) && <option value={current}>{current}</option>}
+              {fields.data.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name} ({f.id})
+                </option>
+              ))}
+            </SelectField>
+          ))}
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            variant="ghost"
+            disabled={update.isPending}
+            onClick={() => {
+              onClose(false)
+            }}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" pending={update.isPending} pendingLabel="Saving…">
+            Save
           </Button>
         </div>
       </form>

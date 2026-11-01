@@ -44,6 +44,9 @@ public static class ArtifactRules
 
         // §4.12: produced automatically at the start of refinement.
         ArtifactType.CodebaseSummary => Phase.Refinement,
+
+        // FR-170: imported at the start of the work, while the project is in refinement (D-V5-10).
+        ArtifactType.SourceItems => Phase.Refinement,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
@@ -209,10 +212,12 @@ public static class ArtifactRules
     {
         if (CodebaseSummaryRules.IsAutoLocked(type))
         {
-            // FR-70: never a draft; only the Repository Analyst writes new (locked) versions.
+            // FR-70, FR-170: never a draft; only the Repository Analyst or an import writes new (locked) versions.
             return Result.Failure(new DomainError(
                 ErrorCodes.ArtifactLocked,
-                "The codebase summary is written and locked by the Repository Analyst; it can't be edited."));
+                type == ArtifactType.SourceItems
+                    ? "The source items are a locked snapshot of imports; re-import or remove items instead."
+                    : "The codebase summary is written and locked by the Repository Analyst; it can't be edited."));
         }
 
         var producing = ProducingPhase(type);

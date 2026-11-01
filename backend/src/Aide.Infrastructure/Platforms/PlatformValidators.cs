@@ -659,7 +659,8 @@ public sealed class PlatformConnectionValidators(IOptions<DeploymentOptions> opt
 
     public IPlatformConnectionValidator ForProvider(PlatformProvider provider)
     {
-        if (provider != PlatformProvider.Vercel && options.Value.UseFake)
+        // Jira and Linear follow Trackers:Provider through their own adapter, not Deployments:Provider.
+        if (provider != PlatformProvider.Vercel && !PlatformConnectionRules.IsTracker(provider) && options.Value.UseFake)
         {
             return new FakePlatformConnectionValidator { Provider = provider };
         }

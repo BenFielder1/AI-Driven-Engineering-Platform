@@ -18,16 +18,26 @@ export const platformProviderIds = ['vercel', 'netlify', 'cloudflare', 'render',
 /** Whether a deployment provider (or any id) is a platform with connections (GitHub Pages and Fake aren't). */
 export const isPlatformProvider = (id: string): id is PlatformProvider => (platformProviderIds as readonly string[]).includes(id)
 
+/** FR-165, FR-166: the platform connections that are issue trackers, not deployment platforms or databases. */
+export const isTrackerPlatform = (provider: PlatformProvider): boolean => provider === 'jira' || provider === 'linear'
+
 /**
  * FR-142: the caller's platform connections (deployment platforms and databases), never the tokens. `provider` keeps
- * only that provider's connections (one shared cache entry; filtered with `select`).
+ * only that provider's connections (one shared cache entry; filtered with `select`). The API also returns Jira and
+ * Linear (FR-165): they appear only with `includeTrackers` or by naming that `provider`, so no deployment picker shows
+ * them.
  */
-export function usePlatformConnections({ enabled = true, provider }: { enabled?: boolean; provider?: PlatformProvider } = {}) {
+export function usePlatformConnections({
+  enabled = true,
+  provider,
+  includeTrackers = false,
+}: { enabled?: boolean; provider?: PlatformProvider; includeTrackers?: boolean } = {}) {
   return useQuery({
     queryKey: connectionKeys.platforms(),
     queryFn: async ({ signal }) => unwrap(await api.GET('/api/me/connections/platforms', { signal })),
     enabled,
-    select: provider ? (all: PlatformConnection[]) => all.filter((c) => c.provider === provider) : undefined,
+    select: (all: PlatformConnection[]) =>
+      all.filter((c) => (provider ? c.provider === provider : includeTrackers || !isTrackerPlatform(c.provider))),
   })
 }
 
@@ -53,6 +63,16 @@ export function useRenamePlatformConnection() {
   return useMutation({
     mutationFn: async ({ id, label }: { id: string; label: string }) =>
       unwrap(await api.PATCH('/api/me/connections/platforms/{id}', { params: { path: { id } }, body: { label } })),
+    onSuccess: invalidate,
+  })
+}
+
+/** FR-165: changes a tracker connection's label, expiry date or acceptance criteria field (the token is unchanged). */
+export function useUpdateTrackerConnection() {
+  const invalidate = useInvalidateConnections()
+  return useMutation({
+    mutationFn: async ({ id, ...body }: { id: string } & Schemas['UpdatePlatformConnectionRequest']) =>
+      unwrap(await api.PATCH('/api/me/connections/platforms/{id}', { params: { path: { id } }, body })),
     onSuccess: invalidate,
   })
 }
@@ -83,7 +103,7 @@ export function useTestPlatformConnection() {
 
 /**
  * FR-142, FR-144: the resources a connection reaches, for the "link an existing one" picker (Vercel `projects`, Netlify
- * `sites`, Cloudflare `workers`/`projects`, Render `services`, Railway `projects`).
+ * `sites`, Cloudflare `workers`/`projects`, Render `services`, Railway `projects`, Jira `fields`).
  */
 export function usePlatformResources(connectionId: string | null, type: PlatformResourceType | null) {
   return useQuery({

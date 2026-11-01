@@ -174,6 +174,7 @@ export const artifactTypes = [
   'implementation_plan',
   'optimization_plan',
   'codebase_summary',
+  'source_items',
 ] as const satisfies readonly Schemas['ArtifactType'][]
 
 export const artifactTypeLabels: Record<Schemas['ArtifactType'], string> = {
@@ -182,6 +183,7 @@ export const artifactTypeLabels: Record<Schemas['ArtifactType'], string> = {
   implementation_plan: 'Implementation plan',
   optimization_plan: 'Optimisation plan',
   codebase_summary: 'Codebase summary',
+  source_items: 'Source items',
 }
 
 /** SPEC §4.3: artifact statuses. `locked` is what an approved version is stored as. */

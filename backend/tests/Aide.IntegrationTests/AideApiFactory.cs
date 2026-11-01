@@ -99,6 +99,12 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
             services.AddHttpClient(Aide.Infrastructure.GitLab.GitLabClients.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
             services.AddSingleton<Aide.Infrastructure.GitLab.IGitHostDns>(new StubGitHostDns());
 
+            // FR-165, §4.26: no test reaches a real tracker; tests use the Fake (Trackers:Provider=Fake) or stubs.
+            foreach (var name in Aide.Infrastructure.Trackers.TrackerHosts.AllClients)
+            {
+                services.AddHttpClient(name).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
+            }
+
         });
 
         // Tests share one client IP; the limits themselves are tested with their real values in RateLimitTests.

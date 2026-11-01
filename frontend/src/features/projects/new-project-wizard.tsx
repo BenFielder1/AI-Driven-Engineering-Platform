@@ -56,6 +56,8 @@ import {
   wizardSchema,
   type WizardValues,
 } from './schemas'
+import { TrackerImportField } from '../trackers/tracker-import-field'
+import { parsePicks, pickedItemCount, serializePicks, toSourceImportRequest } from '../trackers/tracker-picks'
 import { clearWizardDraft, readWizardDraft, saveWizardDraft } from './wizard-draft'
 import {
   defaultLlmProvider,
@@ -97,6 +99,7 @@ const fieldIds: Record<Field, string> = {
   source: 'project-source',
   name: 'project-name',
   idea: 'project-idea',
+  sourceImports: 'project-source-imports',
   approvalMode: 'project-approval-mode',
   complianceThreshold: 'project-threshold',
   maxFilesPerStep: 'project-max-files',
@@ -341,6 +344,7 @@ function toDeploymentRequest(v: WizardValues): Schemas['CreateProjectDeploymentR
 function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
   const deployment = toDeploymentRequest(v)
   const llm = toLlmRequest(v)
+  const picks = parsePicks(v.sourceImports)
   const base = {
     ...(v.stackKind === 'compose' ? { stack: toWizardStackRequest(v) } : {}),
     name: v.name.trim(),
@@ -355,6 +359,8 @@ function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
     ...(deployment ? { deployment } : {}),
     // FR-159: the AI model section.
     ...(llm ? { llm } : {}),
+    // FR-171: queued right after creation; a failed import never blocks it.
+    ...(picks.length > 0 ? { sourceImports: picks.map(toSourceImportRequest) } : {}),
   }
   return v.source === 'import'
     ? {
@@ -529,6 +535,9 @@ export function NewProjectWizard() {
     defaultValues: draft?.values ?? wizardDefaults,
     mode: 'onTouched',
   })
+
+  /** FR-171: the tracker items picked on the Idea step. */
+  const sourceImports = useWatch({ control, name: 'sourceImports' })
 
   /** FR-114: the Stack step's sub-step (Frontend → Backend → Data → VCS → Deployment). */
   const [stackSubStep, setStackSubStep] = useState(0)
@@ -1035,6 +1044,15 @@ export function NewProjectWizard() {
             setError('llmCredentialId', { type: 'server', message: errorMessage(error, 'createProjectLlm') })
             goTo(stepIndex('configuration'))
           } else if (
+            isApiError(error, 'SOURCE_ITEMS_TOO_LARGE') ||
+            (parsePicks(values.sourceImports).length > 0 &&
+              (isApiError(error, 'CREDENTIAL_NOT_OWNER') || isApiError(error, 'NOT_FOUND')) &&
+              credentialErrorTarget(error, values, importValues) === 'other')
+          ) {
+            // FR-171: the imported items are too many, or a tracker connection isn't the caller's any more.
+            goTo(stepIndex('idea'))
+            setServerError({ message: errorMessage(error, 'sourceImport'), error })
+          } else if (
             isApiError(error, 'CREDENTIAL_NOT_OWNER') ||
             (isApiError(error, 'NOT_FOUND') && credentialErrorTarget(error, values, importValues) === 'deployment')
           ) {
@@ -1197,6 +1215,16 @@ export function NewProjectWizard() {
                   {...register('idea')}
                 />
               )}
+              <TrackerImportField
+                picks={parsePicks(sourceImports)}
+                onChange={(next) => {
+                  setValue('sourceImports', serializePicks(next), { shouldDirty: true })
+                  if (getFieldState('idea').error) {
+                    void trigger('idea')
+                  }
+                }}
+                onOpenConnections={saveDraftForConnections}
+              />
             </>
           )}
 
@@ -1899,6 +1927,13 @@ function ReviewSummary({
       <SummarySection title={importing ? 'Request' : 'Project idea'} step="idea" onEdit={onEdit}>
         <SummaryRow term="Name">{values.name.trim()}</SummaryRow>
         <SummaryRow term={importing ? 'Request' : 'Idea'}>{values.idea.trim()}</SummaryRow>
+        {pickedItemCount(parsePicks(values.sourceImports)) > 0 && (
+          <SummaryRow term="Imported items">
+            {parsePicks(values.sourceImports)
+              .flatMap((p) => p.items.map((item) => item.key))
+              .join(', ')}
+          </SummaryRow>
+        )}
       </SummarySection>
       <SummarySection title="Repository" step="repository" onEdit={onEdit}>
         <SummaryRow term="Mode">{gitModeOptionLabels[values.gitMode]}</SummaryRow>

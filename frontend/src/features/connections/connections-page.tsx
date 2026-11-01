@@ -23,7 +23,8 @@ import { GitHubConnectionSection } from './github-connection-section'
 import { GitLabConnectionSection } from './gitlab-connection-section'
 import { AddLlmKeyDialog, RenameLlmKeyDialog } from './llm-connection-dialogs'
 import { PlatformConnectionSection } from './platform-connection-section'
-import { databasePlatformIds, deploymentPlatformIds } from './platform-providers'
+import { databasePlatformIds, deploymentPlatformIds, trackerPlatformIds } from './platform-providers'
+import { TrackerReadiness } from '../trackers/tracker-readiness'
 
 const keylessDescriptions: Partial<Record<LlmCredential['provider'], string>> = {
   ollama: 'Uses the Ollama server configured for AIDE. No key needed.',
@@ -313,7 +314,7 @@ function WizardReturnNotice() {
 }
 
 /**
- * /connections (alias /account/connections; SPEC §7): four sections (FR-142): LLM providers (FR-78), Source control
+ * /connections (alias /account/connections; SPEC §7): five sections (FR-142, FR-165): LLM providers (FR-78), Source control
  * (GitHub FR-81, GitLab FR-131, Bitbucket FR-134), Deployment platforms and Databases (pasted platform tokens; Vercel
  * from FR-87 migrated). `githubError` is a failed Connect GitHub coming back as `?error=GITHUB_AUTH_FAILED&reason=…`.
  */
@@ -341,7 +342,7 @@ export function ConnectionsPage({
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Connections"
-        description="LLM providers, source control, deployment platforms and databases, connected to your account."
+        description="LLM providers, source control, deployment platforms, databases and issue trackers, connected to your account."
       />
       <WizardReturnNotice />
       <LlmProvidersSection />
@@ -368,6 +369,15 @@ export function ConnectionsPage({
         description="Your managed database tokens. A project's database cards in Settings → Deployment use the connection its Owner binds."
         providers={databasePlatformIds}
       />
+      <PlatformConnectionSection
+        id="issue-trackers"
+        title="Issue trackers"
+        description="Import items into a project's Refinement from Jira, Linear, GitHub Issues or GitLab Issues. AIDE only reads from them."
+        providers={trackerPlatformIds}
+        includeTrackers
+      >
+        <TrackerReadiness />
+      </PlatformConnectionSection>
     </div>
   )
 }

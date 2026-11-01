@@ -240,6 +240,18 @@ public static class EventTypes
     /// </summary>
     public const string CodebaseSummaryCreated = "CODEBASE_SUMMARY_CREATED";
 
+    /// <summary>
+    /// FR-170, FR-193: an import finished and wrote a <c>source_items</c> version: <c>{importId, provider, itemCount, renderedBytes,
+    /// releaseVersionId, artifactId, version, contentHash}</c>. Never a token, email or item body.
+    /// </summary>
+    public const string TrackerImportCompleted = "TRACKER_IMPORT_COMPLETED";
+
+    /// <summary>FR-170, FR-193: an import ended without a snapshot: <c>{importId, provider, errorCode, releaseVersionId}</c>.</summary>
+    public const string TrackerImportFailed = "TRACKER_IMPORT_FAILED";
+
+    /// <summary>FR-173, FR-193: a person removed an import: <c>{importId, provider, itemCount, releaseVersionId, artifactId, version}</c>; the last two are null when no snapshot changed.</summary>
+    public const string SourceItemsRemoved = "SOURCE_ITEMS_REMOVED";
+
     // Deployments (FR-90, FR-91, §4.15): category release.
 
     /// <summary>
@@ -356,7 +368,7 @@ public static class EventTypes
     {
         [EventCategory.Transition] = [PhaseChanged],
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
-        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored, CodebaseSummaryCreated],
+        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored, CodebaseSummaryCreated, TrackerImportCompleted, TrackerImportFailed, SourceItemsRemoved],
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
@@ -387,6 +399,7 @@ public static class EventTypes
         DatabaseExpiring,
         ArtifactCorrupted,
         IntegrityAlert,
+        TrackerImportFailed,
     };
 
     private static readonly Dictionary<string, EventCategory> CategoryByType = ByCategory

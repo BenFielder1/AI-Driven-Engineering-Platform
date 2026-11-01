@@ -19,6 +19,7 @@ const types: readonly ArtifactType[] = [
   'implementation_plan',
   'optimization_plan',
   'codebase_summary',
+  'source_items',
 ]
 
 /** SPEC §4.4: what approving a new version of each type invalidates. */
@@ -28,11 +29,13 @@ const cascade: Record<ArtifactType, readonly ArtifactType[]> = {
   implementation_plan: ['optimization_plan'],
   optimization_plan: [],
   codebase_summary: [],
+  source_items: [],
 }
 
 /** §4.12: the phase that produces each type (restore is allowed only there, FR-58). */
 const producingPhase: Record<ArtifactType, Schemas['Phase']> = {
   codebase_summary: 'refinement',
+  source_items: 'refinement',
   project_request: 'refinement',
   technical_specification: 'specification',
   implementation_plan: 'planning',

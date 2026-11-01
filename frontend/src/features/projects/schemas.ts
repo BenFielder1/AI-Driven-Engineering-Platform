@@ -1,3 +1,4 @@
+import { IDEA_REQUIRED_WITH_ITEMS, parsePicks } from '../trackers/tracker-picks'
 import { z } from 'zod'
 
 import { checkRootDirectory, checkVercelProjectName } from '../deployments/vercel-project-rules'
@@ -151,6 +152,8 @@ export const wizardShape = z.object({
   source: z.enum(['scratch', 'import']),
   name: str,
   idea: str,
+  /** FR-171: the tracker items to import, as JSON (tracker-picks.ts): kept in the FR-159 draft, sent as `sourceImports[]`. */
+  sourceImports: str,
   approvalMode: z.enum(approvalModes),
   complianceThreshold: str,
   maxFilesPerStep: str,
@@ -273,9 +276,11 @@ export const wizardSchema = wizardShape.superRefine((v, ctx) => {
     ctx,
     'idea',
     !v.idea.trim()
-      ? importing
-        ? 'Describe what this version should deliver.'
-        : 'Describe your idea: what should the software do, and for whom?'
+      ? parsePicks(v.sourceImports).length > 0
+        ? IDEA_REQUIRED_WITH_ITEMS
+        : importing
+          ? 'Describe what this version should deliver.'
+          : 'Describe your idea: what should the software do, and for whom?'
       : v.idea.length > limits.ideaMax
         ? `The ${importing ? 'request' : 'idea'} is at most ${limits.ideaMax.toLocaleString()} characters.`
         : null,
@@ -352,6 +357,7 @@ export const wizardDefaults: WizardValues = {
   source: 'scratch',
   name: '',
   idea: '',
+  sourceImports: '[]',
   approvalMode: projectDefaults.approvalMode,
   complianceThreshold: projectDefaults.complianceThreshold,
   maxFilesPerStep: projectDefaults.maxFilesPerStep,

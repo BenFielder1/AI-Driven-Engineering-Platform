@@ -56,6 +56,7 @@ public sealed partial class ProjectCreator(
     IWorkspaceStore workspaces,
     JobEnqueuer jobs,
     ProjectStackService stacks,
+    Trackers.SourceImportService imports,
     IOptions<LocalGitOptions> localGit,
     TimeProvider time,
     ILogger<ProjectCreator> logger)
@@ -123,6 +124,13 @@ public sealed partial class ProjectCreator(
             stack = resolved.Value;
         }
 
+        // FR-171: the imports are checked now and queued with the project; a failed import never blocks creation.
+        var plannedImports = await imports.PlanAsync(ownerId, request.SourceImports, "sourceImports", connectionRequired: false, cancellationToken);
+        if (plannedImports.IsFailure)
+        {
+            return Result.Failure<Project>(plannedImports.Error!);
+        }
+
         var now = time.GetUtcNow();
         var project = new Project
         {
@@ -150,7 +158,7 @@ public sealed partial class ProjectCreator(
 
         try
         {
-            return await SaveAsync(request, project, start.Value, stack, llmPlan.Value, gitProvider, ownerId, actor, now, cancellationToken);
+            return await SaveAsync(request, project, start.Value, stack, llmPlan.Value, gitProvider, plannedImports.Value, ownerId, actor, now, cancellationToken);
         }
         catch
         {
@@ -550,6 +558,7 @@ public sealed partial class ProjectCreator(
         StackComposition? stack,
         LlmPlan llmPlan,
         GitProvider gitProvider,
+        IReadOnlyList<Trackers.PlannedImport> plannedImports,
         Guid ownerId,
         string actor,
         DateTimeOffset now,
@@ -672,6 +681,11 @@ public sealed partial class ProjectCreator(
         if (version.BaseCommitSha is not null)
         {
             await jobs.EnqueueAsync(JobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(project.Id, version.Id), project.Id, cancellationToken, now);
+        }
+
+        foreach (var planned in plannedImports)
+        {
+            imports.Queue(project.Id, version.Id, planned, ownerId, now);
         }
 
         await db.SaveChangesAsync(cancellationToken);

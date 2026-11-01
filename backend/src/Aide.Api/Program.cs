@@ -28,6 +28,7 @@ using Aide.Api.Features.Rollback;
 using Aide.Api.Features.Runs;
 using Aide.Api.Features.Stack;
 using Aide.Api.Features.Tokens;
+using Aide.Api.Features.Trackers;
 using Aide.Api.Features.Versions;
 using Aide.Api.Health;
 using Aide.Api.Hosting;
@@ -184,6 +185,9 @@ builder.Services.AddDeployments();
 // Platform connections (FR-142): Vercel, Netlify, Cloudflare, Render, Railway and Supabase tokens and picker data.
 builder.Services.AddScoped<PlatformConnectionService>();
 
+// Issue trackers (FR-165–FR-173): browsing with personal connections, project imports and the import job.
+builder.Services.AddTrackers();
+
 
 // Stack compositions on projects and versions, Settings → Stack and import detection (FR-114–FR-119).
 builder.Services.AddProjectStacks();
@@ -220,6 +224,7 @@ app.MapApiTokenEndpoints();
 app.MapLlmConnectionEndpoints();
 app.MapLlmProviderEndpoints();
 app.MapPlatformConnectionEndpoints();
+app.MapTrackerEndpoints();
 app.MapGitHubEndpoints();
 app.MapGitLabEndpoints();
 app.MapBitbucketEndpoints();

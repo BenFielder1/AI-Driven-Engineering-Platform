@@ -31,6 +31,7 @@ export function stageProgress(
 /** §4.12: the phase that produces each artifact type (restore is allowed only there, FR-58). */
 export const producingPhase: Record<ArtifactType, Phase> = {
   codebase_summary: 'refinement',
+  source_items: 'refinement',
   project_request: 'refinement',
   technical_specification: 'specification',
   implementation_plan: 'planning',
@@ -66,10 +67,13 @@ export const stageGates: Record<Phase, readonly GateType[]> = {
 }
 
 /**
- * Why the UI hides restore: an API reason (RESTORE_NOT_ALLOWED), or `not_restorable` for the codebase summary, which
- * the Repository Analyst generates and locks itself (the API never restores it).
+ * Why the UI hides restore: an API reason (RESTORE_NOT_ALLOWED), or `not_restorable` for a type AIDE generates and locks
+ * itself: the Repository Analyst's codebase summary and an import's source items (the API never restores them).
  */
 export type RestoreBlock = RestoreReason | 'not_restorable'
+
+/** FR-70, FR-170: versions AIDE writes auto-locked. They can't be restored or edited into a new draft (rule 9). */
+export const isAgentLockedType = (type: ArtifactType): boolean => type === 'codebase_summary' || type === 'source_items'
 
 /**
  * FR-58: why a Writer can't restore `version` of `type`, or `null` when they can. Mirrors the API's checks (which
@@ -83,7 +87,7 @@ export function restoreBlockReason(input: {
   version: Pick<Schemas['ArtifactSummaryDto'], 'integrity' | 'releaseVersion'>
 }): RestoreBlock | null {
   const { type, project, readOnly, version } = input
-  if (type === 'codebase_summary') {
+  if (isAgentLockedType(type)) {
     return 'not_restorable'
   }
   if (readOnly || project.developmentVersion === null || version.releaseVersion !== project.developmentVersion) {

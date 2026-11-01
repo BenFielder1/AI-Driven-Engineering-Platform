@@ -145,9 +145,9 @@ public class PlatformConnectionRulesTests
     [Fact]
     public void FR142_S5_wire_values()
     {
-        Assert.Equal(["vercel", "netlify", "cloudflare", "render", "railway", "supabase"], EnumStrings.Values<PlatformProvider>());
+        Assert.Equal(["vercel", "netlify", "cloudflare", "render", "railway", "supabase", "jira", "linear"], EnumStrings.Values<PlatformProvider>());
         Assert.Equal(["valid", "invalid", "insufficient_scope", "unchecked"], EnumStrings.Values<PlatformConnectionStatus>());
-        Assert.Equal(["sites", "services", "projects", "workers", "orgs", "regions", "databases"], EnumStrings.Values<PlatformResourceType>());
+        Assert.Equal(["sites", "services", "projects", "workers", "orgs", "regions", "databases", "fields"], EnumStrings.Values<PlatformResourceType>());
         Assert.Equal(["frontend", "backend"], EnumStrings.Values<DeploymentComponent>());
         Assert.Equal(["not_configured", "configuring", "ready", "attention", "error"], EnumStrings.Values<DeploymentTargetStatus>());
         Assert.Equal(["deploy", "rollback", "promote"], EnumStrings.Values<DeploymentKind>());

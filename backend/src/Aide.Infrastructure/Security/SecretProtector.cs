@@ -44,6 +44,9 @@ public static class SecretPurposes
     /// stay equal to <see cref="VercelToken"/>: the PlatformsAndTargets migration copies v2 Vercel ciphertext unchanged.</summary>
     public const string PlatformToken = VercelToken;
 
+    /// <summary>FR-165, FR-166: Jira email + token and Linear API keys (<c>platform_connections.secret_encrypted</c>), §8: their own purpose.</summary>
+    public const string TrackerToken = "Aide.Secrets.TrackerToken";
+
     /// <summary>Deployment environment variable values (<c>deployment_env_vars.value_encrypted</c>, FR-88).</summary>
     public const string DeploymentEnvValue = "Aide.Secrets.DeploymentEnvValue";
 

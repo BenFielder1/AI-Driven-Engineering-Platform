@@ -18,6 +18,9 @@ public sealed record PlatformCredential(string Token, string? AccountId, Platfor
     {
     }
 
+    /// <summary>FR-165: the Atlassian account email that goes with a Jira token. Never logged.</summary>
+    public string? Email { get; init; }
+
     /// <summary>Redacted: the token never reaches a log.</summary>
     public override string ToString() => $"PlatformCredential {{ AccountId = {AccountId} }}";
 }

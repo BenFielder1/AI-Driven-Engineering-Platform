@@ -9,6 +9,9 @@ public enum ArtifactType
 
     /// <summary>FR-70: the Repository Analyst's summary of the codebase at the version's base commit.</summary>
     CodebaseSummary = 4,
+
+    /// <summary>FR-170: the version's active tracker imports rendered to Markdown (§4.26); auto-locked, invalidates nothing.</summary>
+    SourceItems = 5,
 }
 
 /// <summary>Stored artifact status (§4.3). <c>approved</c> is a moment, not a stored status.</summary>

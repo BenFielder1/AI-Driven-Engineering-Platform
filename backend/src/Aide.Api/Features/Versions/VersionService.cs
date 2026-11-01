@@ -33,6 +33,7 @@ public sealed partial class VersionService(
     ISecretProtector secrets,
     IStackCatalog catalog,
     ProjectStackService stacks,
+    Trackers.SourceImportService imports,
     TimeProvider time,
     ILogger<VersionService> logger)
 {
@@ -69,6 +70,13 @@ public sealed partial class VersionService(
             }
 
             sentStack = resolved.Value;
+        }
+
+        // FR-171: the imports are checked now and queued with the version; a failed import never blocks it.
+        var plannedImports = await imports.PlanAsync(userId, request.SourceImports, "sourceImports", connectionRequired: false, cancellationToken);
+        if (plannedImports.IsFailure)
+        {
+            return Result.Failure<ReleaseVersion>(plannedImports.Error!);
         }
 
         var versions = await db.ReleaseVersions.Where(v => v.ProjectId == projectId).ToListAsync(cancellationToken);
@@ -164,6 +172,10 @@ public sealed partial class VersionService(
             actor,
             now);
         await jobs.EnqueueAsync(JobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(project.Id, started.Id), project.Id, cancellationToken, now);
+        foreach (var planned in plannedImports.Value)
+        {
+            imports.Queue(project.Id, started.Id, planned, userId, now);
+        }
 
         var saved = await LifecyclePersistence.SaveAsync(db, cancellationToken);
         if (saved.IsFailure)

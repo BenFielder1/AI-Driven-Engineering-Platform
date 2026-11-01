@@ -200,6 +200,18 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
         return payload.Trigger != LifecycleJobPayload.PhaseEntered || project.CurrentPhase == ArtifactRules.ProducingPhase(type);
     }
 
+    /// <summary>FR-172: for a release version, when its oldest still-queued or running import was queued, and whether a failed import awaits a retry.</summary>
+    public async Task<(DateTimeOffset? OldestPending, bool HasFailed)> ImportStateAsync(Guid releaseVersionId, CancellationToken cancellationToken)
+    {
+        var imports = await db.TrackerImports.AsNoTracking()
+            .Where(i => i.ReleaseVersionId == releaseVersionId
+                && (i.Status == Domain.Trackers.TrackerImportStatus.Queued || i.Status == Domain.Trackers.TrackerImportStatus.Running || i.Status == Domain.Trackers.TrackerImportStatus.Failed))
+            .Select(i => new { i.Status, i.CreatedAt })
+            .ToListAsync(cancellationToken);
+        var pending = imports.Where(i => i.Status != Domain.Trackers.TrackerImportStatus.Failed).Select(i => (DateTimeOffset?)i.CreatedAt).Min();
+        return (pending, imports.Any(i => i.Status == Domain.Trackers.TrackerImportStatus.Failed));
+    }
+
     public static InputArtifactRef Ref(Artifact artifact)
     {
         ArgumentNullException.ThrowIfNull(artifact);

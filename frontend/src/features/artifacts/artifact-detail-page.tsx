@@ -1,3 +1,4 @@
+import { isAgentLockedType } from '../stages/stage-model'
 import { Link } from '../../lib/navigation'
 import { useRef, useState, type SyntheticEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
@@ -261,7 +262,8 @@ export function ArtifactDetailPage({
   const label = artifactTypeLabels[type]
   useDocumentTitle(`${label} · ${project.name}`)
   // FR-62: a past release version is read-only (`can` is false for mutations there).
-  const canEdit = can('createDraft')
+  // FR-70, FR-170: a new draft of an auto-locked type would be refused with ARTIFACT_LOCKED.
+  const canEdit = can('createDraft') && !isAgentLockedType(type)
   const canDecide = can('approveArtifacts')
 
   const history = useArtifactHistory(project.id, type, releaseVersionId)

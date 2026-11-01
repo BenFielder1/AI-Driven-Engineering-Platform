@@ -583,6 +583,29 @@ function describeConnection(type: string, payload: Payload): string | null {
   }
 }
 
+const trackerEventNames: Readonly<Record<string, string>> = {
+  jira: "Jira",
+  linear: "Linear",
+  github: "GitHub Issues",
+  gitlab: "GitLab Issues",
+};
+
+/** FR-193: the tracker events. Their payloads hold counts and ids, never a token, email or item body. */
+function describeTrackerEvent(type: string, payload: Record<string, unknown>): string {
+  const tracker = (typeof payload.provider === "string" ? trackerEventNames[payload.provider] : undefined) ?? "a tracker";
+  const count = typeof payload.itemCount === "number" ? payload.itemCount : null;
+  const items = count === null ? "items" : `${String(count)} item${count === 1 ? "" : "s"}`;
+  const version = typeof payload.version === "number" ? ` (source items v${String(payload.version)})` : "";
+  switch (type) {
+    case "TRACKER_IMPORT_COMPLETED":
+      return `Imported ${items} from ${tracker}${version}`;
+    case "TRACKER_IMPORT_FAILED":
+      return `The import from ${tracker} failed`;
+    default:
+      return `Removed ${items} imported from ${tracker}${version}`;
+  }
+}
+
 /** FR-155: the v4 events the admin log words like the activity feed; older events keep the server's summary there. */
 export const fr155EventTypes: ReadonlySet<string> = new Set([
   "STACK_CHANGED",
@@ -590,6 +613,9 @@ export const fr155EventTypes: ReadonlySet<string> = new Set([
   "GIT_HOST_INSTANCE_CHANGED",
   "GIT_BINDING_CLEARED",
   "COMMIT_CREDIT_CHANGED",
+  "TRACKER_IMPORT_COMPLETED",
+  "TRACKER_IMPORT_FAILED",
+  "SOURCE_ITEMS_REMOVED",
   "DEPLOYMENT_TARGET_CONFIGURED",
   "DEPLOYMENT_TARGET_FAILED",
   "DATABASE_PROVISIONED",
@@ -908,6 +934,11 @@ export function describeActivity(
       break;
     case "COMMIT_CREDIT_CHANGED":
       text = payload.enabled === false ? "Commit credit turned off" : "Commit credit turned on";
+      break;
+    case "TRACKER_IMPORT_COMPLETED":
+    case "TRACKER_IMPORT_FAILED":
+    case "SOURCE_ITEMS_REMOVED":
+      text = describeTrackerEvent(type, payload);
       break;
     case "DEPLOYMENT_TARGET_CONFIGURED":
       text = describeTargetConfigured(payload);

@@ -36,6 +36,9 @@ public enum PlatformResourceType
 
     /// <summary>FR-152: Postgres databases to link (Render Postgres, Railway Postgres services).</summary>
     Databases = 6,
+
+    /// <summary>FR-165: Jira fields, for the acceptance criteria field picker.</summary>
+    Fields = 7,
 }
 
 /// <summary>
@@ -221,6 +224,7 @@ public static partial class PlatformConnectionRules
         PlatformProvider.Render => [PlatformResourceType.Services, PlatformResourceType.Regions, PlatformResourceType.Databases, PlatformResourceType.Projects],
         PlatformProvider.Railway => [PlatformResourceType.Projects, PlatformResourceType.Regions, PlatformResourceType.Databases, PlatformResourceType.Services],
         PlatformProvider.Supabase => [PlatformResourceType.Projects, PlatformResourceType.Orgs, PlatformResourceType.Regions],
+        PlatformProvider.Jira => [PlatformResourceType.Fields],
         _ => [],
     };
 
@@ -231,7 +235,7 @@ public static partial class PlatformConnectionRules
     public static Result<PlatformResourceType> ResourceType(PlatformProvider provider, string? type)
     {
         var supported = ResourceTypes(provider);
-        if (type is null)
+        if (type is null && supported.Count > 0)
         {
             return Result.Success(supported[0]);
         }
@@ -243,9 +247,14 @@ public static partial class PlatformConnectionRules
 
         return Result.Failure<PlatformResourceType>(new DomainError(ErrorCodes.Validation, "The resource type is invalid.")
         {
-            Details = [$"type: {DisplayName(provider)} lists {string.Join(", ", supported.Select(t => t.ToWire()))}."],
+            Details = [supported.Count == 0
+                ? $"type: {DisplayName(provider)} has no resources to pick."
+                : $"type: {DisplayName(provider)} lists {string.Join(", ", supported.Select(t => t.ToWire()))}."],
         });
     }
+
+    /// <summary>FR-165, FR-166: the trackers among the platforms. Their tokens have their own Data Protection purpose, and expiry is user-entered.</summary>
+    public static bool IsTracker(PlatformProvider provider) => provider is PlatformProvider.Jira or PlatformProvider.Linear;
 
     /// <summary>An account, team, workspace or organisation id as platforms issue them.</summary>
     public static bool IsAccountId(string? accountId) =>
@@ -276,6 +285,8 @@ public static partial class PlatformConnectionRules
         PlatformProvider.Render => "Render",
         PlatformProvider.Railway => "Railway",
         PlatformProvider.Supabase => "Supabase",
+        PlatformProvider.Jira => "Jira",
+        PlatformProvider.Linear => "Linear",
         _ => "The platform",
     };
 

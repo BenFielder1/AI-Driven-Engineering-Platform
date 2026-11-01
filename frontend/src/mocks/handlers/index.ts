@@ -19,6 +19,7 @@ import { projectHandlers } from './projects'
 import { reviewHandlers } from './review'
 import { runHandlers } from './runs'
 import { stackHandlers } from './stack'
+import { trackerHandlers } from './trackers'
 import { versionHandlers } from './versions'
 
 export const handlers = [
@@ -29,6 +30,7 @@ export const handlers = [
   ...connectionHandlers,
   ...llmHandlers,
   ...platformConnectionHandlers,
+  ...trackerHandlers,
   ...deploymentHandlers,
   ...migrationHandlers,
   ...githubHandlers,

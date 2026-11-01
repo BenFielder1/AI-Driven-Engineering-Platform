@@ -17,6 +17,7 @@ import { artifactStatusLabels, phaseLabels } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
 import { RelativeTime } from '../projects/relative-time'
 import { RunStatusBadge } from '../runs/run-badges'
+import { SourceItemsPanel } from '../trackers/source-items-panel'
 import { StageArtifact } from '../stages/stage-artifact'
 import { StageHeader } from '../stages/stage-header'
 import { StageRuns } from '../stages/stage-runs'
@@ -508,6 +509,7 @@ export function RefinementPage() {
         <StageSection id="refinement-request" title="Request">
           <blockquote className="whitespace-pre-wrap break-words">{request}</blockquote>
         </StageSection>
+        <SourceItemsPanel />
         {rounds}
         <CodebaseSummary state={refinement.data?.codebaseSummary} />
         <StageRuns agent="idea_refinement" />

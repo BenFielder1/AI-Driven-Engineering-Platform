@@ -13,11 +13,13 @@ import { applyFieldErrors, errorMessage, isApiError, messageFor } from '../../li
 import { useProjectStack, useStackCatalog } from '../stack/stack-api'
 import { StackEditor } from '../stack/stack-editor'
 import { optionName, selectionFromComposition, toStackRequest, type StackSelection } from '../stack/stack-model'
+import { TrackerImportField } from '../trackers/tracker-import-field'
+import { IDEA_REQUIRED_WITH_ITEMS, pickedItemCount, toSourceImportRequest, type PickedImport } from '../trackers/tracker-picks'
 import { checkNewVersion, normalizeVersion } from './semver'
 import { VERSION_REQUEST_MAX } from './start-version-rules'
 import { useStartReleaseVersion, type ReleaseVersion } from './versions-api'
 
-function startVersionSchema(released: string | null, existing: readonly string[]) {
+function startVersionSchema(released: string | null, existing: readonly string[], hasItems: boolean) {
   return z.object({
     version: z.string().superRefine((value, ctx) => {
       const check = checkNewVersion(value, released, existing)
@@ -28,7 +30,7 @@ function startVersionSchema(released: string | null, existing: readonly string[]
     request: z
       .string()
       .trim()
-      .min(1, { error: 'Describe the new features, improvements or fixes for this version.' })
+      .min(1, { error: hasItems ? IDEA_REQUIRED_WITH_ITEMS : 'Describe the new features, improvements or fixes for this version.' })
       .max(VERSION_REQUEST_MAX, { error: `The request is at most ${VERSION_REQUEST_MAX.toLocaleString()} characters.` }),
   })
 }
@@ -65,7 +67,10 @@ export function StartVersionDialog({
   const base = useId()
   const ids = { version: `${base}-version`, request: `${base}-request` }
   const existing = useMemo(() => versions.map((v) => v.version), [versions])
-  const schema = useMemo(() => startVersionSchema(released, existing), [released, existing])
+  /** FR-171: the tracker items to import into the new version. */
+  const [picks, setPicks] = useState<PickedImport[]>([])
+  const hasItems = picks.length > 0
+  const schema = useMemo(() => startVersionSchema(released, existing, hasItems), [released, existing, hasItems])
   const {
     register,
     handleSubmit,
@@ -100,6 +105,7 @@ export function StartVersionDialog({
       {
         version: normalizeVersion(values.version) ?? values.version.trim(),
         request: values.request.trim(),
+        ...(hasItems ? { sourceImports: picks.map(toSourceImportRequest) } : {}),
         ...(stackChange ? { stack: toStackRequest(stackChange, { omitVcs: (projectStack.data?.repoVcs ?? null) !== null, separateParts: projectStack.data?.composition?.deploy.separateParts ?? [] }) } : {}),
       },
       {
@@ -174,6 +180,7 @@ export function StartVersionDialog({
           error={errors.request?.message}
           {...register('request')}
         />
+        <TrackerImportField picks={picks} onChange={setPicks} />
         {projectStack.data && (
           <div className="flex flex-col gap-1 text-sm" data-testid="start-version-stack">
             <p>
@@ -217,6 +224,12 @@ export function StartVersionDialog({
               <code className="font-mono">{`${tagPrefix}${normalised ?? '…'}`}</code>.
             </li>
             <li>The project goes back to Refinement at checkpoint 1, with your request as its idea.</li>
+            {hasItems && (
+              <li>
+                {pickedItemCount(picks) === 1 ? '1 tracker item is' : `${String(pickedItemCount(picks))} tracker items are`} imported as a
+                locked snapshot. A failed import doesn&apos;t stop the version, and Refinement offers a retry.
+              </li>
+            )}
             <li>The Repository Analyst summarises the existing code for the agents.</li>
             <li>{released ? `${released} stays released and read-only.` : 'Nothing released changes.'}</li>
           </ul>

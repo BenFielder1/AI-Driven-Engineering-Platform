@@ -50,6 +50,9 @@ public static class InvalidationCascade
 
             // FR-70: an input to every stage, auto-locked without approval; a new summary invalidates nothing.
             ArtifactType.CodebaseSummary => (Array.Empty<ArtifactType>(), StepReset.None),
+
+            // FR-173: a new snapshot invalidates nothing by itself; the cascade follows when a new project request is approved.
+            ArtifactType.SourceItems => (Array.Empty<ArtifactType>(), StepReset.None),
             _ => throw new ArgumentOutOfRangeException(nameof(approved), approved, null),
         };
 

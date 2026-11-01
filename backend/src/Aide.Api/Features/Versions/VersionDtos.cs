@@ -65,6 +65,9 @@ public sealed record StartReleaseVersionRequest
 
     /// <summary>FR-117: the new version's stack composition (omitted: the base version's, re-pinned).</summary>
     public Stack.StackCompositionRequest? Stack { get; init; }
+
+    /// <summary>FR-171: tracker items to import into the new version, as on project create. The request stays required (D-V5-6).</summary>
+    public IReadOnlyList<Trackers.SourceImportRequest>? SourceImports { get; init; }
 }
 
 /// <summary>FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1).</summary>

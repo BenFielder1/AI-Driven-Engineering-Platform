@@ -29,6 +29,30 @@ export interface PlatformProviderInfo {
 }
 
 export const platformProviders: Readonly<Record<PlatformProvider, PlatformProviderInfo>> = {
+  jira: {
+    id: 'jira',
+    name: 'Jira',
+    tokenPageUrl: 'https://id.atlassian.com/manage-profile/security/api-tokens',
+    tokenPageSite: 'id.atlassian.com',
+    tokenNoun: 'API token',
+    tokenType: 'a scoped API token with read-only access ("Create API token with scopes", app: Jira).',
+    permissions: ['read:jira-work', 'read:jira-user'],
+    scopeNote: 'AIDE only reads from Jira. Grant these scopes and nothing more.',
+    expiry: 'pick an expiry. Enter it here too, so AIDE can warn you 14 days before it lapses.',
+    accountNoun: 'Site',
+  },
+  linear: {
+    id: 'linear',
+    name: 'Linear',
+    tokenPageUrl: 'https://linear.app/settings/account/security',
+    tokenPageSite: 'linear.app',
+    tokenNoun: 'API key',
+    tokenType: 'a personal API key with read-only access (read-only is recommended).',
+    permissions: [],
+    scopeNote: 'AIDE only reads from Linear.',
+    expiry: 'Linear keys have no expiry unless you set one. Enter it here, so AIDE can warn you 14 days before it lapses.',
+    accountNoun: 'Organisation',
+  },
   vercel: {
     id: 'vercel',
     name: 'Vercel',
@@ -124,6 +148,8 @@ export const platformProviders: Readonly<Record<PlatformProvider, PlatformProvid
 /** FR-142 sections of /connections. */
 export const deploymentPlatformIds = ['vercel', 'netlify', 'cloudflare', 'render', 'railway'] as const satisfies readonly PlatformProvider[]
 export const databasePlatformIds = ['supabase'] as const satisfies readonly PlatformProvider[]
+/** FR-165: the Issue trackers section's pasted-token providers; GitHub and GitLab Issues reuse the Git connections. */
+export const trackerPlatformIds = ['jira', 'linear'] as const satisfies readonly PlatformProvider[]
 
 /**
  * What the token reaches: "Team acme", "Workspace Acme (+2 more)", or "Personal account (ada)" for a personal
@@ -136,6 +162,10 @@ export function platformAccountLabel(c: Pick<PlatformConnection, 'provider' | 'a
       return `Team ${c.metadata.teamSlug}${c.accountName ? ` · account ${c.accountName}` : ''}`
     }
     return c.accountName ? `Personal account (${c.accountName})` : 'Personal account'
+  }
+  if (c.provider === 'jira' || c.provider === 'linear') {
+    const place = c.provider === 'jira' ? c.metadata.site : c.metadata.organization
+    return place ? `${info.accountNoun} ${place}${c.accountName ? ` · account ${c.accountName}` : ''}` : c.accountName
   }
   const accounts = c.metadata.accounts
   const primary = c.accountName ?? accounts.find((a) => a.id === c.accountId)?.name ?? accounts[0]?.name ?? c.accountId
