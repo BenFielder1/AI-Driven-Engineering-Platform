@@ -55,15 +55,7 @@ public sealed class DeploymentGroupTests(AideApiFactory factory)
     {
         var job = await DeploymentHarness.SetupJobAsync(app, projectId);
         await DeploymentHarness.SettleAsync(app, job.Id);
-        var databaseJobs = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DatabaseProvisioning && j.Status == JobStatus.Queued)
-            .OrderBy(j => j.CreatedAt).ThenBy(j => j.Id)
-            .Select(j => j.Id)
-            .ToListAsync(Ct));
-        foreach (var id in databaseJobs)
-        {
-            await DeploymentHarness.SettleAsync(app, id);
-        }
+        await DeploymentHarness.SettleDatabasesAsync(app, projectId);
     }
 
     private static Task<DeploymentGroup> GroupAsync(WebApplicationFactory<Program> app, Guid projectId) =>

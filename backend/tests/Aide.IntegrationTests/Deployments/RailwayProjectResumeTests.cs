@@ -211,15 +211,7 @@ public sealed class RailwayProjectResumeTests(AideApiFactory factory)
                 Ct),
             HttpStatusCode.Accepted);
         await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.SetupJobAsync(app, id)).Id);
-        var jobs = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == id && j.Type == JobTypes.DatabaseProvisioning)
-            .OrderBy(j => j.CreatedAt).ThenBy(j => j.Id)
-            .Select(j => j.Id)
-            .ToListAsync(Ct));
-        foreach (var job in jobs)
-        {
-            await DeploymentHarness.SettleAsync(app, job);
-        }
+        await DeploymentHarness.SettleDatabasesAsync(app, id);
 
         var rows = await ProjectApi.WithDbAsync(app, db => db.ManagedDatabases.AsNoTracking().Where(d => d.ProjectId == id).ToListAsync(Ct));
         Assert.All(rows, r => Assert.Equal(ManagedDatabaseStatus.Available, r.Status));

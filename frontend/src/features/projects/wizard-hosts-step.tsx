@@ -423,7 +423,7 @@ export function WizardHostsStep({
             errors={errors}
             onAddConnection={onAddConnection}
             caveats={host.slot === 'DbPreview' ? [] : caveats.filter((c) => parts.some((part) => part === partOfCaveatLayer[c.layer])).map((c) => c.text)}
-            canSeparate={onPlatform.size >= 2}
+            canSeparate={onPlatform.size >= 2 && host.slot !== 'DbPreview'}
             separate={separate}
             onToggleSeparate={toggle}
           />
