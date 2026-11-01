@@ -14,6 +14,7 @@ public sealed partial class BitbucketRepoService(
     BitbucketConnectionService connections,
     IBitbucketRepoInitializer initializer,
     BitbucketWorkspaceCache workspaceCache,
+    Git.CommitCredit commitCredit,
     ILogger<BitbucketRepoService> logger)
 {
     /// <summary>The most workspaces the owners list shows (§4.19 budget: one projects call each).</summary>
@@ -146,7 +147,8 @@ public sealed partial class BitbucketRepoService(
             var fullName = repository.FullName.Length > 0 ? repository.FullName : $"{create.Workspace}/{create.Slug}";
             try
             {
-                await initializer.PushReadmeAsync(fullName, name, description, call.Credential, call.Auth.Token, cancellationToken);
+                var coAuthor = await commitCredit.ForBitbucketInitialCommitAsync(userId, request.ConnectionId, cancellationToken);
+                await initializer.PushReadmeAsync(fullName, name, description, call.Credential, call.Auth.Token, coAuthor, cancellationToken);
             }
             catch (Exception ex) when (ex is BitbucketInitialPushException or GitCommandException or IOException or UnauthorizedAccessException)
             {

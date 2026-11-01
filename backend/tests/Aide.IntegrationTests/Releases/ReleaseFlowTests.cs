@@ -411,6 +411,57 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     // ---------- GitHub ----------
 
     [Fact]
+    public async Task FR174_GitHub_step_commits_the_merge_commit_message_and_the_tag_carry_the_noreply_trailer()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var branch = new string[1];
+        string? mergedAs = null;
+        var api = new FakeGitHubApi()
+            .On(HttpMethod.Get, Pulls, HttpStatusCode.OK, "[]")
+            .On(HttpMethod.Post, Pulls, HttpStatusCode.Created, $$"""{"number":42,"html_url":"{{PrUrl}}"}""")
+            .On(HttpMethod.Get, Pull, _ => (HttpStatusCode.OK, JsonSerializer.Serialize(new
+            {
+                number = 42,
+                state = mergedAs is null ? "open" : "closed",
+                merged = mergedAs is not null,
+                merge_commit_sha = mergedAs,
+                mergeable = true,
+                html_url = PrUrl,
+                head = new { sha = BareSha(remote, $"refs/heads/{branch[0]}") },
+            })))
+            .On(HttpMethod.Put, Pull + "/merge", _ => (HttpStatusCode.OK, JsonSerializer.Serialize(new { sha = mergedAs = MergeInBare(remote, branch[0]), merged = true })));
+        await using var app = remote.App(ReleaseEligible(), api, out var git);
+        using var fixture = await ProjectApi.FixtureAsync(app, git: new { provider = "github_pat", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
+        var id = fixture.Project.Id;
+        branch[0] = Aide.Domain.Releases.ReleaseVersionRules.BranchName(fixture.Project.Slug, id, Aide.Domain.Releases.SemVer.Parse(fixture.Project.DevelopmentVersion!));
+        var owner = fixture.Owner.User!;
+        await ProjectApi.WithDbAsync(app, async db =>
+        {
+            db.GitHubConnections.Add(new GitHubConnection { UserId = owner.Id, GithubUserId = 917460, Login = "owner-wire", AccessTokenEncrypted = "unused", UpdatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync(Ct);
+        });
+        var line = $"Co-authored-by: {owner.Name} <917460+owner-wire@users.noreply.github.com>";
+
+        await StartExecutionAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+        await ApproveReleaseGateAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        var merge = api.Requests.Single(r => r.Method == "PUT" && r.Path == Pull + "/merge");
+        using (var body = JsonDocument.Parse(merge.Body))
+        {
+            Assert.Equal($"[AIDE] Release {Tag}: {fixture.Project.Name}", body.RootElement.GetProperty("commit_title").GetString());
+            Assert.Equal(line, body.RootElement.GetProperty("commit_message").GetString());
+        }
+
+        var stepMessage = await TestGit.RunAsync(remote.BarePath, Ct, "log", "-1", "--format=%B", $"refs/heads/{branch[0]}");
+        Assert.EndsWith(line, stepMessage.TrimEnd(), StringComparison.Ordinal);
+        Assert.Contains("AIDE-Step-Id: ", stepMessage, StringComparison.Ordinal);
+        Assert.EndsWith(line, (await TestGit.RunAsync(remote.BarePath, Ct, "cat-file", "tag", $"refs/tags/{Tag}")).TrimEnd(), StringComparison.Ordinal);
+        Assert.DoesNotContain(owner.Email, await TestGit.RunAsync(remote.BarePath, Ct, "log", "--format=%B", $"refs/heads/{branch[0]}"), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task FR42_amended_by_FR64_GitHub_merges_the_PR_through_the_API_and_pushes_the_annotated_semver_tag()
     {
         using var remote = await BareRemote.CreateAsync(Ct);
@@ -449,6 +500,9 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
             Assert.Equal("merge", body.RootElement.GetProperty("merge_method").GetString());
             Assert.Equal(await TestGit.RunAsync(remote.BarePath, Ct, "rev-parse", $"refs/heads/{branch[0]}"), body.RootElement.GetProperty("sha").GetString());
             Assert.Equal($"[AIDE] Release {Tag}: {fixture.Project.Name}", body.RootElement.GetProperty("commit_title").GetString());
+
+            // FR-174: with no credited person GitHub keeps its default body.
+            Assert.False(body.RootElement.TryGetProperty("commit_message", out _));
         }
 
         // The tag is annotated, on the merge commit GitHub reported, and on the remote.

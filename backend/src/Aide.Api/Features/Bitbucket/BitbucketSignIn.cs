@@ -130,7 +130,7 @@ public sealed partial class BitbucketSignIn(
                         return FailureUrl(flow, GitSignInRules.LinkSession);
                     }
 
-                    var linked = await LinkAndConnectAsync(user.Id, info.InstanceId, bitbucketUser, tokens, cancellationToken);
+                    var linked = await LinkAndConnectAsync(user.Id, info.InstanceId, bitbucketUser, tokens, emails, cancellationToken);
                     if (linked is not null)
                     {
                         return FailureUrl(flow, linked);
@@ -168,7 +168,7 @@ public sealed partial class BitbucketSignIn(
                             return FailureUrl(flow, "account_create_failed");
                         }
 
-                        var linked = await LinkAndConnectAsync(user.Id, info.InstanceId, bitbucketUser, tokens, cancellationToken);
+                        var linked = await LinkAndConnectAsync(user.Id, info.InstanceId, bitbucketUser, tokens, emails, cancellationToken);
                         if (linked is not null)
                         {
                             await RollbackAsync(transaction);
@@ -232,7 +232,7 @@ public sealed partial class BitbucketSignIn(
 
         pendingLinks.Take(cookie);
         http.Response.Cookies.Delete(BitbucketPendingLinks.CookieName, Cookie(http, TimeSpan.Zero));
-        var failure = await LinkAndConnectAsync(userId, link.InstanceId, link.User, link.Tokens, cancellationToken);
+        var failure = await LinkAndConnectAsync(userId, link.InstanceId, link.User, link.Tokens, null, cancellationToken);
         if (failure is not null)
         {
             return Result.Failure(new DomainError(ErrorCodes.Conflict, "This Bitbucket account is already linked to another AIDE account."));
@@ -267,7 +267,7 @@ public sealed partial class BitbucketSignIn(
     }
 
     /// <summary>Links the identity to <paramref name="userId"/> (if not yet) and stores the connection; a failure reason, else null.</summary>
-    private async Task<string?> LinkAndConnectAsync(Guid userId, Guid instanceId, BitbucketUser bitbucketUser, BitbucketOAuthTokens tokens, CancellationToken cancellationToken)
+    private async Task<string?> LinkAndConnectAsync(Guid userId, Guid instanceId, BitbucketUser bitbucketUser, BitbucketOAuthTokens tokens, IReadOnlyList<BitbucketEmail>? emails, CancellationToken cancellationToken)
     {
         var login = await db.UserExternalLogins.FirstOrDefaultAsync(
             l => l.Provider == ExternalLoginProvider.Bitbucket && l.InstanceId == instanceId && l.ExternalUserId == bitbucketUser.Uuid,
@@ -305,7 +305,7 @@ public sealed partial class BitbucketSignIn(
             return GitSignInRules.AlreadyLinked;
         }
 
-        var saved = await connections.SaveOAuthAsync(userId, instanceId, bitbucketUser, tokens, cancellationToken);
+        var saved = await connections.SaveOAuthAsync(userId, instanceId, bitbucketUser, tokens, emails, cancellationToken);
         return saved.IsSuccess ? null : "connection_failed";
     }
 

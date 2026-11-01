@@ -44,6 +44,7 @@ public sealed partial class MergePollJobHandler(
     GitHubApi api,
     WorkingCopyPreparer preparer,
     IWorkingCopies workingCopies,
+    Git.CommitCredit commitCredit,
     ReleaseCompletion completion,
     GitHubReleasePublisher publisher,
     Databases.MigrationRunService migrations,
@@ -298,6 +299,7 @@ public sealed partial class MergePollJobHandler(
             (sha, ct) => RecordMergeAsync(release.Id, sha, ct))
         {
             Merge = false,
+            CoAuthorLine = await commitCredit.ForReleaseAsync(release, cancellationToken),
             Notes = await publisher.HostNotesAsync(release, working.Provider.Kind, working.Connection.RepoUrl, cancellationToken),
 
             // FR-140: an attempt whose merge AIDE submitted (and that waited past the release job's ceiling) merged by AIDE.

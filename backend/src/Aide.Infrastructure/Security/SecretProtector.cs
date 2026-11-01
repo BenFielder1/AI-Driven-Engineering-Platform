@@ -60,6 +60,9 @@ public static class SecretPurposes
 
     /// <summary>The Atlassian account email that goes with a Bitbucket API token (<c>git_connections.token_email_encrypted</c>, FR-134).</summary>
     public const string GitHostTokenEmail = "Aide.Secrets.GitHostTokenEmail";
+
+    /// <summary>FR-176: the Bitbucket account's primary confirmed email for co-author trailers (<c>git_connections.commit_email_encrypted</c>).</summary>
+    public const string GitHostCommitEmail = "Aide.Secrets.GitHostCommitEmail";
 }
 
 /// <summary>§8: a <see cref="ISecretProtector"/> per secret kind (purpose), e.g. <see cref="SecretPurposes.GitHubUserToken"/>.</summary>

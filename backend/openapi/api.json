@@ -225,6 +225,65 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "FR-177: change the signed-in user's own preferences: commitCreditOptOut (\"Credit me on commits made by AIDE\"). Browser session only.",
+        "operationId": "UpdateCurrentUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCurrentUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/auth/providers": {
@@ -6217,7 +6276,7 @@
         "tags": [
           "Project settings"
         ],
-        "summary": "Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION).",
+        "summary": "Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off.",
         "operationId": "UpdateGitSettings",
         "parameters": [
           {
@@ -18905,6 +18964,10 @@
           "canRebind": {
             "type": "boolean",
             "description": "FR-136: the caller may re-bind their own connection (`connectionId`): an Owner of a GitLab or Bitbucket project."
+          },
+          "commitCreditEnabled": {
+            "type": "boolean",
+            "description": "FR-177: AIDE credits the accountable person on later commits (default on)."
           }
         },
         "description": "Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the\nproject branch, once the working copy has been prepared. `mode` is the v2 name of `provider` (always equal).\nFor `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else\n`null`). `appInstalledOnRepo` says whether the AIDE GitHub App can access a `github_pat` project's repo\n(`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an\nOwner (\"Switch to GitHub App\"). `mergeStrategy` (FR-65: `aide_merges`, the default, or `manual`) and\n`tagPrefix` (§4.10, FR-64: default `v`, so tags read `v1.2.0`) are the project's release settings."
@@ -24078,6 +24141,19 @@
         },
         "description": "Save the Bitbucket OAuth consumer (FR-133): its key (`clientId`) and secret. An omitted `clientSecret` keeps the\nstored one (so the key can be corrected without re-entering the secret)."
       },
+      "UpdateCurrentUserRequest": {
+        "type": "object",
+        "properties": {
+          "commitCreditOptOut": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "`true`: commit credit skips this person, and moves on to the next one (§4.25)."
+          }
+        },
+        "description": "FR-177: `PATCH /api/auth/me`. `commitCreditOptOut` is required (else 400 `VALIDATION`)."
+      },
       "UpdateGitLabInstanceRequest": {
         "type": "object",
         "properties": {
@@ -24191,6 +24267,13 @@
               "string"
             ],
             "description": "§4.10, FR-64: the tag prefix (`^[A-Za-z0-9._/-]{0,20}$`, not starting with `.`, `/` or\n    `-`; empty for bare `1.2.0` tags; else 400 `VALIDATION`). It also applies to the version in\n    development. 409 `CONFLICT` while that version is `awaiting_merge` or a release attempt is in progress."
+          },
+          "commitCreditEnabled": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "FR-177: credit people on later commits (Owner). Never rewrites history."
           }
         },
         "description": "Partial update of the Git settings. Omitted fields are unchanged."
@@ -24403,6 +24486,10 @@
           },
           "githubLinked": {
             "type": "boolean"
+          },
+          "commitCreditOptOut": {
+            "type": "boolean",
+            "description": "FR-177: the user turned off \"Credit me on commits made by AIDE\"."
           }
         },
         "description": "The signed-in user (or a user, for admins)."

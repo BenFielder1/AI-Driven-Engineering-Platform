@@ -1889,6 +1889,8 @@ function ReviewSummary({
         <SummaryRow term="Default branch">{values.defaultBranch.trim()}</SummaryRow>
         {pat && <SummaryRow term="Access token">{values.gitToken ? 'Provided' : 'Not provided'}</SummaryRow>}
         {importing && <SummaryRow term="Currently released version">{releasedLabel(values)}</SummaryRow>}
+        {/* FR-177: every new project starts with credit on; an Owner changes it under Settings → Git. */}
+        <SummaryRow term="Credit people on commits">On</SummaryRow>
       </SummarySection>
       <SummarySection title="Version" step="version" onEdit={onEdit}>
         {importing ? (

@@ -68,6 +68,7 @@ public sealed partial class ExecutionJobHandler(
     IExecutionCompletionHook completion,
     VersionStackLoader stacks,
     IStackCatalog catalog,
+    Features.Git.CommitCredit commitCredit,
     TimeProvider time,
     ILogger<ExecutionJobHandler> logger) : IJobHandler
 {
@@ -148,7 +149,8 @@ public sealed partial class ExecutionJobHandler(
             return;
         }
 
-        var message = CodeGeneration.CommitMessage(step.StepNumber, step.Title, reply.Value.Files.Select(f => f.Path), step.Id);
+        var coAuthor = await commitCredit.ForStepAsync(project.Id, planId, cancellationToken);
+        var message = CodeGeneration.CommitMessage(step.StepNumber, step.Title, reply.Value.Files.Select(f => f.Path), step.Id, coAuthor);
         var normalised = reply.Value.Files.Select(f => new ProducedFile(PathRules.Normalize(f.Path), f.Content)).ToList();
         var commit = await Git(() => workingCopies.CommitStepAsync(project.Id, working.Branch, step.Id, normalised, message, cancellationToken));
         await CompleteAsync(project.Id, planId, step, steps, commit!, [.. result.Warnings], working, outcome.RunId, cancellationToken);

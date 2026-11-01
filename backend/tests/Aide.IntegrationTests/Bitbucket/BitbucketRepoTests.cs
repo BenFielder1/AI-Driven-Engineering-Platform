@@ -4,6 +4,7 @@ using System.Text;
 using Aide.Api.Features.Bitbucket;
 using Aide.Domain.Common;
 using Aide.IntegrationTests.Support;
+using Microsoft.EntityFrameworkCore;
 
 namespace Aide.IntegrationTests.Bitbucket;
 
@@ -124,6 +125,41 @@ public sealed class BitbucketRepoTests(AideApiFactory factory)
             Assert.All(git.Calls, c => Assert.DoesNotContain(c.Arguments, a => a.Contains("bb-oauth-secret-token", StringComparison.Ordinal) || a.Contains(header, StringComparison.Ordinal)));
             Assert.All(git.Calls.Where(c => c.Arguments[0] != "push"), c => Assert.Null(c.Config));
             Assert.DoesNotContain(factory.Logs.Entries, e => e.AllText.Contains("bb-oauth-secret-token", StringComparison.Ordinal));
+        }
+        finally
+        {
+            TestGit.DeleteTree(root);
+        }
+    }
+
+    [Fact]
+    public async Task FR174_The_README_commit_credits_the_creator_with_their_Bitbucket_email_never_the_sign_in_email()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "aide-tests-bitbucket", Guid.NewGuid().ToString("N"));
+        var bare = Path.Combine(root, "acme", "todo-app.git");
+        Directory.CreateDirectory(Path.GetDirectoryName(bare)!);
+        await TestGit.RunAsync(Path.GetDirectoryName(bare)!, Ct, "init", "-q", "--bare", bare);
+        try
+        {
+            var bitbucket = new FakeGitHubApi()
+                .On(HttpMethod.Post, "/2.0/repositories/acme/todo-app", HttpStatusCode.OK, BitbucketHarness.RepoJson("acme", "todo-app", mainBranch: null));
+            var app = BitbucketHarness.AppWithGit(factory, bitbucket, root, out _);
+            using var user = await ApiSession.RegisterAsync(app);
+            var connection = await BitbucketHarness.SeedConnectionAsync(app, user.User!.Id, "bb-oauth-secret-token");
+            var encrypted = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
+                .GetRequiredService<Aide.Infrastructure.Security.ISecretProtectors>(app.Services)
+                .ForPurpose(Aide.Infrastructure.Security.SecretPurposes.GitHostCommitEmail)
+                .Protect("ana@bitbucket.example");
+            await ProjectApi.WithDbAsync(app, db => db.GitConnections.Where(c => c.Id == connection)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.CommitEmailEncrypted, encrypted), Ct));
+
+            var response = await user.Client.PostAsJsonAsync("/api/me/git/bitbucket/repos",
+                new { connectionId = connection, owner = "acme", project = "TODO", name = "todo-app", @private = true }, Ct);
+
+            await ProjectApi.ReadAsync<BitbucketRepoDto>(response, HttpStatusCode.Created);
+            var message = (await TestGit.RunAsync(root, Ct, "--git-dir", bare, "log", "-1", "--format=%B", "main")).ReplaceLineEndings("\n").TrimEnd();
+            Assert.Equal($"Initial commit\n\nCo-authored-by: {user.User!.Name} <ana@bitbucket.example>", message);
+            Assert.DoesNotContain(user.User!.Email, message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

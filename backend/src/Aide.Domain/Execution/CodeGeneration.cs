@@ -248,9 +248,9 @@ public static class CodeGeneration
     /// <summary>
     /// FR-34: subject <c>[AIDE][Phase:execution][Step:N] &lt;title&gt;</c> (title on one line, at most
     /// <see cref="MaxSubjectTitleLength"/> characters) and a body listing the files, ending with the
-    /// <see cref="StepTrailer"/> trailer.
+    /// <see cref="StepTrailer"/> trailer, then FR-174's <paramref name="coAuthorLine"/> in the same trailer block.
     /// </summary>
-    public static StepCommitMessage CommitMessage(int stepNumber, string title, IEnumerable<string> paths, Guid stepId)
+    public static StepCommitMessage CommitMessage(int stepNumber, string title, IEnumerable<string> paths, Guid stepId, string? coAuthorLine = null)
     {
         ArgumentNullException.ThrowIfNull(title);
         ArgumentNullException.ThrowIfNull(paths);
@@ -269,6 +269,11 @@ public static class CodeGeneration
         }
 
         body.Append('\n').Append(StepTrailerLine(stepId));
+        if (coAuthorLine is not null)
+        {
+            body.Append('\n').Append(coAuthorLine);
+        }
+
         return new StepCommitMessage(subject, body.ToString());
     }
 

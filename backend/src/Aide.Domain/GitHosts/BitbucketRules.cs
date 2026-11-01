@@ -204,6 +204,13 @@ public static partial class BitbucketRules
         return chosen?.Email.Trim();
     }
 
+    /// <summary>FR-176: the address a co-author trailer may use: the primary address when it is confirmed, else none.</summary>
+    public static string? CommitEmail(IEnumerable<BitbucketEmail> emails)
+    {
+        ArgumentNullException.ThrowIfNull(emails);
+        return emails.FirstOrDefault(e => e.IsPrimary && e.IsConfirmed && !string.IsNullOrWhiteSpace(e.Email))?.Email.Trim();
+    }
+
     /// <summary>
     /// FR-135: the repo picker's BBQL filter <c>name~"…"</c> (case-insensitive contains), with <c>\</c> and <c>"</c> escaped;
     /// <c>null</c> without a search.

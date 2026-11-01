@@ -68,6 +68,7 @@ internal static class ProjectMapping
         {
             RepoWebUrl = ProjectSettingsRules.RepoWebUrl(s.Provider, s.RepoUrl, s.RepoFullName),
             ExternalRepoId = s.ExternalRepoId,
+            CommitCreditEnabled = s.CommitCreditEnabled,
         };
 
     /// <param name="s">The project's LLM settings.</param>

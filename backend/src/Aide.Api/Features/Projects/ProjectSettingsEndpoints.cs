@@ -43,7 +43,7 @@ public static partial class ProjectSettingsEndpoints
 
         group.MapPatch("/git", UpdateGitSettings)
             .WithName("UpdateGitSettings")
-            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION).")
+            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off.")
             .Produces<GitSettingsDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status409Conflict)
@@ -352,6 +352,14 @@ public static partial class ProjectSettingsEndpoints
         if (changes.Contains("mergeStrategy") || changes.Contains("tagPrefix"))
         {
             project.UpdatedAt = now;
+        }
+
+        // FR-177: applies to later commits only; it doesn't touch the repository, so no pull request job is queued for it.
+        if (request.CommitCreditEnabled is { } commitCredit && commitCredit != settings.CommitCreditEnabled)
+        {
+            settings.CommitCreditEnabled = commitCredit;
+            changes.Add("commitCreditEnabled");
+            db.AddEvent(EventTypes.CommitCreditChanged, id, new { enabled = commitCredit }, currentUser.Actor, now);
         }
 
         // A concurrent change to the project (xmin) becomes 409 CONFLICT in the exception handler.

@@ -103,7 +103,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** FR-177: change the signed-in user's own preferences: commitCreditOptOut ("Credit me on commits made by AIDE"). Browser session only. */
+        patch: operations["UpdateCurrentUser"];
         trace?: never;
     };
     "/api/auth/providers": {
@@ -1181,7 +1182,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). */
+        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off. */
         patch: operations["UpdateGitSettings"];
         trace?: never;
     };
@@ -4606,6 +4607,8 @@ export interface components {
             binding?: null | components["schemas"]["GitBindingDto"];
             /** @description FR-136: the caller may re-bind their own connection (`connectionId`): an Owner of a GitLab or Bitbucket project. */
             canRebind?: boolean;
+            /** @description FR-177: AIDE credits the accountable person on later commits (default on). */
+            commitCreditEnabled?: boolean;
         };
         /** @description Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false. */
         GitTestResultDto: {
@@ -6333,6 +6336,11 @@ export interface components {
             clientId: string;
             clientSecret?: null | string;
         };
+        /** @description FR-177: `PATCH /api/auth/me`. `commitCreditOptOut` is required (else 400 `VALIDATION`). */
+        UpdateCurrentUserRequest: {
+            /** @description `true`: commit credit skips this person, and moves on to the next one (§4.25). */
+            commitCreditOptOut?: null | boolean;
+        };
         /**
          * @description Change a GitLab instance (FR-130); omitted fields are unchanged. An empty `clientId` or `clientSecret` clears it.
          *     Changing `baseUrl` or `allowInsecureHttp` runs the SSRF guard and the reachability check again. gitlab.com's
@@ -6371,6 +6379,8 @@ export interface components {
              *         development. 409 `CONFLICT` while that version is `awaiting_merge` or a release attempt is in progress.
              */
             tagPrefix?: null | string;
+            /** @description FR-177: credit people on later commits (Owner). Never rewrites history. */
+            commitCreditEnabled?: null | boolean;
         };
         /** @description Rename an LLM connection (FR-78). */
         UpdateLlmCredentialRequest: {
@@ -6434,6 +6444,8 @@ export interface components {
             systemRole: components["schemas"]["SystemRole"];
             avatarUrl: null | string;
             githubLinked: boolean;
+            /** @description FR-177: the user turned off "Credit me on commits made by AIDE". */
+            commitCreditOptOut?: boolean;
         };
         /** @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known. */
         ViolationDto: {
@@ -6651,6 +6663,57 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCurrentUserRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

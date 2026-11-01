@@ -38,6 +38,8 @@ public sealed partial class BitbucketConnectionService(
 
     private ISecretProtector EmailProtector => protectors.ForPurpose(SecretPurposes.GitHostTokenEmail);
 
+    private ISecretProtector CommitEmailProtector => protectors.ForPurpose(SecretPurposes.GitHostCommitEmail);
+
     public async Task<IReadOnlyList<BitbucketConnectionDto>> ListAsync(Guid userId, CancellationToken cancellationToken)
     {
         var rows = await db.GitConnections.AsNoTracking()
@@ -104,6 +106,7 @@ public sealed partial class BitbucketConnectionService(
         row.Login = user.Login;
         row.AccessTokenEncrypted = Protector.Protect(token);
         row.TokenEmailEncrypted = EmailProtector.Protect(email.Trim());
+        row.CommitEmailEncrypted = CommitEmailProtector.Protect(email.Trim());
         row.AccessExpiresAt = null;
         row.RefreshTokenEncrypted = null;
         row.Scopes = granted;
@@ -123,9 +126,12 @@ public sealed partial class BitbucketConnectionService(
 
     /// <summary>
     /// FR-134: stores the OAuth tokens of a sign-in or connect as the user's connection for that Bitbucket account (created
-    /// or replaced; status <c>valid</c>), with whatever refresh token Bitbucket sent.
+    /// or replaced; status <c>valid</c>), with whatever refresh token Bitbucket sent. FR-176: <paramref name="emails"/> are
+    /// the addresses the sign-in already read (one call, §4.19); none (refused, or a confirmed link whose emails weren't kept)
+    /// leaves the stored commit email, to be filled on the next refresh or re-test.
     /// </summary>
-    public async Task<Result<GitConnection>> SaveOAuthAsync(Guid userId, Guid instanceId, BitbucketUser user, BitbucketOAuthTokens oauth, CancellationToken cancellationToken)
+    public async Task<Result<GitConnection>> SaveOAuthAsync(
+        Guid userId, Guid instanceId, BitbucketUser user, BitbucketOAuthTokens oauth, IReadOnlyList<BitbucketEmail>? emails, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(oauth);
@@ -137,6 +143,7 @@ public sealed partial class BitbucketConnectionService(
         row.AccessExpiresAt = GitTokenRules.AccessExpiresAt(now, oauth.ExpiresIn);
         row.RefreshTokenEncrypted = oauth.RefreshToken is { } refresh ? Protector.Protect(refresh) : null;
         row.TokenEmailEncrypted = null;
+        ApplyCommitEmail(row, (emails is { Count: > 0 }, emails is null ? null : BitbucketRules.CommitEmail(emails)));
         row.Scopes = oauth.Scopes.Count > 0 ? oauth.Scopes : BitbucketRules.ConsumerPermissions;
         row.ExpiresAt = null;
         row.Status = GitConnectionStatus.Valid;
@@ -190,9 +197,13 @@ public sealed partial class BitbucketConnectionService(
             return Result.Success(ToDto(row));
         }
 
+        (bool Read, string? Email) commitEmail = (false, null);
         var outcome = await CallAsync(userId, id, async call =>
         {
             var user = await call.Client.GetUserAsync(call.Auth, cancellationToken);
+            commitEmail = row.AuthKind == GitConnectionAuthKind.Oauth
+                ? await ReadCommitEmailAsync(call.Client, call.Auth, cancellationToken)
+                : (call.Auth.Email is not null, call.Auth.Email);
             return row.AuthKind == GitConnectionAuthKind.Token ? await CheckTokenScopesAsync(call.Client, call.Auth, user, cancellationToken) : null;
         }, cancellationToken);
         if (outcome.IsFailure)
@@ -228,6 +239,7 @@ public sealed partial class BitbucketConnectionService(
             tracked.Scopes = checkedScopes.Confirmed;
         }
 
+        ApplyCommitEmail(tracked, commitEmail);
         tracked.LastValidatedAt = now;
         tracked.UpdatedAt = now;
         try
@@ -418,6 +430,30 @@ public sealed partial class BitbucketConnectionService(
         var verdict = BitbucketRules.EvaluateTokenScopes(granted, probes);
         IReadOnlyList<string> confirmed = [.. GitTokenRules.BitbucketTokenScopes.Where(s => !verdict.Missing.Contains(s) && !verdict.Unverifiable.Contains(s))];
         return new BitbucketScopeCheck(verdict, confirmed);
+    }
+
+    /// <summary>
+    /// FR-176: the primary confirmed email from <c>GET /2.0/user/emails</c>. <c>Read</c> is false when Bitbucket refused or
+    /// failed (e.g. a consumer without the <c>email</c> permission): a connection never fails for this, and the stored email stays.
+    /// </summary>
+    private static async Task<(bool Read, string? Email)> ReadCommitEmailAsync(BitbucketClient client, BitbucketAuth auth, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (true, BitbucketRules.CommitEmail(await client.GetEmailsAsync(auth, cancellationToken)));
+        }
+        catch (BitbucketApiException)
+        {
+            return (false, null);
+        }
+    }
+
+    private void ApplyCommitEmail(GitConnection row, (bool Read, string? Email) commitEmail)
+    {
+        if (commitEmail.Read)
+        {
+            row.CommitEmailEncrypted = commitEmail.Email is { } email ? CommitEmailProtector.Protect(email) : null;
+        }
     }
 
     private async Task<GitConnection> FindOrAddAsync(Guid userId, Guid instanceId, string externalUserId, DateTimeOffset now, CancellationToken cancellationToken)

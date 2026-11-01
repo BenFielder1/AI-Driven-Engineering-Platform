@@ -32,9 +32,9 @@ public interface IBitbucketRepoInitializer
     /// <summary>
     /// Pushes one commit adding <c>README.md</c> to <c>main</c> of <paramref name="fullName"/> (<c>workspace/slug</c>), with
     /// the connection's token in the per-command <c>http.extraHeader</c> only. Throws
-    /// <see cref="BitbucketInitialPushException"/> when the push fails.
+    /// <see cref="BitbucketInitialPushException"/> when the push fails. <paramref name="coAuthorLine"/> is FR-174's trailer, if any.
     /// </summary>
-    Task PushReadmeAsync(string fullName, string name, string? description, GitCredentialKind credential, string token, CancellationToken cancellationToken);
+    Task PushReadmeAsync(string fullName, string name, string? description, GitCredentialKind credential, string token, string? coAuthorLine, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -48,7 +48,7 @@ public sealed partial class BitbucketRepoInitializer(IGitCli git, IOptionsMonito
     public const string DefaultBranch = "main";
     public const string CommitMessage = "Initial commit";
 
-    public async Task PushReadmeAsync(string fullName, string name, string? description, GitCredentialKind credential, string token, CancellationToken cancellationToken)
+    public async Task PushReadmeAsync(string fullName, string name, string? description, GitCredentialKind credential, string token, string? coAuthorLine, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(fullName);
         ArgumentException.ThrowIfNullOrEmpty(token);
@@ -67,7 +67,7 @@ public sealed partial class BitbucketRepoInitializer(IGitCli git, IOptionsMonito
             await RunAsync(folder, ["init", "-q", "-b", DefaultBranch], cancellationToken);
             await File.WriteAllTextAsync(Path.Combine(folder, "README.md"), Readme(name, description), cancellationToken);
             await RunAsync(folder, ["add", "README.md"], cancellationToken);
-            await RunAsync(folder, ["commit", "-q", "--no-verify", "-m", CommitMessage], cancellationToken);
+            await RunAsync(folder, ["commit", "-q", "--no-verify", "-m", CommitTrailers.Append(CommitMessage, coAuthorLine)], cancellationToken);
             await RunAsync(folder, ["remote", "add", GitRemote.Name, remote.Url], cancellationToken);
             var push = await git.RunAsync(
                 folder,

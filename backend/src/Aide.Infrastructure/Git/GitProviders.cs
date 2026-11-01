@@ -381,7 +381,7 @@ internal sealed partial class GitHubGitProvider(
                     return moved;
                 }
 
-                var merge = await MergePullAsync(client, pull, number, ReleaseRules.MergeTitle(request.ProjectName, tagName), head, token!, cancellationToken);
+                var merge = await MergePullAsync(client, pull, number, ReleaseRules.MergeTitle(request.ProjectName, tagName), request.CoAuthorLine, head, token!, cancellationToken);
                 if (merge.Sha is not { } sha)
                 {
                     if (merge.NotMergeable)
@@ -415,7 +415,7 @@ internal sealed partial class GitHubGitProvider(
                 return ReleaseOutcome.Failed(ErrorCodes.GitError, $"The merge commit {mergeSha[..12]} isn't visible in the repository yet.", transient: true);
             }
 
-            await workingCopies.CreateTagAsync(id, tagName, mergeSha, ReleaseRules.TagMessage(request.ProjectName, tagName, request.Version), cancellationToken);
+            await workingCopies.CreateTagAsync(id, tagName, mergeSha, request.TagMessageFor(tagName), cancellationToken);
             var pushed = await workingCopies.PushTagAsync(id, tagName, remote, cancellationToken);
             if (!pushed.Succeeded)
             {
@@ -548,10 +548,16 @@ internal sealed partial class GitHubGitProvider(
     }
 
     private async Task<MergeAttempt> MergePullAsync(
-        HttpClient client, string pull, int number, string mergeTitle, string headSha, string token, CancellationToken cancellationToken)
+        HttpClient client, string pull, int number, string mergeTitle, string? coAuthorLine, string headSha, string token, CancellationToken cancellationToken)
     {
         // Pinned: GitHub refuses (409) if the branch moved since it was fetched; the job retries and fetches it again.
         var body = new Dictionary<string, string> { ["merge_method"] = options.Value.ReleaseMergeMethod, ["commit_title"] = mergeTitle, ["sha"] = headSha };
+
+        // FR-174: the trailer is the merge commit's body, its last paragraph; without one GitHub keeps its default body.
+        if (coAuthorLine is not null)
+        {
+            body["commit_message"] = coAuthorLine;
+        }
 
         using var sent = await SendAsync(client, HttpMethod.Put, $"{pull}/merge", token, cancellationToken, JsonContent.Create(body));
         if (sent.Error is { } unreachable)
@@ -1010,8 +1016,7 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
                     await recordMerge(mergedBySomeone, cancellationToken);
                 }
 
-                await workingCopies.CreateTagAsync(
-                    id, request.Tag, mergedBySomeone, ReleaseRules.TagMessage(request.ProjectName, request.Tag, request.Version), cancellationToken);
+                await workingCopies.CreateTagAsync(id, request.Tag, mergedBySomeone, request.TagMessage, cancellationToken);
                 return ReleaseOutcome.Released(mergedBySomeone, request.Tag, alreadyTagged: false) with { MergedExternally = true, MergedHead = head };
             }
 
@@ -1022,7 +1027,7 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
             }
 
             var merged = await workingCopies.MergeIntoDefaultAsync(
-                id, settings.DefaultBranch, request.Branch, ReleaseRules.MergeTitle(request.ProjectName, request.Tag), cancellationToken);
+                id, settings.DefaultBranch, request.Branch, request.MergeMessage, cancellationToken);
             if (!merged.Merged)
             {
                 return ReleaseOutcome.Conflicted(
@@ -1035,8 +1040,7 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
                 await onMerged(merged.Sha!, cancellationToken);
             }
 
-            await workingCopies.CreateTagAsync(
-                id, request.Tag, merged.Sha!, ReleaseRules.TagMessage(request.ProjectName, request.Tag, request.Version), cancellationToken);
+            await workingCopies.CreateTagAsync(id, request.Tag, merged.Sha!, request.TagMessage, cancellationToken);
             return ReleaseOutcome.Released(merged.Sha!, request.Tag, alreadyTagged: false);
         }
         catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException or UnauthorizedAccessException)

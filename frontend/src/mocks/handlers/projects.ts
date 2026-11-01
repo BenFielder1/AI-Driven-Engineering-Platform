@@ -232,6 +232,7 @@ export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
     canSwitchToApp: false,
     mergeStrategy: 'aide_merges',
     tagPrefix: 'v',
+    commitCreditEnabled: true,
     ...overrides,
     repoFullName,
     provider,
@@ -1345,6 +1346,7 @@ export const projectHandlers = [
     git.defaultBranch = body.defaultBranch ?? git.defaultBranch
     git.mergeStrategy = body.mergeStrategy ?? git.mergeStrategy
     git.tagPrefix = body.tagPrefix ?? git.tagPrefix
+    git.commitCreditEnabled = body.commitCreditEnabled ?? git.commitCreditEnabled
     if (body.clearToken) {
       git.hasToken = false
     } else if (body.token) {

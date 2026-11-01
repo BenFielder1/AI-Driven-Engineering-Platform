@@ -25,6 +25,7 @@ internal sealed class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
         builder.Property(u => u.GithubId).HasMaxLength(50);
         builder.HasIndex(u => u.GithubId).IsUnique();
         builder.Property(u => u.AvatarUrl).HasMaxLength(500);
+        builder.Property(u => u.CommitCreditOptOut).IsRequired().HasDefaultValue(false);
         builder.Property(u => u.CreatedAt).IsRequired();
     }
 }

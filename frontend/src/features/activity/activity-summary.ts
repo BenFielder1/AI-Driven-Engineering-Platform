@@ -589,6 +589,7 @@ export const fr155EventTypes: ReadonlySet<string> = new Set([
   "STACK_DETECTED",
   "GIT_HOST_INSTANCE_CHANGED",
   "GIT_BINDING_CLEARED",
+  "COMMIT_CREDIT_CHANGED",
   "DEPLOYMENT_TARGET_CONFIGURED",
   "DEPLOYMENT_TARGET_FAILED",
   "DATABASE_PROVISIONED",
@@ -904,6 +905,9 @@ export function describeActivity(
       break;
     case "GIT_BINDING_CLEARED":
       text = describeGitBindingCleared(payload);
+      break;
+    case "COMMIT_CREDIT_CHANGED":
+      text = payload.enabled === false ? "Commit credit turned off" : "Commit credit turned on";
       break;
     case "DEPLOYMENT_TARGET_CONFIGURED":
       text = describeTargetConfigured(payload);

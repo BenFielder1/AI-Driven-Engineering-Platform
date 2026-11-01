@@ -53,6 +53,9 @@ public static class EventTypes
     /// <summary>Git, LLM or notification settings changed (FR-9). The payload never contains secret values.</summary>
     public const string SettingsUpdated = "SETTINGS_UPDATED";
 
+    /// <summary>FR-177, FR-193: an Owner turned commit credit on or off: <c>{enabled}</c>. Holds no emails.</summary>
+    public const string CommitCreditChanged = "COMMIT_CREDIT_CHANGED";
+
     /// <summary>
     /// FR-79: the project's LLM binding was cleared because the binding Owner lost the Owner role, left or was removed, or
     /// deleted the connection: <c>{projectId, credentialId, boundByUserId, provider, reason}</c>
@@ -353,7 +356,7 @@ public static class EventTypes
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady, PreviewRolloutCompleted, DatabaseReset, MigrationRunStarted, MigrationRunCompleted, MigrationRunFailed, MergedHeadMismatch, DeploymentTargetConfigured, DeploymentTargetFailed, DatabaseProvisioned, DatabaseProvisioningFailed, DatabaseExpiring],
         [EventCategory.Rollback] = [RollbackCompleted],
-        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, GitBindingCleared, GitHostInstanceChanged, PresetChanged, StackChanged, StackDetected],
+        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, CommitCreditChanged, LlmBindingCleared, GitBindingCleared, GitHostInstanceChanged, PresetChanged, StackChanged, StackDetected],
         [EventCategory.Integrity] = [IntegrityAlert],
     };
 

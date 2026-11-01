@@ -443,6 +443,9 @@ public sealed record GitSettingsDto(
 
     /// <summary>FR-136: the caller may re-bind their own connection (<c>connectionId</c>): an Owner of a GitLab or Bitbucket project.</summary>
     public bool CanRebind { get; init; }
+
+    /// <summary>FR-177: AIDE credits the accountable person on later commits (default on).</summary>
+    public bool CommitCreditEnabled { get; init; } = true;
 }
 
 /// <summary>A Git host instance as project settings show it (FR-136).</summary>
@@ -570,6 +573,9 @@ public sealed record UpdateGitSettingsRequest
     /// development. 409 <c>CONFLICT</c> while that version is <c>awaiting_merge</c> or a release attempt is in progress.</summary>
     [MaxLength(ReleaseVersionRules.TagPrefixMaxLength)]
     public string? TagPrefix { get; init; }
+
+    /// <summary>FR-177: credit people on later commits (Owner). Never rewrites history.</summary>
+    public bool? CommitCreditEnabled { get; init; }
 }
 
 /// <summary>

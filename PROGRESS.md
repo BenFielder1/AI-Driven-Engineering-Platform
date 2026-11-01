@@ -14,8 +14,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 ## Requirements
 | ID | Summary | Spec § | Layer(s) | Phase | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| FR-163 | AIDE's own Postgres on 18 outside Railway | 3.1 | deploy + data | M32 | todo | — |
-| FR-164 | Existing local data survives the upgrade | 3.1 | deploy | M32 | todo | — |
+| FR-163 | AIDE's own Postgres on 18 outside Railway | 3.1 | deploy + data | M32 | done | CI 41323663409 |
+| FR-164 | Existing local data survives the upgrade | 3.1 | deploy | M32 | done (upgrade path: manual check) | CI 41323663409 |
 | FR-165 | Issue trackers section; Jira connection | 3.2 | backend + frontend + data | M35 | todo | — |
 | FR-166 | Linear connection | 3.2 | backend + frontend | M35 | todo | — |
 | FR-167 | GitHub Issues via App (`issues: read`) | 3.2 | backend + frontend | M35 | todo | — |
@@ -49,7 +49,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 ## Phases
 - [x] M0 Baseline (base: 391a81d): CI green on `main` ([run 41312655301](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41312655301)); no re-scaffold
-- [ ] M32 PostgreSQL 18: FR-163, FR-164
+- [x] M32 PostgreSQL 18: FR-163, FR-164 ([CI 41323663409](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41323663409), head c4710e8)
 - [ ] M33 Commit co-authorship: FR-174–FR-177
 - [ ] M34 Deployment groups: FR-187–FR-192
 - [ ] M35 Tracker connections and imports: FR-165–FR-173
@@ -61,7 +61,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - 2026-11-01 (M32, Q5): Testcontainers.PostgreSql 4.15.0 needs no change for `postgres:18` (it sets no PGDATA or data mount; from reading the package). `readOnlyRootFilesystem` looks fine from reading the image's entrypoint; unverified at runtime.
 - 2026-11-01 (M32): the Kubernetes upgrade renames `pgdata` to `pgdata-17` on the same volume, which clears the `deploy-local.sh` guard without deleting anything.
 
+- 2026-11-01 (M33): "person who started the release" is the actor of that attempt's `RELEASE_STARTED` event, and "project creator" is the `PROJECT_CREATED` event actor, because neither table has a column. A connection with invalid status still counts as an identity (the id and login remain true). The personal opt-out records no event. GitHub `auto_init` and GitLab `initialize_with_readme` commits are written by the host, so they carry no trailer. A Bitbucket user linked through the confirmed pending-link path gets their commit email on the next refresh or re-test, and is skipped until then.
+
 ## Known issues
 
 ## Manual checks (Ben)
+- **M33 co-authorship:** on real GitHub, confirm a step commit shows both avatars and counts on the contributions graph once on the default branch. Check the GitLab noreply address credits the user on gitlab.com and self-managed, and how Bitbucket displays the line (SPEC Q5).
 - **M32 PostgreSQL 18 (nothing here has run against a real cluster):** on a cluster with 17 data, `deploy-local.sh` exits non-zero and the volume is unchanged. Run the README's Kubernetes upgrade end to end, confirming the rename works as uid 999 on the mount root, 18 starts with the read-only root filesystem, and the restore's "expected errors" list is complete. Then run the compose procedure and a fresh-cluster deploy.

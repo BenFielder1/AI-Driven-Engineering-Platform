@@ -358,7 +358,7 @@ internal sealed partial class BitbucketGitProvider
     {
         var repo = settings.RepoFullName!;
         var strategy = BitbucketProjectRules.MergeStrategyParameter(request.Strategy);
-        var message = ReleaseRules.MergeTitle(request.ProjectName, request.Tag);
+        var message = request.MergeMessage;
 
         // FR-140: a merge may complete after this call (202, 555): the attempt records it first, so a rollback waits.
         if (request.OnMergeSubmitting is { } submitting)
@@ -593,16 +593,16 @@ internal sealed partial class BitbucketGitProvider
         return repo.Failure;
     }
 
-    /// <summary>The tag's message is AIDE's release notes (the full notes stay on the AIDE release too).</summary>
+    /// <summary>The tag's message is AIDE's release notes (the full notes stay on the AIDE release too), then FR-174's trailer.</summary>
     private static HostReleaseRequest HostRelease(ReleaseRequest request, string commit)
     {
-        var tagMessage = ReleaseRules.TagMessage(request.ProjectName, request.Tag, request.Version);
+        var tagMessage = request.TagMessage;
         return new HostReleaseRequest(
             request.Tag,
             commit,
             ReleaseNotes.Name(string.IsNullOrEmpty(request.Version) ? request.Tag : request.Version),
             tagMessage,
-            string.IsNullOrWhiteSpace(request.Notes) ? tagMessage : request.Notes);
+            string.IsNullOrWhiteSpace(request.Notes) ? tagMessage : CommitTrailers.Append(request.Notes, request.CoAuthorLine));
     }
 
     /// <summary>The fetched project branch head (the remote-tracking ref, else the local branch).</summary>

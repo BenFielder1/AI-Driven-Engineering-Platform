@@ -54,6 +54,14 @@ public static partial class AuthEndpoints
             .RequireAuthorization()
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
+        group.MapPatch("/me", UpdateCurrentUser)
+            .WithName("UpdateCurrentUser")
+            .WithSummary("FR-177: change the signed-in user's own preferences: commitCreditOptOut (\"Credit me on commits made by AIDE\"). Browser session only.")
+            .RequireAuthorization(AuthConstants.BrowserSessionPolicy)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
+
         group.MapGet("/providers", GetProviders)
             .WithName("GetAuthProviders")
             .WithSummary("Which sign-in providers are configured, how GitHub sign-in works (githubMode: app, oauth or none; D-V2-7), and the GitLab instances offering \"Continue with GitLab\" (FR-131).")
@@ -159,6 +167,26 @@ public static partial class AuthEndpoints
         return user is null
             ? ApiProblems.Of(ErrorCodes.Unauthenticated, "Sign in to continue.")
             : TypedResults.Ok(UserDto.From(user));
+    }
+
+    private static async Task<Results<Ok<UserDto>, ValidationProblem, ProblemHttpResult>> UpdateCurrentUser(
+        UpdateCurrentUserRequest request, ClaimsPrincipal principal, AideDbContext db, CancellationToken cancellationToken)
+    {
+        if (request.CommitCreditOptOut is not { } optOut)
+        {
+            return ApiProblems.Validation(new DomainError(ErrorCodes.Validation, "Say whether to credit you on commits.") { Details = ["commitCreditOptOut: Required."] });
+        }
+
+        var userId = principal.GetUserId();
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        if (user is null)
+        {
+            return ApiProblems.Of(ErrorCodes.Unauthenticated, "Sign in to continue.");
+        }
+
+        user.CommitCreditOptOut = optOut;
+        await db.SaveChangesAsync(cancellationToken);
+        return TypedResults.Ok(UserDto.From(user));
     }
 
     private static async Task<Ok<AuthProvidersDto>> GetProviders(

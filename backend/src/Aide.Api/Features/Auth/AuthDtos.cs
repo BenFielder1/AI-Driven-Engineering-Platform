@@ -45,11 +45,24 @@ public sealed record UserDto(
     string? AvatarUrl,
     bool GithubLinked)
 {
+    /// <summary>FR-177: the user turned off "Credit me on commits made by AIDE".</summary>
+    public bool CommitCreditOptOut { get; init; }
+
     public static UserDto From(AppUser user)
     {
         ArgumentNullException.ThrowIfNull(user);
-        return new UserDto(user.Id, user.Email ?? string.Empty, user.Name, user.SystemRole, user.AvatarUrl, user.GithubId is not null);
+        return new UserDto(user.Id, user.Email ?? string.Empty, user.Name, user.SystemRole, user.AvatarUrl, user.GithubId is not null)
+        {
+            CommitCreditOptOut = user.CommitCreditOptOut,
+        };
     }
+}
+
+/// <summary>FR-177: <c>PATCH /api/auth/me</c>. <c>commitCreditOptOut</c> is required (else 400 <c>VALIDATION</c>).</summary>
+public sealed record UpdateCurrentUserRequest
+{
+    /// <summary><c>true</c>: commit credit skips this person, and moves on to the next one (§4.25).</summary>
+    public bool? CommitCreditOptOut { get; init; }
 }
 
 /// <summary>

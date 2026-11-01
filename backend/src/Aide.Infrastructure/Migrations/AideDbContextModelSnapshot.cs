@@ -1283,6 +1283,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("auth_kind");
 
+                    b.Property<string>("CommitEmailEncrypted")
+                        .HasColumnType("text")
+                        .HasColumnName("commit_email_encrypted");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -2162,6 +2166,12 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("bound_by_user_id");
 
+                    b.Property<bool>("CommitCreditEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("commit_credit_enabled");
+
                     b.Property<string>("DefaultBranch")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -2797,6 +2807,12 @@ namespace Aide.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("avatar_url");
+
+                    b.Property<bool>("CommitCreditOptOut")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("commit_credit_opt_out");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()

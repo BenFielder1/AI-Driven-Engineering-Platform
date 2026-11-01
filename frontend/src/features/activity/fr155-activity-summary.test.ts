@@ -41,6 +41,11 @@ describe('FR-155: activity summaries of the v4 events', () => {
     expect(d('GIT_HOST_INSTANCE_CHANGED', { kind: 'gitlab', change: 'other' })).toBe('server summary')
   })
 
+  it('FR177_COMMIT_CREDIT_CHANGED says which way it went', () => {
+    expect(d('COMMIT_CREDIT_CHANGED', { enabled: false })).toContain('Commit credit turned off')
+    expect(d('COMMIT_CREDIT_CHANGED', { enabled: true })).toContain('Commit credit turned on')
+  })
+
   it('FR155_GIT_BINDING_CLEARED says why, for every reason', () => {
     const tail = '; an Owner re-binds it in Settings → Git'
     expect(d('GIT_BINDING_CLEARED', { provider: 'gitlab', reason: 'owner_role_lost' })).toBe(

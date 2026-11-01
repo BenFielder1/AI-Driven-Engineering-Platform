@@ -22,5 +22,8 @@ public sealed class AppUser : IdentityUser<Guid>
 
     public string? AvatarUrl { get; set; }
 
+    /// <summary>FR-177: "Credit me on commits made by AIDE" turned off; commit credit then skips this person (§4.25).</summary>
+    public bool CommitCreditOptOut { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }

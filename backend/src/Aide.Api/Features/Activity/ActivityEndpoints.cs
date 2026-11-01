@@ -238,6 +238,7 @@ internal static class ActivitySummary
             EventTypes.MemberRoleChanged => "Member role changed",
             EventTypes.MemberRemoved => "Member removed",
             EventTypes.SettingsUpdated => "Settings updated",
+            EventTypes.CommitCreditChanged => Get("enabled") == "false" ? "Commit credit turned off" : "Commit credit turned on",
             EventTypes.DeploymentCreated => $"{Get("target") ?? "Deployment"} deployment of {Get("gitRef") ?? "?"} recorded ({Get("trigger") ?? "auto"})",
             EventTypes.DeploymentUpdated => $"{Get("target") ?? "Deployment"} deployment {Get("status") ?? "updated"}{(Get("errorCode") is { } code ? $" ({code})" : string.Empty)}",
             EventTypes.DeploymentFailed => $"{Get("target") ?? "Production"} deployment failed: {Get("errorCode") ?? "error"}",
