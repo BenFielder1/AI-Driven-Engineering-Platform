@@ -51,7 +51,7 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
         var nextjs = Packs(StackChoices.Frontend).Single(o => o.Id == "fe-nextjs");
         Assert.Equal(["full-stack", "ui"], nextjs.Modes.Select(m => m.Id));
         Assert.Equal("baas", Packs(StackChoices.Data).Single(o => o.Id == "data-supabase").Mode);
-        Assert.Equal(Enumerable.Range(1, 12).Select(i => $"R{i}"), catalog.Rules.Select(r => r.Id));
+        Assert.Equal(Enumerable.Range(1, 13).Select(i => $"R{i}"), catalog.Rules.Select(r => r.Id));
         Assert.Contains(catalog.Recommendations, r => r.Choices["backend"].Contains("be-aspnet"));
 
         using var anonymous = factory.CreateClient();
