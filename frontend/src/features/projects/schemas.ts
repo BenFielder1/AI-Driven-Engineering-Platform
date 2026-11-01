@@ -219,6 +219,13 @@ export const wizardShape = z.object({
   vercelProjectId: str,
   /** §7 Deployment step of a composed stack: one set of flat fields per target and database (wizard-host-fields). */
   ...(Object.fromEntries(hostFieldNames.map((name) => [name, str])) as Record<HostFieldName, typeof str>),
+  /** §4.28: the composition's `deploy.separateParts` (`database,frontend`). */
+  stackSeparateParts: str,
+  /** FR-188: the last `windows[]` of `POST /api/stack/options` (JSON), which decide the step's windows (D-V4-19). */
+  hostWindows: str,
+  /** R10: the origin model a split invalidated and the server's reason; asked again when the parts change. */
+  hostClearedOrigin: str,
+  hostOriginNote: str,
   /** FR-159 AI model section: '' until a usable provider is chosen (an unusable one is never preselected). */
   llmProvider: z.enum(['anthropic', 'openai', 'ollama', 'fake', '']),
   /** One of the caller's own connections for the provider, or '' (system key, keyless, or none shown). */
@@ -387,6 +394,10 @@ export const wizardDefaults: WizardValues = {
   vercelRootDirectory: '',
   vercelProjectId: '',
   ...hostFieldDefaults,
+  stackSeparateParts: '',
+  hostWindows: '',
+  hostClearedOrigin: '',
+  hostOriginNote: '',
   llmProvider: '',
   llmCredentialId: '',
   llmDefaultModel: '',

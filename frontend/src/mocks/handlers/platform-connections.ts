@@ -330,6 +330,14 @@ export const platformConnectionHandlers = [
       return unavailable
     }
     const type = new URL(request.url).searchParams.get('type') ?? 'projects'
+    // §4.28: Railway services are `project:service`, with the project's name as `detail`.
+    if (c.provider === 'railway' && type === 'services') {
+      return HttpResponse.json<Schemas['PlatformResourceDto'][]>([
+        { id: 'projects_1:svc_web', name: 'shop-web', url: null, detail: 'inventory-projects' },
+        { id: 'projects_1:svc_api', name: 'shop-api', url: null, detail: 'inventory-projects' },
+        { id: 'prj_other:svc_x', name: 'elsewhere', url: null, detail: 'another-project' },
+      ])
+    }
     return HttpResponse.json<Schemas['PlatformResourceDto'][]>([
       { id: `${type}_1`, name: `inventory-${type}`, url: null, detail: `A ${c.provider} ${type.replace(/s$/, '')}` },
     ])

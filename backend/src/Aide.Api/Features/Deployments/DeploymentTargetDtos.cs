@@ -80,7 +80,8 @@ public sealed record DeploymentTargetDto(
     DeploymentCapabilitiesDto Capabilities,
     IReadOnlyList<ReadinessItemDto> Readiness,
     bool ImplementedForReal,
-    bool FakeMode);
+    bool FakeMode,
+    Guid? GroupId = null);
 
 /// <summary>
 /// One row of the environment inventory (FR-145): <c>key</c>, the components it applies to, its environments, whether it is
@@ -115,7 +116,8 @@ public sealed record DeploymentOriginModelDto(string? Model, string? PackModel, 
 /// <summary>
 /// Settings → Deployment (FR-144, any member; D-V4-4 replaced v2's single Vercel shape): <c>targets</c>, <c>databases</c>,
 /// the environment inventory (<c>env</c>; keys only) and the <c>originModel</c>. <c>canManage</c>: the caller is an Owner.
-/// <c>fakeMode</c>: <c>Deployments:Provider=Fake</c>.
+/// <c>fakeMode</c>: <c>Deployments:Provider=Fake</c>. FR-191: <c>groups</c>: the group cards; parts' full cards stay in
+/// <c>targets</c> and <c>databases</c>, tied to a group by their <c>groupId</c>.
 /// </summary>
 public sealed record DeploymentSettingsDto(
     IReadOnlyList<DeploymentTargetDto> Targets,
@@ -123,7 +125,8 @@ public sealed record DeploymentSettingsDto(
     DeploymentEnvInventoryDto Env,
     DeploymentOriginModelDto OriginModel,
     bool CanManage,
-    bool FakeMode);
+    bool FakeMode,
+    IReadOnlyList<DeploymentGroupDto> Groups);
 
 /// <summary>FR-144: create a platform resource: its name (letters, digits, <c>.</c>, <c>_</c>, <c>-</c>), and region and plan where the platform has them.</summary>
 public sealed record CreateDeploymentResourceRequest
@@ -161,6 +164,9 @@ public sealed record PutDeploymentTargetRequest
     public CreateDeploymentResourceRequest? Create { get; init; }
 
     public LinkDeploymentResourceRequest? Link { get; init; }
+
+    /// <summary>FR-191: set the part up in this group (<c>DEPLOYMENT_GROUP_INVALID</c> when it can't join); left out, a create or link makes it standalone.</summary>
+    public Guid? GroupId { get; init; }
 }
 
 /// <summary>FR-144: the readiness checklist of <c>POST …/targets/:component/verify</c>, with the target after the check.</summary>

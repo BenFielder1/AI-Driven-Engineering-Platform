@@ -1,4 +1,5 @@
 using Aide.Domain.Common;
+using Aide.Domain.Deployments;
 
 namespace Aide.Domain.Stack;
 
@@ -17,6 +18,12 @@ namespace Aide.Domain.Stack;
 /// </summary>
 public static class StackCompatibility
 {
+    /// <summary>The <c>layer</c> of a caveat about <c>deploy.separateParts</c>.</summary>
+    public const string SeparatePartsLayer = "separateParts";
+
+    /// <summary>§4.28: a part in <c>separateParts</c> must share a platform with another part.</summary>
+    public const string SeparatePartsRule = "R13";
+
     /// <summary>The longest layer path accepted.</summary>
     public const int PathMaxLength = 200;
 
@@ -35,7 +42,13 @@ public static class StackCompatibility
         }
 
         var run = Run(catalog, input, applyDefaults: false);
-        return Result.Success(new StackEvaluation(run.Choices, run.Facts.GetValueOrDefault(StackFacts.NextjsMode) is { } mode && mode != StackIds.None ? mode : null));
+        var (hostF, hostB, hostD) = Hosts(run);
+        return Result.Success(new StackEvaluation(run.Choices, run.Facts.GetValueOrDefault(StackFacts.NextjsMode) is { } mode && mode != StackIds.None ? mode : null)
+        {
+            Groups = DeploymentGrouping.Groups(hostF, hostB, hostD, input.SeparateParts),
+            Windows = DeploymentGrouping.Windows(hostF, hostB, hostD, input.SeparateParts),
+            Caveats = [.. SelectedCaveats(run), .. RemovedSeparateParts(hostF, hostB, hostD, input.SeparateParts)],
+        });
     }
 
     /// <summary>
@@ -78,8 +91,30 @@ public static class StackCompatibility
             return new StackValidation(null, violations, []);
         }
 
+        var (frontendHost, backendHost, databaseHost) = Hosts(run);
+        caveats.AddRange(RemovedSeparateParts(frontendHost, backendHost, databaseHost, input.SeparateParts));
         return new StackValidation(Normalise(catalog, input, run, caveats), [], []);
     }
+
+    /// <summary>§4.28: the hosts a run accepted (an invalidated one is no host).</summary>
+    private static (string? Frontend, string? Backend, string? Database) Hosts(RunResult run)
+    {
+        string? Host(string choice) => run.Facts.GetValueOrDefault(choice) is { } host && host != StackIds.None ? host : null;
+        return (Host(StackChoices.FrontendHost), Host(StackChoices.BackendHost), Host(StackChoices.DatabaseHost));
+    }
+
+    private static IEnumerable<StackCaveat> SelectedCaveats(RunResult run) =>
+        from choice in run.Choices
+        where choice.Selected is not null
+        from option in choice.Options
+        where option.Option == choice.Selected && option.State == StackOptionState.Caveat
+        from reason in option.Reasons
+        select new StackCaveat(choice.Choice, option.Option, reason.Rule, reason.Text);
+
+    /// <summary>R13: "the response says so": one caveat for each part normalisation removed.</summary>
+    private static IEnumerable<StackCaveat> RemovedSeparateParts(string? frontendHost, string? backendHost, string? databaseHost, IReadOnlyList<string>? separateParts) =>
+        DeploymentGrouping.NormaliseSeparate(frontendHost, backendHost, databaseHost, separateParts).Removed
+            .Select(part => new StackCaveat(SeparatePartsLayer, part, SeparatePartsRule, $"The {part} doesn't share a platform with another part, so it can't be split off."));
 
     /// <summary>The <c>STACK_INCOMPATIBLE</c> error for <paramref name="violations"/> (details: <c>"R3: reason"</c>).</summary>
     public static DomainError IncompatibleError(IReadOnlyList<StackViolation> violations)
@@ -138,6 +173,7 @@ public static class StackCompatibility
         string? BackendPath,
         Guid? InstanceId,
         bool SelfManaged,
+        IReadOnlyList<string>? SeparateParts,
         List<StackInputError> Errors);
 
     private static Input ReadInput(StackSelection selection, StackCatalog catalog, bool validate)
@@ -226,7 +262,10 @@ public static class StackCompatibility
             errors.Add(new StackInputError("vcs.instanceId", $"{vcsOption.Name} has no host instances."));
         }
 
-        return new Input(picks, frontendPath, backendPath, selection.Vcs?.InstanceId, selection.Vcs?.SelfManaged ?? false, errors);
+        var separate = selection.Deploy?.SeparateParts;
+        errors.AddRange((separate ?? []).Where(p => !DeploymentGrouping.PartNames.Contains(p, StringComparer.Ordinal))
+            .Select(p => new StackInputError("deploy.separateParts", $"'{p}' is not a part ({string.Join(", ", DeploymentGrouping.PartNames)}).")));
+        return new Input(picks, frontendPath, backendPath, selection.Vcs?.InstanceId, selection.Vcs?.SelfManaged ?? false, separate, errors);
     }
 
     private static DomainError InputError(IReadOnlyList<StackInputError> errors) =>
@@ -245,7 +284,14 @@ public static class StackCompatibility
 
     private static RunResult Run(StackCatalog catalog, Input input, bool applyDefaults)
     {
-        var facts = new Dictionary<string, string>(StringComparer.Ordinal);
+        // §4.28: as asked; a rule reading these also requires both parts on the platform, which is what R13 keeps.
+        string Separate(string part) => input.SeparateParts?.Contains(part, StringComparer.Ordinal) == true ? "yes" : "no";
+        var facts = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [StackFacts.SeparateFrontend] = Separate(DeploymentGrouping.FrontendPart),
+            [StackFacts.SeparateBackend] = Separate(DeploymentGrouping.BackendPart),
+            [StackFacts.SeparateDatabase] = Separate(DeploymentGrouping.DatabasePart),
+        };
         var results = new List<StackChoiceEvaluation>();
         foreach (var choice in catalog.Choices)
         {
@@ -469,7 +515,11 @@ public static class StackCompatibility
         var data = OrNull(StackChoices.Data);
         var dataOption = data is null ? null : catalog.Choice(StackChoices.Data).Find(data);
         var vcs = Pick(StackChoices.Vcs);
-        var deploy = new StackDeploy(OrNull(StackChoices.FrontendHost), OrNull(StackChoices.BackendHost), OrNull(StackChoices.DatabaseHost), Pick(StackChoices.Local));
+        var separate = DeploymentGrouping.NormaliseSeparate(OrNull(StackChoices.FrontendHost), OrNull(StackChoices.BackendHost), OrNull(StackChoices.DatabaseHost), input.SeparateParts).Kept;
+        var deploy = new StackDeploy(OrNull(StackChoices.FrontendHost), OrNull(StackChoices.BackendHost), OrNull(StackChoices.DatabaseHost), Pick(StackChoices.Local))
+        {
+            SeparateParts = separate.Count == 0 ? null : separate,
+        };
         var origin = run.Choices.First(c => c.Choice == StackChoices.OriginModel);
         var nextjsMode = frontend == StackIds.NextJs ? run.Facts.GetValueOrDefault(StackFacts.NextjsMode) : null;
 

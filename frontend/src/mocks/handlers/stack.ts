@@ -116,7 +116,7 @@ export const stackHandlers = [
       return unauthenticated()
     }
     const body = (await record(request)) as Schemas['StackCompositionRequest']
-    return HttpResponse.json<Schemas['StackOptionsDto']>(evaluate(selectionOfRequest(body)))
+    return HttpResponse.json<Schemas['StackOptionsDto']>(evaluate(selectionOfRequest(body), body.deploy?.separateParts ?? []))
   }),
 
   http.post('*/api/stack/validate', async ({ request }) => {

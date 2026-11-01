@@ -100,7 +100,7 @@ export function StartVersionDialog({
       {
         version: normalizeVersion(values.version) ?? values.version.trim(),
         request: values.request.trim(),
-        ...(stackChange ? { stack: toStackRequest(stackChange, { omitVcs: (projectStack.data?.repoVcs ?? null) !== null }) } : {}),
+        ...(stackChange ? { stack: toStackRequest(stackChange, { omitVcs: (projectStack.data?.repoVcs ?? null) !== null, separateParts: projectStack.data?.composition?.deploy.separateParts ?? [] }) } : {}),
       },
       {
         onSuccess: (result) => {

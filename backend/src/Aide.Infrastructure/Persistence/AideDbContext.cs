@@ -53,6 +53,8 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<DeploymentTarget> DeploymentTargets => Set<DeploymentTarget>();
 
+    public DbSet<DeploymentGroup> DeploymentGroups => Set<DeploymentGroup>();
+
     public DbSet<DeploymentEnvVar> DeploymentEnvVars => Set<DeploymentEnvVar>();
 
     public DbSet<Deployment> Deployments => Set<Deployment>();
@@ -114,6 +116,7 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<LlmProvider>(configurationBuilder);
         MapEnum<LlmCredentialStatus>(configurationBuilder);
         MapEnum<GitProvider>(configurationBuilder);
+        MapEnum<DeploymentGroupStatus>(configurationBuilder);
         MapEnum<GitHubOwnerType>(configurationBuilder);
         MapEnum<GitHubConnectionStatus>(configurationBuilder);
         MapEnum<GitHostKind>(configurationBuilder);

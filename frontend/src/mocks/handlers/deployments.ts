@@ -56,6 +56,12 @@ export const deploymentDb = {
   provisioningFailure: null as { errorCode: string; errorMessage: string } | null,
   /** FR-148: a preview rollout or reset is running: the preview database reset answers 409 INVALID_STATE. */
   previewResetBusy: false,
+  /** FR-190: a group's project names already in the workspace: creating one answers 409 PLATFORM_RESOURCE_EXISTS. */
+  existingProjectNames: [] as string[],
+  /** FR-190: this part fails the group's job (once; Retry creates it). */
+  groupPartFailure: null as Schemas['DeploymentPart'] | null,
+  /** FR-191: the new connection can't reach the shared project: a rebind answers 502 PLATFORM_ERROR. */
+  rebindUnreachable: false,
 }
 
 /** Deployments the platform never reported (tests add ids): `unknown_at_platform` (FR-151). */
@@ -73,6 +79,9 @@ export function resetDeploymentDb() {
   deploymentDb.envDeleteFails = false
   deploymentDb.provisioningFailure = null
   deploymentDb.previewResetBusy = false
+  deploymentDb.existingProjectNames = []
+  deploymentDb.groupPartFailure = null
+  deploymentDb.rebindUnreachable = false
   unknownAtPlatform.clear()
   previewEnvironments.clear()
 }
@@ -542,6 +551,126 @@ function settingsDto(p: StoredProject, owner: boolean): Settings {
     originModel: { ...d.originModel, options: [...d.originModel.options] },
     canManage: owner,
     fakeMode: d.fakeMode,
+    groups: (d.groups ?? []).map((g) => ({ ...g, canBind: owner, canRetry: owner && g.canRetry, partStatuses: g.partStatuses.map((s) => ({ ...s })) })),
+  }
+}
+
+type Group = Schemas['DeploymentGroupDto']
+type Part = Schemas['DeploymentPart']
+
+const notConfiguredParts = (parts: readonly Part[]): Group['partStatuses'] =>
+  parts.flatMap<Group['partStatuses'][number]>((part) =>
+    part === 'database'
+      ? (['production', 'preview'] as const).map((environment) => ({ part, environment, status: 'not_configured', statusReason: null, resourceId: null }))
+      : [{ part, environment: null, status: 'not_configured', statusReason: null, resourceId: null }],
+  )
+
+/** A group card before its PUT (`id` null). */
+function makeGroup(provider: Provider, parts: Part[], capability: Group['capability']): Group {
+  return {
+    id: null,
+    provider,
+    capability,
+    parts,
+    name: null,
+    binding: null,
+    canBind: false,
+    sharedResourceId: null,
+    sharedResourceUrl: null,
+    region: null,
+    plan: null,
+    status: 'not_configured',
+    statusReason: null,
+    partStatuses: notConfiguredParts(parts),
+    canRetry: false,
+    updatedAt: null,
+  }
+}
+
+/** FR-191 test seed: a group and its parts' empty cards, optionally set up by `connection` (every part ready). */
+export function seedDeploymentGroup(
+  p: StoredProject,
+  { provider, parts, capability = 'project', connection }: { provider: Provider; parts: Part[]; capability?: Group['capability']; connection?: StoredPlatformConnection },
+): Group {
+  const d = deploymentOf(p)
+  for (const part of parts) {
+    if (part === 'database') {
+      for (const environment of ['production', 'preview'] as const) {
+        if (!d.databases.some((x) => x.environment === environment)) {
+          d.databases.push(makeDatabase(environment, provider as DatabaseProvider))
+        }
+      }
+    } else if (!d.targets.some((t) => t.component === part)) {
+      d.targets.push(makeTarget(part, provider))
+    }
+  }
+  const group = makeGroup(provider, parts, capability)
+  d.groups = [...(d.groups ?? []), group]
+  if (connection) {
+    startGroup(d, group, connection, { name: 'shop', sharedResourceId: capability === 'project' ? 'prj_shop' : null })
+    advanceGroups(d)
+  }
+  return group
+}
+
+function startGroup(d: StoredDeploymentSettings, g: Group, c: StoredPlatformConnection, { name, sharedResourceId }: { name: string; sharedResourceId: string | null }) {
+  g.id ??= nextId()
+  g.name = name
+  g.binding = bindingOf(c)
+  g.sharedResourceId = sharedResourceId
+  g.sharedResourceUrl = sharedResourceId && g.provider === 'railway' ? `https://railway.com/project/${sharedResourceId}` : sharedResourceId ? `https://dashboard.render.com/project/${sharedResourceId}` : null
+  g.status = 'configuring'
+  g.statusReason = null
+  g.canRetry = false
+  g.partStatuses = g.partStatuses.map((s) => ({ ...s, status: 'configuring', statusReason: null }))
+  for (const t of d.targets.filter((x) => g.parts.includes(x.component))) {
+    t.groupId = g.id
+    t.binding = g.binding
+    t.status = 'configuring'
+  }
+  for (const db of g.parts.includes('database') ? d.databases : []) {
+    db.groupId = g.id
+    db.binding = g.binding
+    db.status = 'provisioning'
+  }
+}
+
+/** FR-190: a group's job and its databases' jobs finish by the next read; one part may fail, and the rest stay ready. */
+function advanceGroups(d: StoredDeploymentSettings) {
+  for (const g of d.groups ?? []) {
+    if (g.status !== 'configuring') {
+      continue
+    }
+    const failing = deploymentDb.groupPartFailure
+    deploymentDb.groupPartFailure = null
+    const suffix: Record<Part, string> = { frontend: 'web', backend: 'api', database: 'db' }
+    for (const s of g.partStatuses) {
+      if (s.status !== 'configuring') {
+        continue
+      }
+      const failed = s.part === failing
+      s.status = failed ? 'error' : s.part === 'database' ? 'available' : 'ready'
+      s.statusReason = failed ? 'PLATFORM_ERROR' : null
+      s.resourceId = failed ? null : `res_${g.name ?? ''}_${suffix[s.part]}${s.environment === 'preview' ? '_preview' : ''}`
+      if (s.part === 'database') {
+        const db = d.databases.find((x) => x.environment === s.environment)
+        if (db) {
+          db.status = s.status
+          db.resourceId = s.resourceId
+          db.name = failed ? null : `${g.name ?? ''}-${suffix.database}`
+        }
+      } else {
+        const t = d.targets.find((x) => x.component === s.part)
+        if (t) {
+          t.status = failed ? 'error' : 'ready'
+          t.resourceId = s.resourceId
+          t.name = failed ? null : `${g.name ?? ''}-${suffix[s.part]}`
+        }
+      }
+    }
+    const anyError = g.partStatuses.some((s) => s.status === 'error')
+    g.status = anyError ? 'error' : 'ready'
+    g.canRetry = anyError
   }
 }
 
@@ -571,7 +700,7 @@ const databaseProviderOfOption: Readonly<Record<string, DatabaseProvider>> = {
 }
 
 /** FR-144, FR-152: a created project's target and database cards, from its composition's hosts (nothing set up yet). */
-export function seedHostsFromComposition(p: StoredProject, deploy: Schemas['StackCompositionDto']['deploy']) {
+export function seedHostsFromComposition(p: StoredProject, deploy: Schemas['StackCompositionDto']['deploy'], groups: Schemas['StackCompositionDto']['groups'] = []) {
   const frontend = hostProviderOfOption[deploy.frontendHost ?? '']
   const backend = hostProviderOfOption[deploy.backendHost ?? '']
   const database = databaseProviderOfOption[deploy.databaseHost ?? '']
@@ -581,6 +710,7 @@ export function seedHostsFromComposition(p: StoredProject, deploy: Schemas['Stac
   const d = deploymentOf(p)
   d.targets = [...(frontend ? [makeTarget('frontend', frontend)] : []), ...(backend ? [makeTarget('backend', backend)] : [])]
   d.databases = database ? [makeDatabase('production', database), makeDatabase('preview', database)] : []
+  d.groups = groups.map((g) => makeGroup(g.provider, [...g.parts], g.capability))
 }
 
 /** FR-88 wizard (`POST /projects` `deployment`): v2's Vercel flow, now the project's frontend target (FR-144). */
@@ -1000,7 +1130,101 @@ export const deploymentHandlers = [
     }
     advanceSetups(deploymentOf(a.project))
     advanceDatabases(deploymentOf(a.project))
+    advanceGroups(deploymentOf(a.project))
     return HttpResponse.json<Settings>(settingsDto(a.project, a.level === 'owner'))
+  }),
+
+  // ---- Deployment groups (FR-187–FR-192) ----
+  http.put('*/api/projects/:id/settings/deployment/groups/:provider', async ({ request, params }) => {
+    const a = ownerMutation(request, params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    const body = (await record(request)) as Schemas['PutDeploymentGroupRequest']
+    const d = deploymentOf(a.project)
+    const provider = params.provider as Provider
+    const g = d.groups?.find((x) => x.provider === provider)
+    const platform = platformLabel[provider]
+    if (!g) {
+      const reason = 'a group needs at least two parts on the platform'
+      return problem(400, 'DEPLOYMENT_GROUP_INVALID', `These parts can't share a ${platform} project: ${reason}.`, { reason })
+    }
+    if (!body.connectionId) {
+      return problem(400, 'VALIDATION', 'The deployment group is invalid.', { errors: { connectionId: [`Choose one of your ${platform} connections.`] } })
+    }
+    const connection = platformDb.connections.find((c) => c.id === body.connectionId && c.provider === provider)
+    if (!connection) {
+      return notFound('The connection was not found.')
+    }
+    if (connection.userId !== a.userId) {
+      return problem(403, 'CREDENTIAL_NOT_OWNER', 'You can only bind your own connection.')
+    }
+    if (!body.create && !body.link) {
+      if (g.id === null) {
+        return problem(400, 'VALIDATION', 'The deployment group is invalid.', { errors: { create: ['Create a project or link an existing one.'] } })
+      }
+      if (deploymentDb.rebindUnreachable) {
+        return problem(502, 'PLATFORM_ERROR', `This ${platform} connection can't reach the project.`, { platform: provider })
+      }
+      g.binding = bindingOf(connection)
+      for (const row of [...d.targets, ...d.databases].filter((x) => x.groupId === g.id)) {
+        row.binding = g.binding
+      }
+      return HttpResponse.json<Group>(g, { status: 202 })
+    }
+    if (g.id !== null) {
+      return problem(409, 'CONFLICT', 'The group already has platform resources. Remove the group first; AIDE keeps those resources.')
+    }
+    if (body.create && deploymentDb.existingProjectNames.includes(body.create.name)) {
+      return problem(409, 'PLATFORM_RESOURCE_EXISTS', `${platform} already has a project with that name. Link it instead, or choose another name.`, { platform: provider })
+    }
+    g.region = body.create?.region ?? null
+    g.plan = body.create?.plan ?? null
+    const sharedResourceId = g.capability !== 'project' ? null : (body.link?.resourceId ?? `prj_${body.create?.name ?? a.project.slug}`)
+    startGroup(d, g, connection, { name: body.create?.name ?? a.project.slug, sharedResourceId })
+    return HttpResponse.json<Group>(g, { status: 202 })
+  }),
+
+  http.delete('*/api/projects/:id/settings/deployment/groups/:provider', async ({ request, params }) => {
+    const a = ownerMutation(request, params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    await record(request)
+    const d = deploymentOf(a.project)
+    const i = d.groups?.findIndex((x) => x.provider === params.provider && x.id !== null) ?? -1
+    const g = d.groups?.[i]
+    if (!g || !d.groups) {
+      return notFound('The group was not found.')
+    }
+    d.targets = d.targets.map((t) => (t.groupId === g.id ? makeTarget(t.component, t.provider, { rootDirectory: t.rootDirectory, buildConfig: t.buildConfig }) : t))
+    d.databases = d.databases.map((x) => (x.groupId === g.id ? makeDatabase(x.environment, x.provider as DatabaseProvider) : x))
+    d.groups[i] = makeGroup(g.provider, g.parts, g.capability)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post('*/api/projects/:id/settings/deployment/groups/:provider/retry', async ({ request, params }) => {
+    const a = ownerMutation(request, params.id)
+    if (a instanceof Response) {
+      return a
+    }
+    await record(request)
+    const d = deploymentOf(a.project)
+    const g = d.groups?.find((x) => x.provider === params.provider && x.id !== null)
+    if (!g) {
+      return notFound('The group was not found.')
+    }
+    if (g.status === 'configuring') {
+      return problem(409, 'CONFLICT', 'The group is already being set up.')
+    }
+    if (!g.canRetry) {
+      return problem(409, 'INVALID_STATE', 'No part of the group needs a retry.')
+    }
+    // FR-190: only the failed or missing parts run again.
+    g.partStatuses = g.partStatuses.map((s) => (s.status === 'error' || s.status === 'not_configured' ? { ...s, status: 'configuring', statusReason: null } : s))
+    g.status = 'configuring'
+    g.canRetry = false
+    return HttpResponse.json<Group>(g, { status: 202 })
   }),
 
   http.put('*/api/projects/:id/settings/deployment/targets/:component', async ({ request, params }) => {
@@ -1068,6 +1292,7 @@ export const deploymentHandlers = [
     if (body.link) {
       t.resourceId = body.link.resourceId
     }
+    t.groupId = body.groupId ?? null
     t.status = 'configuring'
     t.statusReason = null
     t.setup = { jobId: nextId(), state: 'queued', step: 'queued', errorCode: null, message: null, fixUrl: null, startedAt: null, completedAt: null }
@@ -1181,6 +1406,7 @@ export const deploymentHandlers = [
       }
       steps = [body.link ? 'linking' : 'creating', 'waiting', 'syncing_env']
     }
+    db.groupId = body.groupId ?? null
     db.status = 'provisioning'
     db.updatedAt = new Date().toISOString()
     db.provisioning = newJob()

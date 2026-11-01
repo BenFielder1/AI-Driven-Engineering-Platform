@@ -982,6 +982,83 @@ namespace Aide.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.DeploymentGroup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BoundByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bound_by_user_id");
+
+                    b.Property<Guid?>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Plan")
+                        .HasColumnType("text")
+                        .HasColumnName("plan");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("Region")
+                        .HasColumnType("text")
+                        .HasColumnName("region");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("SharedResourceId")
+                        .HasColumnType("text")
+                        .HasColumnName("shared_resource_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StatusReason")
+                        .HasColumnType("text")
+                        .HasColumnName("status_reason");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_deployment_groups");
+
+                    b.HasIndex("BoundByUserId")
+                        .HasDatabaseName("ix_deployment_groups_bound_by_user_id");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_deployment_groups_connection_id");
+
+                    b.HasIndex("ProjectId", "Provider")
+                        .IsUnique()
+                        .HasDatabaseName("ux_deployment_groups_project_id_provider");
+
+                    b.ToTable("deployment_groups", (string)null);
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.DeploymentTarget", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1009,9 +1086,17 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("connection_id");
 
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
                     b.Property<string>("Name")
                         .HasColumnType("text")
                         .HasColumnName("name");
+
+                    b.Property<string>("PlatformProjectId")
+                        .HasColumnType("text")
+                        .HasColumnName("platform_project_id");
 
                     b.Property<string>("PreviewResourceId")
                         .HasColumnType("text")
@@ -1074,6 +1159,9 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasIndex("ConnectionId")
                         .HasDatabaseName("ix_deployment_targets_connection_id");
+
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_deployment_targets_group_id");
 
                     b.HasIndex("ProjectId", "Component")
                         .IsUnique()
@@ -1739,6 +1827,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
                     b.Property<string>("Plan")
                         .HasColumnType("text")
                         .HasColumnName("plan");
@@ -1782,6 +1874,9 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasIndex("ConnectionId")
                         .HasDatabaseName("ix_managed_databases_connection_id");
+
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_managed_databases_group_id");
 
                     b.HasIndex("ProjectId", "Environment")
                         .IsUnique()
@@ -3307,6 +3402,28 @@ namespace Aide.Infrastructure.Migrations
                         .HasConstraintName("fk_deployment_env_vars_projects_project_id");
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.DeploymentGroup", b =>
+                {
+                    b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("BoundByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_deployment_groups_users_bound_by_user_id");
+
+                    b.HasOne("Aide.Domain.Entities.PlatformConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_deployment_groups_platform_connections_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_deployment_groups_projects_project_id");
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.DeploymentTarget", b =>
                 {
                     b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
@@ -3320,6 +3437,12 @@ namespace Aide.Infrastructure.Migrations
                         .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_deployment_targets_platform_connections_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.DeploymentGroup", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_deployment_targets_deployment_groups_group_id");
 
                     b.HasOne("Aide.Domain.Entities.Project", null)
                         .WithMany()
@@ -3431,6 +3554,12 @@ namespace Aide.Infrastructure.Migrations
                         .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_managed_databases_platform_connections_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.DeploymentGroup", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_managed_databases_deployment_groups_group_id");
 
                     b.HasOne("Aide.Domain.Entities.Project", null)
                         .WithMany()

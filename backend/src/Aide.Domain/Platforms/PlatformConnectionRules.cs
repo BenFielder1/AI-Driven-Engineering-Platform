@@ -218,8 +218,8 @@ public static partial class PlatformConnectionRules
         PlatformProvider.Vercel => [PlatformResourceType.Projects],
         PlatformProvider.Netlify => [PlatformResourceType.Sites],
         PlatformProvider.Cloudflare => [PlatformResourceType.Workers, PlatformResourceType.Projects],
-        PlatformProvider.Render => [PlatformResourceType.Services, PlatformResourceType.Regions, PlatformResourceType.Databases],
-        PlatformProvider.Railway => [PlatformResourceType.Projects, PlatformResourceType.Regions, PlatformResourceType.Databases],
+        PlatformProvider.Render => [PlatformResourceType.Services, PlatformResourceType.Regions, PlatformResourceType.Databases, PlatformResourceType.Projects],
+        PlatformProvider.Railway => [PlatformResourceType.Projects, PlatformResourceType.Regions, PlatformResourceType.Databases, PlatformResourceType.Services],
         PlatformProvider.Supabase => [PlatformResourceType.Projects, PlatformResourceType.Orgs, PlatformResourceType.Regions],
         _ => [],
     };

@@ -33,7 +33,7 @@ Every adapted file starts with a provenance comment. For `skill.md` it must be
 - `rules.constraints[]`: `{rule, choices[], options[], state: forbidden|caveat, when?[], unless?[], text}`. The entry
   applies to each listed option of each listed choice when any `when` clause holds (or there is none) and no `unless`
   clause holds. A clause is `{fact: [values]}` (all facts must match; `!x` excludes a value). Facts are earlier choices
-  plus `vcsHost` and `nextjsMode` (R2). A rule may only read facts chosen before its choice (load error otherwise).
+  plus `vcsHost`, `nextjsMode` (R2) and `separateFrontend`, `separateBackend`, `separateDatabase` (`yes` or `no`, §4.28). A rule may only read facts chosen before its choice (load error otherwise).
   A clause whose facts aren't all chosen yet never fires the rule. `text` may use `{option}` and `{<earlier choice>}`
   (option names).
 - `rules.originModel[]`: R10, first match wins: `{when?[], allowed[], default?, text}`; the last entry has no `when`.

@@ -55,7 +55,8 @@ public sealed record DeploymentDatabaseDto(
     DatabaseProvisioningDto? Provisioning,
     IReadOnlyList<string> Warnings,
     DateTimeOffset? UpdatedAt,
-    bool ResetRecommended = false);
+    bool ResetRecommended = false,
+    Guid? GroupId = null);
 
 /// <summary>FR-152: provision a database: region (Supabase: a region code or americas/emea/apac; Render: defaults to the backend's), plan, and an optional name.</summary>
 public sealed record CreateManagedDatabaseRequest
@@ -97,6 +98,9 @@ public sealed record PutManagedDatabaseRequest
     public LinkDeploymentResourceRequest? Link { get; init; }
 
     public ExternalDatabaseRequest? External { get; init; }
+
+    /// <summary>FR-191: set the database up in this group (<c>DEPLOYMENT_GROUP_INVALID</c> when it can't join); left out, it is standalone.</summary>
+    public Guid? GroupId { get; init; }
 }
 
 /// <summary>One file a migration run applied: version, name and duration (ms).</summary>

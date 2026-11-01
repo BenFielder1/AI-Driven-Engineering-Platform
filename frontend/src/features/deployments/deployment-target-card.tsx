@@ -41,6 +41,7 @@ import {
   type TargetCard,
 } from './deployments-api'
 import { targetRequestBody } from './host-setup-body'
+import { JoinGroupField } from './group-setup-fields'
 import { HostSetupFields } from './host-setup-fields'
 import { PlatformGitAlert } from './platform-git-alert'
 
@@ -363,7 +364,17 @@ function SetupError({ error, target: t }: { error: unknown; target: TargetCard }
 }
 
 /** FR-144 (Owner): bind one of the caller's connections and create or link the platform resource. */
-function TargetSetupForm({ project, target: t, onDone }: { project: Project; target: TargetCard; onDone: () => void }) {
+function TargetSetupForm({
+  project,
+  target: t,
+  joinGroup,
+  onDone,
+}: {
+  project: Project
+  target: TargetCard
+  joinGroup?: { id: string } | undefined
+  onDone: () => void
+}) {
   const put = usePutDeploymentTarget(project.id, t.component)
   const me = useCurrentUser()
   const name = providerName(t)
@@ -401,9 +412,13 @@ function TargetSetupForm({ project, target: t, onDone }: { project: Project; tar
   const mode = useWatch({ control, name: 'mode' })
   const connectionId = useWatch({ control, name: 'connectionId' })
 
+  const [joining, setJoining] = useState(false)
+  const groupId = t.groupId ?? (joining ? (joinGroup?.id ?? null) : null)
+
   const onSubmit = handleSubmit((v) => {
     setFailure(null)
-    const body = targetRequestBody(t.provider, t.needsConnection, { ...v, connectionString: '' })
+    // FR-191: a change of setup keeps the part in its group; a part outside one joins only when the Owner says so.
+    const body = { ...targetRequestBody(t.provider, t.needsConnection, { ...v, connectionString: '' }), ...(groupId ? { groupId } : {}) }
     put.mutate(body, {
       onSuccess: () => {
         toast.success(`Setting up the ${t.component} on ${name}.`)
@@ -476,6 +491,7 @@ function TargetSetupForm({ project, target: t, onDone }: { project: Project; tar
           on Pages for the repository.
         </p>
       )}
+      {joinGroup && <JoinGroupField platform={name} checked={joining} onChange={setJoining} />}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" pending={put.isPending} pendingLabel="Starting…">
           {t.resourceId ? 'Save target' : `Set up ${name}`}
@@ -495,7 +511,18 @@ function TargetSetupForm({ project, target: t, onDone }: { project: Project; tar
  * status, setup progress or failure, the derived build configuration, capabilities and the readiness checklist.
  * Owners set it up (bind, create or link), verify it and unbind it.
  */
-export function DeploymentTargetCard({ project, target: t, canManage }: { project: Project; target: TargetCard; canManage: boolean }) {
+export function DeploymentTargetCard({
+  project,
+  target: t,
+  canManage,
+  joinGroup,
+}: {
+  project: Project
+  target: TargetCard
+  canManage: boolean
+  /** FR-191: the group this part left, which its setup form can rejoin. */
+  joinGroup?: { id: string } | undefined
+}) {
   const name = providerName(t)
   const component = componentLabels[t.component]
   const configured = t.resourceId !== null || t.binding !== null
@@ -537,6 +564,7 @@ export function DeploymentTargetCard({ project, target: t, canManage }: { projec
         <TargetSetupForm
           project={project}
           target={t}
+          joinGroup={joinGroup}
           onDone={() => {
             setEditing(false)
           }}

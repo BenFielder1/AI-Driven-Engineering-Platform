@@ -21,7 +21,8 @@ public sealed record DerivedEnvDatabase(
     string? TransactionUrl = null,
     string? SupabaseUrl = null,
     string? PublishableKey = null,
-    string? SecretKey = null)
+    string? SecretKey = null,
+    bool SeparateProject = false)
 {
     /// <summary>Never prints the URLs or keys (they hold passwords and the secret key).</summary>
     public override string ToString() => $"DerivedEnvDatabase {{ Environment = {Environment}, Provider = {Provider} }}";
@@ -86,6 +87,9 @@ public static class DerivedEnvRules
     public const string SupabaseUrl = "SUPABASE_URL";
     public const string SupabasePublishableKey = "SUPABASE_PUBLISHABLE_KEY";
     public const string SupabaseSecretKey = "SUPABASE_SECRET_KEY";
+
+    /// <summary>§4.28: the recorded origin of <c>DATABASE_URL</c> for a standalone Railway database.</summary>
+    public const string SeparateRailwayOrigin = "from Railway Postgres (separate project)";
 
     private static readonly DeploymentComponent[] FrontendOnly = [DeploymentComponent.Frontend];
     private static readonly DeploymentComponent[] BackendOnly = [DeploymentComponent.Backend];
@@ -189,7 +193,9 @@ public static class DerivedEnvRules
             {
                 var guidance = facts.Serverless && effective.Values.Any(d => d.Provider == ManagedDatabaseProvider.Supabase)
                     ? " (transaction pooler :6543, prepared statements off)" : string.Empty;
-                list.Add(new DerivedEnvVar(DatabaseUrl, app, urls, Public: false, Sensitive: true, $"managed database ({from}){guidance}"));
+                // §4.28: a Railway database in its own project says so, because its connection is public.
+                var origin = effective.Values.Any(d => d.SeparateProject) ? SeparateRailwayOrigin : $"managed database ({from}){guidance}";
+                list.Add(new DerivedEnvVar(DatabaseUrl, app, urls, Public: false, Sensitive: true, origin));
             }
 
             var needsDirect = facts.NeedsDirectUrl || (facts.Serverless && composition.Data.Pack == "data-drizzle");

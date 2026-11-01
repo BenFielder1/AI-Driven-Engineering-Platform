@@ -60,17 +60,30 @@ public static class StackFacts
     public const string VcsHost = "vcsHost";
     public const string NextjsMode = "nextjsMode";
 
+    /// <summary>§4.28: whether <c>deploy.separateParts</c> names the part; always known, so a rule may read them on any choice.</summary>
+    public const string SeparateFrontend = "separateFrontend";
+
+    /// <inheritdoc cref="SeparateFrontend"/>
+    public const string SeparateBackend = "separateBackend";
+
+    /// <inheritdoc cref="SeparateFrontend"/>
+    public const string SeparateDatabase = "separateDatabase";
+
+    /// <summary>The values of the separate facts.</summary>
+    public static IReadOnlyList<string> YesNo { get; } = ["yes", "no"];
+
     /// <summary>The choice position after which a fact is known (a rule on choice <c>c</c> may use facts with a lower position).</summary>
     public static int PositionOf(string fact) => fact switch
     {
         VcsHost => StackChoices.IndexOf(StackChoices.Vcs),
         NextjsMode => StackChoices.IndexOf(StackChoices.Backend),
+        SeparateFrontend or SeparateBackend or SeparateDatabase => -1,
         _ => StackChoices.IndexOf(fact),
     };
 
     /// <summary>Whether <paramref name="fact"/> is a known fact (a choice other than the origin model, or a derived fact).</summary>
     public static bool IsKnown(string fact) =>
-        fact is VcsHost or NextjsMode || (StackChoices.IndexOf(fact) >= 0 && fact != StackChoices.OriginModel);
+        fact is VcsHost or NextjsMode or SeparateFrontend or SeparateBackend or SeparateDatabase || (StackChoices.IndexOf(fact) >= 0 && fact != StackChoices.OriginModel);
 
     /// <summary>R2: the values of <see cref="NextjsMode"/>.</summary>
     public static IReadOnlyList<string> NextjsModes { get; } = [StackIds.FullStack, StackIds.Ui, StackIds.None];

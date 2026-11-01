@@ -285,6 +285,12 @@ public static class EventTypes
     /// </summary>
     public const string DeploymentTargetFailed = "DEPLOYMENT_TARGET_FAILED";
 
+    /// <summary>FR-190, FR-193: every part of a deployment group is ready: <c>{groupId, provider, status, sharedResourceId}</c>.</summary>
+    public const string DeploymentGroupConfigured = "DEPLOYMENT_GROUP_CONFIGURED";
+
+    /// <summary>FR-190, FR-193: a deployment group's setup ended with a failure: <c>{groupId, provider, status, errorCode}</c>.</summary>
+    public const string DeploymentGroupFailed = "DEPLOYMENT_GROUP_FAILED";
+
     /// <summary>
     /// FR-152, FR-155: a database became available through its provisioning job (created, linked, External or restored):
     /// <c>{databaseId, environment, provider, mode, status, expiresAt}</c>.
@@ -354,7 +360,7 @@ public static class EventTypes
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
-        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady, PreviewRolloutCompleted, DatabaseReset, MigrationRunStarted, MigrationRunCompleted, MigrationRunFailed, MergedHeadMismatch, DeploymentTargetConfigured, DeploymentTargetFailed, DatabaseProvisioned, DatabaseProvisioningFailed, DatabaseExpiring],
+        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady, PreviewRolloutCompleted, DatabaseReset, MigrationRunStarted, MigrationRunCompleted, MigrationRunFailed, MergedHeadMismatch, DeploymentTargetConfigured, DeploymentTargetFailed, DeploymentGroupConfigured, DeploymentGroupFailed, DatabaseProvisioned, DatabaseProvisioningFailed, DatabaseExpiring],
         [EventCategory.Rollback] = [RollbackCompleted],
         [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, CommitCreditChanged, LlmBindingCleared, GitBindingCleared, GitHostInstanceChanged, PresetChanged, StackChanged, StackDetected],
         [EventCategory.Integrity] = [IntegrityAlert],
@@ -376,6 +382,7 @@ public static class EventTypes
         DeploymentFailed,
         MigrationRunFailed,
         DeploymentTargetFailed,
+        DeploymentGroupFailed,
         DatabaseProvisioningFailed,
         DatabaseExpiring,
         ArtifactCorrupted,

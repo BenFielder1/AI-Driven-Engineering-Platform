@@ -71,6 +71,11 @@ public sealed class ManagedDatabaseSecrets(ISecretProtectors protectors)
         }
 
         var connection = Connection(row);
+        if (row.Provider == ManagedDatabaseProvider.Railway && connection.RailwaySeparateProject)
+        {
+            return new DerivedEnvDatabase(row.Environment, row.Provider, connection.Url, SeparateProject: true);
+        }
+
         if (row.Provider == ManagedDatabaseProvider.Railway)
         {
             return new DerivedEnvDatabase(row.Environment, row.Provider, ManagedDatabaseRules.RailwayReference(connection.RailwayService));

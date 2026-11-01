@@ -1,3 +1,4 @@
+using Aide.Api.Features.Deployments;
 using Aide.Api.Features.Projects;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
@@ -82,8 +83,21 @@ public sealed partial class ManagedDatabaseService
                 : new DomainError(ErrorCodes.Forbidden, "Your project role doesn't allow this action."));
         }
 
+        if (request.GroupId is { } joining)
+        {
+            var group = await db.DeploymentGroups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == joining && g.ProjectId == projectId, cancellationToken);
+            var joinable = DeploymentGroups.PlatformOf(provider) is { } platformOfProvider
+                ? DeploymentGroupRules.CanJoin(facts.Composition, DeploymentPart.Database, platformOfProvider, group, providers.UsesFake)
+                : Result.Failure(DeploymentGroupRules.Invalid(group?.Provider ?? DeploymentProvider.Railway, $"{ManagedDatabaseRules.DisplayName(provider)} databases never share a project"));
+            if (joinable.IsFailure)
+            {
+                return (null, joinable.Error);
+            }
+        }
+
         var rows = await db.ManagedDatabases.Where(d => d.ProjectId == projectId).ToListAsync(cancellationToken);
         var row = rows.FirstOrDefault(d => d.Environment == environment);
+        var previousGroup = row?.GroupId;
         var linkId = request.Link?.ResourceId.Trim();
 
         // §4.21: the preview database is never production's (either side may be the one being set): a reset or an
@@ -114,6 +128,8 @@ public sealed partial class ManagedDatabaseService
             db.ManagedDatabases.Add(row);
         }
 
+        var previous = row.ConnectionEncrypted.Length > 0 && row.Provider == provider ? secrets.Connection(row) : null;
+        var hadResource = row.ResourceId is not null;
         var keepsResource = row.Provider == provider && row.ResourceId is not null && mode == DatabaseSetupMode.Link && linkId == row.ResourceId;
         if (!keepsResource)
         {
@@ -123,6 +139,7 @@ public sealed partial class ManagedDatabaseService
         }
 
         row.Provider = provider;
+        row.GroupId = request.GroupId;
         row.ConnectionId = connectionId;
         row.Region = request.Create?.Region;
         row.Plan = request.Create?.Plan;
@@ -139,6 +156,10 @@ public sealed partial class ManagedDatabaseService
             ConnectedByUserId = callerId,
             Step = StepQueued,
             JobId = job.Id,
+
+            // FR-192: an unfinished create resumes in its project; a finished one was cleared above with the resource.
+            RailwayOwnProjectId = mode == DatabaseSetupMode.Create && !hadResource ? previous?.RailwayOwnProjectId : null,
+            RailwayOwnProjectName = mode == DatabaseSetupMode.Create && !hadResource ? previous?.RailwayOwnProjectName : null,
         });
         db.AddEvent(
             EventTypes.SettingsUpdated,
@@ -156,6 +177,12 @@ public sealed partial class ManagedDatabaseService
         }
 
         await transaction.CommitAsync(cancellationToken);
+        await DeploymentGroups.RefreshAsync(db, projectId, row.GroupId, actor, now, cancellationToken);
+        if (previousGroup != row.GroupId)
+        {
+            await DeploymentGroups.RefreshAsync(db, projectId, previousGroup, actor, now, cancellationToken);
+        }
+
         LogQueued(logger, projectId, environment, provider, mode.Value);
         return (await CardAsync(projectId, environment, true, cancellationToken), null);
     }
@@ -176,6 +203,8 @@ public sealed partial class ManagedDatabaseService
         }
 
         var now = time.GetUtcNow();
+        var group = row.GroupId;
+        row.GroupId = null;
         row.Status = ManagedDatabaseStatus.Removed;
         row.ResourceId = null;
         row.ConnectionId = null;
@@ -198,6 +227,9 @@ public sealed partial class ManagedDatabaseService
 
         await transaction.CommitAsync(cancellationToken);
         await SyncDerivedAsync(projectId, actor, cancellationToken);
+
+        // FR-191: the part left its group; the platform resource stays.
+        await DeploymentGroups.RefreshAsync(db, projectId, group, actor, now, cancellationToken);
         return null;
     }
 

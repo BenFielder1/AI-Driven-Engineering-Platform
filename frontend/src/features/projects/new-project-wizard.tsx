@@ -32,15 +32,17 @@ import { usePlatformConnections } from '../connections/platform-connections-api'
 import { PlatformGitAlert } from '../deployments/platform-git-alert'
 import { suggestVercelProjectName } from '../deployments/vercel-project-rules'
 import { resourceNouns } from '../deployments/deployment-format'
+import { GROUP_NAME_MAX_LENGTH } from '../deployments/host-setup-body'
 import { agentKeys, agentLabels, approvalModeDescriptions, approvalModeLabels, approvalModes, llmProviderLabels } from './labels'
 import { catalogModel } from './model-picker'
 import { useCreateProject } from './projects-api'
 import { ReleasedVersionField } from './released-version-field'
 import { deploymentFieldIds } from './wizard-deployment-ids'
 import { WizardDeploymentStep } from './wizard-deployment-step'
-import { hostField, hostFieldIds, hostFieldNames, hostSecretFields, type HostSlot } from './wizard-host-fields'
+import { useDeploymentWindows } from './use-deployment-windows'
+import { hostField, hostFieldIds, hostFieldNames, hostGroupLinkFieldOf, hostSecretFields, type HostSlot } from './wizard-host-fields'
 import { applyHostSetups, type HostSetupFailure } from './wizard-host-setup'
-import { hostSlotsOfChoice, hostValues, isHostChosen, wizardHosts, type WizardHost } from './wizard-hosts'
+import { hostSlotsOfChoice, hostValues, isHostChosen, partsOfHost, wizardHosts, type WizardHost } from './wizard-hosts'
 import { WizardHostsStep } from './wizard-hosts-step'
 import { defaultReleasedTag, releasedOptions, semverOfTag } from './released-versions'
 import {
@@ -76,6 +78,7 @@ import {
   repoHostLabelOf,
   repoVcsOf,
   selectionOfValues,
+  separatePartsOf,
   toWizardStackRequest,
   WIZARD_STACK_PREFIX,
   wizardStackFieldIds,
@@ -120,6 +123,10 @@ const fieldIds: Record<Field, string> = {
   ...wizardStackFieldIds,
   ...deploymentFieldIds,
   ...hostFieldIds,
+  stackSeparateParts: 'project-stack-separate-parts',
+  hostWindows: 'project-host-windows',
+  hostClearedOrigin: 'project-host-cleared-origin',
+  hostOriginNote: 'project-host-origin-note',
   ...llmFieldIds,
 }
 
@@ -474,6 +481,9 @@ function AppRepository({
  */
 /** FR-88, §7: the name suggested for a new target; a database's name stays empty ("the project's name when empty"). */
 function suggestedHostName(projectName: string, slot: HostSlot): string {
+  if (slot === 'Group') {
+    return (suggestVercelProjectName(projectName) || 'app').slice(0, GROUP_NAME_MAX_LENGTH)
+  }
   const suffix = slot === 'Frontend' ? 'web' : slot === 'Backend' ? 'api' : null
   return suffix ? `${suggestVercelProjectName(projectName) || 'app'}-${suffix}`.slice(0, 100) : ''
 }
@@ -565,7 +575,7 @@ export function NewProjectWizard() {
     if (!getValues('vercelProjectName')) {
       setValue('vercelProjectName', suggested)
     }
-    for (const slot of ['Frontend', 'Backend'] as const) {
+    for (const slot of ['Group', 'Frontend', 'Backend'] as const) {
       if (!getValues(hostField(slot, 'Name'))) {
         setValue(hostField(slot, 'Name'), suggestedHostName(getValues('name'), slot))
       }
@@ -811,6 +821,13 @@ export function NewProjectWizard() {
       for (const [k, field] of Object.entries(wizardStackFields) as [keyof StackSelection, WizardStackField][]) {
         if (getValues(field) !== sel[k]) {
           setValue(field, sel[k], { shouldDirty: true, shouldValidate: getFieldState(field).invalid })
+          // FR-188: the windows follow the hosts; the Deployment step asks for them again.
+          if (hostSlotsOfChoice[k]) {
+            setValue('hostWindows', '')
+            for (const link of Object.values(hostGroupLinkFieldOf)) {
+              setValue(link, '')
+            }
+          }
           // §7: a new host starts its setup afresh: another platform's connection or resource means nothing to it.
           for (const slot of hostSlotsOfChoice[k] ?? []) {
             setValue(hostField(slot, 'Mode'), 'skip')
@@ -860,6 +877,8 @@ export function NewProjectWizard() {
     setValue('stackDetection', detectionKey)
     lastApplied.current = stackSnapshot(getValues())
   }, [key, detection.data, detectionKey, draft, getValues, setStack, setValue])
+
+  const windows = useDeploymentWindows({ active: key === 'deployment' && stackKind === 'compose', selection: stackSelection, control, getValues, setValue })
 
   async function next() {
     if (key === 'stack' && getValues('stackKind') === 'compose') {
@@ -1436,8 +1455,9 @@ export function NewProjectWizard() {
                       vcsFixedReason={`Set from the repository you chose (${repoHostLabelOf(gitMode) ?? 'GitHub'}). It can only be the repository's host.`}
                       detection={importing && detectionKey !== null && detectionKey === appliedDetection ? detection.data : null}
                       errors={stackErrors}
+                      separateParts={windows.separateParts}
                     />
-                    <StackSummary catalog={stackCatalog.data} value={stackSelection} onFieldErrors={setLiveStackErrors} />
+                    <StackSummary catalog={stackCatalog.data} value={stackSelection} onFieldErrors={setLiveStackErrors} separateParts={windows.separateParts} />
                   </>
                 ))}
             </>
@@ -1520,17 +1540,19 @@ export function NewProjectWizard() {
           {key === 'deployment' &&
             (stackKind === 'compose' ? (
               <WizardHostsStep
-                hosts={wizardHosts({
-                  stackKind,
-                  stackFrontendHost: stackSelection.frontendHost,
-                  stackBackendHost: stackSelection.backendHost,
-                  stackDatabaseHost: stackSelection.databaseHost,
-                })}
+                hosts={wizardHosts({ stackKind, hostWindows: windows.hostWindows })}
                 control={control}
                 register={register}
                 errors={errors}
                 gitMode={gitMode}
                 onAddConnection={saveDraftForConnections}
+                caveats={windows.caveats}
+                originNote={windows.originNote}
+                separate={windows.separateParts}
+                onToggleSeparate={windows.toggle}
+                loading={windows.loading}
+                loadError={windows.loadError}
+                onRetry={windows.retry}
               />
             ) : (
               <WizardDeploymentStep register={register} errors={errors} values={{ gitMode, deploymentMode, vercelProjectMode, vercelConnectionId }} />
@@ -1548,7 +1570,9 @@ export function NewProjectWizard() {
             <span />
           )}
           {step < LAST_STEP ? (
-            <Button type="submit">Next</Button>
+            <Button type="submit" pending={windows.settling} pendingLabel="Checking the windows…">
+              Next
+            </Button>
           ) : (
             <Button type="submit" pending={create.isPending || settingUpHosts} pendingLabel={settingUpHosts ? 'Setting up the hosts…' : 'Creating…'}>
               Create project
@@ -1755,10 +1779,12 @@ function HostSummary({ host, values }: { host: WizardHost; values: WizardValues 
   const v = hostValues(values, host.slot)
   const connections = usePlatformConnections({ enabled: isHostChosen(values, host.slot) && host.needsConnection })
   const connection = connections.data?.find((c) => c.id === v.connectionId)
-  const noun = host.kind === 'target' ? resourceNouns[host.provider] : 'database'
+  const noun = host.kind === 'group' ? 'project' : host.kind === 'target' ? resourceNouns[host.provider] : 'database'
   const action =
     !isHostChosen(values, host.slot)
       ? 'Set up later'
+      : host.kind === 'group' && host.capability === 'shared_setup' && v.mode === 'link'
+        ? 'Link existing projects'
       : host.provider === 'external'
         ? 'Connection string entered (not shown)'
         : v.mode === 'link'
@@ -1785,6 +1811,7 @@ function HostSummary({ host, values }: { host: WizardHost; values: WizardValues 
 function DeploymentSummary({ values }: { values: WizardValues }) {
   if (values.stackKind === 'compose') {
     const hosts = wizardHosts(values)
+    const separate = hosts.filter((h) => h.kind !== 'group' && separatePartsOf(values.stackSeparateParts).includes(partsOfHost(h)[0] ?? ''))
     return hosts.length === 0 ? (
       <SummaryRow term="Deployment">No hosts in the stack</SummaryRow>
     ) : (
@@ -1792,6 +1819,7 @@ function DeploymentSummary({ values }: { values: WizardValues }) {
         {hosts.map((host) => (
           <HostSummary key={host.slot} host={host} values={values} />
         ))}
+        {separate.length > 0 && <SummaryRow term="In their own projects">{separate.map((h) => h.title).join('; ')}</SummaryRow>}
       </>
     )
   }

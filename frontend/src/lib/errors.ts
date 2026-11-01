@@ -92,6 +92,9 @@ export const errorMessages = {
   PLATFORM_GIT_NOT_CONNECTED: "{platform} can't see this repository. Connect it in {platform}, then verify again.",
   PLATFORM_PLAN_LIMIT: "Your {platform} plan doesn't allow this.",
   PLATFORM_ERROR: "{platform} returned an error. Try again later.",
+  // Deployment groups (FR-187, FR-190, §6). DEPLOYMENT_GROUP_INVALID's `{reason}` is the ProblemDetails `reason`.
+  DEPLOYMENT_GROUP_INVALID: "These parts can't share a {platform} project: {reason}.",
+  PLATFORM_RESOURCE_EXISTS: "{platform} already has a project with that name. Link it instead, or choose another name.",
   // A job code (FR-150, §6): the platform answered 429, so the deployment job backs off and retries.
   PLATFORM_RATE_LIMITED: "{platform} is rate limiting deployments. AIDE will retry.",
   DEPLOYMENT_ACTION_UNSUPPORTED: "{platform} doesn't support this action.",
@@ -386,6 +389,15 @@ export const contextualErrorMessages = {
     VALIDATION: "Check the target's settings: some fields need attention.",
     UPSTREAM_ERROR: "A service AIDE needs for this failed or couldn't be reached, so nothing changed. Try again in a moment.",
     CONFLICT: "Someone else changed the deployment settings at the same time. The page now shows the latest; try again.",
+  },
+  /** PUT, DELETE and retry of /api/projects/:id/settings/deployment/groups/:provider (FR-190, FR-191). */
+  deploymentGroup: {
+    FORBIDDEN: "Only project Owners can change the deployment groups.",
+    CREDENTIAL_NOT_OWNER:
+      "You can only bind one of your own connections. Pick one of yours, or add a token under Connections.",
+    VALIDATION: "Check the group's settings: some fields need attention.",
+    NOT_FOUND: "That connection or group no longer exists. Refresh the page and try again.",
+    CONFLICT: "The group changed or already has platform resources. The page now shows the latest; try again.",
   },
   /** PUT /api/projects/:id/settings/deployment/databases/:environment (FR-152). */
   databaseSetup: {
@@ -899,6 +911,21 @@ function withPlanDetail(code: ErrorCode | null, text: string, detail: string | n
 }
 
 /**
+ * SPEC §6 DEPLOYMENT_GROUP_INVALID: the copy with the problem's `platform` and `reason`. Without a `platform` extension
+ * the server's own title has the platform's name; without either, the reason stands alone.
+ */
+function deploymentGroupInvalidMessage(error: ApiError): string {
+  const reason = error.reason?.trim().replace(/\.+$/, "");
+  if (error.platform && reason) {
+    return withPlatform(errorMessages.DEPLOYMENT_GROUP_INVALID, error.platform).replace("{reason}", reason);
+  }
+  if (!error.message.startsWith("Request failed with HTTP")) {
+    return error.message;
+  }
+  return reason ? `These parts can't share a project: ${reason}.` : "These parts can't share a project.";
+}
+
+/**
  * FR-144: copy for a code recorded on a deployment target or deployment (the setup job's `errorCode`, a failed
  * deployment), naming its platform; `detail` is the platform's reason for PLATFORM_PLAN_LIMIT. `null` for unknown codes.
  */
@@ -1204,6 +1231,9 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
       if (blocked) {
         return blocked;
       }
+    }
+    if (error.errorCode === "DEPLOYMENT_GROUP_INVALID") {
+      return deploymentGroupInvalidMessage(error);
     }
     if (error.errorCode === "INVALID_STATE") {
       const reason = error.message.startsWith("Request failed with HTTP") ? "" : error.message.trim();

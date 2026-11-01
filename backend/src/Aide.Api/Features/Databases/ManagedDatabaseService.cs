@@ -142,7 +142,8 @@ public sealed partial class ManagedDatabaseService(
             missing,
             row is null ? null : await ProvisioningAsync(row, connection!, cancellationToken),
             warnings,
-            row?.UpdatedAt);
+            row?.UpdatedAt,
+            GroupId: row?.GroupId);
     }
 
     /// <summary>The card's provisioning progress from its newest <c>database_provisioning</c> job.</summary>
@@ -210,6 +211,39 @@ public sealed partial class ManagedDatabaseService(
         var railway = targets.FirstOrDefault(t => t.Provider == DeploymentProvider.Railway);
         return new DatabaseHostContext(render?.ResourceId, railway?.ResourceId, railway?.PreviewResourceId);
     }
+
+    /// <summary>
+    /// §4.28 where this database goes: the group's project; a standalone Railway database's own project (the one the other
+    /// environment already made, if any); else as v4, next to its target.
+    /// </summary>
+    public async Task<DatabaseHostContext> HostContextAsync(ManagedDatabase row, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        var host = await HostContextAsync(row.ProjectId, cancellationToken);
+        if (row.GroupId is { } groupId)
+        {
+            var shared = await db.DeploymentGroups.AsNoTracking().Where(g => g.Id == groupId).Select(g => g.SharedResourceId).FirstOrDefaultAsync(cancellationToken);
+            return host with { SharedProjectId = shared, RailwayPublicUrl = await NeedsPublicUrlAsync(row, cancellationToken) };
+        }
+
+        if (row.Provider != ManagedDatabaseProvider.Railway || !Domain.Deployments.DeploymentGrouping.RailwayDatabaseStandsAlone((await inventory.FactsAsync(row.ProjectId, cancellationToken)).Composition))
+        {
+            return host with { RailwayPublicUrl = await NeedsPublicUrlAsync(row, cancellationToken) };
+        }
+
+        var other = await db.ManagedDatabases.AsNoTracking()
+            .Where(d => d.ProjectId == row.ProjectId && d.Environment != row.Environment && d.Provider == ManagedDatabaseProvider.Railway)
+            .FirstOrDefaultAsync(cancellationToken);
+        var own = secrets.Connection(row).RailwayOwnProjectId
+            ?? Domain.Deployments.RailwayRules.ParseResourceId(other?.ResourceId)?.ProjectId
+            ?? (other is null || Unlinked(other) ? null : secrets.Connection(other).RailwayOwnProjectId);
+        return host with { RailwayStandsAlone = true, RailwayPublicUrl = true, RailwayOwnProjectId = own };
+    }
+
+    /// <summary>§4.28, R8: a Railway database whose app (the backend, or the Next.js app) isn't in its Railway project.</summary>
+    private async Task<bool> NeedsPublicUrlAsync(ManagedDatabase row, CancellationToken cancellationToken) =>
+        row.Provider == ManagedDatabaseProvider.Railway
+        && !Domain.Deployments.DeploymentGrouping.RailwayDatabaseSharesProjectWithApp((await inventory.FactsAsync(row.ProjectId, cancellationToken)).Composition);
 
     /// <summary>A row that was unlinked (DELETE keeps it as <c>removed</c> without a resource, for the migration history).</summary>
     internal static bool Unlinked(ManagedDatabase row) => row.Status == ManagedDatabaseStatus.Removed && row.ResourceId is null && string.IsNullOrEmpty(row.ConnectionEncrypted);

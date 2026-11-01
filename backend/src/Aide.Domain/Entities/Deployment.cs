@@ -51,6 +51,15 @@ public sealed class DeploymentTarget
     /// <summary>Why the target needs attention or failed (a short machine reason such as <c>connection_missing</c>).</summary>
     public string? StatusReason { get; set; }
 
+    /// <summary>
+    /// FR-192: the platform project a standalone create made for this target (Railway), stored the moment it exists, so a
+    /// retry or a repeated create resumes in it instead of tripping over its own name.
+    /// </summary>
+    public string? PlatformProjectId { get; set; }
+
+    /// <summary>§4.28: the deployment group the target is part of; <c>null</c> for standalone and v4 rows.</summary>
+    public Guid? GroupId { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
 
     public uint RowVersion { get; set; }

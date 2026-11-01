@@ -25,10 +25,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-171 | Import entry points (wizard, new version, Refinement) | 3.2 | frontend + backend | M35 | todo | — |
 | FR-172 | Agents use the snapshot; traceability | 3.2 | backend | M35 | todo | — |
 | FR-173 | Re-import, remove, drift check | 3.2 | backend + frontend | M35 | todo | — |
-| FR-174 | Co-author trailer on every commit, merge, tag | 3.3 | backend | M33 | todo | — |
-| FR-175 | Who is credited | 3.3 | backend | M33 | todo | — |
-| FR-176 | Which email per host | 3.3 | backend + data | M33 | todo | — |
-| FR-177 | Project and personal credit settings | 3.3 | frontend + backend + data | M33 | todo | — |
+| FR-174 | Co-author trailer on every commit, merge, tag | 3.3 | backend | M33 | done | CI 41326693467 |
+| FR-175 | Who is credited | 3.3 | backend | M33 | done | CI 41326693467 |
+| FR-176 | Which email per host | 3.3 | backend + data | M33 | done | CI 41326693467 |
+| FR-177 | Project and personal credit settings | 3.3 | frontend + backend + data | M33 | done | CI 41326693467 |
 | FR-178 | Stack step: Infer option | 3.4 | frontend + backend | M36 | todo | — |
 | FR-179 | Analysis phase | 3.4 | backend | M36 | todo | — |
 | FR-180 | Stack Analyst agent | 3.4 | backend | M36 | todo | — |
@@ -50,7 +50,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 ## Phases
 - [x] M0 Baseline (base: 391a81d): CI green on `main` ([run 41312655301](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41312655301)); no re-scaffold
 - [x] M32 PostgreSQL 18: FR-163, FR-164 ([CI 41323663409](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41323663409), head c4710e8)
-- [ ] M33 Commit co-authorship: FR-174–FR-177
+- [x] M33 Commit co-authorship: FR-174–FR-177 ([CI 41326693467](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41326693467), head f6b74f1)
 - [ ] M34 Deployment groups: FR-187–FR-192
 - [ ] M35 Tracker connections and imports: FR-165–FR-173
 - [ ] M36 Stack inference and the Analysis phase: FR-178–FR-186
@@ -63,8 +63,13 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 - 2026-11-01 (M33): "person who started the release" is the actor of that attempt's `RELEASE_STARTED` event, and "project creator" is the `PROJECT_CREATED` event actor, because neither table has a column. A connection with invalid status still counts as an identity (the id and login remain true). The personal opt-out records no event. GitHub `auto_init` and GitLab `initialize_with_readme` commits are written by the host, so they carry no trailer. A Bitbucket user linked through the confirmed pending-link path gets their commit email on the next refresh or re-test, and is skipped until then.
 
+- 2026-11-01 (M34, spec sync in M37): `deployment_targets.platform_project_id` is added to §5, so a created Railway project is resumed rather than refused. Additive beyond §6: `windows[]` and `caveats[]` on `/stack/options`, `?type=` pickers, nullable `link.resourceId` for Vercel. A group's database setup runs as its own `database_provisioning` jobs. A group `plan` applies to services only. DELETE on a group clears its targets and databases in AIDE, and platform resources stay. A part with its own resource blocks group creation (D-V5-9). A lone Render database keeps v4's two wizard windows; a lone Railway database has one, as v4 offered no Railway preview. Catalog version 1.2.0.
+- 2026-11-01 (M34, Q5, public docs and schema only, not a live account): Render documents `POST /v1/environments/{id}/resources {resourceIds}`, used here, and a failure is non-blocking. Railway's schema has `TCPProxyCreateInput {applicationPort, environmentId, serviceId}` and `TCPProxy.domain/proxyPort`.
+
 ## Known issues
+- M34 (minor): the Railway public-versus-private `DATABASE_URL` is chosen when the database is set up, so changing the stack afterwards needs that database set up again.
 
 ## Manual checks (Ben)
+- **M34 groups against real APIs (CI uses stubs):** on Railway, create a group for all three parts and check one project with a preview environment; split the database and check the TCP-proxy `DATABASE_URL` works; link an existing project with Postgres and check the preview database comes up. On Render, create a group and check services and Postgres are placed in the project's environments. On Vercel, check `<name>-web` and `<name>-api`.
 - **M33 co-authorship:** on real GitHub, confirm a step commit shows both avatars and counts on the contributions graph once on the default branch. Check the GitLab noreply address credits the user on gitlab.com and self-managed, and how Bitbucket displays the line (SPEC Q5).
 - **M32 PostgreSQL 18 (nothing here has run against a real cluster):** on a cluster with 17 data, `deploy-local.sh` exits non-zero and the volume is unchanged. Run the README's Kubernetes upgrade end to end, confirming the rename works as uid 999 on the mount root, 18 starts with the read-only root filesystem, and the restore's "expected errors" list is complete. Then run the compose procedure and a fresh-cluster deploy.

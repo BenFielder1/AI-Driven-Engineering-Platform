@@ -193,6 +193,8 @@ const dataNeeds: Record<string, { backends: string[]; text: string; nextjsFullSt
   'data-supabase': { backends: ['none'], text: 'Supabase (BaaS) needs Backend None' },
 }
 
+const separatePartsIn = (f: Facts) => (f.separateParts ?? '').split(',').filter(Boolean)
+
 /** R10 (trimmed): the origin models allowed for the facts so far, and the default. */
 function originModels(f: Facts): { allowed: string[]; default: string | null; text: string } {
   if (f.frontend === 'none') {
@@ -206,6 +208,13 @@ function originModels(f: Facts): { allowed: string[]; default: string | null; te
   }
   if (f.frontendHost === 'deploy-vercel' && f.frontend !== 'fe-nextjs') {
     return { allowed: ['cross-origin'], default: 'cross-origin', text: 'A static SPA on Vercel is cross-origin only' }
+  }
+  // §4.28 R10: same-origin on Railway needs both in one project.
+  if (f.frontendHost === 'deploy-railway' && f.backendHost === 'deploy-railway') {
+    const split = separatePartsIn(f).some((p) => p === 'frontend' || p === 'backend')
+    return split
+      ? { allowed: ['cross-origin'], default: 'cross-origin', text: 'Same-origin on Railway needs the frontend and backend in one project' }
+      : { allowed: ['same-origin', 'proxy', 'cross-origin'], default: 'same-origin', text: 'One Railway project serves both' }
   }
   return { allowed: ['proxy', 'cross-origin'], default: 'proxy', text: 'The frontend host proxies /api to the backend’s URL' }
 }
@@ -265,6 +274,9 @@ function verdict(choice: string, option: string, f: Facts): Verdict {
       if (option === 'render-postgres' && f.backendHost !== 'deploy-render') {
         return warn('R8', 'Database on a different platform from the backend: higher latency, public connection')
       }
+      if (option === 'railway-postgres' && separatePartsIn(f).includes('database')) {
+        return warn('R8', 'Separate Railway project: no private network, public connection, higher latency')
+      }
       if (option === 'railway-postgres' && f.backendHost !== 'deploy-railway') {
         return warn('R8', 'Database on a different platform from the backend: higher latency, public connection')
       }
@@ -314,9 +326,64 @@ export function selectionOfRequest(r: Request): Record<string, string> {
 const recommended = (choice: string, option: string) =>
   stackCatalog.recommendations.some((r) => r.choices[choice]?.includes(option) ?? false)
 
+const targetPlatforms: Readonly<Record<string, string>> = {
+  'deploy-vercel': 'vercel',
+  'deploy-netlify': 'netlify',
+  'deploy-cloudflare': 'cloudflare',
+  'deploy-github-pages': 'github_pages',
+  'deploy-render': 'render',
+  'deploy-railway': 'railway',
+}
+
+type Part = Schemas['DeploymentPart']
+type Capability = Schemas['SharedProjectCapability']
+
+const capabilityOf = (platform: string | undefined): Capability =>
+  platform === 'railway' || platform === 'render' ? 'project' : platform === 'vercel' ? 'shared_setup' : 'none'
+
+/** §4.28 `DeploymentGrouping` (mirrors the Domain): groups, windows and what R13 removed. */
+function deploymentLayout(f: Facts, separateParts: readonly string[]) {
+  const databasePlatform = f.databaseHost === 'railway-postgres' ? 'railway' : f.databaseHost === 'render-postgres' ? 'render' : undefined
+  const shareable = ([
+    ['frontend', targetPlatforms[f.frontendHost ?? '']],
+    ['backend', targetPlatforms[f.backendHost ?? '']],
+    ['database', databasePlatform],
+  ] as [Part, string | undefined][]).filter((p): p is [Part, string] => capabilityOf(p[1]) !== 'none')
+  const kept = (['frontend', 'backend', 'database'] as Part[]).filter((part) => {
+    const platform = shareable.find((p) => p[0] === part)?.[1]
+    return separateParts.includes(part) && platform !== undefined && shareable.filter((p) => p[1] === platform).length >= 2
+  })
+  const removed = separateParts.filter((p) => !(kept as string[]).includes(p))
+  const staying = shareable.filter((p) => !kept.includes(p[0]))
+  const platforms = [...new Set(staying.map((p) => p[1]))]
+  const groups = platforms
+    .map((platform) => ({ platform, parts: staying.filter((p) => p[1] === platform).map((p) => p[0]) }))
+    .filter((g) => g.parts.length >= 2)
+    .map((g) => ({ provider: g.platform as Schemas['DeploymentProvider'], parts: g.parts, capability: capabilityOf(g.platform) }))
+  const grouped = new Set(groups.flatMap((g) => g.parts))
+  const windows: Schemas['StackDeploymentWindowDto'][] = groups.map((g) => ({ platform: g.provider, parts: g.parts, capability: g.capability, environment: null }))
+  for (const [part, host] of [['frontend', f.frontendHost], ['backend', f.backendHost]] as [Part, string | undefined][]) {
+    const platform = targetPlatforms[host ?? '']
+    if (platform && !grouped.has(part)) {
+      windows.push({ platform, parts: [part], capability: 'none', environment: null })
+    }
+  }
+  if (!grouped.has('database')) {
+    if (databasePlatform === 'railway') {
+      windows.push({ platform: databasePlatform, parts: ['database'], capability: 'none', environment: null })
+    } else if (databasePlatform || f.databaseHost === 'supabase' || f.databaseHost === 'external') {
+      const platform = databasePlatform ?? f.databaseHost ?? ''
+      for (const environment of ['production', 'preview'] as const) {
+        windows.push({ platform, parts: ['database'], capability: 'none', environment })
+      }
+    }
+  }
+  return { groups, windows, kept, removed }
+}
+
 /** §4.17 `Evaluate`: every choice's option states in order; a selection earlier choices now forbid is `invalidated`. */
-export function evaluate(selection: Record<string, string>): Schemas['StackOptionsDto'] {
-  const facts: Facts = {}
+export function evaluate(selection: Record<string, string>, separateParts: readonly string[] = []): Schemas['StackOptionsDto'] {
+  const facts: Facts = { separateParts: separateParts.join(',') }
   const choices: ChoiceState[] = []
   for (const choice of stackCatalog.choices) {
     const selected = selection[choice.id] ?? ''
@@ -338,7 +405,17 @@ export function evaluate(selection: Record<string, string>): Schemas['StackOptio
     })
   }
   const nextjsMode = facts.frontend === 'fe-nextjs' ? (facts.backend === 'none' ? 'full-stack' : facts.backend ? 'ui' : null) : null
-  return { catalogVersion: STACK_CATALOG_VERSION, choices, nextjsMode }
+  const layout = deploymentLayout(facts, separateParts)
+  const caveats = [
+    ...choices.flatMap((c) =>
+      c.options
+        .filter((o) => o.id === c.selected && o.state === 'caveat')
+        .map((o) => ({ layer: c.choice, option: o.id, rule: o.reasons[0]?.rule ?? '', text: o.reasons[0]?.text ?? '' })),
+    ),
+    // R13: "the response says so".
+    ...layout.removed.map((part) => ({ layer: 'separateParts', option: part, rule: 'R13', text: `The ${part} doesn't share a platform with another part, so it can't be split off.` })),
+  ]
+  return { catalogVersion: STACK_CATALOG_VERSION, choices, nextjsMode, groups: layout.groups, windows: layout.windows, caveats }
 }
 
 export type ValidateResult =
@@ -372,11 +449,12 @@ export function validateComposition(request: Request): ValidateResult {
   if (Object.keys(errors).length > 0) {
     return { ok: false, errors }
   }
-  let evaluation = evaluate(sel)
+  const separateParts = request.deploy?.separateParts ?? []
+  let evaluation = evaluate(sel, separateParts)
   const defaults = Object.fromEntries(evaluation.choices.map((c) => [c.choice, c.default]))
   sel.local = orDefault(sel.local, defaults.local ?? 'none')
   sel.originModel = orDefault(sel.originModel, defaults.originModel ?? '')
-  evaluation = evaluate(sel)
+  evaluation = evaluate(sel, separateParts)
   const violations = evaluation.choices.flatMap((c) =>
     c.options
       .filter((o) => o.id === sel[c.choice] && (o.state === 'invalidated' || o.state === 'forbidden'))
@@ -415,6 +493,7 @@ export function validateComposition(request: Request): ValidateResult {
         backendHost: orNull(sel.backendHost),
         databaseHost: orNull(sel.databaseHost),
         local: sel.local || 'none',
+        separateParts: separateParts.filter((part) => !evaluation.caveats.some((c) => c.rule === 'R13' && c.option === part)),
       },
       originModel: sel.frontend === 'none' ? null : sel.originModel || null,
       derived: {
@@ -425,7 +504,9 @@ export function validateComposition(request: Request): ValidateResult {
         envNames: [],
         gates: [],
       },
-      caveats,
+      caveats: [...caveats, ...evaluation.caveats.filter((c) => c.rule === 'R13')],
+      groups: evaluation.groups,
+      windows: evaluation.windows,
     },
   }
 }

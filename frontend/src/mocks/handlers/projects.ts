@@ -171,6 +171,8 @@ export interface StoredDeploymentSettings {
   /** AIDE-written rows (§4.22): read-only. */
   derived: Schemas['DeploymentEnvVarDto'][]
   fakeMode: boolean
+  /** FR-187: what the composition groups, as cards; `id` null until a PUT. Unset: none. */
+  groups?: Schemas['DeploymentGroupDto'][]
 }
 
 /** An env var with its plaintext value (the mock's stand-in for the encrypted column). */
@@ -1134,7 +1136,7 @@ export const projectHandlers = [
       ...(composition ? { stack: { composition }, stackPacks: packsOf(composition) } : {}),
     })
     if (composition) {
-      seedHostsFromComposition(project, composition.deploy)
+      seedHostsFromComposition(project, composition.deploy, composition.groups)
     }
     // FR-88: the optional Deployment step (one of the caller's own Vercel connections; Local can't deploy).
     if (body.deployment) {

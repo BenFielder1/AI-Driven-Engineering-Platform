@@ -113,6 +113,11 @@ public sealed class FakeDatabaseProvider(ManagedDatabaseProvider kind, Concurren
                 PublishableKey = $"sb_publishable_fake_{env}",
                 SecretKey = $"sb_secret_fake_{env}",
             },
+            ManagedDatabaseProvider.Railway when database.Host.RailwayPublicUrl => connection with
+            {
+                Url = $"postgresql://postgres:fake@{slug}.proxy.rlwy.test:{ManagedDatabaseRules.PostgresPort}/railway",
+                RailwaySeparateProject = true,
+            },
             ManagedDatabaseProvider.Railway => connection with { RailwayService = ManagedDatabaseRules.RailwayServiceName },
             _ => connection with { Url = $"postgresql://aide:fake@fake-db-{env}.test:5432/{slug}" },
         };

@@ -6,8 +6,9 @@ import { cn } from '../../lib/utils'
 import type { Project } from '../projects/projects-api'
 import { deploymentTargetLabels, originModelLabel, originModelLabels } from './deployment-format'
 import { DatabaseCardView } from './database-card'
+import { DeploymentGroupCard } from './deployment-group-card'
 import { DeploymentTargetCard } from './deployment-target-card'
-import { useDeploymentSettings, type DeploymentSettings } from './deployments-api'
+import { useDeploymentSettings, type DeploymentGroup, type DeploymentSettings } from './deployments-api'
 import { EnvInventorySection } from './env-inventory-section'
 
 /** FR-146: the composition's origin model, the stack-packs vocabulary and the explanation. */
@@ -65,11 +66,39 @@ function DatabaseCards({ project, databases, canManage }: { project: Project; da
   )
 }
 
+const partOfTarget = (t: DeploymentSettings['targets'][number]) => t.component
+const setUp = (row: { resourceId: string | null; binding: unknown }) => row.resourceId !== null || row.binding !== null
+
+/**
+ * FR-191: which cards go where. A set-up group holds the rows tied to it by `groupId`, and any of its parts that left it
+ * and aren't set up (which can rejoin). A part set up on its own stays outside. A group with no row yet whose parts were
+ * set up alone in v4 isn't shown at all: those rows look as they did, since AIDE never moves platform resources (D-V5-9).
+ */
+function layoutOf(s: DeploymentSettings) {
+  const inGroup = (group: DeploymentGroup) => ({
+    targets: s.targets.filter((t) => t.groupId === group.id || (!t.groupId && group.parts.includes(partOfTarget(t)) && !setUp(t))),
+    databases: s.databases.filter((d) => d.groupId === group.id || (!d.groupId && group.parts.includes('database') && !setUp(d))),
+  })
+  const alone = (group: DeploymentGroup) =>
+    group.id === null &&
+    (s.targets.some((t) => group.parts.includes(partOfTarget(t)) && setUp(t)) || s.databases.some((d) => group.parts.includes('database') && setUp(d)))
+  const groups = s.groups.filter((g) => !alone(g))
+  const members = groups.map((group) => ({ group, ...inGroup(group) }))
+  const takenTargets = new Set(members.flatMap((m) => m.targets))
+  const takenDatabases = new Set(members.flatMap((m) => m.databases))
+  return {
+    // A group with no row yet shows its form and part statuses: its parts have nothing of their own to show.
+    held: members.map((m) => (m.group.id === null ? { ...m, targets: [], databases: [] } : m)),
+    targets: s.targets.filter((t) => !takenTargets.has(t)),
+    databases: s.databases.filter((d) => !takenDatabases.has(d)),
+  }
+}
+
 /**
  * Settings → Deployment (FR-143–FR-146; replaces v2 FR-88's single Vercel setting). Every member reads it: the
  * origin model, one target card per component (whose connection it uses, resource, URLs, status, readiness), database
- * cards per environment and the environment inventory. Owners (`canManage`) set targets up, verify, unbind and edit
- * user variables.
+ * cards per environment and the environment inventory. FR-191: group cards come first and hold their parts' cards. Owners
+ * (`canManage`) set targets up, verify, unbind and edit user variables.
  */
 export function DeploymentSettingsTab({ project }: { project: Project; canEdit?: boolean }) {
   const settings = useDeploymentSettings(project.id)
@@ -81,6 +110,7 @@ export function DeploymentSettingsTab({ project }: { project: Project; canEdit?:
     body = <ErrorState error={settings.error} onRetry={() => void settings.refetch()} title="The deployment settings couldn't load" />
   } else {
     const s = settings.data
+    const { held, targets, databases } = layoutOf(s)
     body = (
       <div className="flex flex-col gap-6">
         {s.fakeMode && (
@@ -90,19 +120,43 @@ export function DeploymentSettingsTab({ project }: { project: Project; canEdit?:
         )}
         {!s.canManage && <p className="text-sm text-muted-foreground">Only project Owners can change the deployment settings.</p>}
         <OriginModelCard projectId={project.id} origin={s.originModel} />
-        <section aria-labelledby="targets-title" className="flex flex-col gap-3">
-          <h3 id="targets-title" className="text-lg">
-            Targets
-          </h3>
-          {s.targets.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              The stack has no deployment hosts. Choose a frontend or backend host in Settings → Stack to deploy.
-            </p>
-          ) : (
-            s.targets.map((t) => <DeploymentTargetCard key={t.component} project={project} target={t} canManage={s.canManage} />)
-          )}
-        </section>
-        <DatabaseCards project={project} databases={s.databases} canManage={s.canManage} />
+        {held.map(({ group, targets: groupTargets, databases: groupDatabases }) => (
+          <DeploymentGroupCard key={group.provider} projectId={project.id} group={group} canManage={s.canManage} suggestedName={project.slug}>
+            {groupTargets.map((t) => (
+              <DeploymentTargetCard
+                key={t.component}
+                project={project}
+                target={t}
+                canManage={s.canManage}
+                joinGroup={!t.groupId && group.id ? { id: group.id } : undefined}
+              />
+            ))}
+            {groupDatabases.map((d) => (
+              <DatabaseCardView
+                key={d.environment}
+                project={project}
+                database={d}
+                canManage={s.canManage}
+                joinGroup={!d.groupId && group.id ? { id: group.id } : undefined}
+              />
+            ))}
+          </DeploymentGroupCard>
+        ))}
+        {(targets.length > 0 || held.length === 0) && (
+          <section aria-labelledby="targets-title" className="flex flex-col gap-3">
+            <h3 id="targets-title" className="text-lg">
+              Targets
+            </h3>
+            {targets.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                The stack has no deployment hosts. Choose a frontend or backend host in Settings → Stack to deploy.
+              </p>
+            ) : (
+              targets.map((t) => <DeploymentTargetCard key={t.component} project={project} target={t} canManage={s.canManage} />)
+            )}
+          </section>
+        )}
+        <DatabaseCards project={project} databases={databases} canManage={s.canManage} />
         <EnvInventorySection projectId={project.id} inventory={s.env} canManage={s.canManage} />
       </div>
     )

@@ -6919,7 +6919,7 @@
             }
           },
           "400": {
-            "description": "VALIDATION (body, component, or a Local Git project outside Fake mode) or STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository)",
+            "description": "VALIDATION (body, component, or a Local Git project outside Fake mode), STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository) or DEPLOYMENT_GROUP_INVALID (groupId: the part can't join that group)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7337,6 +7337,287 @@
           },
           "502": {
             "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings/deployment/groups/{provider}": {
+      "put": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Set up the platform's deployment group (Owner, FR-190, FR-191): one of the caller's own connections and create {name, region?, plan?}, link {resourceId, parts {frontend?, backend?, database?}} or neither (rebind). Answers 202 with the group. A create or link queues one deployment_setup job: the platform project, then backend, frontend and database, each part reporting its own status. A rebind only swaps the connection, after checking it reaches the project.",
+        "operationId": "PutDeploymentGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutDeploymentGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND (project, connection, or the group of a rebind)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentGroupDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION, STACK_INCOMPATIBLE (the stack deploys nothing to this platform) or DEPLOYMENT_GROUP_INVALID (the parts don't form this group, or a part is already set up on its own)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PLATFORM_RESOURCE_EXISTS (extension platform; link it instead) or CONFLICT (the group is being set up, already has resources, or changed concurrently). PLATFORM_GIT_NOT_CONNECTED and PLATFORM_PLAN_LIMIT land on the part from the job.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "PLATFORM_ERROR (extension platform; the connection can't reach the project, and any old binding stays)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Remove the platform's deployment group and clear its parts (Owner, FR-191). Every platform resource stays, as do deployments and migration runs; derived env vars are recomputed.",
+        "operationId": "DeleteDeploymentGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/settings/deployment/groups/{provider}/retry": {
+      "post": {
+        "tags": [
+          "Deployments"
+        ],
+        "summary": "Retry the group's failed or missing parts (Owner, FR-190): queues one deployment_setup job and leaves ready parts alone. Answers 202 with the group.",
+        "operationId": "RetryDeploymentGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND (project or group)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentGroupDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "INVALID_STATE (setup is running, or nothing needs a retry) or CONFLICT",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16372,6 +16653,13 @@
           "resetRecommended": {
             "type": "boolean",
             "default": false
+          },
+          "groupId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         },
         "description": "FR-152 database card (Settings → Deployment `databases[]`, one per environment when the composition has a\ndatabase host or a database is set): `provider` (`supabase`, `render`, `railway`, `external`,\n`fake`), `status` (`not_configured`, `provisioning`, `available`, `error`, `paused`,\n`expiring`, `removed`), the composition's `hostOption`, the binding (\"connected by\"), the resource, region,\nplan, expiry, the dashboard link (`resourceUrl`), a connection summary without secrets (host, port, database), the\nSupabase permissions the connection lacks (e.g. \"API Key Secrets: Read\"), the provisioning job, and `warnings`\n(`render_free_expiry`, `supabase_free_pausing`, `supabase_free_project_limit`,\n`preview_uses_production_database`). Secrets are never returned. FR-148: on the preview card,\n`resetRecommended` is true when the preview database has migrations the version branch no longer has (e.g. after a\nrollback that removed migrations): offer \"Reset preview database\" (`POST …/databases/preview/reset`)."
@@ -16647,6 +16935,185 @@
         ],
         "description": "Deployment environment (FR-147, FR-149), also a Vercel env target (FR-88). Wire values: `preview`,\n            `production`."
       },
+      "DeploymentGroupDto": {
+        "required": [
+          "id",
+          "provider",
+          "capability",
+          "parts",
+          "name",
+          "binding",
+          "canBind",
+          "sharedResourceId",
+          "sharedResourceUrl",
+          "region",
+          "plan",
+          "status",
+          "statusReason",
+          "partStatuses",
+          "canRetry",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/DeploymentProvider"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/SharedProjectCapability"
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentPart"
+            }
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "binding": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentTargetBindingDto"
+              }
+            ]
+          },
+          "canBind": {
+            "type": "boolean"
+          },
+          "sharedResourceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sharedResourceUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "region": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "plan": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "statusReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "partStatuses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentGroupPartDto"
+            }
+          },
+          "canRetry": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "A group card of Settings → Deployment (FR-191): every group the composition forms, plus any configured group it no\nlonger does. `id` is `null` and `status` `not_configured` until it is set up; then `configuring`,\n`ready`, `attention` or `error`. `capability`: `project` (one real project,\n`sharedResourceId` and its `sharedResourceUrl`) or `shared_setup` (Vercel: same team and name, no shared\nresource). `statusReason`: the failure code, or `project_placement_unavailable` (Render project grouping isn't\navailable: the group still works). `canRetry`: a part failed or is missing and no setup is running."
+      },
+      "DeploymentGroupLinkParts": {
+        "type": "object",
+        "properties": {
+          "frontend": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "backend": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "database": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-190 Link: per part, an existing resource from the connection's picker (`GET …/resources`: Railway\n`type=services`, Render `services` and `databases`, Vercel `projects`); left out means\n<b>Create in this project</b> (Vercel: every part must name one)."
+      },
+      "DeploymentGroupPartDto": {
+        "required": [
+          "part",
+          "environment",
+          "status",
+          "statusReason",
+          "resourceId"
+        ],
+        "type": "object",
+        "properties": {
+          "part": {
+            "$ref": "#/components/schemas/DeploymentPart"
+          },
+          "environment": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentEnvironment"
+              }
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "statusReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "resourceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "One part's progress on a group card (FR-190): `part`, the database's `environment`, `status` (a target's\nor database's status, `not_configured` before it has a row), `statusReason` (the failure code or step) and the\nplatform resource. The part's full card is in `targets[]` or `databases[]`."
+      },
       "DeploymentKind": {
         "enum": [
           "deploy",
@@ -16691,6 +17158,14 @@
         },
         "description": "FR-146: the composition's origin model (`same-origin`, `proxy`, `cross-origin`; `null` API only), the\nstack-packs vocabulary's (`packModel`: `same-origin` or `cross-origin`), the models the Owner may switch\nbetween (Settings → Stack) and the one-line explanation."
       },
+      "DeploymentPart": {
+        "enum": [
+          "frontend",
+          "backend",
+          "database"
+        ],
+        "description": "A deployable part of a composition (§4.28). Wire values: `frontend`, `backend`, `database`."
+      },
       "DeploymentProvider": {
         "enum": [
           "vercel",
@@ -16710,7 +17185,8 @@
           "env",
           "originModel",
           "canManage",
-          "fakeMode"
+          "fakeMode",
+          "groups"
         ],
         "type": "object",
         "properties": {
@@ -16737,9 +17213,15 @@
           },
           "fakeMode": {
             "type": "boolean"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentGroupDto"
+            }
           }
         },
-        "description": "Settings → Deployment (FR-144, any member; D-V4-4 replaced v2's single Vercel shape): `targets`, `databases`,\nthe environment inventory (`env`; keys only) and the `originModel`. `canManage`: the caller is an Owner.\n`fakeMode`: `Deployments:Provider=Fake`."
+        "description": "Settings → Deployment (FR-144, any member; D-V4-4 replaced v2's single Vercel shape): `targets`, `databases`,\nthe environment inventory (`env`; keys only) and the `originModel`. `canManage`: the caller is an Owner.\n`fakeMode`: `Deployments:Provider=Fake`. FR-191: `groups`: the group cards; parts' full cards stay in\n`targets` and `databases`, tied to a group by their `groupId`."
       },
       "DeploymentSetupDto": {
         "required": [
@@ -16970,6 +17452,13 @@
           },
           "fakeMode": {
             "type": "boolean"
+          },
+          "groupId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         },
         "description": "One target card of Settings → Deployment (FR-144): one per component whose host the composition names (plus a target\nset up before the composition dropped its host, `inComposition: false`). `provider` is the composition's host\n(`hostOption` is its catalog id). `binding` is the bound connection (`null` for GitHub Pages, which uses\nthe project's GitHub App or PAT) and `needsConnection` whether one is needed; `canBind` whether the caller may\nbind one of their own. `resourceId`/`name` the platform resource (`null` until set up),\n`rootDirectory` and `buildConfig` what it builds, the production and preview URLs once known, `status`\n(`not_configured`, `configuring`, `ready`, `attention`, `error`) with `statusReason`, the\nsetup job (`setup`, `null` before the first), the provider's capabilities and the readiness checklist\n(platform items say \"not checked yet\" until `verify`). `fakeMode`: deployments run on the Fake provider."
@@ -19129,7 +19618,7 @@
           },
           "platform": {
             "type": "string",
-            "description": "PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4)."
+            "description": "PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR, PLATFORM_RESOURCE_EXISTS: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4)."
           },
           "violations": {
             "type": "array",
@@ -19250,6 +19739,29 @@
           }
         },
         "description": "FR-129: the retired v2 preset a migrated version was pinned to, kept as history: its id, name (the id when unknown),\nversion and `label`, \"Preset nextjs-supabase@1.0.1 (retired, migrated)\"."
+      },
+      "LinkDeploymentGroupRequest": {
+        "type": "object",
+        "properties": {
+          "resourceId": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parts": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentGroupLinkParts"
+              }
+            ]
+          }
+        },
+        "description": "FR-190 Link: the platform project (`type=projects` in the picker; Vercel has none, so leave it out) and the parts."
       },
       "LinkDeploymentResourceRequest": {
         "required": [
@@ -20761,7 +21273,7 @@
           },
           "platform": {
             "type": "string",
-            "description": "PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4)."
+            "description": "PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR, PLATFORM_RESOURCE_EXISTS: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4)."
           },
           "violations": {
             "type": "array",
@@ -21607,6 +22119,39 @@
         },
         "description": "Create or replace a user environment variable (FR-88, FR-145): the value (up to 64 KB; encrypted, never returned), its\nenvironments (`targets`: `preview`, `production`), whether it is sensitive, the components it applies to\n(`appliesTo`, default `[\"frontend\"]`) and whether it is public (default: the key has the frontend pack's public\nprefix; a prefixed key is always public). A public variable that looks secret, or a key AIDE derives, is\n`VALIDATION`."
       },
+      "PutDeploymentGroupRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "create": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CreateDeploymentResourceRequest"
+              }
+            ]
+          },
+          "link": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LinkDeploymentGroupRequest"
+              }
+            ]
+          }
+        },
+        "description": "FR-190, FR-191 (Owner): set up a group. `connectionId` is one of the caller's own connections of the platform;\n`create {name, region?, plan?}` a new project, `link` an existing one, neither a <b>rebind</b> of an existing\ngroup to the new connection. `plan` applies to services; a group's database uses the platform's default plan."
+      },
       "PutDeploymentTargetRequest": {
         "required": [
           "provider"
@@ -21642,6 +22187,14 @@
                 "$ref": "#/components/schemas/LinkDeploymentResourceRequest"
               }
             ]
+          },
+          "groupId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-191: set the part up in this group (`DEPLOYMENT_GROUP_INVALID` when it can't join); left out, a create or link makes it standalone.",
+            "format": "uuid"
           }
         },
         "description": "FR-144 (Owner): set up a target. `provider` must be the composition's host for the component (`fake` also in\nFake mode); `connectionId` one of the caller's own connections of that platform (not used by GitHub Pages);\n`create` or `link`, not both (GitHub Pages: neither; setup enables Pages on the repository)."
@@ -21691,6 +22244,14 @@
                 "$ref": "#/components/schemas/ExternalDatabaseRequest"
               }
             ]
+          },
+          "groupId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-191: set the database up in this group (`DEPLOYMENT_GROUP_INVALID` when it can't join); left out, it is standalone.",
+            "format": "uuid"
           }
         },
         "description": "FR-152 (Owner): set the environment's database. `provider` must be the composition's database host (`fake`\nalso in Fake mode); exactly one of `create`, `link` (a resource id from the connection's picker) or\n`external` (External only). `connectionId` is one of the caller's own platform connections (not for External)."
@@ -22950,6 +23511,14 @@
         ],
         "description": "Severity of a review finding or drift area (§4.7)."
       },
+      "SharedProjectCapability": {
+        "enum": [
+          "none",
+          "project",
+          "shared_setup"
+        ],
+        "description": "FR-192, §4.28: what a platform shares between a group's parts. Wire values: `none`, `project` (one real\nproject), `shared_setup` (one connection and name, one platform project per part: Vercel, D-V5-8)."
+      },
       "StackCatalogDto": {
         "required": [
           "version",
@@ -23151,7 +23720,9 @@
           "deploy",
           "originModel",
           "derived",
-          "caveats"
+          "caveats",
+          "groups",
+          "windows"
         ],
         "type": "object",
         "properties": {
@@ -23213,6 +23784,18 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/StackCaveatDto"
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackDeploymentGroupDto"
+            }
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackDeploymentWindowDto"
             }
           }
         },
@@ -23325,7 +23908,8 @@
           "frontendHost",
           "backendHost",
           "databaseHost",
-          "local"
+          "local",
+          "separateParts"
         ],
         "type": "object",
         "properties": {
@@ -23349,9 +23933,15 @@
           },
           "local": {
             "type": "string"
+          },
+          "separateParts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
-        "description": "Host option ids (`null` = None) and the local dev loop (`compose` or `none`)."
+        "description": "Host option ids (`null` = None), the local dev loop (`compose` or `none`) and §4.28's parts in their own projects (normalised; `[]` when none)."
       },
       "StackDeploySelection": {
         "type": "object",
@@ -23383,9 +23973,77 @@
               "null",
               "string"
             ]
+          },
+          "separateParts": {
+            "maxItems": 3,
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "§4.28: the parts deployed to their own projects (`frontend`, `backend`, `database`); absent means none. R13 removes any that share no platform, and a caveat says so."
           }
         },
         "description": "The Deployment layer: option ids of the frontend, backend and database hosts (or `none`) and the local dev loop (`compose`/`none`)."
+      },
+      "StackDeploymentGroupDto": {
+        "required": [
+          "provider",
+          "parts",
+          "capability"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/DeploymentProvider"
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentPart"
+            }
+          },
+          "capability": {
+            "$ref": "#/components/schemas/SharedProjectCapability"
+          }
+        },
+        "description": "FR-187: parts on one platform that form a group, and what that platform shares (`project`, or `shared_setup` on Vercel)."
+      },
+      "StackDeploymentWindowDto": {
+        "required": [
+          "platform",
+          "parts",
+          "capability",
+          "environment"
+        ],
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentPart"
+            }
+          },
+          "capability": {
+            "$ref": "#/components/schemas/SharedProjectCapability"
+          },
+          "environment": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeploymentEnvironment"
+              }
+            ]
+          }
+        },
+        "description": "FR-188: one window of the Deployment step: a group, or one part (`capability` `none`). `platform` is the host's\nname (`railway`, `netlify`, `supabase`, `external` …), and `environment` is set where a database has a window per environment."
       },
       "StackDerivedDto": {
         "required": [
@@ -23704,7 +24362,10 @@
         "required": [
           "catalogVersion",
           "choices",
-          "nextjsMode"
+          "nextjsMode",
+          "groups",
+          "windows",
+          "caveats"
         ],
         "type": "object",
         "properties": {
@@ -23722,6 +24383,24 @@
               "null",
               "string"
             ]
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackDeploymentGroupDto"
+            }
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackDeploymentWindowDto"
+            }
+          },
+          "caveats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackCaveatDto"
+            }
           }
         },
         "description": "`POST /api/stack/options` (§4.17): every choice in evaluation order with every option's state. A selection that\nearlier choices now forbid is `invalidated` (the wizard clears it and names the reason); later choices are\nevaluated without it. `nextjsMode` is R2's derived mode once known."

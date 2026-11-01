@@ -48,7 +48,7 @@ public static class DeploymentEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION (body, component, or a Local Git project outside Fake mode) or STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository)"),
+                (StatusCodes.Status400BadRequest, "VALIDATION (body, component, or a Local Git project outside Fake mode), STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository) or DEPLOYMENT_GROUP_INVALID (groupId: the part can't join that group)"),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection)"),
                 (StatusCodes.Status404NotFound, "NOT_FOUND (project or connection)"),
                 (StatusCodes.Status409Conflict, "PLATFORM_PERMISSION_MISSING (GitHub Pages: the AIDE GitHub App lacks Pages; extensions platform, installUrl = the App's page), PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT (extension platform; also reported by the setup job on the target) or CONFLICT"),
@@ -87,6 +87,37 @@ public static class DeploymentEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status502BadGateway);
+
+        settings.MapPut("/groups/{provider}", PutDeploymentGroup)
+            .WithName("PutDeploymentGroup")
+            .WithSummary("Set up the platform's deployment group (Owner, FR-190, FR-191): one of the caller's own connections and create {name, region?, plan?}, link {resourceId, parts {frontend?, backend?, database?}} or neither (rebind). Answers 202 with the group. A create or link queues one deployment_setup job: the platform project, then backend, frontend and database, each part reporting its own status. A rebind only swaps the connection, after checking it reaches the project.")
+            .Produces<DeploymentGroupDto>(StatusCodes.Status202Accepted)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status502BadGateway)
+            .WithResponseDescriptions(
+                (StatusCodes.Status400BadRequest, "VALIDATION, STACK_INCOMPATIBLE (the stack deploys nothing to this platform) or DEPLOYMENT_GROUP_INVALID (the parts don't form this group, or a part is already set up on its own)"),
+                (StatusCodes.Status403Forbidden, "FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection)"),
+                (StatusCodes.Status404NotFound, "NOT_FOUND (project, connection, or the group of a rebind)"),
+                (StatusCodes.Status409Conflict, "PLATFORM_RESOURCE_EXISTS (extension platform; link it instead) or CONFLICT (the group is being set up, already has resources, or changed concurrently). PLATFORM_GIT_NOT_CONNECTED and PLATFORM_PLAN_LIMIT land on the part from the job."),
+                (StatusCodes.Status502BadGateway, "PLATFORM_ERROR (extension platform; the connection can't reach the project, and any old binding stays)"));
+
+        settings.MapDelete("/groups/{provider}", DeleteDeploymentGroup)
+            .WithName("DeleteDeploymentGroup")
+            .WithSummary("Remove the platform's deployment group and clear its parts (Owner, FR-191). Every platform resource stays, as do deployments and migration runs; derived env vars are recomputed.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        settings.MapPost("/groups/{provider}/retry", RetryDeploymentGroup)
+            .WithName("RetryDeploymentGroup")
+            .WithSummary("Retry the group's failed or missing parts (Owner, FR-190): queues one deployment_setup job and leaves ready parts alone. Answers 202 with the group.")
+            .Produces<DeploymentGroupDto>(StatusCodes.Status202Accepted)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .WithResponseDescriptions(
+                (StatusCodes.Status404NotFound, "NOT_FOUND (project or group)"),
+                (StatusCodes.Status409Conflict, "INVALID_STATE (setup is running, or nothing needs a retry) or CONFLICT"));
 
         var deployments = app.MapGroup("/api/projects/{id:guid}/deployments")
             .WithTags("Deployments")
@@ -191,12 +222,81 @@ public static class DeploymentEndpoints
         {
             // PLATFORM_* problems carry the platform (and install link); STACK_INCOMPATIBLE keeps its violations.
             return failure.Error.Code == ErrorCodes.Validation ? ApiProblems.Validation(failure.Error)
-                : failure.Error.Code.StartsWith("PLATFORM_", StringComparison.Ordinal) ? ApiProblems.Platform(failure.Error, failure.Platform)
+                : failure.Error.Code.StartsWith("PLATFORM_", StringComparison.Ordinal) || failure.Error.Code == ErrorCodes.DeploymentGroupInvalid ? ApiProblems.Platform(failure.Error, failure.Platform)
                 : ApiProblems.FromError(failure.Error);
         }
 
         return TypedResults.Accepted($"/api/projects/{id}/settings/deployment", target!);
     }
+
+    private static async Task<Results<Accepted<DeploymentGroupDto>, ValidationProblem, ProblemHttpResult>> PutDeploymentGroup(
+        Guid id,
+        string provider,
+        PutDeploymentGroupRequest request,
+        IProjectAccess access,
+        ICurrentUser currentUser,
+        DeploymentGroupService groups,
+        CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.ManageDeployments, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        if (!EnumStrings.TryParse<DeploymentProvider>(provider, out var parsed))
+        {
+            return InvalidProvider();
+        }
+
+        var (group, failure) = await groups.PutAsync(id, parsed, request, grant.Value.UserId, grant.Value.SystemRole == SystemRole.Admin, currentUser.Actor, cancellationToken);
+        if (failure is not null)
+        {
+            return failure.Error.Code == ErrorCodes.Validation ? ApiProblems.Validation(failure.Error)
+                : failure.Error.Code.StartsWith("PLATFORM_", StringComparison.Ordinal) || failure.Error.Code == ErrorCodes.DeploymentGroupInvalid ? ApiProblems.Platform(failure.Error, failure.Platform)
+                : ApiProblems.FromError(failure.Error);
+        }
+
+        return TypedResults.Accepted($"/api/projects/{id}/settings/deployment", group!);
+    }
+
+    private static async Task<Results<NoContent, ValidationProblem, ProblemHttpResult>> DeleteDeploymentGroup(
+        Guid id, string provider, IProjectAccess access, ICurrentUser currentUser, DeploymentGroupService groups, CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.ManageDeployments, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        if (!EnumStrings.TryParse<DeploymentProvider>(provider, out var parsed))
+        {
+            return InvalidProvider();
+        }
+
+        return await groups.DeleteAsync(id, parsed, currentUser.Actor, cancellationToken) is { } error ? ApiProblems.FromError(error) : TypedResults.NoContent();
+    }
+
+    private static async Task<Results<Accepted<DeploymentGroupDto>, ValidationProblem, ProblemHttpResult>> RetryDeploymentGroup(
+        Guid id, string provider, IProjectAccess access, ICurrentUser currentUser, DeploymentGroupService groups, CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.ManageDeployments, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        if (!EnumStrings.TryParse<DeploymentProvider>(provider, out var parsed))
+        {
+            return InvalidProvider();
+        }
+
+        var (group, error) = await groups.RetryAsync(id, parsed, currentUser.Actor, cancellationToken);
+        return error is not null ? ApiProblems.FromError(error) : TypedResults.Accepted($"/api/projects/{id}/settings/deployment", group!);
+    }
+
+    private static ValidationProblem InvalidProvider() =>
+        ApiProblems.Validation(new Dictionary<string, string[]> { ["provider"] = ["The provider is a deployment platform such as railway, render or vercel."] });
 
     private static async Task<Results<NoContent, ValidationProblem, ProblemHttpResult>> DeleteDeploymentTarget(
         Guid id, string component, IProjectAccess access, ICurrentUser currentUser, DeploymentTargetService targets, CancellationToken cancellationToken)

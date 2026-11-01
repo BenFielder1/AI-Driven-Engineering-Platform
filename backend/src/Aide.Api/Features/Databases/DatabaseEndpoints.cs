@@ -110,7 +110,9 @@ public static class DatabaseEndpoints
         var (card, error) = await databases.PutAsync(id, parsed, request, grant.Value.UserId, grant.Value.SystemRole == SystemRole.Admin, currentUser.Actor, cancellationToken);
         if (error is not null)
         {
-            return error.Code == ErrorCodes.Validation ? ApiProblems.Validation(error) : ApiProblems.FromError(error);
+            return error.Code == ErrorCodes.Validation ? ApiProblems.Validation(error)
+                : error.Code == ErrorCodes.DeploymentGroupInvalid && Deployments.DeploymentGroups.PlatformOf(request.Provider) is { } platform ? ApiProblems.Platform(error, platform)
+                : ApiProblems.FromError(error);
         }
 
         return TypedResults.Accepted($"/api/projects/{id}/settings/deployment", card!);

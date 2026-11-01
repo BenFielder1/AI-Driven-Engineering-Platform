@@ -19,6 +19,18 @@ public sealed record DatabaseAuth(string Token, string? AccountId)
 public sealed record DatabaseHostContext(string? RenderServiceId, string? RailwayResourceId, string? RailwayPreviewEnvironmentId)
 {
     public static DatabaseHostContext None { get; } = new(null, null, null);
+
+    /// <summary>§4.28: the group's platform project: Railway Postgres goes in it, Render Postgres is placed in it.</summary>
+    public string? SharedProjectId { get; init; }
+
+    /// <summary>§4.28: a Railway Postgres with no part to share a project with: its own project.</summary>
+    public bool RailwayStandsAlone { get; init; }
+
+    /// <summary>§4.28, R8: the app using the database isn't in its Railway project, so it needs the public URL through a TCP proxy.</summary>
+    public bool RailwayPublicUrl { get; init; }
+
+    /// <summary>§4.28: the project the other environment's standalone Railway Postgres already made.</summary>
+    public string? RailwayOwnProjectId { get; init; }
 }
 
 /// <summary>
@@ -43,6 +55,9 @@ public sealed record DatabaseSetupRequest(
 /// <summary>The created or linked resource: its id and name, region and plan when known, and the password set (if any).</summary>
 public sealed record DatabaseSetupResult(string? ResourceId, string Name, string? Region, string? Plan, bool PasswordSet, string? DashboardUrl)
 {
+    /// <summary>§11 Q5: the platform wouldn't place the database in the group's project; the group still shares workspace, region and name.</summary>
+    public bool PlacementUnavailable { get; init; }
+
     public override string ToString() => $"DatabaseSetupResult {{ ResourceId = {ResourceId}, Name = {Name} }}";
 }
 
@@ -79,6 +94,12 @@ public interface IDatabaseProvider
 
     /// <summary>Creates (idempotently: an existing resource of the same name is adopted) or links the database.</summary>
     Task<DatabaseSetupResult> SetupAsync(DatabaseAuth auth, DatabaseSetupRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-192, §4.28: creates a standalone database's own project and returns its id (the caller stores it at once); an
+    /// existing name is <see cref="DeploymentFailure.ResourceExists"/>. A provider without the concept returns <c>null</c>.
+    /// </summary>
+    Task<string?> CreateOwnProjectAsync(DatabaseAuth auth, string name, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 
     /// <summary>Reads the database's state; once available, its connection details.</summary>
     Task<DatabasePoll> PollAsync(DatabaseAuth auth, DatabaseRef database, CancellationToken cancellationToken);

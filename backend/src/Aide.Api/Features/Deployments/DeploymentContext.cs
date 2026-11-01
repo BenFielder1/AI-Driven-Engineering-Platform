@@ -117,6 +117,29 @@ public sealed class DeploymentAccess(AideDbContext db, ISecretProtectors protect
     }
 
     /// <summary>
+    /// FR-190: the credential of a group's connection (<c>DEPLOYMENT_NOT_CONFIGURED</c> without one; <c>CREDENTIAL_INVALID</c>
+    /// when its token can't be decrypted).
+    /// </summary>
+    public async Task<Result<DeploymentAuth>> ConnectionAuthAsync(DeploymentProvider provider, Guid? connectionId, CancellationToken cancellationToken)
+    {
+        var platform = DeploymentPlatforms.DisplayName(provider);
+        var expected = DeploymentPlatforms.ConnectionProvider(provider);
+        var connection = connectionId is { } id ? await db.PlatformConnections.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id && c.Provider == expected, cancellationToken) : null;
+        if (connection is null)
+        {
+            return Result.Failure<DeploymentAuth>(new DomainError(ErrorCodes.DeploymentNotConfigured, $"The {platform} connection no longer exists: bind another in Settings → Deployment."));
+        }
+
+        if (!Tokens.TryUnprotect(connection.SecretEncrypted, out var token) || token.Length == 0)
+        {
+            return Result.Failure<DeploymentAuth>(new DomainError(ErrorCodes.CredentialInvalid, $"The {platform} token can't be decrypted; its owner needs to add it again."));
+        }
+
+        var slug = connection.Metadata.Accounts.FirstOrDefault(a => a.Id == connection.AccountId)?.Slug ?? connection.AccountId;
+        return Result.Success(new DeploymentAuth(token, connection.Metadata.TeamId, connection.AccountId, slug));
+    }
+
+    /// <summary>
     /// The project's repository for platforms: GitHub (owner/name and id), GitLab (namespace path, project, project id) or
     /// Bitbucket (workspace, slug, UUID); <see cref="DeploymentRepoRef.Local"/> for a Local project (deployable only with the Fake).
     /// </summary>

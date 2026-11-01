@@ -144,6 +144,12 @@ public static class ErrorCodes
     /// platform API failure, or a provider AIDE can't call for real yet ("not supported yet").</summary>
     public const string PlatformError = "PLATFORM_ERROR";
 
+    /// <summary>FR-187, FR-191 (400): the parts or provider don't form this deployment group.</summary>
+    public const string DeploymentGroupInvalid = "DEPLOYMENT_GROUP_INVALID";
+
+    /// <summary>FR-190, FR-192 (409, also on a part or group from the job): the project name already exists in the workspace.</summary>
+    public const string PlatformResourceExists = "PLATFORM_RESOURCE_EXISTS";
+
     /// <summary>FR-42, FR-43 (recorded on a failed release): Git or GitHub refused the merge, tag or push for good.</summary>
     public const string GitError = "GIT_ERROR";
 
@@ -415,6 +421,8 @@ public static class ErrorCodes
         [PlatformGitNotConnected] = 409,
         [PlatformPlanLimit] = 409,
         [PlatformError] = 502,
+        [DeploymentGroupInvalid] = 400,
+        [PlatformResourceExists] = 409,
         [PlatformPermissionMissing] = 409,
         [DeploymentNotConfigured] = 409,
         [InvalidDeployment] = 409,

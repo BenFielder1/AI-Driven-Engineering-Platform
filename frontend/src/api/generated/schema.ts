@@ -1342,6 +1342,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/settings/deployment/groups/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set up the platform's deployment group (Owner, FR-190, FR-191): one of the caller's own connections and create {name, region?, plan?}, link {resourceId, parts {frontend?, backend?, database?}} or neither (rebind). Answers 202 with the group. A create or link queues one deployment_setup job: the platform project, then backend, frontend and database, each part reporting its own status. A rebind only swaps the connection, after checking it reaches the project. */
+        put: operations["PutDeploymentGroup"];
+        post?: never;
+        /** Remove the platform's deployment group and clear its parts (Owner, FR-191). Every platform resource stays, as do deployments and migration runs; derived env vars are recomputed. */
+        delete: operations["DeleteDeploymentGroup"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/groups/{provider}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry the group's failed or missing parts (Owner, FR-190): queues one deployment_setup job and leaves ready parts alone. Answers 202 with the group. */
+        post: operations["RetryDeploymentGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/deployments": {
         parameters: {
             query?: never;
@@ -3698,6 +3733,8 @@ export interface components {
             updatedAt: null | string;
             /** @default false */
             resetRecommended: boolean;
+            /** Format: uuid */
+            groupId?: null | string;
         };
         /**
          * @description A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |
@@ -3791,6 +3828,56 @@ export interface components {
          */
         DeploymentEnvironment: "preview" | "production";
         /**
+         * @description A group card of Settings → Deployment (FR-191): every group the composition forms, plus any configured group it no
+         *     longer does. `id` is `null` and `status` `not_configured` until it is set up; then `configuring`,
+         *     `ready`, `attention` or `error`. `capability`: `project` (one real project,
+         *     `sharedResourceId` and its `sharedResourceUrl`) or `shared_setup` (Vercel: same team and name, no shared
+         *     resource). `statusReason`: the failure code, or `project_placement_unavailable` (Render project grouping isn't
+         *     available: the group still works). `canRetry`: a part failed or is missing and no setup is running.
+         */
+        DeploymentGroupDto: {
+            /** Format: uuid */
+            id: null | string;
+            provider: components["schemas"]["DeploymentProvider"];
+            capability: components["schemas"]["SharedProjectCapability"];
+            parts: components["schemas"]["DeploymentPart"][];
+            name: null | string;
+            binding: null | components["schemas"]["DeploymentTargetBindingDto"];
+            canBind: boolean;
+            sharedResourceId: null | string;
+            sharedResourceUrl: null | string;
+            region: null | string;
+            plan: null | string;
+            status: string;
+            statusReason: null | string;
+            partStatuses: components["schemas"]["DeploymentGroupPartDto"][];
+            canRetry: boolean;
+            /** Format: date-time */
+            updatedAt: null | string;
+        };
+        /**
+         * @description FR-190 Link: per part, an existing resource from the connection's picker (`GET …/resources`: Railway
+         *     `type=services`, Render `services` and `databases`, Vercel `projects`); left out means
+         *     <b>Create in this project</b> (Vercel: every part must name one).
+         */
+        DeploymentGroupLinkParts: {
+            frontend?: null | string;
+            backend?: null | string;
+            database?: null | string;
+        };
+        /**
+         * @description One part's progress on a group card (FR-190): `part`, the database's `environment`, `status` (a target's
+         *     or database's status, `not_configured` before it has a row), `statusReason` (the failure code or step) and the
+         *     platform resource. The part's full card is in `targets[]` or `databases[]`.
+         */
+        DeploymentGroupPartDto: {
+            part: components["schemas"]["DeploymentPart"];
+            environment: null | components["schemas"]["DeploymentEnvironment"];
+            status: string;
+            statusReason: null | string;
+            resourceId: null | string;
+        };
+        /**
          * @description What a deployment row does (FR-150, §5). Wire values: `deploy`, `rollback`, `promote`.
          * @enum {unknown}
          */
@@ -3807,6 +3894,11 @@ export interface components {
             explanation: null | string;
         };
         /**
+         * @description A deployable part of a composition (§4.28). Wire values: `frontend`, `backend`, `database`.
+         * @enum {unknown}
+         */
+        DeploymentPart: "frontend" | "backend" | "database";
+        /**
          * @description Deployment provider (§4.15, §4.20): a target's platform, from the composition's host (`deploy-vercel` → `vercel`).
          *     Wire values: `vercel`, `fake` (v2's explicit Fake provider; deployments made under
          *     `Deployments:Provider=Fake` are recorded as `fake`), `netlify`, `cloudflare`, `render`,
@@ -3817,7 +3909,8 @@ export interface components {
         /**
          * @description Settings → Deployment (FR-144, any member; D-V4-4 replaced v2's single Vercel shape): `targets`, `databases`,
          *     the environment inventory (`env`; keys only) and the `originModel`. `canManage`: the caller is an Owner.
-         *     `fakeMode`: `Deployments:Provider=Fake`.
+         *     `fakeMode`: `Deployments:Provider=Fake`. FR-191: `groups`: the group cards; parts' full cards stay in
+         *     `targets` and `databases`, tied to a group by their `groupId`.
          */
         DeploymentSettingsDto: {
             targets: components["schemas"]["DeploymentTargetDto"][];
@@ -3826,6 +3919,7 @@ export interface components {
             originModel: components["schemas"]["DeploymentOriginModelDto"];
             canManage: boolean;
             fakeMode: boolean;
+            groups: components["schemas"]["DeploymentGroupDto"][];
         };
         /**
          * @description The `deployment_setup` job of a target (FR-144): `state` `queued`, `running`, `succeeded` or
@@ -3897,6 +3991,8 @@ export interface components {
             readiness: components["schemas"]["ReadinessItemDto"][];
             implementedForReal: boolean;
             fakeMode: boolean;
+            /** Format: uuid */
+            groupId?: null | string;
         };
         /**
          * @description State of a deployment target (FR-144). Wire values: `not_configured`, `configuring`, `ready`,
@@ -4654,7 +4750,7 @@ export interface components {
             reason?: string;
             /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
-            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
+            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR, PLATFORM_RESOURCE_EXISTS: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
             platform?: string;
             /** @description STACK_INCOMPATIBLE: each broken compatibility rule (FR-116). */
             violations?: {
@@ -4698,6 +4794,11 @@ export interface components {
             presetName: string;
             presetVersion: null | string;
             label: string;
+        };
+        /** @description FR-190 Link: the platform project (`type=projects` in the picker; Vercel has none, so leave it out) and the parts. */
+        LinkDeploymentGroupRequest: {
+            resourceId?: null | string;
+            parts?: null | components["schemas"]["DeploymentGroupLinkParts"];
         };
         /** @description FR-144: link an existing platform resource (from `GET /api/me/connections/platforms/:id/resources`). */
         LinkDeploymentResourceRequest: {
@@ -5261,7 +5362,7 @@ export interface components {
             reason?: string;
             /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
-            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
+            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR, PLATFORM_RESOURCE_EXISTS: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
             platform?: string;
             /** @description STACK_INCOMPATIBLE: each broken compatibility rule (FR-116). */
             violations?: {
@@ -5547,6 +5648,17 @@ export interface components {
             public?: null | boolean;
         };
         /**
+         * @description FR-190, FR-191 (Owner): set up a group. `connectionId` is one of the caller's own connections of the platform;
+         *     `create {name, region?, plan?}` a new project, `link` an existing one, neither a <b>rebind</b> of an existing
+         *     group to the new connection. `plan` applies to services; a group's database uses the platform's default plan.
+         */
+        PutDeploymentGroupRequest: {
+            /** Format: uuid */
+            connectionId?: null | string;
+            create?: null | components["schemas"]["CreateDeploymentResourceRequest"];
+            link?: null | components["schemas"]["LinkDeploymentGroupRequest"];
+        };
+        /**
          * @description FR-144 (Owner): set up a target. `provider` must be the composition's host for the component (`fake` also in
          *     Fake mode); `connectionId` one of the caller's own connections of that platform (not used by GitHub Pages);
          *     `create` or `link`, not both (GitHub Pages: neither; setup enables Pages on the repository).
@@ -5557,6 +5669,11 @@ export interface components {
             connectionId?: null | string;
             create?: null | components["schemas"]["CreateDeploymentResourceRequest"];
             link?: null | components["schemas"]["LinkDeploymentResourceRequest"];
+            /**
+             * Format: uuid
+             * @description FR-191: set the part up in this group (`DEPLOYMENT_GROUP_INVALID` when it can't join); left out, a create or link makes it standalone.
+             */
+            groupId?: null | string;
         };
         /**
          * @description FR-152 (Owner): set the environment's database. `provider` must be the composition's database host (`fake`
@@ -5570,6 +5687,11 @@ export interface components {
             create?: null | components["schemas"]["CreateManagedDatabaseRequest"];
             link?: null | components["schemas"]["LinkDeploymentResourceRequest"];
             external?: null | components["schemas"]["ExternalDatabaseRequest"];
+            /**
+             * Format: uuid
+             * @description FR-191: set the database up in this group (`DEPLOYMENT_GROUP_INVALID` when it can't join); left out, it is standalone.
+             */
+            groupId?: null | string;
         };
         /** @description One readiness checklist item (FR-144): a stable `id`, `state` (`ok`, `warning`, `error`, `na`), a message and an optional fix link. */
         ReadinessItemDto: {
@@ -5996,6 +6118,12 @@ export interface components {
          */
         Severity: "minor" | "major" | "critical";
         /**
+         * @description FR-192, §4.28: what a platform shares between a group's parts. Wire values: `none`, `project` (one real
+         *     project), `shared_setup` (one connection and name, one platform project per part: Vercel, D-V5-8).
+         * @enum {unknown}
+         */
+        SharedProjectCapability: "none" | "project" | "shared_setup";
+        /**
          * @description The stack catalog (FR-113, §4.16) for the wizard's Stack step, Settings → Stack and Admin → Stack catalog: the five
          *     layers, the choices in evaluation order (frontend, backend, data, vcs, then the deployment choices frontendHost,
          *     backendHost, databaseHost, local and originModel) with their options, the rule statements and the recommended
@@ -6069,6 +6197,8 @@ export interface components {
             originModel: null | string;
             derived: components["schemas"]["StackDerivedDto"];
             caveats: components["schemas"]["StackCaveatDto"][];
+            groups: components["schemas"]["StackDeploymentGroupDto"][];
+            windows: components["schemas"]["StackDeploymentWindowDto"][];
         };
         /**
          * @description A (partial) composition (§4.17, §4.18). For `/options` a missing layer is "not chosen yet"; for `/validate` it
@@ -6093,12 +6223,13 @@ export interface components {
             pack: string;
             mode?: null | string;
         };
-        /** @description Host option ids (`null` = None) and the local dev loop (`compose` or `none`). */
+        /** @description Host option ids (`null` = None), the local dev loop (`compose` or `none`) and §4.28's parts in their own projects (normalised; `[]` when none). */
         StackDeployDto: {
             frontendHost: null | string;
             backendHost: null | string;
             databaseHost: null | string;
             local: string;
+            separateParts: string[];
         };
         /** @description The Deployment layer: option ids of the frontend, backend and database hosts (or `none`) and the local dev loop (`compose`/`none`). */
         StackDeploySelection: {
@@ -6106,6 +6237,24 @@ export interface components {
             backendHost?: null | string;
             databaseHost?: null | string;
             local?: null | string;
+            /** @description §4.28: the parts deployed to their own projects (`frontend`, `backend`, `database`); absent means none. R13 removes any that share no platform, and a caveat says so. */
+            separateParts?: null | string[];
+        };
+        /** @description FR-187: parts on one platform that form a group, and what that platform shares (`project`, or `shared_setup` on Vercel). */
+        StackDeploymentGroupDto: {
+            provider: components["schemas"]["DeploymentProvider"];
+            parts: components["schemas"]["DeploymentPart"][];
+            capability: components["schemas"]["SharedProjectCapability"];
+        };
+        /**
+         * @description FR-188: one window of the Deployment step: a group, or one part (`capability` `none`). `platform` is the host's
+         *     name (`railway`, `netlify`, `supabase`, `external` …), and `environment` is set where a database has a window per environment.
+         */
+        StackDeploymentWindowDto: {
+            platform: string;
+            parts: components["schemas"]["DeploymentPart"][];
+            capability: components["schemas"]["SharedProjectCapability"];
+            environment: null | components["schemas"]["DeploymentEnvironment"];
         };
         /**
          * @description Derived facts (§4.18): the Next.js mode (R2), the specialists in play (FR-120), the origin models the Owner can switch
@@ -6201,6 +6350,9 @@ export interface components {
             catalogVersion: string;
             choices: components["schemas"]["StackChoiceStateDto"][];
             nextjsMode: null | string;
+            groups: components["schemas"]["StackDeploymentGroupDto"][];
+            windows: components["schemas"]["StackDeploymentWindowDto"][];
+            caveats: components["schemas"]["StackCaveatDto"][];
         };
         /** @description Where a pack was adapted from (FR-122): the stack-packs plugin, its version and the snapshot date. */
         StackPackSourceDto: {
@@ -11760,7 +11912,7 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentTargetDto"];
                 };
             };
-            /** @description VALIDATION (body, component, or a Local Git project outside Fake mode) or STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository) */
+            /** @description VALIDATION (body, component, or a Local Git project outside Fake mode), STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository) or DEPLOYMENT_GROUP_INVALID (groupId: the part can't join that group) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -12110,6 +12262,221 @@ export interface operations {
             };
             /** @description Bad Gateway */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PutDeploymentGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutDeploymentGroupRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentGroupDto"];
+                };
+            };
+            /** @description VALIDATION, STACK_INCOMPATIBLE (the stack deploys nothing to this platform) or DEPLOYMENT_GROUP_INVALID (the parts don't form this group, or a part is already set up on its own) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project, connection, or the group of a rebind) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PLATFORM_RESOURCE_EXISTS (extension platform; link it instead) or CONFLICT (the group is being set up, already has resources, or changed concurrently). PLATFORM_GIT_NOT_CONNECTED and PLATFORM_PLAN_LIMIT land on the part from the job. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PLATFORM_ERROR (extension platform; the connection can't reach the project, and any old binding stays) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteDeploymentGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RetryDeploymentGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentGroupDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project or group) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description INVALID_STATE (setup is running, or nothing needs a retry) or CONFLICT */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

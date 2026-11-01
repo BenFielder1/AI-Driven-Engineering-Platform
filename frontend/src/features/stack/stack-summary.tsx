@@ -112,13 +112,15 @@ export function StackSummary({
   catalog,
   value,
   onFieldErrors,
+  separateParts,
 }: {
   catalog: StackCatalog | undefined
   value: StackSelection
   onFieldErrors?: (errors: StackFieldErrors) => void
+  separateParts?: readonly string[] | undefined
 }) {
   const debounced = useDebounced(value)
-  const request = isComplete(debounced) ? toStackRequest(debounced) : null
+  const request = isComplete(debounced) ? toStackRequest(debounced, separateParts ? { separateParts } : {}) : null
   const validation = useValidateStack(request)
 
   const error = validation.isError ? validation.error : null

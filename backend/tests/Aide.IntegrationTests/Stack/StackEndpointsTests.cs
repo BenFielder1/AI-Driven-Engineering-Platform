@@ -131,10 +131,10 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
             deploy = new { frontendHost = "deploy-netlify", backendHost = "deploy-render", databaseHost = "render-postgres" },
         }, Ct));
 
-        Assert.Equal("1.1.0", composition.CatalogVersion);
+        Assert.Equal("1.2.0", composition.CatalogVersion);
         Assert.Equal(new StackComponentDto("fe-react-vite", "frontend"), composition.Frontend);
         Assert.Equal(new StackComponentDto("be-aspnet", "backend"), composition.Backend);
-        Assert.Equal(new StackDeployDto("deploy-netlify", "deploy-render", "render-postgres", "compose"), composition.Deploy);
+        Assert.Equal(("deploy-netlify", "deploy-render", "render-postgres", "compose"), (composition.Deploy.FrontendHost, composition.Deploy.BackendHost, composition.Deploy.DatabaseHost, composition.Deploy.Local));
         Assert.Equal("proxy", composition.OriginModel);
         Assert.Equal(["proxy", "cross-origin"], composition.Derived.OriginModelOptions);
         Assert.Contains(StackAgents.BackendEngineer, composition.Derived.Agents);

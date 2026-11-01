@@ -113,6 +113,11 @@ public static class ApiProblems
             extensions[InstallUrlKey] = link;
         }
 
+        if (error.Reason is { } reason && error.Code == ErrorCodes.DeploymentGroupInvalid)
+        {
+            extensions[ReasonKey] = reason;
+        }
+
         if (error.Details.Count > 0)
         {
             extensions[DetailsKey] = error.Details;

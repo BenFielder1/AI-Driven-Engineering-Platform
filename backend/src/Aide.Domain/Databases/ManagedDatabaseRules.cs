@@ -56,6 +56,7 @@ public static partial class ManagedDatabaseRules
     public const int SupabaseTransactionPort = 6543;
     public const string DefaultDatabaseName = "postgres";
     public const string RailwayServiceName = "Postgres";
+    public const int PostgresPort = 5432;
     public const string RenderPostgresVersion = "17";
     public const int ConnectionStringMaxLength = 2000;
     public const int ResourceIdMaxLength = 200;
@@ -357,7 +358,7 @@ public static partial class ManagedDatabaseRules
             return $"{pooler}:{SupabaseSessionPort}/{connection.DatabaseName ?? DefaultDatabaseName} (session pooler)";
         }
 
-        if (provider == ManagedDatabaseProvider.Railway)
+        if (provider == ManagedDatabaseProvider.Railway && !connection.RailwaySeparateProject)
         {
             return RailwayReference(connection.RailwayService);
         }

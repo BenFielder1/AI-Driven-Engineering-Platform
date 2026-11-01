@@ -85,8 +85,11 @@ export function repoVcsOf(gitMode: WizardValues['gitMode']): string | null {
 
 /** FR-114/FR-117: `stack` for CreateProject; the VCS is omitted when the repository sets it (R5). */
 export function toWizardStackRequest(v: WizardValues): StackCompositionRequest {
-  return toStackRequest(selectionOfValues(v), { omitVcs: repoVcsOf(v.gitMode) !== null })
+  return toStackRequest(selectionOfValues(v), { omitVcs: repoVcsOf(v.gitMode) !== null, separateParts: separatePartsOf(v.stackSeparateParts) })
 }
+
+/** §4.28 `deploy.separateParts`, kept flat like the other stack fields: `database,frontend`. */
+export const separatePartsOf = (value: string): string[] => value.split(',').filter(Boolean)
 
 /**
  * FR-118: the repository to detect the stack of, at the import's base (the released tag, else the default branch), or

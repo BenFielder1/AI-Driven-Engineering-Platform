@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using Aide.Domain.Deployments;
+
 namespace Aide.Domain.Stack;
 
 /// <summary>
@@ -31,7 +34,11 @@ public sealed record StackDataPick(string Pack, string? Mode = null);
 public sealed record StackVcsPick(string Pack, Guid? InstanceId = null, bool SelfManaged = false);
 
 /// <summary>The Deployment layer's picks: option ids of the frontend, backend and database hosts and the local dev loop.</summary>
-public sealed record StackDeployPick(string? FrontendHost = null, string? BackendHost = null, string? DatabaseHost = null, string? Local = null);
+public sealed record StackDeployPick(string? FrontendHost = null, string? BackendHost = null, string? DatabaseHost = null, string? Local = null)
+{
+    /// <summary>§4.28: the parts deployed to their own projects: <c>frontend</c>, <c>backend</c>, <c>database</c>. Absent means none.</summary>
+    public IReadOnlyList<string>? SeparateParts { get; init; }
+}
 
 /// <summary>
 /// §4.18: the normalised composition, as pinned on a release version. None is <c>null</c> for the frontend, backend, data
@@ -69,7 +76,12 @@ public sealed record StackDataLayer(string Pack, string? Mode);
 public sealed record StackVcs(string Pack, Guid? InstanceId, bool SelfManaged);
 
 /// <summary>Host option ids (<c>null</c> = None) and the local dev loop (<c>compose</c> or <c>none</c>).</summary>
-public sealed record StackDeploy(string? FrontendHost, string? BackendHost, string? DatabaseHost, string Local);
+public sealed record StackDeploy(string? FrontendHost, string? BackendHost, string? DatabaseHost, string Local)
+{
+    /// <summary>§4.28: the parts deployed to their own projects, normalised by R13; absent (never written as <c>null</c>) when none, so v4 compositions keep their exact JSON.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? SeparateParts { get; init; }
+}
 
 /// <summary>
 /// §4.18 derived facts: the Next.js mode (R2), the specialists in play (FR-120), the origin models the Owner may switch
@@ -101,9 +113,15 @@ public sealed record StackOptionEvaluation(string Option, StackOptionState State
 /// </summary>
 public sealed record StackChoiceEvaluation(string Choice, string Layer, string? Selected, string? Default, IReadOnlyList<StackOptionEvaluation> Options);
 
-/// <summary>§4.17 <c>Evaluate</c>: every choice with its options' states, and the Next.js mode when known.</summary>
+/// <summary>§4.17 <c>Evaluate</c>: every choice with its options' states, and the Next.js mode when known; §4.28: the groups, windows and the selection's caveats (R13 included).</summary>
 public sealed record StackEvaluation(IReadOnlyList<StackChoiceEvaluation> Choices, string? NextjsMode)
 {
+    public IReadOnlyList<DeploymentGroupSpec> Groups { get; init; } = [];
+
+    public IReadOnlyList<DeploymentWindow> Windows { get; init; } = [];
+
+    public IReadOnlyList<StackCaveat> Caveats { get; init; } = [];
+
     public StackChoiceEvaluation Choice(string id) => Choices.First(c => c.Choice == id);
 }
 
