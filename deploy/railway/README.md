@@ -6,7 +6,7 @@ One Railway project, `aide`, with two environments: `preview` and `production`. 
   `/healthz`
 - **`api`:** the ASP.NET API from `backend/Dockerfile`, private only, with a 500 MB volume at `/data` (5 GB after a plan upgrade), migrations as its
   pre-deploy command, and healthcheck `/api/health/ready`
-- **`postgres`:** Railway Postgres 18 (`postgres-ssl:18`; local and CI use 17, SPEC D-V3-13)
+- **`postgres`:** Railway Postgres 18 (`postgres-ssl:18`, SPEC D-V3-13; local and CI run 18 too, D-V5-1)
 
 The browser only talks to `web`, which proxies `/api` and the SignalR WebSockets to
 `http://api.railway.internal:8080`.

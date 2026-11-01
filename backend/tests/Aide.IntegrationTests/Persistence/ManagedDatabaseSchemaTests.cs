@@ -8,7 +8,7 @@ using Npgsql;
 
 namespace Aide.IntegrationTests.Persistence;
 
-/// <summary>FR-147, FR-148, FR-152, FR-153, FR-154, §4.21, §5: the M30 schema (ManagedDatabases) against real PostgreSQL 17.</summary>
+/// <summary>FR-147, FR-148, FR-152, FR-153, FR-154, §4.21, §5: the M30 schema (ManagedDatabases) against real PostgreSQL 18.</summary>
 [Collection(ApiTestGroup.Name)]
 public sealed class ManagedDatabaseSchemaTests(AideApiFactory factory)
 {

@@ -82,6 +82,19 @@ for overlay in overlays/local overlays/local-e2e; do
     exit 1
   fi
 
+  # FR-163: AIDE's own database is postgres:18 on the 18 data layout, with no 17 image or path left in the render.
+  DB_STATEFULSET="$(doc_of StatefulSet db <<<"$RENDERED")"
+  [[ -n "$DB_STATEFULSET" ]] || { echo "ERROR: $overlay has no StatefulSet 'db'." >&2; exit 1; }
+  if grep -qE 'postgres:17|/var/lib/postgresql/data' <<<"$RENDERED"; then
+    echo "ERROR: $overlay still references postgres:17 or its data path /var/lib/postgresql/data (FR-163)." >&2
+    exit 1
+  fi
+  for kv in 'image: postgres:18' 'value: /var/lib/postgresql/18/docker' 'readOnlyRootFilesystem: true'; do
+    grep -qF "$kv" <<<"$DB_STATEFULSET" || { echo "ERROR: $overlay db StatefulSet is missing '$kv' (FR-163)." >&2; exit 1; }
+  done
+  grep -qE 'mountPath: /var/lib/postgresql$' <<<"$DB_STATEFULSET" \
+    || { echo "ERROR: $overlay db StatefulSet must mount its volume at /var/lib/postgresql (FR-163)." >&2; exit 1; }
+
   if command -v kubeconform >/dev/null 2>&1; then
     kubeconform -strict -summary -ignore-missing-schemas <<<"$RENDERED"
   fi

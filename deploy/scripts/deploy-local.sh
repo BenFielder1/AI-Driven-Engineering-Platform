@@ -2,6 +2,7 @@
 # Build the images, apply the local overlay, run migrations, roll out and smoke-test.
 # Target: Docker Desktop Kubernetes (context docker-desktop) only. App: http://localhost:8080
 # Idempotent: safe to re-run. Never deletes data (PVCs, namespace).
+# Stops before changing anything if the database volume still holds PostgreSQL 17 data (FR-164; see README.md).
 #
 # Usage: deploy-local.sh [--e2e]
 #   (default)  overlays/local: Vercel deployments, no Local import (normal use).
@@ -19,7 +20,7 @@ E2E=0
 for arg in "$@"; do
   case "$arg" in
     --e2e) E2E=1 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) die "Unknown argument: $arg (see --help)" ;;
   esac
 done
@@ -34,6 +35,10 @@ docker info >/dev/null 2>&1 || die "Docker is not running. Start Docker Desktop.
 require_context
 RUNTIME="$($K get nodes -o jsonpath='{.items[0].status.nodeInfo.containerRuntimeVersion}')"
 info "node runtime: $RUNTIME"
+
+# ---------------------------------------------------------------------------
+step "Checking the database volume's PostgreSQL version"
+check_db_data_version
 
 # ---------------------------------------------------------------------------
 step "Checking $SECRETS_FILE"

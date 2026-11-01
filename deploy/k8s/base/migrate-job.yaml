@@ -22,7 +22,7 @@ spec:
       initContainers:
         # Wait for PostgreSQL so a cold start doesn't burn the Job's retries.
         - name: wait-for-db
-          image: postgres:17
+          image: postgres:18
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "until pg_isready -h db -p 5432 -U \"$POSTGRES_USER\"; do echo waiting for db; sleep 2; done"]
           env:

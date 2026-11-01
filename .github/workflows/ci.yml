@@ -302,7 +302,7 @@ jobs:
         suite: [v1, v2, a11y]
     services:
       db:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_USER: aide
           POSTGRES_DB: aide

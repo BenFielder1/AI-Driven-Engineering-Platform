@@ -57,7 +57,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [ ] M37 Integrate and harden: FR-193, FR-194, E2E, axe, perf, docs, verifier over v1–v5
 
 ## Decisions
+- 2026-11-01 (M32): FR-163's "v4 §8 test note" stays unchanged because `docs/` is frozen; SPEC §8 for v5 carries the test scope.
+- 2026-11-01 (M32, Q5): Testcontainers.PostgreSql 4.15.0 needs no change for `postgres:18` (it sets no PGDATA or data mount; from reading the package). `readOnlyRootFilesystem` looks fine from reading the image's entrypoint; unverified at runtime.
+- 2026-11-01 (M32): the Kubernetes upgrade renames `pgdata` to `pgdata-17` on the same volume, which clears the `deploy-local.sh` guard without deleting anything.
 
 ## Known issues
 
 ## Manual checks (Ben)
+- **M32 PostgreSQL 18 (nothing here has run against a real cluster):** on a cluster with 17 data, `deploy-local.sh` exits non-zero and the volume is unchanged. Run the README's Kubernetes upgrade end to end, confirming the rename works as uid 999 on the mount root, 18 starts with the read-only root filesystem, and the restore's "expected errors" list is complete. Then run the compose procedure and a fresh-cluster deploy.
