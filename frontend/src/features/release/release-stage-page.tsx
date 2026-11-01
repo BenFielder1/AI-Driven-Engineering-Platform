@@ -34,7 +34,7 @@ function PastReleases({ projectId, releaseVersionId }: { projectId: string; rele
 
 /**
  * /projects/:id/release (FR-55 stage page): the pre-release gate (decided in place), the release panel (FR-42, FR-43,
- * FR-64, FR-65: attempts, awaiting merge, tag, pull request), merge readiness (FR-84), the GitHub Release link, the
+ * FR-64, FR-65: attempts, awaiting merge, tag, pull request), merge readiness (FR-84), the host release link (FR-140), the
  * production deployment (FR-91) and, for Owners, Start new version
  * (FR-60; disabled with the reason until the project is released and merged). Before the project reaches Release, an
  * empty state says what has to happen first. A past version (FR-62) shows its summary and release attempts, read-only.
@@ -90,7 +90,7 @@ export function ReleaseStagePage() {
       <StageGates
         types={stageGates.release}
         pendingDetails={(gate) =>
-          gate.type === 'pre_release' && mergeReadinessApplies(s) ? <MergeReadinessSummary projectId={project.id} /> : null
+          gate.type === 'pre_release' && mergeReadinessApplies(s) ? <MergeReadinessSummary projectId={project.id} state={s} /> : null
         }
       />
       {started ? (

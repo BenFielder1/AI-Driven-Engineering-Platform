@@ -44,7 +44,28 @@ public static class ReleaseEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or no release has started yet."));
 
+        group.MapGet("/releases/{releaseId:guid}/notes", GetReleaseNotes)
+            .WithName("GetReleaseNotes")
+            .WithSummary("FR-140, D-V4-7: AIDE's full release notes of one release attempt (members): a succeeded Bitbucket release's (Bitbucket has no Releases; the annotated tag's message holds them); notes is null for other Git hosts or an attempt that hasn't succeeded.")
+            .Produces<ReleaseNotesDto>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or no such release attempt in it."));
+
         return app;
+    }
+
+    private static async Task<Results<Ok<ReleaseNotesDto>, ProblemHttpResult>> GetReleaseNotes(
+        Guid id, Guid releaseId, IProjectAccess access, ReleaseService releases, CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        return await releases.NotesAsync(id, releaseId, cancellationToken) is { } notes
+            ? TypedResults.Ok(notes)
+            : ApiProblems.NotFound("The release attempt was not found.");
     }
 
     private static async Task<Results<Accepted<ReleaseDto>, ProblemHttpResult>> RetryRelease(

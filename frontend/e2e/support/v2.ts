@@ -4,15 +4,19 @@ import { api, apiJson, projectState, waitForDraft, waitForPendingGate } from './
 
 /**
  * v2 E2E helpers (NFR-TEST2): Fake LLM + Local Git + the Fake deployment provider (§4.15: READY after 2 polls at
- * https://fake-<sha8>.vercel.test). Everything here talks to the real API or the real UI; no fixed waits.
+ * https://fake-<sha8>-<component>.<provider>.test, §4.20). Everything here talks to the real API or the real UI; no fixed waits.
  */
 
 export const AGENT_TIMEOUT = 60_000
 export const LIVE_BOUND_MS = 2_000
 
-/** FR-87: a Vercel connection of the context's user. The Fake provider accepts any token not starting `fake_invalid`. */
+/**
+ * FR-87, FR-142: a Vercel platform connection of the context's user. The Fake provider accepts any token not starting
+ * `fake_invalid`.
+ */
 export async function createVercelConnection(context: BrowserContext, label = 'Fake Vercel'): Promise<string> {
-  const connection = await apiJson<{ id: string; status: string }>(context, 'POST', '/api/me/connections/vercel', {
+  const connection = await apiJson<{ id: string; status: string }>(context, 'POST', '/api/me/connections/platforms', {
+    provider: 'vercel',
     label,
     token: `fake_e2e_${String(Date.now())}`,
   })
@@ -23,7 +27,8 @@ export async function createVercelConnection(context: BrowserContext, label = 'F
 export interface LocalProjectOptions {
   name: string
   idea?: string
-  presetId?: string | null
+  /** FR-114: a stack composition request (omitted: No stack (general)). */
+  stack?: Record<string, unknown>
   /** A Vercel connection id: the project deploys with the Fake provider (FR-88, Local + Fake). */
   vercelConnectionId?: string
   approvalMode?: 'strict' | 'advisory' | 'autonomous'
@@ -31,7 +36,7 @@ export interface LocalProjectOptions {
   initialVersion?: string
 }
 
-/** POST /api/projects from scratch with Local Git (FR-66), optionally with a preset (FR-74) and Fake deployments (FR-88). */
+/** POST /api/projects from scratch with Local Git (FR-66), optionally with a stack composition (FR-114) and Fake deployments (FR-88). */
 export async function createLocalProject(context: BrowserContext, o: LocalProjectOptions) {
   return apiJson<{ id: string; name: string; slug: string; deploymentsEnabled: boolean }>(context, 'POST', '/api/projects', {
     name: o.name,
@@ -43,7 +48,7 @@ export async function createLocalProject(context: BrowserContext, o: LocalProjec
     tokenBudget: null,
     source: 'scratch',
     initialVersion: o.initialVersion ?? '0.1.0',
-    ...(o.presetId ? { presetId: o.presetId } : {}),
+    ...(o.stack ? { stack: o.stack } : {}),
     git: { mode: 'local', defaultBranch: 'main' },
     ...(o.vercelConnectionId
       ? {
@@ -97,8 +102,12 @@ export async function waitForDeployment(
   return found as unknown as DeploymentDto
 }
 
-/** §4.15: the Fake provider's URL for a commit. */
-export const fakeUrl = (sha: string) => `https://fake-${sha.slice(0, 8).toLowerCase()}.vercel.test`
+/**
+ * §4.15, §4.20: the Fake provider's URL for a commit of a target, `https://fake-<sha8>-<component>.<provider>.test`
+ * (the wizard's Vercel deployment is the frontend target on `vercel`).
+ */
+export const fakeUrl = (sha: string, component: 'frontend' | 'backend' = 'frontend', provider = 'vercel') =>
+  `https://fake-${sha.slice(0, 8).toLowerCase()}-${component}.${provider}.test`
 
 export async function approveDraftViaApi(context: BrowserContext, projectId: string, type: string) {
   const draft = await waitForDraft(context, projectId, type, AGENT_TIMEOUT)

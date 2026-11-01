@@ -114,28 +114,24 @@ public static class ErrorCodes
     /// </summary>
     public const string TagNotFound = "TAG_NOT_FOUND";
 
-    /// <summary>FR-74: the preset doesn't exist (until presets land, every preset id).</summary>
-    public const string PresetNotFound = "PRESET_NOT_FOUND";
+    // Deployments (FR-87–FR-91, FR-143–FR-146, §4.15, §4.20; D-V4-4 renamed the Vercel-specific codes)
 
     /// <summary>
-    /// FR-74 (409 on <c>PATCH /api/projects/:id/preset</c>): the version's first implementation plan is locked (or nothing
-    /// is in development), so its preset can't change; a new version can pick another one.
+    /// FR-144 (409, replaces <c>VERCEL_GIT_NOT_CONNECTED</c>): the platform's Git integration can't access the project's
+    /// repository. The ProblemDetails carries <c>platform</c> and, when known, <c>installUrl</c> (the platform's install or
+    /// connect link).
     /// </summary>
-    public const string PresetLocked = "PRESET_LOCKED";
+    public const string PlatformGitNotConnected = "PLATFORM_GIT_NOT_CONNECTED";
 
-    // Vercel deployments (FR-87–FR-91, §4.15)
-
-    /// <summary>
-    /// FR-88 (409 on <c>PATCH /settings/deployment</c> and <c>POST /api/projects</c>): Vercel's GitHub App can't access the
-    /// project's repository. The ProblemDetails carries an <c>installUrl</c> extension (Vercel's install link) when known.
-    /// </summary>
-    public const string VercelGitNotConnected = "VERCEL_GIT_NOT_CONNECTED";
-
-    /// <summary>FR-88: the Vercel plan doesn't allow it (a Hobby account linking an organisation-owned repository).</summary>
-    public const string VercelPlanLimit = "VERCEL_PLAN_LIMIT";
+    /// <summary>FR-144 (409, replaces <c>VERCEL_PLAN_LIMIT</c>): the platform's plan doesn't allow it (e.g. Vercel Hobby with an
+    /// organisation-owned repository). The ProblemDetails carries <c>platform</c>.</summary>
+    public const string PlatformPlanLimit = "PLATFORM_PLAN_LIMIT";
 
     /// <summary>FR-90 (409 on <c>POST /deployments/preview</c>): the project has no deployment settings (no provider bound).</summary>
     public const string DeploymentNotConfigured = "DEPLOYMENT_NOT_CONFIGURED";
+
+    /// <summary>FR-150, §6 (409): the provider can't roll back or promote (e.g. GitHub Pages, §4.20 capabilities).</summary>
+    public const string DeploymentActionUnsupported = "DEPLOYMENT_ACTION_UNSUPPORTED";
 
     /// <summary>FR-91 (409 on promote): only a <c>ready</c> production deployment can be promoted.</summary>
     public const string InvalidDeployment = "INVALID_DEPLOYMENT";
@@ -143,9 +139,10 @@ public static class ErrorCodes
     /// <summary>§4.15 (recorded on a deployment, not returned by an endpoint): still not finished after the 30-minute poll ceiling.</summary>
     public const string DeploymentTimeout = "DEPLOYMENT_TIMEOUT";
 
-    /// <summary>FR-90, FR-91 (recorded on a deployment, not returned by an endpoint): Vercel reported the build or deployment
-    /// as failed, or refused to create it; the message and build-log tail say why.</summary>
-    public const string VercelError = "VERCEL_ERROR";
+    /// <summary>FR-90, FR-91, §6 (replaces <c>VERCEL_ERROR</c>): the platform reported the build or deployment as failed, or
+    /// refused a request (recorded on a deployment with the message and build-log tail); as an endpoint answer (502), a
+    /// platform API failure, or a provider AIDE can't call for real yet ("not supported yet").</summary>
+    public const string PlatformError = "PLATFORM_ERROR";
 
     /// <summary>FR-42, FR-43 (recorded on a failed release): Git or GitHub refused the merge, tag or push for good.</summary>
     public const string GitError = "GIT_ERROR";
@@ -208,13 +205,25 @@ public static class ErrorCodes
     public const string AgentScope = "AGENT_SCOPE";
 
     /// <summary>
-    /// §4.11, §4.12 (a <b>warning</b>, never blocking): a <i>soft</i> preset ordering rule is broken (e.g. a
+    /// §4.11, §4.12 (a <b>warning</b>, never blocking): a <i>soft</i> pack ordering rule is broken (e.g. a
     /// <c>lib/&lt;domain&gt;</c> step after an <c>app/**</c> step); hard ordering rules are <see cref="InvalidPlan"/>.
     /// </summary>
     public const string PlanOrder = "PLAN_ORDER";
 
     /// <summary>
-    /// FR-89 (a <b>warning</b>, never blocking): the version's preset deploys to Vercel, the base commit has no
+    /// FR-117, FR-124 (a plan <b>error</b>, recorded on the plan generator run like <see cref="InvalidPlan"/>): a stack change
+    /// has no step assigned to a changed layer's specialist; each missing layer is in the details.
+    /// </summary>
+    public const string StackChangeUnplanned = "STACK_CHANGE_UNPLANNED";
+
+    /// <summary>
+    /// FR-127 (a <b>warning</b>, never blocking): a step changes the API under the backend but neither it nor a later step
+    /// declares the generated contract file (e.g. <c>backend/openapi/api.json</c>); each step is in the details.
+    /// </summary>
+    public const string UndeclaredGeneratedFile = "UNDECLARED_GENERATED_FILE";
+
+    /// <summary>
+    /// FR-89 (a <b>warning</b>, never blocking): the version's stack deploys to Vercel, the base commit has no
     /// <c>vercel.json</c> and no plan step declares one, so nothing would stop Vercel's automatic deploys of <c>aide/**</c>.
     /// </summary>
     public const string MissingVercelConfig = "MISSING_VERCEL_CONFIG";
@@ -233,6 +242,104 @@ public static class ErrorCodes
 
     /// <summary>FR-25: the provider failed (status, timeout or unreadable response); transient ones are retried first.</summary>
     public const string ProviderError = "PROVIDER_ERROR";
+
+    /// <summary>
+    /// FR-157, FR-159: the LLM provider is disabled on this deployment (<c>Llm:Providers:&lt;P&gt;:Enabled=false</c>) or not
+    /// usable by the caller (no allowed system key and no connection). Returned (400) on project create and
+    /// <c>PATCH …/settings/llm</c>, and recorded as the failure code of an agent run whose project is bound to a disabled provider.
+    /// </summary>
+    public const string LlmProviderUnavailable = "LLM_PROVIDER_UNAVAILABLE";
+
+    /// <summary>
+    /// FR-116, §4.17: a composition breaks a compatibility rule (400); the ProblemDetails <c>violations</c> extension lists
+    /// each <c>{layer, option, rule, reason}</c>.
+    /// </summary>
+    public const string StackIncompatible = "STACK_INCOMPATIBLE";
+
+    /// <summary>
+    /// FR-117 (409 on <c>PUT /api/projects/:id/stack</c>): the version's first implementation plan is locked (or nothing is
+    /// in development), so its stack can't change; a new version can change it.
+    /// </summary>
+    public const string StackLocked = "STACK_LOCKED";
+
+    /// <summary>
+    /// FR-117, §4.17 R5 (400 on project create and <c>PUT /api/projects/:id/stack</c>): the composition's VCS layer isn't
+    /// the host of the project's repository.
+    /// </summary>
+    public const string VcsMismatch = "VCS_MISMATCH";
+
+    /// <summary>
+    /// §6 (409, e.g. <c>POST /api/stack/detect</c>): no usable Git connection for the request (for GitHub: the caller has no
+    /// valid GitHub connection).
+    /// </summary>
+    public const string GitNotConnected = "GIT_NOT_CONNECTED";
+
+    /// <summary>
+    /// FR-130, §8 (400 when an Admin adds or changes a GitLab instance): the base URL fails the SSRF guard (not https without
+    /// <c>allow_insecure_http</c>, or a loopback, link-local, metadata, unspecified or — with
+    /// <c>GitLab:AllowPrivateNetworks=false</c> — private address).
+    /// </summary>
+    public const string GitHostNotAllowed = "GIT_HOST_NOT_ALLOWED";
+
+    /// <summary>
+    /// FR-131, FR-134 (a redirect, <c>?error=GIT_AUTH_FAILED&amp;reason=…</c>): a GitLab or Bitbucket OAuth flow failed or was
+    /// denied (state, token exchange, identity, or account rules).
+    /// </summary>
+    public const string GitAuthFailed = "GIT_AUTH_FAILED";
+
+    /// <summary>
+    /// FR-131, FR-134, §3.8 (400): a pasted token is missing scopes (listed in <c>details</c>) or is the wrong token type.
+    /// Nothing is saved.
+    /// </summary>
+    public const string ConnectionScopeInsufficient = "CONNECTION_SCOPE_INSUFFICIENT";
+
+    /// <summary>§6 (429, with <c>Retry-After</c> when known): a Git host or platform is rate limiting AIDE's requests (e.g. the
+    /// GitLab.com project-creation limit, FR-132).</summary>
+    public const string UpstreamRateLimited = "UPSTREAM_RATE_LIMITED";
+
+    /// <summary>
+    /// §6 job code (FR-136, §4.19): GitLab rate limited a background job's request (429). The job is re-queued for the reset
+    /// (<c>Retry-After</c> or <c>RateLimit-Reset</c>) without counting an attempt.
+    /// </summary>
+    public const string GitLabRateLimited = "GITLAB_RATE_LIMITED";
+
+    /// <summary>
+    /// §6 job code (FR-136, §4.19): Bitbucket (429), or AIDE's per-connection budget of 900 requests an hour, held back a
+    /// background job's request. The job is re-queued for the wait (<c>Retry-After</c>, else five minutes, or the bucket's
+    /// refill) without counting an attempt.
+    /// </summary>
+    public const string BitbucketRateLimited = "BITBUCKET_RATE_LIMITED";
+
+    /// <summary>
+    /// §6 job code (FR-149, §4.20): a deployment platform rate limited a background job (429), or AIDE's own limit held it
+    /// back before calling (Netlify: 3 deploys a minute and 100 a day per account). The job waits for <c>Retry-After</c> (or
+    /// the limit's window) without counting an attempt.
+    /// </summary>
+    public const string PlatformRateLimited = "PLATFORM_RATE_LIMITED";
+
+    /// <summary>
+    /// FR-143, §6 (409 when an Owner sets up a GitHub Pages target): the AIDE GitHub App (or its installation) lacks the
+    /// Pages permission. The ProblemDetails carries <c>platform</c> and the App settings link (<c>installUrl</c>).
+    /// </summary>
+    public const string PlatformPermissionMissing = "PLATFORM_PERMISSION_MISSING";
+
+    /// <summary>FR-152, §4.21 (job code): provisioning or linking a managed database failed; recorded on the database card.</summary>
+    public const string DatabaseProvisioningFailed = "DATABASE_PROVISIONING_FAILED";
+
+    /// <summary>FR-152, §4.21 (job code): the database wasn't available within 10 minutes of polling.</summary>
+    public const string DatabaseProvisioningTimeout = "DATABASE_PROVISIONING_TIMEOUT";
+
+    /// <summary>FR-153, §4.21 (job code): a migration file failed to apply (its transaction rolled back).</summary>
+    public const string MigrationFailed = "MIGRATION_FAILED";
+
+    /// <summary>FR-153, §4.21 (job code): a recorded migration version's file changed or disappeared from the repository.</summary>
+    public const string MigrationHistoryDiverged = "MIGRATION_HISTORY_DIVERGED";
+
+    /// <summary>FR-147, FR-148 (409): the preview database has migrations the branch no longer has; reset it to continue.</summary>
+    public const string PreviewDatabaseDiverged = "PREVIEW_DATABASE_DIVERGED";
+
+    /// <summary>FR-148, §6 (409): the action can't run in the current state, e.g. a preview database reset while a preview rollout runs.</summary>
+    public const string InvalidState = "INVALID_STATE";
 
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
@@ -289,19 +396,31 @@ public static class ErrorCodes
         [ReleaseNotMerged] = 409,
         [NotReleased] = 409,
         [TagNotFound] = 400,
-        [PresetNotFound] = 400,
-        [PresetLocked] = 409,
         [CredentialInvalid] = 400,
         [CredentialNotOwner] = 403,
+        [LlmProviderUnavailable] = 400,
+        [StackIncompatible] = 400,
+        [StackLocked] = 409,
+        [VcsMismatch] = 400,
+        [GitNotConnected] = 409,
+        [GitHostNotAllowed] = 400,
+        [GitAuthFailed] = 400,
+        [ConnectionScopeInsufficient] = 400,
+        [UpstreamRateLimited] = 429,
         [UpstreamError] = 502,
         [GitHubNotConnected] = 409,
         [GitHubAppNotInstalled] = 409,
         [RepoNameTaken] = 409,
         [GitHubRateLimited] = 429,
-        [VercelGitNotConnected] = 409,
-        [VercelPlanLimit] = 409,
+        [PlatformGitNotConnected] = 409,
+        [PlatformPlanLimit] = 409,
+        [PlatformError] = 502,
+        [PlatformPermissionMissing] = 409,
         [DeploymentNotConfigured] = 409,
         [InvalidDeployment] = 409,
+        [DeploymentActionUnsupported] = 409,
+        [PreviewDatabaseDiverged] = 409,
+        [InvalidState] = 409,
         [LinkExpired] = 410,
         [LinkUsed] = 409,
     };

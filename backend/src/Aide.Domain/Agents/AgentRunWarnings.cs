@@ -17,4 +17,16 @@ public static class AgentRunWarnings
 
     /// <summary>FR-70: the Repository Analyst failed (or produced nothing), so refinement continued without a summary.</summary>
     public const string SummaryUnavailable = "summary_unavailable";
+
+    /// <summary>
+    /// FR-162 (v2 FR-23/FR-71): the answer was still cut off at the model's output limit after the last continuation (or
+    /// continuing would overflow the context window), so the output may be incomplete. The run still completes.
+    /// </summary>
+    public const string OutputTruncated = "output_truncated";
+
+    /// <summary>
+    /// §4.23, FR-129: a step of a plan locked before the upgrade named a v2 agent key whose v4 specialist was ambiguous (a
+    /// <c>devops-engineer</c> step declaring <c>.github/**</c> and other files) or isn't in the stack, so another one ran it.
+    /// </summary>
+    public const string LegacyAgentMapped = "legacy_agent_mapped";
 }

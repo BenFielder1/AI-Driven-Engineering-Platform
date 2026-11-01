@@ -115,6 +115,27 @@ describe('Execution runs (FR-57)', () => {
     expect(within(await within(fixStep).findByRole('list', { name: 'Attempts of step 1' })).getAllByRole('listitem')).toHaveLength(1)
   })
 
+  it('FR129_FR121_step_planned_for_a_retired_preset_agent_shows_the_specialist_it_ran_as', async () => {
+    const project = seedProjectAs('owner', (p) => {
+      seedExecution(p, 2, (s) => {
+        complete(s)
+        Object.assign(s[0] ?? {}, { agentKey: 'data-engineer', legacyAgentKey: 'db-engineer' })
+        Object.assign(s[1] ?? {}, { agentKey: 'frontend-engineer', legacyAgentKey: null })
+      })
+      seedOptimizationPlan(p, 1, 1, undefined, 1)
+      syncExecutionState(p)
+    })
+    const { user } = await openExecution(project)
+
+    const dev = runGroup(/^Implementation plan v1/)
+    await user.click(within(dev).getByRole('button', { name: /^Implementation plan v1/ }))
+    const devSteps = within(dev).getByRole('list', { name: 'Steps of Implementation plan v1' })
+    expect(within(devSteps).getByRole('listitem', { name: 'Step 1: Step 1 title' })).toHaveTextContent('data-engineer (was db-engineer)')
+    const step2 = within(devSteps).getByRole('listitem', { name: 'Step 2: Step 2 title' })
+    expect(step2).toHaveTextContent('frontend-engineer')
+    expect(step2).not.toHaveTextContent('(was')
+  })
+
   it('FR57_active_run_updates_live', async () => {
     let steps: StoredExecutionStep[] = []
     const project = seedProjectAs('owner', (p) => {

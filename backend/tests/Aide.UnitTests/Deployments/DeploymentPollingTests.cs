@@ -111,13 +111,13 @@ public class DeploymentPollingTests
         Assert.Equal(T0, first.WaitingSince);
         Assert.Equal(T0.AddSeconds(10), first.RecheckAt);
 
-        var later = PreviewReviewRules.Decide(status, T0, T0.AddMinutes(19));
+        var later = PreviewReviewRules.Decide(status, T0, T0.AddMinutes(29));
         Assert.True(later.Wait);
         Assert.Equal(T0, later.WaitingSince);
     }
 
     [Fact]
-    public void FR90_Review_proceeds_when_the_preview_finishes_or_after_20_minutes()
+    public void FR90_FR147_Review_proceeds_when_the_preview_finishes_or_after_30_minutes()
     {
         var ready = PreviewReviewRules.Decide(DeploymentStatus.Ready, T0, T0.AddMinutes(3));
         Assert.False(ready.Wait);
@@ -128,10 +128,10 @@ public class DeploymentPollingTests
         Assert.False(immediately.Wait);
         Assert.Null(immediately.WaitedSeconds);
 
-        var gaveUp = PreviewReviewRules.Decide(DeploymentStatus.Building, T0, T0.AddMinutes(20));
+        var gaveUp = PreviewReviewRules.Decide(DeploymentStatus.Building, T0, T0.AddMinutes(30));
         Assert.False(gaveUp.Wait);
         Assert.True(gaveUp.TimedOut);
-        Assert.Equal(1200, gaveUp.WaitedSeconds);
+        Assert.Equal(1800, gaveUp.WaitedSeconds);
     }
 
     [Fact]
@@ -174,43 +174,44 @@ public class DeploymentPollingTests
     // ------------------------------------------------------------------ FR-91 production
 
     [Fact]
-    public void FR91_The_automatic_production_deployment_looks_for_Vercels_own_for_30_seconds()
+    public void FR91_FR149_The_automatic_production_deployment_looks_for_the_platforms_own_for_60_seconds()
     {
         Assert.Equal(T0.AddSeconds(10), ProductionDeploymentRules.LookAgainAt(T0, T0));
-        Assert.Equal(T0.AddSeconds(30), ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(25)));
-        Assert.Null(ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(30)));
-        Assert.True(ProductionDeploymentRules.Adopts(DeploymentTarget.Production, DeploymentTrigger.Auto, DeploymentProvider.Vercel));
-        Assert.False(ProductionDeploymentRules.Adopts(DeploymentTarget.Production, DeploymentTrigger.Auto, DeploymentProvider.Fake));
-        Assert.False(ProductionDeploymentRules.Adopts(DeploymentTarget.Production, DeploymentTrigger.Redeploy, DeploymentProvider.Vercel));
-        Assert.False(ProductionDeploymentRules.Adopts(DeploymentTarget.Preview, DeploymentTrigger.Auto, DeploymentProvider.Vercel));
+        Assert.Equal(T0.AddSeconds(35), ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(25)));
+        Assert.Equal(T0.AddSeconds(60), ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(55)));
+        Assert.Null(ProductionDeploymentRules.LookAgainAt(T0, T0.AddSeconds(60)));
+        Assert.True(ProductionDeploymentRules.Adopts(DeploymentEnvironment.Production, DeploymentTrigger.Auto, DeploymentProvider.Vercel));
+        Assert.False(ProductionDeploymentRules.Adopts(DeploymentEnvironment.Production, DeploymentTrigger.Auto, DeploymentProvider.Fake));
+        Assert.False(ProductionDeploymentRules.Adopts(DeploymentEnvironment.Production, DeploymentTrigger.Redeploy, DeploymentProvider.Vercel));
+        Assert.False(ProductionDeploymentRules.Adopts(DeploymentEnvironment.Preview, DeploymentTrigger.Auto, DeploymentProvider.Vercel));
     }
 
     // ------------------------------------------------------------------ FR-87, FR-88 Vercel errors
 
     [Theory]
-    [InlineData(401, null, "Not authorized", false, VercelFailure.CredentialRejected)]
-    [InlineData(403, "forbidden", "Not authorized", true, VercelFailure.CredentialRejected)]
-    [InlineData(403, "forbidden", "You don't have permission to create the project.", false, VercelFailure.Forbidden)]
-    [InlineData(429, "rate_limited", "Too many requests", false, VercelFailure.RateLimited)]
-    [InlineData(500, null, null, false, VercelFailure.Upstream)]
-    [InlineData(null, null, null, false, VercelFailure.Upstream)]
-    [InlineData(404, "not_found", "Project not found", false, VercelFailure.NotFound)]
-    [InlineData(400, "bad_request", "To link a GitHub repository, you need to install the GitHub integration first.", false, VercelFailure.GitNotConnected)]
-    [InlineData(404, "repo_not_found", "Repository not found", false, VercelFailure.GitNotConnected)]
-    [InlineData(400, "bad_request", "Hobby teams can't deploy repositories owned by an organization; upgrade to Pro.", false, VercelFailure.PlanLimit)]
-    [InlineData(400, "bad_request", "Invalid name", false, VercelFailure.Rejected)]
-    public void FR88_Vercel_errors_are_classified(int? status, string? code, string? message, bool invalidToken, VercelFailure expected) =>
+    [InlineData(401, null, "Not authorized", false, DeploymentFailure.CredentialRejected)]
+    [InlineData(403, "forbidden", "Not authorized", true, DeploymentFailure.CredentialRejected)]
+    [InlineData(403, "forbidden", "You don't have permission to create the project.", false, DeploymentFailure.Forbidden)]
+    [InlineData(429, "rate_limited", "Too many requests", false, DeploymentFailure.RateLimited)]
+    [InlineData(500, null, null, false, DeploymentFailure.Upstream)]
+    [InlineData(null, null, null, false, DeploymentFailure.Upstream)]
+    [InlineData(404, "not_found", "Project not found", false, DeploymentFailure.NotFound)]
+    [InlineData(400, "bad_request", "To link a GitHub repository, you need to install the GitHub integration first.", false, DeploymentFailure.GitNotConnected)]
+    [InlineData(404, "repo_not_found", "Repository not found", false, DeploymentFailure.GitNotConnected)]
+    [InlineData(400, "bad_request", "Hobby teams can't deploy repositories owned by an organization; upgrade to Pro.", false, DeploymentFailure.PlanLimit)]
+    [InlineData(400, "bad_request", "Invalid name", false, DeploymentFailure.Rejected)]
+    public void FR88_Vercel_errors_are_classified(int? status, string? code, string? message, bool invalidToken, DeploymentFailure expected) =>
         Assert.Equal(expected, VercelErrorRules.Classify(status, code, message, invalidToken));
 
     [Fact]
     public void FR88_Vercel_failures_map_to_the_spec_error_codes()
     {
-        Assert.Equal(ErrorCodes.VercelGitNotConnected, VercelErrorRules.ErrorCodeFor(VercelFailure.GitNotConnected));
-        Assert.Equal(ErrorCodes.VercelPlanLimit, VercelErrorRules.ErrorCodeFor(VercelFailure.PlanLimit));
-        Assert.Equal(ErrorCodes.CredentialInvalid, VercelErrorRules.ErrorCodeFor(VercelFailure.CredentialRejected));
-        Assert.Equal(ErrorCodes.NotFound, VercelErrorRules.ErrorCodeFor(VercelFailure.NotFound));
-        Assert.Equal(ErrorCodes.UpstreamError, VercelErrorRules.ErrorCodeFor(VercelFailure.Upstream));
-        Assert.Equal(ErrorCodes.UpstreamError, VercelErrorRules.ErrorCodeFor(VercelFailure.RateLimited));
+        Assert.Equal(ErrorCodes.PlatformGitNotConnected, VercelErrorRules.ErrorCodeFor(DeploymentFailure.GitNotConnected));
+        Assert.Equal(ErrorCodes.PlatformPlanLimit, VercelErrorRules.ErrorCodeFor(DeploymentFailure.PlanLimit));
+        Assert.Equal(ErrorCodes.CredentialInvalid, VercelErrorRules.ErrorCodeFor(DeploymentFailure.CredentialRejected));
+        Assert.Equal(ErrorCodes.NotFound, VercelErrorRules.ErrorCodeFor(DeploymentFailure.NotFound));
+        Assert.Equal(ErrorCodes.UpstreamError, VercelErrorRules.ErrorCodeFor(DeploymentFailure.Upstream));
+        Assert.Equal(ErrorCodes.UpstreamError, VercelErrorRules.ErrorCodeFor(DeploymentFailure.RateLimited));
         Assert.StartsWith("https://github.com/apps/vercel", VercelErrorRules.DefaultGitHubInstallUrl, StringComparison.Ordinal);
     }
 
@@ -229,16 +230,16 @@ public class DeploymentPollingTests
     [Fact]
     public void FR88_nextjs_supabase_required_env_is_flagged_when_missing()
     {
-        IReadOnlyList<DeploymentTarget> both = [DeploymentTarget.Preview, DeploymentTarget.Production];
-        var project = new Dictionary<string, IReadOnlyList<DeploymentTarget>>
+        IReadOnlyList<DeploymentEnvironment> both = [DeploymentEnvironment.Preview, DeploymentEnvironment.Production];
+        var project = new Dictionary<string, IReadOnlyList<DeploymentEnvironment>>
         {
             ["NEXT_PUBLIC_SUPABASE_URL"] = both,
-            ["NEXT_PUBLIC_SUPABASE_ANON_KEY"] = [DeploymentTarget.Preview],
+            ["NEXT_PUBLIC_SUPABASE_ANON_KEY"] = [DeploymentEnvironment.Preview],
         };
 
         Assert.True(DeploymentEnvRules.IsPresent("NEXT_PUBLIC_SUPABASE_URL", both, project));
         Assert.False(DeploymentEnvRules.IsPresent("NEXT_PUBLIC_SUPABASE_ANON_KEY", both, project));
-        Assert.True(DeploymentEnvRules.IsPresent("NEXT_PUBLIC_SUPABASE_ANON_KEY", [DeploymentTarget.Preview], project));
+        Assert.True(DeploymentEnvRules.IsPresent("NEXT_PUBLIC_SUPABASE_ANON_KEY", [DeploymentEnvironment.Preview], project));
         Assert.False(DeploymentEnvRules.IsPresent("SUPABASE_SERVICE_ROLE_KEY", both, project));
     }
 
@@ -273,14 +274,14 @@ public class DeploymentPollingTests
     [Fact]
     public void S4_15_Env_sync_upserts_by_key_and_target_and_deletes_dropped_targets()
     {
-        var first = EnvSyncRules.Plan([DeploymentTarget.Production, DeploymentTarget.Preview], null);
-        Assert.Equal([new EnvTargetWrite(DeploymentTarget.Preview, null), new EnvTargetWrite(DeploymentTarget.Production, null)], first.Writes);
+        var first = EnvSyncRules.Plan([DeploymentEnvironment.Production, DeploymentEnvironment.Preview], null);
+        Assert.Equal([new EnvTargetWrite(DeploymentEnvironment.Preview, null), new EnvTargetWrite(DeploymentEnvironment.Production, null)], first.Writes);
         Assert.Empty(first.Deletes);
 
         var ids = new Dictionary<string, string> { ["preview"] = "env_p", ["production"] = "env_q" };
-        var narrowed = EnvSyncRules.Plan([DeploymentTarget.Preview], ids);
-        Assert.Equal([new EnvTargetWrite(DeploymentTarget.Preview, "env_p")], narrowed.Writes);
-        Assert.Equal([new EnvTargetDelete(DeploymentTarget.Production, "env_q")], narrowed.Deletes);
+        var narrowed = EnvSyncRules.Plan([DeploymentEnvironment.Preview], ids);
+        Assert.Equal([new EnvTargetWrite(DeploymentEnvironment.Preview, "env_p")], narrowed.Writes);
+        Assert.Equal([new EnvTargetDelete(DeploymentEnvironment.Production, "env_q")], narrowed.Deletes);
 
         Assert.Equal(["env_p", "env_q"], EnvSyncRules.AllIds(ids));
         Assert.Empty(EnvSyncRules.AllIds(null));
@@ -346,7 +347,7 @@ public class DeploymentPollingTests
     {
         var failed = NotificationMessages.Compose(new NotificationFacts(NotificationType.DeploymentFailed, "Todo")
         {
-            DeploymentTarget = "production",
+            DeploymentEnvironment = "production",
             ReleaseVersion = "1.2.0",
             ErrorCode = "VERCEL_ERROR",
         });

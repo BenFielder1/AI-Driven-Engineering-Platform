@@ -1,0 +1,230 @@
+{
+  "id": "data-drizzle",
+  "layer": "data",
+  "name": "Drizzle",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "data-drizzle",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Drizzle",
+    "PostgreSQL"
+  ],
+  "description": "Drizzle ORM with reviewed drizzle-kit SQL migrations on PostgreSQL, for Express, NestJS or Next.js full-stack.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Data Model & Migrations",
+      "guidance": "For each entity/table: columns with types, lengths and numeric precision, nullability and defaults; the primary key (UUIDv7 or identity); foreign keys with an explicit on-delete behaviour; unique indexes from business rules (say which are case-insensitive); check constraints; indexes for foreign keys and query predicates; enums stored as strings; UTC timestamps; and which aggregates are edited concurrently and need a concurrency token (409 CONFLICT). Then the migration plan: one migration per change, named, in order, with which steps are expand/contract (add, backfill, switch code, drop later) so the previous version keeps working during rollout; any data backfill; the reference/seed data (dev-only seed per role and state); and how migrations run in each environment (the runtime migrator (npm run db:migrate) as the platform's pre-deploy step, or the build command gated by AIDE_RUN_MIGRATIONS on serverless hosts)."
+    }
+  ],
+  "ownership": {
+    "data-engineer": [
+      "{app}/src/db/**",
+      "{app}/drizzle/**"
+    ]
+  },
+  "agentSections": {
+    "data-engineer": [
+      "*"
+    ],
+    "backend-engineer": [
+      "Setup",
+      "Modelling"
+    ],
+    "scaffolder": [
+      "Setup"
+    ],
+    "test-engineer": [
+      "Testing"
+    ],
+    "ci-engineer": [
+      "Migrations"
+    ],
+    "deploy-engineer": [
+      "Migrations",
+      "Production notes"
+    ],
+    "frontend-engineer": [
+      "Setup"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{app}/drizzle/**"
+        ],
+        "after": [
+          "{app}/src/app/**",
+          "{app}/src/features/**",
+          "{app}/src/server/**",
+          "{app}/src/**/*.controller.ts",
+          "{app}/src/**/*.service.ts"
+        ],
+        "soft": false,
+        "reason": "Migrations come before the backend or Next.js server code that uses their tables."
+      }
+    ],
+    "exclusive": [
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          "{app}/src/app/**",
+          "{app}/src/features/**",
+          "{app}/src/server/**",
+          "{app}/src/**/*.controller.ts",
+          "{app}/src/**/*.service.ts"
+        ],
+        "reason": "The data engineer owns src/db and drizzle/, not endpoints, pages or services."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "{app}/drizzle/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      },
+      {
+        "agent": "frontend-engineer",
+        "notWithGlobs": [
+          "{app}/drizzle/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      }
+    ],
+    "maxFilesPerStep": [
+      {
+        "glob": "{app}/drizzle/*.sql",
+        "max": 1
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "glob": "{app}/drizzle/**",
+      "existingOnBase": true,
+      "except": [
+        "{app}/drizzle/meta/_journal.json"
+      ],
+      "reason": "Drizzle migrations and snapshots on the base commit are immutable (FR-125); a schema change is a new migration. Only the journal is appended."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "glob": "{app}/drizzle/*.sql",
+      "handling": "hand_written",
+      "ciCheck": "npx drizzle-kit check && npx drizzle-kit generate && git diff --exit-code -- drizzle (no schema drift)"
+    },
+    {
+      "glob": "{app}/drizzle/meta/**",
+      "handling": "hand_written",
+      "ciCheck": "npx drizzle-kit check && npx drizzle-kit generate && git diff --exit-code -- drizzle (no schema drift)"
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "DATABASE_URL",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": true,
+      "public": false,
+      "description": "PostgreSQL connection for the app (the backend, or the Next.js full-stack app when there is no backend). The Supabase transaction pooler (:6543; prepare: false with postgres.js) on serverless hosts, the session pooler (:5432) or the platform's internal URL otherwise; SSL on managed hosts."
+    },
+    {
+      "key": "DIRECT_URL",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": true,
+      "public": false,
+      "when": "databaseHost == supabase",
+      "description": "Session pooler (:5432) used by the migrator when DATABASE_URL is the transaction pooler (serverless); the migrator falls back to DATABASE_URL when unset. Applies to the same component as DATABASE_URL."
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Exactly one new migration per schema change, never an edit to a migration that exists on the base commit.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Breaking changes (rename, drop, type change) use expand/contract so the previous version runs against the new schema during preview and production rollout.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Columns are explicit (lengths, precision, nullability), foreign keys have a deliberate on-delete, and every foreign key and query predicate is indexed.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Uniqueness rules from the spec are unique indexes or constraints (case-insensitive where the spec says so), and concurrently edited aggregates have a concurrency token mapped to 409 CONFLICT.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Timestamps are UTC (timestamptz/datetimeoffset) from an injected clock, and enums are stored as strings.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Integration tests run against the real engine in a container with every migration applied; no in-memory or SQLite substitute.",
+        "category": "testing",
+        "severity": "major"
+      },
+      {
+        "item": "Queries are parameterised, project only the needed columns, paginate lists and avoid N+1.",
+        "category": "architecture",
+        "severity": "minor"
+      },
+      {
+        "item": "The seed is idempotent, dev-only and gated; reference data is part of the migrations.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "No drizzle-kit push in package scripts or CI; npm run db:migrate (the runtime migrator) is the one-off pre-start migrate step.",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Each migration has its SQL file, journal entry and snapshot, consistent with the schema (CI: drizzle-kit check and a no-drift generate).",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "One pool and drizzle instance with snake_case casing, injected or server-only; sql templates are parameterised.",
+        "category": "architecture",
+        "severity": "minor"
+      }
+    ],
+    "deterministic": [
+      "no_schema_push",
+      "migration_backward_compatible"
+    ]
+  },
+  "gate": null,
+  "migrate": {
+    "command": "npm run db:migrate",
+    "needsDirectUrl": false
+  },
+  "deploy": null
+}

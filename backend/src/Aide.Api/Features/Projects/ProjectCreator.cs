@@ -1,19 +1,20 @@
 using Aide.Api.Features.GitHub;
+using Aide.Api.Features.Stack;
 using Aide.Api.Features.Versions;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Aide.Domain.GitHosts;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
-using Aide.Domain.Presets;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
+using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Presets;
 using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -23,7 +24,8 @@ namespace Aide.Api.Features.Projects;
 /// <summary>
 /// FR-5, FR-66, FR-73, FR-86: creates a project with everything it starts with, in one <c>SaveChanges</c> (one
 /// transaction): the project (refinement / active / checkpoint 1) and its release versions, the Owner membership, Git
-/// settings (token encrypted), LLM settings (system default provider if usable, else Fake), empty notification settings,
+/// settings (token encrypted), LLM settings (FR-159: the request's <c>llm</c> choice, bound to the chosen connection, or the
+/// §4.24 default for the creator; never a disabled provider), empty notification settings,
 /// the creation state transition (none → refinement at checkpoint 1, the anchor for a rollback to checkpoint 1) and the
 /// <c>PROJECT_CREATED</c> event.
 /// <list type="bullet">
@@ -36,6 +38,9 @@ namespace Aide.Api.Features.Projects;
 /// artifacts) unless "Never released", plus the <c>in_development</c> version based on that tag's commit (or the default
 /// branch head); the idea is the version's request; the Repository Analyst is queued (FR-70).</item>
 /// </list>
+/// <b>GitLab</b> (FR-132, FR-136, FR-141) and <b>Bitbucket</b> (FR-135, FR-136, FR-141): the picked repository is checked
+/// with the creator's own connection (GitLab Developer access or higher; Bitbucket write access) and the project is bound to
+/// that connection; a repository with code is built on, as on GitHub.
 /// Used by <c>POST /api/projects</c> and the dev seed.
 /// </summary>
 public sealed partial class ProjectCreator(
@@ -45,10 +50,12 @@ public sealed partial class ProjectCreator(
     IGitHubAppStore apps,
     GitHubRepoService gitHubRepos,
     GitHubApi gitHubApi,
+    GitLab.GitLabProjectRepos gitLabRepos,
+    Bitbucket.BitbucketProjectRepos bitbucketRepos,
     IWorkingCopies workingCopies,
     IWorkspaceStore workspaces,
     JobEnqueuer jobs,
-    IPresetCatalog presets,
+    ProjectStackService stacks,
     IOptions<LocalGitOptions> localGit,
     TimeProvider time,
     ILogger<ProjectCreator> logger)
@@ -78,17 +85,42 @@ public sealed partial class ProjectCreator(
             gitProvider == GitProvider.GithubApp
                 ? ProjectSettingsRules.ValidateAppRepo(git.InstallationId, git.RepoFullName, git.RepoUrl, git.Token, prefix: "git.")
                 : Result.Success(),
+            // FR-132, FR-136: a GitLab repository from the picker, bound to the caller's own connection.
+            gitProvider switch
+            {
+                GitProvider.Gitlab => GitLabProjectRules.ValidateCreate(git.InstanceId, git.ConnectionId, git.RepoId, git.RepoFullName, git.RepoUrl, git.Token, git.InstallationId, prefix: "git."),
+
+                // FR-135, FR-136: a Bitbucket repository from the picker (UUID and workspace/slug), bound to the caller's own connection.
+                GitProvider.Bitbucket => BitbucketProjectRules.ValidateCreate(git.InstanceId, git.ConnectionId, git.RepoId, git.RepoFullName, git.RepoUrl, git.Token, git.InstallationId, prefix: "git."),
+                _ => BitbucketProjectRules.ValidateNotSent(gitProvider, git.InstanceId, git.ConnectionId, git.RepoId, prefix: "git."),
+            },
             ImportRules.ValidateSource(request.Source, request.Import is not null, request.InitialVersion is not null, git.LocalSourcePath is not null, gitProvider));
         if (validation.IsFailure)
         {
             return Result.Failure<Project>(validation.Error!);
         }
 
-        // FR-74: the wizard's Stack step, pinned on the version to develop.
-        var preset = Presets.PresetService.Resolve(presets, request.PresetId);
-        if (preset.IsFailure)
+        // FR-157, FR-159: the LLM choice (or the default), checked before anything is read from a repository.
+        var llmPlan = await PlanLlmAsync(request.Llm, ownerId, cancellationToken);
+        if (llmPlan.IsFailure)
         {
-            return Result.Failure<Project>(preset.Error!);
+            return Result.Failure<Project>(llmPlan.Error!);
+        }
+
+        // FR-114–FR-117: the wizard's Stack step, a stack composition validated with R5 for the repository's host and
+        // pinned on the version to develop (none: "No stack (general)").
+        StackComposition? stack = null;
+        if (request.Stack is { } stackRequest)
+        {
+            // FR-136: a GitLab repo's VCS pick carries its instance (a self-managed instance limits the hosts, §4.17).
+            var repoHost = await stacks.RepoHostAsync(gitProvider, gitProvider == GitProvider.Gitlab ? git.InstanceId : null, cancellationToken);
+            var resolved = stacks.Resolve(stackRequest, repoHost, "stack.");
+            if (resolved.IsFailure)
+            {
+                return Result.Failure<Project>(resolved.Error!);
+            }
+
+            stack = resolved.Value;
         }
 
         var now = time.GetUtcNow();
@@ -118,7 +150,7 @@ public sealed partial class ProjectCreator(
 
         try
         {
-            return await SaveAsync(request, project, start.Value, preset.Value, gitProvider, ownerId, actor, now, cancellationToken);
+            return await SaveAsync(request, project, start.Value, stack, llmPlan.Value, gitProvider, ownerId, actor, now, cancellationToken);
         }
         catch
         {
@@ -132,6 +164,116 @@ public sealed partial class ProjectCreator(
         }
     }
 
+    /// <summary>The new project's LLM settings (FR-159): provider, models, the bound connection, and whether it was the default.</summary>
+    private sealed record LlmPlan(
+        LlmProvider Provider,
+        string DefaultModel,
+        IReadOnlyDictionary<string, string> ModelsByAgent,
+        LlmConnectionRef? Binding,
+        bool Defaulted);
+
+    /// <summary>
+    /// FR-157, FR-159, §4.24: the LLM settings of a project created by <paramref name="ownerId"/>.
+    /// <list type="bullet">
+    /// <item>No <paramref name="choice"/>: <see cref="ILlmProviderCatalog.DefaultForNewProject"/> for the creator's
+    /// connections (<c>LLM_PROVIDER_UNAVAILABLE</c> when no enabled provider is usable), with the provider's configured models.</item>
+    /// <item>A choice: the provider must be enabled (<c>LLM_PROVIDER_UNAVAILABLE</c>), the models non-blank (<c>VALIDATION</c>),
+    /// a sent connection the creator's own for that provider (<see cref="LlmConnectionRules.CanBind"/>: <c>NOT_FOUND</c>,
+    /// <c>CREDENTIAL_NOT_OWNER</c>, <c>VALIDATION</c>), and the provider usable by the creator (<c>LLM_PROVIDER_UNAVAILABLE</c>).</item>
+    /// </list>
+    /// A provider that needs a key and has no usable system key is bound to the sent connection, else to the creator's newest
+    /// valid connection for it, so the first run has a key (FR-79 binding semantics). Connections whose last check failed
+    /// (<c>invalid</c>) count for nothing here: not for availability, the default, or the fallback binding.
+    /// </summary>
+    private async Task<Result<LlmPlan>> PlanLlmAsync(CreateProjectLlmRequest? choice, Guid ownerId, CancellationToken cancellationToken)
+    {
+        var connections = await db.LlmCredentials.AsNoTracking()
+            .Where(c => c.UserId == ownerId)
+            .OrderByDescending(c => c.CreatedAt)
+            .ThenByDescending(c => c.Id)
+            .Where(c => c.Status != LlmCredentialStatus.Invalid) // FR-159: an invalid connection doesn't make a provider usable
+            .Select(c => new { c.Id, c.UserId, c.Provider })
+            .ToListAsync(cancellationToken);
+        LlmConnectionRef? NewestConnection(LlmProvider provider) =>
+            connections
+                .Where(c => c.Provider == provider)
+                .Select(c => new LlmConnectionRef(c.Id, c.UserId, c.Provider))
+                .FirstOrDefault();
+        bool NeedsBinding(LlmProvider provider) => ProjectSettingsRules.RequiresApiKey(provider) && !llm.HasSystemKey(provider);
+
+        if (choice is null)
+        {
+            var chosen = llm.DefaultForNewProject([.. connections.Select(c => c.Provider)]);
+            if (chosen.IsFailure)
+            {
+                return Result.Failure<LlmPlan>(chosen.Error!);
+            }
+
+            var provider = chosen.Value;
+            return Result.Success(new LlmPlan(
+                provider,
+                llm.DefaultModel(provider),
+                llm.DefaultAgentModels(provider),
+                NeedsBinding(provider) ? NewestConnection(provider) : null,
+                Defaulted: true));
+        }
+
+        var enabled = LlmProviderRules.IsEnabled(choice.Provider, llm.IsEnabled(choice.Provider));
+        if (enabled.IsFailure)
+        {
+            return Result.Failure<LlmPlan>(enabled.Error!);
+        }
+
+        var sentModels = choice.ModelsByAgent is { } dto ? ProjectMapping.FromAgentModels(dto) : null;
+        var models = ProjectSettingsRules.ValidateLlm(
+            choice.Provider,
+            choice.DefaultModel,
+            sentModels?.ToDictionary(m => m.FieldName, m => m.Model),
+            hasSystemKey: true,
+            hasBindingAfter: true,
+            providerChanged: false,
+            prefix: "llm.");
+        if (models.IsFailure)
+        {
+            return Result.Failure<LlmPlan>(models.Error!);
+        }
+
+        LlmConnectionRef? binding = null;
+        if (choice.CredentialId is { } credentialId)
+        {
+            var connection = await db.LlmCredentials.AsNoTracking()
+                .Where(c => c.Id == credentialId)
+                .Select(c => new LlmConnectionRef(c.Id, c.UserId, c.Provider))
+                .FirstOrDefaultAsync(cancellationToken);
+            var allowed = LlmConnectionRules.CanBind(ownerId, ProjectRole.Owner, connection, choice.Provider);
+            if (allowed.IsFailure)
+            {
+                var error = allowed.Error!;
+                return Result.Failure<LlmPlan>(error.Code == ErrorCodes.Validation
+                    ? error with { Details = [.. error.Details.Select(d => "llm." + d)] }
+                    : error with { Field = "llm.credentialId" });
+            }
+
+            binding = connection;
+        }
+
+        var usable = LlmProviderRules.CanChoose(choice.Provider, llm.Availability(choice.Provider, connections.Count(c => c.Provider == choice.Provider)));
+        if (usable.IsFailure)
+        {
+            return Result.Failure<LlmPlan>(usable.Error!);
+        }
+
+        if (binding is null && NeedsBinding(choice.Provider))
+        {
+            binding = NewestConnection(choice.Provider);
+        }
+
+        var modelsByAgent = sentModels is not null
+            ? sentModels.Where(m => m.Model is not null).ToDictionary(m => m.Agent.ToWire(), m => m.Model!.Trim(), StringComparer.Ordinal)
+            : new Dictionary<string, string>(llm.DefaultAgentModels(choice.Provider), StringComparer.Ordinal);
+        return Result.Success(new LlmPlan(choice.Provider, choice.DefaultModel.Trim(), modelsByAgent, binding, Defaulted: false));
+    }
+
     /// <summary>What the repository gives the new project: its versions, base commit, default branch and the App repo.</summary>
     private sealed record RepositoryStart(
         SemVer DevelopmentVersion,
@@ -142,13 +284,43 @@ public sealed partial class ProjectCreator(
         string? DefaultBranch,
         VerifiedAppRepo? AppRepo,
         bool LocalCopy,
-        bool Imported);
+        bool Imported)
+    {
+        /// <summary>FR-136: the GitLab or Bitbucket repository bound to the project (gitlab, bitbucket mode).</summary>
+        public HostRepo? GitLabRepo { get; init; }
+    }
+
+    /// <summary>
+    /// FR-136: a GitLab or Bitbucket repository checked for binding: the host instance, the binding connection and its owner,
+    /// the host's repo id and full path, default branch, web URL, head and whether it has code.
+    /// </summary>
+    private sealed record HostRepo(
+        Guid InstanceId, Guid ConnectionId, Guid OwnerUserId, string RepoId, string FullName, string DefaultBranch, string WebUrl, string? HeadSha, bool HasCode)
+    {
+        public static HostRepo From(GitLab.VerifiedGitLabRepo r) =>
+            new(r.InstanceId, r.ConnectionId, r.OwnerUserId, r.RepoId, r.FullName, r.DefaultBranch, r.WebUrl, r.HeadSha, r.HasCode);
+
+        public static HostRepo From(Bitbucket.VerifiedBitbucketRepo r) =>
+            new(r.InstanceId, r.ConnectionId, r.OwnerUserId, r.RepoId, r.FullName, r.DefaultBranch, r.WebUrl, r.HeadSha, r.HasCode);
+    }
 
     /// <summary>FR-66, FR-82, FR-86: the initial version; a picked App repository is verified (and checked for code).</summary>
     private async Task<Result<RepositoryStart>> ScratchStartAsync(CreateProjectRequest request, GitProvider gitProvider, Guid ownerId, CancellationToken cancellationToken)
     {
         var git = request.Git;
         VerifiedAppRepo? appRepo = null;
+        HostRepo? gitLabRepo = null;
+        if (ProjectSettingsRules.IsGitHost(gitProvider))
+        {
+            var checkedRepo = await VerifyHostAsync(gitProvider, git, ownerId, cancellationToken);
+            if (checkedRepo.IsFailure)
+            {
+                return Result.Failure<RepositoryStart>(checkedRepo.Error!);
+            }
+
+            gitLabRepo = checkedRepo.Value;
+        }
+
         if (gitProvider == GitProvider.GithubApp)
         {
             var verified = await gitHubRepos.VerifyProjectRepoAsync(ownerId, git.InstallationId!.Value, git.RepoFullName!.Trim(), cancellationToken);
@@ -167,8 +339,11 @@ public sealed partial class ProjectCreator(
         }
 
         // FR-86: a repository that already has code is built on: "Never released", based on its default branch head.
-        var head = appRepo is { HasCode: true } ? appRepo.HeadSha : null;
-        return Result.Success(new RepositoryStart(initial.Value, null, null, null, head, appRepo?.DefaultBranch, appRepo, LocalCopy: false, Imported: false));
+        var head = appRepo is { HasCode: true } ? appRepo.HeadSha : gitLabRepo is { HasCode: true } ? gitLabRepo.HeadSha : null;
+        return Result.Success(new RepositoryStart(initial.Value, null, null, null, head, appRepo?.DefaultBranch ?? gitLabRepo?.DefaultBranch, appRepo, LocalCopy: false, Imported: false)
+        {
+            GitLabRepo = gitLabRepo,
+        });
     }
 
     /// <summary>FR-73: the import's versions, checked against the repository's tags.</summary>
@@ -189,6 +364,7 @@ public sealed partial class ProjectCreator(
         {
             GitProvider.GithubApp => await AppRepositoryAsync(git, ownerId, wanted, cancellationToken),
             GitProvider.GithubPat => await PatRepositoryAsync(git, wanted, cancellationToken),
+            GitProvider.Gitlab or GitProvider.Bitbucket => await HostRepositoryAsync(gitProvider, git, ownerId, wanted, cancellationToken),
             _ => await LocalRepositoryAsync(git, project.Id, cancellationToken),
         };
         if (repository.IsFailure)
@@ -218,11 +394,60 @@ public sealed partial class ProjectCreator(
             found.DefaultBranch,
             found.AppRepo,
             found.LocalCopy,
-            Imported: true));
+            Imported: true)
+        {
+            GitLabRepo = found.GitLabRepo,
+        });
     }
 
     /// <summary>A repository to import: its tags (with their commits), default branch head and branch.</summary>
-    private sealed record FoundRepository(IReadOnlyList<ReleaseTagRef> Tags, string? HeadCommit, string? DefaultBranch, VerifiedAppRepo? AppRepo, bool LocalCopy);
+    private sealed record FoundRepository(IReadOnlyList<ReleaseTagRef> Tags, string? HeadCommit, string? DefaultBranch, VerifiedAppRepo? AppRepo, bool LocalCopy)
+    {
+        public HostRepo? GitLabRepo { get; init; }
+    }
+
+    /// <summary>
+    /// FR-132, FR-135, FR-136: the picked GitLab or Bitbucket repository, checked for binding with the caller's own
+    /// connection.
+    /// </summary>
+    private async Task<Result<HostRepo>> VerifyHostAsync(GitProvider provider, CreateProjectGitRequest git, Guid ownerId, CancellationToken cancellationToken)
+    {
+        if (provider == GitProvider.Bitbucket)
+        {
+            var bitbucket = await bitbucketRepos.VerifyAsync(ownerId, ProjectRole.Owner, git.ConnectionId!.Value, git.RepoId!.Trim(), git.RepoFullName!.Trim(), "git.", cancellationToken);
+            return bitbucket.IsFailure ? Result.Failure<HostRepo>(bitbucket.Error!) : Result.Success(HostRepo.From(bitbucket.Value));
+        }
+
+        var gitLab = await gitLabRepos.VerifyAsync(ownerId, ProjectRole.Owner, git.InstanceId!.Value, git.ConnectionId!.Value, git.RepoId!.Trim(), "git.", cancellationToken);
+        return gitLab.IsFailure ? Result.Failure<HostRepo>(gitLab.Error!) : Result.Success(HostRepo.From(gitLab.Value));
+    }
+
+    /// <summary>FR-141: the picked GitLab or Bitbucket repository (verified for binding) and which of <paramref name="wanted"/> exist.</summary>
+    private async Task<Result<FoundRepository>> HostRepositoryAsync(
+        GitProvider provider, CreateProjectGitRequest git, Guid ownerId, IReadOnlyList<string> wanted, CancellationToken cancellationToken)
+    {
+        var checkedRepo = await VerifyHostAsync(provider, git, ownerId, cancellationToken);
+        if (checkedRepo.IsFailure)
+        {
+            return Result.Failure<FoundRepository>(checkedRepo.Error!);
+        }
+
+        var repo = checkedRepo.Value;
+        var tags = repo.HeadSha is null
+            ? Result.Success<IReadOnlyList<(string Tag, string Commit)>>([])
+            : provider == GitProvider.Bitbucket
+                ? await bitbucketRepos.FindTagsAsync(ownerId, repo.ConnectionId, repo.FullName, wanted, cancellationToken)
+                : await gitLabRepos.FindTagsAsync(ownerId, repo.ConnectionId, repo.RepoId, wanted, cancellationToken);
+        if (tags.IsFailure)
+        {
+            return Result.Failure<FoundRepository>(tags.Error!);
+        }
+
+        return Result.Success(new FoundRepository([.. tags.Value.Select(t => new ReleaseTagRef(t.Tag, t.Commit))], repo.HeadSha, repo.DefaultBranch, null, LocalCopy: false)
+        {
+            GitLabRepo = repo,
+        });
+    }
 
     /// <summary>FR-73 (GitHub App): the picked repository, verified for the caller (<c>GITHUB_APP_NOT_INSTALLED</c>), and which of <paramref name="wanted"/> exist.</summary>
     private async Task<Result<FoundRepository>> AppRepositoryAsync(CreateProjectGitRequest git, Guid ownerId, IReadOnlyList<string> wanted, CancellationToken cancellationToken)
@@ -319,10 +544,20 @@ public sealed partial class ProjectCreator(
     }
 
     private async Task<Result<Project>> SaveAsync(
-        CreateProjectRequest request, Project project, RepositoryStart start, Preset? preset, GitProvider gitProvider, Guid ownerId, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+        CreateProjectRequest request,
+        Project project,
+        RepositoryStart start,
+        StackComposition? stack,
+        LlmPlan llmPlan,
+        GitProvider gitProvider,
+        Guid ownerId,
+        string actor,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
         var git = request.Git;
         var appRepo = start.AppRepo;
+        var gitLabRepo = start.GitLabRepo;
         project.Slug = await UniqueSlugAsync(project.Name, project.Id, cancellationToken);
 
         var versions = new List<ReleaseVersion>();
@@ -359,15 +594,16 @@ public sealed partial class ProjectCreator(
             BaseTag = start.ReleasedTag,
             BaseCommitSha = start.ReleasedCommit ?? start.HeadCommit,
         };
-        Presets.PresetService.Pin(version, preset);
+        ProjectStackService.Pin(version, stack);
+        stacks.SyncPacks(project, stack);
         versions.Add(version);
         project.CurrentReleaseVersionId = version.Id;
         ReleaseVersionScope.Refresh(project, versions);
 
-        var provider = llm.DefaultForNewProject;
-        if (provider != llm.ConfiguredDefault)
+        var provider = llmPlan.Provider;
+        if (llmPlan.Defaulted && provider != llm.ConfiguredDefault)
         {
-            LogFakeDefault(logger, llm.ConfiguredDefault, provider);
+            LogDefaultFallback(logger, llm.ConfiguredDefault, provider);
         }
 
         db.Projects.Add(project);
@@ -377,19 +613,29 @@ public sealed partial class ProjectCreator(
         {
             ProjectId = project.Id,
             Provider = gitProvider,
-            RepoUrl = ProjectSettingsRules.NormalizeRepoUrl(gitProvider, git.RepoUrl),
+            RepoUrl = gitLabRepo?.WebUrl ?? ProjectSettingsRules.NormalizeRepoUrl(gitProvider, git.RepoUrl),
             DefaultBranch = DefaultBranchFor(git.DefaultBranch!.Trim(), start.DefaultBranch), // validated above
             TokenEncrypted = gitProvider == GitProvider.GithubApp || string.IsNullOrEmpty(git.Token) ? null : secrets.Protect(git.Token),
             InstallationId = appRepo?.InstallationId,
             RepoId = appRepo?.RepoId,
-            RepoFullName = appRepo?.FullName,
+            RepoFullName = appRepo?.FullName ?? gitLabRepo?.FullName,
+
+            // FR-136: a GitLab or Bitbucket project is bound to the creator's connection (the binding Owner).
+            InstanceId = gitLabRepo?.InstanceId,
+            GitConnectionId = gitLabRepo?.ConnectionId,
+            BoundByUserId = gitLabRepo?.OwnerUserId,
+            ExternalRepoId = gitLabRepo?.RepoId,
         });
         db.ProjectLlmSettings.Add(new ProjectLlmSettings
         {
             ProjectId = project.Id,
             Provider = provider,
-            DefaultModel = llm.DefaultModel(provider),
-            ModelsByAgent = new Dictionary<string, string>(llm.DefaultAgentModels(provider)),
+            DefaultModel = llmPlan.DefaultModel,
+            ModelsByAgent = new Dictionary<string, string>(llmPlan.ModelsByAgent, StringComparer.Ordinal),
+
+            // FR-79, FR-159: the binding Owner is the connection's owner (the creator).
+            CredentialId = llmPlan.Binding?.Id,
+            BoundByUserId = llmPlan.Binding?.UserId,
         });
         db.ProjectNotificationSettings.Add(new ProjectNotificationSettings { ProjectId = project.Id, Channels = [] });
         db.StateTransitions.Add(new StateTransition
@@ -412,12 +658,12 @@ public sealed partial class ProjectCreator(
                 name = project.Name,
                 actor,
                 source = request.Source,
-                repoFullName = appRepo?.FullName,
-                repoHasCode = appRepo?.HasCode,
+                repoFullName = appRepo?.FullName ?? gitLabRepo?.FullName,
+                repoHasCode = appRepo?.HasCode ?? gitLabRepo?.HasCode,
                 importedTag = start.Imported ? start.ReleasedTag : null,
                 developmentVersion = version.Version,
-                presetId = version.PresetId,
-                presetVersion = version.PresetVersion,
+                stackPacks = project.StackPacks,
+                catalogVersion = version.CatalogVersion,
             },
             actor,
             now);
@@ -455,8 +701,8 @@ public sealed partial class ProjectCreator(
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} created (LLM provider {LlmProvider}, Git provider {GitProvider}, source {Source})")]
     private static partial void LogCreated(ILogger logger, Guid projectId, LlmProvider llmProvider, GitProvider gitProvider, ProjectSource source);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Default LLM provider {ConfiguredProvider} has no API key configured; the new project uses {Provider}")]
-    private static partial void LogFakeDefault(ILogger logger, LlmProvider configuredProvider, LlmProvider provider);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Default LLM provider {ConfiguredProvider} has no API key configured or isn't usable by the creator; the new project uses {Provider}")]
+    private static partial void LogDefaultFallback(ILogger logger, LlmProvider configuredProvider, LlmProvider provider);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Reading the repository to import failed (HTTP {Status}, {Kind})")]
     private static partial void LogImportLookupFailed(ILogger logger, int? status, GitHubFailureKind kind);

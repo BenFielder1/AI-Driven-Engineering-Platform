@@ -18,8 +18,8 @@ import { SelectField } from '../../components/ui/select-field'
 import { TextField } from '../../components/ui/text-field'
 import { cn } from '../../lib/utils'
 import { formatDateTime, formatNumber, phaseLabels, phases, roleLabels, statusLabels, statuses } from './labels'
-import { PresetChip } from '../presets/preset-chip'
-import { usePresets } from '../presets/presets-api'
+import { useStackCatalog } from '../stack/stack-api'
+import { catalogPacks, StackChips } from '../stack/stack-chips'
 import { PhaseBadge, StatusBadge } from './project-badges'
 import {
   PROJECTS_PAGE_SIZE,
@@ -62,9 +62,6 @@ function ProjectKpiRow({ filters, filtered }: { filters: ProjectKpiFilters; filt
   )
 }
 
-/** `?preset=none`: projects whose current version has no preset (FR-74). */
-const NO_PRESET_FILTER = 'none'
-
 const sortKeys: Partial<Record<string, ProjectSortBy>> = { name: 'name', updated: 'updated' }
 
 const columns: DataTableColumn<ProjectSummary>[] = [
@@ -84,7 +81,7 @@ const columns: DataTableColumn<ProjectSummary>[] = [
       </Link>
     ),
   },
-  { key: 'preset', header: 'Preset', cell: (p) => <PresetChip name={p.presetName} version={p.presetVersion} /> },
+  { key: 'stack', header: 'Stack', cell: (p) => <StackChips packs={p.stackPacks} label={`${p.name} stack`} /> },
   { key: 'phase', header: 'Phase', cell: (p) => <PhaseBadge phase={p.currentPhase} /> },
   { key: 'status', header: 'Status', cell: (p) => <StatusBadge status={p.status} /> },
   {
@@ -114,11 +111,12 @@ export function ProjectsListPage({ search, onSearchChange }: ProjectsListPagePro
     phase: search.phase,
     status: search.status,
     hasDevelopmentVersion: search.hasDevelopmentVersion,
-    preset: search.preset,
+    pack: search.pack,
   }
   const projects = useProjects({ page, limit: PROJECTS_PAGE_SIZE, ...filters, sortBy, sortOrder })
   const filtered =
-    Boolean(search.search ?? search.phase ?? search.status ?? search.preset) || search.hasDevelopmentVersion !== undefined
+    Boolean(search.search ?? search.phase ?? search.status ?? search.pack) ||
+    search.hasDevelopmentVersion !== undefined
 
   /** Any filter change goes back to page 1. */
   const update = (patch: Partial<ProjectsSearch>) => {
@@ -295,10 +293,10 @@ function ProjectFilters({ search, onChange }: { search: ProjectsSearch; onChange
         <option value="true">Yes</option>
         <option value="false">No</option>
       </SelectField>
-      <PresetFilter
-        value={search.preset}
-        onChange={(preset) => {
-          onChange({ preset })
+      <PackFilter
+        value={search.pack}
+        onChange={(pack) => {
+          onChange({ pack })
         }}
       />
       <SelectField
@@ -335,27 +333,26 @@ function ProjectFilters({ search, onChange }: { search: ProjectsSearch; onChange
   )
 }
 
-/** FR-74, SPEC §7.2: filter by the current version's preset: any, none (`preset=none`) or one preset id. */
-function PresetFilter({ value, onChange }: { value: string | undefined; onChange: (preset: string | undefined) => void }) {
-  const presets = usePresets()
-  const listed = presets.data ?? []
+/** FR-117, SPEC §7.2: filter by a pack of the current version's stack composition (any, or one pack id). */
+function PackFilter({ value, onChange }: { value: string | undefined; onChange: (pack: string | undefined) => void }) {
+  const catalog = useStackCatalog()
+  const packs = catalogPacks(catalog.data)
   return (
     <SelectField
-      id="projects-preset"
-      label="Preset"
+      id="projects-pack"
+      label="Stack pack"
       value={value ?? ''}
       onChange={(e) => {
         onChange(e.target.value || undefined)
       }}
     >
-      <option value="">Any preset</option>
-      <option value={NO_PRESET_FILTER}>No preset</option>
-      {listed.map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.name}
+      <option value="">Any pack</option>
+      {packs.map((p) => (
+        <option key={p.pack} value={p.pack}>
+          {p.label}
         </option>
       ))}
-      {value && value !== NO_PRESET_FILTER && !listed.some((p) => p.id === value) && <option value={value}>{value}</option>}
+      {value && !packs.some((p) => p.pack === value) && <option value={value}>{value}</option>}
     </SelectField>
   )
 }

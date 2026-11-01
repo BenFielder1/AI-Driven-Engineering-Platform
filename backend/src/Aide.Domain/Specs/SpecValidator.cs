@@ -7,8 +7,8 @@ namespace Aide.Domain.Specs;
 /// What a spec is validated against (§4.13, FR-75). <see cref="FirstVersion"/>: a project's first version from scratch
 /// (v1's eleven sections, requirement IDs and criteria). <see cref="NewVersion"/>: an iteration with the previous
 /// released version's locked spec as baseline. <see cref="ImportFirstVersion"/>: an import's first version (an
-/// iteration without a baseline spec). <see cref="PresetSections"/> is the extension point for phase 8 (a preset's
-/// required extra sections); empty without a preset.
+/// iteration without a baseline spec). <see cref="StackSections"/> holds the composition's (FR-123)
+/// required extra sections; empty without a stack.
 /// </summary>
 public sealed record SpecValidationContext
 {
@@ -21,31 +21,31 @@ public sealed record SpecValidationContext
     /// <summary>The requirement IDs of the baseline (previous released) spec (<see cref="RequirementParser.Ids"/>).</summary>
     public IReadOnlyCollection<string> BaselineRequirementIds { get; init; } = [];
 
-    /// <summary>A preset's required extra section titles (§4.11 <c>specSections[].title</c>); empty without a preset.</summary>
-    public IReadOnlyList<string> PresetSections { get; init; } = [];
+    /// <summary>The composition's required extra section titles (FR-123, §4.16 <c>specSections[].title</c>); empty without a stack.</summary>
+    public IReadOnlyList<string> StackSections { get; init; } = [];
 
     public static SpecValidationContext FirstVersion { get; } = new();
 
-    public static SpecValidationContext NewVersion(IEnumerable<string> baselineRequirementIds, IEnumerable<string>? presetSections = null)
+    public static SpecValidationContext NewVersion(IEnumerable<string> baselineRequirementIds, IEnumerable<string>? stackSections = null)
     {
         ArgumentNullException.ThrowIfNull(baselineRequirementIds);
         return new()
         {
             IsIteration = true,
             BaselineRequirementIds = [.. baselineRequirementIds.Select(RequirementParser.NormaliseId).OfType<string>().Distinct(StringComparer.Ordinal)],
-            PresetSections = [.. presetSections ?? []],
+            StackSections = [.. stackSections ?? []],
         };
     }
 
-    public static SpecValidationContext ImportFirstVersion(IEnumerable<string>? presetSections = null) => new()
+    public static SpecValidationContext ImportFirstVersion(IEnumerable<string>? stackSections = null) => new()
     {
         IsIteration = true,
         IsFirstImportVersion = true,
-        PresetSections = [.. presetSections ?? []],
+        StackSections = [.. stackSections ?? []],
     };
 
     /// <summary>The sections the spec must have (<see cref="SpecSections.RequiredFor"/>).</summary>
-    public IReadOnlyList<string> RequiredSections => SpecSections.RequiredFor(IsIteration, PresetSections);
+    public IReadOnlyList<string> RequiredSections => SpecSections.RequiredFor(IsIteration, StackSections);
 
     /// <summary>
     /// The prompt's spec mode (§4.13): <c>first_version</c>, <c>new_version</c> (cumulative, tagged against the baseline) or
@@ -63,20 +63,20 @@ public sealed record SpecValidationContext
     /// without one (an import's first version, or a version that builds on code AIDE never specified) an
     /// <see cref="ImportFirstVersion"/>; otherwise the <see cref="FirstVersion"/>.
     /// </summary>
-    public static SpecValidationContext ForVersion(bool isIteration, string? baselineSpecification, IEnumerable<string>? presetSections = null)
+    public static SpecValidationContext ForVersion(bool isIteration, string? baselineSpecification, IEnumerable<string>? stackSections = null)
     {
         if (!string.IsNullOrWhiteSpace(baselineSpecification))
         {
-            return NewVersion(RequirementParser.Parse(baselineSpecification).Ids, presetSections);
+            return NewVersion(RequirementParser.Parse(baselineSpecification).Ids, stackSections);
         }
 
         if (isIteration)
         {
-            return ImportFirstVersion(presetSections);
+            return ImportFirstVersion(stackSections);
         }
 
-        var sections = presetSections?.ToList() ?? [];
-        return sections.Count == 0 ? FirstVersion : new SpecValidationContext { PresetSections = sections };
+        var sections = stackSections?.ToList() ?? [];
+        return sections.Count == 0 ? FirstVersion : new SpecValidationContext { StackSections = sections };
     }
 }
 

@@ -1,0 +1,181 @@
+{
+  "id": "fe-vanilla",
+  "layer": "frontend",
+  "name": "Vanilla HTML/CSS/JS",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "fe-vanilla",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "HTML",
+    "CSS",
+    "JavaScript"
+  ],
+  "description": "Standards-first HTML, CSS and JavaScript with no framework, and optional Vite bundling.",
+  "defaultPath": "frontend",
+  "publicEnvPrefix": "VITE_",
+  "runtime": "static",
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Data Sources & Consumed APIs",
+      "guidance": "There is no backend or database in this stack. List every data source and third-party API the frontend consumes: base URL and endpoints used, authentication (public keys only, never secrets in the browser), CORS and rate limits, the response fields the UI relies on, where in the app each is called, caching, and how failures, empty results and offline states are shown. Static or bundled data: name its file and how it is updated.",
+      "when": "backend == none && data == none"
+    }
+  ],
+  "ownership": {
+    "frontend-engineer": [
+      "{fe}/**",
+      "!{fe}/e2e/**",
+      "!{fe}/playwright.config.*",
+      "!{fe}/**/Dockerfile",
+      "!{fe}/**/.dockerignore",
+      "!{fe}/**/nginx.conf",
+      "!{fe}/vercel.json",
+      "!{fe}/netlify.toml",
+      "!{fe}/**/_redirects",
+      "!{fe}/**/wrangler.jsonc",
+      "!{fe}/worker/**",
+      "!{fe}/**/.env.example",
+      "!{fe}/supabase/**",
+      "!{fe}/src/lib/database.types.ts"
+    ]
+  },
+  "agentSections": {
+    "scaffolder": [
+      "Detect",
+      "Scaffold",
+      "Conventions",
+      "Config"
+    ],
+    "frontend-engineer": [
+      "*"
+    ],
+    "test-engineer": [
+      "Testing",
+      "Gate"
+    ],
+    "ci-engineer": [
+      "Gate"
+    ],
+    "deploy-engineer": [
+      "Containerise",
+      "Deploy notes"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{be}/openapi/api.json"
+        ],
+        "after": [
+          "{fe}/src/api/generated/**",
+          "{fe}/js/api/generated/**"
+        ],
+        "soft": true,
+        "reason": "Change the API contract before the frontend steps that update the generated client from it."
+      }
+    ],
+    "exclusive": [],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [
+    {
+      "glob": "{fe}/src/api/generated/**",
+      "handling": "hand_written",
+      "ciCheck": "cd {fe} && npm run gen:api && git diff --exit-code src/api/generated"
+    },
+    {
+      "glob": "{fe}/js/api/generated/**",
+      "handling": "hand_written",
+      "ciCheck": "cd {fe} && npm run gen:api && git diff --exit-code js/api/generated"
+    },
+    {
+      "glob": "{fe}/package-lock.json",
+      "handling": "ci_generated",
+      "ciCheck": null
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "VITE_API_BASE_URL",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": true,
+      "description": "The backend origin for the generated client, baked in at build (cross-origin only). No-build mode writes it into config.json instead.",
+      "when": "originModel == cross-origin"
+    },
+    {
+      "key": "VITE_SUPABASE_URL",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": false,
+      "public": true,
+      "description": "The Supabase project URL (https://<ref>.supabase.co), public, baked in at build. No-build mode writes it into config.json instead.",
+      "when": "data == data-supabase"
+    },
+    {
+      "key": "VITE_SUPABASE_PUBLISHABLE_KEY",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": false,
+      "public": true,
+      "description": "The Supabase publishable key (sb_publishable_...), public, baked in at build. No-build mode writes it into config.json instead.",
+      "when": "data == data-supabase"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Semantic HTML that works without JS where the spec allows. Native form validation, plus server error mapping.",
+        "category": "feature_coverage",
+        "severity": "major"
+      },
+      {
+        "item": "checkJs is clean, with JSDoc types from the generated schema.",
+        "category": "api_contracts",
+        "severity": "minor"
+      },
+      {
+        "item": "CSS uses tokens, is responsive and respects user preferences.",
+        "category": "architecture",
+        "severity": "minor"
+      },
+      {
+        "item": "Lint (ESLint, stylelint, html-validate) and tests pass, and accessibility basics are met.",
+        "category": "testing",
+        "severity": "major"
+      }
+    ],
+    "deterministic": [
+      "no_secret_in_client"
+    ]
+  },
+  "gate": [
+    "cd {fe} && npm ci && npm run typecheck && npm run lint && npm test && npm run build"
+  ],
+  "migrate": null,
+  "deploy": null
+}

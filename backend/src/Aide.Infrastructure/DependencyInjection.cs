@@ -1,11 +1,14 @@
 using Aide.Infrastructure.Agents;
+using Aide.Infrastructure.Bitbucket;
 using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
+using Aide.Infrastructure.GitLab;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Presets;
+using Aide.Infrastructure.Platforms;
 using Aide.Infrastructure.RepoTools;
+using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -99,12 +102,18 @@ public static class DependencyInjection
         services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<FakeLlmProvider>());
         services.AddSingleton<IPromptLibrary, EmbeddedPromptLibrary>();
 
-        // Tech stack presets (FR-74, §4.11): the shipped presets (embedded), loaded once at startup; tests add sources.
-        services.AddSingleton<IPresetSource>(EmbeddedPresetSource.Shipped);
-        services.TryAddSingleton<IPresetCatalog, PresetCatalog>();
-        services.AddHostedService<PresetCatalogStartup>();
+        // Stack catalog (FR-113, FR-122, §4.16): the shipped catalog (embedded), loaded once at startup; tests may replace the source.
+        services.TryAddSingleton<IStackCatalogSource>(EmbeddedStackCatalogSource.Shipped);
+        services.TryAddSingleton<IStackCatalog, StackCatalogProvider>();
+        services.AddHostedService<StackCatalogStartup>();
         services.AddScoped<ILlmResolver, LlmResolver>();
         services.AddScoped<ILlmKeyValidator, LlmKeyValidator>();
+
+        // FR-160: per-model output limits (catalog, Anthropic discovery cached 24 h, ceiling, fallback).
+        services.AddHttpClient(IAnthropicModelInfo.HttpClientName, ConfigureLlmClient);
+        services.AddSingleton<AnthropicModelInfoCache>();
+        services.AddScoped<IAnthropicModelInfo, AnthropicModelInfo>();
+        services.AddScoped<ILlmOutputLimits, LlmOutputLimitResolver>();
 
         // Git providers (FR-10, FR-35) and working copies.
         services.AddSingleton<IWorkspaceStore, WorkspaceStore>();
@@ -153,26 +162,122 @@ public static class DependencyInjection
         services.AddScoped<IGitProvider, GitHubAppGitProvider>();
         services.AddScoped<IGitProviderResolver, GitProviderResolver>();
 
+        // GitLab instances, connections and API (FR-130–FR-132, §4.19, §8): one HttpClient per instance from the "gitlab"
+        // handler, whose ConnectCallback is the SSRF guard (resolved addresses checked on every connection, no redirects,
+        // no proxy). Tokens come from IGitConnectionTokens (refresh before expiry, rotated pair stored atomically).
+        services.AddOptions<GitLabOptions>()
+            .BindConfiguration(GitLabOptions.SectionName)
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<GitLabOptions>, GitLabOptionsValidator>();
+        services.TryAddSingleton<IGitHostDns, SystemGitHostDns>();
+        services.AddSingleton<GitHostConnector>();
+        services.AddHttpClient(GitLabClients.HttpClientName, client =>
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            })
+            .ConfigurePrimaryHttpMessageHandler(sp => sp.GetRequiredService<GitHostConnector>().CreateHandler());
+        services.AddSingleton<IGitLabClients, GitLabClients>();
+        services.AddScoped<IGitLabInstances, GitLabInstances>();
+        services.AddSingleton<IGitConnectionTokens, GitConnectionTokens>();
+
+        // FR-136, FR-137: the gitlab provider (the binding Owner's connection, per-command extraHeader for git).
+        services.AddScoped<IGitProvider, GitLabGitProvider>();
+
+        // FR-136, FR-137: the bitbucket provider (the binding Owner's connection, its budget, per-command extraHeader for git).
+        services.AddScoped<IGitProvider, Bitbucket.BitbucketGitProvider>();
+
+        // Bitbucket Cloud (FR-133–FR-135, §4.19): fixed hosts (no SSRF surface), redirects never followed, the consumer row
+        // (git_host_instances, kind bitbucket) with Bitbucket__OAuth__* on top, and the shared per-connection limiter
+        // (900 requests an hour, in memory: one API replica).
+        services.AddOptions<BitbucketOptions>()
+            .BindConfiguration(BitbucketOptions.SectionName)
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<BitbucketOptions>, BitbucketOptionsValidator>();
+        services.AddHttpClient(BitbucketClients.HttpClientName, client =>
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                AutomaticDecompression = System.Net.DecompressionMethods.All,
+            });
+        services.AddSingleton<BitbucketRateLimiter>();
+        services.AddSingleton<IBitbucketClients, BitbucketClients>();
+        services.AddScoped<IBitbucketConsumer, BitbucketConsumer>();
+        services.AddSingleton<IBitbucketRepoInitializer, BitbucketRepoInitializer>();
+
         // Deployments (FR-87–FR-91, §4.15, D-V2-10): Vercel's REST API on the fixed host api.vercel.com (§8: never
         // configurable, so no SSRF), the deterministic Fake (Deployments:Provider=Fake) and the env write limiter.
         services.AddOptions<DeploymentOptions>().BindConfiguration(DeploymentOptions.SectionName);
-        services.AddHttpClient(VercelDeploymentProvider.HttpClientName, client =>
+        services.AddHttpClient(VercelApiClient.HttpClientName, client =>
         {
-            client.BaseAddress = new Uri(VercelDeploymentProvider.ApiBaseUrl);
+            client.BaseAddress = new Uri(VercelApiClient.ApiBaseUrl);
             client.Timeout = TimeSpan.FromSeconds(20);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
         });
         services.AddSingleton<VercelEnvWriteLimiter>();
+        // §4.20: one provider per platform (all real since M30; every one Fake under Deployments:Provider=Fake).
+        services.AddSingleton<VercelApiClient>();
+        services.AddSingleton<FakeVercelClient>();
         services.AddSingleton<VercelDeploymentProvider>();
-        services.AddSingleton<FakeDeploymentProvider>();
+        services.AddSingleton<GitHubPagesDeploymentProvider>();
+        services.AddSingleton<NetlifyDeployRateLimiter>();
+        services.AddSingleton<IGitHostRepoLinks, GitHostRepoLinks>();
+        services.AddSingleton<NetlifyDeploymentProvider>();
+        services.AddSingleton<CloudflareDeploymentProvider>();
+        services.AddSingleton<RenderLogRateLimiter>();
+        services.AddSingleton<RenderDeploymentProvider>();
+        services.AddSingleton<RailwayDeploymentProvider>();
         services.AddSingleton<IDeploymentProviderResolver, DeploymentProviderResolver>();
+
+        // FR-152, FR-153, §4.21: managed database hosts (Fake under Databases:Provider=Fake) and the Supabase BaaS runner.
+        services.AddOptions<Databases.DatabaseOptions>().BindConfiguration(Databases.DatabaseOptions.SectionName);
+        services.AddSingleton<Databases.SupabaseDatabaseProvider>();
+        services.AddSingleton<Databases.RenderPostgresProvider>();
+        services.AddSingleton<Databases.RailwayPostgresProvider>();
+        services.AddSingleton<Databases.ExternalDatabaseProvider>();
+        services.AddSingleton<Databases.IDatabaseProviderResolver, Databases.DatabaseProviderResolver>();
+        services.AddSingleton<Databases.NpgsqlMigrationSqlExecutor>();
+        services.AddSingleton<Databases.FakeAwareMigrationSqlExecutor>();
+        services.AddSingleton<Databases.IMigrationSqlExecutor>(sp => sp.GetRequiredService<Databases.FakeAwareMigrationSqlExecutor>());
+        services.AddSingleton<Databases.IDatabaseSchemaReset>(sp => sp.GetRequiredService<Databases.FakeAwareMigrationSqlExecutor>());
+        services.AddSingleton<Databases.SupabaseMigrationRunner>();
+
+        // Platform connections (FR-142, §4.20, §4.21): each platform's REST or GraphQL API on its fixed host (§8: never
+        // configurable, so no SSRF); the Fake for all but Vercel under Deployments:Provider=Fake.
+        foreach (var (name, baseUrl) in PlatformHosts.All)
+        {
+            services.AddHttpClient(name, client =>
+            {
+                client.BaseAddress = new Uri(baseUrl);
+                client.Timeout = TimeSpan.FromSeconds(20);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            });
+        }
+
+        services.AddSingleton<PlatformHttp>();
+        services.AddSingleton<IPlatformConnectionValidator, VercelConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidator, NetlifyConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidator, CloudflareConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidator, RenderConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidator, RailwayConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidator, SupabaseConnectionValidator>();
+        services.AddSingleton<IPlatformConnectionValidators, PlatformConnectionValidators>();
 
         return services;
     }
 
-    private static void ConfigureLlmClient(IServiceProvider sp, HttpClient client)
+    /// <summary>
+    /// FR-161: no client timeout. Streamed completions can run for many minutes and are bounded by
+    /// <c>Llm:RequestTimeout</c> and <c>Llm:StreamIdleTimeout</c> per call (<c>LlmStream</c>); key checks, model lookups and
+    /// Ollama <c>/api/show</c> set their own short timeouts.
+    /// </summary>
+    private static void ConfigureLlmClient(HttpClient client)
     {
-        client.Timeout = sp.GetRequiredService<IOptions<LlmOptions>>().Value.RequestTimeout;
+        client.Timeout = Timeout.InfiniteTimeSpan;
         client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
     }
 }

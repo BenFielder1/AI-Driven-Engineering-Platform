@@ -26,6 +26,11 @@ const allTypes: readonly NotificationType[] = [
   'preview_ready',
   'connection_invalid',
   'llm_binding_cleared',
+  'git_binding_cleared',
+  'database_provisioning_failed',
+  'database_expiring',
+  'migration_failed',
+  'deployment_target_attention',
 ]
 
 interface StoredNotification extends Notification {

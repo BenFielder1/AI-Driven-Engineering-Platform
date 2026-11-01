@@ -162,15 +162,17 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR5_Missing_LLM_key_defaults_new_projects_to_Fake()
+    public async Task FR159_Missing_LLM_key_defaults_new_projects_to_the_first_usable_enabled_provider()
     {
-        using var owner = await ApiSession.RegisterAsync(factory);
+        // §4.24 table row 1 (amends FR-5): all four enabled, no key-free use of Anthropic/OpenAI, default anthropic → Ollama.
+        await using var app = factory.WithWebHostBuilder(b => b.UseSetting("Llm:DefaultProvider", "anthropic"));
+        using var owner = await ApiSession.RegisterAsync(app);
 
         var project = await ProjectApi.CreateAsync(owner.Client);
 
         var settings = await ProjectApi.ReadAsync<ProjectSettingsDto>(await owner.Client.GetAsync(new Uri($"/api/projects/{project.Id}/settings", UriKind.Relative), Ct));
-        Assert.Equal(LlmProvider.Fake, settings.Llm.Provider);
-        Assert.Equal("fake-1", settings.Llm.DefaultModel);
+        Assert.Equal(LlmProvider.Ollama, settings.Llm.Provider);
+        Assert.Equal("qwen2.5-coder", settings.Llm.DefaultModel);
         Assert.False(settings.Llm.Providers.Single(p => p.Provider == LlmProvider.Anthropic).Configured);
         Assert.True(settings.Llm.Providers.Single(p => p.Provider == LlmProvider.Ollama).Configured);
         Assert.Contains(factory.Logs.Entries, e =>
@@ -178,10 +180,22 @@ public sealed class ProjectEndpointsTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task FR159_CI_defaults_give_new_projects_the_Fake_provider()
+    {
+        using var owner = await ApiSession.RegisterAsync(factory);
+
+        var project = await ProjectApi.CreateAsync(owner.Client);
+
+        var settings = await ProjectApi.ReadAsync<ProjectSettingsDto>(await owner.Client.GetAsync(new Uri($"/api/projects/{project.Id}/settings", UriKind.Relative), Ct));
+        Assert.Equal((LlmProvider.Fake, "fake-1"), (settings.Llm.Provider, settings.Llm.DefaultModel));
+    }
+
+    [Fact]
     public async Task FR5_A_system_key_makes_the_configured_default_provider_the_new_project_default()
     {
         // D-V2-5: a system key counts only when Llm:AllowSystemKeys is on (FR79_System_keys_are_used_only_when_allowed_and_nothing_is_bound).
         await using var app = factory.WithWebHostBuilder(b => b
+            .UseSetting("Llm:DefaultProvider", "anthropic")
             .UseSetting("Llm:Providers:Anthropic:ApiKey", "sk-ant-system-test-key")
             .UseSetting("Llm:AllowSystemKeys", "true"));
         using var owner = await ApiSession.RegisterAsync(app);

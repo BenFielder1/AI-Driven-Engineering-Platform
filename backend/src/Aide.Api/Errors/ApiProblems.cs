@@ -15,15 +15,28 @@ public static class ApiProblems
     public const string DetailsKey = "details";
     public const string ReasonKey = "reason";
 
-    /// <summary>FR-81, FR-83: the AIDE GitHub App's install link on a <c>GITHUB_APP_NOT_INSTALLED</c> problem; FR-88: Vercel's
-    /// GitHub App install link on a <c>VERCEL_GIT_NOT_CONNECTED</c> problem.</summary>
+    /// <summary>The field map of a VALIDATION problem; other codes carry it when the error names its field (<see cref="DomainError.Field"/>).</summary>
+    public const string ErrorsKey = "errors";
+
+    /// <summary>FR-81, FR-83: the AIDE GitHub App's install link on a <c>GITHUB_APP_NOT_INSTALLED</c> problem; FR-144: the
+    /// platform's install or connect link on <c>PLATFORM_GIT_NOT_CONNECTED</c>, the App settings link on
+    /// <c>PLATFORM_PERMISSION_MISSING</c>.</summary>
     public const string InstallUrlKey = "installUrl";
+
+    /// <summary>FR-144, D-V4-4: the platform (<c>vercel</c>, <c>github_pages</c> …) of a <c>PLATFORM_*</c> problem.</summary>
+    public const string PlatformKey = "platform";
 
     /// <summary>
     /// The <c>errorCode</c> of a 501 contract stub: the endpoint is in the contract (so the client can be built against
     /// it) but not implemented yet. Not in <see cref="ErrorCodes"/>: no implemented endpoint returns it.
     /// </summary>
     public const string NotImplementedCode = "NOT_IMPLEMENTED";
+
+    /// <summary>FR-116: the broken rules on a <c>STACK_INCOMPATIBLE</c> problem, each <c>{layer, option, rule, reason}</c>.</summary>
+    public const string ViolationsKey = "violations";
+
+    /// <summary>FR-134: the scopes AIDE couldn't confirm on a <c>CONNECTION_SCOPE_INSUFFICIENT</c> problem (missing ones are in <c>details</c>).</summary>
+    public const string UnverifiableScopesKey = "unverifiableScopes";
 
     /// <summary>A ProblemDetails result for a domain error (status from the domain's HTTP status map).</summary>
     public static ProblemHttpResult FromError(DomainError error)
@@ -38,6 +51,21 @@ public static class ApiProblems
         if (error.Reason is not null)
         {
             extensions[ReasonKey] = error.Reason;
+        }
+
+        if (error.Field is { Length: > 0 } field)
+        {
+            extensions[ErrorsKey] = new Dictionary<string, string[]>(StringComparer.Ordinal) { [field] = [error.Message] };
+        }
+
+        if (error.UnverifiableScopes.Count > 0)
+        {
+            extensions[UnverifiableScopesKey] = error.UnverifiableScopes;
+        }
+
+        if (error.Violations.Count > 0)
+        {
+            extensions[ViolationsKey] = error.Violations.Select(v => new Features.Stack.StackViolationDto(v.Layer, v.Option, v.Rule, v.Reason)).ToList();
         }
 
         return TypedResults.Problem(
@@ -67,16 +95,42 @@ public static class ApiProblems
         return TypedResults.Problem(title: title, statusCode: StatusFor(ErrorCodes.GitHubAppNotInstalled), extensions: extensions);
     }
 
-    /// <summary>409 <c>VERCEL_GIT_NOT_CONNECTED</c> (FR-88) with Vercel's GitHub App install link, when known.</summary>
-    public static ProblemHttpResult VercelGitNotConnected(string? installUrl, string title = "Vercel's GitHub App can't access this repository.")
+    /// <summary>
+    /// A platform problem (FR-144, D-V4-4): <paramref name="error"/> with <c>platform</c> (the provider's wire value, for the
+    /// "{platform}" copy) and, for <c>PLATFORM_GIT_NOT_CONNECTED</c> and <c>PLATFORM_PERMISSION_MISSING</c>, the install,
+    /// connect or App settings link (<see cref="DomainError.Reason"/>) as <c>installUrl</c>.
+    /// </summary>
+    public static ProblemHttpResult Platform(DomainError error, Domain.Entities.DeploymentProvider platform)
     {
-        var extensions = new Dictionary<string, object?> { [ErrorCodeKey] = ErrorCodes.VercelGitNotConnected };
-        if (installUrl is not null)
+        ArgumentNullException.ThrowIfNull(error);
+        var extensions = new Dictionary<string, object?>
         {
-            extensions[InstallUrlKey] = installUrl;
+            [ErrorCodeKey] = error.Code,
+            [PlatformKey] = Domain.Common.EnumStrings.ToWire(platform),
+        };
+        if (error.Reason is { } link && error.Code is ErrorCodes.PlatformGitNotConnected or ErrorCodes.PlatformPermissionMissing)
+        {
+            extensions[InstallUrlKey] = link;
         }
 
-        return TypedResults.Problem(title: title, statusCode: StatusFor(ErrorCodes.VercelGitNotConnected), extensions: extensions);
+        if (error.Details.Count > 0)
+        {
+            extensions[DetailsKey] = error.Details;
+        }
+
+        if (error.Field is { Length: > 0 } field)
+        {
+            extensions[ErrorsKey] = new Dictionary<string, string[]>(StringComparer.Ordinal) { [field] = [error.Message] };
+        }
+
+        return TypedResults.Problem(title: error.Message, statusCode: StatusFor(error.Code), extensions: extensions);
+    }
+
+    /// <summary>400 <c>STACK_INCOMPATIBLE</c> (FR-116) with the <c>violations</c> extension and the reasons as <c>details</c>.</summary>
+    public static ProblemHttpResult StackIncompatible(IReadOnlyList<Domain.Stack.StackViolation> violations)
+    {
+        ArgumentNullException.ThrowIfNull(violations);
+        return FromError(Domain.Stack.StackCompatibility.IncompatibleError(violations));
     }
 
     public static ProblemHttpResult NotFound(string title = "The resource was not found.") => Of(ErrorCodes.NotFound, title);

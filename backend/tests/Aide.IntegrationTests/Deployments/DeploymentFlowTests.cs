@@ -76,7 +76,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
 
     [Fact]
-    public async Task FR90_S4_15_Execution_records_a_Fake_preview_review_waits_for_READY_then_scores_with_it()
+    public async Task FR90_FR147_S4_15_Execution_rolls_out_a_Fake_preview_review_waits_for_the_rollout_then_scores_with_it()
     {
         var app = FakeApp();
         using var fixture = await ExecutingAsync(app);
@@ -85,7 +85,9 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         // Execution, PR (Local comparison) and the advance to review run; the review and the deployment wait.
         await AgentJobs.RunQueuedAsync(app, id);
         var preview = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id));
-        Assert.Equal((DeploymentTarget.Preview, DeploymentTrigger.Auto, DeploymentProvider.Fake), (preview.Target, preview.Trigger, preview.Provider));
+        Assert.Equal((DeploymentEnvironment.Preview, DeploymentTrigger.Auto, DeploymentProvider.Fake), (preview.Environment, preview.Trigger, preview.Provider));
+        var rollout = await DeploymentHarness.RolloutJobAsync(app, id);
+        Assert.Equal(rollout.Id, preview.RolloutId); // FR-147: the rollout's frontend step
         var version = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == id, Ct));
         Assert.Equal(version.BranchName, preview.GitRef);
         Assert.Equal(40, preview.GitSha.Length);
@@ -109,11 +111,17 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         var updates = (await LifecycleSeed.EventsAsync(app, id, EventTypes.DeploymentUpdated)).Select(e => LifecycleSeed.Payload(e.Payload).GetProperty("status").GetString()).ToList();
         Assert.Equal(["building", "ready"], updates);
 
+        // Review still waits for the whole rollout (FR-147); the rollout then completes.
+        Assert.True(await DeploymentHarness.RunOnceAsync(app, review.Id));
+        Assert.False(await DeploymentHarness.RunOnceAsync(app, rollout.Id));
+        Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.PreviewRolloutCompleted));
+
         // Now review scores, with the preview stored on the report and no preview finding.
         Assert.False(await DeploymentHarness.RunOnceAsync(app, review.Id));
         var report = await ReportAsync(app, id);
         var checks = JsonDocument.Parse(report.ExternalChecks!).RootElement.GetProperty("preview");
         Assert.Equal(("ready", preview.Id.ToString()), (checks.GetProperty("status").GetString(), checks.GetProperty("deploymentId").GetString()));
+        Assert.Equal("succeeded", checks.GetProperty("rollout").GetProperty("state").GetString());
         Assert.DoesNotContain(report.Violations, v => v.Message == "Vercel preview build failed");
         var dto = await ProjectApi.ReadAsync<ComplianceReportDetailDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/compliance/reports/1", UriKind.Relative), Ct));
         Assert.Equal((DeploymentStatus.Ready, FakeUrl(preview.GitSha)), (dto.ExternalChecks!.Preview!.Status, dto.ExternalChecks.Preview.Url));
@@ -125,9 +133,18 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         var listed = await ProjectApi.ReadAsync<List<DeploymentDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/deployments?target=preview", UriKind.Relative), Ct));
         Assert.Equal((preview.Id, "0.1.0", (DeploymentUserDto?)null), (Assert.Single(listed).Id, listed[0].ReleaseVersion, listed[0].TriggeredBy));
 
-        // FR-90: a Contributor deploys the branch head again on request; it replaces the older one for polling.
-        var manual = await ProjectApi.ReadAsync<DeploymentDto>(await fixture.Contributor.Client.PostAsync(new Uri($"{fixture.Path}/deployments/preview", UriKind.Relative), null, Ct), HttpStatusCode.Accepted);
-        Assert.Equal((DeploymentTrigger.Manual, DeploymentStatus.Queued, fixture.Contributor.User!.Id, preview.GitSha), (manual.Trigger, manual.Status, manual.TriggeredBy!.Id, manual.GitSha));
+        // FR-147: the Review page reads the preview environment; a Contributor rolls the branch head out again on request.
+        var environment = await ProjectApi.ReadAsync<PreviewEnvironmentDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/deployments/preview", UriKind.Relative), Ct));
+        var step = Assert.Single(environment.Current!.Steps);
+        Assert.Equal((RolloutState.Succeeded, RolloutStepKind.Frontend, (DeploymentStatus?)DeploymentStatus.Ready, (Guid?)preview.Id), (environment.Current.State, step.Step, step.Status, step.DeploymentId));
+        Assert.False(environment.DatabaseDiverged);
+        var manual = await ProjectApi.ReadAsync<RolloutDto>(await fixture.Contributor.Client.PostAsync(new Uri($"{fixture.Path}/deployments/preview", UriKind.Relative), null, Ct), HttpStatusCode.Accepted);
+        Assert.Equal((RolloutState.Running, preview.GitSha, DeploymentEnvironment.Preview), (manual.State, manual.GitSha, manual.Environment));
+        var manualJob = await DeploymentHarness.RolloutJobAsync(app, id);
+        Assert.Equal(manual.RolloutId, manualJob.Id);
+        await DeploymentHarness.SettleRolloutAsync(app, id, manualJob.Id);
+        var redeployed = (await DeploymentHarness.DeploymentsAsync(app, id)).Last();
+        Assert.Equal((DeploymentTrigger.Manual, (Guid?)fixture.Contributor.User!.Id, (Guid?)manualJob.Id, DeploymentStatus.Ready), (redeployed.Trigger, redeployed.TriggeredBy, redeployed.RolloutId, redeployed.Status));
     }
 
     [Fact]
@@ -139,10 +156,10 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await AgentJobs.RunQueuedAsync(app, id);
         var preview = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id));
-        await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, id, preview.Id)).Id);
+        await DeploymentHarness.SettleRolloutAsync(app, id, (await DeploymentHarness.RolloutJobAsync(app, id)).Id);
 
         var failed = await DeploymentHarness.DeploymentAsync(app, preview.Id);
-        Assert.Equal((DeploymentStatus.Error, ErrorCodes.VercelError), (failed.Status, failed.ErrorCode));
+        Assert.Equal((DeploymentStatus.Error, ErrorCodes.PlatformError), (failed.Status, failed.ErrorCode));
         Assert.Contains("Type error", failed.BuildLogTail, StringComparison.Ordinal);
         Assert.Empty(await LifecycleSeed.EventsAsync(app, id, EventTypes.DeploymentFailed)); // previews don't notify Owners
 
@@ -160,13 +177,15 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         var gate = Assert.Single(await LifecycleSeed.GatesAsync(app, id), g => g.Status == GateStatus.Pending);
         await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve");
         await AgentJobs.RunQueuedAsync(app, id);
-        var production = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id), d => d.Target == DeploymentTarget.Production);
-        await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, id, production.Id)).Id);
+        var production = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id), d => d.Environment == DeploymentEnvironment.Production);
+        await DeploymentHarness.SettleRolloutAsync(app, id, (await DeploymentHarness.RolloutJobAsync(app, id, JobTypes.ProductionRollout)).Id);
 
         var project = await LifecycleSeed.ProjectAsync(app, id);
         Assert.Equal(ProjectStatus.Released, project.Status);
         var release = await ProjectApi.ReadAsync<ReleaseDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/releases/latest", UriKind.Relative), Ct));
         Assert.Equal((ReleaseStatus.Succeeded, DeploymentStatus.Error, release.MergeCommitSha), (release.Status, release.ProductionDeployment!.Status, release.ProductionDeployment.GitSha));
+        Assert.Equal(RolloutState.Failed, release.Rollout!.State); // FR-149: the release stands
+        Assert.Empty(release.LiveOn!);
         var failedEvent = Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.DeploymentFailed));
         Assert.Equal("production", LifecycleSeed.Payload(failedEvent.Payload).GetProperty("target").GetString());
         Assert.Contains(await LifecycleSeed.NotificationJobsAsync(app, id), j => j.Payload.Contains(failedEvent.Id.ToString(), StringComparison.Ordinal));
@@ -179,35 +198,43 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR91_Release_merged_the_production_deployment_becomes_READY_and_the_release_shows_its_URL()
+    public async Task FR91_FR149_Release_merged_the_production_rollout_becomes_READY_and_the_release_shows_where_it_is_live()
     {
         var app = FakeApp();
         using var fixture = await ExecutingAsync(app);
         var id = fixture.Project.Id;
         await AgentJobs.RunQueuedAsync(app, id);
-        await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, id, Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id)).Id)).Id);
+        await DeploymentHarness.SettleRolloutAsync(app, id, (await DeploymentHarness.RolloutJobAsync(app, id)).Id);
         await DeploymentHarness.SettleAsync(app, (await ReviewJobAsync(app, id)).Id);
         var gate = Assert.Single(await LifecycleSeed.GatesAsync(app, id), g => g.Status == GateStatus.Pending);
         await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve");
 
         await AgentJobs.RunQueuedAsync(app, id);
-        var production = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id), d => d.Target == DeploymentTarget.Production);
+        var production = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id), d => d.Environment == DeploymentEnvironment.Production);
         var releaseRow = await ProjectApi.WithDbAsync(app, db => db.Releases.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
-        Assert.Equal((releaseRow.Id, releaseRow.MergeCommitSha, DeploymentTrigger.Auto), (production.ReleaseId, production.GitSha, production.Trigger));
-        await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, id, production.Id)).Id);
+        var rollout = await DeploymentHarness.RolloutJobAsync(app, id, JobTypes.ProductionRollout);
+        Assert.Equal((releaseRow.Id, releaseRow.MergeCommitSha, DeploymentTrigger.Auto, (Guid?)rollout.Id), (production.ReleaseId, production.GitSha, production.Trigger, production.RolloutId));
+        await DeploymentHarness.SettleRolloutAsync(app, id, rollout.Id);
 
         var release = await ProjectApi.ReadAsync<ReleaseDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/releases/latest", UriKind.Relative), Ct));
-        Assert.Equal((DeploymentStatus.Ready, FakeUrl(releaseRow.MergeCommitSha!), DeploymentTarget.Production), (release.ProductionDeployment!.Status, release.ProductionDeployment.Url, release.ProductionDeployment.Target));
-        var settings = await ProjectApi.WithDbAsync(app, db => db.ProjectDeploymentSettings.AsNoTracking().SingleAsync(s => s.ProjectId == id, Ct));
+        Assert.Equal((DeploymentStatus.Ready, FakeUrl(releaseRow.MergeCommitSha!), DeploymentEnvironment.Production), (release.ProductionDeployment!.Status, release.ProductionDeployment.Url, release.ProductionDeployment.Target));
+        var settings = await DeploymentHarness.FrontendTargetAsync(app, id);
         Assert.Equal(FakeUrl(releaseRow.MergeCommitSha!), settings.ProductionUrl);
         Assert.Empty(await LifecycleSeed.EventsAsync(app, id, EventTypes.DeploymentFailed));
+        Assert.Equal(RolloutState.Succeeded, release.Rollout!.State);
+        var live = Assert.Single(release.LiveOn!);
+        Assert.Equal((DeploymentComponent.Frontend, "Vercel", FakeUrl(releaseRow.MergeCommitSha!)), (live.Component, live.ProviderName, live.Url));
 
-        // Idempotent per release: completing the release again records no second automatic production deployment.
+        // FR-149: idempotent per release: queuing the rollout again records nothing, and a rerun adds no second row.
         await using (var scope = app.Services.CreateAsyncScope())
         {
-            var scheduler = scope.ServiceProvider.GetRequiredService<DeploymentScheduler>();
-            Assert.Null(await scheduler.AutoProductionAsync(releaseRow, "main", DateTimeOffset.UtcNow, Ct));
+            var scheduler = scope.ServiceProvider.GetRequiredService<RolloutScheduler>();
+            Assert.Null(await scheduler.EnqueueProductionAsync(releaseRow, "main", DateTimeOffset.UtcNow, Ct));
         }
+
+        await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == rollout.Id).ExecuteUpdateAsync(u => u.SetProperty(j => j.Status, JobStatus.Queued), Ct));
+        Assert.False(await DeploymentHarness.RunOnceAsync(app, rollout.Id));
+        Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id), d => d.Environment == DeploymentEnvironment.Production);
 
         // FR-91: the Owner promotes the ready production deployment (a new promote row; Git untouched).
         var promoted = await ProjectApi.ReadAsync<DeploymentDto>(
@@ -223,11 +250,11 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         var project = await ProjectApi.CreateAsync(owner.Client);
         await DeploymentHarness.BindAsync(app, project.Id, await DeploymentHarness.SeedConnectionAsync(app, owner.User!.Id), owner.User!.Id);
         var versionId = await DeploymentHarness.VersionIdAsync(app, project.Id);
-        var older = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentTarget.Preview, "aide/x", new string('a', 40), DeploymentTrigger.Auto, null));
+        var older = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Preview, "aide/x", new string('a', 40), DeploymentTrigger.Auto, null));
         var olderJob = await DeploymentHarness.JobOfAsync(app, project.Id, older.Id);
         Assert.True(await DeploymentHarness.RunOnceAsync(app, olderJob.Id));
 
-        var newer = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentTarget.Preview, "aide/x", new string('b', 40), DeploymentTrigger.Auto, null));
+        var newer = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Preview, "aide/x", new string('b', 40), DeploymentTrigger.Auto, null));
 
         var stopped = await DeploymentHarness.DeploymentAsync(app, older.Id);
         Assert.Equal((DeploymentStatus.Canceled, DeploymentPollRules.SupersededMessage), (stopped.Status, stopped.ErrorMessage));
@@ -244,7 +271,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         var project = await ProjectApi.CreateAsync(owner.Client);
         await DeploymentHarness.BindAsync(app, project.Id, await DeploymentHarness.SeedConnectionAsync(app, owner.User!.Id), owner.User!.Id);
         var versionId = await DeploymentHarness.VersionIdAsync(app, project.Id);
-        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentTarget.Preview, "aide/x", new string('c', 40), DeploymentTrigger.Manual, owner.User!.Id));
+        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Preview, "aide/x", new string('c', 40), DeploymentTrigger.Manual, owner.User!.Id));
         var job = await DeploymentHarness.JobOfAsync(app, project.Id, deployment.Id);
         Assert.True(await DeploymentHarness.RunOnceAsync(app, job.Id));
         Assert.True(await DeploymentHarness.RunOnceAsync(app, job.Id));
@@ -285,12 +312,12 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         // An env value echoed by the build is masked in the stored tail (it is shown to members and given to review).
         await owner.Client.PutAsJsonAsync($"/api/projects/{project.Id}/settings/deployment/env/BUILD_SECRET", new { value = "build-secret-0123456789", targets = Preview }, Ct);
         var sha = new string('d', 40);
-        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentTarget.Preview, "aide/todo/v0.1.0", sha, DeploymentTrigger.Auto, null));
+        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Preview, "aide/todo/v0.1.0", sha, DeploymentTrigger.Auto, null));
 
         await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, project.Id, deployment.Id)).Id);
 
         var failed = await DeploymentHarness.DeploymentAsync(app, deployment.Id);
-        Assert.Equal((DeploymentStatus.Error, ErrorCodes.VercelError, "https://todo-git-aide.vercel.app", "dpl_1"), (failed.Status, failed.ErrorCode, failed.Url, failed.ProviderDeploymentId));
+        Assert.Equal((DeploymentStatus.Error, ErrorCodes.PlatformError, "https://todo-git-aide.vercel.app", "dpl_1"), (failed.Status, failed.ErrorCode, failed.Url, failed.ProviderDeploymentId));
         Assert.StartsWith("Running \"npm run build\"\nFailed to compile.\nType error: Type 'number' is not assignable to type 'string'.\n", failed.BuildLogTail, StringComparison.Ordinal);
         Assert.DoesNotContain("build-secret-0123456789", failed.BuildLogTail, StringComparison.Ordinal);
         var create = JsonDocument.Parse(Assert.Single(vercel.Requests, r => r.Method == "POST" && r.Path == "/v13/deployments").Body).RootElement;
@@ -321,7 +348,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
             .On(HttpMethod.Get, "/v13/deployments/dpl_auto", HttpStatusCode.OK, """{"id":"dpl_auto","url":"todo-abc.vercel.app","readyState":"READY","alias":["todo.vercel.app"]}""");
         var (app, owner, project, versionId) = await VercelBoundAsync(vercel);
         using var _ = owner;
-        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentTarget.Production, "main", sha, DeploymentTrigger.Auto, null));
+        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Production, "main", sha, DeploymentTrigger.Auto, null));
 
         await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, project.Id, deployment.Id)).Id);
 
@@ -329,7 +356,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         Assert.Equal(("dpl_auto", DeploymentStatus.Ready), (adopted.ProviderDeploymentId, adopted.Status));
         Assert.DoesNotContain(vercel.Requests, r => r.Method == "POST");
         Assert.Contains(vercel.Requests, r => r.Path == "/v6/deployments" && r.Query.Contains("target=production", StringComparison.Ordinal) && r.Query.Contains($"sha={sha}", StringComparison.Ordinal));
-        Assert.Equal("https://todo.vercel.app", (await ProjectApi.WithDbAsync(app, db => db.ProjectDeploymentSettings.AsNoTracking().SingleAsync(s => s.ProjectId == project.Id, Ct))).ProductionUrl);
+        Assert.Equal("https://todo.vercel.app", (await DeploymentHarness.FrontendTargetAsync(app, project.Id)).ProductionUrl);
     }
 
     [Fact]
@@ -342,7 +369,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         var (app, owner, project, versionId) = await VercelBoundAsync(vercel);
         using var _ = owner;
         var deployment = await DeploymentHarness.ScheduleAsync(
-            app, new NewDeployment(project.Id, versionId, null, DeploymentTarget.Production, "main", new string('1', 40), DeploymentTrigger.Auto, null), DateTimeOffset.UtcNow.AddMinutes(-1));
+            app, new NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Production, "main", new string('1', 40), DeploymentTrigger.Auto, null), DateTimeOffset.UtcNow.AddMinutes(-2));
 
         await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, project.Id, deployment.Id)).Id);
 
@@ -360,7 +387,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
                 new Dictionary<string, string> { ["x-ratelimit-reset"] = reset.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture) });
         var (app, owner, project, versionId) = await VercelBoundAsync(vercel);
         using var _ = owner;
-        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentTarget.Preview, "aide/x", new string('2', 40), DeploymentTrigger.Auto, null));
+        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Preview, "aide/x", new string('2', 40), DeploymentTrigger.Auto, null));
         var job = await DeploymentHarness.JobOfAsync(app, project.Id, deployment.Id);
 
         Assert.True(await DeploymentHarness.RunOnceAsync(app, job.Id));
@@ -379,7 +406,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         var (app, owner, project, versionId) = await VercelBoundAsync(vercel);
         using var _ = owner;
         var deployment = await DeploymentHarness.ScheduleAsync(
-            app, new NewDeployment(project.Id, versionId, null, DeploymentTarget.Production, "main", new string('3', 40), DeploymentTrigger.Redeploy, owner.User!.Id), DateTimeOffset.UtcNow.AddMinutes(-31));
+            app, new NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Production, "main", new string('3', 40), DeploymentTrigger.Redeploy, owner.User!.Id), DateTimeOffset.UtcNow.AddMinutes(-31));
         await ProjectApi.WithDbAsync(app, db => db.Deployments.Where(d => d.Id == deployment.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.ProviderDeploymentId, "dpl_slow").SetProperty(d => d.Status, DeploymentStatus.Building), Ct));
 
@@ -397,12 +424,12 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
             .On(HttpMethod.Post, "/v13/deployments", HttpStatusCode.Forbidden, """{"error":{"code":"forbidden","message":"Not authorized","invalidToken":true}}""");
         var (app, owner, project, versionId) = await VercelBoundAsync(vercel);
         using var _ = owner;
-        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentTarget.Preview, "aide/x", new string('4', 40), DeploymentTrigger.Auto, null));
+        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Preview, "aide/x", new string('4', 40), DeploymentTrigger.Auto, null));
 
         Assert.False(await DeploymentHarness.RunOnceAsync(app, (await DeploymentHarness.JobOfAsync(app, project.Id, deployment.Id)).Id));
 
         Assert.Equal((DeploymentStatus.Error, ErrorCodes.CredentialInvalid), ((await DeploymentHarness.DeploymentAsync(app, deployment.Id)).Status, (await DeploymentHarness.DeploymentAsync(app, deployment.Id)).ErrorCode));
-        Assert.Equal(VercelConnectionStatus.Invalid, (await ProjectApi.WithDbAsync(app, db => db.VercelConnections.AsNoTracking().SingleAsync(c => c.UserId == owner.User!.Id, Ct))).Status);
+        Assert.Equal(PlatformConnectionStatus.Invalid, (await ProjectApi.WithDbAsync(app, db => db.PlatformConnections.AsNoTracking().SingleAsync(c => c.UserId == owner.User!.Id, Ct))).Status);
         Assert.Single(await LifecycleSeed.EventsAsync(app, project.Id, EventTypes.ConnectionInvalid));
         Assert.Single(await LifecycleSeed.EventsAsync(app, project.Id, EventTypes.DeploymentFailed));
     }
@@ -414,7 +441,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
             .On(HttpMethod.Post, "/v10/projects/prj_todo/promote/dpl_old", HttpStatusCode.Created, "{}");
         var (app, owner, project, versionId) = await VercelBoundAsync(vercel);
         using var _ = owner;
-        var old = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentTarget.Production, "main", new string('5', 40), DeploymentTrigger.Auto, null));
+        var old = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(project.Id, versionId, null, DeploymentEnvironment.Production, "main", new string('5', 40), DeploymentTrigger.Auto, null));
         await ProjectApi.WithDbAsync(app, db => db.Deployments.Where(d => d.Id == old.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.ProviderDeploymentId, "dpl_old").SetProperty(d => d.Status, DeploymentStatus.Ready).SetProperty(d => d.Url, "https://todo-old.vercel.app"), Ct));
 
@@ -425,5 +452,6 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         Assert.Single(vercel.Requests, r => r.Method == "POST" && r.Path == "/v10/projects/prj_todo/promote/dpl_old");
     }
 
-    private static string FakeUrl(string sha) => FakeDeploymentRules.Url(sha);
+    /// <summary>§4.20 Fake URL of the frontend target (bound as Vercel): <c>https://fake-&lt;sha8&gt;-frontend.vercel.test</c>.</summary>
+    private static string FakeUrl(string sha) => FakeDeploymentRules.Url(sha, DeploymentComponent.Frontend, DeploymentProvider.Vercel);
 }

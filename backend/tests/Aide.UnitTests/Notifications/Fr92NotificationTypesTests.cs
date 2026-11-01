@@ -64,8 +64,8 @@ public class Fr92NotificationTypesTests
     [Fact]
     public void FR92_Preferences_cover_every_type_and_new_types_default_on()
     {
-        Assert.Equal(16, NotificationRules.All.Count);
-        foreach (var type in new[] { NotificationType.ReleaseAwaitingMerge, NotificationType.DeploymentFailed, NotificationType.PreviewReady, NotificationType.ConnectionInvalid, NotificationType.LlmBindingCleared })
+        Assert.Equal(21, NotificationRules.All.Count);
+        foreach (var type in new[] { NotificationType.ReleaseAwaitingMerge, NotificationType.DeploymentFailed, NotificationType.PreviewReady, NotificationType.ConnectionInvalid, NotificationType.LlmBindingCleared, NotificationType.GitBindingCleared })
         {
             Assert.True(NotificationRules.Wants(type, null));
             Assert.True(NotificationRules.Wants(type, [NotificationType.ReviewCompleted, NotificationType.ReleaseFailed]));
@@ -105,7 +105,7 @@ public class Fr92NotificationTypesTests
     {
         var production = NotificationMessages.Compose(new NotificationFacts(NotificationType.DeploymentFailed, "Todo")
         {
-            DeploymentTarget = "production",
+            DeploymentEnvironment = "production",
             ReleaseVersion = "1.2.0",
             ErrorCode = "BUILD_FAILED",
         });
@@ -113,7 +113,7 @@ public class Fr92NotificationTypesTests
         Assert.Contains("(BUILD_FAILED)", production.Body, StringComparison.Ordinal);
         Assert.Contains("redeploy from the Release page", production.Body, StringComparison.Ordinal);
 
-        var preview = NotificationMessages.Compose(new NotificationFacts(NotificationType.DeploymentFailed, "Todo") { DeploymentTarget = "preview" });
+        var preview = NotificationMessages.Compose(new NotificationFacts(NotificationType.DeploymentFailed, "Todo") { DeploymentEnvironment = "preview" });
         Assert.Contains("redeploy from the Review page", preview.Body, StringComparison.Ordinal);
     }
 

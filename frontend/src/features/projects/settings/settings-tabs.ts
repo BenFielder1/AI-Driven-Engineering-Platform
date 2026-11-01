@@ -1,11 +1,12 @@
 /** Settings sections, in nav order: the `/projects/:id/settings/{section}` sub-routes (SPEC §7.2). */
-export const settingsTabs = ['general', 'members', 'git', 'llm', 'deployment', 'notifications', 'danger'] as const
+export const settingsTabs = ['general', 'members', 'git', 'stack', 'llm', 'deployment', 'notifications', 'danger'] as const
 export type SettingsTab = (typeof settingsTabs)[number]
 
 export const settingsTabLabels: Record<SettingsTab, string> = {
   general: 'General',
   members: 'Members',
   git: 'Git',
+  stack: 'Stack',
   llm: 'LLM',
   deployment: 'Deployment',
   notifications: 'Notifications',

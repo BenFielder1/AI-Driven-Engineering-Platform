@@ -1,21 +1,25 @@
 import type { UseFormRegisterReturn } from 'react-hook-form'
 
 import { RadioGroup } from '../../components/ui/radio-group'
-import { LoadingState } from '../../components/ui/states'
+import { ErrorState, LoadingState } from '../../components/ui/states'
 import { TextField } from '../../components/ui/text-field'
-import type { useGitHubRepoRefs } from '../github/github-api'
 import { GitHubErrorAlert } from '../github/github-error-alert'
-import { releasedOptions, type ReleasedOption } from './released-versions'
+import { releasedOptions, type ReleasedOption, type ReleaseRefs } from './released-versions'
 import { NEVER_RELEASED } from './schemas'
 
 const dateFormat = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' })
 
-function describe(o: ReleasedOption): string {
+/** The host whose Releases and tags are listed (FR-73 GitHub App, FR-141 GitLab and Bitbucket). */
+export type ReleaseHost = 'github' | 'gitlab' | 'bitbucket'
+
+const hostNames: Record<ReleaseHost, string> = { github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket' }
+
+function describe(o: ReleasedOption, host: ReleaseHost): string {
   if (o.kind === 'tag') {
     return `Tag · version ${o.version}`
   }
   return [
-    o.isLatest ? 'Latest GitHub release' : 'GitHub release',
+    o.isLatest ? `Latest ${hostNames[host]} release` : `${hostNames[host]} release`,
     o.name && o.name !== o.tag ? o.name : null,
     o.publishedAt ? `published ${dateFormat.format(new Date(o.publishedAt))}` : null,
   ]
@@ -23,24 +27,35 @@ function describe(o: ReleasedOption): string {
     .join(' · ')
 }
 
+/** The refs query as the field reads it (GitHub's, GitLab's or Bitbucket's). */
+interface RefsQuery {
+  isPending: boolean
+  isError: boolean
+  error: unknown
+  data: ReleaseRefs | undefined
+  refetch: () => unknown
+}
+
 /**
- * FR-73 "Currently released version": for a GitHub App repo, its GitHub Releases and semver tags (the latest release
- * preselected by the wizard) plus "Never released"; for a URL + token or Local import, the tag typed in (empty: never
+ * FR-73, FR-141 "Currently released version": for a GitHub App or GitLab repo, its Releases and semver tags, for a
+ * Bitbucket repo its semver tags (the wizard preselects one), plus "Never released"; for a URL + token or Local import, the tag typed in (empty: never
  * released), since AIDE can't list those repositories' tags before the project exists.
  */
 export function ReleasedVersionField({
   id,
   listed,
+  host = 'github',
   repoSelected,
   refs,
   inputProps,
   error,
 }: {
   id: string
-  /** The GitHub App option is chosen: list the repo's releases and tags. */
+  /** The GitHub App, GitLab or Bitbucket option is chosen: list the repo's releases and tags. */
   listed: boolean
+  host?: ReleaseHost
   repoSelected: boolean
-  refs: ReturnType<typeof useGitHubRepoRefs>
+  refs: RefsQuery
   inputProps: UseFormRegisterReturn
   error?: string | undefined
 }) {
@@ -64,8 +79,24 @@ export function ReleasedVersionField({
   if (refs.isPending) {
     return <LoadingState label="Loading the repository's releases and tags…" />
   }
-  if (refs.isError) {
-    return <GitHubErrorAlert error={refs.error} title="We couldn't load the repository's releases and tags" context="githubRepos" />
+  if (refs.isError || !refs.data) {
+    return host === 'gitlab' ? (
+      <ErrorState
+        error={refs.error}
+        title="We couldn't load the project's releases and tags"
+        context="gitlabRepos"
+        onRetry={() => void refs.refetch()}
+      />
+    ) : host === 'bitbucket' ? (
+      <ErrorState
+        error={refs.error}
+        title="We couldn't load the repository's tags"
+        context="bitbucketRepos"
+        onRetry={() => void refs.refetch()}
+      />
+    ) : (
+      <GitHubErrorAlert error={refs.error} title="We couldn't load the repository's releases and tags" context="githubRepos" />
+    )
   }
   const options = releasedOptions(refs.data)
   return (
@@ -76,7 +107,7 @@ export function ReleasedVersionField({
         inputProps={inputProps}
         error={error}
         options={[
-          ...options.map((o) => ({ value: o.tag, label: o.tag, description: describe(o) })),
+          ...options.map((o) => ({ value: o.tag, label: o.tag, description: describe(o, host) })),
           {
             value: NEVER_RELEASED,
             label: 'Never released',
@@ -85,7 +116,11 @@ export function ReleasedVersionField({
         ]}
       />
       {options.length === 0 && (
-        <p className="text-sm text-muted-foreground">This repository has no GitHub Releases or semantic-version tags.</p>
+        <p className="text-sm text-muted-foreground">
+          {host === 'bitbucket'
+            ? 'This repository has no semantic-version tags.'
+            : `This repository has no ${hostNames[host]} Releases or semantic-version tags.`}
+        </p>
       )}
     </div>
   )

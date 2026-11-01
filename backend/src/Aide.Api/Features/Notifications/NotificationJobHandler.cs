@@ -63,6 +63,12 @@ public sealed partial class NotificationJobHandler(
             return;
         }
 
+        if (!composed.Notifies)
+        {
+            LogSkipped(logger, key, "the event is recorded without a notification");
+            return;
+        }
+
         if (payload.Type == NotificationType.BudgetExceeded && payload.ProjectId is { } budgetProject
             && !await IsFirstRefusalOfBudgetAsync(budgetProject, payload.SourceId, cancellationToken))
         {
@@ -217,7 +223,7 @@ public sealed partial class NotificationJobHandler(
     private async Task<int> AddDeliveriesAsync(ComposedNotification composed, DateTimeOffset now, CancellationToken cancellationToken)
     {
         List<string> wanted;
-        if (NotificationRules.ChannelEvent(composed.Type) is not { } channelEvent)
+        if (NotificationRules.ChannelEvent(composed.Type) is null)
         {
             // Personal (FR-92): the user's account email, unless they muted the type.
             var recipients = await WantingAsync(composed.Type, await RecipientsAsync(composed, cancellationToken), cancellationToken);
@@ -232,7 +238,7 @@ public sealed partial class NotificationJobHandler(
                     .FirstOrDefaultAsync(cancellationToken) ?? []
                 : [];
             wanted = configured
-                .Where(c => c.Events.Contains(channelEvent, StringComparer.Ordinal))
+                .Where(c => NotificationRules.ChannelReceives(composed.Type, c.Events))
                 .Select(NotificationDispatcher.ChannelName)
                 .Distinct(StringComparer.Ordinal)
                 .ToList();

@@ -4,7 +4,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
-using Aide.Domain.Projects;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -57,14 +56,14 @@ public static class ReleaseRecords
             Tag = TagFor(version?.TagPrefix, version?.Version),
             Status = ReleaseStatus.InProgress,
             Attempt = ReleaseRules.NextAttempt(attempts),
-            PrUrl = provider is { } gitProvider && ProjectSettingsRules.IsGitHub(gitProvider) ? version?.PullRequestUrl : null,
+            PrUrl = provider is { } gitProvider && gitProvider != GitProvider.Local ? version?.PullRequestUrl : null,
             CreatedAt = now,
         };
         db.Releases.Add(release);
         db.AddEvent(
             EventTypes.ReleaseStarted,
             project.Id,
-            new { releaseId = release.Id, releaseVersionId = versionId, version = version?.Version, checkpoint, tag = release.Tag, attempt = release.Attempt, trigger },
+            new { releaseId = release.Id, releaseVersionId = versionId, version = version?.Version, checkpoint, tag = release.Tag, attempt = release.Attempt, trigger, provider = provider?.ToWire() },
             actor,
             now);
         return release;
@@ -79,9 +78,34 @@ public static class ReleaseRecords
             : prefix + (version ?? string.Empty);
     }
 
-    /// <summary>FR-43: marks an in-progress attempt failed and adds <c>RELEASE_FAILED</c> (the Owner notification seam, FR-47).</summary>
+    /// <summary>
+    /// FR-140: the project's Git provider wire value (<c>github_app</c>, <c>gitlab</c>, ...) carried as <c>provider</c> in the
+    /// <c>RELEASE_*</c> and <c>MERGE_READINESS_CHECKED</c> payloads, so activity and notifications name the host.
+    /// </summary>
+    public static async Task<string?> ProviderAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var provider = await db.ProjectGitSettings.AsNoTracking()
+            .Where(s => s.ProjectId == projectId)
+            .Select(s => (GitProvider?)s.Provider)
+            .FirstOrDefaultAsync(cancellationToken);
+        return provider?.ToWire();
+    }
+
+    /// <summary>
+    /// FR-43: marks an in-progress attempt failed and adds <c>RELEASE_FAILED</c> (the Owner notification seam, FR-47), with
+    /// the project's Git <paramref name="provider"/> (<see cref="ProviderAsync"/>).
+    /// </summary>
     public static void Fail(
-        AideDbContext db, ReleaseEntity release, string errorCode, string message, IReadOnlyList<string> conflictingFiles, string actor, DateTimeOffset now, bool deadLettered = false)
+        AideDbContext db,
+        ReleaseEntity release,
+        string errorCode,
+        string message,
+        IReadOnlyList<string> conflictingFiles,
+        string actor,
+        DateTimeOffset now,
+        bool deadLettered = false,
+        string? provider = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(release);
@@ -104,6 +128,7 @@ public static class ReleaseRecords
                 errorMessage = message,
                 conflictingFiles,
                 deadLettered,
+                provider,
             },
             actor,
             now);
@@ -134,7 +159,10 @@ public static class ReleaseRecords
     /// <param name="release">The release attempt.</param>
     /// <param name="mergeStrategy">The project's merge strategy (FR-65).</param>
     /// <param name="productionDeployment">FR-91: the release's production deployment, if any.</param>
-    public static ReleaseDto ToDto(ReleaseEntity release, MergeStrategy mergeStrategy, Deployments.DeploymentDto? productionDeployment = null)
+    /// <param name="rollout">FR-149: the release's production rollout, if any.</param>
+    /// <param name="appliedNotMerged">§4.21: migrations were applied to production but the release failed unmerged.</param>
+    public static ReleaseDto ToDto(
+        ReleaseEntity release, MergeStrategy mergeStrategy, Deployments.DeploymentDto? productionDeployment = null, Deployments.RolloutDto? rollout = null, bool appliedNotMerged = false)
     {
         ArgumentNullException.ThrowIfNull(release);
         return new ReleaseDto(
@@ -155,7 +183,11 @@ public static class ReleaseRecords
             release.AwaitingMergeSince,
             Git.MergeReasonsJson.Read(release.MergeReasons),
             mergeStrategy,
-            productionDeployment);
+            productionDeployment,
+            release.MigrationRunId,
+            appliedNotMerged,
+            rollout,
+            Deployments.RolloutReader.LiveOn(rollout));
     }
 
     /// <summary>The latest attempt for the project state (FR-42, FR-43, FR-65).</summary>
@@ -188,7 +220,8 @@ public static class ReleaseRecords
 }
 
 /// <summary>FR-42, FR-43: release history and the Owner's retry of a failed release.</summary>
-public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, TimeProvider time, ILogger<ReleaseService> logger)
+public sealed partial class ReleaseService(
+    AideDbContext db, JobEnqueuer jobs, GitHubReleasePublisher publisher, Deployments.RolloutReader rollouts, TimeProvider time, ILogger<ReleaseService> logger)
 {
     /// <summary>
     /// FR-43 <c>POST /release</c>: <see cref="ReleaseRules.CanRetry"/> (<c>NOT_RELEASING</c>, <c>RELEASE_IN_PROGRESS</c>), then the
@@ -242,7 +275,59 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, T
             .ToListAsync(cancellationToken);
         var strategy = await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken);
         var production = await Deployments.DeploymentReader.ProductionByReleaseAsync(db, [.. releases.Select(r => r.Id)], cancellationToken);
-        return [.. releases.Select(r => ReleaseRecords.ToDto(r, strategy, production.GetValueOrDefault(r.Id)))];
+        var rolledOut = await rollouts.ForReleasesAsync(projectId, releases, cancellationToken);
+        var notMerged = await AppliedNotMergedAsync(releases, cancellationToken);
+        return [.. releases.Select(r => ReleaseRecords.ToDto(r, strategy, production.GetValueOrDefault(r.Id), rolledOut.GetValueOrDefault(r.Id), notMerged.Contains(r.Id)))];
+    }
+
+    /// <summary>
+    /// §4.21: the failed, unmerged releases where any production migration run applied migrations (not only the newest: a
+    /// re-run on a moved head can apply nothing new, or fail, after an earlier run applied files).
+    /// </summary>
+    private async Task<HashSet<Guid>> AppliedNotMergedAsync(IReadOnlyList<ReleaseEntity> releases, CancellationToken cancellationToken)
+    {
+        var releaseIds = releases.Where(r => r.Status == ReleaseStatus.Failed && r.MergeCommitSha is null && r.MigrationRunId is not null).Select(r => r.Id).ToList();
+        if (releaseIds.Count == 0)
+        {
+            return [];
+        }
+
+        var runs = await db.DatabaseMigrationRuns.AsNoTracking()
+            .Where(r => r.ReleaseId != null && releaseIds.Contains(r.ReleaseId.Value) && r.Environment == DeploymentEnvironment.Production)
+            .Select(r => new { r.ReleaseId, r.Applied })
+            .ToListAsync(cancellationToken);
+        return [.. runs.Where(r => r.Applied.Count > 0).Select(r => r.ReleaseId!.Value)];
+    }
+
+    /// <summary>
+    /// FR-140, D-V4-7: one release attempt's full notes: a succeeded Bitbucket release's (Bitbucket has no Releases; the tag's
+    /// message holds them), rebuilt from the version's locked spec, steps and review as when it was tagged; <c>null</c>
+    /// otherwise. <c>null</c> result: no such attempt in the project. Read on demand only (lists and latest stay cheap).
+    /// </summary>
+    public async Task<ReleaseNotesDto?> NotesAsync(Guid projectId, Guid releaseId, CancellationToken cancellationToken)
+    {
+        var release = await db.Releases.AsNoTracking().FirstOrDefaultAsync(r => r.Id == releaseId && r.ProjectId == projectId, cancellationToken);
+        if (release is null)
+        {
+            return null;
+        }
+
+        if (release.Status != ReleaseStatus.Succeeded)
+        {
+            return new ReleaseNotesDto(release.Id, null);
+        }
+
+        var git = await db.ProjectGitSettings.AsNoTracking()
+            .Where(s => s.ProjectId == release.ProjectId)
+            .Select(s => new { s.Provider, s.RepoUrl, s.RepoFullName })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (git?.Provider != GitProvider.Bitbucket)
+        {
+            return new ReleaseNotesDto(release.Id, null);
+        }
+
+        var webUrl = Domain.Projects.ProjectSettingsRules.RepoWebUrl(git.Provider, git.RepoUrl, git.RepoFullName);
+        return new ReleaseNotesDto(release.Id, await publisher.HostNotesAsync(release, git.Provider, webUrl, cancellationToken));
     }
 
     /// <summary>The latest release attempt, or <c>null</c> before the first release.</summary>
@@ -259,7 +344,10 @@ public sealed partial class ReleaseService(AideDbContext db, JobEnqueuer jobs, T
         }
 
         var production = await Deployments.DeploymentReader.ProductionByReleaseAsync(db, [release.Id], cancellationToken);
-        return ReleaseRecords.ToDto(release, await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken), production.GetValueOrDefault(release.Id));
+        var rolledOut = await rollouts.ForReleasesAsync(projectId, [release], cancellationToken);
+        var notMerged = await AppliedNotMergedAsync([release], cancellationToken);
+        return ReleaseRecords.ToDto(
+            release, await ReleaseRecords.MergeStrategyAsync(db, projectId, cancellationToken), production.GetValueOrDefault(release.Id), rolledOut.GetValueOrDefault(release.Id), notMerged.Contains(release.Id));
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: release at checkpoint {Checkpoint} retried (attempt {Attempt})")]

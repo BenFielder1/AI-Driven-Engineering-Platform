@@ -19,10 +19,18 @@ namespace Aide.Api.Features.Release;
 /// Failure codes include <c>MERGE_CONFLICT</c>, <c>TAG_EXISTS</c>, <c>GIT_ERROR</c>, <c>RELEASE_CANCELLED</c>,
 /// <c>GITHUB_RATE_LIMITED</c>, and while awaiting the merge <c>PR_CLOSED</c> (closed without merging) and
 /// <c>MERGE_TIMEOUT</c> (not merged within 14 days); after either the project stays in <c>release</c> and an Owner can
-/// retry with <c>POST /release</c>. <c>githubReleaseUrl</c> is the GitHub Release created for the tag (FR-64; <c>null</c>
-/// for Local or before it exists). <c>mergeStrategy</c> is the project's current merge strategy (FR-65).
+/// retry with <c>POST /release</c>. <c>githubReleaseUrl</c> is the host release created for the tag: the GitHub Release
+/// (FR-64), the GitLab Release, or the Bitbucket annotated tag's page (FR-140; Bitbucket has no Releases); <c>null</c> for
+/// Local or before it exists. AIDE's full release notes of a succeeded Bitbucket release (the tag's message, FR-140,
+/// D-V4-7) are read with <c>GET …/releases/{releaseId}/notes</c>. A GitLab merge refused because the
+/// merge request's head moved since review (409) fails with <c>GIT_ERROR</c>. <c>mergeStrategy</c> is the project's current merge strategy (FR-65).
 /// <c>productionDeployment</c> is the release's production deployment (FR-91: the newest for this release attempt, including
 /// redeploys; <c>null</c> when deployment isn't configured or not created yet). A failed one doesn't undo the release.
+/// FR-149: <c>rollout</c> is the release's production rollout timeline (migration run → backend → frontend with states and
+/// URLs; <c>null</c> before it is queued) and <c>liveOn</c> where it is live (ready components with their host and URL, for
+/// "Released 0.1.0 · live on Netlify and Render"). §4.21: <c>migrationRunId</c> is the Supabase BaaS production migration
+/// run (before the merge); <c>migrationsAppliedNotMerged</c> is true when it applied migrations but the release failed
+/// without merging (e.g. the PR was closed): the next version must keep those migration files.
 /// </summary>
 public sealed record ReleaseDto(
     Guid Id,
@@ -42,7 +50,18 @@ public sealed record ReleaseDto(
     DateTimeOffset? AwaitingMergeSince,
     IReadOnlyList<MergeReadinessReasonDto>? MergeReasons,
     MergeStrategy MergeStrategy,
-    Deployments.DeploymentDto? ProductionDeployment);
+    Deployments.DeploymentDto? ProductionDeployment,
+    Guid? MigrationRunId = null,
+    bool MigrationsAppliedNotMerged = false,
+    Deployments.RolloutDto? Rollout = null,
+    IReadOnlyList<Deployments.LiveTargetDto>? LiveOn = null);
+
+/// <summary>
+/// FR-140, D-V4-7: AIDE's full release notes of a release attempt, for a host without Releases (Bitbucket: the annotated
+/// tag's message), rebuilt from the version's locked spec, completed steps and latest review; <c>null</c> for other hosts
+/// or an attempt that hasn't succeeded.
+/// </summary>
+public sealed record ReleaseNotesDto(Guid ReleaseId, string? Notes);
 
 /// <summary>
 /// The latest release attempt in the project state (FR-42, FR-43, FR-64, FR-65): enough for the overview's release banner,

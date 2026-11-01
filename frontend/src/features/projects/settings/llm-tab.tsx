@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link } from '../../../lib/navigation'
 import { useState } from 'react'
-import { useForm, useWatch } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -12,24 +12,32 @@ import { buttonClasses } from '../../../components/ui/button-classes'
 import { fieldErrorSummary } from '../../../components/ui/form-errors'
 import { SelectField } from '../../../components/ui/select-field'
 import { ErrorState, LoadingState } from '../../../components/ui/states'
-import { TextField } from '../../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, isApiError } from '../../../lib/errors'
 import { bindingSummary, connectionLabel, credentialStatusLabels } from '../../connections/connection-format'
-import { keyedProviders, useLlmConnections, type LlmCredential } from '../../connections/connections-api'
+import { keyedProviders, useLlmConnections, useLlmProviders, type LlmCredential } from '../../connections/connections-api'
 import { CredentialStatusBadge } from '../../connections/credential-status-badge'
 import { agentKeys, agentLabels, llmProviderLabels } from '../labels'
+import { ModelPicker } from '../model-picker'
 import { useLlmSettings, useUpdateLlmSettings, type LlmSettings } from '../projects-api'
 import { limits } from '../schemas'
 
 type LlmProvider = Schemas['LlmProvider']
 type Binding = Schemas['LlmBindingDto']
 
-const isKeyed = (p: LlmProvider) => keyedProviders.some((k) => k === p)
+const isKeyed = (p: LlmProvider | '') => keyedProviders.some((k) => k === p)
+
+/** FR-157: the project's provider is turned off on this server (absent from `providers[]`). */
+const providerTurnedOff = (llm: LlmSettings) => !llm.providers.some((p) => p.provider === llm.provider)
+
+const TURNED_OFF = 'This provider is turned off on this server. Choose another provider.'
 
 const model = z.string().max(limits.modelMax, { error: `Model ids are at most ${String(limits.modelMax)} characters.` })
 
 const llmSchema = z.object({
-  provider: z.enum(['anthropic', 'openai', 'ollama', 'fake']),
+  /** '' when the project's provider is turned off on this server (FR-157): the Owner must choose another. */
+  provider: z
+    .enum(['anthropic', 'openai', 'ollama', 'fake', ''])
+    .refine((v) => v.length > 0, { error: 'Choose another provider: the current one is turned off on this server.' }),
   defaultModel: model.refine((v) => v.trim() !== '', { error: 'Enter the default model id.' }),
   ideaRefinement: model,
   specGenerator: model,
@@ -54,7 +62,7 @@ const fieldIds = {
 } as const
 
 const toValues = (s: LlmSettings): LlmValues => ({
-  provider: s.provider,
+  provider: providerTurnedOff(s) ? '' : s.provider,
   defaultModel: s.defaultModel,
   ideaRefinement: s.modelsByAgent.ideaRefinement ?? '',
   specGenerator: s.modelsByAgent.specGenerator ?? '',
@@ -116,6 +124,11 @@ function LlmReadOnly({ llm }: { llm: LlmSettings }) {
         LLM
       </h2>
       <p className="text-sm text-muted-foreground">Only project Owners can change the LLM settings or the bound connection.</p>
+      {providerTurnedOff(llm) && (
+        <Alert tone="warning" title="Provider turned off">
+          <p>{TURNED_OFF} Agent runs of this project fail until a project Owner does.</p>
+        </Alert>
+      )}
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
         <dt className="font-medium">Provider</dt>
         <dd>{llmProviderLabels[llm.provider]}</dd>
@@ -144,6 +157,9 @@ function LlmForm({ projectId, llm, canBind }: { projectId: string; llm: LlmSetti
   const update = useUpdateLlmSettings(projectId)
   const unbind = useUpdateLlmSettings(projectId)
   const connections = useLlmConnections(canBind)
+  // FR-158: the model catalogs (enabled providers only) for the model pickers.
+  const catalogs = useLlmProviders()
+  const turnedOff = providerTurnedOff(llm)
   const [serverErrors, setServerErrors] = useState<string[]>([])
   const {
     register,
@@ -158,7 +174,8 @@ function LlmForm({ projectId, llm, canBind }: { projectId: string; llm: LlmSetti
 
   const provider = useWatch({ control, name: 'provider' })
   const credentialId = useWatch({ control, name: 'credentialId' })
-  const statusOf = (p: LlmProvider) => llm.providers.find((s) => s.provider === p)
+  const statusOf = (p: LlmProvider | '') => llm.providers.find((s) => s.provider === p)
+  const catalogOf = (p: LlmProvider | '') => catalogs.data?.find((o) => o.provider === p)?.catalog ?? []
   const providerField = register('provider')
   const binding = llm.binding
 
@@ -176,6 +193,9 @@ function LlmForm({ projectId, llm, canBind }: { projectId: string; llm: LlmSetti
     for (const agent of agentKeys) {
       modelsByAgent[agent] = v[agent].trim() || null
     }
+    if (v.provider === '') {
+      return
+    }
     const body: Schemas['UpdateLlmSettingsRequest'] = {
       provider: v.provider,
       defaultModel: v.defaultModel.trim(),
@@ -192,6 +212,11 @@ function LlmForm({ projectId, llm, canBind }: { projectId: string; llm: LlmSetti
         toast.success('LLM settings saved.')
       },
       onError: (error) => {
+        if (isApiError(error, 'LLM_PROVIDER_UNAVAILABLE')) {
+          // FR-157: turned off since the page loaded (or not usable): choose another.
+          setError('provider', { type: 'server', message: errorMessage(error, 'llmBinding') })
+          return
+        }
         if (isApiError(error, 'CREDENTIAL_NOT_OWNER') || isApiError(error, 'NOT_FOUND')) {
           setError('credentialId', { type: 'server', message: errorMessage(error, 'llmBinding') })
           return
@@ -232,6 +257,14 @@ function LlmForm({ projectId, llm, canBind }: { projectId: string; llm: LlmSetti
         errors={[...serverErrors.map((message) => ({ message })), ...(isSubmitted ? fieldErrorSummary(errors, fieldIds) : [])]}
       />
       <div className="mt-2 flex flex-col gap-5">
+        {turnedOff && (
+          <Alert tone="warning" title="Provider turned off">
+            <p>
+              {TURNED_OFF} The project was set to {llmProviderLabels[llm.provider]}, so its agent runs fail until you save
+              another provider.
+            </p>
+          </Alert>
+        )}
         <SelectField
           id={fieldIds.provider}
           label="Provider"
@@ -243,11 +276,17 @@ function LlmForm({ projectId, llm, canBind }: { projectId: string; llm: LlmSetti
             void providerField.onChange(e)
             const next = statusOf(getValues('provider'))
             const modelNow = getValues('defaultModel').trim()
-            if (next && (modelNow === '' || modelNow === previous?.defaultModel)) {
+            // A turned-off provider's model doesn't carry over (FR-157).
+            if (next && (turnedOff || modelNow === '' || modelNow === previous?.defaultModel)) {
               setValue('defaultModel', next.defaultModel)
             }
           }}
         >
+          {provider === '' && (
+            <option value="" disabled>
+              Choose a provider
+            </option>
+          )}
           {llm.providers.map((p) => (
             <option key={p.provider} value={p.provider}>
               {llmProviderLabels[p.provider]}
@@ -258,7 +297,9 @@ function LlmForm({ projectId, llm, canBind }: { projectId: string; llm: LlmSetti
         <fieldset className="flex flex-col gap-3 rounded-lg border border-border/60 p-4">
           <legend className="px-1 text-sm font-medium">Connection</legend>
           {binding && <BindingSummary binding={binding} />}
-          {!isKeyed(provider) ? (
+          {provider === '' ? (
+            <p className="text-sm text-muted-foreground">Choose a provider first.</p>
+          ) : !isKeyed(provider) ? (
             <p className="text-sm text-muted-foreground">{llmProviderLabels[provider]} needs no key.</p>
           ) : canBind ? (
             <>
@@ -309,33 +350,61 @@ function LlmForm({ projectId, llm, canBind }: { projectId: string; llm: LlmSetti
           ) : (
             <p className="text-sm text-muted-foreground">Only project Owners can bind or unbind a connection.</p>
           )}
-          {isKeyed(provider) && <KeyWarning llm={llm} provider={provider} binding={binding} />}
+          {provider !== '' && isKeyed(provider) && <KeyWarning llm={llm} provider={provider} binding={binding} />}
         </fieldset>
 
-        <TextField
-          id={fieldIds.defaultModel}
-          label="Default model"
-          hint={current ? `The system default for ${llmProviderLabels[current.provider]} is ${current.defaultModel}.` : undefined}
-          maxLength={limits.modelMax}
-          autoComplete="off"
-          error={errors.defaultModel?.message}
-          {...register('defaultModel')}
-        />
-        <fieldset className="flex flex-col gap-3 rounded-lg border border-border/60 p-4">
-          <legend className="px-1 text-sm font-medium">Model per agent (optional)</legend>
-          <p className="text-sm text-muted-foreground">Leave a field empty to use the default model.</p>
-          {agentKeys.map((agent) => (
-            <TextField
-              key={agent}
-              id={fieldIds[agent]}
-              label={agentLabels[agent]}
-              maxLength={limits.modelMax}
-              autoComplete="off"
-              error={errors[agent]?.message}
-              {...register(agent)}
+        {catalogs.isPending ? (
+          <LoadingState label="Loading the model catalog…" />
+        ) : (
+          <>
+            {catalogs.isError && (
+              <p className="text-sm text-muted-foreground">The model catalog couldn&apos;t load, so enter model ids.</p>
+            )}
+            {/* FR-159: the catalog picker (with max output tokens) plus "Other model id"; keyed by provider so it resets. */}
+            <Controller
+              key={`default-${provider}`}
+              control={control}
+              name="defaultModel"
+              render={({ field }) => (
+                <ModelPicker
+                  ref={field.ref}
+                  id={fieldIds.defaultModel}
+                  label="Default model"
+                  hint={current ? `The system default for ${llmProviderLabels[current.provider]} is ${current.defaultModel}.` : undefined}
+                  catalog={catalogOf(provider)}
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  error={errors.defaultModel?.message}
+                />
+              )}
             />
-          ))}
-        </fieldset>
+            <fieldset className="flex flex-col gap-3 rounded-lg border border-border/60 p-4">
+              <legend className="px-1 text-sm font-medium">Model per agent (optional)</legend>
+              <p className="text-sm text-muted-foreground">Each agent uses the default model unless you pick another.</p>
+              {agentKeys.map((agent) => (
+                <Controller
+                  key={`${agent}-${provider}`}
+                  control={control}
+                  name={agent}
+                  render={({ field }) => (
+                    <ModelPicker
+                      ref={field.ref}
+                      id={fieldIds[agent]}
+                      label={agentLabels[agent]}
+                      catalog={catalogOf(provider)}
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      error={errors[agent]?.message}
+                      emptyLabel="Use the default model"
+                    />
+                  )}
+                />
+              ))}
+            </fieldset>
+          </>
+        )}
       </div>
       <div className="mt-6">
         <Button type="submit" pending={update.isPending} pendingLabel="Saving…">

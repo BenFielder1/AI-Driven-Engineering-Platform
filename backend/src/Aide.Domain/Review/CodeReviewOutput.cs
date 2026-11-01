@@ -37,7 +37,7 @@ public sealed record CodeReviewResult(
 /// FR-38: reads the Code Review agent's JSON reply. Every one of the six categories needs a score from 0 to 1; violations
 /// and drift areas need a known category/severity; the optimisation plan follows the implementation plan rules
 /// (<see cref="PlanValidator"/> with the project's max files per step, no protected paths — an agent may not declare them,
-/// §4.6; with a preset, the <c>agents</c> of <see cref="PlanAgents.ForOptimization"/>, FR-76) and must render to a
+/// §4.6; with a composition, the <c>agents</c> of <see cref="PlanAgents.ForStackOptimization"/>, FR-124) and must render to a
 /// document that reads back to the same steps. An unreadable reply is <c>INVALID_OUTPUT</c>; a
 /// readable reply with an invalid plan is <c>INVALID_PLAN</c>. Either way every reason is in <see cref="DomainError.Details"/>
 /// so the one corrective re-run can fix them all.

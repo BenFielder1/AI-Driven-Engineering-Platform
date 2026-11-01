@@ -1,0 +1,621 @@
+using System.Text;
+using System.Text.RegularExpressions;
+using Aide.Domain.Common;
+using Aide.Domain.Entities;
+using Aide.Domain.Stack;
+
+namespace Aide.Domain.Deployments;
+
+/// <summary>A target as the §4.22 derivation sees it: its component, provider, resource name and URLs.</summary>
+public sealed record DerivedEnvTarget(DeploymentComponent Component, DeploymentProvider Provider, string? Name, string? ProductionUrl, string? PreviewUrl);
+
+/// <summary>
+/// An available database as the §4.22 derivation sees it (FR-152, FR-153): its environment, provider and endpoints.
+/// <see cref="Url"/> is what apps use (Render internal, Railway reference, External, Fake; Supabase: the session pooler
+/// <c>:5432</c>); <see cref="TransactionUrl"/> the Supabase transaction pooler <c>:6543</c>; the Supabase project URL and keys.
+/// </summary>
+public sealed record DerivedEnvDatabase(
+    DeploymentEnvironment Environment,
+    ManagedDatabaseProvider Provider,
+    string? Url,
+    string? TransactionUrl = null,
+    string? SupabaseUrl = null,
+    string? PublishableKey = null,
+    string? SecretKey = null)
+{
+    /// <summary>Never prints the URLs or keys (they hold passwords and the secret key).</summary>
+    public override string ToString() => $"DerivedEnvDatabase {{ Environment = {Environment}, Provider = {Provider} }}";
+}
+
+/// <summary>
+/// The resolved stack's facts the database rows need (§4.22): the app runs on a serverless host in host mode (its host
+/// pack declares <c>AIDE_RUN_MIGRATIONS</c>), the data pack's <c>migrate.needsDirectUrl</c>, and whether the pack rule asks
+/// for the server-side Supabase keys (<c>SUPABASE_SECRET_KEY</c> is required: BaaS with Next.js full-stack).
+/// </summary>
+public sealed record DerivedEnvDatabaseFacts(bool Serverless, bool NeedsDirectUrl, bool SupabaseServerKeys)
+{
+    public static DerivedEnvDatabaseFacts None { get; } = new(false, false, false);
+}
+
+/// <summary>
+/// The inputs of <see cref="DerivedEnvRules.Derive"/>: the composition, the frontend pack's public prefix
+/// (<c>NEXT_PUBLIC_</c>, <c>VITE_</c>, or <c>null</c> for Angular), the targets, the available databases and the stack facts.
+/// </summary>
+public sealed record DerivedEnvInput(
+    StackComposition? Composition,
+    string? PublicPrefix,
+    IReadOnlyList<DerivedEnvTarget> Targets,
+    IReadOnlyList<DerivedEnvDatabase> Databases,
+    DerivedEnvDatabaseFacts? DatabaseFacts = null);
+
+/// <summary>
+/// A variable AIDE derives (§4.22): key, the components it applies to, its value per environment (only the environments
+/// whose source is known; empty while the backend has no URL yet), whether it is public or sensitive, and where it comes from.
+/// </summary>
+public sealed record DerivedEnvVar(
+    string Key,
+    IReadOnlyList<DeploymentComponent> AppliesTo,
+    IReadOnlyDictionary<DeploymentEnvironment, string> Values,
+    bool Public,
+    bool Sensitive,
+    string DerivedFrom);
+
+/// <summary>
+/// FR-145, FR-146, §4.22: the derived environment variables, a pure function of the composition, the targets and (from M30)
+/// the databases:
+/// <list type="bullet">
+/// <item><c>API_ORIGIN</c> (frontend): origin model <c>proxy</c>, or <c>same-origin</c> with frontend and backend both on
+/// Railway (the SPA container's proxy target) — the backend URL per environment.</item>
+/// <item><c>&lt;prefix&gt;API_BASE_URL</c> (frontend, public; <c>VITE_API_BASE_URL</c>, <c>NEXT_PUBLIC_API_BASE_URL</c>, Angular
+/// <c>API_BASE_URL</c>): <c>cross-origin</c> — the backend URL per environment.</item>
+/// <item><c>BACKEND_URL</c> (frontend, server-side): <c>fe-nextjs</c> in ui mode — the backend URL per environment.</item>
+/// <item><c>CORS_ALLOWED_ORIGINS</c> (backend): <c>cross-origin</c> — production: the frontend's production URL; preview: the
+/// frontend's preview URL and its host's preview URL pattern.</item>
+/// </list>
+/// Recomputed whenever a target URL (or, from M30, a database) changes.
+/// </summary>
+public static class DerivedEnvRules
+{
+    public const string ApiOrigin = "API_ORIGIN";
+    public const string ApiBaseUrl = "API_BASE_URL";
+    public const string BackendUrl = "BACKEND_URL";
+    public const string CorsAllowedOrigins = "CORS_ALLOWED_ORIGINS";
+    public const string DatabaseUrl = "DATABASE_URL";
+    public const string DirectUrl = "DIRECT_URL";
+    public const string RunMigrations = "AIDE_RUN_MIGRATIONS";
+    public const string SupabaseUrl = "SUPABASE_URL";
+    public const string SupabasePublishableKey = "SUPABASE_PUBLISHABLE_KEY";
+    public const string SupabaseSecretKey = "SUPABASE_SECRET_KEY";
+
+    private static readonly DeploymentComponent[] FrontendOnly = [DeploymentComponent.Frontend];
+    private static readonly DeploymentComponent[] BackendOnly = [DeploymentComponent.Backend];
+
+    public static IReadOnlyList<DerivedEnvVar> Derive(DerivedEnvInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var composition = input.Composition;
+        var list = new List<DerivedEnvVar>();
+        if (composition is null)
+        {
+            return list;
+        }
+
+        var frontend = input.Targets.FirstOrDefault(t => t.Component == DeploymentComponent.Frontend);
+        var backend = input.Targets.FirstOrDefault(t => t.Component == DeploymentComponent.Backend);
+        if (composition.Frontend is not null && composition.Backend is not null)
+        {
+            var backendHost = DisplayHost(composition.Deploy.BackendHost, backend);
+            var backendUrls = Urls(backend);
+            var model = composition.OriginModel;
+            var railwaySameOrigin = model == OriginModels.SameOrigin
+                && composition.Deploy.FrontendHost == "deploy-railway" && composition.Deploy.BackendHost == "deploy-railway";
+            if (railwaySameOrigin && RailwayPrivateOrigin(backend?.Name) is { } privateOrigin)
+            {
+                // FR-146, §4.22: the SPA container proxies /api over Railway's private network; Railway resolves the reference
+                // in each environment (production, aide-preview), so one value serves both.
+                list.Add(new DerivedEnvVar(
+                    ApiOrigin,
+                    FrontendOnly,
+                    new Dictionary<DeploymentEnvironment, string> { [DeploymentEnvironment.Production] = privateOrigin, [DeploymentEnvironment.Preview] = privateOrigin },
+                    Public: false,
+                    Sensitive: false,
+                    $"backend private network ({backendHost})"));
+            }
+            else if (model == OriginModels.Proxy || railwaySameOrigin)
+            {
+                list.Add(new DerivedEnvVar(ApiOrigin, FrontendOnly, backendUrls, Public: false, Sensitive: false, $"backend target URL ({backendHost})"));
+            }
+
+            if (model == OriginModels.CrossOrigin)
+            {
+                list.Add(new DerivedEnvVar(
+                    $"{input.PublicPrefix}{ApiBaseUrl}", FrontendOnly, backendUrls, Public: true, Sensitive: false, $"backend target URL ({backendHost})"));
+                list.Add(new DerivedEnvVar(
+                    CorsAllowedOrigins, BackendOnly, CorsOrigins(frontend), Public: false, Sensitive: false,
+                    $"frontend target URLs ({DisplayHost(composition.Deploy.FrontendHost, frontend)})"));
+            }
+
+            if (composition.Derived.NextjsMode == StackIds.Ui)
+            {
+                list.Add(new DerivedEnvVar(BackendUrl, FrontendOnly, backendUrls, Public: false, Sensitive: false, $"backend target URL ({backendHost})"));
+            }
+        }
+
+        DeriveDatabaseRows(input, composition, list);
+        return [.. list.OrderBy(v => v.Key, StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// FR-145, FR-152–FR-154, §4.22: the database rows. Preview falls back to the production database when it has none of its
+    /// own (FR-154: "preview uses the production database"), except for <c>AIDE_RUN_MIGRATIONS</c>, which is <c>true</c> only
+    /// where the environment has its own database.
+    /// <list type="bullet">
+    /// <item>Host mode (an ORM data pack, the app is the backend or the Next.js full-stack app): <c>DATABASE_URL</c> (Supabase:
+    /// transaction pooler with <c>pgbouncer=true</c> for Prisma on serverless hosts, session pooler otherwise),
+    /// <c>DIRECT_URL</c> when the pack needs it (Prisma; Drizzle on serverless): the session pooler or the same URL, and
+    /// <c>AIDE_RUN_MIGRATIONS</c> on serverless hosts.</item>
+    /// <item>Supabase BaaS: <c>&lt;prefix&gt;SUPABASE_URL</c> and <c>&lt;prefix&gt;SUPABASE_PUBLISHABLE_KEY</c> (public,
+    /// frontend), and, when the pack rule asks, the server-only <c>SUPABASE_URL</c> and sensitive <c>SUPABASE_SECRET_KEY</c>.</item>
+    /// </list>
+    /// </summary>
+    private static void DeriveDatabaseRows(DerivedEnvInput input, StackComposition composition, List<DerivedEnvVar> list)
+    {
+        var facts = input.DatabaseFacts ?? DerivedEnvDatabaseFacts.None;
+        var own = input.Databases.Where(d => d.Url is not null || d.SupabaseUrl is not null).GroupBy(d => d.Environment).ToDictionary(g => g.Key, g => g.First());
+        var effective = new Dictionary<DeploymentEnvironment, DerivedEnvDatabase>();
+        if (own.TryGetValue(DeploymentEnvironment.Production, out var production))
+        {
+            effective[DeploymentEnvironment.Production] = production;
+        }
+
+        if (own.TryGetValue(DeploymentEnvironment.Preview, out var preview) || production is not null)
+        {
+            effective[DeploymentEnvironment.Preview] = preview ?? production!;
+        }
+
+        string Source(DeploymentEnvironment e) => effective.TryGetValue(e, out var d) ? Databases.ManagedDatabaseRules.DisplayName(d.Provider) : "database";
+        var from = effective.Count == 0 ? "database" : string.Join(", ", effective.Values.Select(d => Databases.ManagedDatabaseRules.DisplayName(d.Provider)).Distinct());
+        var baas = composition.Data?.Pack == StackIds.Supabase;
+        IReadOnlyList<DeploymentComponent>? app = composition.Backend is not null ? BackendOnly
+            : composition.Derived.NextjsMode == StackIds.FullStack ? FrontendOnly
+            : null;
+        if (!baas && composition.Data is not null && app is not null)
+        {
+            var prisma = composition.Data.Pack == "data-prisma";
+            var urls = Values(effective, d => d.Provider == ManagedDatabaseProvider.Supabase && facts.Serverless && d.TransactionUrl is { } tx
+                ? (prisma ? Databases.ManagedDatabaseRules.WithPgbouncer(tx) : tx)
+                : d.Url);
+            if (urls.Count > 0)
+            {
+                var guidance = facts.Serverless && effective.Values.Any(d => d.Provider == ManagedDatabaseProvider.Supabase)
+                    ? " (transaction pooler :6543, prepared statements off)" : string.Empty;
+                list.Add(new DerivedEnvVar(DatabaseUrl, app, urls, Public: false, Sensitive: true, $"managed database ({from}){guidance}"));
+            }
+
+            var needsDirect = facts.NeedsDirectUrl || (facts.Serverless && composition.Data.Pack == "data-drizzle");
+            var direct = Values(effective, d => d.Url);
+            if (needsDirect && direct.Count > 0)
+            {
+                list.Add(new DerivedEnvVar(DirectUrl, app, direct, Public: false, Sensitive: true, $"managed database ({from}, session connection for migrations)"));
+            }
+
+            if (facts.Serverless)
+            {
+                var run = new Dictionary<DeploymentEnvironment, string>
+                {
+                    [DeploymentEnvironment.Production] = own.ContainsKey(DeploymentEnvironment.Production) ? "true" : "false",
+                    [DeploymentEnvironment.Preview] = own.ContainsKey(DeploymentEnvironment.Preview) ? "true" : "false",
+                };
+                list.Add(new DerivedEnvVar(RunMigrations, app, run, Public: false, Sensitive: false, "environments with their own database (D-V4-13)"));
+            }
+        }
+
+        if (baas && composition.Frontend is not null)
+        {
+            var projectUrls = Values(effective, d => d.SupabaseUrl);
+            var publishable = Values(effective, d => d.PublishableKey);
+            if (projectUrls.Count > 0)
+            {
+                list.Add(new DerivedEnvVar($"{input.PublicPrefix}{SupabaseUrl}", FrontendOnly, projectUrls, Public: true, Sensitive: false, $"Supabase project ({Source(DeploymentEnvironment.Production)})"));
+            }
+
+            if (publishable.Count > 0)
+            {
+                list.Add(new DerivedEnvVar($"{input.PublicPrefix}{SupabasePublishableKey}", FrontendOnly, publishable, Public: true, Sensitive: false, "Supabase publishable key"));
+            }
+
+            // Server-side keys go to server code only: the backend, else a Next.js full-stack frontend; never a static SPA host.
+            if (facts.SupabaseServerKeys && app is { } server)
+            {
+                // §4.22 Known-issue fix: the server code reads the unprefixed SUPABASE_URL (unless that is the public key already).
+                if (!string.IsNullOrEmpty(input.PublicPrefix) && projectUrls.Count > 0)
+                {
+                    list.Add(new DerivedEnvVar(SupabaseUrl, server, projectUrls, Public: false, Sensitive: false, "Supabase project (server code)"));
+                }
+
+                var secret = Values(effective, d => d.SecretKey);
+                if (secret.Count > 0)
+                {
+                    list.Add(new DerivedEnvVar(SupabaseSecretKey, server, secret, Public: false, Sensitive: true, "Supabase secret key (server code only)"));
+                }
+            }
+        }
+    }
+
+    private static Dictionary<DeploymentEnvironment, string> Values(
+        Dictionary<DeploymentEnvironment, DerivedEnvDatabase> databases, Func<DerivedEnvDatabase, string?> value)
+    {
+        var values = new Dictionary<DeploymentEnvironment, string>();
+        foreach (var (environment, database) in databases)
+        {
+            if (value(database) is { Length: > 0 } v)
+            {
+                values[environment] = v;
+            }
+        }
+
+        return values;
+    }
+
+    /// <summary>
+    /// FR-146: the backend's origin on Railway's private network as a Railway reference variable,
+    /// <c>http://${{&lt;service&gt;.RAILWAY_PRIVATE_DOMAIN}}:${{&lt;service&gt;.PORT}}</c> (AIDE sets <c>PORT</c> on a backend
+    /// service it creates); <c>null</c> without a service name (the public URLs are used then).
+    /// </summary>
+    public static string? RailwayPrivateOrigin(string? backendServiceName) =>
+        string.IsNullOrWhiteSpace(backendServiceName) ? null
+        : $"http://${{{{{backendServiceName}.RAILWAY_PRIVATE_DOMAIN}}}}:${{{{{backendServiceName}.PORT}}}}";
+
+    /// <summary>The keys AIDE derives for <paramref name="input"/> (an Owner can't set them, §4.22).</summary>
+    public static IReadOnlySet<string> DerivedKeys(DerivedEnvInput input) =>
+        Derive(input).Select(v => v.Key).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The preview URL pattern of a frontend host (for <c>CORS_ALLOWED_ORIGINS</c>): Vercel <c>https://&lt;name&gt;-*.vercel.app</c>,
+    /// Netlify <c>https://*--&lt;name&gt;.netlify.app</c>, Cloudflare <c>https://*-&lt;name&gt;.*.workers.dev</c>; <c>null</c> where
+    /// previews have one stable URL (Render, Railway) or don't exist (GitHub Pages), or the name isn't known.
+    /// </summary>
+    public static string? PreviewPattern(DeploymentProvider provider, string? name) => string.IsNullOrEmpty(name) ? null : provider switch
+    {
+        DeploymentProvider.Vercel => $"https://{name}-*.vercel.app",
+        DeploymentProvider.Netlify => $"https://*--{name}.netlify.app",
+        DeploymentProvider.Cloudflare => $"https://*-{name}.*.workers.dev",
+        _ => null,
+    };
+
+    private static Dictionary<DeploymentEnvironment, string> Urls(DerivedEnvTarget? target)
+    {
+        var values = new Dictionary<DeploymentEnvironment, string>();
+        if (Origin(target?.ProductionUrl) is { } production)
+        {
+            values[DeploymentEnvironment.Production] = production;
+        }
+
+        if (Origin(target?.PreviewUrl) is { } preview)
+        {
+            values[DeploymentEnvironment.Preview] = preview;
+        }
+
+        return values;
+    }
+
+    private static Dictionary<DeploymentEnvironment, string> CorsOrigins(DerivedEnvTarget? frontend)
+    {
+        var values = new Dictionary<DeploymentEnvironment, string>();
+        if (frontend is null)
+        {
+            return values;
+        }
+
+        if (Origin(frontend.ProductionUrl) is { } production)
+        {
+            values[DeploymentEnvironment.Production] = production;
+        }
+
+        var preview = new[] { Origin(frontend.PreviewUrl), PreviewPattern(frontend.Provider, frontend.Name) }.OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+        if (preview.Count > 0)
+        {
+            values[DeploymentEnvironment.Preview] = string.Join(',', preview);
+        }
+
+        return values;
+    }
+
+    /// <summary>A URL's origin (<c>https://host[:port]</c>, no path or trailing slash); <c>null</c> when it isn't an absolute http(s) URL.</summary>
+    public static string? Origin(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)
+            ? uri.GetLeftPart(UriPartial.Authority)
+            : null;
+
+    private static string DisplayHost(string? hostOption, DerivedEnvTarget? target) =>
+        target is not null ? DeploymentPlatforms.DisplayName(target.Provider)
+        : DeploymentPlatforms.FromHostOption(hostOption) is { } provider ? DeploymentPlatforms.DisplayName(provider)
+        : "not deployed";
+}
+
+/// <summary>A user variable as the inventory sees it (no value).</summary>
+public sealed record EnvUserVar(
+    string Key,
+    IReadOnlyList<DeploymentComponent> AppliesTo,
+    IReadOnlyList<DeploymentEnvironment> Environments,
+    bool Sensitive,
+    bool Public,
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset? SyncedAt,
+    string? SyncError);
+
+/// <summary>The sync state of a stored derived variable.</summary>
+public sealed record EnvSyncState(DateTimeOffset UpdatedAt, DateTimeOffset? SyncedAt, string? SyncError);
+
+/// <summary>
+/// One row of the FR-145 environment inventory: <see cref="Source"/> <c>user</c> (an Owner's, value encrypted),
+/// <c>derived</c> (AIDE's, read-only, with <see cref="DerivedFrom"/>) or <c>required</c> (a pack's required variable that has
+/// no value). <see cref="HasValue"/> is false for required rows and for derived rows whose source has no URL yet.
+/// </summary>
+public sealed record EnvInventoryRow(
+    string Key,
+    IReadOnlyList<DeploymentComponent> AppliesTo,
+    IReadOnlyList<DeploymentEnvironment> Environments,
+    bool Sensitive,
+    bool Public,
+    DeploymentEnvSource Source,
+    string? DerivedFrom,
+    string? Description,
+    bool HasValue,
+    DateTimeOffset? UpdatedAt,
+    DateTimeOffset? SyncedAt,
+    string? SyncError);
+
+/// <summary>
+/// FR-145, §4.18, §4.22: the environment inventory and the rules for user variables. Pure.
+/// <list type="bullet">
+/// <item>Rows: derived variables first claim their keys, then user variables, then the packs' required variables that have
+/// neither (flagged <c>required</c>), ordered by key.</item>
+/// <item>A user variable can't use a derived key, and a public one (by flag or by the frontend's public prefix) can't look
+/// secret: see <see cref="LooksSecret"/> (§4.18 secret patterns, §8).</item>
+/// </list>
+/// </summary>
+public static partial class EnvInventoryRules
+{
+    public const string PublicSecretMessage = "secret values can't be public";
+
+    private static readonly string[] PublicPrefixes = ["NEXT_PUBLIC_", "VITE_"];
+
+    public static IReadOnlyList<EnvInventoryRow> Build(
+        IReadOnlyList<DerivedEnvVar> derived,
+        IReadOnlyDictionary<string, EnvSyncState> derivedSync,
+        IReadOnlyList<EnvUserVar> users,
+        IReadOnlyList<StackEnvVar> required)
+    {
+        ArgumentNullException.ThrowIfNull(derived);
+        ArgumentNullException.ThrowIfNull(derivedSync);
+        ArgumentNullException.ThrowIfNull(users);
+        ArgumentNullException.ThrowIfNull(required);
+        var rows = new Dictionary<string, EnvInventoryRow>(StringComparer.Ordinal);
+        foreach (var d in derived)
+        {
+            var sync = derivedSync.GetValueOrDefault(d.Key);
+            rows[d.Key] = new EnvInventoryRow(
+                d.Key, d.AppliesTo, [.. d.Values.Keys.Order()], d.Sensitive, d.Public, DeploymentEnvSource.Derived, d.DerivedFrom,
+                Description: null, HasValue: d.Values.Count > 0, sync?.UpdatedAt, sync?.SyncedAt, sync?.SyncError);
+        }
+
+        foreach (var u in users.Where(u => !rows.ContainsKey(u.Key)))
+        {
+            rows[u.Key] = new EnvInventoryRow(
+                u.Key, u.AppliesTo, u.Environments, u.Sensitive, u.Public, DeploymentEnvSource.User, null, null, HasValue: true, u.UpdatedAt, u.SyncedAt, u.SyncError);
+        }
+
+        foreach (var r in required.Where(r => !rows.ContainsKey(r.Key)))
+        {
+            rows[r.Key] = new EnvInventoryRow(
+                r.Key,
+                [.. r.AppliesTo.Select(a => EnumStrings.TryParse<DeploymentComponent>(a, out var c) ? (DeploymentComponent?)c : null).OfType<DeploymentComponent>().Distinct()],
+                [.. r.Targets.Select(t => EnumStrings.TryParse<DeploymentEnvironment>(t, out var e) ? (DeploymentEnvironment?)e : null).OfType<DeploymentEnvironment>().Distinct().Order()],
+                r.Sensitive,
+                r.Public,
+                DeploymentEnvSource.Required,
+                null,
+                r.Description,
+                HasValue: false,
+                null,
+                null,
+                null);
+        }
+
+        return [.. rows.Values.OrderBy(r => r.Key, StringComparer.Ordinal)];
+    }
+
+    /// <summary>The required keys without a value (the readiness checklist's "required env vars").</summary>
+    public static IReadOnlyList<string> MissingRequired(IReadOnlyList<EnvInventoryRow> rows, DeploymentComponent component)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        return [.. rows.Where(r => !r.HasValue && (r.AppliesTo.Count == 0 || r.AppliesTo.Contains(component)) && r.Source != DeploymentEnvSource.User).Select(r => r.Key)];
+    }
+
+    /// <summary>Whether a key starts with a public prefix (<c>NEXT_PUBLIC_</c>, <c>VITE_</c>, or the frontend pack's).</summary>
+    public static bool HasPublicPrefix(string key, string? publicPrefix)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return PublicPrefixes.Any(p => key.StartsWith(p, StringComparison.Ordinal))
+            || (!string.IsNullOrEmpty(publicPrefix) && key.StartsWith(publicPrefix, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §4.18 secret patterns, §8: the key names a secret or a database URL (<c>SECRET</c>, <c>SERVICE_ROLE</c>, <c>PRIVATE</c>,
+    /// <c>PASSWORD</c>, <c>VITE_DB_URL</c>, <c>CONNECTION_STRING</c>), or the value holds a secret key, a database connection
+    /// URI, an ADO-style connection string with a password, or a JWT whose payload has the role <c>service_role</c>. A JWT
+    /// with another role (Supabase's legacy anon key) is public by design.
+    /// </summary>
+    public static bool LooksSecret(string key, string? value)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return SecretKeyPattern().IsMatch(key)
+            || (value is not null
+                && (SecretValuePattern().IsMatch(value)
+                    || DatabaseUriPattern().IsMatch(value)
+                    || AdoPasswordPattern().IsMatch(value)
+                    || HoldsServiceRoleJwt(value)));
+    }
+
+    /// <summary>A legacy Supabase key is base64url, so the literal <c>service_role</c> never appears: its payload has to be decoded.</summary>
+    private static bool HoldsServiceRoleJwt(string value)
+    {
+        foreach (Match match in JwtPattern().Matches(value))
+        {
+            if (string.Equals(JwtRole(match.Groups["payload"].Value), "service_role", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The <c>role</c> claim of a base64url JWT payload; <c>null</c> when it isn't readable JSON or has none.</summary>
+    private static string? JwtRole(string payload)
+    {
+        var base64 = payload.Replace('-', '+').Replace('_', '/');
+        base64 = base64.PadRight(base64.Length + ((4 - (base64.Length % 4)) % 4), '=');
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(Convert.FromBase64String(base64));
+            return doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("role", out var role)
+                && role.ValueKind == System.Text.Json.JsonValueKind.String
+                ? role.GetString()
+                : null;
+        }
+        catch (Exception ex) when (ex is FormatException or System.Text.Json.JsonException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// FR-145: a user variable: the v2 checks (<see cref="DeploymentEnvRules.Validate"/>), components applied to (at least one,
+    /// each once), not a derived key, and not public while looking secret. <paramref name="isPublic"/> is the effective flag
+    /// (<see cref="IsPublic"/>).
+    /// </summary>
+    public static Result ValidateUser(
+        string? key,
+        string? value,
+        IReadOnlyCollection<DeploymentEnvironment>? targets,
+        IReadOnlyCollection<DeploymentComponent>? appliesTo,
+        bool isPublic,
+        IReadOnlySet<string> derivedKeys)
+    {
+        ArgumentNullException.ThrowIfNull(derivedKeys);
+        var problems = new List<string>();
+        var basic = DeploymentEnvRules.Validate(key, value, targets);
+        if (basic.IsFailure)
+        {
+            problems.AddRange(basic.Error!.Details);
+        }
+
+        if (appliesTo is not null && (appliesTo.Count == 0 || appliesTo.Distinct().Count() != appliesTo.Count))
+        {
+            problems.Add("appliesTo: Choose frontend, backend or both, each once.");
+        }
+
+        if (key is not null && derivedKeys.Contains(key))
+        {
+            problems.Add($"key: AIDE derives {key} from the deployment targets; it can't be set by hand.");
+        }
+
+        if (isPublic && key is not null && LooksSecret(key, value))
+        {
+            problems.Add($"public: {char.ToUpperInvariant(PublicSecretMessage[0])}{PublicSecretMessage[1..]}.");
+        }
+
+        if (isPublic && appliesTo is not null && !appliesTo.Contains(DeploymentComponent.Frontend))
+        {
+            problems.Add("appliesTo: A public variable reaches the browser, so it applies to the frontend.");
+        }
+
+        return ProjectRulesBridge.ToResult(problems, isPublic && key is not null && LooksSecret(key, value)
+            ? $"The environment variable is invalid: {PublicSecretMessage}."
+            : "The environment variable is invalid.");
+    }
+
+    /// <summary>The effective public flag: as sent, or (not sent) whether the key has a public prefix. A prefixed key is always public.</summary>
+    public static bool IsPublic(string key, bool? requested, string? publicPrefix) =>
+        HasPublicPrefix(key, publicPrefix) || (requested ?? false);
+
+    [GeneratedRegex(
+        @"SECRET|SERVICE_?ROLE|PRIVATE|PASSWORD|CONNECTION_?STRING|(^|_)(DATABASE|DB|DIRECT|POSTGRES|POSTGRESQL|PG|MYSQL|MARIADB|MONGO|MONGODB|REDIS|MSSQL|SQLSERVER)_(URL|URI|DSN)$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        matchTimeoutMilliseconds: 1000)]
+    private static partial Regex SecretKeyPattern();
+
+    [GeneratedRegex(@"sb_secret_|sk_live|PRIVATE KEY-----|service_role", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex SecretValuePattern();
+
+    /// <summary>A connection URI of a database scheme, also inside <c>jdbc:…</c>; not <c>https://postgres.example.com</c> or the bare word.</summary>
+    [GeneratedRegex(
+        @"(?<![A-Za-z0-9+.\-])(postgres|postgresql|pgsql|mysql|mysql2|mariadb|mongodb|mongodb\+srv|redis|rediss|sqlserver|mssql|oracle|cockroachdb|sqlite|clickhouse|cassandra|couchdb|neo4j)://",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        matchTimeoutMilliseconds: 1000)]
+    private static partial Regex DatabaseUriPattern();
+
+    /// <summary>An ADO-style <c>Key=value;</c> pair holding a password; not a <c>?password=</c> URL query.</summary>
+    [GeneratedRegex(@"(^|;)\s*(password|pwd)\s*=", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex AdoPasswordPattern();
+
+    [GeneratedRegex(@"(?<![A-Za-z0-9_\-])eyJ[A-Za-z0-9_\-]+\.(?<payload>[A-Za-z0-9_\-]+)\.[A-Za-z0-9_\-]*", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex JwtPattern();
+}
+
+/// <summary>Turns collected <c>field: message</c> problems into a <c>VALIDATION</c> result (as <c>ProjectRules</c>).</summary>
+internal static class ProjectRulesBridge
+{
+    public static Result ToResult(List<string> problems, string title) => Projects.ProjectRules.ToResult(problems, title);
+}
+
+/// <summary>
+/// §4.22 storage of a derived variable's per-environment values in <c>deployment_env_vars.value_encrypted</c> (one row per
+/// key, unique (project, key)): a small JSON object <c>{"preview": …, "production": …}</c>, encrypted like any value. Pure.
+/// </summary>
+public static class DerivedEnvValues
+{
+    public static string Serialize(IReadOnlyDictionary<DeploymentEnvironment, string> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        var sb = new StringBuilder("{");
+        var first = true;
+        foreach (var (environment, value) in values.OrderBy(v => v.Key))
+        {
+            sb.Append(first ? string.Empty : ",").Append(System.Text.Json.JsonSerializer.Serialize(environment.ToWire())).Append(':').Append(System.Text.Json.JsonSerializer.Serialize(value));
+            first = false;
+        }
+
+        return sb.Append('}').ToString();
+    }
+
+    public static IReadOnlyDictionary<DeploymentEnvironment, string> Parse(string json)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        var values = new Dictionary<DeploymentEnvironment, string>();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+            {
+                return values;
+            }
+
+            foreach (var property in doc.RootElement.EnumerateObject())
+            {
+                if (EnumStrings.TryParse<DeploymentEnvironment>(property.Name, out var environment) && property.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    values[environment] = property.Value.GetString()!;
+                }
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+
+        return values;
+    }
+}

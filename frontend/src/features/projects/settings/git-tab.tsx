@@ -13,17 +13,19 @@ import { fieldErrorSummary } from '../../../components/ui/form-errors'
 import { SelectField } from '../../../components/ui/select-field'
 import { TextField } from '../../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, isApiError } from '../../../lib/errors'
+import { gitHostTerms } from '../../../lib/git-host'
 import { useSwitchGitToApp } from '../../github/github-api'
 import { GitHubErrorAlert, GitHubLink } from '../../github/github-error-alert'
-import { gitProviderLabels, mergeStrategyLabels } from '../labels'
+import { gitProviderLabels, mergeStrategyLabel } from '../labels'
 import { useTestGitConnection, useUpdateGitSettings, type GitSettings, type GitTestResult } from '../projects-api'
 import { checkBranch, checkRepoUrl, checkSecret, limits } from '../schemas'
+import { BindingAlert, BoundHostRows, isBoundHost, RebindConnection } from './git-binding'
 import { ReleaseSettingsForm } from './release-settings-form'
 import { SecretField, type SecretAction } from './secret-field'
 
 const gitSchema = z
   .object({
-    provider: z.enum(['github_app', 'github_pat', 'local']),
+    provider: z.enum(['github_app', 'github_pat', 'gitlab', 'bitbucket', 'local']),
     repoUrl: z.string(),
     defaultBranch: z.string(),
     token: z.string(),
@@ -66,7 +68,10 @@ function Row({ term, children }: { term: string; children: ReactNode }) {
   )
 }
 
-/** FR-83: which mode is in use, the repository, App access and the PAT flag (never a token). */
+/**
+ * FR-83: which mode is in use, the repository, App access and the PAT flag (never a token). FR-136: for GitLab and
+ * Bitbucket, the host instance, the repository link and the binding.
+ */
 function GitModeSummary({ git }: { git: GitSettings }) {
   const repo = git.mode === 'github_app' ? git.repoFullName : git.mode === 'github_pat' ? git.repoUrl : null
   return (
@@ -78,9 +83,13 @@ function GitModeSummary({ git }: { git: GitSettings }) {
         <Row term="Mode">
           <span data-testid="git-mode">{gitProviderLabels[git.mode]}</span>
         </Row>
-        <Row term="Repository">
-          {git.mode === 'local' ? 'AIDE-managed local repository' : (repo ?? 'Not set')}
-        </Row>
+        {isBoundHost(git) ? (
+          <BoundHostRows git={git} />
+        ) : (
+          <Row term="Repository">
+            {git.mode === 'local' ? 'AIDE-managed local repository' : (repo ?? 'Not set')}
+          </Row>
+        )}
         {git.mode === 'github_app' && (
           <Row term="GitHub App">
             <StatusBadge tone="success">Installed on the repository</StatusBadge>
@@ -106,7 +115,7 @@ function GitModeSummary({ git }: { git: GitSettings }) {
           </>
         )}
         <Row term="Merge strategy">
-          <span data-testid="git-merge-strategy">{mergeStrategyLabels[git.mergeStrategy]}</span>
+          <span data-testid="git-merge-strategy">{mergeStrategyLabel(git.mergeStrategy, gitHostTerms(git.mode))}</span>
         </Row>
         <Row term="Tag prefix">
           {git.tagPrefix ? <code className="font-mono">{git.tagPrefix}</code> : <span className="text-muted-foreground">None (bare version tags)</span>}
@@ -183,7 +192,9 @@ function SwitchToApp({ projectId, git }: { projectId: string; git: GitSettings }
 export function GitTab({ projectId, git }: { projectId: string; git: GitSettings }) {
   return (
     <div className="flex max-w-2xl flex-col gap-8">
+      {isBoundHost(git) && <BindingAlert git={git} />}
       <GitModeSummary git={git} />
+      <RebindConnection projectId={projectId} git={git} />
       <SwitchToApp projectId={projectId} git={git} />
       {/* Remount when the mode changes (Switch to GitHub App), so the form starts from the saved settings. */}
       <GitForm key={git.mode} projectId={projectId} git={git} />
@@ -209,6 +220,8 @@ function GitForm({ projectId, git }: { projectId: string; git: GitSettings }) {
 
   const provider = useWatch({ control, name: 'provider' })
   const isApp = git.mode === 'github_app'
+  /** GitLab/Bitbucket projects (FR-136) keep their host here; their binding and Rebind are above the form. */
+  const hostMode = git.mode === 'gitlab' || git.mode === 'bitbucket' ? git.mode : null
 
   const onSubmit = handleSubmit((v) => {
     setServerErrors([])
@@ -258,6 +271,7 @@ function GitForm({ projectId, git }: { projectId: string; git: GitSettings }) {
           {...register('provider')}
         >
           {isApp && <option value="github_app">{gitProviderLabels.github_app}</option>}
+          {hostMode && <option value={hostMode}>{gitProviderLabels[hostMode]}</option>}
           <option value="github_pat">{gitProviderLabels.github_pat}</option>
           <option value="local">{gitProviderLabels.local}</option>
         </SelectField>
@@ -266,6 +280,14 @@ function GitForm({ projectId, git }: { projectId: string; git: GitSettings }) {
             <p>
               The repository is <strong>{git.repoFullName}</strong>, picked when the project was created. AIDE accesses it
               through the GitHub App.
+            </p>
+          </Alert>
+        )}
+        {(provider === 'gitlab' || provider === 'bitbucket') && (
+          <Alert tone="info">
+            <p>
+              The repository is <strong>{git.repoFullName}</strong> on {gitProviderLabels[provider]}, picked when the project
+              was created.
             </p>
           </Alert>
         )}

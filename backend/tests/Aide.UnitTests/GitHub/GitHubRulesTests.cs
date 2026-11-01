@@ -26,7 +26,7 @@ public class GitHubRulesTests
         Assert.Equal(["database", "configuration"], EnumStrings.Values<GitHubAppSource>());
         Assert.Equal(["none", "oauth", "app"], EnumStrings.Values<GitHubSignInMode>());
         Assert.Equal(["all", "selected"], EnumStrings.Values<GitHubRepositorySelection>());
-        Assert.Equal(["github_pat", "local", "github_app"], EnumStrings.Values<GitProvider>());
+        Assert.Equal(["github_pat", "local", "github_app", "gitlab", "bitbucket"], EnumStrings.Values<GitProvider>()); // FR-136
     }
 
     // ---------------------------------------------------------------- FR-81 names

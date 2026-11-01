@@ -2,7 +2,9 @@ import { z } from 'zod'
 
 import { checkRootDirectory, checkVercelProjectName } from '../deployments/vercel-project-rules'
 import { checkNewVersion, DEFAULT_INITIAL_VERSION, normalizeVersion } from '../versions/semver'
-import { approvalModes } from './labels'
+import { approvalModes, type agentKeys } from './labels'
+import { hostFieldDefaults, hostFieldNames, type HostFieldName } from './wizard-host-fields'
+import { hostChecks } from './wizard-hosts'
 
 /**
  * Client-side validation mirroring the API's limits (backend ProjectLimits / ProjectDefaults). Numeric inputs are
@@ -132,112 +134,210 @@ export function releasedTagOf(v: Pick<WizardValues, 'releasedTag'>): string | nu
 
 export const localSourcePathMax = 1024
 
+/** FR-159: the wizard's per-agent model fields (flat, so the error summary and field ids stay one level). */
+export const wizardAgentModelFields = {
+  ideaRefinement: 'llmModelIdeaRefinement',
+  specGenerator: 'llmModelSpecGenerator',
+  planGenerator: 'llmModelPlanGenerator',
+  codeGenerator: 'llmModelCodeGenerator',
+  codeReview: 'llmModelCodeReview',
+} as const satisfies Record<(typeof agentKeys)[number], string>
+
+const modelTooLong = `Model ids are at most ${String(limits.modelMax)} characters.`
+
+/** The wizard's fields, without the cross-field refinement (also used to check a restored session-storage draft). */
+export const wizardShape = z.object({
+  /** FR-73: start from scratch, or import an existing repository. */
+  source: z.enum(['scratch', 'import']),
+  name: str,
+  idea: str,
+  approvalMode: z.enum(approvalModes),
+  complianceThreshold: str,
+  maxFilesPerStep: str,
+  maxReviewCycles: str,
+  tokenBudget: str,
+  /**
+   * FR-82, FR-86, FR-132, FR-135: `github_app` (picker / create), `github_pat` (URL + token), `gitlab` (picker / create),
+   * `bitbucket` (picker / create) or `local`.
+   */
+  gitMode: z.enum(['github_app', 'github_pat', 'gitlab', 'bitbucket', 'local']),
+  repoUrl: str,
+  defaultBranch: str,
+  gitToken: str,
+  /**
+   * `github_app`: the picked repository (`owner/name`) and the installation that grants it (a number, as text).
+   * `gitlab`: the picked project's full path (`group/sub/project`). `bitbucket`: the repository's `workspace/slug`.
+   */
+  repoFullName: str,
+  installationId: str,
+  /**
+   * FR-132, FR-136 `gitlab`: the caller's GitLab connection (bound to the project), its instance, and the picked
+   * project's GitLab id.
+   */
+  gitlabConnectionId: str,
+  gitlabInstanceId: str,
+  gitlabRepoId: str,
+  /** FR-135 `bitbucket`: the caller's Bitbucket connection, and the picked repository's Bitbucket UUID. */
+  bitbucketConnectionId: str,
+  bitbucketRepoId: str,
+  /** `github_app`: the picked repository already has commits (FR-86 warning). */
+  repoHasCode: z.boolean(),
+  initialVersion: str,
+  /** FR-73 import: the released tag (a tag name, NEVER_RELEASED, or '' typed as "never released"). */
+  releasedTag: str,
+  /** FR-73 import: the released tag's semver ('' when never released or not a version), kept in sync by the wizard. */
+  releasedVersion: str,
+  /** FR-73 import: the version to develop. */
+  developmentVersion: str,
+  /** FR-73 import with `local` (development only): the server path of the repository to import. */
+  localSourcePath: str,
+  /**
+   * FR-114 Stack step: "No stack (general)" or a composition from the five sub-steps (FR-129: presets are retired).
+   * The composition is one option id per choice ('' = not chosen yet) and the layer paths (FR-119).
+   */
+  stackKind: z.enum(['general', 'compose']),
+  stackFrontend: str,
+  stackBackend: str,
+  stackData: str,
+  stackVcs: str,
+  stackFrontendHost: str,
+  stackBackendHost: str,
+  stackDatabaseHost: str,
+  stackLocal: str,
+  stackOriginModel: str,
+  stackFrontendPath: str,
+  stackBackendPath: str,
+  /** FR-118: the identity of the import detection last applied to the stack fields ('' = none). */
+  stackDetection: str,
+  /** FR-88 Deployment step (optional): skip, or Vercel with one of the caller's own connections. */
+  deploymentMode: z.enum(['none', 'vercel']),
+  vercelConnectionId: str,
+  /** Create a new Vercel project (name, root directory) or link an existing one (id or name). */
+  vercelProjectMode: z.enum(['create', 'link']),
+  vercelProjectName: str,
+  vercelRootDirectory: str,
+  vercelProjectId: str,
+  /** §7 Deployment step of a composed stack: one set of flat fields per target and database (wizard-host-fields). */
+  ...(Object.fromEntries(hostFieldNames.map((name) => [name, str])) as Record<HostFieldName, typeof str>),
+  /** FR-159 AI model section: '' until a usable provider is chosen (an unusable one is never preselected). */
+  llmProvider: z.enum(['anthropic', 'openai', 'ollama', 'fake', '']),
+  /** One of the caller's own connections for the provider, or '' (system key, keyless, or none shown). */
+  llmCredentialId: str,
+  llmDefaultModel: str,
+  llmModelIdeaRefinement: str,
+  llmModelSpecGenerator: str,
+  llmModelPlanGenerator: str,
+  llmModelCodeGenerator: str,
+  llmModelCodeReview: str,
+})
+
 /** One loose object plus one refinement, so every field is checked together (per-step checks use RHF `trigger`). */
-export const wizardSchema = z
-  .object({
-    /** FR-73: start from scratch, or import an existing repository. */
-    source: z.enum(['scratch', 'import']),
-    name: str,
-    idea: str,
-    approvalMode: z.enum(approvalModes),
-    complianceThreshold: str,
-    maxFilesPerStep: str,
-    maxReviewCycles: str,
-    tokenBudget: str,
-    /** FR-82, FR-86: `github_app` (picker / create), `github_pat` (URL + token) or `local`. */
-    gitMode: z.enum(['github_app', 'github_pat', 'local']),
-    repoUrl: str,
-    defaultBranch: str,
-    gitToken: str,
-    /** `github_app`: the picked repository (`owner/name`) and the installation that grants it (a number, as text). */
-    repoFullName: str,
-    installationId: str,
-    /** `github_app`: the picked repository already has commits (FR-86 warning). */
-    repoHasCode: z.boolean(),
-    initialVersion: str,
-    /** FR-73 import: the released tag (a tag name, NEVER_RELEASED, or '' typed as "never released"). */
-    releasedTag: str,
-    /** FR-73 import: the released tag's semver ('' when never released or not a version), kept in sync by the wizard. */
-    releasedVersion: str,
-    /** FR-73 import: the version to develop. */
-    developmentVersion: str,
-    /** FR-73 import with `local` (development only): the server path of the repository to import. */
-    localSourcePath: str,
-    /** FR-74 Stack step: a preset id from GET /api/presets, or '' for "No preset (general)". */
-    presetId: str,
-    /** FR-88 Deployment step (optional): skip, or Vercel with one of the caller's own connections. */
-    deploymentMode: z.enum(['none', 'vercel']),
-    vercelConnectionId: str,
-    /** Create a new Vercel project (name, root directory) or link an existing one (id or name). */
-    vercelProjectMode: z.enum(['create', 'link']),
-    vercelProjectName: str,
-    vercelRootDirectory: str,
-    vercelProjectId: str,
-  })
-  .superRefine((v, ctx) => {
-    const importing = v.source === 'import'
-    addCheck(ctx, 'name', checkName(v.name))
-    if (importing) {
-      const releasedTag = releasedTagOf(v)
-      const released = releasedTag === null ? null : v.releasedVersion || normalizeVersion(releasedTag)
-      if (releasedTag !== null && !released) {
-        addCheck(
-          ctx,
-          'releasedTag',
-          "This tag isn't a semantic version (for example v2.3.0). Enter the released version's tag, or leave it empty.",
-        )
-      }
-      const check = checkNewVersion(v.developmentVersion, released)
-      addCheck(ctx, 'developmentVersion', check.ok ? null : check.message)
-      if (v.gitMode === 'local') {
-        const path = v.localSourcePath.trim()
-        addCheck(
-          ctx,
-          'localSourcePath',
-          !path
-            ? 'Enter the path of the repository to import.'
-            : path.length > localSourcePathMax
-              ? `The path is at most ${String(localSourcePathMax)} characters.`
-              : null,
-        )
-      }
-    } else {
-      addCheck(ctx, 'initialVersion', checkInitialVersion(v.initialVersion))
+export const wizardSchema = wizardShape.superRefine((v, ctx) => {
+  const importing = v.source === 'import'
+  addCheck(ctx, 'name', checkName(v.name))
+  if (importing) {
+    const releasedTag = releasedTagOf(v)
+    const released = releasedTag === null ? null : v.releasedVersion || normalizeVersion(releasedTag)
+    if (releasedTag !== null && !released) {
+      addCheck(
+        ctx,
+        'releasedTag',
+        "This tag isn't a semantic version (for example v2.3.0). Enter the released version's tag, or leave it empty.",
+      )
     }
+    const check = checkNewVersion(v.developmentVersion, released)
+    addCheck(ctx, 'developmentVersion', check.ok ? null : check.message)
+    if (v.gitMode === 'local') {
+      const path = v.localSourcePath.trim()
+      addCheck(
+        ctx,
+        'localSourcePath',
+        !path
+          ? 'Enter the path of the repository to import.'
+          : path.length > localSourcePathMax
+            ? `The path is at most ${String(localSourcePathMax)} characters.`
+            : null,
+      )
+    }
+  } else {
+    addCheck(ctx, 'initialVersion', checkInitialVersion(v.initialVersion))
+  }
+  addCheck(
+    ctx,
+    'idea',
+    !v.idea.trim()
+      ? importing
+        ? 'Describe what this version should deliver.'
+        : 'Describe your idea: what should the software do, and for whom?'
+      : v.idea.length > limits.ideaMax
+        ? `The ${importing ? 'request' : 'idea'} is at most ${limits.ideaMax.toLocaleString()} characters.`
+        : null,
+  )
+  addCheck(ctx, 'complianceThreshold', checkThreshold(v.complianceThreshold))
+  addCheck(ctx, 'maxFilesPerStep', checkMaxFiles(v.maxFilesPerStep))
+  addCheck(ctx, 'maxReviewCycles', checkMaxCycles(v.maxReviewCycles))
+  addCheck(ctx, 'tokenBudget', checkTokenBudget(v.tokenBudget))
+  addCheck(ctx, 'defaultBranch', checkBranch(v.defaultBranch))
+  if (v.gitMode === 'github_pat') {
+    addCheck(ctx, 'repoUrl', checkRepoUrl(v.repoUrl))
+    addCheck(ctx, 'gitToken', checkSecret(v.gitToken, 'access token'))
+  }
+  if (v.gitMode === 'github_app' && (!v.repoFullName || !v.installationId)) {
+    addCheck(ctx, 'repoFullName', 'Pick a repository, or create one.')
+  }
+  if (v.gitMode === 'gitlab') {
+    addCheck(ctx, 'gitlabConnectionId', v.gitlabConnectionId ? null : 'Connect GitLab, or choose another option.')
     addCheck(
       ctx,
-      'idea',
-      !v.idea.trim()
+      'repoFullName',
+      v.gitlabConnectionId && (!v.repoFullName || !v.gitlabRepoId)
         ? importing
-          ? 'Describe what this version should deliver.'
-          : 'Describe your idea: what should the software do, and for whom?'
-        : v.idea.length > limits.ideaMax
-          ? `The ${importing ? 'request' : 'idea'} is at most ${limits.ideaMax.toLocaleString()} characters.`
-          : null,
+          ? 'Pick the GitLab project to import.'
+          : 'Pick a GitLab project, or create one.'
+        : null,
     )
-    addCheck(ctx, 'complianceThreshold', checkThreshold(v.complianceThreshold))
-    addCheck(ctx, 'maxFilesPerStep', checkMaxFiles(v.maxFilesPerStep))
-    addCheck(ctx, 'maxReviewCycles', checkMaxCycles(v.maxReviewCycles))
-    addCheck(ctx, 'tokenBudget', checkTokenBudget(v.tokenBudget))
-    addCheck(ctx, 'defaultBranch', checkBranch(v.defaultBranch))
-    if (v.gitMode === 'github_pat') {
-      addCheck(ctx, 'repoUrl', checkRepoUrl(v.repoUrl))
-      addCheck(ctx, 'gitToken', checkSecret(v.gitToken, 'access token'))
+  }
+  if (v.gitMode === 'bitbucket') {
+    addCheck(ctx, 'bitbucketConnectionId', v.bitbucketConnectionId ? null : 'Connect Bitbucket, or choose another option.')
+    addCheck(
+      ctx,
+      'repoFullName',
+      v.bitbucketConnectionId && (!v.repoFullName || !v.bitbucketRepoId)
+        ? importing
+          ? 'Pick the Bitbucket repository to import.'
+          : 'Pick a Bitbucket repository, or create one.'
+        : null,
+    )
+  }
+  // FR-114: a composition needs a choice (or None) for each layer up to VCS; compatibility is the server's (D-V4-19).
+  if (v.stackKind === 'compose') {
+    addCheck(ctx, 'stackFrontend', v.stackFrontend ? null : 'Choose the frontend, or None.')
+    addCheck(ctx, 'stackBackend', v.stackBackend ? null : 'Choose the backend, or None.')
+    addCheck(ctx, 'stackData', v.stackData ? null : 'Choose the data layer, or None.')
+    addCheck(ctx, 'stackVcs', v.stackVcs ? null : 'Choose the version control host.')
+  }
+  // §7: the hosts chosen in the Deployment step of a composed stack.
+  for (const [field, message] of hostChecks(v)) {
+    addCheck(ctx, field, message)
+  }
+  // FR-88: without a stack, the server decides whether a Local project can deploy (VALIDATION unless it runs the Fake provider).
+  if (v.stackKind === 'general' && v.deploymentMode === 'vercel') {
+    addCheck(ctx, 'vercelConnectionId', v.vercelConnectionId ? null : 'Pick one of your Vercel connections, or skip deployment.')
+    if (v.vercelProjectMode === 'create') {
+      addCheck(ctx, 'vercelProjectName', checkVercelProjectName(v.vercelProjectName))
+      addCheck(ctx, 'vercelRootDirectory', checkRootDirectory(v.vercelRootDirectory))
+    } else {
+      addCheck(ctx, 'vercelProjectId', v.vercelProjectId.trim() ? null : 'Enter the Vercel project id (prj_…) or name.')
     }
-    if (v.gitMode === 'github_app' && (!v.repoFullName || !v.installationId)) {
-      addCheck(ctx, 'repoFullName', 'Pick a repository, or create one.')
-    }
-    // FR-88: the server decides whether a Local project can deploy (VALIDATION unless it runs the Fake provider).
-    if (v.deploymentMode === 'vercel') {
-      addCheck(ctx, 'vercelConnectionId', v.vercelConnectionId ? null : 'Pick one of your Vercel connections, or skip deployment.')
-      if (v.vercelProjectMode === 'create') {
-        addCheck(ctx, 'vercelProjectName', checkVercelProjectName(v.vercelProjectName))
-        addCheck(ctx, 'vercelRootDirectory', checkRootDirectory(v.vercelRootDirectory))
-      } else {
-        addCheck(ctx, 'vercelProjectId', v.vercelProjectId.trim() ? null : 'Enter the Vercel project id (prj_…) or name.')
-      }
-    }
-  })
+  }
+  // FR-159: the AI model section.
+  addCheck(ctx, 'llmProvider', v.llmProvider ? null : 'Choose an AI provider you can use, or add a connection for one.')
+  const model = v.llmDefaultModel.trim()
+  addCheck(ctx, 'llmDefaultModel', !model ? 'Choose the default model, or enter its id.' : model.length > limits.modelMax ? modelTooLong : null)
+  for (const field of Object.values(wizardAgentModelFields)) {
+    addCheck(ctx, field, v[field].trim().length > limits.modelMax ? modelTooLong : null)
+  }
+})
 
 export type WizardValues = z.infer<typeof wizardSchema>
 
@@ -256,19 +356,45 @@ export const wizardDefaults: WizardValues = {
   gitToken: '',
   repoFullName: '',
   installationId: '',
+  gitlabConnectionId: '',
+  gitlabInstanceId: '',
+  gitlabRepoId: '',
+  bitbucketConnectionId: '',
+  bitbucketRepoId: '',
   repoHasCode: false,
   initialVersion: DEFAULT_INITIAL_VERSION,
   releasedTag: '',
   releasedVersion: '',
   developmentVersion: DEFAULT_INITIAL_VERSION,
   localSourcePath: '',
-  presetId: '',
+  stackKind: 'general',
+  stackFrontend: '',
+  stackBackend: '',
+  stackData: '',
+  stackVcs: '',
+  stackFrontendHost: '',
+  stackBackendHost: '',
+  stackDatabaseHost: '',
+  stackLocal: '',
+  stackOriginModel: '',
+  stackFrontendPath: 'frontend',
+  stackBackendPath: 'backend',
+  stackDetection: '',
   deploymentMode: 'none',
   vercelConnectionId: '',
   vercelProjectMode: 'create',
   vercelProjectName: '',
   vercelRootDirectory: '',
   vercelProjectId: '',
+  ...hostFieldDefaults,
+  llmProvider: '',
+  llmCredentialId: '',
+  llmDefaultModel: '',
+  llmModelIdeaRefinement: '',
+  llmModelSpecGenerator: '',
+  llmModelPlanGenerator: '',
+  llmModelCodeGenerator: '',
+  llmModelCodeReview: '',
 }
 
 // ---- Settings → General (FR-7) ---------------------------------------------------------------------------------

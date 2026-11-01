@@ -20,9 +20,10 @@ namespace Aide.Api.Features.Projects;
 /// checkpoint within the current release version <c>releaseVersionId</c> (§4.10, D-V2-11: was <c>projectVersion</c>);
 /// <c>releasedVersion</c> is the highest released version (<c>null</c>: not released) and <c>developmentVersion</c> the
 /// version in development (<c>null</c>: none) (FR-62). <c>idea</c> is the request of the version in development.
-/// <c>presetId</c>, <c>presetName</c> and <c>presetVersion</c> are the tech stack preset pinned on the current release
-/// version (FR-74; all <c>null</c>: no preset). <c>deploymentsEnabled</c>: the project has deployment settings (FR-88), so
-/// the Deployments page is in its navigation (§7.2).
+/// <c>presetId</c>, <c>presetName</c> and <c>presetVersion</c> are history (FR-129): the retired v2 preset the current release
+/// version was pinned to before it was migrated to a composition (all <c>null</c>: never pinned to a preset). <c>deploymentsEnabled</c>: the project has deployment settings (FR-88), so
+/// the Deployments page is in its navigation (§7.2). <c>stackPacks</c> are the pack ids of the current release version's
+/// stack composition (FR-117, §5; empty: no stack), e.g. <c>["fe-react-vite", "be-aspnet", "vcs-github"]</c>.
 /// </summary>
 public sealed record ProjectDto(
     Guid Id,
@@ -48,7 +49,9 @@ public sealed record ProjectDto(
     string? PresetId,
     string? PresetName,
     string? PresetVersion,
-    bool DeploymentsEnabled);
+    bool DeploymentsEnabled,
+    IReadOnlyList<string> StackPacks,
+    bool PreviewMigrationsEnabled = false);
 
 /// <summary>
 /// §7.2: the projects-list KPI row, over the projects matching the list's filters. <c>active</c>: not <c>released</c> (any
@@ -61,7 +64,8 @@ public sealed record ProjectKpisDto(int Total, int Active, int InReview, int Awa
 /// A row of the projects list (FR-6, FR-62). <c>myRole</c> is <c>null</c> for an Admin who isn't a member;
 /// <c>releasedVersion</c> / <c>developmentVersion</c> are the two version badges (<c>null</c> when not released / nothing in
 /// development); <c>checkpoint</c> was <c>projectVersion</c> (D-V2-11); <c>presetId</c>/<c>presetName</c>/<c>presetVersion</c>
-/// are the preset chip (FR-74, §7.2; <c>null</c>: no preset).
+/// are history (FR-129: the retired preset the current version was migrated from; <c>null</c>: none); <c>stackPacks</c> the pack ids of the current version's
+/// stack composition (FR-117, the <c>pack</c> filter; empty: no stack).
 /// </summary>
 public sealed record ProjectSummaryDto(
     Guid Id,
@@ -78,7 +82,8 @@ public sealed record ProjectSummaryDto(
     DateTimeOffset UpdatedAt,
     string? PresetId,
     string? PresetName,
-    string? PresetVersion);
+    string? PresetVersion,
+    IReadOnlyList<string> StackPacks);
 
 /// <summary>Sort keys of the projects list (FR-6).</summary>
 public enum ProjectSortBy
@@ -107,7 +112,8 @@ public sealed record CreateProjectGitRequest
     private readonly GitProvider _mode;
     private readonly GitProvider _provider;
 
-    /// <summary>The Git provider (FR-82): <c>github_app</c>, <c>github_pat</c> or <c>local</c>.</summary>
+    /// <summary>The Git provider (FR-82, FR-136): <c>github_app</c>, <c>github_pat</c>, <c>gitlab</c>, <c>bitbucket</c> or
+    /// <c>local</c>.</summary>
     public GitProvider Mode
     {
         get => _mode;
@@ -141,9 +147,33 @@ public sealed record CreateProjectGitRequest
     [Range(1, ProjectLimits.MaxTokenBudget)]
     public long? InstallationId { get; init; }
 
-    /// <summary><c>github_app</c>: the repository as <c>owner/name</c>.</summary>
+    /// <summary><c>github_app</c>: the repository as <c>owner/name</c>. <c>gitlab</c>: its <c>group/sub/project</c> path (the
+    /// stored path is the one GitLab reports for <c>repoId</c>). <c>bitbucket</c>: its <c>workspace/slug</c> (the stored one
+    /// is what Bitbucket reports for <c>repoId</c>).</summary>
     [MaxLength(ProjectLimits.RepoFullNameMaxLength)]
     public string? RepoFullName { get; init; }
+
+    /// <summary>
+    /// <c>gitlab</c> (FR-132, FR-136): the GitLab instance of the repository (from the repo picker). Required with gitlab and
+    /// not used otherwise (400 <c>VALIDATION</c>).
+    /// </summary>
+    public Guid? InstanceId { get; init; }
+
+    /// <summary>
+    /// <c>gitlab</c>, <c>bitbucket</c> (FR-136): one of the caller's own valid GitLab connections on <c>instanceId</c>, or
+    /// Bitbucket connections, bound to the project: all background Git work uses it. Another user's connection is 403
+    /// <c>CREDENTIAL_NOT_OWNER</c>; a missing one 404 <c>NOT_FOUND</c>; an invalid one or a disabled instance 409
+    /// <c>GIT_NOT_CONNECTED</c>; a connection on another instance 400 <c>VALIDATION</c>. Not used with other modes.
+    /// </summary>
+    public Guid? ConnectionId { get; init; }
+
+    /// <summary>
+    /// <c>gitlab</c> (FR-132): GitLab's project id; <c>bitbucket</c> (FR-135): the repository UUID (<c>{…}</c>); both from
+    /// the repo picker. The caller needs GitLab Developer access or higher, or Bitbucket <c>write</c>/<c>admin</c>, on it
+    /// (403 <c>FORBIDDEN</c>; 404 <c>NOT_FOUND</c> when the connection can't see it). Not used with other modes.
+    /// </summary>
+    [MaxLength(Domain.GitHosts.BitbucketProjectRules.MaxRepoIdLength)]
+    public string? RepoId { get; init; }
 
     /// <summary>Required for <c>github_pat</c>: <c>https://github.com/OWNER/REPO</c>, optionally ending in <c>.git</c>.</summary>
     [MaxLength(ProjectLimits.UrlMaxLength)]
@@ -227,11 +257,13 @@ public sealed record CreateProjectRequest
     public CreateProjectImportRequest? Import { get; init; }
 
     /// <summary>
-    /// FR-74 (wizard Stack step): a preset id from <c>GET /api/presets</c>, pinned (with its version and content hash) on
-    /// the version to develop; omitted or <c>null</c> = no preset (general). Unknown: 400 <c>PRESET_NOT_FOUND</c>.
+    /// FR-114, FR-115, FR-117 (wizard Stack step): the stack composition, validated like <c>POST /api/stack/validate</c>
+    /// (400 <c>STACK_INCOMPATIBLE</c> with <c>violations</c>; <c>VALIDATION</c> on <c>stack.*</c> fields) plus R5: the VCS
+    /// layer is the repository's host (GitHub for <c>github_app</c>/<c>github_pat</c>; omitted, it is set from it; another
+    /// one is 400 <c>VCS_MISMATCH</c>). It is pinned with the catalog version and hash on the version to develop. Omitted or
+    /// <c>null</c>: no stack ("No stack (general)"). FR-129: the v2 <c>presetId</c> was removed (D-V4-4).
     /// </summary>
-    [MaxLength(Aide.Domain.Presets.PresetRules.IdMaxLength)]
-    public string? PresetId { get; init; }
+    public Stack.StackCompositionRequest? Stack { get; init; }
 
     /// <summary>
     /// FR-88 (wizard Deployment step): deploy to Vercel with one of the caller's own Vercel connections, linking an existing
@@ -239,6 +271,35 @@ public sealed record CreateProjectRequest
     /// Deployment). Needs a GitHub-backed project (400 <c>VALIDATION</c> on <c>deployment.provider</c> for Local).
     /// </summary>
     public Deployments.CreateProjectDeploymentRequest? Deployment { get; init; }
+
+    /// <summary>
+    /// FR-159 (wizard Configuration step, AI model section): the project's LLM provider, connection and models. Omitted or
+    /// <c>null</c>: the default for the caller (§4.24: the configured default provider if enabled and usable, else the first
+    /// enabled usable one in the order anthropic, openai, ollama, fake; 400 <c>LLM_PROVIDER_UNAVAILABLE</c> when none is).
+    /// </summary>
+    public CreateProjectLlmRequest? Llm { get; init; }
+}
+
+/// <summary>
+/// FR-159: the LLM choice of a new project. <c>provider</c> must be enabled and usable by the caller (else 400
+/// <c>LLM_PROVIDER_UNAVAILABLE</c>). <c>credentialId</c> binds one of the caller's own connections for that provider, as
+/// <c>PATCH …/settings/llm</c> does (FR-79: 403 <c>CREDENTIAL_NOT_OWNER</c> for another user's, 404 <c>NOT_FOUND</c> for an
+/// unknown one, 400 <c>VALIDATION</c> for one of another provider); omitted, a provider that needs a key and has no usable
+/// system key is bound to the caller's newest connection for it. <c>defaultModel</c> is required (400 <c>VALIDATION</c>
+/// when blank) and need not be in the catalog. <c>modelsByAgent</c> overrides models per agent; omitted, the provider's
+/// configured per-agent defaults apply.
+/// </summary>
+public sealed record CreateProjectLlmRequest
+{
+    public required LlmProvider Provider { get; init; }
+
+    public Guid? CredentialId { get; init; }
+
+    [Required]
+    [MaxLength(ProjectLimits.ModelMaxLength)]
+    public required string DefaultModel { get; init; }
+
+    public AgentModelsDto? ModelsByAgent { get; init; }
 }
 
 /// <summary>Partial update of a project (FR-7). Omitted fields are unchanged.</summary>
@@ -297,7 +358,8 @@ public sealed record GateSummaryDto(Guid Id, GateType Type, DateTimeOffset Creat
 /// <c>releaseVersionId</c> (the version in development, else the latest released; §4.10). <c>checkpoint</c> was
 /// <c>projectVersion</c> (D-V2-11). <c>suggestedNextVersion</c> prefills "Start new version" (FR-60: the next minor of the
 /// released version). <c>latestDeployment</c> is the project's newest deployment of any target (FR-90, FR-91; <c>null</c>:
-/// none), for the overview and <c>aide status</c>.
+/// none), for the overview and <c>aide status</c>. <c>productionUrls</c> (FR-151) is the production URL of each component
+/// with a deployment target: the target's production URL (its stable domain), else the URL of the deployment production serves now.
 /// </summary>
 public sealed record ProjectStateDto(
     Guid ProjectId,
@@ -318,7 +380,8 @@ public sealed record ProjectStateDto(
     ExecutionRunStatus ExecutionStatus,
     PullRequestSummaryDto? PullRequest,
     ReleaseSummaryDto? LatestRelease,
-    Deployments.DeploymentDto? LatestDeployment);
+    Deployments.DeploymentDto? LatestDeployment,
+    IReadOnlyList<Deployments.ComponentProductionUrlDto> ProductionUrls);
 
 /// <summary>A project member (FR-8).</summary>
 public sealed record MemberDto(Guid UserId, string Email, string Name, string? AvatarUrl, ProjectRole Role, DateTimeOffset CreatedAt);
@@ -361,7 +424,38 @@ public sealed record GitSettingsDto(
     bool? AppInstalledOnRepo,
     bool CanSwitchToApp,
     MergeStrategy MergeStrategy,
-    string TagPrefix);
+    string TagPrefix)
+{
+    /// <summary>FR-136: the Git host instance of a GitLab or Bitbucket project (<c>null</c> otherwise).</summary>
+    public GitHostInstanceRefDto? Instance { get; init; }
+
+    /// <summary>FR-136: the host's repo id (GitLab project id, Bitbucket repository UUID).</summary>
+    public string? ExternalRepoId { get; init; }
+
+    /// <summary>The repository's web URL (GitHub, GitLab or Bitbucket), <c>null</c> for Local.</summary>
+    public string? RepoWebUrl { get; init; }
+
+    /// <summary>
+    /// FR-136: the binding ("GitLab · connected by Ana (@ana)"); <c>null</c> when the project isn't on GitLab/Bitbucket or
+    /// the binding was cleared (Git work then fails with <c>GIT_NOT_CONNECTED</c> until an Owner re-binds).
+    /// </summary>
+    public GitBindingDto? Binding { get; init; }
+
+    /// <summary>FR-136: the caller may re-bind their own connection (<c>connectionId</c>): an Owner of a GitLab or Bitbucket project.</summary>
+    public bool CanRebind { get; init; }
+}
+
+/// <summary>A Git host instance as project settings show it (FR-136).</summary>
+public sealed record GitHostInstanceRefDto(Guid Id, string Name, string BaseUrl, bool Enabled);
+
+/// <summary>The Owner who bound a project's Git connection (FR-136).</summary>
+public sealed record GitBindingUserDto(Guid Id, string Name);
+
+/// <summary>
+/// The Git connection bound to a GitLab or Bitbucket project (FR-136), shown to Owners as e.g. "GitLab · connected by Ana
+/// (@ana)". Never contains a token. <c>connectionId</c> only lets the binding Owner recognise their own connection.
+/// </summary>
+public sealed record GitBindingDto(Guid ConnectionId, string Login, Aide.Domain.Entities.GitConnectionStatus Status, GitBindingUserDto BoundBy);
 
 /// <summary>Model id per agent; an omitted or <c>null</c> agent uses the default model.</summary>
 public sealed record AgentModelsDto
@@ -405,7 +499,7 @@ public sealed record LlmBindingDto(
 /// LLM settings (FR-9, FR-22, FR-79). Keys are never returned. <c>hasApiKey</c> is true while a connection is bound
 /// (kept from v1); <c>binding</c> describes it (<c>null</c> when nothing is bound). <c>canBind</c> is true when the caller
 /// is a project Owner and so may bind one of their own connections or unbind. <c>providers</c> lists every provider with
-/// whether it's usable and its system default model.
+/// whether it's usable and its system default model; only providers enabled on this deployment are listed (FR-157).
 /// </summary>
 public sealed record LlmSettingsDto(
     LlmProvider Provider,
@@ -455,8 +549,20 @@ public sealed record UpdateGitSettingsRequest
 
     public bool ClearToken { get; init; }
 
+    /// <summary>
+    /// FR-136: re-binds a GitLab or Bitbucket project to one of the caller's own connections on the project's instance
+    /// (Owner). AIDE first checks the connection's access to the repository: GitLab Developer or higher, Bitbucket
+    /// <c>write</c> or <c>admin</c> (else 403 <c>FORBIDDEN</c>). Another user's connection is 403 <c>CREDENTIAL_NOT_OWNER</c>;
+    /// an invalid one 409 <c>GIT_NOT_CONNECTED</c>; one on another instance, or <c>connectionId</c> on a project that isn't
+    /// on GitLab or Bitbucket, 400 <c>VALIDATION</c>.
+    /// </summary>
+    public Guid? ConnectionId { get; init; }
+
     /// <summary>FR-65: <c>aide_merges</c> (AIDE merges the PR on release) or <c>manual</c> (AIDE never merges; the release
-    /// marks the PR ready for review and waits for the merge on GitHub). Applies to the next release attempt.</summary>
+    /// marks the PR ready for review and waits for the merge on the Git host). FR-140, Bitbucket projects only (else 400
+    /// <c>VALIDATION</c>): <c>fast_forward</c> or <c>squash</c>, AIDE merging with that Bitbucket merge strategy
+    /// (<c>aide_merges</c> merges with <c>merge_commit</c>); a project that leaves Bitbucket goes back to <c>aide_merges</c>.
+    /// Applies to the next release attempt.</summary>
     public MergeStrategy? MergeStrategy { get; init; }
 
     /// <summary>§4.10, FR-64: the tag prefix (<c>^[A-Za-z0-9._/-]{0,20}$</c>, not starting with <c>.</c>, <c>/</c> or
@@ -543,6 +649,9 @@ public sealed record GitTestResultDto(bool Ok, bool Reachable, bool Writable, bo
 /// <summary>Request limits of the projects feature (FR-5, FR-7, FR-9).</summary>
 public static class ProjectLimits
 {
+    /// <summary>FR-117: the longest pack id the projects list <c>pack</c> filter accepts.</summary>
+    public const int PackMaxLength = 100;
+
     public const int NameMaxLength = 100;
     public const int IdeaMaxLength = 10_000;
     public const double MinComplianceThreshold = 0.50;
@@ -559,7 +668,8 @@ public static class ProjectLimits
     public const int BranchMaxLength = 255;
 
     /// <summary><c>owner/name</c>: a 39-character login, a slash and a 100-character name.</summary>
-    public const int RepoFullNameMaxLength = 140;
+    /// <summary>GitHub <c>owner/name</c> (≤ 140) or a GitLab <c>group/sub/project</c> path (FR-136, ≤ 255).</summary>
+    public const int RepoFullNameMaxLength = 255;
     public const int SecretMaxLength = 1024;
     public const int ModelMaxLength = 200;
     public const int EmailMaxLength = 256;

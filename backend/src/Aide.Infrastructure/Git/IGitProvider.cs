@@ -1,17 +1,35 @@
+using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Aide.Domain.GitHosts;
+using Aide.Domain.Releases;
 
 namespace Aide.Infrastructure.Git;
 
 /// <summary>
 /// The saved Git settings of a project, as a provider needs them (never includes the token). For <c>github_app</c>
 /// (FR-82), <see cref="InstallationId"/> and <see cref="RepoId"/> identify the repository and <see cref="RepoUrl"/> is its
-/// <c>https://github.com/{owner}/{name}</c> URL (derived from the stored full name).
+/// <c>https://github.com/{owner}/{name}</c> URL (derived from the stored full name). For <c>gitlab</c> (FR-136),
+/// <see cref="InstanceId"/>, <see cref="ExternalRepoId"/> and <see cref="RepoFullName"/> identify the repository and
+/// <see cref="GitConnectionId"/> is the binding Owner's connection whose token all Git work uses (<c>null</c>: unbound,
+/// so Git work fails with <c>GIT_NOT_CONNECTED</c>).
 /// </summary>
 public sealed record GitConnectionSettings(Guid ProjectId, string? RepoUrl, string DefaultBranch)
 {
     public long? InstallationId { get; init; }
 
     public long? RepoId { get; init; }
+
+    /// <summary>FR-136: the Git host instance (GitLab, Bitbucket).</summary>
+    public Guid? InstanceId { get; init; }
+
+    /// <summary>FR-136: the binding Owner's connection (GitLab, Bitbucket); <c>null</c> when the binding was cleared.</summary>
+    public Guid? GitConnectionId { get; init; }
+
+    /// <summary>FR-136: the host's repo id (GitLab project id, Bitbucket repository UUID).</summary>
+    public string? ExternalRepoId { get; init; }
+
+    /// <summary>FR-136: <c>group/sub/project</c> (GitLab) or <c>workspace/slug</c> (Bitbucket).</summary>
+    public string? RepoFullName { get; init; }
 
     /// <summary>The connection for a project's stored Git settings (<paramref name="defaultBranch"/> overrides the stored one).</summary>
     public static GitConnectionSettings From(ProjectGitSettings settings, string? defaultBranch = null)
@@ -24,8 +42,14 @@ public sealed record GitConnectionSettings(Guid ProjectId, string? RepoUrl, stri
         {
             InstallationId = settings.Provider == GitProvider.GithubApp ? settings.InstallationId : null,
             RepoId = settings.Provider == GitProvider.GithubApp ? settings.RepoId : null,
+            InstanceId = Hosted(settings) ? settings.InstanceId : null,
+            GitConnectionId = Hosted(settings) ? settings.GitConnectionId : null,
+            ExternalRepoId = Hosted(settings) ? settings.ExternalRepoId : null,
+            RepoFullName = Hosted(settings) ? settings.RepoFullName : null,
         };
     }
+
+    private static bool Hosted(ProjectGitSettings settings) => Domain.Projects.ProjectSettingsRules.IsGitHost(settings.Provider);
 }
 
 /// <summary>Outcome of a connection test (FR-10). <see cref="Reason"/> explains a failure in the provider's words.</summary>
@@ -85,6 +109,110 @@ public interface IGitProvider
     /// repository on the data volume, which may not exist yet). Changes nothing.
     /// </summary>
     Task<TagLookup> FindTagAsync(GitConnectionSettings settings, string tag, string? token, CancellationToken cancellationToken);
+
+    // §4.19 common operations (v4). User-scoped ones take the caller's own connection (already checked to be theirs);
+    // project-scoped ones the project's settings (the binding connection). A provider that doesn't implement one answers
+    // NotSupported (GitHub keeps its v2 services for the picker and import; Local has no host).
+
+    /// <summary>§4.19, FR-132: the repos the connection's user can develop in (search, keyset cursor).</summary>
+    Task<Result<GitHostRepoPage>> ListReposAsync(Guid connectionId, string? search, string? cursor, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<GitHostRepoPage>(GitHostOperations.NotSupported(Kind, "listing repositories")));
+
+    /// <summary>§4.19, FR-132: where the connection's user can create a repo (namespace and groups, workspaces).</summary>
+    Task<Result<IReadOnlyList<GitHostOwner>>> ListOwnersAsync(Guid connectionId, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<IReadOnlyList<GitHostOwner>>(GitHostOperations.NotSupported(Kind, "listing owners")));
+
+    /// <summary>§4.19, FR-132: creates a repo whose default branch exists (README).</summary>
+    Task<Result<GitHostRepo>> CreateRepoAsync(Guid connectionId, GitHostCreateRepo request, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<GitHostRepo>(GitHostOperations.NotSupported(Kind, "creating repositories")));
+
+    /// <summary>§4.19, FR-141: a repo's default branch, releases and tags, with the import's suggested released version.</summary>
+    Task<Result<GitHostReleaseRefs>> FindReleaseRefsAsync(Guid connectionId, string repoId, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<GitHostReleaseRefs>(GitHostOperations.NotSupported(Kind, "reading releases and tags")));
+
+    /// <summary>
+    /// §4.19, FR-138: the version's merge/pull request readiness. <paramref name="markedReady"/>: AIDE already marked the
+    /// draft ready for this version (a release attempt awaited its merge), so a draft blocks again.
+    /// </summary>
+    Task<Result<HostMergeReadiness>> GetMergeReadinessAsync(
+        GitConnectionSettings settings, int number, MergeStrategy strategy, CancellationToken cancellationToken, bool markedReady = false) =>
+        Task.FromResult(Result.Failure<HostMergeReadiness>(GitHostOperations.NotSupported(Kind, "merge readiness")));
+
+    /// <summary>
+    /// §4.19, FR-139: the commit's CI statuses as review observations. <paramref name="pullRequestNumber"/>: the version's
+    /// merge/pull request, when the host tells from it which statuses are required (Bitbucket's mergeability checks).
+    /// </summary>
+    Task<Result<IReadOnlyList<CheckObservation>>> GetCommitStatusesAsync(
+        GitConnectionSettings settings, string sha, CancellationToken cancellationToken, int? pullRequestNumber = null) =>
+        Task.FromResult(Result.Failure<IReadOnlyList<CheckObservation>>(GitHostOperations.NotSupported(Kind, "commit statuses")));
+
+    /// <summary>§4.19, FR-140: publishes the host release (GitLab Release; Bitbucket annotated tag); its URL.</summary>
+    Task<Result<string?>> PublishReleaseAsync(GitConnectionSettings settings, HostReleaseRequest request, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<string?>(GitHostOperations.NotSupported(Kind, "publishing releases")));
+
+    /// <summary>
+    /// FR-140, FR-65, §4.19: the merge poll's look at the version's merge/pull request <paramref name="number"/>: open,
+    /// merged or closed, and the earliest the next poll may run under the host's rate limit.
+    /// </summary>
+    Task<Result<HostMergeObservation>> ObserveMergeRequestAsync(GitConnectionSettings settings, int number, CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<HostMergeObservation>(GitHostOperations.NotSupported(Kind, "merge polls")));
+}
+
+/// <summary>
+/// FR-65, §4.19: what the merge poll saw (<see cref="Observation"/>), and <see cref="NotBefore"/>, the rate-limit back-off
+/// for the next poll (<c>null</c>: the poll's own cadence).
+/// </summary>
+public sealed record HostMergeObservation(MergePollObservation Observation, DateTimeOffset? NotBefore);
+
+/// <summary>§4.19: a repo on a Git host, as the picker shows it (<see cref="Id"/>: GitLab project id, Bitbucket UUID).</summary>
+public sealed record GitHostRepo(
+    string Id,
+    string FullName,
+    string Name,
+    string? Path,
+    string? DefaultBranch,
+    string? WebUrl,
+    string? OwnerPath,
+    string? Visibility,
+    DateTimeOffset? LastActivityAt);
+
+/// <summary>A page of repos; <see cref="NextCursor"/> is <c>null</c> on the last page.</summary>
+public sealed record GitHostRepoPage(IReadOnlyList<GitHostRepo> Items, string? NextCursor);
+
+/// <summary>§4.19: a place a repo can be created (<see cref="Kind"/>: <c>user</c>, <c>group</c>, <c>workspace</c>).</summary>
+public sealed record GitHostOwner(long Id, string Kind, string FullPath, string Name, bool CanCreate, string? Reason);
+
+/// <summary>§4.19: a repo to create under <see cref="Owner"/> (full path); <see cref="Project"/> is Bitbucket's project key.</summary>
+public sealed record GitHostCreateRepo(string Owner, string Name, string? Path, string? Description, bool Private, string? Project = null);
+
+/// <summary>A host release (FR-141): its tag, name, release time, and whether it is the host's latest.</summary>
+public sealed record GitHostRelease(string TagName, string? Name, DateTimeOffset? ReleasedAt, bool IsLatest);
+
+/// <summary>A tag with its commit and semantic version (<c>null</c> when it isn't one).</summary>
+public sealed record GitHostTag(string Name, string Sha, string? Semver);
+
+/// <summary>
+/// FR-141: what the import needs about a repo: its full path, default branch (and head), whether it is empty, its releases
+/// and tags, and the suggestion (<see cref="Domain.GitHosts.GitLabProjectRules.SuggestRelease"/>).
+/// </summary>
+public sealed record GitHostReleaseRefs(
+    string FullName,
+    string DefaultBranch,
+    string? HeadSha,
+    bool Empty,
+    IReadOnlyList<GitHostRelease> Releases,
+    IReadOnlyList<GitHostTag> Tags,
+    ReleaseRefSuggestion Suggestion);
+
+/// <summary>FR-140 (slice 2b): a host release to publish on <see cref="Commit"/>.</summary>
+public sealed record HostReleaseRequest(string Tag, string Commit, string Name, string TagMessage, string Notes);
+
+/// <summary>Helpers for <see cref="IGitProvider"/>'s §4.19 operations.</summary>
+public static class GitHostOperations
+{
+    /// <summary>The failure of an operation a provider doesn't implement (<c>GIT_ERROR</c>, never retried).</summary>
+    public static DomainError NotSupported(GitProvider provider, string operation) =>
+        new(ErrorCodes.GitError, $"The {provider.ToWire()} Git provider doesn't support {operation}.");
 }
 
 /// <summary>The outcome of <see cref="IGitProvider.FindTagAsync"/>: whether the tag exists, or a token-free failure reason.</summary>
@@ -117,6 +245,53 @@ public sealed record ReleaseRequest(
     /// is <see cref="ReleaseOutcomeKind.AwaitingMerge"/> (GitHub: a draft PR is marked ready for review first).
     /// </summary>
     public bool Merge { get; init; } = true;
+
+    /// <summary>
+    /// FR-140: AIDE's release notes (<see cref="Domain.Releases.ReleaseNotes"/>) for a host whose release is created with the
+    /// tag (GitLab: the Release's <c>description</c>; Bitbucket: the annotated tag's message). <c>null</c> for GitHub (its
+    /// Release is created after tagging) and Local.
+    /// </summary>
+    public string? Notes { get; init; }
+
+    /// <summary>
+    /// FR-140: the project's merge strategy, for a host whose merge call takes the method (Bitbucket <c>merge_strategy</c>:
+    /// <c>merge_commit</c>, <c>squash</c>, <c>fast_forward</c>).
+    /// </summary>
+    public MergeStrategy Strategy { get; init; } = MergeStrategy.AideMerges;
+
+    /// <summary>
+    /// FR-65, FR-140: the merge commit already recorded on the attempt (AIDE's own merge, before a retry); a merged PR/MR
+    /// on this commit isn't a merge someone else made.
+    /// </summary>
+    public string? RecordedMergeCommitSha { get; init; }
+
+    /// <summary>
+    /// FR-140: the attempt already submitted AIDE's merge (<c>releases.merge_submitted_at</c>); a pull request found merged is
+    /// then AIDE's own merge, even before its commit was recorded.
+    /// </summary>
+    public bool MergeSubmitted { get; init; }
+
+    /// <summary>
+    /// FR-140: called right before the host's merge call, so the attempt records that a merge may be happening (a rollback
+    /// then waits for the release). An exception from it ends the release (nothing is merged).
+    /// </summary>
+    public Func<CancellationToken, Task>? OnMergeSubmitting { get; init; }
+
+    /// <summary>
+    /// FR-153, §4.21: the branch head the production migrations ran on (Supabase BaaS). AIDE merges only this commit: a
+    /// fetched head (which the host's PR head must equal, and the merge call pins) that differs fails the attempt
+    /// transiently, and the retry runs the migrations again on the new head first. <c>null</c>: no pre-merge migrations.
+    /// </summary>
+    public string? ExpectedHeadSha { get; init; }
+
+    /// <summary>The transient failure for a head that isn't <see cref="ExpectedHeadSha"/>; <c>null</c> when it is (or no pin).</summary>
+    public ReleaseOutcome? HeadMovedSinceMigrations(string head) =>
+        ExpectedHeadSha is { Length: > 0 } expected && !string.Equals(expected, head, StringComparison.OrdinalIgnoreCase)
+            ? ReleaseOutcome.Failed(
+                ErrorCodes.GitError,
+                $"The project branch moved to {head[..Math.Min(12, head.Length)]} after the production migrations ran on {expected[..Math.Min(12, expected.Length)]}; nothing was merged and the release runs the migrations again for the new head.",
+                transient: true)
+            : null;
 }
 
 /// <summary>How a release attempt ended at the provider.</summary>
@@ -173,6 +348,36 @@ public sealed record ReleaseOutcome(
 
     /// <summary>FR-65: released on a merge someone else made (the PR was already merged on GitHub, or the Local branch by hand).</summary>
     public bool MergedExternally { get; init; }
+
+    /// <summary>FR-140: the host release the provider created with the tag (GitLab Release); <c>null</c> otherwise.</summary>
+    public string? ReleaseUrl { get; init; }
+
+    /// <summary>
+    /// FR-140: the readiness reason the host's refusal implies (GitLab 403 → <c>no_permission</c>), used when merge readiness
+    /// shows none; <c>null</c>: <c>branch_protected</c>.
+    /// </summary>
+    public MergeReadinessReasonCode? RefusedReason { get; init; }
+
+    /// <summary>FR-138: AIDE couldn't take the merge request out of draft, so the awaiting reasons include <c>draft</c>.</summary>
+    public bool StillDraft { get; init; }
+
+    /// <summary>
+    /// FR-140: the host accepted AIDE's merge and is still performing it (a Bitbucket merge task still pending): not a
+    /// failure; the release job looks again shortly without counting an attempt.
+    /// </summary>
+    public bool MergePending { get; init; }
+
+    /// <summary>
+    /// FR-153, §4.21: the pull request head the host actually merged, when it differs from
+    /// <see cref="ReleaseRequest.ExpectedHeadSha"/> (a host that can't pin its merge, Bitbucket); <c>null</c> otherwise.
+    /// </summary>
+    public string? MergedHeadMismatch { get; init; }
+
+    /// <summary>
+    /// FR-153, §4.21: the pull request head of a merge someone else made, as the host reports it (or the Local branch);
+    /// <c>null</c> when it isn't known or AIDE merged. Compared with the head the production migrations ran on.
+    /// </summary>
+    public string? MergedHead { get; init; }
 }
 
 /// <summary>The project PR to open (FR-36).</summary>
@@ -184,6 +389,9 @@ public sealed record PullRequestRequest(string HeadBranch, string Title, string 
 /// </summary>
 public sealed record PullRequestOutcome(bool Ok, int? Number, string? Url, bool Reused, string? Reason, bool Transient)
 {
+    /// <summary>An error code for the job failure (e.g. <c>GIT_NOT_CONNECTED</c>, FR-136), when the provider knows one.</summary>
+    public string? ErrorCode { get; init; }
+
     public static PullRequestOutcome Opened(int? number, string? url, bool reused) => new(true, number, url, reused, null, false);
 
     public static PullRequestOutcome Failed(string reason, bool transient) => new(false, null, null, false, reason, transient);
@@ -195,6 +403,11 @@ public sealed record PullRequestOutcome(bool Ok, int? Number, string? Url, bool 
 /// </summary>
 public sealed record GitOutcome(bool Ok, string? Reason, bool Transient = true)
 {
+    /// <summary>An error code for the job failure (e.g. <c>GIT_NOT_CONNECTED</c>, FR-136), when the provider knows one.</summary>
+    public string? ErrorCode { get; init; }
+
+    public static GitOutcome Failed(string reason, bool transient, string? errorCode) => new(false, reason, transient) { ErrorCode = errorCode };
+
     public static GitOutcome Success { get; } = new(true, null);
 
     public static GitOutcome Failed(string reason, bool transient = true) => new(false, reason, transient);

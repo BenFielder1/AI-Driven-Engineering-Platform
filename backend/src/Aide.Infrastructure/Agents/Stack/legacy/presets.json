@@ -1,0 +1,43 @@
+// Frozen from the v2 presets nextjs-frontend@1.0.0 and nextjs-supabase@1.0.1 (Agents/Presets/<id>/preset.json, retired by
+// FR-129, SPEC §4.23). Never edit: plans locked before the upgrade run their v2 agent keys as the v4 specialists below,
+// and their owned-path checks use these globs until the plan is replaced.
+{
+  "agentKeys": [
+    { "from": "project-scaffolder", "to": "scaffolder" },
+    { "from": "db-engineer", "to": "data-engineer" },
+    { "from": "domain-logic-engineer", "to": "frontend-engineer" },
+    { "from": "api-engineer", "to": "frontend-engineer" },
+    { "from": "ui-engineer", "to": "frontend-engineer" },
+    { "from": "test-engineer", "to": "test-engineer" },
+    { "from": "devops-engineer", "to": "deploy-engineer", "byFiles": [{ "glob": ".github/**", "to": "ci-engineer" }] }
+  ],
+  "presets": [
+    {
+      "id": "nextjs-frontend",
+      "name": "Next.js frontend",
+      "version": "1.0.0",
+      "owns": {
+        "project-scaffolder": ["package.json", "tsconfig.json", "next.config.ts", "next.config.mjs", "next-env.d.ts", "eslint.config.mjs", "postcss.config.mjs", "tailwind.config.ts", "vitest.config.ts", "vitest.setup.ts", ".gitignore", ".nvmrc", ".env.example", "vercel.json", "README.md", "app/layout.tsx", "app/page.tsx", "app/globals.css", "middleware.ts", "proxy.ts"],
+        "domain-logic-engineer": ["lib/*/**", "!lib/api/**", "!lib/ui/**", "lib/types.ts"],
+        "api-engineer": ["app/api/**", "lib/api/**"],
+        "ui-engineer": ["app/**", "!app/api/**", "components/**", "lib/ui/**", "styles/**"],
+        "test-engineer": ["e2e/**", "playwright.config.ts", "mocks/**", "**/*.test.{ts,tsx}"],
+        "devops-engineer": [".github/**", "vercel.json", ".env.example", ".gitignore"]
+      }
+    },
+    {
+      "id": "nextjs-supabase",
+      "name": "Next.js + Supabase",
+      "version": "1.0.1",
+      "owns": {
+        "project-scaffolder": ["package.json", "tsconfig.json", "next.config.ts", "next.config.mjs", "next-env.d.ts", "eslint.config.mjs", "postcss.config.mjs", "tailwind.config.ts", "vitest.config.ts", "vitest.setup.ts", ".gitignore", ".nvmrc", ".env.example", "vercel.json", "README.md", "app/layout.tsx", "app/page.tsx", "app/globals.css", "middleware.ts", "proxy.ts", "lib/supabase/**", "supabase/config.toml"],
+        "db-engineer": ["supabase/migrations/**", "supabase/seed.sql", "supabase/config.toml", "lib/database.types.ts"],
+        "domain-logic-engineer": ["lib/*/**", "!lib/api/**", "!lib/supabase/**", "!lib/ui/**", "lib/types.ts"],
+        "api-engineer": ["app/api/**", "app/auth/**", "lib/api/**"],
+        "ui-engineer": ["app/**", "!app/api/**", "!app/auth/**", "components/**", "lib/ui/**", "styles/**"],
+        "test-engineer": ["e2e/**", "playwright.config.ts", "**/*.test.{ts,tsx}"],
+        "devops-engineer": [".github/**", "vercel.json", ".env.example", ".gitignore"]
+      }
+    }
+  ]
+}

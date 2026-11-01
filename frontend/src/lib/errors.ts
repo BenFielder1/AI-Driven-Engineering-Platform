@@ -1,5 +1,23 @@
 import type { FieldValues, Path, UseFormSetError } from "react-hook-form";
 
+import { withGitHost, type GitHostTerms } from "./git-host";
+
+/** SPEC §6 GITLAB_RATE_LIMITED / BITBUCKET_RATE_LIMITED: "{host} is rate limiting requests. AIDE will retry." */
+function hostJobRateLimited(host: string): string {
+  return `${host} is rate limiting requests. AIDE will retry.`;
+}
+
+/**
+ * SPEC §6 UPSTREAM_RATE_LIMITED for a Git host ("{provider} is rate limiting requests. Try again in a few minutes."),
+ * optionally saying what didn't happen ("Nothing was created"). errorMessage() swaps "in a few minutes" for the
+ * Retry-After wait in the contexts listed in `retryAfterContexts`.
+ */
+function hostRateLimited(host: string, outcome?: string): string {
+  return outcome
+    ? `${host} is rate limiting requests. ${outcome}; try again in a few minutes.`
+    : `${host} is rate limiting requests. Try again in a few minutes.`;
+}
+
 /**
  * The ONE place that maps API `errorCode`s to user copy (CLAUDE.md rule 4). Mirrors
  * backend/src/Aide.Domain/Common/ErrorCodes.cs (endpoint codes and agent-run codes; Guardian codes are separate).
@@ -55,16 +73,12 @@ export const errorMessages = {
   VERSION_IN_PROGRESS: "A version is already in development. Release it before starting another.",
   RELEASE_NOT_MERGED: "The latest release is waiting for its pull request to be merged. Merge it first.",
   NOT_RELEASED: "Release the current version before starting a new one.",
-  // External services and presets
+  // External services
   UPSTREAM_ERROR: "An external service (such as GitHub) failed or couldn't be reached. Try again in a moment.",
   // LLM connections (FR-78, FR-79)
   CREDENTIAL_INVALID:
     "The provider rejected this key. Check that you copied the whole key and that it is active, then try again.",
   CREDENTIAL_NOT_OWNER: "You can only bind one of your own connections. Add your own key under Connections.",
-  // Tech stack presets (FR-74)
-  PRESET_NOT_FOUND: "That tech stack preset doesn't exist.",
-  PRESET_LOCKED:
-    "The implementation plan for this version is locked. Change the preset when you start the next version.",
   // GitHub App and connections (FR-80–FR-86, §4.14)
   GITHUB_NOT_CONNECTED:
     "Connect your GitHub account first, under Connections → GitHub.",
@@ -73,23 +87,26 @@ export const errorMessages = {
   REPO_NAME_TAKEN: "A repository with this name already exists for that owner. Choose another name.",
   GITHUB_RATE_LIMITED: "GitHub's rate limit was reached. Wait a moment and try again.",
   GIT_ERROR: "Git or GitHub refused the operation.",
-  // Vercel deployments (FR-87–FR-91, §4.15)
-  VERCEL_GIT_NOT_CONNECTED:
-    "Vercel's GitHub App can't access this repository. Install it on the repository's owner (or give it access to the repository), then try again.",
-  VERCEL_PLAN_LIMIT:
-    "Your Vercel plan doesn't allow this: a Hobby account can't deploy a repository owned by a GitHub organisation. Use a token for a Pro team, or a repository on your personal account.",
+  // Deployment platforms (FR-87–FR-91, FR-144, §4.15, §6). `{platform}` is completed by errorMessage() from the
+  // ProblemDetails `platform` extension, or by platformCopy() for a code recorded on a target or deployment.
+  PLATFORM_GIT_NOT_CONNECTED: "{platform} can't see this repository. Connect it in {platform}, then verify again.",
+  PLATFORM_PLAN_LIMIT: "Your {platform} plan doesn't allow this.",
+  PLATFORM_ERROR: "{platform} returned an error. Try again later.",
+  // A job code (FR-150, §6): the platform answered 429, so the deployment job backs off and retries.
+  PLATFORM_RATE_LIMITED: "{platform} is rate limiting deployments. AIDE will retry.",
+  DEPLOYMENT_ACTION_UNSUPPORTED: "{platform} doesn't support this action.",
   DEPLOYMENT_NOT_CONFIGURED:
-    "Deployment isn't set up for this project. An Owner can set up Vercel in Settings → Deployment.",
-  INVALID_DEPLOYMENT: "Only a ready production deployment can be promoted.",
+    "Deployment isn't set up for this project. An Owner can set up the deployment targets in Settings → Deployment.",
+  INVALID_DEPLOYMENT: "Only a ready production deployment can be rolled back to.",
   DEPLOYMENT_TIMEOUT: "The deployment didn't finish within 30 minutes, so AIDE stopped waiting for it.",
-  VERCEL_ERROR: "Vercel reported the build or deployment as failed. The build log says why.",
   // Import an existing repository (FR-73)
   TAG_NOT_FOUND: "That tag isn't in the repository. Pick another released version, or choose Never released.",
   RELEASE_CANCELLED: "A rollback cancelled this release before it ran.",
-  // Recorded on a release attempt that was awaiting its merge (FR-65, §4.14)
-  PR_CLOSED: "The pull request was closed without merging. Reopen it on GitHub, then retry.",
+  // Recorded on a release attempt that was awaiting its merge (FR-65, §4.14). `{pr}` and `{host}` name the project's Git
+  // host (FR-140): pass its terms to copyForCode(); without them the copy reads as GitHub.
+  PR_CLOSED: "The {pr} was closed without merging. Reopen it on {host}, then retry.",
   MERGE_TIMEOUT:
-    "The pull request wasn't merged within 14 days, so AIDE stopped waiting. Merge it on GitHub or fix what blocks it, then retry the release.",
+    "The {pr} wasn't merged within 14 days, so AIDE stopped waiting. Merge it on {host} or fix what blocks it, then retry the release.",
   // Approval links
   LINK_EXPIRED: "This approval link has expired.",
   LINK_USED: "This approval link has already been used.",
@@ -109,7 +126,7 @@ export const errorMessages = {
   AGENT_SCOPE:
     "Some plan steps declare files outside the paths their specialist agent owns. This is a warning: the plan can still be approved.",
   PLAN_ORDER:
-    "Some plan steps break the preset's recommended order. This is a warning: the plan can still be approved.",
+    "Some plan steps break the stack's recommended order. This is a warning: the plan can still be approved.",
   MISSING_VERCEL_CONFIG:
     "This plan doesn't create vercel.json, so Vercel would deploy AIDE branches automatically, on top of the deployments AIDE makes. Add vercel.json to a step with git.deploymentEnabled set to { \"aide/**\": false }. This is a warning: the plan can still be approved.",
   TOOL_LIMIT:
@@ -117,8 +134,46 @@ export const errorMessages = {
   PROVIDER_NOT_CONFIGURED:
     "The project has no LLM connection bound for this provider, and system keys aren't allowed. An Owner can bind one of their connections in Settings → LLM.",
   PROVIDER_ERROR: "The model provider returned an error.",
+  // FR-157, FR-159: a provider turned off on this server, or one the user can't use yet.
+  LLM_PROVIDER_UNAVAILABLE: "This AI provider isn't available here. Choose another provider or add a connection.",
   // Restore (FR-58); the specific copy per `reason` is restoreNotAllowedMessage().
   RESTORE_NOT_ALLOWED: "This version can't be restored right now.",
+  // FR-116: a stack composition breaks a compatibility rule. The map doesn't interpolate, so callers append the
+  // ProblemDetails `violations[].reason` list themselves (M25 Stack UI).
+  STACK_INCOMPATIBLE: "These stack choices don't work together.",
+  // FR-117: the stack is pinned once the version's implementation plan is locked; the VCS layer is the repo's host.
+  STACK_LOCKED:
+    "The stack can't change after the implementation plan is locked. Start a new version to change it.",
+  VCS_MISMATCH: "The version control choice must match the project's repository host.",
+  // FR-124, FR-127: composed plan rules (a plan error, and a plan warning).
+  STACK_CHANGE_UNPLANNED: "The plan must include work for the stack change.",
+  UNDECLARED_GENERATED_FILE: "A file generated from this change isn't declared by any step.",
+  // FR-118 and Git hosts (§6): no usable Git connection for the project or request.
+  GIT_NOT_CONNECTED:
+    "Connect your Git host account (or ask an Owner to re-bind the project) to continue.",
+  // GitLab instances and connections (FR-130, FR-131, §6). Copy with a {host}, {missing} or {provider} is completed by
+  // gitHostFailureMessage(), connectionScopeMessage() and the per-context overrides below.
+  GIT_HOST_NOT_ALLOWED: "That address isn't allowed for a GitLab instance.",
+  GIT_AUTH_FAILED: "Signing in with your Git host didn't complete. Try again.",
+  CONNECTION_SCOPE_INSUFFICIENT: "This token is missing permissions AIDE needs, or it is the wrong type of token.",
+  UPSTREAM_RATE_LIMITED: "The service is rate limiting requests. Try again in a few minutes.",
+  // FR-136 job codes (§6): the Git host rate limited a background job; it is re-queued for the reset.
+  GITLAB_RATE_LIMITED: hostJobRateLimited("GitLab"),
+  BITBUCKET_RATE_LIMITED: hostJobRateLimited("Bitbucket"),
+  // FR-143, §6: GitHub Pages as a frontend host needs the App's Pages permission.
+  PLATFORM_PERMISSION_MISSING:
+    "The AIDE GitHub App needs the Pages permission. Update it in GitHub settings, then accept it on each installation.",
+  // Managed databases and migrations (FR-147, FR-152, FR-153, §4.21, §6). Job codes are recorded on a database card's
+  // provisioning job or a migration run; `{detail}` is added by withJobDetail() when the job recorded a message.
+  PREVIEW_DATABASE_DIVERGED:
+    "The preview database has migrations this branch no longer has. Reset the preview database to continue.",
+  // FR-148, §6 (409): the action can't run in the current state (e.g. a preview rollout or reset is running). errorMessage()
+  // adds the server's reason: "This can't be done right now. {reason}".
+  INVALID_STATE: "This can't be done right now. Wait for the running work to finish, then try again.",
+  MIGRATION_FAILED: "A database migration failed.",
+  MIGRATION_HISTORY_DIVERGED: "The database's migration history doesn't match the repository.",
+  DATABASE_PROVISIONING_FAILED: "Creating the database failed.",
+  DATABASE_PROVISIONING_TIMEOUT: "The database took too long to become available.",
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;
@@ -230,8 +285,13 @@ export const contextualErrorMessages = {
   /** PATCH /api/projects/:id/settings/git — the release settings: merge strategy and tag prefix (FR-64, FR-65, §4.10). */
   releaseSettings: {
     CONFLICT:
-      "The tag prefix can't change while a release is in progress or awaiting its merge on GitHub. Try again once the release finishes.",
+      "The tag prefix can't change while a release is in progress or awaiting its merge on the Git host. Try again once the release finishes.",
     FORBIDDEN: "Only project Owners can change the release settings.",
+  },
+  /** GET /api/projects/:id/releases/:releaseId/notes (FR-140, D-V4-7): Bitbucket's release notes. */
+  releaseNotes: {
+    NOT_FOUND: "These release notes are no longer available. The release tag on the Git host still holds them.",
+    FORBIDDEN: "You don't have access to this project's release notes. Ask an Owner for access.",
   },
   /** GET /api/projects/:id/git/merge-readiness (FR-84). */
   mergeReadiness: {
@@ -239,7 +299,6 @@ export const contextualErrorMessages = {
   },
   /** POST /api/projects/:id/versions — Start new version (FR-60, FR-61). */
   startVersion: {
-    PRESET_NOT_FOUND: "That preset is no longer available. Pick another one, keep the current preset, or choose No preset.",
     VERSION_INVALID:
       "Enter a version as MAJOR.MINOR.PATCH with an optional -prerelease, for example 1.2.0 or 2.0.0-beta.1.",
     TAG_EXISTS:
@@ -291,44 +350,104 @@ export const contextualErrorMessages = {
     CREDENTIAL_INVALID:
       "The provider rejected this key, so it wasn't saved. Check that you copied the whole key and that it is active.",
   },
-  /** POST /api/me/connections/vercel · /:id/test (FR-87). */
+  /**
+   * /api/me/connections/platforms[/:id] · /:id/test (FR-142). `{provider}` is completed by platformConnectionMessage().
+   */
+  platformConnection: {
+    UPSTREAM_ERROR: "We couldn't reach {provider} to check the token. Nothing changed; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: "{provider} is rate limiting requests. Nothing changed; try again in a few minutes.",
+    FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
+    NOT_FOUND: "That connection no longer exists. The list now shows the latest.",
+    CREDENTIAL_INVALID:
+      "{provider} rejected this token, so it wasn't saved. Check that you copied the whole token, that it hasn't expired or been revoked, and that it is the type of token described above.",
+  },
+  /** FR-142 Vercel: the v2 copy (FR-87), naming team tokens. */
   vercelConnection: {
     UPSTREAM_ERROR: "We couldn't reach Vercel to check the token. Nothing changed; try again in a moment.",
     FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
     CREDENTIAL_INVALID:
       "Vercel rejected this token, so it wasn't saved. Check that you copied the whole token, that it hasn't expired and, for a team token, that it can access the team.",
   },
-  /** PATCH /api/projects/:id/settings/deployment (FR-88). */
-  deploymentSettings: {
-    FORBIDDEN: "Only project Owners can change the deployment settings.",
+  /** FR-142 Cloudflare: an account-owned (cfat_) token is refused before calling Cloudflare. */
+  cloudflareConnection: {
+    CONNECTION_SCOPE_INSUFFICIENT:
+      "This is a Cloudflare account-owned token (it starts with cfat_), so it wasn't saved. Workers Builds needs a user API token: create one under My Profile → API Tokens with Workers Scripts Edit, Workers CI Edit, Account Settings Read and User Details Read.",
+  },
+  /** FR-142 Railway: a workspace token also needs its workspace id. */
+  railwayConnection: {
+    CREDENTIAL_INVALID:
+      "Railway rejected this token, so it wasn't saved. Check that you copied the whole token and, for a workspace token, that the Workspace ID is the token's workspace.",
+  },
+  /** PUT /api/projects/:id/settings/deployment/targets/:component (FR-144). */
+  deploymentTarget: {
+    FORBIDDEN: "Only project Owners can change the deployment targets.",
     CREDENTIAL_NOT_OWNER:
-      "Changing the Vercel project uses your own Vercel connection: pick one of yours, which rebinds the project to it. Add a token under Connections → Vercel if you have none.",
-    VALIDATION: "Deployment needs a GitHub-backed project: a Local repository can't deploy to Vercel.",
-    UPSTREAM_ERROR: "Vercel failed or couldn't be reached, so nothing changed. Try again in a moment.",
+      "You can only bind one of your own connections. Pick one of yours, or add a token under Connections.",
+    VALIDATION: "Check the target's settings: some fields need attention.",
+    UPSTREAM_ERROR: "A service AIDE needs for this failed or couldn't be reached, so nothing changed. Try again in a moment.",
     CONFLICT: "Someone else changed the deployment settings at the same time. The page now shows the latest; try again.",
   },
-  /** PUT /api/projects/:id/settings/deployment/env/:key (FR-88): 502 means saved in AIDE but not pushed to Vercel. */
+  /** PUT /api/projects/:id/settings/deployment/databases/:environment (FR-152). */
+  databaseSetup: {
+    FORBIDDEN: "Only project Owners can change the databases.",
+    CREDENTIAL_NOT_OWNER:
+      "You can only bind one of your own connections. Pick one of yours, or add a token under Connections.",
+    VALIDATION: "Check the database settings: some fields need attention.",
+    NOT_FOUND: "That connection no longer exists. Pick another one, or add a token under Connections.",
+    UPSTREAM_ERROR: "The database platform failed or couldn't be reached, so nothing changed. Try again in a moment.",
+    CONFLICT: "The database is busy or someone else changed it at the same time. The page now shows the latest; try again.",
+  },
+  /** DELETE /api/projects/:id/settings/deployment/databases/:environment (FR-152). */
+  databaseUnlink: {
+    FORBIDDEN: "Only project Owners can unlink a database.",
+    CONFLICT: "The database is busy (it's being set up or migrated). Try again when it's done.",
+  },
+  /** POST /api/projects/:id/settings/deployment/databases/:environment/restore (FR-152, §4.21 Paused). */
+  databaseRestore: {
+    FORBIDDEN: "Only project Owners can restore a paused database.",
+    DEPLOYMENT_ACTION_UNSUPPORTED: "{platform} can't restore this database, so nothing changed.",
+    CONFLICT: "The database isn't paused any more, or another action is running. The page now shows the latest.",
+    DEPLOYMENT_NOT_CONFIGURED: "This database isn't set up, so there's nothing to restore.",
+    CREDENTIAL_INVALID:
+      "The platform rejected the bound connection's token. Replace the token under Connections, then try again.",
+    UPSTREAM_ERROR: "The database platform failed or couldn't be reached, so nothing was restored. Try again in a moment.",
+  },
+  /** POST /api/projects/:id/settings/deployment/databases/preview/reset (FR-148). */
+  databaseReset: {
+    FORBIDDEN: "Only project Owners can reset the preview database.",
+    NOT_FOUND: "There's no preview database to reset. Set one up first.",
+  },
+  /** POST /api/projects/:id/settings/deployment/targets/:component/verify (FR-144). */
+  deploymentVerify: {
+    FORBIDDEN: "Only project Owners can check a deployment target.",
+  },
+  /** DELETE /api/projects/:id/settings/deployment/targets/:component (FR-144). */
+  deploymentUnbind: {
+    FORBIDDEN: "Only project Owners can unbind a deployment target.",
+  },
+  /** PUT /api/projects/:id/settings/deployment/env/:key (FR-145): 502 means saved in AIDE but not pushed to a platform. */
   deploymentEnvSave: {
     FORBIDDEN: "Only project Owners can edit environment variables.",
     UPSTREAM_ERROR:
-      "Saved in AIDE, but pushing it to Vercel failed. AIDE pushes it again on the next save or deployment.",
+      "Saved in AIDE, but pushing it to a deployment platform failed. AIDE pushes it again on the next save or deployment.",
   },
-  /** DELETE /api/projects/:id/settings/deployment/env/:key (FR-88): nothing is deleted when Vercel can't delete it. */
+  /** DELETE /api/projects/:id/settings/deployment/env/:key (FR-145): nothing is deleted when a platform can't delete it. */
   deploymentEnvDelete: {
     FORBIDDEN: "Only project Owners can delete environment variables.",
-    UPSTREAM_ERROR: "Vercel couldn't delete it, so nothing was deleted. Try again in a moment.",
+    UPSTREAM_ERROR: "A deployment platform couldn't delete it, so nothing was deleted. Try again in a moment.",
   },
   /** POST /api/projects/:id/deployments/preview · /:deploymentId/redeploy (FR-90, FR-91). */
   deploy: {
     FORBIDDEN: "Only Contributors and Owners can deploy a preview, and only Owners can redeploy production.",
-    UPSTREAM_ERROR: "Vercel failed or couldn't be reached, so no deployment was created. Try again in a moment.",
+    UPSTREAM_ERROR: "The deployment platform failed or couldn't be reached, so no deployment was created. Try again in a moment.",
   },
-  /** POST /api/projects/:id/deployments/:deploymentId/promote (FR-91). */
-  promoteDeployment: {
-    FORBIDDEN: "Only project Owners can promote a production deployment.",
+  /** POST /api/projects/:id/deployments/:deploymentId/rollback (FR-91, FR-150; `/promote` is its v2 alias). */
+  rollbackDeployment: {
+    FORBIDDEN: "Only project Owners can roll back a production deployment.",
     INVALID_DEPLOYMENT:
-      "This deployment can't be promoted: only a ready production deployment can. The list now shows the latest.",
-    UPSTREAM_ERROR: "Vercel failed or couldn't be reached, so nothing was promoted. Try again in a moment.",
+      "This deployment can't be rolled back to: only a ready production deployment that isn't live can. The list now shows the latest.",
+    DEPLOYMENT_ACTION_UNSUPPORTED: "{platform} doesn't support rollback, so nothing changed.",
+    UPSTREAM_ERROR: "The deployment platform failed or couldn't be reached, so nothing was rolled back. Try again in a moment.",
   },
   /** PATCH /api/projects/:id/settings/llm (FR-79). */
   llmBinding: {
@@ -367,15 +486,8 @@ export const contextualErrorMessages = {
     GITHUB_APP_NOT_INSTALLED:
       "The AIDE GitHub App can't access this repository. Install it on the repository, then try again.",
   },
-  /** PATCH /api/projects/:id/preset (FR-74). */
-  changePreset: {
-    PRESET_NOT_FOUND: "That preset is no longer available. Pick another one, or No preset (general).",
-    FORBIDDEN: "Only project Owners can change the preset.",
-    CONFLICT: "Someone else changed the project at the same time. Reload to see the latest, then try again.",
-  },
   /** POST /api/projects (FR-86): a github_app repo needs push access for the caller; FR-73 import versions. */
   createProject: {
-    PRESET_NOT_FOUND: "That preset is no longer available. Pick another one, or No preset (general).",
     FORBIDDEN: "You need write access to this repository on GitHub to create a project on it. Pick another repository.",
     VERSION_INVALID:
       "Enter a version as MAJOR.MINOR.PATCH with an optional -prerelease, for example 1.2.0 or 2.0.0-beta.1.",
@@ -386,6 +498,187 @@ export const contextualErrorMessages = {
     NOT_FOUND:
       "We couldn't find that repository, or the access token can't see it. Check the URL and the token's repository access.",
     CREDENTIAL_NOT_OWNER: "You can only use one of your own Vercel connections. Pick another, or skip deployment.",
+    PLATFORM_GIT_NOT_CONNECTED: "{platform} can't see this repository. Connect it in {platform}, then try again.",
+  },
+  /** POST /api/projects `git` with `mode: gitlab` (FR-132, FR-136, FR-141): the bound connection and the picked project. */
+  createProjectGitLab: {
+    CREDENTIAL_NOT_OWNER:
+      "You can only bind one of your own GitLab connections. Pick another, or connect GitLab under Connections.",
+    GIT_NOT_CONNECTED:
+      "This GitLab connection no longer works: GitLab rejected it, or an administrator disabled its instance. Reconnect it under Connections, or pick another.",
+    FORBIDDEN:
+      "Your GitLab account needs Developer access or higher on this project for AIDE to work on it. Pick another project, or ask its maintainers for access.",
+    NOT_FOUND:
+      "That GitLab project or connection no longer exists, or your GitLab account can't see it. Pick another project.",
+    UPSTREAM_ERROR: "We couldn't reach GitLab to check the project. Nothing was created; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("GitLab", "Nothing was created"),
+  },
+  /** PATCH /api/projects/:id/settings/git `connectionId`: Rebind (FR-136). */
+  gitBinding: {
+    CREDENTIAL_NOT_OWNER: "You can only bind one of your own GitLab connections. Pick another.",
+    GIT_NOT_CONNECTED:
+      "That GitLab connection no longer works: GitLab rejected it, or an administrator disabled its instance. Reconnect it under Connections, then bind it.",
+    FORBIDDEN:
+      "Your GitLab account needs Developer access or higher on this repository to bind it. Ask a maintainer for access, or ask another Owner to re-bind.",
+    NOT_FOUND: "That GitLab connection no longer exists. Pick another, or connect GitLab under Connections.",
+    VALIDATION: "That connection is for a different GitLab instance than the project's repository. Pick another.",
+    UPSTREAM_ERROR: "We couldn't reach GitLab to check your access. Nothing changed; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("GitLab", "Nothing changed"),
+  },
+  /** POST /api/projects `git` with `mode: bitbucket` (FR-135, FR-136, FR-141): the bound connection and the picked repository. */
+  createProjectBitbucket: {
+    CREDENTIAL_NOT_OWNER:
+      "You can only bind one of your own Bitbucket connections. Pick another, or connect Bitbucket under Connections.",
+    GIT_NOT_CONNECTED:
+      "This Bitbucket connection no longer works: Bitbucket rejected it, or it is missing scopes. Reconnect it under Connections, or pick another.",
+    FORBIDDEN:
+      "Your Bitbucket account needs write access to this repository for AIDE to work on it. Pick another repository, or ask its admins for access.",
+    NOT_FOUND:
+      "That Bitbucket repository or connection no longer exists, or your Bitbucket account can't see it. Pick another repository.",
+    UPSTREAM_ERROR: "We couldn't reach Bitbucket to check the repository. Nothing was created; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket", "Nothing was created"),
+  },
+  /** PATCH /api/projects/:id/settings/git `connectionId` on a Bitbucket project: Rebind (FR-136). */
+  gitBindingBitbucket: {
+    CREDENTIAL_NOT_OWNER: "You can only bind one of your own Bitbucket connections. Pick another.",
+    GIT_NOT_CONNECTED:
+      "That Bitbucket connection no longer works: Bitbucket rejected it, or it is missing scopes. Reconnect it under Connections, then bind it.",
+    FORBIDDEN:
+      "Your Bitbucket account needs write access to this repository to bind it. Ask a workspace admin for access, or ask another Owner to re-bind.",
+    NOT_FOUND: "That Bitbucket connection no longer exists. Pick another, or connect Bitbucket under Connections.",
+    VALIDATION: "That connection can't be bound to this project. Pick another.",
+    UPSTREAM_ERROR: "We couldn't reach Bitbucket to check your access. Nothing changed; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket", "Nothing changed"),
+  },
+  /** POST /api/projects `llm` (FR-159): the AI model section's connection. */
+  createProjectLlm: {
+    CREDENTIAL_NOT_OWNER: "You can only use one of your own connections. Pick another, or add a key under Connections.",
+    NOT_FOUND: "That connection no longer exists. Pick another, or add a key under Connections.",
+    VALIDATION: "Enter the model id, and pick a connection for the chosen provider.",
+  },
+  /** POST /api/stack/detect (FR-118): detection never blocks, so the copy says what to do instead. */
+  detectStack: {
+    GIT_NOT_CONNECTED:
+      "Connect your GitHub account under Connections to detect the stack, or choose each layer yourself.",
+    NOT_FOUND: "We couldn't read that repository or ref, so nothing was detected. Choose each layer yourself.",
+    VALIDATION: "We couldn't read that repository, so nothing was detected. Choose each layer yourself.",
+    FORBIDDEN: "GitHub refused to list the repository's files, so nothing was detected. Choose each layer yourself.",
+  },
+  /** POST /api/stack/detect for a GitLab import (FR-141). */
+  detectStackGitLab: {
+    GIT_NOT_CONNECTED:
+      "Your GitLab connection no longer works, so nothing was detected. Reconnect it under Connections, or choose each layer yourself.",
+    NOT_FOUND: "We couldn't read that project or ref, so nothing was detected. Choose each layer yourself.",
+    VALIDATION: "We couldn't read that project, so nothing was detected. Choose each layer yourself.",
+    FORBIDDEN: "GitLab refused to list the project's files, so nothing was detected. Choose each layer yourself.",
+  },
+  /** POST /api/stack/detect for a Bitbucket import (FR-141). */
+  detectStackBitbucket: {
+    GIT_NOT_CONNECTED:
+      "Your Bitbucket connection no longer works, so nothing was detected. Reconnect it under Connections, or choose each layer yourself.",
+    NOT_FOUND: "We couldn't read that repository or ref, so nothing was detected. Choose each layer yourself.",
+    VALIDATION: "We couldn't read that repository, so nothing was detected. Choose each layer yourself.",
+    FORBIDDEN: "Bitbucket refused to list the repository's files, so nothing was detected. Choose each layer yourself.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket"),
+  },
+  /** PUT /api/projects/:id/stack and the start-version stack change (FR-117). */
+  changeStack: {
+    FORBIDDEN: "Only project Owners can change the stack.",
+    CONFLICT: "Someone else changed the project at the same time. Reload to see the latest, then try again.",
+    STACK_LOCKED:
+      "The stack can't change after the implementation plan is locked. Start a new version to change it.",
+  },
+  /** POST/PATCH /api/admin/integrations/gitlab[/:id] · /:id/check (FR-130). */
+  gitlabInstance: {
+    CONFLICT:
+      "A GitLab instance with this base URL already exists, or this instance can't change that way: gitlab.com keeps its address, an instance in use keeps its base URL, and an instance configured in the server's environment only changes Enabled here.",
+    UPSTREAM_ERROR:
+      "AIDE couldn't reach a GitLab at that address (GET /api/v4/version didn't answer like GitLab). Check the base URL and try again.",
+    NOT_FOUND: "That GitLab instance no longer exists. The list now shows the latest.",
+    FORBIDDEN: "Only administrators can change GitLab instances, and only from a browser session.",
+  },
+  /** DELETE /api/admin/integrations/gitlab/:id (FR-130). */
+  deleteGitLabInstance: {
+    CONFLICT:
+      "This GitLab instance can't be removed: projects use it, or it is gitlab.com or configured in the server's environment. Disable it instead.",
+    NOT_FOUND: "That GitLab instance was already removed. The list now shows the latest.",
+    FORBIDDEN: "Only administrators can remove GitLab instances, and only from a browser session.",
+  },
+  /** POST/DELETE /api/me/connections/gitlab · /:id/test (FR-131). */
+  gitlabConnection: {
+    CREDENTIAL_INVALID:
+      "GitLab rejected this token, so it wasn't saved. Check that you copied the whole token and that it hasn't expired or been revoked.",
+    NOT_FOUND: "That GitLab instance or connection no longer exists. The page now shows the latest.",
+    UPSTREAM_ERROR: "We couldn't reach GitLab to check the token. Nothing changed; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("GitLab"),
+    FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
+  },
+  /** GET/POST /api/auth/gitlab/link: confirm linking a GitLab sign-in to the account with its email (FR-131). */
+  gitlabLink: {
+    FORBIDDEN:
+      "You're signed in to a different AIDE account. Sign out, then sign in to the account with this GitLab email to link it.",
+    NOT_FOUND: "This GitLab sign-in is no longer waiting to be linked (links last 10 minutes). Continue with GitLab again.",
+    CONFLICT: "This GitLab account is already linked to another AIDE account.",
+  },
+  /** GET /api/me/git/gitlab/repos · /owners (FR-132). */
+  gitlabRepos: {
+    UPSTREAM_ERROR: "We couldn't load your projects from GitLab. Try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("GitLab"),
+    GIT_NOT_CONNECTED:
+      "This GitLab connection no longer works: GitLab rejected it, or an administrator disabled its instance. Reconnect it under Connections.",
+    NOT_FOUND: "That GitLab connection no longer exists. Pick another, or connect GitLab under Connections.",
+  },
+  /** POST /api/me/git/gitlab/repos (FR-132). */
+  createGitLabRepo: {
+    REPO_NAME_TAKEN: "A project with this name or path already exists in that namespace. Choose another name or path.",
+    FORBIDDEN: "GitLab doesn't let you create projects there. Pick your personal namespace or another group.",
+    UPSTREAM_RATE_LIMITED:
+      "GitLab's project-creation limit was reached, so nothing was created. Try again later.",
+    UPSTREAM_ERROR: "GitLab couldn't create the project right now. Nothing was created; try again in a moment.",
+    GIT_NOT_CONNECTED:
+      "This GitLab connection no longer works: GitLab rejected it, or an administrator disabled its instance. Reconnect it under Connections.",
+    NOT_FOUND: "That GitLab connection or group no longer exists. Pick another namespace.",
+  },
+  /** PUT/DELETE /api/admin/integrations/bitbucket (FR-133). */
+  bitbucketConsumer: {
+    CONFLICT:
+      "The Bitbucket consumer is set in the server's configuration (Bitbucket__OAuth__*), so it can't be changed or removed here. Change it there and restart AIDE.",
+    FORBIDDEN: "Only administrators can change the Bitbucket consumer, and only from a browser session.",
+  },
+  /** POST/DELETE /api/me/connections/bitbucket · /:id/test (FR-134). */
+  bitbucketConnection: {
+    CREDENTIAL_INVALID:
+      "Bitbucket rejected this email and token, so nothing was saved. Check the email of your Atlassian account, that you copied the whole token, and that it hasn't expired or been revoked. App passwords don't work.",
+    NOT_FOUND: "That Bitbucket connection no longer exists. The page now shows the latest.",
+    CONFLICT: "Bitbucket was connected at the same time elsewhere. Reload the page, then try again.",
+    UPSTREAM_ERROR: "We couldn't reach Bitbucket to check the token. Nothing changed; try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket"),
+    FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
+  },
+  /** GET/POST /api/auth/bitbucket/link: confirm linking a Bitbucket sign-in to the account with its email (FR-134). */
+  bitbucketLink: {
+    FORBIDDEN:
+      "You're signed in to a different AIDE account. Sign out, then sign in to the account with this Bitbucket email to link it.",
+    NOT_FOUND:
+      "This Bitbucket sign-in is no longer waiting to be linked (links last 10 minutes). Continue with Bitbucket again.",
+    CONFLICT: "This Bitbucket account is already linked to another AIDE account.",
+  },
+  /** GET /api/me/git/bitbucket/repos · /owners (FR-135). */
+  bitbucketRepos: {
+    UPSTREAM_ERROR: "We couldn't load your repositories from Bitbucket. Try again in a moment.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket"),
+    GIT_NOT_CONNECTED: "This Bitbucket connection no longer works: Bitbucket rejected it. Reconnect it under Connections.",
+    NOT_FOUND: "That Bitbucket connection no longer exists. Pick another, or connect Bitbucket under Connections.",
+  },
+  /** POST /api/me/git/bitbucket/repos (FR-135). */
+  createBitbucketRepo: {
+    REPO_NAME_TAKEN: "A repository with this name already exists in that workspace. Choose another name.",
+    FORBIDDEN: "Bitbucket doesn't let you create repositories there. Pick another workspace or project.",
+    UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket", "Nothing was created"),
+    UPSTREAM_ERROR:
+      "Bitbucket couldn't create the repository, or AIDE couldn't push its first commit (the README on main). Check the workspace on Bitbucket: if the repository exists but is empty, delete it there, then try again.",
+    GIT_NOT_CONNECTED: "This Bitbucket connection no longer works: Bitbucket rejected it. Reconnect it under Connections.",
+    NOT_FOUND: "That Bitbucket connection, workspace or project no longer exists. Pick another.",
   },
   /** PATCH /api/admin/users/:id/role (FR-3). */
   changeSystemRole: {
@@ -398,12 +691,26 @@ export const contextualErrorMessages = {
 
 export type ErrorContext = keyof typeof contextualErrorMessages;
 
+/**
+ * Contexts whose UPSTREAM_RATE_LIMITED copy names the Retry-After wait instead of "a few minutes" (Bitbucket's hourly
+ * budget can hold requests back for longer, FR-135).
+ */
+const retryAfterContexts: ReadonlySet<ErrorContext> = new Set<ErrorContext>([
+  "bitbucketConnection",
+  "platformConnection",
+  "bitbucketRepos",
+  "createBitbucketRepo",
+  "createProjectBitbucket",
+  "gitBindingBitbucket",
+  "detectStackBitbucket",
+]);
+
 /** Copy for a code, preferring the context's override. */
 export function messageFor(code: ErrorCode, context?: ErrorContext): string {
   const overrides: Partial<Record<ErrorCode, string>> | undefined = context
     ? contextualErrorMessages[context]
     : undefined;
-  return overrides?.[code] ?? errorMessages[code];
+  return withGitHost(overrides?.[code] ?? errorMessages[code]);
 }
 
 /** FR-2: `reason` on `/login?error=GITHUB_AUTH_FAILED&reason=…` (see backend Auth/GitHubAuth.cs). */
@@ -449,13 +756,180 @@ export function githubFailureMessage(reason: string | undefined): string {
   );
 }
 
+/** Git host names for GIT_AUTH_FAILED's `provider` (FR-131, FR-134). */
+const gitHostNames: Readonly<Record<string, string>> = { gitlab: "GitLab", bitbucket: "Bitbucket" };
+
+/**
+ * FR-131, FR-134: `reason` on `?error=GIT_AUTH_FAILED&reason=…&provider=gitlab|bitbucket` (backend GitLab/GitLabSignIn.cs,
+ * Bitbucket/BitbucketSignIn.cs,
+ * Aide.Domain/GitHosts/GitSignInRules.cs). `{host}` is the Git host's name.
+ */
+export const gitHostFailureMessages: Readonly<Record<string, string>> = {
+  access_denied: "{host} authorization was cancelled.",
+  state: "The {host} sign-in expired or was started in another browser. Try again.",
+  instance_unavailable: "That {host} instance is disabled or no longer set up for sign-in. Ask an administrator.",
+  token_exchange: "{host} didn't accept the sign-in. Try again.",
+  host_not_allowed: "That {host} address isn't allowed. Ask an administrator to check the instance.",
+  email_required:
+    "{host} didn't share a verified email address. Verify an email on your {host} account, or register with email first.",
+  already_linked: "This {host} account is already linked to another AIDE user.",
+  link_session: "Your session ended while connecting {host}. Sign in and try again.",
+  account_create_failed: "We couldn't create an account from your {host} profile. Try again, or register with email.",
+  connection_failed: "Signed in, but we couldn't save your {host} connection. Connect it again from Connections.",
+  busy: "Too many sign-ins are in progress. Try again in a minute.",
+};
+
+/** Reasons whose copy differs per host (Bitbucket Cloud has one OAuth consumer, not instances; FR-134). */
+const gitHostFailureOverrides: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  bitbucket: {
+    instance_unavailable:
+      "Bitbucket sign-in isn't set up here any more (the OAuth consumer was removed). Ask an administrator, or sign in another way.",
+  },
+};
+
+/** SPEC §6 GIT_AUTH_FAILED: "Signing in with {host} didn't complete. Try again.", or the reason's specific copy. */
+export function gitHostFailureMessage(provider: string | undefined, reason: string | undefined): string {
+  const host = (provider ? gitHostNames[provider] : undefined) ?? "your Git host";
+  const override = provider && reason ? gitHostFailureOverrides[provider]?.[reason] : undefined;
+  const copy =
+    override ?? (reason ? gitHostFailureMessages[reason] : undefined) ?? "Signing in with {host} didn't complete. Try again.";
+  const text = copy.replaceAll("{host}", host);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * SPEC §6 CONNECTION_SCOPE_INSUFFICIENT: "This token is missing permissions: {missing}." (`details` lists them). FR-134:
+ * Bitbucket may also name scopes AIDE couldn't confirm (`unverifiableScopes`; a token is saved only when all are
+ * verified), with what to do instead.
+ */
+export function connectionScopeMessage(
+  missing: readonly string[],
+  unverifiable: readonly string[] = [],
+  oauthAvailable = true,
+): string {
+  const scopes = missing.map((m) => m.trim()).filter(Boolean);
+  const unconfirmed = unverifiable.map((m) => m.trim()).filter(Boolean);
+  const parts: string[] = [];
+  if (scopes.length > 0) {
+    parts.push(`This token is missing permissions: ${scopes.join(", ")}.`);
+  }
+  if (unconfirmed.length > 0) {
+    parts.push(
+      oauthAvailable
+        ? `AIDE couldn't confirm these permissions: ${unconfirmed.join(", ")}. Connect with Bitbucket (OAuth) instead, or create a repository in your workspace first so AIDE can check them, then try again.`
+        : `AIDE couldn't confirm these permissions: ${unconfirmed.join(", ")}. Create a repository in the workspace first so AIDE can check them, then try again.`,
+    );
+  }
+  return parts.length === 0 ? errorMessages.CONNECTION_SCOPE_INSUFFICIENT : parts.join(" ");
+}
+
+/**
+ * FR-142: copy for a failed platform connection call. A provider's own context wins (Vercel's team tokens, Cloudflare's
+ * cfat_ refusal, Railway's workspace id), then the shared platform copy with `{provider}` filled in.
+ */
+export function platformConnectionMessage(error: unknown, provider: { id: string; name: string }): string {
+  const own = `${provider.id}Connection`;
+  const providerContext = Object.hasOwn(contextualErrorMessages, own) ? (own as ErrorContext) : undefined;
+  const code = error instanceof ApiError ? error.errorCode : null;
+  const overrides: Partial<Record<ErrorCode, string>> | undefined = providerContext
+    ? contextualErrorMessages[providerContext]
+    : undefined;
+  const context = code !== null && overrides?.[code] ? providerContext : "platformConnection";
+  return errorMessage(error, context).replaceAll("{provider}", provider.name);
+}
+
+/**
+ * Codes recorded on deployments and events before v4 renamed them (D-V4-4: VERCEL_* → PLATFORM_*). They are no
+ * longer API codes, so they aren't in `errorMessages`; copyForCode() still reads them so history stays readable.
+ */
+const legacyCodeCopy: Readonly<Record<string, string>> = {
+  VERCEL_GIT_NOT_CONNECTED: "Vercel couldn't see this repository.",
+  VERCEL_PLAN_LIMIT: "The Vercel plan didn't allow this.",
+  VERCEL_ERROR: "Vercel reported the build or deployment as failed. The build log says why.",
+};
+
 function isErrorCode(code: unknown): code is ErrorCode {
   return typeof code === "string" && Object.hasOwn(errorMessages, code);
 }
 
-/** Copy for an `errorCode` recorded on a resource (e.g. a failed release), or `null` when the code is unknown. */
-export function copyForCode(code: string | null | undefined, context?: ErrorContext): string | null {
-  return isErrorCode(code) ? messageFor(code, context) : null;
+/**
+ * Copy for an `errorCode` recorded on a resource (e.g. a failed release), or `null` when the code is unknown. `host`
+ * names the project's Git host in host-aware copy (FR-140; default GitHub).
+ */
+export function copyForCode(
+  code: string | null | undefined,
+  context?: ErrorContext,
+  host?: GitHostTerms,
+): string | null {
+  if (!isErrorCode(code)) {
+    return typeof code === "string" && Object.hasOwn(legacyCodeCopy, code) ? (legacyCodeCopy[code] ?? null) : null;
+  }
+  const overrides: Partial<Record<ErrorCode, string>> | undefined = context
+    ? contextualErrorMessages[context]
+    : undefined;
+  return withGitHost(overrides?.[code] ?? errorMessages[code], host);
+}
+
+/** SPEC §6 `{platform}`: the display name of a deployment platform id (ProblemDetails `platform`, a target's provider). */
+export const platformNames: Readonly<Record<string, string>> = {
+  vercel: "Vercel",
+  netlify: "Netlify",
+  cloudflare: "Cloudflare",
+  render: "Render",
+  railway: "Railway",
+  github_pages: "GitHub Pages",
+  supabase: "Supabase",
+  fake: "the Fake provider",
+};
+
+/** Fills `{platform}` (unknown or missing: "the platform"), capitalising the first letter of the result. */
+export function withPlatform(text: string, platform: string | null | undefined): string {
+  if (!text.includes("{platform}")) {
+    return text;
+  }
+  const name = (platform ? platformNames[platform] : undefined) ?? "the platform";
+  const filled = text.replaceAll("{platform}", name);
+  return filled.charAt(0).toUpperCase() + filled.slice(1);
+}
+
+/** PLATFORM_PLAN_LIMIT: "Your {platform} plan doesn't allow this. {detail}" with the platform's reason, when there is one. */
+function withPlanDetail(code: ErrorCode | null, text: string, detail: string | null | undefined): string {
+  const d = detail?.trim();
+  return code === "PLATFORM_PLAN_LIMIT" && d ? `${text} ${d}` : text;
+}
+
+/**
+ * FR-144: copy for a code recorded on a deployment target or deployment (the setup job's `errorCode`, a failed
+ * deployment), naming its platform; `detail` is the platform's reason for PLATFORM_PLAN_LIMIT. `null` for unknown codes.
+ */
+export function platformCopy(
+  code: string | null | undefined,
+  platform: string | null | undefined,
+  detail?: string | null,
+): string | null {
+  const copy = copyForCode(code);
+  return copy === null || !isErrorCode(code) ? copy : withPlanDetail(code, withPlatform(copy, platform), detail);
+}
+
+/** SPEC §6 job codes whose copy ends with ": {detail}." (the job's recorded message). */
+export const jobDetailCodes: ReadonlySet<string> = new Set(["MIGRATION_FAILED", "DATABASE_PROVISIONING_FAILED"]);
+
+/**
+ * FR-152, FR-153: copy for a code recorded on a database's provisioning job or a migration run, naming the platform.
+ * MIGRATION_FAILED and DATABASE_PROVISIONING_FAILED read "A database migration failed: {detail}." with the recorded
+ * message; PLATFORM_PLAN_LIMIT appends the platform's reason. `null` for unknown codes.
+ */
+export function withJobDetail(
+  code: string | null | undefined,
+  platform: string | null | undefined,
+  detail: string | null | undefined,
+): string | null {
+  const copy = platformCopy(code, platform, detail);
+  const d = detail?.trim().replace(/\.+$/, "");
+  if (copy === null || !code || !jobDetailCodes.has(code) || !d) {
+    return copy;
+  }
+  return `${copy.replace(/\.$/, "")}: ${d}.`;
 }
 
 const statusFallback: Partial<Record<number, ErrorCode>> = {
@@ -467,13 +941,24 @@ const statusFallback: Partial<Record<number, ErrorCode>> = {
   429: "RATE_LIMITED",
 };
 
+/** STACK_INCOMPATIBLE `violations[]` (FR-116): the choice (`layer`), the option, the rule id and its reason. */
+export interface StackViolation {
+  layer: string;
+  option: string;
+  rule: string;
+  reason: string;
+}
+
 interface ProblemBody {
   title?: string | null;
+  violations?: unknown;
   errorCode?: string;
   reason?: string;
   installUrl?: string;
+  platform?: string;
   errors?: Record<string, string[]>;
   details?: string[];
+  unverifiableScopes?: unknown;
   traceId?: string;
 }
 
@@ -490,6 +975,12 @@ export class ApiError extends Error {
   readonly reason: string | null;
   /** ProblemDetails `installUrl` (GITHUB_APP_NOT_INSTALLED, FR-81/FR-83): the AIDE GitHub App's install link. */
   readonly installUrl: string | null;
+  /** ProblemDetails `violations` (STACK_INCOMPATIBLE, FR-116): each broken compatibility rule. */
+  readonly violations: readonly StackViolation[];
+  /** ProblemDetails `unverifiableScopes` (CONNECTION_SCOPE_INSUFFICIENT on a Bitbucket token, FR-134). */
+  readonly unverifiableScopes: readonly string[];
+  /** ProblemDetails `platform` (PLATFORM_* codes, FR-144): the platform id that fills `{platform}` in the copy. */
+  readonly platform: string | null;
 
   constructor(init: {
     status: number;
@@ -501,6 +992,9 @@ export class ApiError extends Error {
     traceId?: string;
     reason?: string | null;
     installUrl?: string | null;
+    violations?: readonly StackViolation[];
+    unverifiableScopes?: readonly string[];
+    platform?: string | null;
   }) {
     super(init.title ?? `Request failed with HTTP ${String(init.status)}`);
     this.name = "ApiError";
@@ -512,6 +1006,9 @@ export class ApiError extends Error {
     this.traceId = init.traceId;
     this.reason = init.reason ?? null;
     this.installUrl = init.installUrl ?? null;
+    this.violations = init.violations ?? [];
+    this.unverifiableScopes = init.unverifiableScopes ?? [];
+    this.platform = init.platform ?? null;
   }
 }
 
@@ -539,7 +1036,35 @@ export function toApiError(error: unknown, response: Response): ApiError {
     traceId: body.traceId,
     reason: typeof body.reason === "string" ? body.reason : null,
     installUrl: typeof body.installUrl === "string" && body.installUrl.startsWith("https://") ? body.installUrl : null,
+    violations: parseViolations(body.violations),
+    unverifiableScopes: Array.isArray(body.unverifiableScopes)
+      ? body.unverifiableScopes.filter((d): d is string => typeof d === "string")
+      : [],
+    platform: typeof body.platform === "string" ? body.platform : null,
   });
+}
+
+function isViolation(value: unknown): value is StackViolation {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const v = value as Record<string, unknown>;
+  return ["layer", "option", "rule", "reason"].every((k) => typeof v[k] === "string");
+}
+
+function parseViolations(value: unknown): StackViolation[] {
+  return Array.isArray(value) ? value.filter(isViolation) : [];
+}
+
+/**
+ * SPEC §6 STACK_INCOMPATIBLE: "These stack choices don't work together: {reasons}." The reasons are the violations'
+ * reason texts (each once), or the generic copy when the server sent none.
+ */
+export function stackIncompatibleMessage(violations: readonly StackViolation[]): string {
+  const reasons = [...new Set(violations.map((v) => v.reason.trim().replace(/\.$/, "")).filter(Boolean))];
+  return reasons.length === 0
+    ? errorMessages.STACK_INCOMPATIBLE
+    : `These stack choices don't work together: ${reasons.join("; ")}.`;
 }
 
 /** The value of a `key: value` entry in ProblemDetails `details` (e.g. `latestVersion: 5`), if present. */
@@ -557,13 +1082,21 @@ export const rollbackBlockedMessages = {
   versionReleased:
     "This version is released and closed, so it can't be rolled back. Start a new version to make changes.",
   releasePartiallyApplied:
-    "A rollback isn't possible because the release is partially applied: it's awaiting its merge on GitHub, or it was merged or tagged but didn't finish. Merge or close the pull request, or retry the release, first.",
-  /** Shown before asking: the release is awaiting its merge on GitHub (FR-65; the API says release_partially_applied). */
+    "A rollback isn't possible because the release is partially applied: it's awaiting its merge on the Git host, or it was merged or tagged but didn't finish. Merge or close the pull or merge request, or retry the release, first.",
+  /**
+   * Shown before asking: the release is awaiting its merge on the Git host (FR-65; the API says
+   * release_partially_applied). Host-aware (FR-140): show it through rollbackAwaitingMergeMessage().
+   */
   awaitingMerge:
-    "A rollback isn't possible while the release is awaiting its merge on GitHub (the release is partially applied). Merge or close the pull request first.",
+    "A rollback isn't possible while the release is awaiting its merge on {host} (the release is partially applied). Merge or close the {pr} first.",
   releaseRunning:
     "A rollback isn't possible while a release is merging and tagging. Wait for it to finish, then try again.",
 } as const;
+
+/** FR-65, FR-140: rollbackBlockedMessages.awaitingMerge naming the project's Git host (default GitHub). */
+export function rollbackAwaitingMergeMessage(host?: GitHostTerms): string {
+  return withGitHost(rollbackBlockedMessages.awaitingMerge, host);
+}
 
 function rollbackBlockedMessage(error: ApiError): string | null {
   const reason = `${detailValue(error, "reason") ?? ""} ${error.message}`.toLowerCase();
@@ -643,14 +1176,48 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
         return `Someone saved a newer version (v${latest}) while you were editing. Your text is kept here: copy it, then cancel and edit again to start from v${latest}.`;
       }
     }
+    if (
+      error.errorCode === "UPSTREAM_RATE_LIMITED" &&
+      error.retryAfterSeconds &&
+      context &&
+      retryAfterContexts.has(context)
+    ) {
+      return messageFor("UPSTREAM_RATE_LIMITED", context).replace(
+        "in a few minutes",
+        `in ${waitCopy(error.retryAfterSeconds)}`,
+      );
+    }
+    if (error.errorCode === "CONNECTION_SCOPE_INSUFFICIENT") {
+      const override: Partial<Record<ErrorCode, string>> | undefined = context
+        ? contextualErrorMessages[context]
+        : undefined;
+      if (override?.CONNECTION_SCOPE_INSUFFICIENT) {
+        return override.CONNECTION_SCOPE_INSUFFICIENT;
+      }
+      return connectionScopeMessage(error.details, error.unverifiableScopes);
+    }
+    if (error.errorCode === "STACK_INCOMPATIBLE") {
+      return stackIncompatibleMessage(error.violations);
+    }
     if (error.errorCode === "ROLLBACK_BLOCKED") {
       const blocked = rollbackBlockedMessage(error);
       if (blocked) {
         return blocked;
       }
     }
+    if (error.errorCode === "INVALID_STATE") {
+      const reason = error.message.startsWith("Request failed with HTTP") ? "" : error.message.trim();
+      if (reason) {
+        return `This can't be done right now. ${/[.!?]$/.test(reason) ? reason : `${reason}.`}`;
+      }
+    }
     if (error.errorCode) {
-      return messageFor(error.errorCode, context);
+      const generic = error.message.startsWith("Request failed with HTTP");
+      return withPlanDetail(
+        error.errorCode,
+        withPlatform(messageFor(error.errorCode, context), error.platform),
+        generic ? null : error.message,
+      );
     }
     if (error.status === 501) {
       return notImplementedMessage;

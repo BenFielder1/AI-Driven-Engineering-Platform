@@ -5,10 +5,14 @@ import { checkTagPrefix } from '../../features/projects/settings/release-setting
 import { compareSemVer, normalizeVersion, parseSemVer } from '../../features/versions/semver'
 import type { ProjectRole } from '../../lib/permissions'
 import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from './auth'
-import { applyVercelSetup } from './deployments'
+import { bindCredential, connectionsDb } from './connections'
+import { applyVercelSetup, seedHostsFromComposition } from './deployments'
 import { githubDb } from './github'
-import { findPreset, presetNameOf } from './preset-catalog'
+import { bitbucketDb, bitbucketRefsOf, findBitbucketConnection, findBitbucketRepo } from './bitbucket'
+import { findGitLabConnection, findGitLabRepo, gitlabDb, gitlabRefsOf } from './gitlab'
+import { checkCreateLlm, isLlmProviderEnabled } from './llm'
 import { problem } from './problem'
+import { packsOf, validateComposition } from './stack-catalog'
 
 type Project = Schemas['ProjectDto']
 type Summary = Schemas['ProjectSummaryDto']
@@ -49,8 +53,16 @@ export interface StoredProject extends Omit<
     | 'presetName'
     | 'presetVersion'
     | 'deploymentsEnabled'
+    | 'previewMigrationsEnabled'
   > {
+  /** §4.21: a preview rollout has a migration step, even with no target. */
+  previewMigrationsEnabled?: boolean
   members: StoredMember[]
+  /**
+   * FR-117 Settings → Stack: the composition pinned on the current release version (unset or null: none), and the seed
+   * knobs for its lock and stack change; see mocks/handlers/stack.ts.
+   */
+  stack?: StoredStack
   /**
    * Release versions in any order (FR-62); the project's released, development and current versions are derived from
    * them (§4.10). Seeded with one version (0.1.0: in development, or released for a released project).
@@ -102,6 +114,8 @@ export interface StoredProject extends Omit<
   phaseAtVersion: Record<number, Project['currentPhase']>
   /** Release attempts, oldest first (FR-42, FR-43); see mocks/handlers/release.ts. */
   releases?: Schemas['ReleaseDto'][]
+  /** FR-140: AIDE's release notes per release attempt id (GET …/releases/:releaseId/notes; missing = `null`). */
+  releaseNotes?: Record<string, string | null>
   /** Recorded rollbacks, oldest first (FR-44); see mocks/handlers/release.ts. */
   rollbacks?: Schemas['RollbackDto'][]
   /** When the last rollback ran (epoch ms), for the one-per-minute limit (FR-45). */
@@ -118,20 +132,45 @@ export interface StoredProject extends Omit<
   deploymentEnv?: StoredEnvVar[]
   /** FR-90, FR-91: deployments, any order (the API lists newest first); see mocks/handlers/deployments.ts. */
   deployments?: Schemas['DeploymentDto'][]
+  /** FR-153: Supabase BaaS migration runs, any order (the API lists newest first); see mocks/handlers/migrations.ts. */
+  migrationRuns?: Schemas['MigrationRunDto'][]
 }
 
-/** FR-88: the stored deployment settings; `present` on required env and `canBind` are derived per request. */
+export interface StoredStack {
+  composition?: Schemas['StackCompositionDto'] | null
+  catalogVersion?: string
+  /** `null`: a composition written by the FR-129 preset migration, not re-pinned yet. */
+  catalogHash?: string | null
+  planLocked?: boolean
+  baseHasCode?: boolean
+  layersChanged?: string[]
+  legacyPreset?: Schemas['LegacyPresetDto'] | null
+}
+
+/** §4.17 R5: the VCS option of the project's repository host (Local: none, any VCS). */
+export function repoVcsOfProject(p: StoredProject): string | null {
+  return repoVcsOfMode(p.git.mode)
+}
+
+/** §4.17 R5: the VCS option fixed by a repository host (Local: any). */
+function repoVcsOfMode(mode: Schemas['GitProvider'] | undefined): string | null {
+  return !mode || mode === 'local' ? null : mode === 'gitlab' ? 'vcs-gitlab' : mode === 'bitbucket' ? 'vcs-bitbucket' : 'vcs-github'
+}
+
+/**
+ * FR-144–FR-146: Settings → Deployment as stored. `canBind` on the targets is derived per request; the setup job of a
+ * target advances one step per GET (see mocks/handlers/deployments.ts).
+ */
 export interface StoredDeploymentSettings {
-  provider: Schemas['DeploymentProvider'] | null
-  /** The preset supports Vercel (an Owner can opt in otherwise by setting a provider). */
-  supported: boolean
-  binding: Schemas['DeploymentBindingDto'] | null
-  vercelProject: Schemas['VercelProjectDto'] | null
-  rootDirectory: string
-  framework: string
-  requiredEnv: Omit<Schemas['RequiredEnvVarDto'], 'present'>[]
-  gitConnected: boolean | null
-  installUrl: string | null
+  targets: Schemas['DeploymentTargetDto'][]
+  databases: Schemas['DeploymentDatabaseDto'][]
+  publicPrefix: string | null
+  originModel: Schemas['DeploymentOriginModelDto']
+  /** Pack-declared variables: listed as `required` rows while no user value exists. */
+  required: Pick<Schemas['DeploymentEnvVarDto'], 'key' | 'appliesTo' | 'environments' | 'sensitive' | 'public' | 'description'>[]
+  /** AIDE-written rows (§4.22): read-only. */
+  derived: Schemas['DeploymentEnvVarDto'][]
+  fakeMode: boolean
 }
 
 /** An env var with its plaintext value (the mock's stand-in for the encrypted column). */
@@ -146,6 +185,8 @@ export type StoredRefinementRound = Schemas['RefinementRoundDto'] & {
 export type StoredExecutionStep = Schemas['ExecutionStepDto'] & {
   planArtifactId: string
   agentKey?: string | null
+  /** FR-121, FR-129: the retired v2 preset agent the step was planned for (it ran as `agentKey`). */
+  legacyAgentKey?: string | null
 }
 
 /** A compliance report plus the v2 detail fields (FR-56) that the v1 DTO lacks. */
@@ -178,7 +219,10 @@ export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
   const app = provider === 'github_app'
   const repoFullName = overrides.repoFullName ?? (app ? 'acme/inventory' : null)
   return {
-    repoUrl: provider === 'local' ? null : `https://github.com/${repoFullName ?? 'acme/inventory'}`,
+    repoUrl:
+      provider === 'local' || provider === 'gitlab' || provider === 'bitbucket'
+        ? null
+        : `https://github.com/${repoFullName ?? 'acme/inventory'}`,
     defaultBranch: 'main',
     branchName: null,
     hasToken: false,
@@ -195,11 +239,150 @@ export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
   }
 }
 
-/** GET/PATCH /settings/git body: "Switch to GitHub App" is offered to Owners of a PAT project the App can access. */
+/**
+ * GET/PATCH /settings/git body: "Switch to GitHub App" is offered to Owners of a PAT project the App can access;
+ * Rebind (FR-136) to Owners of a GitLab or Bitbucket project.
+ */
 export function gitDto(project: StoredProject, isOwner: boolean): GitSettings {
   const g = project.git
-  return { ...g, canSwitchToApp: isOwner && g.mode === 'github_pat' && g.appInstalledOnRepo === true }
+  return {
+    ...g,
+    canSwitchToApp: isOwner && g.mode === 'github_pat' && g.appInstalledOnRepo === true,
+    canRebind: isOwner && (g.mode === 'gitlab' || g.mode === 'bitbucket'),
+  }
 }
+
+/** FR-136: the GitLab settings of a project bound to `connection` (seeds and the create handler). */
+export function gitlabGitSettings(options: {
+  instance: Schemas['GitHostInstanceRefDto']
+  repoId: string
+  repoFullName: string
+  binding: Schemas['GitBindingDto'] | null
+  defaultBranch?: string
+}): GitSettings {
+  return gitSettings({
+    provider: 'gitlab',
+    repoFullName: options.repoFullName,
+    defaultBranch: options.defaultBranch ?? 'main',
+    instance: options.instance,
+    externalRepoId: options.repoId,
+    repoWebUrl: `${options.instance.baseUrl}/${options.repoFullName}`,
+    binding: options.binding,
+  })
+}
+
+/** Bitbucket Cloud as project settings show it (FR-136: a `git_host_instances` row, base URL NULL). */
+export const BITBUCKET_CLOUD: Schemas['GitHostInstanceRefDto'] = {
+  id: '0192d000-0000-7000-8000-00000000bb01',
+  name: 'Bitbucket Cloud',
+  baseUrl: 'https://bitbucket.org',
+  enabled: true,
+}
+
+/** FR-136: the Bitbucket settings of a project bound to `connection` (seeds and the create handler). */
+export function bitbucketGitSettings(options: {
+  repoId: string
+  repoFullName: string
+  binding: Schemas['GitBindingDto'] | null
+  defaultBranch?: string
+  mergeStrategy?: Schemas['MergeStrategy']
+}): GitSettings {
+  return gitSettings({
+    provider: 'bitbucket',
+    repoFullName: options.repoFullName,
+    defaultBranch: options.defaultBranch ?? 'main',
+    instance: BITBUCKET_CLOUD,
+    externalRepoId: options.repoId,
+    repoWebUrl: `https://bitbucket.org/${options.repoFullName}`,
+    binding: options.binding,
+    mergeStrategy: options.mergeStrategy ?? 'aide_merges',
+  })
+}
+
+/**
+ * FR-136: the checks of binding a Bitbucket connection (create and Rebind): the caller's own (CREDENTIAL_NOT_OWNER),
+ * valid (GIT_NOT_CONNECTED), with write access to the repository (FORBIDDEN on `fieldPrefix + repoId`).
+ */
+function checkBitbucketBinding(
+  callerId: string,
+  connectionId: string | null | undefined,
+  repoId: string,
+  fieldPrefix: string,
+): Response | Schemas['BitbucketConnectionDto'] {
+  const onConnection = { errors: { [`${fieldPrefix}connectionId`]: ['Bind one of your own valid Bitbucket connections.'] } }
+  const onRepo = { errors: { [`${fieldPrefix}repoId`]: ['Write access to the repository is required.'] } }
+  const found = findBitbucketConnection(connectionId)
+  if (!found) {
+    return problem(404, 'NOT_FOUND', 'The connection was not found.', onConnection)
+  }
+  if (found.userId !== callerId) {
+    return problem(403, 'CREDENTIAL_NOT_OWNER', 'You can only bind your own connections.', onConnection)
+  }
+  if (found.connection.status !== 'valid') {
+    return problem(409, 'GIT_NOT_CONNECTED', 'The Bitbucket connection is invalid. Reconnect it under Account → Connections, then bind it.', onConnection)
+  }
+  if (bitbucketDb.noWriteAccess.includes(repoId)) {
+    return problem(403, 'FORBIDDEN', 'Your Bitbucket account needs write access to the repository to bind it.', onRepo)
+  }
+  return found.connection
+}
+
+/**
+ * FR-136: the checks of binding a GitLab connection (create and Rebind): the caller's own (CREDENTIAL_NOT_OWNER), on
+ * the repo's instance (VALIDATION on `fieldPrefix + connectionId`), valid on an enabled instance (GIT_NOT_CONNECTED),
+ * and Developer access to the repo (FORBIDDEN).
+ */
+function checkGitLabBinding(
+  callerId: string,
+  connectionId: string | null | undefined,
+  instanceId: string | null | undefined,
+  repoId: string,
+  fieldPrefix: string,
+): Response | Schemas['GitLabConnectionDto'] {
+  const onConnection = { errors: { [`${fieldPrefix}connectionId`]: ['Bind one of your own valid GitLab connections.'] } }
+  const onRepo = { errors: { [`${fieldPrefix}repoId`]: ['Developer access or higher is required.'] } }
+  const found = findGitLabConnection(connectionId)
+  if (!found) {
+    return problem(404, 'NOT_FOUND', 'The connection was not found.', onConnection)
+  }
+  if (found.userId !== callerId) {
+    return problem(403, 'CREDENTIAL_NOT_OWNER', 'You can only bind your own connections.', onConnection)
+  }
+  const c = found.connection
+  if (c.instanceId !== instanceId) {
+    return validation({
+      [`${fieldPrefix}connectionId`]: ["The connection is for a different GitLab instance than the project's repository."],
+    })
+  }
+  if (c.status !== 'valid' || !c.instanceEnabled) {
+    return problem(409, 'GIT_NOT_CONNECTED', 'The GitLab connection is invalid. Reconnect it under Account → Connections, then bind it.', onConnection)
+  }
+  if (gitlabDb.noDeveloperAccess.includes(repoId)) {
+    return problem(403, 'FORBIDDEN', 'Your GitLab account needs developer (write) access to the repository to bind it.', onRepo)
+  }
+  return c
+}
+
+/** The instance as project settings show it. */
+export function instanceRef(instanceId: string): Schemas['GitHostInstanceRefDto'] {
+  const i = gitlabDb.instances.find((x) => x.id === instanceId)
+  return {
+    id: instanceId,
+    name: i?.name ?? 'GitLab.com',
+    baseUrl: i?.baseUrl ?? 'https://gitlab.com',
+    enabled: i?.enabled ?? true,
+  }
+}
+
+const bindingOf = (
+  c: Schemas['GitLabConnectionDto'] | Schemas['BitbucketConnectionDto'],
+  user: { id: string; name: string },
+): Schemas['GitBindingDto'] => ({
+  connectionId: c.id,
+  login: c.login,
+  status: c.status,
+  boundBy: { id: user.id, name: user.name },
+})
 
 /** In-memory projects backend for tests (reset after each test by src/test/setup.ts). */
 export const projectsDb = {
@@ -244,7 +427,8 @@ export function makeReleaseVersion(overrides: Partial<ReleaseVersion> & Pick<Rel
     checkpoints: { current: 1, max: 1 },
     presetId: null,
     presetVersion: null,
-    presetName: presetNameOf(overrides.presetId),
+    // FR-129: the retired preset's name is its id (no preset ships any more).
+    presetName: overrides.presetId ?? null,
     request: 'Track stock levels across warehouses.',
     startedBy: { id: null, name: 'Ada Owner', isSystem: false },
     createdAt: '2026-09-01T10:00:00Z',
@@ -332,6 +516,7 @@ export function seedProject(
     executionSteps: [],
     phaseAtVersion: {},
     releaseVersions: [],
+    stackPacks: [],
     ...rest,
     members: (members ?? (owner ? [{ userId: owner, role: 'owner' as const }] : [])).map((m) => ({
       ...m,
@@ -363,10 +548,10 @@ export function roleOf(project: StoredProject, userId: string): ProjectRole | nu
   return project.members.find((m) => m.userId === userId)?.role ?? null
 }
 
-/** FR-74: the preset chip of a project: the current release version's pinned preset (all null: none). */
+/** FR-129: the retired preset the current release version was migrated from (history; all null: none). */
 function presetFields(p: StoredProject): Pick<Project, 'presetId' | 'presetName' | 'presetVersion'> {
   const v = currentVersionOf(p)
-  return { presetId: v?.presetId ?? null, presetName: presetNameOf(v?.presetId), presetVersion: v?.presetVersion ?? null }
+  return { presetId: v?.presetId ?? null, presetName: v?.presetId ?? null, presetVersion: v?.presetVersion ?? null }
 }
 
 export function projectDto(project: StoredProject, userId: string): Project {
@@ -393,7 +578,9 @@ export function projectDto(project: StoredProject, userId: string): Project {
     myRole: roleOf(p, userId),
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
-    deploymentsEnabled: p.deployment?.provider != null,
+    deploymentsEnabled: p.deployment?.targets.some((t) => t.resourceId !== null || t.status !== 'not_configured') ?? false,
+    stackPacks: p.stackPacks,
+    previewMigrationsEnabled: p.previewMigrationsEnabled ?? false,
   }
 }
 
@@ -413,6 +600,7 @@ function toSummary(project: StoredProject, userId: string): Summary {
     updatedAt,
     myRole: roleOf(project, userId),
     ...presetFields(project),
+    stackPacks: project.stackPacks,
   }
 }
 
@@ -435,8 +623,31 @@ export function llmDto(project: StoredProject, canBind: boolean): LlmSettings {
     ...project.llm,
     hasApiKey: binding !== null,
     canBind,
-    providers: projectsDb.providers.map((p) => ({ ...p, configured: p.configured || binding?.provider === p.provider })),
+    // FR-157: only providers enabled on this server are listed.
+    providers: projectsDb.providers
+      .filter((p) => isLlmProviderEnabled(p.provider))
+      .map((p) => ({ ...p, configured: p.configured || binding?.provider === p.provider })),
   }
+}
+
+/**
+ * FR-159: the new project's LLM settings, bound to the chosen connection, or (a keyed provider without one) to the
+ * caller's newest connection for it, as the API does.
+ */
+function applyCreateLlm(project: StoredProject, llm: Schemas['CreateProjectLlmRequest'], userId: string) {
+  project.llm.provider = llm.provider
+  project.llm.defaultModel = llm.defaultModel.trim()
+  project.llm.modelsByAgent = llm.modelsByAgent ?? {}
+  project.llm.binding = null
+  const credential = llm.credentialId
+    ? connectionsDb.credentials.find((c) => c.id === llm.credentialId)
+    : llm.provider === 'anthropic' || llm.provider === 'openai'
+      ? connectionsDb.credentials.find((c) => c.userId === userId && c.provider === llm.provider)
+      : undefined
+  if (credential) {
+    bindCredential(project, credential)
+  }
+  project.llm.hasApiKey = credential !== undefined
 }
 
 const urlIsSecret = (type: Channel['type']) => type === 'slack' || type === 'teams'
@@ -547,6 +758,26 @@ function pullRequestSummary(pr: Schemas['PullRequestDto'] | null | undefined): S
   return { provider, baseBranch, headBranch, number, url, openedAt }
 }
 
+/** FR-150, FR-151: the production deployment a component serves now: its newest ready production row. */
+export function currentDeploymentOf(
+  p: StoredProject,
+  component: Schemas['DeploymentComponent'],
+): Schemas['DeploymentDto'] | undefined {
+  return (p.deployments ?? [])
+    .filter((d) => d.target === 'production' && d.status === 'ready' && d.component === component)
+    .reduce<Schemas['DeploymentDto'] | undefined>((best, d) => (!best || d.createdAt > best.createdAt ? d : best), undefined)
+}
+
+/** FR-151: /state's production URL of each set-up target (the current deployment's, else the target's own). */
+function productionUrlsOf(p: StoredProject): Schemas['ComponentProductionUrlDto'][] {
+  return (p.deployment?.targets ?? [])
+    .filter((t) => t.resourceId !== null)
+    .map((t) => {
+      const current = currentDeploymentOf(p, t.component)
+      return { component: t.component, provider: t.provider, url: current?.url ?? t.productionUrl, deploymentId: current?.id ?? null }
+    })
+}
+
 /** GET /state for a stored project; `pendingGates` comes from its gates. */
 export function stateDto(p: StoredProject): State {
   return {
@@ -560,6 +791,7 @@ export function stateDto(p: StoredProject): State {
     suggestedNextVersion: suggestedNextVersion(p),
     executionPaused: p.executionPaused,
     executionStatus: executionRunStatus(p),
+    productionUrls: productionUrlsOf(p),
     ...p.state,
     pendingGates: p.gates
       .filter((g) => g.status === 'pending')
@@ -656,13 +888,17 @@ function scratchVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[
  * GitHub App repo's refs (TAG_NOT_FOUND) and a version (VERSION_INVALID); the version to develop must be valid and
  * greater (VERSION_NOT_GREATER). Creates an `imported` row for the released tag plus the version `in_development`.
  */
-function importVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[] | Response {
+function importVersions(
+  body: Schemas['CreateProjectRequest'],
+  hostRefs?: Schemas['GitLabRepoRefsDto'] | Schemas['BitbucketRepoRefsDto'],
+): ReleaseVersion[] | Response {
   const releasedTag = body.import?.releasedTag ?? null
   let released: string | null = null
   if (releasedTag !== null) {
-    const refs = body.git.repoFullName ? githubDb.refs[body.git.repoFullName] : undefined
+    const refs = hostRefs ?? (body.git.repoFullName ? githubDb.refs[body.git.repoFullName] : undefined)
     const tag = refs?.tags.find((t) => t.name === releasedTag)
-    if (refs && !tag && !refs.releases.some((r) => r.tagName === releasedTag)) {
+    const asRelease = refs && 'releases' in refs ? refs.releases.some((r) => r.tagName === releasedTag) : false
+    if (refs && !tag && !asRelease) {
       return problem(400, 'TAG_NOT_FOUND', `The tag '${releasedTag}' was not found in the repository.`)
     }
     released = normalizeVersion(tag ? tag.semver : releasedTag)
@@ -688,19 +924,19 @@ function importVersions(body: Schemas['CreateProjectRequest']): ReleaseVersion[]
   ]
 }
 
-/** GET /projects and /projects/kpis: the caller's projects (all for Admins) matching search, phase, status, preset and dev version. */
+/** GET /projects and /projects/kpis: the caller's projects (all for Admins) matching search, phase, status, pack and dev version. */
 function listFiltered(user: { id: string; systemRole: string }, q: URLSearchParams) {
   const search = q.get('search')?.toLowerCase()
   const phase = q.get('phase')
   const status = q.get('status')
   const hasDevelopment = q.get('hasDevelopmentVersion')
-  const preset = q.get('preset')
+  const pack = q.get('pack')
   return projectsDb.projects
     .filter((p) => user.systemRole === 'admin' || roleOf(p, user.id))
     .filter((p) => !search || p.name.toLowerCase().includes(search))
     .filter((p) => !phase || p.currentPhase === phase)
     .filter((p) => !status || p.status === status)
-    .filter((p) => !preset || (currentVersionOf(p)?.presetId ?? 'none') === preset)
+    .filter((p) => !pack || p.stackPacks.includes(pack))
     .filter((p) => hasDevelopment === null || (developmentVersionOf(p) !== undefined) === (hasDevelopment === 'true'))
 }
 
@@ -769,6 +1005,28 @@ export const projectHandlers = [
     if (mode === 'github_app' && (!body.git.installationId || !body.git.repoFullName)) {
       errors['git.repoFullName'] = ['Pick a repository the AIDE GitHub App is installed on.']
     }
+    if (mode === 'gitlab') {
+      if (!body.git.instanceId) {
+        errors['git.instanceId'] = ['The GitLab instance is required.']
+      }
+      if (!body.git.connectionId) {
+        errors['git.connectionId'] = ['Pick one of your GitLab connections.']
+      }
+      if (!body.git.repoId) {
+        errors['git.repoId'] = ['Pick a GitLab project.']
+      }
+      if ((body.git.repoFullName ?? '').length > 255) {
+        errors['git.repoFullName'] = ['The project path is at most 255 characters.']
+      }
+    }
+    if (mode === 'bitbucket') {
+      if (!body.git.connectionId) {
+        errors['git.connectionId'] = ['Pick one of your Bitbucket connections.']
+      }
+      if (!body.git.repoId) {
+        errors['git.repoId'] = ['Pick a Bitbucket repository.']
+      }
+    }
     const importing = body.source === 'import'
     if (importing && !body.import) {
       errors.import = ['Say which version is released and which to develop.']
@@ -779,20 +1037,60 @@ export const projectHandlers = [
     if (Object.keys(errors).length > 0) {
       return validation(errors)
     }
-    const versions = importing ? importVersions(body) : scratchVersions(body)
+    // FR-159: the AI model section (enabled and usable provider, the caller's own connection, a model id).
+    const llmFailure = body.llm ? checkCreateLlm(body.llm, user.id) : null
+    if (llmFailure) {
+      return llmFailure
+    }
+    // FR-132, FR-136: the caller's own valid connection on the repo's instance, with Developer access to a project it sees.
+    let gitlab: { connection: Schemas['GitLabConnectionDto']; repo: Schemas['GitLabRepoDto'] } | null = null
+    if (mode === 'gitlab') {
+      const checked = checkGitLabBinding(user.id, body.git.connectionId, body.git.instanceId, body.git.repoId ?? '', 'git.')
+      if (checked instanceof Response) {
+        return checked
+      }
+      const repo = findGitLabRepo(checked.id, body.git.repoId ?? '')
+      if (!repo) {
+        return problem(404, 'NOT_FOUND', "The GitLab repository wasn't found, or your GitLab account can't see it.", {
+          errors: { 'git.repoId': ['Pick a GitLab project your account can see.'] },
+        })
+      }
+      gitlab = { connection: checked, repo }
+    }
+    // FR-135, FR-136: the caller's own valid Bitbucket connection, with write access to a repository it sees.
+    let bitbucket: { connection: Schemas['BitbucketConnectionDto']; repo: Schemas['BitbucketRepoDto'] } | null = null
+    if (mode === 'bitbucket') {
+      const checked = checkBitbucketBinding(user.id, body.git.connectionId, body.git.repoId ?? '', 'git.')
+      if (checked instanceof Response) {
+        return checked
+      }
+      const repo = findBitbucketRepo(checked.id, body.git.repoId ?? '')
+      if (!repo) {
+        return problem(404, 'NOT_FOUND', "The Bitbucket repository wasn't found, or your Bitbucket account can't see it.", {
+          errors: { 'git.repoId': ['Pick a Bitbucket repository your account can see.'] },
+        })
+      }
+      bitbucket = { connection: checked, repo }
+    }
+    const hostRefs = gitlab ? gitlabRefsOf(gitlab.repo) : bitbucket ? bitbucketRefsOf(bitbucket.repo) : undefined
+    const versions = importing ? importVersions(body, hostRefs) : scratchVersions(body)
     if (versions instanceof Response) {
       return versions
     }
-    // FR-74: the preset is pinned on the version to develop.
-    const preset = body.presetId ? findPreset(body.presetId) : undefined
-    if (body.presetId && !preset) {
-      return problem(400, 'PRESET_NOT_FOUND', `The preset '${body.presetId}' was not found.`)
-    }
-    const developing = versions.at(-1)
-    if (preset && developing) {
-      developing.presetId = preset.id
-      developing.presetVersion = preset.version
-      developing.presetName = preset.name
+    // FR-114–FR-117: the stack composition, validated (STACK_INCOMPATIBLE, VCS_MISMATCH, paths).
+    let composition: Schemas['StackCompositionDto'] | null = null
+    if (body.stack) {
+      const repoVcs = repoVcsOfMode(mode)
+      if (repoVcs && body.stack.vcs && body.stack.vcs.pack !== repoVcs) {
+        return problem(400, 'VCS_MISMATCH', "The VCS layer isn't the repository's host.")
+      }
+      const result = validateComposition({ ...body.stack, vcs: body.stack.vcs ?? (repoVcs ? { pack: repoVcs } : null) })
+      if (!result.ok) {
+        return 'errors' in result
+          ? validation(Object.fromEntries(Object.entries(result.errors).map(([k, v]) => [`stack.${k}`, v])))
+          : problem(400, 'STACK_INCOMPATIBLE', "These stack choices don't work together.", { violations: result.violations })
+      }
+      composition = result.composition
     }
     const now = new Date().toISOString()
     const project = seedProject({
@@ -806,7 +1104,22 @@ export const projectHandlers = [
       tokenBudget: body.tokenBudget ?? null,
       createdAt: now,
       updatedAt: now,
-      git: gitSettings({
+      git: bitbucket
+        ? bitbucketGitSettings({
+            repoId: bitbucket.repo.id,
+            repoFullName: bitbucket.repo.fullName,
+            binding: bindingOf(bitbucket.connection, user),
+            defaultBranch: body.git.defaultBranch ?? 'main',
+          })
+        : gitlab
+        ? gitlabGitSettings({
+            instance: instanceRef(gitlab.connection.instanceId),
+            repoId: gitlab.repo.id,
+            repoFullName: gitlab.repo.fullPath,
+            binding: bindingOf(gitlab.connection, user),
+            defaultBranch: body.git.defaultBranch ?? 'main',
+          })
+        : gitSettings({
         provider: mode ?? 'local',
         ...(mode === 'github_pat' ? { repoUrl: body.git.repoUrl ?? null } : {}),
         ...(mode === 'github_app'
@@ -817,14 +1130,21 @@ export const projectHandlers = [
       }),
       members: [{ userId: user.id, role: 'owner' }],
       releaseVersions: versions,
+      ...(composition ? { stack: { composition }, stackPacks: packsOf(composition) } : {}),
     })
+    if (composition) {
+      seedHostsFromComposition(project, composition.deploy)
+    }
     // FR-88: the optional Deployment step (one of the caller's own Vercel connections; Local can't deploy).
     if (body.deployment) {
-      const failed = applyVercelSetup(project, user.id, body.deployment)
+      const failed = applyVercelSetup(project, user.id, body.deployment, 'deployment.')
       if (failed) {
         projectsDb.projects = projectsDb.projects.filter((p) => p !== project)
         return failed
       }
+    }
+    if (body.llm) {
+      applyCreateLlm(project, body.llm, user.id)
     }
     // FR-70: an import queues the Repository Analyst for the version to develop.
     const development = developmentVersionOf(project)
@@ -972,6 +1292,29 @@ export const projectHandlers = [
     if (provider === 'github_app' && git.provider !== 'github_app') {
       return validation({ provider: ['Use Switch to GitHub App to move this project onto the AIDE GitHub App.'] })
     }
+    // FR-136: a project can't move onto GitLab or Bitbucket here (only the wizard creates those).
+    if ((provider === 'gitlab' || provider === 'bitbucket') && git.provider !== provider) {
+      return validation({ provider: ['A project can only be put on GitLab or Bitbucket when it is created.'] })
+    }
+    // FR-140: fast_forward and squash are Bitbucket's merge strategies only.
+    if ((body.mergeStrategy === 'fast_forward' || body.mergeStrategy === 'squash') && git.mode !== 'bitbucket') {
+      return validation({ mergeStrategy: ['fast_forward and squash are only available on Bitbucket projects.'] })
+    }
+    // FR-136 Rebind: the caller's own connection (GitLab: on the project's instance, Developer access; Bitbucket: write).
+    if (body.connectionId) {
+      if (git.mode !== 'gitlab' && git.mode !== 'bitbucket') {
+        return validation({ connectionId: ["Only used to re-bind a GitLab or Bitbucket project's connection."] })
+      }
+      const user = authDb.users.find((u) => u.id === a.userId)
+      const checked =
+        git.mode === 'bitbucket'
+          ? checkBitbucketBinding(a.userId, body.connectionId, git.externalRepoId ?? '', '')
+          : checkGitLabBinding(a.userId, body.connectionId, git.instance?.id, git.externalRepoId ?? '', '')
+      if (checked instanceof Response) {
+        return checked
+      }
+      git.binding = bindingOf(checked, { id: a.userId, name: user?.name ?? 'Owner' })
+    }
     git.provider = provider
     git.mode = provider
     if (provider === 'local') {
@@ -979,7 +1322,7 @@ export const projectHandlers = [
     } else if (body.repoUrl) {
       git.repoUrl = body.repoUrl
     }
-    if (provider !== 'github_app') {
+    if (provider !== 'github_app' && provider !== 'gitlab' && provider !== 'bitbucket') {
       git.installationId = null
       git.repoId = null
       git.repoFullName = null

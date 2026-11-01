@@ -15,11 +15,27 @@ import { Link } from '../../lib/navigation'
 import { isAdmin } from '../../lib/permissions'
 import { cn } from '../../lib/utils'
 import { useAuthProviders, useCurrentUser } from '../auth/auth-api'
-import { connectGitHubHref, githubKeys, useDisconnectGitHub, useGitHubConnection, type GitHubConnection } from '../github/github-api'
+import {
+  connectGitHubHref,
+  githubKeys,
+  PAGES_PERMISSION_MISSING_COPY,
+  useDisconnectGitHub,
+  useGitHubConnection,
+  type GitHubConnection,
+} from '../github/github-api'
 import { GitHubLink } from '../github/github-error-alert'
 import { RelativeTime } from '../projects/relative-time'
 
 const RETURN_URL = '/connections'
+
+function PagesPermissionMissing() {
+  return (
+    <span className="flex items-center gap-2" data-testid="github-pages-permission-missing">
+      <StatusBadge tone="warning">GitHub Pages</StatusBadge>
+      <span>{PAGES_PERMISSION_MISSING_COPY}.</span>
+    </span>
+  )
+}
 
 function ConnectedView({ connection, onDisconnect }: { connection: GitHubConnection; onDisconnect: () => void }) {
   const valid = connection.status === 'valid'
@@ -57,7 +73,7 @@ function ConnectedView({ connection, onDisconnect }: { connection: GitHubConnect
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Where AIDE is installed</h3>
+        <h4 className="mb-2 text-sm font-semibold">Where AIDE is installed</h4>
         {connection.installations.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             The AIDE GitHub App isn&apos;t installed on any account you can access yet. Install it to pick repositories.
@@ -70,13 +86,16 @@ function ConnectedView({ connection, onDisconnect }: { connection: GitHubConnect
                 aria-label={i.account.login}
                 className="flex flex-col gap-2 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
               >
-                <span>
-                  <span className="font-medium">{i.account.login}</span>
-                  <span className="text-muted-foreground">
-                    {' '}
-                    ({i.account.type === 'organization' ? 'organisation' : 'personal account'}) ·{' '}
-                    {i.repositorySelection === 'all' ? 'All repositories' : 'Selected repositories'}
+                <span className="flex flex-col gap-1">
+                  <span>
+                    <span className="font-medium">{i.account.login}</span>
+                    <span className="text-muted-foreground">
+                      {' '}
+                      ({i.account.type === 'organization' ? 'organisation' : 'personal account'}) ·{' '}
+                      {i.repositorySelection === 'all' ? 'All repositories' : 'Selected repositories'}
+                    </span>
                   </span>
+                  {i.pagesPermission === 'missing' && <PagesPermissionMissing />}
                 </span>
                 <GitHubLink href={i.manageUrl} variant="link">
                   {`Manage ${i.account.login}`}
@@ -150,7 +169,7 @@ export function GitHubConnectionSection({
     body = (
       <EmptyState
         variant="not_connected"
-        headingLevel={3}
+        headingLevel={4}
         bare
         title="GitHub isn't set up yet"
         description="AIDE connects to GitHub through its GitHub App, and an Admin must register it first under Admin → Integrations → GitHub. Projects keep using the Git settings they have."
@@ -176,7 +195,7 @@ export function GitHubConnectionSection({
     body = (
       <EmptyState
         variant="not_connected"
-        headingLevel={3}
+        headingLevel={4}
         bare
         title="Not connected"
         description="Connect GitHub to pick or create repositories for your projects. Signing in with GitHub connects it automatically."
@@ -201,9 +220,9 @@ export function GitHubConnectionSection({
   return (
     <section aria-labelledby="github-connection-title" className={cn(panelClass, 'flex flex-col gap-4 p-5')}>
       <div>
-        <h2 id="github-connection-title" ref={headingRef} tabIndex={-1} className="text-lg outline-none">
+        <h3 id="github-connection-title" ref={headingRef} tabIndex={-1} className="text-lg outline-none">
           GitHub
-        </h2>
+        </h3>
         <p className="mt-1 text-sm text-muted-foreground">
           Your GitHub account, used to pick and create repositories. Background Git work uses the App, never your token.
         </p>

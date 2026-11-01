@@ -75,6 +75,7 @@ internal sealed class ExecutionStepConfiguration : IEntityTypeConfiguration<Exec
         builder.Property(s => s.BranchName).HasMaxLength(255);
         builder.Property(s => s.CommitSha).HasMaxLength(64);
         builder.Property(s => s.AgentKey).HasMaxLength(100);
+        builder.Property(s => s.LegacyAgentKey).HasColumnType("text");
         builder.PrimitiveCollection(s => s.Covers).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]").IsRequired();
         builder.Property(s => s.RowVersion).IsXminRowVersion();
 
@@ -123,6 +124,8 @@ internal sealed class AgentRunConfiguration : IEntityTypeConfiguration<AgentRun>
         builder.Property(r => r.AgentKey).HasMaxLength(100);
         builder.Property(r => r.PresetId).HasMaxLength(100);
         builder.Property(r => r.PresetVersion).HasMaxLength(50);
+        builder.Property(r => r.Packs).HasColumnType("jsonb");
+        builder.Property(r => r.CatalogVersion).HasColumnType("text");
         builder.Property(r => r.ToolCalls).HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb").IsRequired();
 
         builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);

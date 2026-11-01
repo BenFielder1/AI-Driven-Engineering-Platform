@@ -330,16 +330,16 @@ public sealed class LlmToolLoopTests : IDisposable
     [Fact]
     public async Task FR23_Anthropic_answer_cut_off_at_max_tokens_is_continued_and_joined()
     {
-        var handler = Sequence(
-            """{"content":[{"type":"text","text":"## 1. Overview\nPart one"}],"stop_reason":"max_tokens","usage":{"input_tokens":100,"output_tokens":1000}}""",
-            """{"content":[{"type":"text","text":" and part two.\n## 2. Data"}],"stop_reason":"end_turn","usage":{"input_tokens":120,"output_tokens":300}}""");
+        var handler = SseSequence(
+            LlmStreamingTests.AnthropicStream("## 1. Overview\nPart one", "max_tokens", 100, 1000),
+            LlmStreamingTests.AnthropicStream(" and part two.\n## 2. Data", "end_turn", 120, 300));
         var provider = new AnthropicLlmProvider(new HttpClient(handler), Options());
 
         var result = await LlmToolLoop.RunAsync(provider, Request(), null, Ct);
 
         Assert.Equal(new LlmCompletion("## 1. Overview\nPart one and part two.\n## 2. Data", 220, 1300, "end_turn"), result.Completion);
-        Assert.Equal((2, 0), (result.Turns, result.Warnings.Count));
-        var messages = JsonDocument.Parse(handler.Requests[1].Body).RootElement.GetProperty("messages").EnumerateArray().ToList();
+        Assert.Equal((2, 0, 1), (result.Turns, result.Warnings.Count, result.Continuations));
+        var messages = JsonDocument.Parse(handler.Bodies[1]).RootElement.GetProperty("messages").EnumerateArray().ToList();
         Assert.Equal(["user", "assistant", "user"], messages.Select(m => m.GetProperty("role").GetString()));
         Assert.Equal("## 1. Overview\nPart one", messages[1].GetProperty("content").GetString());
         Assert.Equal(LlmToolLoop.ContinuePrompt, messages[2].GetProperty("content").GetString());
@@ -383,16 +383,20 @@ public sealed class LlmToolLoopTests : IDisposable
     }
 
     [Fact]
-    public async Task FR23_answer_still_cut_off_after_the_last_continuation_is_returned_with_a_warning()
+    public async Task FR162_answer_still_cut_off_after_the_5th_continuation_is_returned_with_output_truncated()
     {
-        var handler = Sequence("""{"content":[{"type":"text","text":"more "}],"stop_reason":"max_tokens","usage":{"input_tokens":1,"output_tokens":1}}""");
+        var handler = SseSequence(LlmStreamingTests.AnthropicStream("more ", "max_tokens"));
 
         var result = await LlmToolLoop.RunAsync(new AnthropicLlmProvider(new HttpClient(handler), Options()), Request(), null, Ct);
 
-        Assert.Equal(LlmToolLoop.MaxContinuations + 1, handler.Requests.Count);
+        Assert.Equal(5, LlmToolLoop.MaxContinuations);
+        Assert.Equal(6, handler.Bodies.Count);
+        Assert.Equal((5, 6), (result.Continuations, result.Turns));
         Assert.Equal([LlmToolLoop.OutputTruncatedWarning], result.Warnings);
+        Assert.Equal("output_truncated", LlmToolLoop.OutputTruncatedWarning);
         Assert.Equal("max_tokens", result.Completion.StopReason);
-        Assert.Equal(string.Concat(Enumerable.Repeat("more ", LlmToolLoop.MaxContinuations + 1)), result.Completion.Text);
+        Assert.Equal(string.Concat(Enumerable.Repeat("more ", 6)), result.Completion.Text);
+        Assert.All(handler.Bodies, b => Assert.True(JsonDocument.Parse(b).RootElement.GetProperty("stream").GetBoolean()));
     }
 
     [Fact]
@@ -423,6 +427,168 @@ public sealed class LlmToolLoopTests : IDisposable
     [InlineData(null, false)]
     public void FR23_IsLengthStop_recognises_each_providers_output_cap_reason(string? reason, bool expected) =>
         Assert.Equal(expected, LlmToolLoop.IsLengthStop(reason));
+
+    // ------------------------------------------------------------------ FR-162: the continuation table (§4.24)
+
+    [Theory]
+    [InlineData(new[] { "end_turn" }, 1, 0, false)]
+    [InlineData(new[] { "max_tokens", "max_tokens", "end_turn" }, 3, 2, false)]
+    [InlineData(new[] { "max_tokens", "max_tokens", "max_tokens", "end_turn" }, 4, 3, false)]
+    [InlineData(new[] { "max_tokens", "max_tokens", "max_tokens", "max_tokens", "max_tokens", "max_tokens" }, 6, 5, true)]
+    [InlineData(new[] { "length", "length", "length", "length", "length", "length", "length" }, 6, 5, true)]
+    public async Task FR162_continuation_table_plain_answers(string[] stopReasons, int calls, int continuations, bool truncated)
+    {
+        var provider = new ScriptedStops(stopReasons);
+
+        var result = await LlmToolLoop.RunAsync(provider, Request(), null, Ct);
+
+        Assert.Equal((calls, continuations, calls), (provider.Calls, result.Continuations, result.Turns));
+        Assert.Equal(truncated, result.Warnings.Contains(LlmToolLoop.OutputTruncatedWarning));
+        Assert.Equal(string.Concat(Enumerable.Range(1, calls).Select(i => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"part {i}. "))), result.Completion.Text);
+        Assert.Equal((calls * 10, calls * 100), (result.Completion.InputTokens, result.Completion.OutputTokens));
+    }
+
+    [Theory]
+    [InlineData(new[] { "end_turn" }, 1, 0, false)]
+    [InlineData(new[] { "max_tokens", "max_tokens", "end_turn" }, 3, 2, false)]
+    [InlineData(new[] { "max_tokens", "max_tokens", "max_tokens", "max_tokens", "max_tokens", "max_tokens" }, 6, 5, true)]
+    public async Task FR162_continuation_table_tool_loop_answers(string[] stopReasons, int calls, int continuations, bool truncated)
+    {
+        var provider = new ScriptedStops(stopReasons);
+
+        var result = await LlmToolLoop.RunAsync(provider, Request(), new RepoToolSession(_root), Ct);
+
+        Assert.Equal((calls, continuations), (provider.Calls, result.Continuations));
+        Assert.Equal(truncated, result.Warnings.Contains(LlmToolLoop.OutputTruncatedWarning));
+        Assert.All(provider.ToolRequests.Skip(1), r => Assert.True(r.ForceFinalAnswer));
+    }
+
+    [Fact]
+    public async Task FR162_a_stub_cut_off_on_calls_1_to_3_returns_the_joined_answer_with_3_continuations_and_no_warning()
+    {
+        var provider = new ScriptedStops("max_tokens", "max_tokens", "max_tokens", "end_turn");
+
+        var result = await LlmToolLoop.RunAsync(provider, Request(), null, Ct);
+
+        Assert.Equal("part 1. part 2. part 3. part 4. ", result.Completion.Text);
+        Assert.Equal((3, "end_turn"), (result.Continuations, result.Completion.StopReason));
+        Assert.Empty(result.Warnings);
+    }
+
+    [Fact]
+    public async Task FR162_context_nearly_full_stops_after_1_call_with_output_truncated()
+    {
+        // Input: system (15 characters) + user message (18); the answer so far "part 1. " (8). The window 1,000 minus the
+        // limit 995 leaves 5 tokens, and (33 + 8) / 4 = 10 estimated input tokens don't fit.
+        var provider = new ScriptedStops("max_tokens", "end_turn");
+        var request = WithLimits(Request(), maxTokens: 995, contextTokens: 1000);
+
+        var result = await LlmToolLoop.RunAsync(provider, request, null, Ct);
+
+        Assert.Equal((1, 0), (provider.Calls, result.Continuations));
+        Assert.Equal([LlmToolLoop.OutputTruncatedWarning], result.Warnings);
+        Assert.Equal("max_tokens", result.Completion.StopReason);
+    }
+
+    [Fact]
+    public async Task FR162_context_nearly_full_also_stops_a_tool_loop_answer()
+    {
+        var provider = new ScriptedStops("max_tokens", "end_turn");
+        var request = WithLimits(Request(), maxTokens: 995, contextTokens: 1000);
+
+        var result = await LlmToolLoop.RunAsync(provider, request, new RepoToolSession(_root), Ct);
+
+        Assert.Equal((1, 0), (provider.Calls, result.Continuations));
+        Assert.Equal([LlmToolLoop.OutputTruncatedWarning], result.Warnings);
+    }
+
+    [Fact]
+    public async Task FR162_a_window_with_room_or_an_unknown_window_does_not_stop_continuing()
+    {
+        var roomy = new ScriptedStops("max_tokens", "end_turn");
+        var unknown = new ScriptedStops("max_tokens", "end_turn");
+
+        var withRoom = await LlmToolLoop.RunAsync(roomy, WithLimits(Request(), maxTokens: 900, contextTokens: 1000), null, Ct);
+        var withoutWindow = await LlmToolLoop.RunAsync(unknown, WithLimits(Request(), maxTokens: 900, contextTokens: null), null, Ct);
+
+        Assert.Equal((2, 1), (roomy.Calls, withRoom.Continuations));
+        Assert.Equal((2, 1), (unknown.Calls, withoutWindow.Continuations));
+        Assert.Empty(withRoom.Warnings);
+    }
+
+    [Theory]
+    [InlineData(null, 128_000, 10_000_000L, 0L, true)] // unknown window: not checked
+    [InlineData(0, 128_000, 10_000_000L, 0L, true)]
+    [InlineData(1_000_000, 128_000, 3_000_000L, 488_000L, true)] // 3,488,000 / 4 = 872,000 = 1,000,000 - 128,000
+    [InlineData(1_000_000, 128_000, 3_000_000L, 488_004L, false)] // 872,001 tokens
+    [InlineData(200_000, 64_000, 0L, 544_000L, true)]
+    [InlineData(200_000, 64_000, 0L, 544_004L, false)]
+    public void FR162_FitsContext_estimates_4_characters_per_token(int? contextTokens, int maxOutputTokens, long inputChars, long answerChars, bool fits) =>
+        Assert.Equal(fits, LlmToolLoop.FitsContext(contextTokens, maxOutputTokens, inputChars, answerChars));
+
+    [Fact]
+    public async Task FR162_the_budget_hook_is_asked_before_each_continuation()
+    {
+        var provider = new ScriptedStops("max_tokens", "max_tokens", "end_turn");
+        var asked = new List<LlmTurnTokens>();
+
+        var result = await LlmToolLoop.RunAsync(provider, Request(), null, Ct, (tokens, _) =>
+        {
+            asked.Add(tokens);
+            return Task.FromResult(true);
+        });
+
+        Assert.Equal([new LlmTurnTokens(10, 100), new LlmTurnTokens(20, 200)], asked);
+        Assert.Equal(2, result.Continuations);
+    }
+
+    private static LlmRequest WithLimits(LlmRequest request, int? maxTokens, int? contextTokens) => new()
+    {
+        Model = request.Model,
+        System = request.System,
+        Messages = request.Messages,
+        MaxTokens = maxTokens,
+        ContextTokens = contextTokens,
+        Agent = request.Agent,
+        ApiKey = request.ApiKey,
+    };
+
+    private static LlmStreamingTests.StreamHandler SseSequence(params string[] streams)
+    {
+        var index = 0;
+        return new LlmStreamingTests.StreamHandler(_ => LlmStreamingTests.StreamScript.Sse(streams[Math.Min(index++, streams.Length - 1)]));
+    }
+
+    /// <summary>Answers call n with "part n. " and the n-th stop reason (the last one repeats), 10 input and 100 output tokens.</summary>
+    private sealed class ScriptedStops(params string[] stopReasons) : ILlmProvider, IToolCallingLlmProvider
+    {
+        public int Calls { get; private set; }
+
+        public List<LlmToolRequest> ToolRequests { get; } = [];
+
+        public Aide.Domain.Entities.LlmProvider Kind => Aide.Domain.Entities.LlmProvider.Fake;
+
+        public Task<LlmCompletion> CompleteAsync(LlmRequest request, CancellationToken cancellationToken)
+        {
+            var (text, stop) = Next();
+            return Task.FromResult(new LlmCompletion(text, 10, 100, stop));
+        }
+
+        public Task<bool> SupportsToolsAsync(LlmRequest request, CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public Task<LlmToolTurn> CompleteTurnAsync(LlmToolRequest toolRequest, CancellationToken cancellationToken)
+        {
+            ToolRequests.Add(toolRequest);
+            var (text, stop) = Next();
+            return Task.FromResult(new LlmToolTurn(text, [], 10, 100, stop));
+        }
+
+        private (string Text, string Stop) Next()
+        {
+            Calls++;
+            return (string.Create(System.Globalization.CultureInfo.InvariantCulture, $"part {Calls}. "), stopReasons[Math.Min(Calls - 1, stopReasons.Length - 1)]);
+        }
+    }
 
     private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 

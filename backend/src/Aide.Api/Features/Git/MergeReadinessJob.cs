@@ -62,6 +62,7 @@ public static class MergeReadinessServiceCollectionExtensions
     public static IServiceCollection AddMergeReadiness(this IServiceCollection services)
     {
         services.AddScoped<GitHubRepoAccess>();
+        services.AddScoped<GitHostTargets>();
         services.AddScoped<MergeReadinessService>();
         services.AddSingleton<MergeReadinessThrottle>();
         services.AddJobHandler<MergeReadinessJobHandler>(JobTypes.MergeReadiness);

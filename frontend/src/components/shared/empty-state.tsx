@@ -41,11 +41,11 @@ export function EmptyState({
   action?: ReactNode
   /** Without the panel surface (e.g. inside another card). */
   bare?: boolean
-  headingLevel?: 1 | 2 | 3
+  headingLevel?: 1 | 2 | 3 | 4
   className?: string
 }) {
   const Icon = icons[variant]
-  const Heading = headingLevel === 1 ? 'h1' : headingLevel === 3 ? 'h3' : 'h2'
+  const Heading = headingLevel === 1 ? 'h1' : headingLevel === 3 ? 'h3' : headingLevel === 4 ? 'h4' : 'h2'
   return (
     <div
       data-testid="empty-state"

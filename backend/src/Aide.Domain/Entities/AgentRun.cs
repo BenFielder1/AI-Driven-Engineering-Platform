@@ -15,12 +15,21 @@ public sealed class AgentRun
 
     public AgentKind Agent { get; set; }
 
-    /// <summary>The preset specialist key (FR-76), e.g. <c>db-engineer</c>; null for base agents.</summary>
+    /// <summary>The specialist key of a plan step run (FR-121), e.g. <c>data-engineer</c> (v2 keys such as <c>db-engineer</c> on runs before FR-129); null for base agents.</summary>
     public string? AgentKey { get; set; }
 
     public string? PresetId { get; set; }
 
     public string? PresetVersion { get; set; }
+
+    /// <summary>
+    /// The pack skills the specialist loaded (FR-121) as raw JSON: <c>[{id, version, sections[]}]</c>, where an empty
+    /// <c>sections</c> means the full skill. Null for runs recorded before v4.
+    /// </summary>
+    public string? Packs { get; set; }
+
+    /// <summary>The stack catalog version the run resolved its skills from (FR-121); null for runs recorded before v4.</summary>
+    public string? CatalogVersion { get; set; }
 
     /// <summary>The LLM connection that paid for the run (never the key itself).</summary>
     public Guid? CredentialId { get; set; }

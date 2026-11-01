@@ -1,9 +1,7 @@
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Execution;
-using Aide.Domain.Presets;
 using Aide.Domain.Review;
-using Aide.UnitTests.Presets;
 
 namespace Aide.UnitTests.Deployments;
 
@@ -12,9 +10,10 @@ public class VercelConfigRulesTests
 {
     private const string Good = "{\n  \"git\": {\n    \"deploymentEnabled\": {\n      \"aide/**\": false\n    }\n  }\n}\n";
 
-    private static readonly Preset Vercel = TestPresets.Fixture with { DeployTargets = ["vercel"] };
+    /// <summary>FR-129: the stack deploys the frontend to Vercel (formerly a preset's deploy target).</summary>
+    private const bool Vercel = true;
 
-    private static readonly Preset NoTargets = TestPresets.Fixture with { DeployTargets = [] };
+    private const bool NoTargets = false;
 
     private static readonly HashSet<string> EmptyBase = new(StringComparer.OrdinalIgnoreCase);
 
@@ -31,7 +30,7 @@ public class VercelConfigRulesTests
     ];
 
     [Fact]
-    public void FR89_A_vercel_preset_plan_on_an_empty_repo_without_a_vercel_json_step_warns_MISSING_VERCEL_CONFIG()
+    public void FR89_A_vercel_stack_plan_on_an_empty_repo_without_a_vercel_json_step_warns_MISSING_VERCEL_CONFIG()
     {
         var warning = VercelConfigRules.PlanWarning(Plan(), Vercel, EmptyBase);
 
@@ -45,9 +44,10 @@ public class VercelConfigRulesTests
     {
         var plan = Plan();
 
-        Assert.Contains(ErrorCodes.MissingVercelConfig, PresetPlanValidator.AllWarnings(plan, null, Vercel, EmptyBase).Select(w => w.Code));
-        Assert.True(PlanValidator.Validate(plan, agents: PlanAgents.For(Vercel, repoEmpty: true)).IsSuccess);
-        Assert.DoesNotContain(ErrorCodes.MissingVercelConfig, PresetPlanValidator.AllWarnings(plan, null, Vercel).Select(w => w.Code)); // base unknown
+        var warning = VercelConfigRules.PlanWarning(plan, Vercel, EmptyBase);
+
+        Assert.Equal(ErrorCodes.MissingVercelConfig, warning?.Code);
+        Assert.Null(VercelConfigRules.PlanWarning(plan, Vercel, baseFiles: null)); // base unknown
     }
 
     [Theory]
@@ -57,12 +57,12 @@ public class VercelConfigRulesTests
         Assert.Null(VercelConfigRules.PlanWarning(Plan(path), Vercel, EmptyBase));
 
     [Fact]
-    public void FR89_No_warning_when_the_base_has_vercel_json_the_base_is_unknown_or_the_preset_does_not_deploy_to_vercel()
+    public void FR89_No_warning_when_the_base_has_vercel_json_the_base_is_unknown_or_the_stack_does_not_deploy_to_vercel()
     {
         Assert.Null(VercelConfigRules.PlanWarning(Plan(), Vercel, new HashSet<string>(["vercel.json", "package.json"], StringComparer.OrdinalIgnoreCase)));
         Assert.Null(VercelConfigRules.PlanWarning(Plan(), Vercel, baseFiles: null));
         Assert.Null(VercelConfigRules.PlanWarning(Plan(), NoTargets, EmptyBase));
-        Assert.Null(VercelConfigRules.PlanWarning(Plan(), preset: null, EmptyBase));
+        Assert.Null(VercelConfigRules.PlanWarning(Plan(), deploysToVercel: false, EmptyBase));
         Assert.NotNull(VercelConfigRules.PlanWarning(Plan(), Vercel, new HashSet<string>(["web/vercel.json"], StringComparer.OrdinalIgnoreCase)));
     }
 
@@ -76,7 +76,6 @@ public class VercelConfigRulesTests
         Assert.Contains("web/vercel.json", warning.Message, StringComparison.Ordinal);
         Assert.NotNull(VercelConfigRules.PlanWarning(Plan("Vercel.json"), Vercel, EmptyBase));
         Assert.NotNull(VercelConfigRules.PlanWarning(Plan("web/Vercel.json"), Vercel, EmptyBase, rootDirectory: "web"));
-        Assert.Contains(ErrorCodes.MissingVercelConfig, PresetPlanValidator.AllWarnings(Plan("vercel.json"), null, Vercel, EmptyBase, "web").Select(w => w.Code));
         Assert.True(VercelConfigRules.IsConfigPath("./web//vercel.json", VercelConfigRules.ConfigPath("web")));
         Assert.False(VercelConfigRules.IsConfigPath("WEB/vercel.json", VercelConfigRules.ConfigPath("web")));
     }

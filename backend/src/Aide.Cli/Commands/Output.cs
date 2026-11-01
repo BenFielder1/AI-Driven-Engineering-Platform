@@ -70,9 +70,20 @@ internal static class ErrorReporter
             await error.WriteLineAsync($"  {problem.Detail}").ConfigureAwait(false);
         }
 
-        foreach (var detail in problem?.Details ?? [])
+        // FR-156: the violations carry everything the details ("R3: reason") say, plus the layer and option.
+        if (problem?.Violations is { Count: > 0 } violations)
         {
-            await error.WriteLineAsync($"  - {detail}").ConfigureAwait(false);
+            foreach (var violation in violations)
+            {
+                await error.WriteLineAsync($"  - {violation.Rule} ({violation.Layer}: {violation.Option}): {violation.Reason}").ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            foreach (var detail in problem?.Details ?? [])
+            {
+                await error.WriteLineAsync($"  - {detail}").ConfigureAwait(false);
+            }
         }
 
         foreach (var (field, messages) in problem?.Errors ?? new Dictionary<string, string[]>())

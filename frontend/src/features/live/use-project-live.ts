@@ -34,6 +34,12 @@ export const NOTIFYING_EVENT_TYPES: ReadonlySet<string> = new Set([
   'DEPLOYMENT_PREVIEW_READY',
   'CONNECTION_INVALID',
   'LLM_BINDING_CLEARED',
+  // FR-136, FR-155.
+  'GIT_BINDING_CLEARED',
+  'DATABASE_PROVISIONING_FAILED',
+  'DATABASE_EXPIRING',
+  'MIGRATION_RUN_FAILED',
+  'DEPLOYMENT_TARGET_FAILED',
 ])
 
 /** Trailing debounce for the notification refresh, so a burst of events (a draft, an execution run) refetches once. */

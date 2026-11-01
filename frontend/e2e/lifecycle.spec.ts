@@ -94,7 +94,7 @@ test('NFR-TEST, FR-5–FR-66: an idea becomes a tagged release, a new version st
   await expect(page.getByLabel('Initial version')).toHaveValue('0.1.0')
   await page.getByRole('button', { name: 'Next' }).click()
   await expect(page.getByRole('heading', { name: 'Step 5 of 8: Stack' })).toBeVisible()
-  await expect(page.getByRole('radio', { name: /^No preset \(general\)/ })).toBeChecked()
+  await expect(page.getByRole('radio', { name: /^No stack \(general\)/ })).toBeChecked()
   await page.getByRole('button', { name: 'Next' }).click()
   await expect(page.getByRole('heading', { name: 'Step 6 of 8: Configuration' })).toBeVisible()
   await page.getByRole('radio', { name: /^Strict/ }).check()

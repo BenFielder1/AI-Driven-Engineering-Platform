@@ -7,7 +7,8 @@ namespace Aide.Domain.Releases;
 /// <summary>
 /// FR-84: why AIDE can't merge the version's PR itself (wire values <c>review_required</c>, <c>changes_requested</c>,
 /// <c>checks_failing</c>, <c>checks_pending</c>, <c>branch_protected</c>, <c>merge_conflict</c>, <c>no_permission</c>,
-/// <c>merge_method_not_allowed</c>, <c>pr_not_open</c>, <c>manual_strategy</c>). Also recorded on an <c>awaiting_merge</c>
+/// <c>merge_method_not_allowed</c>, <c>pr_not_open</c>, <c>manual_strategy</c>), plus FR-138's GitLab/Bitbucket reasons
+/// <c>draft</c>, <c>discussions_unresolved</c> and <c>rebase_required</c>. Also recorded on an <c>awaiting_merge</c>
 /// release attempt (FR-65).
 /// </summary>
 public enum MergeReadinessReasonCode
@@ -41,6 +42,15 @@ public enum MergeReadinessReasonCode
 
     /// <summary>The project's merge strategy is <c>manual</c>: AIDE never merges (FR-65).</summary>
     ManualStrategy = 9,
+
+    /// <summary>FR-138: the merge request (GitLab) or pull request (Bitbucket) is still a draft.</summary>
+    Draft = 10,
+
+    /// <summary>FR-138: blocking discussions (GitLab) or open tasks (Bitbucket) aren't resolved.</summary>
+    DiscussionsUnresolved = 11,
+
+    /// <summary>FR-138: the project's merge method (GitLab fast-forward or semi-linear) needs the branch rebased first.</summary>
+    RebaseRequired = 12,
 }
 
 /// <summary>FR-84, FR-85: a GitHub check run's (or commit status's) state. Wire values <c>queued</c>, <c>in_progress</c>, <c>completed</c>.</summary>
@@ -81,9 +91,15 @@ public static class MergeReadinessRules
                 ErrorCodes.WrongPhase,
                 $"Merge readiness is checked in the review and release phases, not in {phase.ToWire()}."));
 
-    /// <summary>FR-65, FR-84: "AIDE will merge automatically" needs the <c>aide_merges</c> strategy and a mergeable PR.</summary>
+    /// <summary>
+    /// FR-65, FR-84: "AIDE will merge automatically" needs a strategy where AIDE merges (<c>aide_merges</c>, or Bitbucket's
+    /// <c>fast_forward</c>/<c>squash</c>, FR-140) and a mergeable PR.
+    /// </summary>
     public static bool WillAutoMerge(MergeStrategy strategy, bool canMerge) =>
-        strategy == MergeStrategy.AideMerges && canMerge;
+        AideMerges(strategy) && canMerge;
+
+    /// <summary>FR-65, FR-140: whether AIDE merges under <paramref name="strategy"/> (every strategy but <c>manual</c>).</summary>
+    public static bool AideMerges(MergeStrategy strategy) => strategy != MergeStrategy.Manual;
 
     /// <summary>A completed check whose conclusion blocks a required check: failure, timed out, cancelled or action required.</summary>
     public static bool IsFailing(CheckObservation check)

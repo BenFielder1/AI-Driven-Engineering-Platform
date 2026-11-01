@@ -186,10 +186,11 @@ internal static class ActivitySummary
             EventTypes.RollbackCompleted => $"Rolled back from checkpoint {Get("fromCheckpoint") ?? Get("fromVersion") ?? "?"} to checkpoint {Get("targetCheckpoint") ?? Get("targetVersion") ?? "?"}",
             EventTypes.VersionStarted => $"Version {Get("version") ?? "?"} started",
             EventTypes.PresetChanged => $"Preset of version {Get("version") ?? "?"} changed from {Get("fromPresetId") ?? "none"} to {Get("presetId") ?? "none"}",
+            EventTypes.StackChanged => $"Stack of version {Get("version") ?? "?"} changed ({LayerList(payload)})",
             EventTypes.ArtifactRestored => $"{Get("type") ?? "Artifact"} v{Get("restoredFromVersion") ?? "?"} restored as draft v{Get("version") ?? "?"}",
             EventTypes.CodebaseSummaryCreated => $"Codebase summary v{Get("version") ?? "?"} created by the Repository Analyst",
-            EventTypes.ReleaseAwaitingMerge => $"Release {Get("tag") ?? Get("version") ?? "?"} awaits a merge on GitHub",
-            EventTypes.ReleaseMergedExternally => $"Release {Get("tag") ?? Get("version") ?? "?"} merged on GitHub",
+            EventTypes.ReleaseAwaitingMerge => $"Release {Get("tag") ?? Get("version") ?? "?"} awaits a merge on {Domain.GitHosts.GitHostNames.Display(Get("provider"))}",
+            EventTypes.ReleaseMergedExternally => $"Release {Get("tag") ?? Get("version") ?? "?"} merged on {Domain.GitHosts.GitHostNames.Display(Get("provider"))}",
             EventTypes.RunStarted => $"{Get("agent") ?? "Agent"} run started on {Get("model") ?? "?"}",
             EventTypes.RunCompleted => $"{Get("agent") ?? "Agent"} run completed ({Get("inputTokens") ?? "?"} in / {Get("outputTokens") ?? "?"} out tokens)",
             EventTypes.RunFailed => $"{Get("agent") ?? "Agent"} run failed: {Get("errorCode") ?? "error"}",
@@ -197,10 +198,20 @@ internal static class ActivitySummary
             EventTypes.ConnectionInvalid => Get("provider") switch
             {
                 "vercel" => "Vercel rejected the connection's token; it is marked invalid",
+                "netlify" => "Netlify rejected the connection's token; it is marked invalid",
+                "cloudflare" => "Cloudflare rejected the connection's token; it is marked invalid",
+                "render" => "Render rejected the connection's API key; it is marked invalid",
+                "railway" => "Railway rejected the connection's token; it is marked invalid",
+                "supabase" => "Supabase rejected the connection's token; it is marked invalid",
                 "github" => "GitHub rejected the user's connection; it is marked invalid",
+                "gitlab" => "GitLab rejected the user's connection; it is marked invalid",
+                "bitbucket" => "Bitbucket rejected the user's connection; it is marked invalid",
                 var provider => $"{provider ?? "LLM"} rejected the bound connection's key; it is marked invalid",
             },
             EventTypes.LlmBindingCleared => $"LLM binding cleared ({Get("reason") ?? "?"})",
+            EventTypes.GitBindingCleared => $"Git binding cleared ({Get("reason") ?? "?"})",
+            EventTypes.GitHostInstanceChanged => $"{Domain.GitHosts.GitHostNames.Display(Get("kind"))} instance {Get("change") ?? "changed"}",
+            EventTypes.StackDetected => $"Stack detected at the base of version {Get("version") ?? "?"}",
             EventTypes.StepStarted => $"Step {Get("stepNumber") ?? "?"} started (attempt {Get("attempt") ?? "?"})",
             EventTypes.StepCompleted => $"Step {Get("stepNumber") ?? "?"} completed",
             EventTypes.StepRejected => $"Step {Get("stepNumber") ?? "?"} rejected by the Execution Guardian (attempt {Get("attempt") ?? "?"})",
@@ -231,12 +242,36 @@ internal static class ActivitySummary
             EventTypes.DeploymentUpdated => $"{Get("target") ?? "Deployment"} deployment {Get("status") ?? "updated"}{(Get("errorCode") is { } code ? $" ({code})" : string.Empty)}",
             EventTypes.DeploymentFailed => $"{Get("target") ?? "Production"} deployment failed: {Get("errorCode") ?? "error"}",
             EventTypes.DeploymentPreviewReady => $"Preview ready{(Get("url") is { } url ? $" at {url}" : string.Empty)}",
+            EventTypes.PreviewRolloutCompleted => $"Preview rollout {Get("state") ?? "finished"}{(Get("errorCode") is { } rolloutCode ? $" ({rolloutCode})" : string.Empty)}",
+            EventTypes.DatabaseReset => $"Preview database reset ({Get("method") ?? "reset_schema"})",
+            EventTypes.DeploymentTargetConfigured => $"{Get("component") ?? "Deployment"} target configured on {Get("provider") ?? "?"}",
+            EventTypes.DeploymentTargetFailed => $"{Get("component") ?? "Deployment"} target needs attention ({Get("reason") ?? "?"})",
+            EventTypes.DatabaseProvisioned => $"{Get("environment") ?? "Database"} database available on {Get("provider") ?? "?"}",
+            EventTypes.DatabaseProvisioningFailed => $"{Get("environment") ?? "Database"} database setup failed: {Get("errorCode") ?? "error"}",
+            EventTypes.DatabaseExpiring => Get("reason") == Domain.Databases.ManagedDatabaseRules.ExpiringReasonPaused
+                ? $"{Get("environment") ?? "Database"} database is paused"
+                : $"{Get("environment") ?? "Database"} database expires at {Get("expiresAt") ?? "?"}",
+            EventTypes.MigrationRunStarted => $"{Get("environment") ?? "Database"} migration run started",
+            EventTypes.MigrationRunCompleted => $"{Get("environment") ?? "Database"} migration run applied {Get("applied") ?? "0"} file(s)",
+            EventTypes.MigrationRunFailed => $"{Get("environment") ?? "Database"} migration run failed: {Get("errorCode") ?? "error"}",
+            EventTypes.MergedHeadMismatch => Get("expectedHeadSha") is null
+                ? $"{Short(Get("mergedHeadSha"))} was merged before AIDE ran the production migrations; the production rollout migrates the merge commit"
+                : $"The host merged {Short(Get("mergedHeadSha"))}, not the migrated head {Short(Get("expectedHeadSha"))}; the production rollout migrates the merge commit",
             EventTypes.DeadLetterRetried => $"Dead-lettered {Get("jobType") ?? "?"} job retried by an Admin",
             _ when Get("type") is { } artifactType && Get("version") is { } version
                 => $"{Humanize(type)}: {artifactType} v{version}",
             _ => Humanize(type),
         };
     }
+
+    /// <summary>FR-117: <c>STACK_CHANGED.layersChanged</c> as "backend, data" ("no layers" when only re-pinned).</summary>
+    private static string LayerList(JsonObject payload) =>
+        payload.TryGetPropertyValue("layersChanged", out var node) && node is JsonArray layers && layers.Count > 0
+            ? string.Join(", ", layers.Select(l => l?.ToString() ?? "?"))
+            : "no layers";
+
+    /// <summary>A commit id shortened to 12 characters ("?" when missing).</summary>
+    private static string Short(string? sha) => sha is null ? "?" : sha[..Math.Min(12, sha.Length)];
 
     /// <summary><c>ARTIFACT_APPROVED</c> → "Artifact approved".</summary>
     private static string Humanize(string type)

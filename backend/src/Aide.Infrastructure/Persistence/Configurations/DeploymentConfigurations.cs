@@ -6,56 +6,65 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Aide.Infrastructure.Persistence.Configurations;
 
-// FR-87–FR-91, §4.15, §5: Vercel connections, project deployment settings, env vars and deployments.
+// FR-87–FR-91, FR-142–FR-151, §4.15, §5: platform connections, deployment targets, env vars and deployments.
 
-internal sealed class VercelConnectionConfiguration : IEntityTypeConfiguration<VercelConnection>
+internal sealed class PlatformConnectionConfiguration : IEntityTypeConfiguration<PlatformConnection>
 {
-    public void Configure(EntityTypeBuilder<VercelConnection> builder)
+    public void Configure(EntityTypeBuilder<PlatformConnection> builder)
     {
-        // A team-scoped token always names its team.
-        builder.ToTable("vercel_connections", t => t.HasCheckConstraint(
-            "ck_vercel_connections_team_scope", "scope <> 'team' OR team_id IS NOT NULL"));
+        builder.ToTable("platform_connections");
         builder.HasKey(c => c.Id);
         builder.Property(c => c.Id).ValueGeneratedNever();
+        builder.Property(c => c.Provider).IsRequired();
         builder.Property(c => c.Label).HasColumnType("text").IsRequired();
-        builder.Property(c => c.TokenEncrypted).HasColumnType("text").IsRequired();
+        builder.Property(c => c.SecretEncrypted).HasColumnType("text").IsRequired();
         builder.Property(c => c.Last4).HasColumnType("text").IsRequired();
-        builder.Property(c => c.VercelUserId).HasColumnType("text").IsRequired();
-        builder.Property(c => c.VercelUsername).HasColumnType("text");
-        builder.Property(c => c.TeamId).HasColumnType("text");
-        builder.Property(c => c.TeamSlug).HasColumnType("text");
-        builder.Property(c => c.Scope).IsRequired();
+        builder.Property(c => c.AccountId).HasColumnType("text");
+        builder.Property(c => c.AccountName).HasColumnType("text");
+        builder.Property(c => c.Metadata).HasJsonbConversion().HasDefaultValueSql("'{}'::jsonb").IsRequired();
+        builder.PrimitiveCollection(c => c.Scopes).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]").IsRequired();
         builder.Property(c => c.Status).IsRequired();
         builder.Property(c => c.CreatedAt).IsRequired();
         builder.HasOne<AppUser>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
-        builder.HasIndex(c => c.UserId);
+
+        // §5: the Connections page lists a user's connections per provider; the leading user_id serves user lookups.
+        builder.HasIndex(c => new { c.UserId, c.Provider });
     }
 }
 
-internal sealed class ProjectDeploymentSettingsConfiguration : IEntityTypeConfiguration<ProjectDeploymentSettings>
+internal sealed class DeploymentTargetConfiguration : IEntityTypeConfiguration<DeploymentTarget>
 {
-    public void Configure(EntityTypeBuilder<ProjectDeploymentSettings> builder)
+    public void Configure(EntityTypeBuilder<DeploymentTarget> builder)
     {
-        builder.ToTable("project_deployment_settings");
-        builder.HasKey(s => s.ProjectId);
-        builder.Property(s => s.ProjectId).ValueGeneratedNever();
-        builder.Property(s => s.Provider).HasDefaultValue(DeploymentProvider.Vercel).IsRequired();
-        builder.Property(s => s.VercelProjectId).HasColumnType("text");
-        builder.Property(s => s.VercelProjectName).HasColumnType("text");
-        builder.Property(s => s.RootDirectory).HasColumnType("text")
-            .HasDefaultValue(ProjectDeploymentSettings.DefaultRootDirectory).IsRequired();
-        builder.Property(s => s.Framework).HasColumnType("text")
-            .HasDefaultValue(ProjectDeploymentSettings.DefaultFramework).IsRequired();
-        builder.Property(s => s.ProductionUrl).HasColumnType("text");
-        builder.Property(s => s.UpdatedAt).IsRequired();
-        builder.Property(s => s.RowVersion).IsXminRowVersion();
-        builder.HasOne<Project>().WithOne().HasForeignKey<ProjectDeploymentSettings>(s => s.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        builder.ToTable("deployment_targets");
+        builder.HasKey(t => t.Id);
+        builder.Property(t => t.Id).ValueGeneratedNever();
+        builder.Property(t => t.Component).IsRequired();
+        builder.Property(t => t.Provider).IsRequired();
+        builder.Property(t => t.ResourceId).HasColumnType("text");
+        builder.Property(t => t.PreviewResourceId).HasColumnType("text");
+        builder.Property(t => t.Name).HasColumnType("text");
+        builder.Property(t => t.RootDirectory).HasColumnType("text")
+            .HasDefaultValue(DeploymentTarget.DefaultRootDirectory).IsRequired();
+        builder.Property(t => t.BuildConfig).HasJsonbConversion().HasDefaultValueSql("'{}'::jsonb").IsRequired();
+        builder.Property(t => t.ProductionUrl).HasColumnType("text");
+        builder.Property(t => t.PreviewUrl).HasColumnType("text");
+        builder.Property(t => t.Status).IsRequired();
+        builder.Property(t => t.StatusReason).HasColumnType("text");
+        builder.Property(t => t.UpdatedAt).IsRequired();
+        builder.Property(t => t.RowVersion).IsXminRowVersion();
+        builder.HasOne<Project>().WithMany().HasForeignKey(t => t.ProjectId).OnDelete(DeleteBehavior.Cascade);
 
-        // FR-88: the bound connection and the Owner who bound it; deleting either clears the binding.
-        builder.HasOne<VercelConnection>().WithMany().HasForeignKey(s => s.ConnectionId).OnDelete(DeleteBehavior.SetNull);
-        builder.HasOne<AppUser>().WithMany().HasForeignKey(s => s.BoundByUserId).OnDelete(DeleteBehavior.SetNull);
-        builder.HasIndex(s => s.ConnectionId);
-        builder.HasIndex(s => s.BoundByUserId);
+        // FR-144: the bound connection and the Owner who bound it; deleting either clears the binding.
+        builder.HasOne<PlatformConnection>().WithMany().HasForeignKey(t => t.ConnectionId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(t => t.BoundByUserId).OnDelete(DeleteBehavior.SetNull);
+
+        // §5: one target per component of a project.
+        builder.HasIndex(t => new { t.ProjectId, t.Component })
+            .IsUnique()
+            .HasDatabaseName("ux_deployment_targets_project_id_component");
+        builder.HasIndex(t => t.ConnectionId);
+        builder.HasIndex(t => t.BoundByUserId);
     }
 }
 
@@ -63,16 +72,26 @@ internal sealed class DeploymentEnvVarConfiguration : IEntityTypeConfiguration<D
 {
     public void Configure(EntityTypeBuilder<DeploymentEnvVar> builder)
     {
-        // FR-88: targets are a non-empty subset of {preview, production}.
-        builder.ToTable("deployment_env_vars", t => t.HasCheckConstraint(
-            "ck_deployment_env_vars_targets",
-            "cardinality(targets) > 0 AND targets <@ ARRAY['preview', 'production']::text[]"));
+        // FR-88: targets are a non-empty subset of {preview, production}; FR-145: applies_to of {frontend, backend}.
+        builder.ToTable("deployment_env_vars", t =>
+        {
+            t.HasCheckConstraint(
+                "ck_deployment_env_vars_targets",
+                "cardinality(targets) > 0 AND targets <@ ARRAY['preview', 'production']::text[]");
+            t.HasCheckConstraint(
+                "ck_deployment_env_vars_applies_to",
+                "cardinality(applies_to) > 0 AND applies_to <@ ARRAY['frontend', 'backend']::text[]");
+        });
         builder.HasKey(v => v.Id);
         builder.Property(v => v.Id).ValueGeneratedNever();
         builder.Property(v => v.Key).HasMaxLength(DeploymentEnvVar.KeyMaxLength).IsRequired();
         builder.PrimitiveCollection(v => v.Targets).HasColumnType("text[]").IsRequired();
         builder.Property(v => v.ValueEncrypted).HasColumnType("text").IsRequired();
         builder.Property(v => v.Sensitive).IsRequired();
+        builder.PrimitiveCollection(v => v.AppliesTo).HasColumnType("text[]").IsRequired();
+        builder.Property(v => v.Public).IsRequired();
+        builder.Property(v => v.Source).IsRequired();
+        builder.Property(v => v.DerivedFrom).HasColumnType("text");
         builder.Property(v => v.VercelEnvIds).HasJsonbConversion();
         builder.Property(v => v.UpdatedAt).IsRequired();
         builder.Property(v => v.SyncError).HasColumnType("text");
@@ -91,7 +110,9 @@ internal sealed class DeploymentConfiguration : IEntityTypeConfiguration<Deploym
         builder.HasKey(d => d.Id);
         builder.Property(d => d.Id).ValueGeneratedNever();
         builder.Property(d => d.Provider).IsRequired();
-        builder.Property(d => d.Target).IsRequired();
+        builder.Property(d => d.Environment).IsRequired();
+        builder.Property(d => d.Component).IsRequired();
+        builder.Property(d => d.Kind).IsRequired();
         builder.Property(d => d.ProviderDeploymentId).HasColumnType("text").IsRequired();
         builder.Property(d => d.Url).HasColumnType("text");
         builder.Property(d => d.InspectorUrl).HasColumnType("text");
@@ -113,6 +134,7 @@ internal sealed class DeploymentConfiguration : IEntityTypeConfiguration<Deploym
         builder.HasOne<Release>().WithMany().HasForeignKey(d => d.ReleaseId).OnDelete(DeleteBehavior.SetNull);
         builder.HasOne<AppUser>().WithMany().HasForeignKey(d => d.TriggeredBy).OnDelete(DeleteBehavior.SetNull);
         builder.HasOne<Deployment>().WithMany().HasForeignKey(d => d.PromotedFromDeploymentId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<DeploymentTarget>().WithMany().HasForeignKey(d => d.TargetId).OnDelete(DeleteBehavior.SetNull);
 
         // Deployments page (FR-91): newest first per project.
         builder.HasIndex(d => new { d.ProjectId, d.CreatedAt }).IsDescending(false, true);
@@ -120,12 +142,13 @@ internal sealed class DeploymentConfiguration : IEntityTypeConfiguration<Deploym
         // §4.15: review waits for the latest preview of the PR head SHA; production adopts Vercel's deployment of a SHA.
         builder.HasIndex(d => new { d.ProjectId, d.GitSha });
 
-        // §4.15: the automatic production deployment is created once per release, idempotent by (release_id, target).
-        // Redeploy, promote and manual rows are new rows, so they are outside the index.
-        builder.HasIndex(d => new { d.ReleaseId, d.Target })
+        // FR-149, §5: the automatic production deployment is created once per release and component, idempotent by
+        // (release_id, component). Redeploy, promote and manual rows are new rows (with the same release), so they are
+        // outside the index.
+        builder.HasIndex(d => new { d.ReleaseId, d.Component })
             .IsUnique()
-            .HasFilter("target = 'production' AND trigger = 'auto'")
-            .HasDatabaseName("ux_deployments_release_id_target_auto_production");
+            .HasFilter("environment = 'production' AND trigger = 'auto'")
+            .HasDatabaseName("ux_deployments_release_id_component_auto_production");
 
         // Pollers pick up unfinished deployments.
         builder.HasIndex(d => d.Status)
@@ -136,5 +159,6 @@ internal sealed class DeploymentConfiguration : IEntityTypeConfiguration<Deploym
         builder.HasIndex(d => d.ReleaseVersionId);
         builder.HasIndex(d => d.TriggeredBy);
         builder.HasIndex(d => d.PromotedFromDeploymentId);
+        builder.HasIndex(d => d.TargetId);
     }
 }

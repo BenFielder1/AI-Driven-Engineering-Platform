@@ -14,6 +14,7 @@ export const appPaths = [
   '/projects/$projectId/artifacts/$type',
   '/projects/$projectId/deployments',
   '/projects/$projectId/execution',
+  '/projects/$projectId/migrations',
   '/projects/$projectId/planning',
   '/projects/$projectId/refinement',
   '/projects/$projectId/release',

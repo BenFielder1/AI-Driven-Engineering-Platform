@@ -1,7 +1,7 @@
 # E2E variant of the Docker Desktop overlay (SPEC §8 Testing, §9 DEP-V2). Opt-in:
 #   ./deploy/scripts/deploy-local.sh --e2e      (the only switch; no environment variable)
 # Everything from overlays/local (incl. its secrets.env Secret), plus app-config-e2e.yaml:
-#   Fake deployment provider (allowed outside Development via Deployments__AllowFake), Fake LLM as the default
+#   Fake deployment and database providers (allowed outside Development via Deployments__AllowFake), Fake LLM as the default
 #   for new projects, and the Local import root /data/import (the script seeds /data/import/existing-app).
 # A normal deploy (no --e2e) renders overlays/local only: Vercel deployments, no Local import.
 apiVersion: kustomize.config.k8s.io/v1beta1

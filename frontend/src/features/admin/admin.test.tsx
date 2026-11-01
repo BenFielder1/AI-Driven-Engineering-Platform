@@ -80,6 +80,19 @@ describe('Admin area access (FR-3, FR-51)', () => {
 })
 
 describe('Admin events (FR-51)', () => {
+  it('FR155_admin_log_words_v4_events_like_the_activity_feed', async () => {
+    signInAdmin()
+    seedAdminEvent({
+      type: 'GIT_HOST_INSTANCE_CHANGED',
+      category: 'project',
+      summary: 'GitLab instance created',
+      payload: { kind: 'gitlab', change: 'created', name: 'Acme GitLab' },
+    })
+    await open('/admin/events', 'Events')
+
+    expect(screen.getByText('GitLab instance "Acme GitLab" added')).toBeInTheDocument()
+  })
+
   it('FR51_ events: lists events of every project, newest first, with project, category, outcome and actor', async () => {
     signInAdmin()
     const a = seedProject({ name: 'Inventory tracker' })

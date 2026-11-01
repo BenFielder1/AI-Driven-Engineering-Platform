@@ -12,9 +12,10 @@ internal static class ProjectMapping
 {
     /// <param name="p">The project.</param>
     /// <param name="myRole">The caller's project role.</param>
-    /// <param name="preset">The preset pinned on the current release version.</param>
+    /// <param name="preset">The retired preset the current release version was migrated from (history, FR-129).</param>
     /// <param name="deploymentsEnabled">FR-88: the project has deployment settings.</param>
-    public static ProjectDto ToDto(Project p, ProjectRole? myRole, Presets.ProjectPresetRef preset, bool deploymentsEnabled) => new(
+    /// <param name="previewMigrationsEnabled">FR-147, §4.21: a preview rollout has a migration step, even with no target.</param>
+    public static ProjectDto ToDto(Project p, ProjectRole? myRole, Stack.ProjectPresetRef preset, bool deploymentsEnabled, bool previewMigrationsEnabled) => new(
         p.Id,
         p.Name,
         p.Slug,
@@ -38,7 +39,9 @@ internal static class ProjectMapping
         preset.PresetId,
         preset.PresetName,
         preset.PresetVersion,
-        deploymentsEnabled);
+        deploymentsEnabled,
+        [.. p.StackPacks],
+        previewMigrationsEnabled);
 
     /// <param name="s">The project's Git settings.</param>
     /// <param name="branchName">The working branch of the project's current release version (§4.10), if recorded.</param>
@@ -48,7 +51,7 @@ internal static class ProjectMapping
     /// <param name="tagPrefix">§4.10: the project's tag prefix.</param>
     public static GitSettingsDto ToDto(
         ProjectGitSettings s, string? branchName, MergeStrategy mergeStrategy, string tagPrefix, bool? appInstalledOnRepo = null, bool canSwitchToApp = false) =>
-        new(
+        new GitSettingsDto(
             s.Provider,
             s.RepoUrl,
             s.DefaultBranch,
@@ -61,7 +64,11 @@ internal static class ProjectMapping
             appInstalledOnRepo,
             canSwitchToApp,
             mergeStrategy,
-            tagPrefix);
+            tagPrefix)
+        {
+            RepoWebUrl = ProjectSettingsRules.RepoWebUrl(s.Provider, s.RepoUrl, s.RepoFullName),
+            ExternalRepoId = s.ExternalRepoId,
+        };
 
     /// <param name="s">The project's LLM settings.</param>
     /// <param name="catalog">The system LLM configuration.</param>
@@ -70,7 +77,8 @@ internal static class ProjectMapping
     public static LlmSettingsDto ToDto(ProjectLlmSettings s, ILlmProviderCatalog catalog, LlmBindingDto? binding, bool canBind)
     {
         var bound = binding is not null && binding.Provider == s.Provider ? binding : null;
-        var providers = Enum.GetValues<LlmProvider>()
+        // FR-157: only the providers enabled on this deployment are listed.
+        var providers = catalog.EnabledProviders
             .Select(p => new LlmProviderStatusDto(
                 p,
                 ProjectSettingsRules.IsConfigured(p, catalog.HasSystemKey(p), bound is not null && s.Provider == p),

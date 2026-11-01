@@ -58,6 +58,42 @@ public static class JobTypes
     public const string Deployment = "deployment";
 
     /// <summary>
+    /// FR-144: sets up one deployment target: creates or links the platform resource (with branch control and the preview
+    /// resource where the platform has one), then recomputes and syncs the derived env vars. Progress is on the target.
+    /// </summary>
+    public const string DeploymentSetup = "deployment_setup";
+
+    /// <summary>
+    /// FR-152, §4.21: provisions or links one managed database (or follows a Supabase restore): the platform call, then a
+    /// poll every 10 seconds (deferring itself) until available, within 10 minutes; then the derived env vars are
+    /// recomputed and synced. Progress is on the database.
+    /// </summary>
+    public const string DatabaseProvisioning = "database_provisioning";
+
+    /// <summary>
+    /// FR-147: deploys the PR head to the project's persistent preview environment in dependency order — Supabase BaaS
+    /// preview migrations, then the backend (its pre-deploy migrates its preview database), then the frontend — each step
+    /// waiting for <c>ready</c> (the job defers itself). Its deployment rows carry <c>rollout_id</c> = this job's id.
+    /// </summary>
+    public const string PreviewRollout = "preview_rollout";
+
+    /// <summary>
+    /// FR-149: after the release merge, deploys every target in order (Supabase BaaS migrations, backend, frontend),
+    /// adopting the platform's own deployment of the merge commit within 60 s or creating one; idempotent per
+    /// <c>(release_id, component)</c>.
+    /// </summary>
+    public const string ProductionRollout = "production_rollout";
+
+    /// <summary>FR-148: resets the preview database (schema reset; Supabase BaaS re-applies the base commit's migrations).</summary>
+    public const string PreviewDatabaseReset = "preview_database_reset";
+
+    /// <summary>
+    /// FR-155: looks for databases about to go away (a Render free database within 7 days of its expiry, a paused Supabase
+    /// project), writing <c>DATABASE_EXPIRING</c> once per expiry. Queued periodically, with no project.
+    /// </summary>
+    public const string DatabaseExpirySweep = "database_expiry_sweep";
+
+    /// <summary>
     /// FR-47: fan out one notification-worthy event (or a gate reminder, FR-15): in-app notifications for its recipients,
     /// one delivery row per subscribed project channel, then a first delivery attempt. Queued in the event's transaction.
     /// </summary>

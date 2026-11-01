@@ -1,0 +1,239 @@
+{
+  "id": "data-supabase",
+  "layer": "data",
+  "name": "Supabase",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "data-supabase",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Supabase",
+    "PostgreSQL",
+    "Auth",
+    "RLS"
+  ],
+  "description": "Supabase as a backend-as-a-service: the frontend talks to it directly with Auth and Row Level Security.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [
+    {
+      "id": "baas",
+      "name": "BaaS",
+      "description": "The frontend talks to Supabase directly (supabase-js, Auth, Row Level Security, Supabase CLI migrations)."
+    },
+    {
+      "id": "host",
+      "name": "Host",
+      "description": "Supabase is only the managed PostgreSQL for another data pack, whose migrations own the schema."
+    }
+  ],
+  "specSections": [
+    {
+      "title": "Data Model & RLS Policies",
+      "when": "mode == baas",
+      "guidance": "For each table in public: columns with Postgres types, nullability and defaults; the primary key (uuid default gen_random_uuid()); foreign keys with an explicit on delete (owner columns reference auth.users(id)); check constraints, unique and partial unique indexes (citext where case-insensitive); and indexes on foreign keys and policy predicates. Then, per table and per role (anon, authenticated, owner/member), the select/insert/update/delete policy in words, including which columns an update may change, and the grants that expose the table to the Data API. List the security definer functions (name, arguments, permission re-checks, error codes raised), views (security_invoker), Realtime tables, the migration order with expand/contract steps, and the dev seed (one user per role, rows in each important state)."
+    },
+    {
+      "title": "Auth Flows",
+      "when": "mode == baas",
+      "guidance": "The sign-in methods (email and password, magic link, OAuth providers, anonymous) and how a guest upgrades. Sign-up and confirmation behaviour, the profile row created per auth user (trigger), session refresh, sign-out, and which routes require sign-in (redirect with ?next=<path>). List the redirect URLs for local, preview and production (AIDE sets site_url and the allow list on the Supabase project), and any server-only admin action that needs the secret key (or 'None')."
+    }
+  ],
+  "ownership": {
+    "data-engineer": [
+      "supabase/**",
+      "{fe}/src/lib/database.types.ts"
+    ]
+  },
+  "agentSections": {
+    "data-engineer": [
+      "*"
+    ],
+    "frontend-engineer": [
+      "*"
+    ],
+    "scaffolder": [
+      "Setup"
+    ],
+    "test-engineer": [
+      "Testing"
+    ],
+    "ci-engineer": [
+      "Migrations"
+    ],
+    "deploy-engineer": [
+      "Migrations",
+      "Production notes"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "supabase/migrations/**"
+        ],
+        "after": [
+          "{fe}/src/app/**",
+          "{fe}/src/features/**",
+          "{fe}/src/components/**",
+          "{fe}/src/pages/**",
+          "{fe}/src/views/**",
+          "{fe}/src/server/**"
+        ],
+        "soft": false,
+        "reason": "Migrations (tables, policies, functions) come before the pages and server code that use them."
+      }
+    ],
+    "exclusive": [
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          "{fe}/src/app/**",
+          "{fe}/src/features/**",
+          "{fe}/src/components/**",
+          "{fe}/src/pages/**",
+          "{fe}/src/views/**",
+          "{fe}/src/server/**"
+        ],
+        "reason": "The data engineer writes SQL, seed, tests and the generated types; pages and components are frontend steps."
+      },
+      {
+        "agent": "frontend-engineer",
+        "notWithGlobs": [
+          "supabase/migrations/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      }
+    ],
+    "maxFilesPerStep": [
+      {
+        "glob": "supabase/migrations/*.sql",
+        "max": 1
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "glob": "supabase/migrations/**",
+      "existingOnBase": true,
+      "reason": "Migrations on the base commit are immutable (FR-125); AIDE's runner fails with MIGRATION_HISTORY_DIVERGED when a recorded file changes."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "glob": "{fe}/src/lib/database.types.ts",
+      "handling": "hand_written"
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "SUPABASE_URL",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": false,
+      "public": true,
+      "when": "mode == baas",
+      "description": "Project URL (https://<ref>.supabase.co), prefixed with the frontend pack's public prefix (NEXT_PUBLIC_SUPABASE_URL, VITE_SUPABASE_URL; Angular reads SUPABASE_URL at build into assets/config.json). Server code reads the unprefixed name."
+    },
+    {
+      "key": "SUPABASE_PUBLISHABLE_KEY",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": false,
+      "public": true,
+      "when": "mode == baas",
+      "description": "Publishable key (sb_publishable_…), prefixed with the frontend pack's public prefix. Public: every request is still limited by RLS and grants."
+    },
+    {
+      "key": "SUPABASE_SECRET_KEY",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": true,
+      "public": false,
+      "when": "mode == baas && nextjsMode == full-stack",
+      "description": "Secret key (sb_secret_…), server-only (Next.js server code), and only when the spec needs admin actions. Bypasses RLS; never prefixed and never read in a \"use client\" file."
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Every table created in supabase/migrations enables row level security and has deliberate policies per role and action from the spec's permission table.",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "New public tables are granted to authenticated (and anon only where the spec allows), so they are exposed to the Data API.",
+        "category": "api_contracts",
+        "severity": "major"
+      },
+      {
+        "item": "Security definer functions set search_path = '', re-check every permission, revoke execute from public and grant it only to the roles that need it.",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "The secret key is used only in server code the spec requires; no secret or service-role value in a public-prefixed variable or client file.",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "Update policies (or column grants and RPCs) restrict which columns each role can change, and read-only states are enforced in the database.",
+        "category": "security",
+        "severity": "major"
+      },
+      {
+        "item": "Exactly one new migration per change, named <timestamp>_<name>.sql after every existing version, never an edit to a migration on the base commit, and expand/contract for breaking changes.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "database.types.ts matches the migrations (tables, views, functions, enums).",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Every foreign key and every column used in a policy predicate is indexed.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "RLS is tested as anon, user A and user B for both allowed and denied access.",
+        "category": "testing",
+        "severity": "major"
+      },
+      {
+        "item": "Only one tool owns migrations: no ORM migrations alongside supabase/migrations.",
+        "category": "architecture",
+        "severity": "major"
+      }
+    ],
+    "deterministic": [
+      "rls_on_every_table",
+      "grants_for_exposed_tables",
+      "migration_backward_compatible"
+    ]
+  },
+  "gate": null,
+  "migrate": null,
+  "deploy": null
+}

@@ -336,7 +336,7 @@ internal sealed partial class GitHubGitProvider(
                 }
 
                 mergeSha = merged;
-                mergedExternally = true;
+                mergedExternally = !string.Equals(request.RecordedMergeCommitSha, merged, StringComparison.Ordinal);
             }
             else
             {
@@ -373,6 +373,12 @@ internal sealed partial class GitHubGitProvider(
                         ErrorCodes.GitError,
                         $"Pull request #{number} points at a different commit than the fetched project branch ({head[..12]}); the release retries with a fresh fetch.",
                         transient: true);
+                }
+
+                // §4.21: only the commit the production migrations ran on is merged (the merge call pins it).
+                if (request.HeadMovedSinceMigrations(head) is { } moved)
+                {
+                    return moved;
                 }
 
                 var merge = await MergePullAsync(client, pull, number, ReleaseRules.MergeTitle(request.ProjectName, tagName), head, token!, cancellationToken);
@@ -421,7 +427,7 @@ internal sealed partial class GitHubGitProvider(
                 return ReleaseOutcome.Failed(ErrorCodes.GitError, reason, transient);
             }
 
-            return ReleaseOutcome.Released(mergeSha, tagName, alreadyTagged: false) with { MergedExternally = mergedExternally };
+            return ReleaseOutcome.Released(mergeSha, tagName, alreadyTagged: false) with { MergedExternally = mergedExternally, MergedHead = pr.Merged ? pr.HeadSha : null };
         }
         catch (GitCommandException ex)
         {
@@ -1006,7 +1012,13 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
 
                 await workingCopies.CreateTagAsync(
                     id, request.Tag, mergedBySomeone, ReleaseRules.TagMessage(request.ProjectName, request.Tag, request.Version), cancellationToken);
-                return ReleaseOutcome.Released(mergedBySomeone, request.Tag, alreadyTagged: false) with { MergedExternally = true };
+                return ReleaseOutcome.Released(mergedBySomeone, request.Tag, alreadyTagged: false) with { MergedExternally = true, MergedHead = head };
+            }
+
+            // §4.21: only the commit the production migrations ran on is merged.
+            if (request.HeadMovedSinceMigrations(head) is { } moved)
+            {
+                return moved;
             }
 
             var merged = await workingCopies.MergeIntoDefaultAsync(

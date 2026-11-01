@@ -43,13 +43,23 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<GitHubConnection> GitHubConnections => Set<GitHubConnection>();
 
-    public DbSet<VercelConnection> VercelConnections => Set<VercelConnection>();
+    public DbSet<GitHostInstance> GitHostInstances => Set<GitHostInstance>();
 
-    public DbSet<ProjectDeploymentSettings> ProjectDeploymentSettings => Set<ProjectDeploymentSettings>();
+    public DbSet<UserExternalLogin> UserExternalLogins => Set<UserExternalLogin>();
+
+    public DbSet<GitConnection> GitConnections => Set<GitConnection>();
+
+    public DbSet<PlatformConnection> PlatformConnections => Set<PlatformConnection>();
+
+    public DbSet<DeploymentTarget> DeploymentTargets => Set<DeploymentTarget>();
 
     public DbSet<DeploymentEnvVar> DeploymentEnvVars => Set<DeploymentEnvVar>();
 
     public DbSet<Deployment> Deployments => Set<Deployment>();
+
+    public DbSet<ManagedDatabase> ManagedDatabases => Set<ManagedDatabase>();
+
+    public DbSet<DatabaseMigrationRun> DatabaseMigrationRuns => Set<DatabaseMigrationRun>();
 
     public DbSet<Artifact> Artifacts => Set<Artifact>();
 
@@ -106,12 +116,23 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<GitProvider>(configurationBuilder);
         MapEnum<GitHubOwnerType>(configurationBuilder);
         MapEnum<GitHubConnectionStatus>(configurationBuilder);
-        MapEnum<VercelTokenScope>(configurationBuilder);
-        MapEnum<VercelConnectionStatus>(configurationBuilder);
+        MapEnum<GitHostKind>(configurationBuilder);
+        MapEnum<ExternalLoginProvider>(configurationBuilder);
+        MapEnum<GitConnectionAuthKind>(configurationBuilder);
+        MapEnum<GitConnectionStatus>(configurationBuilder);
+        MapEnum<PlatformProvider>(configurationBuilder);
+        MapEnum<PlatformConnectionStatus>(configurationBuilder);
         MapEnum<DeploymentProvider>(configurationBuilder);
-        MapEnum<DeploymentTarget>(configurationBuilder);
+        MapEnum<DeploymentEnvironment>(configurationBuilder);
+        MapEnum<DeploymentComponent>(configurationBuilder);
+        MapEnum<DeploymentTargetStatus>(configurationBuilder);
+        MapEnum<DeploymentKind>(configurationBuilder);
+        MapEnum<DeploymentEnvSource>(configurationBuilder);
         MapEnum<DeploymentStatus>(configurationBuilder);
         MapEnum<DeploymentTrigger>(configurationBuilder);
+        MapEnum<ManagedDatabaseProvider>(configurationBuilder);
+        MapEnum<ManagedDatabaseStatus>(configurationBuilder);
+        MapEnum<MigrationRunStatus>(configurationBuilder);
         MapEnum<DriftLevel>(configurationBuilder);
         MapEnum<ReviewDecision>(configurationBuilder);
         MapEnum<EscalationReason>(configurationBuilder);

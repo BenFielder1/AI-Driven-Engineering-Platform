@@ -27,7 +27,7 @@ public sealed partial class ReleaseCompletion(
     AideDbContext db,
     LifecycleWriter writer,
     JobEnqueuer jobs,
-    Deployments.DeploymentScheduler deployments,
+    Deployments.RolloutScheduler rollouts,
     TimeProvider time,
     ILogger<ReleaseCompletion> logger)
 {
@@ -41,9 +41,11 @@ public sealed partial class ReleaseCompletion(
     /// version and nothing in development, and <c>RELEASE_COMPLETED</c> (after <c>RELEASE_MERGED_EXTERNALLY</c> when the merge
     /// happened on GitHub). If the project moved on meanwhile, the Git facts are recorded on the attempt only. FR-91: with
     /// Vercel set up, the production deployment of the merge commit is recorded and queued in the same transaction (a
-    /// failed deployment never undoes the release, D-V2-10).
+    /// failed deployment never undoes the release, D-V2-10). §4.21: <paramref name="unmigrated"/> writes
+    /// <c>MERGED_HEAD_MISMATCH</c> in the same transaction.
     /// </summary>
-    public async Task SucceedAsync(Guid releaseId, ReleaseOutcome outcome, string? githubReleaseUrl, bool mergedExternally, CancellationToken cancellationToken)
+    public async Task SucceedAsync(
+        Guid releaseId, ReleaseOutcome outcome, string? githubReleaseUrl, bool mergedExternally, CancellationToken cancellationToken, UnmigratedMerge? unmigrated = null)
     {
         ArgumentNullException.ThrowIfNull(outcome);
         db.ChangeTracker.Clear();
@@ -87,6 +89,17 @@ public sealed partial class ReleaseCompletion(
             LogProjectMoved(logger, project.Id, release.Checkpoint);
         }
 
+        if (unmigrated is not null)
+        {
+            db.AddEvent(
+                EventTypes.MergedHeadMismatch,
+                release.ProjectId,
+                new { releaseId = release.Id, expectedHeadSha = unmigrated.ExpectedHeadSha, mergedHeadSha = unmigrated.MergedHeadSha, mergeCommitSha = release.MergeCommitSha },
+                SystemActor.Name,
+                now);
+        }
+
+        var provider = await ReleaseRecords.ProviderAsync(db, release.ProjectId, cancellationToken);
         if (mergedExternally)
         {
             db.AddEvent(
@@ -102,6 +115,7 @@ public sealed partial class ReleaseCompletion(
                     mergeCommitSha = release.MergeCommitSha,
                     githubReleaseUrl = release.GithubReleaseUrl,
                     pullRequestUrl = release.PrUrl,
+                    provider,
                 },
                 SystemActor.Name,
                 now);
@@ -122,6 +136,7 @@ public sealed partial class ReleaseCompletion(
                 githubReleaseUrl = release.GithubReleaseUrl,
                 alreadyTagged = outcome.AlreadyTagged,
                 mergedExternally,
+                provider,
             },
             SystemActor.Name,
             now);
@@ -129,7 +144,8 @@ public sealed partial class ReleaseCompletion(
             .Where(s => s.ProjectId == release.ProjectId)
             .Select(s => s.DefaultBranch)
             .FirstOrDefaultAsync(cancellationToken) ?? "main";
-        await deployments.AutoProductionAsync(release, defaultBranch, now, cancellationToken);
+        // FR-149 (amends FR-91): the production rollout of the merge commit (migrations → backend → frontend).
+        await rollouts.EnqueueProductionAsync(release, defaultBranch, now, cancellationToken);
         await SaveAsync(cancellationToken);
         LogReleased(logger, release.ProjectId, release.Tag, outcome.AlreadyTagged, mergedExternally);
     }
@@ -186,6 +202,7 @@ public sealed partial class ReleaseCompletion(
                 mergeStrategy = strategy,
                 awaitingMerge = true,
                 reasons,
+                provider = await ReleaseRecords.ProviderAsync(db, project.Id, cancellationToken),
             },
             SystemActor.Name,
             now);
@@ -211,7 +228,7 @@ public sealed partial class ReleaseCompletion(
             return;
         }
 
-        ReleaseRecords.Fail(db, release, errorCode, message, [], SystemActor.Name, now);
+        ReleaseRecords.Fail(db, release, errorCode, message, [], SystemActor.Name, now, provider: await ReleaseRecords.ProviderAsync(db, release.ProjectId, cancellationToken));
         var project = await db.Projects.FirstAsync(p => p.Id == release.ProjectId, cancellationToken);
         if (project.Checkpoint == release.Checkpoint)
         {
@@ -284,10 +301,10 @@ public sealed partial class ReleaseCompletion(
     [LoggerMessage(Level = LogLevel.Information, Message = "Release completion did nothing: {Reason}")]
     private static partial void LogSkipped(ILogger logger, string reason);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} released as {Tag} (tag already existed: {AlreadyTagged}, merged on GitHub: {MergedExternally})")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} released as {Tag} (tag already existed: {AlreadyTagged}, merged outside AIDE: {MergedExternally})")]
     private static partial void LogReleased(ILogger logger, Guid projectId, string tag, bool alreadyTagged, bool mergedExternally);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Release {Tag} of project {ProjectId} awaits a merge on GitHub ({ReasonCount} reasons)")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Release {Tag} of project {ProjectId} awaits a merge on its Git host ({ReasonCount} reasons)")]
     private static partial void LogAwaiting(ILogger logger, Guid projectId, string tag, int reasonCount);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Awaited merge of release {Tag} of project {ProjectId} abandoned ({ErrorCode})")]

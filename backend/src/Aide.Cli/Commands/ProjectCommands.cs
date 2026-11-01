@@ -1,11 +1,12 @@
 using System.CommandLine;
 using System.Globalization;
+using System.Text.Json.Nodes;
 using Aide.Cli.Api;
 using Aide.Cli.Config;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>`aide projects list`, `aide project init`, `aide status &lt;id&gt;`.</summary>
+/// <summary>`aide projects list`, `aide project init` (alias `aide project create`, FR-156), `aide status &lt;id&gt;`.</summary>
 internal static class ProjectCommands
 {
     private static readonly string[] Phases = ["refinement", "specification", "planning", "execution", "review", "release"];
@@ -92,6 +93,10 @@ internal static class ProjectCommands
         var repoUrl = new Option<string?>("--repo-url") { Description = "GitHub repository URL (https://github.com/OWNER/REPO); required for github." };
         var defaultBranch = new Option<string?>("--default-branch") { Description = "Default branch (server default: main)." };
         var noInput = new Option<bool>("--no-input") { Description = "Never prompt; fail with a usage error if something required is missing." };
+        var llmProvider = new Option<string?>("--llm-provider") { Description = "LLM provider: anthropic, openai, ollama or fake (only those enabled on the server). Omit for the server's default." };
+        llmProvider.AcceptOnlyFromAmong("anthropic", "openai", "ollama", "fake");
+        var llmModel = new Option<string?>("--llm-model") { Description = "Default model id for --llm-provider (e.g. claude-opus-5-5); required with it." };
+        var llmConnection = new Option<Guid?>("--llm-connection") { Description = "Id of your LLM connection to bind (Account > Connections). Default: your newest one for the provider, when it needs a key." };
 
         var command = new Command(
             "init",
@@ -99,7 +104,11 @@ internal static class ProjectCommands
             "For GitHub, the access token is read from AIDE_GIT_TOKEN (or prompted for), never from a flag.")
         {
             name, idea, ideaFile, approvalMode, compliance, maxFiles, maxCycles, tokenBudget, gitProvider, repoUrl, defaultBranch, noInput,
+            llmProvider, llmModel, llmConnection,
         };
+
+        // FR-156: `aide project create` is the v4 name of the same command.
+        command.Aliases.Add("create");
 
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
@@ -173,6 +182,25 @@ internal static class ProjectCommands
                 throw new UsageException("--repo-url is only used with --git-provider github.");
             }
 
+            // FR-156, FR-159: the LLM choice is flags only (never prompted); omitted, the server's default applies.
+            var chosenProvider = context.Get(llmProvider);
+            var chosenModel = context.Get(llmModel);
+            var chosenConnection = context.Get(llmConnection);
+            CreateProjectLlmRequest? llm = null;
+            if (chosenProvider is not null)
+            {
+                if (string.IsNullOrWhiteSpace(chosenModel))
+                {
+                    throw new UsageException("--llm-model is required with --llm-provider.");
+                }
+
+                llm = new CreateProjectLlmRequest(chosenProvider.ToLowerInvariant(), chosenModel.Trim(), chosenConnection);
+            }
+            else if (chosenModel is not null || chosenConnection is not null)
+            {
+                throw new UsageException("--llm-model and --llm-connection need --llm-provider.");
+            }
+
             var request = new CreateProjectRequest(
                 projectName,
                 ideaText,
@@ -181,7 +209,8 @@ internal static class ProjectCommands
                 context.Get(maxFiles),
                 context.Get(maxCycles),
                 context.Get(tokenBudget),
-                new CreateProjectGitRequest(provider == "github" ? GitProvider.GithubPat : GitProvider.Local, repo, context.Get(defaultBranch), gitToken));
+                new CreateProjectGitRequest(provider == "github" ? GitProvider.GithubPat : GitProvider.Local, repo, context.Get(defaultBranch), gitToken),
+                llm);
 
             var created = await context.Api().PostAsync<ProjectDto>("api/projects", request, cancellationToken).ConfigureAwait(false);
             if (context.Json)
@@ -202,25 +231,33 @@ internal static class ProjectCommands
     public static Command BuildStatus(CommandFactory factory)
     {
         var id = ProjectIdArgument();
-        var command = new Command("status", "Show a project's lifecycle state: phase, status, released and in-development versions, checkpoint, preset, artifacts, execution, review, gates and the latest deployment.") { id };
+        var command = new Command("status", "Show a project's lifecycle state: phase, status, released and in-development versions, checkpoint, preset, stack composition, production URLs, artifacts, execution, review, gates, the latest deployment and the latest migration run. With --json: the API's project state plus stack and latestMigrationRun.") { id };
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
             var projectId = context.Get(id);
             var state = await context.Api().GetAsync<ProjectStateDto>($"api/projects/{projectId}/state", cancellationToken).ConfigureAwait(false);
             if (context.Json)
             {
-                await context.WriteRawJsonAsync(state.Raw).ConfigureAwait(false);
+                // FR-156: the API's state, plus what status adds to it for people.
+                var stackJson = await context.Api().GetAsync<JsonNode>($"api/projects/{projectId}/stack", cancellationToken).ConfigureAwait(false);
+                var runsJson = await context.Api().GetAsync<JsonNode>($"api/projects/{projectId}/migrations", cancellationToken).ConfigureAwait(false);
+                var combined = JsonNode.Parse(state.Raw)!.AsObject();
+                combined["stack"] = stackJson.Value.DeepClone();
+                combined["latestMigrationRun"] = (runsJson.Value as JsonArray)?.FirstOrDefault()?.DeepClone();
+                await context.Out.WriteLineAsync(ApiJson.ToIndentedJson(combined)).ConfigureAwait(false);
                 return ExitCodes.Success;
             }
 
             var project = await context.Api().GetAsync<ProjectDto>($"api/projects/{projectId}", cancellationToken).ConfigureAwait(false);
-            await context.Out.WriteLineAsync(FormatState(project.Value, state.Value)).ConfigureAwait(false);
+            var stack = await context.Api().GetAsync<ProjectStackDto>($"api/projects/{projectId}/stack", cancellationToken).ConfigureAwait(false);
+            var runs = await context.Api().GetAsync<List<MigrationRunDto>>($"api/projects/{projectId}/migrations", cancellationToken).ConfigureAwait(false);
+            await context.Out.WriteLineAsync(FormatState(project.Value, state.Value, stack.Value, runs.Value.FirstOrDefault())).ConfigureAwait(false);
             return ExitCodes.Success;
         });
         return command;
     }
 
-    internal static string FormatState(ProjectDto project, ProjectStateDto s)
+    internal static string FormatState(ProjectDto project, ProjectStateDto s, ProjectStackDto stack, MigrationRunDto? latestMigration)
     {
         var lines = new List<string>
         {
@@ -234,6 +271,8 @@ internal static class ProjectCommands
                 ("In development", s.DevelopmentVersion is { } development ? $"{development} (checkpoint {Output.Num(s.Checkpoint)})" : "-"),
                 ("Checkpoint", Output.Num(s.Checkpoint)),
                 ("Preset", VersionCommands.PresetText(project.PresetName ?? project.PresetId, project.PresetVersion)),
+                ("Stack", StackCommands.Summary(stack.Composition)),
+                .. ProductionUrlRows(s),
                 ("Approval mode", project.ApprovalMode),
                 ("Execution", s.ExecutionPaused ? $"{s.ExecutionStatus} (paused)" : s.ExecutionStatus),
                 ("Steps", string.Create(CultureInfo.InvariantCulture,
@@ -245,6 +284,7 @@ internal static class ProjectCommands
                 ("Latest release", s.LatestRelease is null ? "-" : $"{s.LatestRelease.Tag} ({s.LatestRelease.Status})"),
                 ("Latest deployment", s.LatestDeployment is not { } d ? "-"
                     : $"{d.Target} {d.ReleaseVersion} {VersionCommands.StatusText(d)} {d.Url ?? string.Empty}".TrimEnd() + $" ({Output.Time(d.CreatedAt)})"),
+                ("Latest migration", latestMigration is null ? "-" : DatabaseCommands.Summary(latestMigration)),
             ]),
             string.Empty,
             "Artifacts:",
@@ -267,6 +307,12 @@ internal static class ProjectCommands
 
         return string.Join(Environment.NewLine, lines);
     }
+
+    /// <summary>FR-156: a row per deployment target with its production URL; one dash when there are no targets.</summary>
+    private static IEnumerable<(string Key, string Value)> ProductionUrlRows(ProjectStateDto s) =>
+        s.ProductionUrls is { Count: > 0 } urls
+            ? urls.Select(u => ($"Production {u.Component}", $"{u.Url ?? "-"} ({u.Provider})"))
+            : [("Production URLs", "-")];
 
     /// <summary>Reads a file, or stdin when <paramref name="path"/> is `-`.</summary>
     internal static string ReadText(string path, Hosting.ITerminal terminal)

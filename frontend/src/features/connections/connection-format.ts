@@ -1,9 +1,11 @@
 import type { Schemas } from '../../api/client'
 import { llmProviderLabels } from '../projects/labels'
 
-export const credentialStatusLabels: Record<Schemas['LlmCredentialStatus'], string> = {
+/** LLM keys (FR-78) and platform connections (FR-142; only those can be `insufficient_scope`). */
+export const credentialStatusLabels: Record<Schemas['LlmCredentialStatus'] | Schemas['PlatformConnectionStatus'], string> = {
   valid: 'Valid',
   invalid: 'Invalid',
+  insufficient_scope: 'Missing permissions',
   unchecked: 'Not checked',
 }
 
@@ -19,11 +21,3 @@ export const connectionLabel = (c: { label: string; last4: string }) => `${c.lab
 /** FR-79: "Anthropic · connected by Ana (••••a1b2)". */
 export const bindingSummary = (b: Schemas['LlmBindingDto']) =>
   `${llmProviderLabels[b.provider]} · connected by ${b.boundBy.name} (${maskedKey(b.last4)})`
-
-/** "Team acme" or "Personal account (ada)" (FR-87 scope). */
-export function vercelScopeLabel(c: Pick<Schemas['VercelConnectionDto'], 'scope' | 'teamSlug' | 'accountName'>): string {
-  if (c.scope === 'team') {
-    return `Team ${c.teamSlug ?? 'unknown'}${c.accountName ? ` · account ${c.accountName}` : ''}`
-  }
-  return c.accountName ? `Personal account (${c.accountName})` : 'Personal account'
-}

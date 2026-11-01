@@ -14,4 +14,20 @@ public sealed record DomainError(string Code, string Message)
 
     /// <summary>A machine-readable sub-reason (e.g. <see cref="RestoreReasons"/> for <see cref="ErrorCodes.RestoreNotAllowed"/>), returned as the ProblemDetails <c>reason</c>.</summary>
     public string? Reason { get; init; }
+
+    /// <summary>For <see cref="ErrorCodes.StackIncompatible"/> (FR-116): the broken rules, returned as the ProblemDetails <c>violations</c>.</summary>
+    public IReadOnlyList<Stack.StackViolation> Violations { get; init; } = [];
+
+    /// <summary>
+    /// The request field the error is about (e.g. <c>git.connectionId</c>), returned as the ProblemDetails <c>errors</c>
+    /// entry <c>{field: [message]}</c> (the VALIDATION shape), so a client can tell which choice failed.
+    /// </summary>
+    public string? Field { get; init; }
+
+    /// <summary>
+    /// For <see cref="ErrorCodes.ConnectionScopeInsufficient"/> (FR-134): the scopes AIDE couldn't confirm the token has (no
+    /// harmless call could run for them), returned as the ProblemDetails <c>unverifiableScopes</c>, next to the missing
+    /// scopes in <see cref="Details"/>.
+    /// </summary>
+    public IReadOnlyList<string> UnverifiableScopes { get; init; } = [];
 }

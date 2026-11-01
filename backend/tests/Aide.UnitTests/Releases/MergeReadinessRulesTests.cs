@@ -36,10 +36,10 @@ public class MergeReadinessRulesTests
         Assert.Equal(expected, MergeReadinessRules.WillAutoMerge(strategy, canMerge));
 
     [Fact]
-    public void FR84_Reason_check_and_conclusion_wire_values_match_the_spec()
+    public void FR84_FR138_Reason_check_and_conclusion_wire_values_match_the_spec()
     {
         Assert.Equal(
-            ["review_required", "changes_requested", "checks_failing", "checks_pending", "branch_protected", "merge_conflict", "no_permission", "merge_method_not_allowed", "pr_not_open", "manual_strategy"],
+            ["review_required", "changes_requested", "checks_failing", "checks_pending", "branch_protected", "merge_conflict", "no_permission", "merge_method_not_allowed", "pr_not_open", "manual_strategy", "draft", "discussions_unresolved", "rebase_required"],
             EnumStrings.Values<MergeReadinessReasonCode>());
         Assert.Equal(["queued", "in_progress", "completed"], EnumStrings.Values<CheckRunStatus>());
         Assert.Equal(["success", "failure", "neutral", "cancelled", "skipped", "timed_out", "action_required"], EnumStrings.Values<CheckRunConclusion>());

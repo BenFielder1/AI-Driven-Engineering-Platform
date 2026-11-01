@@ -14,6 +14,12 @@ export function problem(
     reason?: string
     /** GITHUB_APP_NOT_INSTALLED extension (FR-81, FR-83). */
     installUrl?: string
+    /** STACK_INCOMPATIBLE extension (FR-116). */
+    violations?: Schemas['HttpValidationProblemDetails']['violations']
+    /** CONNECTION_SCOPE_INSUFFICIENT extension for Bitbucket tokens (FR-134). */
+    unverifiableScopes?: string[]
+    /** PLATFORM_* extension (FR-144): the platform id for the copy's {platform}. */
+    platform?: string
     headers?: Record<string, string>
   } = {},
 ): Response {
@@ -28,6 +34,9 @@ export function problem(
       ...(init.details ? { details: init.details } : {}),
       ...(init.reason ? { reason: init.reason } : {}),
       ...(init.installUrl ? { installUrl: init.installUrl } : {}),
+      ...(init.violations ? { violations: init.violations } : {}),
+      ...(init.unverifiableScopes ? { unverifiableScopes: init.unverifiableScopes } : {}),
+      ...(init.platform ? { platform: init.platform } : {}),
     },
     { status, headers: { 'Content-Type': 'application/problem+json', ...init.headers } },
   )

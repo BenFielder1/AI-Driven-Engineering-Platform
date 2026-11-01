@@ -14,7 +14,8 @@ namespace Aide.Api.Features.Admin;
 /// §2 Admin: the system LLM key policy (D-V2-5). <c>allowSystemKeys</c> is <c>Llm:AllowSystemKeys</c> (configuration,
 /// read-only here: set <c>Llm__AllowSystemKeys</c> in <c>secrets.env</c> / user-secrets and restart). When it is on,
 /// projects with no bound connection use the system key of their provider; <c>systemKeyProviders</c> lists the
-/// providers that have one configured (allowed or not). Keys are never returned.
+/// providers that have one configured (allowed or not). Keys are never returned. Providers disabled on this deployment
+/// (FR-157) are never listed.
 /// </summary>
 public sealed record AdminLlmPolicyDto(bool AllowSystemKeys, IReadOnlyList<LlmProvider> SystemKeyProviders);
 
@@ -62,7 +63,7 @@ public static class AdminIntegrationEndpoints
     private static Ok<AdminLlmPolicyDto> GetLlmPolicy(ILlmProviderCatalog catalog) =>
         TypedResults.Ok(new AdminLlmPolicyDto(
             catalog.AllowSystemKeys,
-            [.. Enum.GetValues<LlmProvider>().Where(p => ProjectSettingsRules.RequiresApiKey(p) && catalog.IsSystemKeySet(p))]));
+            [.. catalog.EnabledProviders.Where(p => ProjectSettingsRules.RequiresApiKey(p) && catalog.IsSystemKeySet(p))]));
 
     private static async Task<Ok<AdminGitHubAppDto>> GetGitHubApp(GitHubAppAdmin admin, CancellationToken cancellationToken) =>
         TypedResults.Ok(await admin.StatusAsync(cancellationToken));

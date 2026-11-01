@@ -1,0 +1,175 @@
+{
+  "id": "be-aspnet",
+  "layer": "backend",
+  "name": "ASP.NET Core",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "be-aspnet",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "C#",
+    ".NET",
+    "Minimal APIs"
+  ],
+  "description": "A C# ASP.NET Core API with minimal APIs, ProblemDetails errors and a build-time OpenAPI export.",
+  "defaultPath": "backend",
+  "publicEnvPrefix": null,
+  "runtime": "dotnet",
+  "modes": [],
+  "specSections": [
+    {
+      "title": "API Contract & Error Codes",
+      "guidance": "List every endpoint under /api with its method, route, operation ID (the minimal-API .WithName, which becomes the client method name), request and response DTOs, auth policy and ownership rule, and the status codes it returns. Give the error table: each UPPER_SNAKE errorCode, its HTTP status and when it applies; errors are ProblemDetails with an errorCode extension, and validation errors are 400 ValidationProblem with an errors map. Name the auth scheme (Identity cookies for same-origin, JWT bearer for cross-origin or an external IdP) and the health endpoints /api/health/live and /api/health/ready."
+    }
+  ],
+  "ownership": {
+    "backend-engineer": [
+      "{be}/**",
+      "{be}/openapi/api.json",
+      "!{be}/src/*Infrastructure*/Persistence/**",
+      "!{be}/src/*Infrastructure*/Migrations/**",
+      "!{be}/**/Dockerfile",
+      "!{be}/**/.dockerignore",
+      "!{be}/**/.env.example"
+    ],
+    "test-engineer": [
+      "{be}/tests/**"
+    ]
+  },
+  "agentSections": {
+    "scaffolder": [
+      "Detect",
+      "Scaffold",
+      "Conventions",
+      "Config and database URL"
+    ],
+    "backend-engineer": [
+      "*"
+    ],
+    "test-engineer": [
+      "Testing",
+      "Gate"
+    ],
+    "ci-engineer": [
+      "Gate"
+    ],
+    "deploy-engineer": [
+      "Containerise",
+      "Deploy notes"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{be}/openapi/api.json"
+        ],
+        "after": [
+          "{fe}/src/api/generated/**",
+          "{fe}/src/app/api/generated/**"
+        ],
+        "soft": true,
+        "reason": "Change the contract (backend/openapi/api.json) before regenerating the frontend client from it."
+      }
+    ],
+    "exclusive": [
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "{be}/src/*Infrastructure*/Migrations/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      }
+    ],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [
+    {
+      "glob": "{be}/openapi/api.json",
+      "handling": "hand_written",
+      "ciCheck": "cd {be} && dotnet build src/<App>.Api && git diff --exit-code openapi/api.json"
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "DATABASE_URL",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": true,
+      "public": false,
+      "description": "The platform database URI (postgres://…), converted at startup to ConnectionStrings:Default with NpgsqlConnectionStringBuilder when that is empty.",
+      "when": "data != none"
+    },
+    {
+      "key": "CORS_ALLOWED_ORIGINS",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": false,
+      "description": "Comma-separated frontend origins the CORS policy allows (cross-origin model only).",
+      "when": "originModel == cross-origin"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Domain rules are pure (no EF, ASP.NET or I/O) and unit-tested by FR ID.",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Endpoints are thin, return TypedResults with Results<…> types and DTO records (never entities), and have stable operation IDs via .WithName.",
+        "category": "api_contracts",
+        "severity": "major"
+      },
+      {
+        "item": "Errors are ProblemDetails carrying the spec's errorCode, with no stack traces outside Development.",
+        "category": "api_contracts",
+        "severity": "major"
+      },
+      {
+        "item": "Every protected endpoint has an authorisation policy plus an ownership check; CORS is enabled only for the cross-origin model with explicit origins.",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "Options are validated on start, DATABASE_URL conversion is handled in one place, and no secrets are in appsettings*.json.",
+        "category": "security",
+        "severity": "major"
+      },
+      {
+        "item": "Integration tests cover success, 400, 401, 403, 404, each errorCode and 409 for each endpoint.",
+        "category": "testing",
+        "severity": "major"
+      },
+      {
+        "item": "openapi/api.json matches the endpoints (the CI freshness check passes) and the gate is green.",
+        "category": "api_contracts",
+        "severity": "major"
+      }
+    ],
+    "deterministic": [
+      "container_non_root",
+      "health_endpoints"
+    ]
+  },
+  "gate": [
+    "cd {be} && dotnet build -warnaserror && dotnet test && dotnet format --verify-no-changes",
+    "cd {be} && dotnet build src/<App>.Api && git diff --exit-code openapi/api.json"
+  ],
+  "migrate": null,
+  "deploy": null
+}

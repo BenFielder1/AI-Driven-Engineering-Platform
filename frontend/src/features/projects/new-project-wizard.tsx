@@ -1,8 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useNavigate } from '../../lib/navigation'
+import { Link, useNavigate } from '../../lib/navigation'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useForm, useWatch, type Path } from 'react-hook-form'
+import { useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
+import { toast } from 'sonner'
 
 import type { Schemas } from '../../api/client'
 import { Alert, ErrorSummary } from '../../components/ui/alert'
@@ -17,22 +19,29 @@ import { TextField } from '../../components/ui/text-field'
 import { errorMessage, isApiError } from '../../lib/errors'
 import { normalizeVersion, suggestNextVersion } from '../versions/semver'
 import { buttonClasses } from '../../components/ui/button-classes'
-import { LoadingState } from '../../components/ui/states'
+import { ErrorState, LoadingState } from '../../components/ui/states'
 import { useAuthProviders } from '../auth/auth-api'
 import { connectGitHubHref, useGitHubConnection, useGitHubRepoRefs, type GitHubRepo } from '../github/github-api'
 import { GitHubErrorAlert } from '../github/github-error-alert'
 import { RepoPicker } from '../github/repo-picker'
+import { useBitbucketConnections, useBitbucketRepoRefs, type BitbucketRepo } from '../bitbucket/bitbucket-api'
+import { gitlabHost, useGitLabConnections, useGitLabInstances, useGitLabRepoRefs, type GitLabRepo } from '../gitlab/gitlab-api'
 import { connectionLabel } from '../connections/connection-format'
-import { useVercelConnections } from '../connections/vercel-connections-api'
-import { VercelGitAlert } from '../deployments/vercel-git-alert'
+import { connectionKeys, useLlmProviders, type LlmProviderOption } from '../connections/connections-api'
+import { usePlatformConnections } from '../connections/platform-connections-api'
+import { PlatformGitAlert } from '../deployments/platform-git-alert'
 import { suggestVercelProjectName } from '../deployments/vercel-project-rules'
-import { PresetPicker } from '../presets/preset-picker'
-import { usePresets } from '../presets/presets-api'
-import { approvalModeDescriptions, approvalModeLabels, approvalModes } from './labels'
+import { resourceNouns } from '../deployments/deployment-format'
+import { agentKeys, agentLabels, approvalModeDescriptions, approvalModeLabels, approvalModes, llmProviderLabels } from './labels'
+import { catalogModel } from './model-picker'
 import { useCreateProject } from './projects-api'
 import { ReleasedVersionField } from './released-version-field'
 import { deploymentFieldIds } from './wizard-deployment-ids'
 import { WizardDeploymentStep } from './wizard-deployment-step'
+import { hostField, hostFieldIds, hostFieldNames, hostSecretFields, type HostSlot } from './wizard-host-fields'
+import { applyHostSetups, type HostSetupFailure } from './wizard-host-setup'
+import { hostSlotsOfChoice, hostValues, isHostChosen, wizardHosts, type WizardHost } from './wizard-hosts'
+import { WizardHostsStep } from './wizard-hosts-step'
 import { defaultReleasedTag, releasedOptions, semverOfTag } from './released-versions'
 import {
   limits,
@@ -40,10 +49,43 @@ import {
   NEVER_RELEASED,
   releasedTagOf,
   toBudget,
+  wizardAgentModelFields,
   wizardDefaults,
   wizardSchema,
   type WizardValues,
 } from './schemas'
+import { clearWizardDraft, readWizardDraft, saveWizardDraft } from './wizard-draft'
+import {
+  defaultLlmProvider,
+  initialModel,
+  llmFieldIds,
+  llmFields,
+  llmValuesFor,
+  showsConnectionPicker,
+  toLlmRequest,
+} from './wizard-llm'
+import { WizardLlmSection } from './wizard-llm-section'
+import { WizardBitbucketRepository } from './wizard-bitbucket-repository'
+import { WizardGitLabRepository } from './wizard-gitlab-repository'
+import { useStackCatalog, useStackDetection } from '../stack/stack-api'
+import { StackComposer, stackLayers, type StackFieldErrors } from '../stack/stack-composer'
+import { detectedAnything, emptyStackSelection, selectionFromDetection, stackFieldOfKey, type StackSelection } from '../stack/stack-model'
+import { CompositionRows, StackSummary } from '../stack/stack-summary'
+import {
+  detectRequestOf,
+  repoHostLabelOf,
+  repoVcsOf,
+  selectionOfValues,
+  toWizardStackRequest,
+  WIZARD_STACK_PREFIX,
+  wizardStackFieldIds,
+  wizardStackFieldList,
+  wizardStackFields,
+  detectionIdOf,
+  stackSnapshot,
+  wizardStackLayerFields,
+  type WizardStackField,
+} from './wizard-stack'
 
 type Field = Path<WizardValues>
 type Source = WizardValues['source']
@@ -63,19 +105,27 @@ const fieldIds: Record<Field, string> = {
   gitToken: 'project-git-token',
   repoFullName: 'project-repo-search',
   installationId: 'project-repo-search',
+  gitlabConnectionId: 'project-gitlab-connection',
+  gitlabInstanceId: 'project-gitlab-connection',
+  gitlabRepoId: 'project-repo-search',
+  bitbucketConnectionId: 'project-bitbucket-connection',
+  bitbucketRepoId: 'project-repo-search',
   repoHasCode: 'project-repo-search',
   initialVersion: 'project-initial-version',
   releasedTag: 'project-released-tag',
   releasedVersion: 'project-released-tag',
   developmentVersion: 'project-development-version',
   localSourcePath: 'project-local-source-path',
-  presetId: 'project-preset',
+  stackDetection: 'project-stack-kind',
+  ...wizardStackFieldIds,
   ...deploymentFieldIds,
+  ...hostFieldIds,
+  ...llmFieldIds,
 }
 
 /**
- * SPEC §7.2 order: Source → Idea (or Request) → Repository → Version → Stack (FR-74) → Configuration → Deployment
- * (FR-88, optional) → Review & create.
+ * SPEC §7 order: Source → Idea (or Request) → Repository → Version → Stack (FR-114) → Configuration → Deployment
+ * (FR-88, optional; the Stack step's hosts for a composed stack) → Review & create.
  */
 const stepKeys = ['source', 'idea', 'repository', 'version', 'stack', 'configuration', 'deployment', 'review'] as const
 type StepKey = (typeof stepKeys)[number]
@@ -83,11 +133,11 @@ type StepKey = (typeof stepKeys)[number]
 const stepFields: Record<StepKey, readonly Field[]> = {
   source: ['source'],
   idea: ['name', 'idea'],
-  repository: ['gitMode', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken', 'releasedTag', 'localSourcePath'],
+  repository: ['gitMode', 'gitlabConnectionId', 'bitbucketConnectionId', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken', 'releasedTag', 'localSourcePath'],
   version: ['initialVersion', 'developmentVersion'],
-  stack: ['presetId'],
-  configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget'],
-  deployment: ['deploymentMode', 'vercelConnectionId', 'vercelProjectMode', 'vercelProjectName', 'vercelRootDirectory', 'vercelProjectId'],
+  stack: ['stackKind', ...wizardStackFieldList],
+  configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget', ...llmFields],
+  deployment: ['deploymentMode', 'vercelConnectionId', 'vercelProjectMode', 'vercelProjectName', 'vercelRootDirectory', 'vercelProjectId', ...hostFieldNames],
   review: [],
 }
 
@@ -115,6 +165,23 @@ function stepTitle(key: StepKey, source: Source): string {
 const stepIndex = (key: StepKey) => stepKeys.indexOf(key)
 const LAST_STEP = stepKeys.length - 1
 
+/**
+ * A server VALIDATION key → wizard field: the map below, or a `stack.*` key of the composition (FR-114, FR-119).
+ * `git.connectionId` is the chosen host's connection (GitLab or Bitbucket, FR-136).
+ */
+function wizardFieldOfKey(key: string, gitMode: WizardValues['gitMode']): Field | undefined {
+  const lower = key.toLowerCase()
+  const mapped = serverFieldMap[lower]
+  if (mapped === 'gitlabConnectionId' && gitMode === 'bitbucket') {
+    return 'bitbucketConnectionId'
+  }
+  if (mapped) {
+    return mapped
+  }
+  const stackField = lower.startsWith('stack.') ? stackFieldOfKey(lower) : undefined
+  return stackField ? wizardStackFields[stackField] : undefined
+}
+
 /** Server VALIDATION keys (camelCase, possibly `git.`/`import.`-prefixed) → wizard fields. */
 const serverFieldMap: Record<string, Field> = {
   source: 'source',
@@ -133,13 +200,18 @@ const serverFieldMap: Record<string, Field> = {
   'git.installationid': 'repoFullName',
   'git.repofullname': 'repoFullName',
   'git.localsourcepath': 'localSourcePath',
+  // FR-132, FR-135, FR-136: the GitLab or Bitbucket binding (the connection, GitLab's instance) and the picked repository.
+  'git.instanceid': 'gitlabConnectionId',
+  'git.connectionid': 'gitlabConnectionId',
+  'git.repoid': 'repoFullName',
   git: 'gitMode',
   initialversion: 'initialVersion',
   version: 'initialVersion',
   import: 'developmentVersion',
   'import.developmentversion': 'developmentVersion',
   'import.releasedtag': 'releasedTag',
-  presetid: 'presetId',
+  // FR-114: `stack.*` keys map through stackFieldOfKey; `stack` itself is the kind.
+  stack: 'stackKind',
   deployment: 'deploymentMode',
   // A Local project without the Fake provider: VALIDATION on the deployment (FR-88).
   provider: 'deploymentMode',
@@ -149,6 +221,51 @@ const serverFieldMap: Record<string, Field> = {
   'deployment.create': 'vercelProjectName',
   'deployment.create.name': 'vercelProjectName',
   'deployment.create.rootdirectory': 'vercelRootDirectory',
+  // FR-159: the AI model section.
+  llm: 'llmProvider',
+  'llm.provider': 'llmProvider',
+  'llm.credentialid': 'llmCredentialId',
+  'llm.defaultmodel': 'llmDefaultModel',
+  'llm.modelsbyagent': 'llmModelIdeaRefinement',
+  // Per-agent models (`llm.modelsByAgent.codeGenerator` → the Code generator field).
+  ...Object.fromEntries(
+    Object.entries(wizardAgentModelFields).map(([agent, field]) => [`llm.modelsbyagent.${agent.toLowerCase()}`, field]),
+  ),
+}
+
+/**
+ * Which part of the request a CREDENTIAL_NOT_OWNER / NOT_FOUND / GIT_NOT_CONNECTED / FORBIDDEN on create is about.
+ * The ProblemDetails `errors` key says so first (`llm.credentialId`, `git.connectionId` / `git.repoId`,
+ * `deployment.connectionId`). Without one, the server's check order decides: the AI model section's connection
+ * (PlanLlmAsync) when one is chosen, then the Vercel connection when Vercel is chosen, then the GitLab or Bitbucket
+ * binding and repository (FR-136). For the other hosts: a PAT import's repository is the likely 404, else the LLM credential.
+ */
+function credentialErrorTarget(error: unknown, v: WizardValues, importing: boolean): 'llm' | 'git' | 'deployment' | 'other' {
+  const keys = isApiError(error) ? Object.keys(error.fieldErrors).map((k) => k.toLowerCase()) : []
+  if (keys.some((k) => k.startsWith('llm'))) {
+    return 'llm'
+  }
+  if (keys.some((k) => k.startsWith('git'))) {
+    return 'git'
+  }
+  if (keys.some((k) => k.startsWith('deployment'))) {
+    return 'deployment'
+  }
+  if (keys.length > 0) {
+    return 'other'
+  }
+  // Only a credential can be another user's or missing: GIT_NOT_CONNECTED and FORBIDDEN are about the repository.
+  const credentialCode = isApiError(error, 'CREDENTIAL_NOT_OWNER') || isApiError(error, 'NOT_FOUND')
+  if (credentialCode && v.llmCredentialId) {
+    return 'llm'
+  }
+  if (credentialCode && v.stackKind === 'general' && v.deploymentMode === 'vercel') {
+    return 'deployment'
+  }
+  if (v.gitMode === 'gitlab' || v.gitMode === 'bitbucket') {
+    return 'git'
+  }
+  return importing && v.gitMode === 'github_pat' ? 'other' : 'llm'
 }
 
 function firstStepWithError(errors: Partial<Record<Field, unknown>>): number {
@@ -164,6 +281,25 @@ function toGitRequest(v: WizardValues): Schemas['CreateProjectGitRequest'] {
       return { mode: 'github_app', installationId: Number(v.installationId), repoFullName: v.repoFullName, defaultBranch }
     case 'github_pat':
       return { mode: 'github_pat', repoUrl: v.repoUrl.trim(), defaultBranch, token: v.gitToken ? v.gitToken : null }
+    case 'gitlab':
+      // FR-132, FR-136: the picked project on its instance, bound to the caller's own connection.
+      return {
+        mode: 'gitlab',
+        instanceId: v.gitlabInstanceId,
+        connectionId: v.gitlabConnectionId,
+        repoId: v.gitlabRepoId,
+        repoFullName: v.repoFullName,
+        defaultBranch,
+      }
+    case 'bitbucket':
+      // FR-135, FR-136: the picked repository (its `{uuid}` and `workspace/slug`), bound to the caller's own connection.
+      return {
+        mode: 'bitbucket',
+        connectionId: v.bitbucketConnectionId,
+        repoId: v.bitbucketRepoId,
+        repoFullName: v.repoFullName,
+        defaultBranch,
+      }
     case 'local':
       // FR-73: a Local import names the existing repository on the server (development and E2E only).
       return v.source === 'import'
@@ -174,9 +310,12 @@ function toGitRequest(v: WizardValues): Schemas['CreateProjectGitRequest'] {
 
 const versionText = (text: string) => normalizeVersion(text) ?? text.trim()
 
-/** FR-88: the optional `deployment` (Vercel with an own connection and a new or existing project). */
+/**
+ * FR-88: the optional `deployment` of "No stack (general)" (Vercel with an own connection and a new or existing project).
+ * A composed stack's hosts are set up after create instead (§7, `applyHostSetups`).
+ */
 function toDeploymentRequest(v: WizardValues): Schemas['CreateProjectDeploymentRequest'] | null {
-  if (v.deploymentMode !== 'vercel') {
+  if (v.stackKind !== 'general' || v.deploymentMode !== 'vercel') {
     return null
   }
   return {
@@ -190,12 +329,13 @@ function toDeploymentRequest(v: WizardValues): Schemas['CreateProjectDeploymentR
 
 /**
  * FR-5, FR-66, FR-73: scratch sends `initialVersion`; import sends `import`, and `idea` is the version's request.
- * FR-74: `presetId` only when a preset is picked ("No preset (general)" omits it).
+ * FR-114: `stack` for a composition ("No stack (general)" omits it).
  */
 function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
   const deployment = toDeploymentRequest(v)
+  const llm = toLlmRequest(v)
   const base = {
-    ...(v.presetId ? { presetId: v.presetId } : {}),
+    ...(v.stackKind === 'compose' ? { stack: toWizardStackRequest(v) } : {}),
     name: v.name.trim(),
     idea: v.idea.trim(),
     approvalMode: v.approvalMode,
@@ -204,8 +344,10 @@ function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
     maxReviewCycles: Number(v.maxReviewCycles),
     tokenBudget: toBudget(v.tokenBudget),
     git: toGitRequest(v),
-    // FR-88: `deployment` only when Vercel is chosen (skipping omits it).
+    // FR-88: `deployment` only when Vercel is chosen without a stack (skipping omits it).
     ...(deployment ? { deployment } : {}),
+    // FR-159: the AI model section.
+    ...(llm ? { llm } : {}),
   }
   return v.source === 'import'
     ? {
@@ -240,6 +382,8 @@ const sourceLabels: Record<Source, string> = {
 const gitModeOptionLabels: Record<WizardValues['gitMode'], string> = {
   github_app: 'GitHub (AIDE GitHub App)',
   github_pat: 'Repository URL and access token',
+  gitlab: 'GitLab',
+  bitbucket: 'Bitbucket',
   local: 'Local repository',
 }
 
@@ -328,10 +472,31 @@ function AppRepository({
  * for the request, the repository with its released version, and the version to develop. Create navigates to the
  * new project.
  */
+/** FR-88, §7: the name suggested for a new target; a database's name stays empty ("the project's name when empty"). */
+function suggestedHostName(projectName: string, slot: HostSlot): string {
+  const suffix = slot === 'Frontend' ? 'web' : slot === 'Backend' ? 'api' : null
+  return suffix ? `${suggestVercelProjectName(projectName) || 'app'}-${suffix}`.slice(0, 100) : ''
+}
+
 export function NewProjectWizard() {
   const navigate = useNavigate()
   const create = useCreateProject()
-  const [step, setStep] = useState(0)
+  const queryClient = useQueryClient()
+  /** §7: the project exists and its hosts are being set up; it can't be created again. */
+  const [settingUpHosts, setSettingUpHosts] = useState(false)
+  /** §7: what couldn't be set up after create; the project is usable and Settings → Deployment takes it from there. */
+  const [hostOutcome, setHostOutcome] = useState<{ projectId: string; failures: HostSetupFailure[] } | null>(null)
+  /**
+   * FR-159: back from Connections ("Add a connection"), the wizard saved in session storage. The authenticated layout
+   * renders pages only in the browser, so it is read on the first render (and removed once used).
+   */
+  const [draft] = useState(readWizardDraft)
+  useEffect(() => {
+    if (draft) {
+      clearWizardDraft()
+    }
+  }, [draft])
+  const [step, setStep] = useState(() => (draft ? Math.min(draft.step, LAST_STEP) : 0))
   /** The create failure, with the error itself so GitHub codes can offer their way out (install link, connect). */
   const [serverError, setServerError] = useState<{ message: string; error?: unknown } | null>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
@@ -351,16 +516,19 @@ export function NewProjectWizard() {
     formState: { errors },
   } = useForm<WizardValues>({
     resolver: zodResolver(wizardSchema),
-    defaultValues: wizardDefaults,
+    defaultValues: draft?.values ?? wizardDefaults,
     mode: 'onTouched',
   })
+
+  /** FR-114: the Stack step's sub-step (Frontend → Backend → Data → VCS → Deployment). */
+  const [stackSubStep, setStackSubStep] = useState(0)
 
   // Focus the new step's heading so keyboard and screen-reader users start at the top of it.
   useEffect(() => {
     if (moveFocus) {
       headingRef.current?.focus()
     }
-  }, [step, moveFocus])
+  }, [step, stackSubStep, moveFocus])
 
   const goTo = (next: number) => {
     setMoveFocus(true)
@@ -376,15 +544,31 @@ export function NewProjectWizard() {
   const repoHasCode = useWatch({ control, name: 'repoHasCode' })
   const releasedTag = useWatch({ control, name: 'releasedTag' })
   const releasedVersion = useWatch({ control, name: 'releasedVersion' })
-  const presetId = useWatch({ control, name: 'presetId' })
   const deploymentMode = useWatch({ control, name: 'deploymentMode' })
   const vercelProjectMode = useWatch({ control, name: 'vercelProjectMode' })
   const vercelConnectionId = useWatch({ control, name: 'vercelConnectionId' })
+  const llmProvider = useWatch({ control, name: 'llmProvider' })
+  const stackKind = useWatch({ control, name: 'stackKind' })
+  const stackValues: readonly string[] = useWatch({ control, name: wizardStackFieldList })
+  const stackSelection = Object.fromEntries(
+    Object.keys(wizardStackFields).map((k, i) => [k, stackValues[i] ?? '']),
+  ) as unknown as StackSelection
+  // Watched so detection re-reads the repository fields (FR-118).
+  useWatch({ control, name: ['repoUrl', 'localSourcePath', 'defaultBranch', 'gitToken'] })
 
-  // FR-88: suggest the new Vercel project's name from the project name when the step opens.
+  // FR-88, §7: suggest the new resources' names from the project name when the step opens.
   useEffect(() => {
-    if (key === 'deployment' && !getValues('vercelProjectName')) {
-      setValue('vercelProjectName', suggestVercelProjectName(getValues('name')))
+    if (key !== 'deployment') {
+      return
+    }
+    const suggested = suggestVercelProjectName(getValues('name'))
+    if (!getValues('vercelProjectName')) {
+      setValue('vercelProjectName', suggested)
+    }
+    for (const slot of ['Frontend', 'Backend'] as const) {
+      if (!getValues(hostField(slot, 'Name'))) {
+        setValue(hostField(slot, 'Name'), suggestedHostName(getValues('name'), slot))
+      }
     }
   }, [key, getValues, setValue])
 
@@ -393,7 +577,8 @@ export function NewProjectWizard() {
   const appAvailable = providers.data?.githubMode === 'app'
   const connection = useGitHubConnection(appAvailable)
   const connected = connection.data?.connected === true && connection.data.status === 'valid'
-  const defaultApplied = useRef(false)
+  // A restored wizard keeps its Git option.
+  const defaultApplied = useRef(draft !== null)
   useEffect(() => {
     if (!defaultApplied.current && appAvailable && connected && !getFieldState('gitMode').isDirty) {
       defaultApplied.current = true
@@ -403,49 +588,147 @@ export function NewProjectWizard() {
 
   // The list may not know whether a repo is empty; its refs always do (FR-86). They also list releases and tags (FR-73).
   const refs = useGitHubRepoRefs(gitMode === 'github_app' && repoFullName ? repoFullName : null)
-  const refsData = gitMode === 'github_app' ? refs.data : undefined
+  // FR-141: a picked GitLab project's or Bitbucket repository's refs, read with the chosen connection.
+  const gitlabConnectionId = useWatch({ control, name: 'gitlabConnectionId' })
+  const gitlabRepoId = useWatch({ control, name: 'gitlabRepoId' })
+  const gitlabRefs = useGitLabRepoRefs(gitMode === 'gitlab' ? gitlabConnectionId : '', gitMode === 'gitlab' ? gitlabRepoId : '')
+  const bitbucketConnectionId = useWatch({ control, name: 'bitbucketConnectionId' })
+  const bitbucketRepoId = useWatch({ control, name: 'bitbucketRepoId' })
+  const bitbucketRefs = useBitbucketRepoRefs(
+    gitMode === 'bitbucket' ? bitbucketConnectionId : '',
+    gitMode === 'bitbucket' ? bitbucketRepoId : '',
+  )
+  // The host's own suggestion (GitLab, Bitbucket): the tag to preselect and the version to develop.
+  const hostRefsData = gitMode === 'gitlab' ? gitlabRefs.data : gitMode === 'bitbucket' ? bitbucketRefs.data : undefined
+  const refsData = gitMode === 'github_app' ? refs.data : hostRefsData
   useEffect(() => {
     if (refs.data) {
       setValue('repoHasCode', !refs.data.empty)
     }
   }, [refs.data, setValue])
+  useEffect(() => {
+    if (hostRefsData) {
+      setValue('repoHasCode', !hostRefsData.empty)
+    }
+  }, [hostRefsData, setValue])
 
   /**
    * Whether the user chose the released version / edited the version to develop. Kept here rather than read from
    * RHF's dirty state, which also turns true for programmatic prefills once any other field changes.
    */
-  const [releasedChosen, setReleasedChosen] = useState(false)
-  const [versionEdited, setVersionEdited] = useState(false)
+  const [releasedChosen, setReleasedChosen] = useState(draft !== null)
+  const [versionEdited, setVersionEdited] = useState(draft !== null)
   const resetReleased = useCallback(() => {
     setReleasedChosen(false)
     resetField('releasedTag')
   }, [resetField])
 
-  // FR-73: preselect the latest release once a repo's refs are known, unless the user already chose.
+  // FR-73: preselect the latest release once a repo's refs are known, unless the user already chose. FR-141: GitLab and
+  // Bitbucket say which one (`preselectedTag`; `null` = never released).
   useEffect(() => {
     if (refsData && importing && !releasedChosen) {
-      setValue('releasedTag', defaultReleasedTag(releasedOptions(refsData)))
+      setValue(
+        'releasedTag',
+        hostRefsData ? (hostRefsData.preselectedTag ?? NEVER_RELEASED) : defaultReleasedTag(releasedOptions(refsData)),
+      )
     }
-  }, [refsData, importing, releasedChosen, setValue])
+  }, [refsData, hostRefsData, importing, releasedChosen, setValue])
 
   // A typed tag (URL + token, Local) doesn't carry over to the picker, and a picked one doesn't carry over to the field.
   const previousMode = useRef(gitMode)
   useEffect(() => {
     if (previousMode.current !== gitMode) {
+      // A repository picked on one host doesn't carry over to another (FR-132, FR-135).
+      const pickerHosts: readonly WizardValues['gitMode'][] = ['gitlab', 'bitbucket']
+      if (pickerHosts.includes(previousMode.current) || pickerHosts.includes(gitMode)) {
+        setValue('repoFullName', '')
+        setValue('installationId', '')
+        setValue('gitlabRepoId', '')
+        setValue('bitbucketRepoId', '')
+        setValue('repoHasCode', false)
+      }
       previousMode.current = gitMode
       resetReleased()
     }
-  }, [gitMode, resetReleased])
+  }, [gitMode, resetReleased, setValue])
 
-  // Keep the released tag's semver in sync, and prefill the version to develop with its next minor (FR-73).
+  // FR-132: the GitLab option exists while any GitLab instance is enabled.
+  const gitlabInstances = useGitLabInstances()
+  const gitlabAvailable = (gitlabInstances.data?.length ?? 0) > 0 || gitMode === 'gitlab'
+  const chooseGitLabConnection = useCallback(
+    (id: string, instanceId: string) => {
+      if (instanceId !== getValues('gitlabInstanceId')) {
+        setValue('gitlabInstanceId', instanceId)
+      }
+      if (id !== getValues('gitlabConnectionId')) {
+        setValue('gitlabConnectionId', id, { shouldValidate: getFieldState('gitlabConnectionId').invalid })
+        setValue('repoFullName', '')
+        setValue('gitlabRepoId', '')
+        setValue('repoHasCode', false)
+        resetReleased()
+      }
+    },
+    [getValues, setValue, getFieldState, resetReleased],
+  )
+  const pickGitLabRepo = (repo: GitLabRepo) => {
+    if (repo.id !== getValues('gitlabRepoId')) {
+      resetReleased()
+    }
+    setValue('repoFullName', repo.fullPath, { shouldValidate: getFieldState('repoFullName').invalid })
+    setValue('gitlabRepoId', repo.id)
+    // Known from the project's refs (FR-86), which load next.
+    setValue('repoHasCode', false)
+    setValue('defaultBranch', repo.defaultBranch ?? 'main', { shouldValidate: true })
+  }
+  /** FR-141: an empty GitLab project or Bitbucket repository has nothing to import, so the wizard starts from scratch on it. */
+  const scratchInstead = () => {
+    setValue('source', 'scratch', { shouldDirty: true })
+  }
+  /** "Connect GitLab / Bitbucket under Connections": saves the wizard (FR-159 draft) before Connections opens. */
+  const saveDraftForConnections = () => {
+    saveWizardDraft(getValues(), step)
+  }
+
+  // FR-135: the Bitbucket option shows where Bitbucket is in use: the OAuth consumer is configured, or the user has a
+  // connection (API tokens work without the consumer).
+  const bitbucketConnections = useBitbucketConnections()
+  const bitbucketAvailable =
+    providers.data?.bitbucket === true || (bitbucketConnections.data?.length ?? 0) > 0 || gitMode === 'bitbucket'
+  const chooseBitbucketConnection = useCallback(
+    (id: string) => {
+      if (id !== getValues('bitbucketConnectionId')) {
+        setValue('bitbucketConnectionId', id, { shouldValidate: getFieldState('bitbucketConnectionId').invalid })
+        setValue('repoFullName', '')
+        setValue('bitbucketRepoId', '')
+        setValue('repoHasCode', false)
+        resetReleased()
+      }
+    },
+    [getValues, setValue, getFieldState, resetReleased],
+  )
+  const pickBitbucketRepo = (repo: BitbucketRepo) => {
+    if (repo.id !== getValues('bitbucketRepoId')) {
+      resetReleased()
+    }
+    setValue('repoFullName', repo.fullName, { shouldValidate: getFieldState('repoFullName').invalid })
+    setValue('bitbucketRepoId', repo.id)
+    // Known from the repository's refs (FR-86, FR-141), which load next.
+    setValue('repoHasCode', false)
+    setValue('defaultBranch', repo.mainBranch ?? 'main', { shouldValidate: true })
+  }
+
+  // Keep the released tag's semver in sync, and prefill the version to develop with its next minor (FR-73). FR-141:
+  // with GitLab's or Bitbucket's own preselection, the version it suggests.
   useEffect(() => {
     setValue('releasedVersion', semverOfTag(releasedTag, refsData) ?? '')
   }, [releasedTag, refsData, setValue])
+  const hostSuggestion =
+    hostRefsData?.preselectedTag === releasedTagOf({ releasedTag }) ? hostRefsData.suggestedDevelopmentVersion : null
   useEffect(() => {
     if (!versionEdited) {
-      setValue('developmentVersion', suggestNextVersion(releasedVersion || null))
+      setValue('developmentVersion', hostSuggestion ?? suggestNextVersion(releasedVersion || null))
     }
-  }, [releasedVersion, versionEdited, setValue])
+  }, [releasedVersion, hostSuggestion, versionEdited, setValue])
 
   const pickRepo = (repo: GitHubRepo) => {
     if (repo.fullName !== getValues('repoFullName')) {
@@ -464,10 +747,155 @@ export function NewProjectWizard() {
     setValue('releasedTag', NEVER_RELEASED, { shouldDirty: true })
   }
 
+  // FR-158, FR-159: the AI model section. Keep a usable chosen provider (filling in its connection and model), else
+  // preselect the default one. An unusable provider is never preselected.
+  const llmProviders = useLlmProviders()
+  const llmOptions = llmProviders.data
+  // Back from Connections, the cached list may predate the new connection: refetch it, and wait for that answer
+  // before keeping or replacing the intended provider.
+  const [mountedAt] = useState(() => Date.now())
+  const { refetch: refetchLlmProviders } = llmProviders
+  useEffect(() => {
+    if (draft) {
+      void refetchLlmProviders()
+    }
+  }, [draft, refetchLlmProviders])
+  const settledLlmOptions = !draft || llmProviders.dataUpdatedAt >= mountedAt ? llmOptions : undefined
+  const applyLlm = useCallback(
+    (values: ReturnType<typeof llmValuesFor> | Pick<WizardValues, 'llmProvider' | 'llmCredentialId' | 'llmDefaultModel'>) => {
+      for (const [field, value] of Object.entries(values) as [keyof typeof values, string][]) {
+        setValue(field, value)
+      }
+    },
+    [setValue],
+  )
+  useEffect(() => {
+    if (!settledLlmOptions) {
+      return
+    }
+    const current = settledLlmOptions.find((p) => p.provider === getValues('llmProvider'))
+    if (current?.usable) {
+      const credential = getValues('llmCredentialId')
+      if (showsConnectionPicker(current) && !current.connections.some((c) => c.id === credential)) {
+        setValue('llmCredentialId', current.connections[0]?.id ?? '')
+      } else if (!showsConnectionPicker(current) && credential) {
+        setValue('llmCredentialId', '')
+      }
+      if (!getValues('llmDefaultModel').trim()) {
+        setValue('llmDefaultModel', initialModel(current))
+      }
+      return
+    }
+    const fallback = defaultLlmProvider(settledLlmOptions)
+    applyLlm(fallback ? llmValuesFor(fallback) : { llmProvider: '', llmCredentialId: '', llmDefaultModel: '' })
+  }, [settledLlmOptions, getValues, setValue, applyLlm])
+
+  const chooseLlmProvider = (option: LlmProviderOption) => {
+    applyLlm(llmValuesFor(option))
+  }
+
+  /** "Add a connection": saves the wizard, with that provider as the intended choice, before Connections opens. */
+  const addLlmConnection = (provider: LlmProviderOption['provider']) => {
+    const noOverrides = Object.fromEntries(Object.values(wizardAgentModelFields).map((f) => [f, ''])) as Partial<WizardValues>
+    saveWizardDraft(
+      { ...getValues(), ...noOverrides, llmProvider: provider, llmCredentialId: '', llmDefaultModel: '' },
+      step,
+    )
+  }
+
+  // FR-114: the stack catalog (option cards) and the composition fields, set from the five sub-steps.
+  const stackCatalog = useStackCatalog(step >= stepIndex('stack'))
+  const [liveStackErrors, setLiveStackErrors] = useState<StackFieldErrors>({})
+  const setStack = useCallback(
+    (sel: StackSelection) => {
+      for (const [k, field] of Object.entries(wizardStackFields) as [keyof StackSelection, WizardStackField][]) {
+        if (getValues(field) !== sel[k]) {
+          setValue(field, sel[k], { shouldDirty: true, shouldValidate: getFieldState(field).invalid })
+          // §7: a new host starts its setup afresh: another platform's connection or resource means nothing to it.
+          for (const slot of hostSlotsOfChoice[k] ?? []) {
+            setValue(hostField(slot, 'Mode'), 'skip')
+            setValue(hostField(slot, 'ConnectionId'), '')
+            setValue(hostField(slot, 'ResourceId'), '')
+            setValue(hostField(slot, 'ConnectionString'), '')
+            setValue(hostField(slot, 'Region'), '')
+            setValue(hostField(slot, 'Plan'), '')
+            // Only the suggested name carries over; another is cleared, and the Deployment step suggests one again.
+            if (getValues(hostField(slot, 'Name')) !== suggestedHostName(getValues('name'), slot)) {
+              setValue(hostField(slot, 'Name'), '')
+            }
+          }
+        }
+      }
+    },
+    [getValues, setValue, getFieldState],
+  )
+  const stackErrors: StackFieldErrors = { ...liveStackErrors }
+  for (const [k, field] of Object.entries(wizardStackFields) as [keyof StackSelection, WizardStackField][]) {
+    const message = errors[field]?.message
+    if (message) {
+      stackErrors[k] = message
+    }
+  }
+
+  // FR-118: an import pre-fills the Stack step from the repository's files (never blocking). Detection runs only while
+  // the Stack step is shown, and a result is applied only while the stack is untouched since the last applied one, so
+  // a late answer or a new repository never overwrites the user's own choices.
+  const detectRequest = importing && key === 'stack' ? detectRequestOf(getValues()) : null
+  const detection = useStackDetection(detectRequest)
+  const detectionKey = detection.data && detectRequest ? detectionIdOf(detectRequest, detection.data) : null
+  const appliedDetection = useWatch({ control, name: 'stackDetection' })
+  const lastApplied = useRef<string | null>(null)
+  useEffect(() => {
+    if (key !== 'stack' || !detection.data || !detectionKey || getValues('stackDetection') === detectionKey) {
+      return
+    }
+    const values = getValues()
+    lastApplied.current ??= stackSnapshot(draft?.values ?? wizardDefaults)
+    if (stackSnapshot(values) !== lastApplied.current) {
+      return
+    }
+    const found = detectedAnything(detection.data)
+    setStack(found ? selectionFromDetection(detection.data, emptyStackSelection) : emptyStackSelection)
+    setValue('stackKind', found ? 'compose' : 'general', { shouldDirty: true })
+    setValue('stackDetection', detectionKey)
+    lastApplied.current = stackSnapshot(getValues())
+  }, [key, detection.data, detectionKey, draft, getValues, setStack, setValue])
+
   async function next() {
+    if (key === 'stack' && getValues('stackKind') === 'compose') {
+      const layers = stackLayers(stackCatalog.data)
+      if (stackSubStep < layers.length - 1) {
+        const fields = wizardStackLayerFields[layers[stackSubStep]?.id ?? ''] ?? []
+        const valid = fields.length === 0 || (await trigger([...fields], { shouldFocus: true }))
+        if (valid) {
+          setMoveFocus(true)
+          setServerError(null)
+          setStackSubStep(stackSubStep + 1)
+        }
+        return
+      }
+    }
     const valid = await trigger(stepFields[key], { shouldFocus: true })
     if (valid) {
       goTo(step + 1)
+    }
+  }
+
+  function back() {
+    if (key === 'stack' && stackKind === 'compose' && stackSubStep > 0) {
+      setMoveFocus(true)
+      setStackSubStep(stackSubStep - 1)
+      return
+    }
+    goTo(step - 1)
+  }
+
+  /** The sub-step of the first stack field with a server error (create's VALIDATION on `stack.*`). */
+  const showStackField = (fields: readonly Field[]) => {
+    const layers = stackLayers(stackCatalog.data)
+    const index = layers.findIndex((l) => (wizardStackLayerFields[l.id] ?? []).some((f) => fields.includes(f)))
+    if (index >= 0) {
+      setStackSubStep(index)
     }
   }
 
@@ -476,12 +904,38 @@ export function NewProjectWizard() {
     goTo(stepIndex(field === 'releasedTag' ? 'repository' : 'version'))
   }
 
+  /**
+   * §7: the project exists; set up the hosts chosen in the Deployment step (a failure leaves a usable project), then go to
+   * it, or stay and say what's left for Settings → Deployment.
+   */
+  const afterCreate = async (projectId: string, values: WizardValues) => {
+    const toProject = () => navigate({ to: '/projects/$projectId', params: { projectId } })
+    const chosen = wizardHosts(values).filter((h) => isHostChosen(values, h.slot))
+    if (chosen.length === 0) {
+      await toProject()
+      return
+    }
+    setSettingUpHosts(true)
+    const failures = await applyHostSetups(projectId, values)
+    for (const field of hostSecretFields) {
+      setValue(field, '')
+    }
+    void queryClient.invalidateQueries({ queryKey: connectionKeys.platforms() })
+    setSettingUpHosts(false)
+    if (failures.length > 0) {
+      setHostOutcome({ projectId, failures })
+      return
+    }
+    toast.success('The project is created and its hosts are being set up. Follow them in Settings → Deployment.')
+    await toProject()
+  }
+
   const submit = handleSubmit(
     (values) => {
       setServerError(null)
       create.mutate(toRequest(values), {
         onSuccess: (project) => {
-          void navigate({ to: '/projects/$projectId', params: { projectId: project.id } })
+          void afterCreate(project.id, values)
         },
         onError: (error) => {
           const importValues = values.source === 'import'
@@ -489,7 +943,7 @@ export function NewProjectWizard() {
             const unmatched: string[] = []
             const matched: Partial<Record<Field, string>> = {}
             for (const [field, messages] of Object.entries(error.fieldErrors)) {
-              const target = serverFieldMap[field.toLowerCase()]
+              const target = wizardFieldOfKey(field, values.gitMode)
               if (target) {
                 matched[target] = messages.join(' ')
                 setError(target, { type: 'server', message: messages.join(' ') })
@@ -500,6 +954,9 @@ export function NewProjectWizard() {
             const target = firstStepWithError(matched)
             if (target !== LAST_STEP) {
               goTo(target)
+            }
+            if (target === stepIndex('stack')) {
+              showStackField(Object.keys(matched) as Field[])
             }
             setServerError({ message: unmatched.length > 0 ? unmatched.join(' ') : errorMessage(error) })
           } else if (isApiError(error, 'VERSION_INVALID')) {
@@ -518,22 +975,75 @@ export function NewProjectWizard() {
             // FR-73: the repository to import doesn't exist, or the token can't see it.
             setError('repoUrl', { type: 'server', message: errorMessage(error, 'createProject') })
             goTo(stepIndex('repository'))
-          } else if (isApiError(error, 'PRESET_NOT_FOUND')) {
-            // FR-74: the preset was withdrawn since the list loaded; pick again from the fresh list.
-            setError('presetId', { type: 'server', message: errorMessage(error, 'createProject') })
+          } else if (
+            (values.gitMode === 'gitlab' || values.gitMode === 'bitbucket') &&
+            (isApiError(error, 'CREDENTIAL_NOT_OWNER') ||
+              isApiError(error, 'GIT_NOT_CONNECTED') ||
+              isApiError(error, 'NOT_FOUND') ||
+              isApiError(error, 'FORBIDDEN')) &&
+            credentialErrorTarget(error, values, importValues) === 'git'
+          ) {
+            // FR-136: the binding must be the caller's own, valid connection; FR-132, FR-135: with write access to a
+            // repository it can see. The connection's problems go on the connection, the repository's on the picker.
+            const keys = Object.keys(error.fieldErrors).map((k) => k.toLowerCase())
+            const onConnection = keys.includes('git.connectionid') || keys.includes('git.instanceid')
+              ? true
+              : keys.includes('git.repoid')
+                ? false
+                : isApiError(error, 'CREDENTIAL_NOT_OWNER') || isApiError(error, 'GIT_NOT_CONNECTED')
+            const bitbucket = values.gitMode === 'bitbucket'
+            setError(onConnection ? (bitbucket ? 'bitbucketConnectionId' : 'gitlabConnectionId') : 'repoFullName', {
+              type: 'server',
+              message: errorMessage(error, bitbucket ? 'createProjectBitbucket' : 'createProjectGitLab'),
+            })
+            goTo(stepIndex('repository'))
+          } else if (isApiError(error, 'STACK_INCOMPATIBLE') || isApiError(error, 'VCS_MISMATCH')) {
+            // FR-116, FR-117: the composition breaks a rule (the reasons are listed), or the VCS isn't the repo's host.
             goTo(stepIndex('stack'))
-          } else if (isApiError(error, 'CREDENTIAL_NOT_OWNER')) {
+            setServerError({ message: errorMessage(error, 'createProject'), error })
+          } else if (isApiError(error, 'LLM_PROVIDER_UNAVAILABLE')) {
+            // FR-157, FR-159: the provider was turned off, or the user can no longer use it. Choose again.
+            void llmProviders.refetch()
+            setError('llmProvider', { type: 'server', message: errorMessage(error, 'createProject') })
+            goTo(stepIndex('configuration'))
+          } else if (
+            values.llmCredentialId &&
+            (isApiError(error, 'CREDENTIAL_NOT_OWNER') || isApiError(error, 'NOT_FOUND')) &&
+            credentialErrorTarget(error, values, importValues) === 'llm'
+          ) {
+            // FR-159: the AI model section's connection isn't the caller's, or no longer exists.
+            void llmProviders.refetch()
+            setError('llmCredentialId', { type: 'server', message: errorMessage(error, 'createProjectLlm') })
+            goTo(stepIndex('configuration'))
+          } else if (
+            isApiError(error, 'CREDENTIAL_NOT_OWNER') ||
+            (isApiError(error, 'NOT_FOUND') && credentialErrorTarget(error, values, importValues) === 'deployment')
+          ) {
             // FR-88: only the caller's own Vercel connections can be used.
             setError('vercelConnectionId', { type: 'server', message: errorMessage(error, 'createProject') })
             goTo(stepIndex('deployment'))
-          } else if (isApiError(error, 'VERCEL_GIT_NOT_CONNECTED') || isApiError(error, 'VERCEL_PLAN_LIMIT')) {
+          } else if (isApiError(error, 'PLATFORM_GIT_NOT_CONNECTED') || isApiError(error, 'PLATFORM_PLAN_LIMIT')) {
             goTo(stepIndex('deployment'))
             setServerError({ message: errorMessage(error, 'createProject'), error })
           } else if (importValues && isApiError(error, 'TAG_NOT_FOUND')) {
-            void refs.refetch()
+            void (values.gitMode === 'gitlab'
+              ? gitlabRefs.refetch()
+              : values.gitMode === 'bitbucket'
+                ? bitbucketRefs.refetch()
+                : refs.refetch())
             failVersion('releasedTag', error)
           } else {
-            setServerError({ message: errorMessage(error, 'createProject'), error })
+            setServerError({
+              message: errorMessage(
+                error,
+                values.gitMode === 'gitlab'
+                  ? 'createProjectGitLab'
+                  : values.gitMode === 'bitbucket'
+                    ? 'createProjectBitbucket'
+                    : 'createProject',
+              ),
+              error,
+            })
           }
         },
       })
@@ -549,6 +1059,15 @@ export function NewProjectWizard() {
   )
   const titles = stepKeys.map((k) => stepTitle(k, source))
 
+  if (hostOutcome) {
+    return (
+      <>
+        <PageHeader title="New project" />
+        <HostSetupOutcome projectId={hostOutcome.projectId} failures={hostOutcome.failures} />
+      </>
+    )
+  }
+
   return (
     <>
       <PageHeader title="New project" />
@@ -562,6 +1081,9 @@ export function NewProjectWizard() {
           if (step < LAST_STEP) {
             e.preventDefault()
             void next()
+          } else if (settingUpHosts) {
+            // The project exists already.
+            e.preventDefault()
           } else {
             void submit(e)
           }
@@ -579,8 +1101,13 @@ export function NewProjectWizard() {
         <ErrorSummary title="Check this step" errors={stepErrors} />
         {serverError && (
           <div className="mb-4">
-            {isApiError(serverError.error, 'VERCEL_GIT_NOT_CONNECTED') ? (
-              <VercelGitAlert error={serverError.error} title="We couldn't create the project" />
+            {isApiError(serverError.error, 'PLATFORM_GIT_NOT_CONNECTED') ? (
+              <PlatformGitAlert
+                error={serverError.error}
+                platform={serverError.error.platform ?? 'vercel'}
+                message={serverError.message}
+                title="We couldn't create the project"
+              />
             ) : isApiError(serverError.error, 'GITHUB_APP_NOT_INSTALLED') ||
               isApiError(serverError.error, 'GITHUB_NOT_CONNECTED') ? (
               <GitHubErrorAlert
@@ -673,6 +1200,26 @@ export function NewProjectWizard() {
                         },
                       ]
                     : []),
+                  ...(gitlabAvailable
+                    ? [
+                        {
+                          value: 'gitlab',
+                          label: gitModeOptionLabels.gitlab,
+                          description: importing
+                            ? 'Pick a GitLab project with one of your GitLab connections.'
+                            : 'Pick or create a project on gitlab.com or your GitLab instance. Git work uses your connection.',
+                        },
+                      ]
+                    : []),
+                  ...(bitbucketAvailable
+                    ? [
+                        {
+                          value: 'bitbucket',
+                          label: gitModeOptionLabels.bitbucket,
+                          description: 'Pick a Bitbucket Cloud repository with one of your Bitbucket connections.',
+                        },
+                      ]
+                    : []),
                   {
                     value: 'github_pat',
                     label: gitModeOptionLabels.github_pat,
@@ -699,6 +1246,40 @@ export function NewProjectWizard() {
                   error={errors.repoFullName?.message}
                   onSelect={pickRepo}
                   onImportInstead={importInstead}
+                />
+              )}
+              {gitMode === 'gitlab' && (
+                <WizardGitLabRepository
+                  connectionFieldId={fieldIds.gitlabConnectionId}
+                  searchId={fieldIds.repoFullName}
+                  connectionId={gitlabConnectionId}
+                  selected={repoFullName}
+                  importing={importing}
+                  empty={gitlabRefs.data?.empty}
+                  connectionError={errors.gitlabConnectionId?.message}
+                  repoError={errors.repoFullName?.message}
+                  onConnection={chooseGitLabConnection}
+                  onSelect={pickGitLabRepo}
+                  onAddConnection={saveDraftForConnections}
+                  onImportInstead={importInstead}
+                  onScratchInstead={scratchInstead}
+                />
+              )}
+              {gitMode === 'bitbucket' && (
+                <WizardBitbucketRepository
+                  connectionFieldId={fieldIds.bitbucketConnectionId}
+                  searchId={fieldIds.repoFullName}
+                  connectionId={bitbucketConnectionId}
+                  selected={repoFullName}
+                  importing={importing}
+                  empty={bitbucketRefs.data?.empty}
+                  connectionError={errors.bitbucketConnectionId?.message}
+                  repoError={errors.repoFullName?.message}
+                  onConnection={chooseBitbucketConnection}
+                  onSelect={pickBitbucketRepo}
+                  onAddConnection={saveDraftForConnections}
+                  onImportInstead={importInstead}
+                  onScratchInstead={scratchInstead}
                 />
               )}
               {gitMode === 'github_pat' && (
@@ -748,7 +1329,11 @@ export function NewProjectWizard() {
               <TextField
                 id={fieldIds.defaultBranch}
                 label="Default branch"
-                hint={gitMode === 'github_app' && repoFullName ? 'Prefilled from the repository.' : undefined}
+                hint={
+                  (gitMode === 'github_app' || gitMode === 'gitlab' || gitMode === 'bitbucket') && repoFullName
+                    ? 'Prefilled from the repository.'
+                    : undefined
+                }
                 maxLength={limits.branchMax}
                 autoComplete="off"
                 error={errors.defaultBranch?.message}
@@ -757,9 +1342,10 @@ export function NewProjectWizard() {
               {importing && (
                 <ReleasedVersionField
                   id={fieldIds.releasedTag}
-                  listed={gitMode === 'github_app'}
+                  listed={gitMode === 'github_app' || gitMode === 'gitlab' || gitMode === 'bitbucket'}
+                  host={gitMode === 'gitlab' ? 'gitlab' : gitMode === 'bitbucket' ? 'bitbucket' : 'github'}
                   repoSelected={Boolean(repoFullName)}
-                  refs={refs}
+                  refs={gitMode === 'gitlab' ? gitlabRefs : gitMode === 'bitbucket' ? bitbucketRefs : refs}
                   inputProps={register('releasedTag', {
                     onChange: () => {
                       setReleasedChosen(true)
@@ -806,12 +1392,55 @@ export function NewProjectWizard() {
             ))}
 
           {key === 'stack' && (
-            <PresetPicker
-              id={fieldIds.presetId}
-              selected={presetId}
-              inputProps={register('presetId')}
-              error={errors.presetId?.message}
-            />
+            <>
+              <RadioGroup
+                id={fieldIds.stackKind}
+                legend="How should the agents build it?"
+                inputProps={register('stackKind')}
+                error={errors.stackKind?.message}
+                options={[
+                  {
+                    value: 'general',
+                    label: 'No stack (general)',
+                    description:
+                      'Any stack: the generalist agent writes every plan step, and the specification has the standard sections.',
+                  },
+                  {
+                    value: 'compose',
+                    label: 'Choose the stack',
+                    description:
+                      'Pick the frontend, backend, data, version control and deployment layers. A specialist agent works on each layer.',
+                  },
+                ]}
+              />
+              {importing && <DetectionNotice detection={detection} gitMode={gitMode} />}
+              {stackKind === 'compose' &&
+                (stackCatalog.isPending ? (
+                  <LoadingState label="Loading the stack catalog…" />
+                ) : stackCatalog.isError ? (
+                  <ErrorState
+                    error={stackCatalog.error}
+                    title="The stack catalog couldn't load"
+                    onRetry={() => void stackCatalog.refetch()}
+                  />
+                ) : (
+                  <>
+                    <StackComposer
+                      catalog={stackCatalog.data}
+                      value={stackSelection}
+                      onChange={setStack}
+                      subStep={stackSubStep}
+                      onSubStepChange={setStackSubStep}
+                      idPrefix={WIZARD_STACK_PREFIX}
+                      vcsFixed={repoVcsOf(gitMode)}
+                      vcsFixedReason={`Set from the repository you chose (${repoHostLabelOf(gitMode) ?? 'GitHub'}). It can only be the repository's host.`}
+                      detection={importing && detectionKey !== null && detectionKey === appliedDetection ? detection.data : null}
+                      errors={stackErrors}
+                    />
+                    <StackSummary catalog={stackCatalog.data} value={stackSelection} onFieldErrors={setLiveStackErrors} />
+                  </>
+                ))}
+            </>
           )}
 
           {key === 'configuration' && (
@@ -876,28 +1505,43 @@ export function NewProjectWizard() {
                 error={errors.tokenBudget?.message}
                 {...register('tokenBudget')}
               />
+              <WizardLlmSection
+                providers={llmProviders}
+                control={control}
+                register={register}
+                errors={errors}
+                provider={llmProvider}
+                onChooseProvider={chooseLlmProvider}
+                onAddConnection={addLlmConnection}
+              />
             </>
           )}
 
-          {key === 'deployment' && (
-            <WizardDeploymentStep
-              register={register}
-              errors={errors}
-              values={{ gitMode, presetId, deploymentMode, vercelProjectMode, vercelConnectionId }}
-            />
-          )}
+          {key === 'deployment' &&
+            (stackKind === 'compose' ? (
+              <WizardHostsStep
+                hosts={wizardHosts({
+                  stackKind,
+                  stackFrontendHost: stackSelection.frontendHost,
+                  stackBackendHost: stackSelection.backendHost,
+                  stackDatabaseHost: stackSelection.databaseHost,
+                })}
+                control={control}
+                register={register}
+                errors={errors}
+                gitMode={gitMode}
+                onAddConnection={saveDraftForConnections}
+              />
+            ) : (
+              <WizardDeploymentStep register={register} errors={errors} values={{ gitMode, deploymentMode, vercelProjectMode, vercelConnectionId }} />
+            ))}
 
-          {key === 'review' && <ReviewSummary values={getValues()} onEdit={goTo} />}
+          {key === 'review' && <ReviewSummary values={getValues()} llmOptions={llmOptions} onEdit={goTo} />}
         </div>
 
         <div className="mt-6 flex flex-wrap justify-between gap-2">
           {step > 0 ? (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                goTo(step - 1)
-              }}
-            >
+            <Button variant="secondary" onClick={back} disabled={settingUpHosts}>
               Back
             </Button>
           ) : (
@@ -906,13 +1550,39 @@ export function NewProjectWizard() {
           {step < LAST_STEP ? (
             <Button type="submit">Next</Button>
           ) : (
-            <Button type="submit" pending={create.isPending} pendingLabel="Creating…">
+            <Button type="submit" pending={create.isPending || settingUpHosts} pendingLabel={settingUpHosts ? 'Setting up the hosts…' : 'Creating…'}>
               Create project
             </Button>
           )}
         </div>
       </form>
     </>
+  )
+}
+
+/** §7: the project was created, but part of its hosts' setup wasn't: what failed, and where to finish it. */
+function HostSetupOutcome({ projectId, failures }: { projectId: string; failures: readonly HostSetupFailure[] }) {
+  return (
+    <div className={cn(panelClass, 'flex max-w-2xl flex-col gap-4 p-4 sm:p-6')}>
+      <Alert tone="warning" role="alert" title="The project is created, but part of its deployment setup isn't">
+        <p>Nothing else is affected. Finish these in Settings → Deployment:</p>
+        <ul aria-label="Setup that didn't finish" data-testid="host-setup-failures" className="mt-2 list-disc pl-5">
+          {failures.map((f) => (
+            <li key={f.title}>
+              <span className="font-medium">{f.title}:</span> {f.message}
+            </li>
+          ))}
+        </ul>
+      </Alert>
+      <div className="flex flex-wrap gap-2">
+        <Link to="/projects/$projectId/settings/$section" params={{ projectId, section: 'deployment' }} className={buttonClasses('primary')}>
+          Open Settings → Deployment
+        </Link>
+        <Link to="/projects/$projectId" params={{ projectId }} className={buttonClasses('secondary')}>
+          Go to the project
+        </Link>
+      </div>
+    </div>
   )
 }
 
@@ -991,20 +1661,146 @@ function SummarySection({ title, step, onEdit, children }: {
   )
 }
 
-/** The picked preset's name and version (from the cached list), or "No preset (general)". */
-function PresetName({ presetId }: { presetId: string }) {
-  const presets = usePresets(Boolean(presetId))
-  if (!presetId) {
-    return <>No preset (general)</>
-  }
-  const preset = presets.data?.find((p) => p.id === presetId)
-  return <>{preset ? `${preset.name} ${preset.version}` : presetId}</>
+/** FR-114: the composition in the summary, layer by layer (names from the catalog). */
+function StackReview({ values }: { values: WizardValues }) {
+  const catalog = useStackCatalog()
+  return <CompositionRows catalog={catalog.data} value={selectionOfValues(values)} />
 }
 
-/** FR-88: the Deployment step in the summary ("Vercel", the connection, and the new or existing Vercel project). */
+/** FR-118: what import detection found (or that it couldn't run); it never blocks the step. */
+function DetectionNotice({
+  detection,
+  gitMode,
+}: {
+  detection: ReturnType<typeof useStackDetection>
+  gitMode: WizardValues['gitMode']
+}) {
+  if (detection.isPending && detection.fetchStatus === 'idle') {
+    return null
+  }
+  if (detection.isPending) {
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Detecting the repository&apos;s stack…
+      </p>
+    )
+  }
+  if (detection.isError) {
+    return (
+      <Alert tone="info" role="status" title="We couldn't detect the stack">
+        <p>
+          {errorMessage(
+            detection.error,
+            gitMode === 'gitlab' ? 'detectStackGitLab' : gitMode === 'bitbucket' ? 'detectStackBitbucket' : 'detectStack',
+          )}
+        </p>
+      </Alert>
+    )
+  }
+  const d = detection.data
+  if (!detectedAnything(d)) {
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Nothing was detected in the repository. Choose each layer yourself, or keep No stack (general).
+      </p>
+    )
+  }
+  return (
+    <Alert tone="success" role="status" title="Stack detected">
+      <p>
+        The layers detected in <code className="font-mono">{d.ref}</code> are pre-filled and marked Detected. You can
+        change any of them.
+      </p>
+      {d.truncated && <p className="mt-1">The repository has more files than AIDE listed, so some layers may be missing.</p>}
+    </Alert>
+  )
+}
+
+/** FR-136: the GitLab connection the project is bound to ("ada on GitLab.com (gitlab.com)"). */
+function GitLabConnectionSummary({ connectionId }: { connectionId: string }) {
+  const connections = useGitLabConnections()
+  const c = connections.data?.find((x) => x.id === connectionId)
+  return (
+    <SummaryRow term="GitLab connection">
+      {c
+        ? `${c.login} on ${c.instanceName} (${gitlabHost(c.instanceBaseUrl)})`
+        : connections.isPending
+          ? 'Loading…'
+          : connections.isError
+            ? "Your GitLab connections couldn't load"
+            : 'Connection not found. Choose another under Repository.'}
+    </SummaryRow>
+  )
+}
+
+/** FR-136: the Bitbucket connection the project is bound to ("ada (OAuth)"). */
+function BitbucketConnectionSummary({ connectionId }: { connectionId: string }) {
+  const connections = useBitbucketConnections()
+  const c = connections.data?.find((x) => x.id === connectionId)
+  return (
+    <SummaryRow term="Bitbucket connection">
+      {c
+        ? `${c.login} (${c.authKind === 'oauth' ? 'OAuth' : 'API token'})`
+        : connections.isPending
+          ? 'Loading…'
+          : connections.isError
+            ? "Your Bitbucket connections couldn't load"
+            : 'Connection not found. Choose another under Repository.'}
+    </SummaryRow>
+  )
+}
+
+/** §7: one chosen host in the summary: what happens to it, and the connection (never a connection string). */
+function HostSummary({ host, values }: { host: WizardHost; values: WizardValues }) {
+  const v = hostValues(values, host.slot)
+  const connections = usePlatformConnections({ enabled: isHostChosen(values, host.slot) && host.needsConnection })
+  const connection = connections.data?.find((c) => c.id === v.connectionId)
+  const noun = host.kind === 'target' ? resourceNouns[host.provider] : 'database'
+  const action =
+    !isHostChosen(values, host.slot)
+      ? 'Set up later'
+      : host.provider === 'external'
+        ? 'Connection string entered (not shown)'
+        : v.mode === 'link'
+          ? `Link existing ${noun} ${v.resourceId.trim()}`
+          : !host.needsConnection
+            ? 'Turn on'
+            : v.name.trim()
+              ? `New ${noun} ${v.name.trim()}`
+              : `New ${noun}`
+  return (
+    <>
+      <SummaryRow term={host.title}>{action}</SummaryRow>
+      {isHostChosen(values, host.slot) && host.needsConnection && (
+        <SummaryRow term={`${host.title}: connection`}>{connection ? connectionLabel(connection) : v.connectionId}</SummaryRow>
+      )}
+    </>
+  )
+}
+
+/**
+ * The Deployment step in the summary. A composed stack: its hosts (§7). Without a stack: "Vercel", the connection, and the
+ * new or existing Vercel project (FR-88).
+ */
 function DeploymentSummary({ values }: { values: WizardValues }) {
+  if (values.stackKind === 'compose') {
+    const hosts = wizardHosts(values)
+    return hosts.length === 0 ? (
+      <SummaryRow term="Deployment">No hosts in the stack</SummaryRow>
+    ) : (
+      <>
+        {hosts.map((host) => (
+          <HostSummary key={host.slot} host={host} values={values} />
+        ))}
+      </>
+    )
+  }
+  return <VercelDeploymentSummary values={values} />
+}
+
+function VercelDeploymentSummary({ values }: { values: WizardValues }) {
   const request = toDeploymentRequest(values)
-  const connections = useVercelConnections(request !== null)
+  const connections = usePlatformConnections({ enabled: request !== null, provider: 'vercel' })
   if (!request) {
     return <SummaryRow term="Deployment">Skipped</SummaryRow>
   }
@@ -1022,7 +1818,48 @@ function DeploymentSummary({ values }: { values: WizardValues }) {
   )
 }
 
-function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step: number) => void }) {
+/** FR-159: the AI model section in the summary (provider, connection, default model and any per-agent models). */
+function LlmSummary({ values, options }: { values: WizardValues; options: readonly LlmProviderOption[] | undefined }) {
+  if (!values.llmProvider) {
+    return <SummaryRow term="AI provider">Not chosen</SummaryRow>
+  }
+  const option = options?.find((p) => p.provider === values.llmProvider)
+  const catalog = option?.catalog ?? []
+  const modelText = (id: string) => {
+    const m = catalogModel(catalog, id)
+    return m ? `${m.name} (${m.id})` : id
+  }
+  const connection = option?.connections.find((c) => c.id === values.llmCredentialId)
+  return (
+    <>
+      <SummaryRow term="AI provider">{llmProviderLabels[values.llmProvider]}</SummaryRow>
+      {values.llmCredentialId ? (
+        <SummaryRow term="Connection">{connection ? connectionLabel(connection) : values.llmCredentialId}</SummaryRow>
+      ) : (
+        option?.reason === 'system_key' && <SummaryRow term="Connection">This server&apos;s key</SummaryRow>
+      )}
+      <SummaryRow term="Default model">{modelText(values.llmDefaultModel.trim())}</SummaryRow>
+      {agentKeys.map((agent) => {
+        const model = values[wizardAgentModelFields[agent]].trim()
+        return model ? (
+          <SummaryRow key={agent} term={`${agentLabels[agent]} model`}>
+            {modelText(model)}
+          </SummaryRow>
+        ) : null
+      })}
+    </>
+  )
+}
+
+function ReviewSummary({
+  values,
+  llmOptions,
+  onEdit,
+}: {
+  values: WizardValues
+  llmOptions: readonly LlmProviderOption[] | undefined
+  onEdit: (step: number) => void
+}) {
   const pat = values.gitMode === 'github_pat'
   const app = values.gitMode === 'github_app'
   const importing = values.source === 'import'
@@ -1037,8 +1874,12 @@ function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step
       </SummarySection>
       <SummarySection title="Repository" step="repository" onEdit={onEdit}>
         <SummaryRow term="Mode">{gitModeOptionLabels[values.gitMode]}</SummaryRow>
-        {app && <SummaryRow term="Repository">{values.repoFullName}</SummaryRow>}
-        {app && values.repoHasCode && !importing && (
+        {(app || values.gitMode === 'gitlab' || values.gitMode === 'bitbucket') && (
+          <SummaryRow term="Repository">{values.repoFullName}</SummaryRow>
+        )}
+        {values.gitMode === 'gitlab' && <GitLabConnectionSummary connectionId={values.gitlabConnectionId} />}
+        {values.gitMode === 'bitbucket' && <BitbucketConnectionSummary connectionId={values.bitbucketConnectionId} />}
+        {(app || values.gitMode === 'gitlab' || values.gitMode === 'bitbucket') && values.repoHasCode && !importing && (
           <SummaryRow term="Existing code">AIDE builds on it (treated as an import that was never released)</SummaryRow>
         )}
         {pat && <SummaryRow term="Repository URL">{values.repoUrl.trim()}</SummaryRow>}
@@ -1057,9 +1898,11 @@ function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step
         )}
       </SummarySection>
       <SummarySection title="Stack" step="stack" onEdit={onEdit}>
-        <SummaryRow term="Preset">
-          <PresetName presetId={values.presetId} />
-        </SummaryRow>
+        {values.stackKind === 'compose' ? (
+          <StackReview values={values} />
+        ) : (
+          <SummaryRow term="Stack">No stack (general)</SummaryRow>
+        )}
       </SummarySection>
       <SummarySection title="Configuration" step="configuration" onEdit={onEdit}>
         <SummaryRow term="Approval mode">{approvalModeLabels[values.approvalMode]}</SummaryRow>
@@ -1069,6 +1912,7 @@ function ReviewSummary({ values, onEdit }: { values: WizardValues; onEdit: (step
         <SummaryRow term="Token budget">
           {values.tokenBudget.trim() ? `${Number(values.tokenBudget).toLocaleString()} tokens` : 'No limit'}
         </SummaryRow>
+        <LlmSummary values={values} options={llmOptions} />
       </SummarySection>
       <SummarySection title="Deployment" step="deployment" onEdit={onEdit}>
         <DeploymentSummary values={values} />

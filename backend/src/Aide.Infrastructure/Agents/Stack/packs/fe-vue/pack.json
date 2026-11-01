@@ -1,0 +1,176 @@
+{
+  "id": "fe-vue",
+  "layer": "frontend",
+  "name": "Vue",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "fe-vue",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Vue 3",
+    "Vite",
+    "TypeScript",
+    "SPA"
+  ],
+  "description": "A Vue 3 single-page app with the Composition API, Pinia, TanStack Vue Query and a generated OpenAPI client.",
+  "defaultPath": "frontend",
+  "publicEnvPrefix": "VITE_",
+  "runtime": "static",
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Data Sources & Consumed APIs",
+      "guidance": "There is no backend or database in this stack. List every data source and third-party API the frontend consumes: base URL and endpoints used, authentication (public keys only, never secrets in the browser), CORS and rate limits, the response fields the UI relies on, where in the app each is called, caching, and how failures, empty results and offline states are shown. Static or bundled data: name its file and how it is updated.",
+      "when": "backend == none && data == none"
+    }
+  ],
+  "ownership": {
+    "frontend-engineer": [
+      "{fe}/**",
+      "!{fe}/e2e/**",
+      "!{fe}/playwright.config.*",
+      "!{fe}/**/Dockerfile",
+      "!{fe}/**/.dockerignore",
+      "!{fe}/**/nginx.conf",
+      "!{fe}/vercel.json",
+      "!{fe}/netlify.toml",
+      "!{fe}/**/_redirects",
+      "!{fe}/**/wrangler.jsonc",
+      "!{fe}/worker/**",
+      "!{fe}/**/.env.example",
+      "!{fe}/supabase/**",
+      "!{fe}/src/lib/database.types.ts"
+    ]
+  },
+  "agentSections": {
+    "scaffolder": [
+      "Detect",
+      "Scaffold",
+      "Conventions",
+      "Config"
+    ],
+    "frontend-engineer": [
+      "*"
+    ],
+    "test-engineer": [
+      "Testing",
+      "Gate"
+    ],
+    "ci-engineer": [
+      "Gate"
+    ],
+    "deploy-engineer": [
+      "Containerise",
+      "Deploy notes"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{be}/openapi/api.json"
+        ],
+        "after": [
+          "{fe}/src/api/generated/**"
+        ],
+        "soft": true,
+        "reason": "Change the API contract before the frontend steps that update the generated client from it."
+      }
+    ],
+    "exclusive": [],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [
+    {
+      "glob": "{fe}/src/api/generated/**",
+      "handling": "hand_written",
+      "ciCheck": "cd {fe} && npm run gen:api && git diff --exit-code src/api/generated"
+    },
+    {
+      "glob": "{fe}/package-lock.json",
+      "handling": "ci_generated",
+      "ciCheck": null
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "VITE_API_BASE_URL",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": true,
+      "description": "The backend origin for the generated client, baked in at build (cross-origin only).",
+      "when": "originModel == cross-origin"
+    },
+    {
+      "key": "VITE_SUPABASE_URL",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": false,
+      "public": true,
+      "description": "The Supabase project URL (https://<ref>.supabase.co), public, baked in at build.",
+      "when": "data == data-supabase"
+    },
+    {
+      "key": "VITE_SUPABASE_PUBLISHABLE_KEY",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": false,
+      "public": true,
+      "description": "The Supabase publishable key (sb_publishable_...), public, baked in at build.",
+      "when": "data == data-supabase"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "<script setup> + TS, server state in Vue Query, and Pinia for client state only.",
+        "category": "architecture",
+        "severity": "minor"
+      },
+      {
+        "item": "Only the generated client is used, and it matches the current contract.",
+        "category": "api_contracts",
+        "severity": "major"
+      },
+      {
+        "item": "Guards and permissions come from the spec, error codes map to copy, and every state is present.",
+        "category": "feature_coverage",
+        "severity": "major"
+      },
+      {
+        "item": "Accessibility basics are met, tests cover the FRs, and the gate passes.",
+        "category": "testing",
+        "severity": "major"
+      }
+    ],
+    "deterministic": [
+      "no_secret_in_client"
+    ]
+  },
+  "gate": [
+    "cd {fe} && npm ci && npm run typecheck && npm run lint && npm test && npm run build"
+  ],
+  "migrate": null,
+  "deploy": null
+}

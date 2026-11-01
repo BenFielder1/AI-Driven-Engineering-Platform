@@ -14,7 +14,7 @@ public interface ILlmResolver
 {
     /// <summary>
     /// The project's LLM settings (provider, the agent's model or the default model) when saved, else the system
-    /// defaults (<c>Llm:DefaultProvider</c> if usable, else Fake, with its configured models); plus the key.
+    /// defaults (<see cref="ILlmProviderCatalog.FallbackProvider"/>, with its configured models); plus the key.
     /// </summary>
     Task<ResolvedLlm> ResolveAsync(Guid projectId, AgentKind agent, CancellationToken cancellationToken);
 
@@ -46,7 +46,7 @@ internal sealed partial class LlmResolver(
         }
         else
         {
-            var provider = settings?.Provider ?? catalog.DefaultForNewProject;
+            var provider = settings?.Provider ?? catalog.FallbackProvider;
             choice = AgentRunRules.ChooseModel(agent, provider, catalog.DefaultModel(provider), catalog.DefaultAgentModels(provider));
         }
 

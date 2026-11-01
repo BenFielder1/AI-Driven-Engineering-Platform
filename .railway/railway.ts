@@ -21,14 +21,31 @@ import { database, defineRailway, project, service, volume } from 'railway/iac'
 
 // FR-107 / FR-112: variables set per environment in Railway, never in git (deploy/railway/variables.md). IaC ignores
 // these names, so setting or removing one in either environment needs no change here and never shows up as drift.
+// §4.24: the first index after the catalog entries shipped in appsettings.json (Anthropic 7 entries, OpenAI 2).
+const catalogExtensionVariables = (
+  [
+    ['Anthropic', 7],
+    ['OpenAI', 2],
+  ] as const
+).flatMap(([provider, index]) =>
+  ['Id', 'Name', 'MaxOutputTokens', 'ContextTokens', 'Recommended'].map((field) => `Llm__Providers__${provider}__Catalog__${String(index)}__${field}`),
+)
+
 const operatorSetApiVariables = [
   // Required secret: one-click approval links (FR-48), 64 random characters, different per environment.
   'Approvals__SigningKey',
-  // Optional: system LLM keys (FR-79) and a reachable Ollama.
+  // Optional: system LLM keys (FR-79). No Ollama base URL: Ollama is disabled on Railway (FR-157, env below).
   'Llm__AllowSystemKeys',
   'Llm__Providers__Anthropic__ApiKey',
   'Llm__Providers__OpenAI__ApiKey',
-  'Llm__Providers__Ollama__BaseUrl',
+  // Optional: output-token ceiling (FR-160) and streaming timeouts (FR-161).
+  'Llm__MaxOutputTokensCeiling',
+  'Llm__StreamIdleTimeout',
+  'Llm__RequestTimeout',
+  // Optional: model catalog extensions (§4.24), the entry after the ones shipped in appsettings.json. Listed by exact name:
+  // whether `variables.ignore` takes wildcards isn't established, and a wrong guess would plan deleting a set variable.
+  // A further entry (or another index) is added here by exact name first.
+  ...catalogExtensionVariables,
   // Optional: GitHub App override (all five or none) and v1 OAuth sign-in.
   'GitHub__App__AppId',
   'GitHub__App__ClientId',
@@ -37,6 +54,20 @@ const operatorSetApiVariables = [
   'GitHub__App__Slug',
   'GitHub__OAuth__ClientId',
   'GitHub__OAuth__ClientSecret',
+  // Optional: one config-defined GitLab instance (FR-130; overrides a DB-registered instance with the same host) and
+  // the GitLab request timeout. More instances (`GitLab__Instances__1__*`, ...) are added here by exact name.
+  // GitLab__AllowPrivateNetworks is a literal on `api` below, not operator-set.
+  'GitLab__Instances__0__Name',
+  'GitLab__Instances__0__BaseUrl',
+  'GitLab__Instances__0__ClientId',
+  'GitLab__Instances__0__ClientSecret',
+  'GitLab__Instances__0__AllowInsecureHttp',
+  'GitLab__RequestTimeout',
+  // Optional: Bitbucket Cloud OAuth consumer override (M28).
+  'Bitbucket__OAuth__ClientId',
+  'Bitbucket__OAuth__ClientSecret',
+  // Optional: how often the database expiry sweep runs (FR-155).
+  'Notifications__DatabaseExpirySweepInterval',
   // Optional: email channel (FR-47).
   'Smtp__Host',
   'Smtp__Port',
@@ -103,6 +134,14 @@ export default defineRailway(() => {
         'Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};' +
         'Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}',
       App__PublicBaseUrl: 'https://${{web.RAILWAY_PUBLIC_DOMAIN}}',
+      // FR-157: only Anthropic and OpenAI on Railway. Ollama has no reachable default here (host.docker.internal
+      // doesn't resolve) and Fake must never serve real users. Startup validation requires the default provider
+      // (appsettings) to be enabled.
+      Llm__Providers__Ollama__Enabled: 'false',
+      Llm__Providers__Fake__Enabled: 'false',
+      // SPEC §8: on Railway, private addresses (10/8, *.railway.internal, ...) are AIDE's own services, so GitLab hosts
+      // there are refused (SSRF). The backend default (true) suits Docker Desktop and the dev loop.
+      GitLab__AllowPrivateNetworks: 'false',
     },
   })
 

@@ -21,7 +21,7 @@ function signInUser() {
 const fr92Cases: { type: Schemas['NotificationType']; label: string; title: string; link: string }[] = [
   {
     type: 'release_awaiting_merge',
-    label: 'Release awaiting a merge on GitHub',
+    label: 'Release awaiting a merge on the Git host',
     title: 'Release v1.2.0 is waiting for a merge',
     link: `/projects/${PROJECT}/release`,
   },
@@ -37,6 +37,13 @@ const fr92Cases: { type: Schemas['NotificationType']; label: string; title: stri
     label: 'LLM connection unbound',
     title: 'The LLM connection was unbound',
     link: `/projects/${PROJECT}/settings/llm`,
+  },
+  // FR-136: a GitLab or Bitbucket project's Git binding was cleared; it opens Settings → Git to re-bind.
+  {
+    type: 'git_binding_cleared',
+    label: 'Git connection unbound',
+    title: 'Inventory tracker: GitLab connection unbound',
+    link: `/projects/${PROJECT}/settings/git`,
   },
   { type: 'connection_invalid', label: 'Connection invalid', title: 'Your GitHub connection is invalid', link: '/connections' },
 ]
@@ -58,6 +65,11 @@ const allTypes: Schemas['NotificationType'][] = [
   'preview_ready',
   'connection_invalid',
   'llm_binding_cleared',
+  'git_binding_cleared',
+  'database_provisioning_failed',
+  'database_expiring',
+  'migration_failed',
+  'deployment_target_attention',
 ]
 
 describe('FR-92: v2 notification types in the UI', () => {
@@ -171,6 +183,11 @@ describe('FR-92: v2 notification types in the UI', () => {
         'DEPLOYMENT_PREVIEW_READY',
         'CONNECTION_INVALID',
         'LLM_BINDING_CLEARED',
+        'GIT_BINDING_CLEARED',
+        'DATABASE_PROVISIONING_FAILED',
+        'DATABASE_EXPIRING',
+        'MIGRATION_RUN_FAILED',
+        'DEPLOYMENT_TARGET_FAILED',
       ].sort(),
     )
     // Not notifying: deployment bookkeeping, merges seen on GitHub, versions and presets.

@@ -8,6 +8,8 @@ export type LlmConnections = Schemas['LlmConnectionsDto']
 export type LlmCredential = Schemas['LlmCredentialDto']
 export type LlmCredentialStatus = Schemas['LlmCredentialStatus']
 export type AdminLlmPolicy = Schemas['AdminLlmPolicyDto']
+export type LlmProviderOption = Schemas['LlmProviderDto']
+export type LlmModel = Schemas['LlmModelDto']
 
 /** Providers that take a user key (FR-78); Ollama and Fake are keyless. */
 export const keyedProviders = ['anthropic', 'openai'] as const satisfies readonly Schemas['LlmProvider'][]
@@ -15,8 +17,12 @@ export const keyedProviders = ['anthropic', 'openai'] as const satisfies readonl
 export const connectionKeys = {
   all: ['me', 'connections'] as const,
   llm: () => [...connectionKeys.all, 'llm'] as const,
-  /** GET /api/me/connections/vercel (FR-87). */
-  vercel: () => [...connectionKeys.all, 'vercel'] as const,
+  /** GET /api/llm/providers (FR-158): under `all`, so a connection change refreshes it. */
+  llmProviders: () => [...connectionKeys.all, 'llm-providers'] as const,
+  /** GET /api/me/connections/platforms (FR-142; Vercel connections included, FR-87). */
+  platforms: () => [...connectionKeys.all, 'platforms'] as const,
+  /** GET /api/me/connections/platforms/:id/resources?type= (FR-142 picker data). */
+  platformResources: (id: string, type: string) => [...connectionKeys.all, 'platforms', id, 'resources', type] as const,
   adminLlmPolicy: () => ['admin', 'integrations', 'llm'] as const,
 }
 
@@ -25,6 +31,18 @@ export function useLlmConnections(enabled = true) {
   return useQuery({
     queryKey: connectionKeys.llm(),
     queryFn: async ({ signal }) => unwrap(await api.GET('/api/me/connections/llm', { signal })),
+    enabled,
+  })
+}
+
+/**
+ * FR-158: the LLM providers enabled on this server, in server order, with whether the caller can use each (and why),
+ * the caller's connections for it, its model catalog and default model.
+ */
+export function useLlmProviders(enabled = true) {
+  return useQuery({
+    queryKey: connectionKeys.llmProviders(),
+    queryFn: async ({ signal }) => unwrap(await api.GET('/api/llm/providers', { signal })),
     enabled,
   })
 }
@@ -46,7 +64,7 @@ export function useInvalidateConnections() {
  * FR-78: adds a key; the API checks it with the provider first (CREDENTIAL_INVALID → nothing saved). The variables
  * carry the plaintext key, so the mutation is garbage-collected as soon as it has no observer (`gcTime: 0`): callers
  * `reset()` it after every outcome, which drops it from the MutationCache. Use the same pattern for any secret
- * (the Vercel token, FR-87, and deployment env values, FR-88).
+ * (platform tokens, FR-142, and deployment env values, FR-88).
  */
 export function useCreateLlmConnection() {
   const invalidate = useInvalidateConnections()

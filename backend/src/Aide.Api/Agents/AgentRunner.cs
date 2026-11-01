@@ -11,9 +11,7 @@ using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
-using Aide.Infrastructure.Presets;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace Aide.Api.Agents;
 
@@ -41,7 +39,7 @@ public sealed record AgentRunRequest
 
     public string? RunKey { get; init; }
 
-    /// <summary>Output token cap; default <c>Llm:MaxOutputTokens</c>.</summary>
+    /// <summary>Output token limit per call; default: the run's provider and model limit (FR-160, <see cref="ILlmOutputLimits"/>).</summary>
     public int? MaxTokens { get; init; }
 
     /// <summary>
@@ -64,10 +62,21 @@ public sealed record AgentRunRequest
     public IReadOnlyList<string> Warnings { get; init; } = [];
 
     /// <summary>
-    /// FR-76: the plan step's agent (a code generator run). With a preset whose catalogue has it, the run is that specialist:
-    /// its prompt is <see cref="Domain.Presets.SpecialistPrompt.Compose"/> of the base template, and <c>agent_key</c> records it.
+    /// FR-121: the plan step's agent (a code generator run). With a composition that has it, the run is that specialist (its
+    /// prompt is <see cref="Domain.Stack.StackPrompt.Compose"/> of the base template); <c>agent_key</c> records it, and a
+    /// <c>generalist</c> step of a composed project (an optimisation plan) records <c>generalist</c>.
     /// </summary>
     public string? SpecialistAgentKey { get; init; }
+
+    /// <summary>§4.23: the v2 agent key the step was planned with (its <c>legacy_agent_key</c>), recorded in <c>RUN_STARTED</c>.</summary>
+    public string? LegacyAgentKey { get; init; }
+
+    /// <summary>
+    /// FR-120, FR-121: the version's resolved composition (resolved once by the job, <see cref="Features.Stack.VersionStackLoader"/>).
+    /// The run records its catalog version and the packs it loaded (<c>[]</c> for agents that load no pack skills); a
+    /// specialist step (<see cref="SpecialistAgentKey"/> in play) gets <see cref="Domain.Stack.StackPrompt.Compose"/> of the base template.
+    /// </summary>
+    public Domain.Stack.StackResolution? Stack { get; init; }
 }
 
 /// <summary>A succeeded run: its id, the provider's text, what it cost and when it completed.</summary>
@@ -103,9 +112,9 @@ public sealed record AgentRunOutcome(Guid RunId, string Text, string StopReason,
 /// left <c>running</c> (e.g. after its lease expired on the last attempt).
 /// Failures surface as <see cref="JobFailedException"/> carrying the error code. Every log entry carries <c>RunId</c>.
 /// <para>
-/// FR-74, FR-76: a run of a release version with a preset records <c>preset_id</c>/<c>preset_version</c> (the preset as
-/// shipped when the run starts, <see cref="PresetCatalogExtensions.StampRun"/>); a code generator run of a specialist step
-/// also records <c>agent_key</c> and gets the specialist prompt (base contract → conventions → role → skills).
+/// FR-121: a run of a composed project records the catalog version and the packs it loaded; a code generator run of a
+/// specialist step also records <c>agent_key</c> and gets the specialist prompt (base → summary → role → skills). FR-129:
+/// new runs never record a preset (<c>preset_id</c>/<c>preset_version</c> are history of runs before the upgrade).
 /// </para>
 /// </summary>
 public sealed partial class AgentRunner(
@@ -113,9 +122,8 @@ public sealed partial class AgentRunner(
     ILlmResolver llm,
     IPromptLibrary prompts,
     ILlmProviderCatalog catalog,
-    IPresetCatalog presets,
     AgentRepoContext repoContext,
-    IOptions<LlmOptions> options,
+    ILlmOutputLimits outputLimits,
     TimeProvider time,
     ILogger<AgentRunner> logger)
 {
@@ -202,10 +210,18 @@ public sealed partial class AgentRunner(
             throw new JobFailedException(rendered.Error.Message, transient: false, rendered.Error.Code);
         }
 
-        // FR-76: a specialist step's prompt (the preset the run recorded, so a redelivery renders the same one).
-        if (run.AgentKey is { } agentKey && presets.Find(run.PresetId) is { } preset && preset.Agent(agentKey) is not null)
+        if (run.AgentKey is { } stackKey && request.Stack is { } stack && stack.Specialist(stackKey) is not null)
         {
-            rendered = Domain.Presets.SpecialistPrompt.Compose(rendered.Value, preset, agentKey);
+            // FR-121: base code_generator.md → composition summary → role → skills → step input.
+            rendered = Domain.Stack.StackPrompt.Compose(rendered.Value, stack, stackKey);
+        }
+
+        // FR-157: a project still set to a provider this deployment disabled fails without calling it.
+        if (!catalog.IsEnabled(run.Provider))
+        {
+            var unavailable = $"The {run.Provider.ToWire()} AI provider is turned off on this server: a project Owner chooses another provider in the project's LLM settings.";
+            await FailAsync(run, ErrorCodes.LlmProviderUnavailable, unavailable, deadLetter: false);
+            throw new JobFailedException(unavailable, transient: false, ErrorCodes.LlmProviderUnavailable);
         }
 
         // D-V2-5: the project's bound connection pays for every run, whoever triggered it; the run records which one.
@@ -220,9 +236,12 @@ public sealed partial class AgentRunner(
             throw new JobFailedException(message, transient: false, ErrorCodes.ProviderNotConfigured);
         }
 
+        // FR-160: the output limit of the run's provider and model (catalog, Anthropic discovery, ceiling, fallback).
+        var maxOutputTokens = request.MaxTokens ?? await outputLimits.ResolveAsync(run.Provider, run.Model, apiKey, cancellationToken);
+
         run.Attempts++;
         await db.SaveChangesAsync(cancellationToken);
-        LogCalling(logger, run.Provider, run.Model, run.Attempts);
+        LogCalling(logger, run.Provider, run.Model, run.Attempts, maxOutputTokens);
 
         // FR-71: the repo tools over a snapshot (none: a plain call). A missing snapshot is a warning, never a failure.
         using var context = request.Repo == RepoScope.None
@@ -231,6 +250,10 @@ public sealed partial class AgentRunner(
         var started = time.GetTimestamp();
         LlmCompletion completion;
         IReadOnlyList<string> loopWarnings;
+        int continuations;
+
+        // FR-162: continuing a cut-off answer stops before the model's context window (catalog; unknown: unchecked) overflows.
+        int? contextTokens = LlmOutputLimits.Find(catalog.Catalog(run.Provider), run.Model)?.ContextTokens is > 0 and var window ? window : null;
 
         // FR-26, FR-71: a tool loop's turns are paid for one by one. Their tokens are kept so a failure later in the loop
         // still counts them, and the budget is checked between turns (as of the run's start plus this run's turns).
@@ -255,7 +278,8 @@ public sealed partial class AgentRunner(
                     Model = run.Model,
                     System = rendered.Value.System,
                     Messages = [new LlmMessage(LlmRole.User, rendered.Value.User)],
-                    MaxTokens = request.MaxTokens ?? options.Value.MaxOutputTokens,
+                    MaxTokens = maxOutputTokens,
+                    ContextTokens = contextTokens,
                     Agent = request.Agent,
                     ApiKey = apiKey,
                 },
@@ -264,6 +288,7 @@ public sealed partial class AgentRunner(
                 OnToolTurn);
             completion = loop.Completion;
             loopWarnings = loop.Warnings;
+            continuations = loop.Continuations;
         }
         catch (LlmToolLoopStoppedException ex)
         {
@@ -325,7 +350,7 @@ public sealed partial class AgentRunner(
                 .Where(w => !string.IsNullOrWhiteSpace(w))
                 .Distinct(StringComparer.Ordinal),
         ];
-        await CompleteAsync(run, completion, Elapsed(started), request.Check, warnings);
+        await CompleteAsync(run, completion, Elapsed(started), request.Check, warnings, maxOutputTokens, continuations);
         return Outcome(run);
     }
 
@@ -427,11 +452,6 @@ public sealed partial class AgentRunner(
 
         var resolved = await llm.ResolveAsync(project.Id, request.Agent, cancellationToken);
 
-        // FR-74: the preset of the run's release version, as shipped now (null without one or when no longer shipped).
-        var version = project.CurrentReleaseVersionId is { } versionId
-            ? await db.ReleaseVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == versionId, cancellationToken)
-            : null;
-        var preset = version is null ? null : presets.ForVersion(version);
         var run = new AgentRun
         {
             Id = runId,
@@ -449,12 +469,12 @@ public sealed partial class AgentRunner(
             Status = AgentRunStatus.Running,
             CreatedAt = now,
         };
-        PresetCatalogExtensions.StampRun(run, preset, preset is not null && request.SpecialistAgentKey is { } key ? key : null);
+        StampStack(run, request);
         db.AgentRuns.Add(run);
         db.AddEvent(
             EventTypes.RunStarted,
             project.Id,
-            new { runId, jobId = request.Job.Id, agent = request.Agent.ToWire(), provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, preset = preset?.RunLabel, agentKey = run.AgentKey },
+            new { runId, jobId = request.Job.Id, agent = request.Agent.ToWire(), provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, stack = request.Stack?.CatalogLabel, agentKey = run.AgentKey, legacyAgentKey = request.LegacyAgentKey },
             SystemActor.Name,
             now);
         await db.SaveChangesAsync(cancellationToken);
@@ -462,7 +482,37 @@ public sealed partial class AgentRunner(
         return run;
     }
 
-    private async Task CompleteAsync(AgentRun run, LlmCompletion completion, long elapsedMs, Func<string, Result>? check, IReadOnlyList<string> warnings)
+    /// <summary>
+    /// FR-121: a run of a composed project records the catalog version it resolved against and the packs it loaded
+    /// (<c>[{id, version, sections[]}]</c>; <c>[]</c> when the agent loads none); a plan step also records its <c>agent_key</c>:
+    /// the specialist, or <c>generalist</c> for a generalist step (an optimisation plan's fix steps, base prompt).
+    /// </summary>
+    internal static void StampStack(AgentRun run, AgentRunRequest request)
+    {
+        if (request.Stack is not { } stack)
+        {
+            return;
+        }
+
+        run.CatalogVersion = stack.CatalogVersion;
+        var specialist = request.SpecialistAgentKey is { } key ? stack.Specialist(key) : null;
+        if (specialist is not null)
+        {
+            run.AgentKey = specialist.Key;
+        }
+        else if (request.SpecialistAgentKey == Domain.Execution.PlanAgents.Generalist)
+        {
+            run.AgentKey = Domain.Execution.PlanAgents.Generalist;
+        }
+
+        run.Packs = JsonSerializer.Serialize(
+            (specialist?.Packs ?? []).Select(p => new { id = p.Id, version = p.Version, sections = p.Sections }),
+            PacksJson);
+    }
+
+    private static readonly JsonSerializerOptions PacksJson = new(JsonSerializerDefaults.Web);
+
+    private async Task CompleteAsync(AgentRun run, LlmCompletion completion, long elapsedMs, Func<string, Result>? check, IReadOnlyList<string> warnings, int maxOutputTokens, int continuations)
     {
         // timestamptz keeps microseconds: truncate so the outcome (and the draft dated by it) matches what a redelivered
         // job reads back from the stored run.
@@ -475,7 +525,12 @@ public sealed partial class AgentRunner(
         run.OutputTokens += completion.OutputTokens;
         run.CostEstimate = AgentRunRules.EstimateCost(run.InputTokens, run.OutputTokens, catalog.PriceOf(run.Model));
         run.DurationMs += elapsedMs;
-        run.Output = AideJson.Serialize(new RunOutput(completion.Text, completion.StopReason) { Warnings = warnings.Count == 0 ? null : warnings });
+        run.Output = AideJson.Serialize(new RunOutput(completion.Text, completion.StopReason)
+        {
+            Warnings = warnings.Count == 0 ? null : warnings,
+            MaxOutputTokens = maxOutputTokens,
+            Continuations = continuations,
+        });
         run.Error = null;
         run.CompletedAt = now;
         long tokens = completion.InputTokens + completion.OutputTokens;
@@ -567,8 +622,8 @@ public sealed partial class AgentRunner(
     [LoggerMessage(Level = LogLevel.Information, Message = "Agent run started on {Provider} model {Model} (prompt v{PromptVersion})")]
     private static partial void LogStarted(ILogger logger, LlmProvider provider, string model, string promptVersion);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Calling {Provider} model {Model} (attempt {Attempt})")]
-    private static partial void LogCalling(ILogger logger, LlmProvider provider, string model, int attempt);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Calling {Provider} model {Model} (attempt {Attempt}, max output tokens {MaxOutputTokens})")]
+    private static partial void LogCalling(ILogger logger, LlmProvider provider, string model, int attempt, int maxOutputTokens);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Agent run succeeded: {InputTokens} input / {OutputTokens} output tokens in {DurationMs} ms (cost {CostEstimate})")]
     private static partial void LogSucceeded(ILogger logger, int inputTokens, int outputTokens, long durationMs, decimal costEstimate);
@@ -597,9 +652,15 @@ public sealed partial class AgentRunner(
 
 /// <summary>
 /// What a run stores in <c>agent_runs.output</c>: the provider's text, why it stopped, and the run's warnings (FR-70,
-/// FR-71; omitted when none).
+/// FR-71; omitted when none). FR-160: <see cref="MaxOutputTokens"/> is the output limit its calls used; FR-162:
+/// <see cref="Continuations"/> is how many continuations its answer took (0–5). Both are <c>null</c> for runs stored before
+/// v4 (no migration: they live in the output JSON).
 /// </summary>
 public sealed record RunOutput(string Text, string StopReason)
 {
     public IReadOnlyList<string>? Warnings { get; init; }
+
+    public int? MaxOutputTokens { get; init; }
+
+    public int? Continuations { get; init; }
 }

@@ -5,8 +5,10 @@ import { useDocumentTitle } from '../../lib/use-document-title'
 import { cn } from '../../lib/utils'
 import { useAdminLlmPolicy } from '../connections/connections-api'
 import { llmProviderLabels } from '../projects/labels'
+import { AdminBitbucketPanel } from './admin-bitbucket-panel'
 import { GitHubAppPanel } from './admin-github-app-panel'
-import { AdminPresetsPanel } from './admin-presets-panel'
+import { AdminGitLabPanel } from './admin-gitlab-panel'
+import { AdminStackCatalogPanel } from './admin-stack-catalog-panel'
 
 /**
  * Admin → Integrations → LLM system keys (FR-79): read-only. The policy comes from configuration
@@ -58,7 +60,8 @@ function LlmSystemKeysPanel() {
 }
 
 /**
- * /admin/integrations (SPEC §7.2): the GitHub App (FR-80), the system-key policy and the presets (FR-74). `callback` is
+ * /admin/integrations (SPEC §7.2): the GitHub App (FR-80), GitLab instances (FR-130), the Bitbucket consumer (FR-133), the system-key policy and the stack catalog (FR-113; the v2
+ * presets are retired, FR-129). `callback` is
  * the manifest flow's outcome from `?github=configured` / `?error=GITHUB_AUTH_FAILED`.
  */
 export function AdminIntegrationsPage({ callback }: { callback?: 'configured' | 'failed' }) {
@@ -69,8 +72,10 @@ export function AdminIntegrationsPage({ callback }: { callback?: 'configured' | 
         Integrations
       </h2>
       <GitHubAppPanel callback={callback} />
+      <AdminGitLabPanel />
+      <AdminBitbucketPanel />
       <LlmSystemKeysPanel />
-      <AdminPresetsPanel />
+      <AdminStackCatalogPanel />
     </section>
   )
 }

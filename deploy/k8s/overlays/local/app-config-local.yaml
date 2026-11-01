@@ -11,3 +11,6 @@ data:
   # §9 / §4.15: deployments use Vercel by default (Deployments__Provider=Vercel, Deployments__AllowFake=false, from
   # appsettings.json). Local import is off (Git__Local__ImportRoot unset). The E2E variant (overlays/local-e2e,
   # `deploy-local.sh --e2e`) switches both to Fake / /data/import.
+  # SPEC §8/§9: self-managed GitLab on a private network is allowed locally (still never loopback, link-local or
+  # metadata addresses). Same as the backend default; explicit here because Railway sets it to false.
+  GitLab__AllowPrivateNetworks: "true"

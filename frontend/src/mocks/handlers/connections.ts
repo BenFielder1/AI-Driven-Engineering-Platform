@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw'
 
 import type { Schemas } from '../../api/client'
 import { antiforgeryFailure, authDb, currentUser, nextId, unauthenticated } from './auth'
+import { isLlmProviderEnabled, llmProviderUnavailable } from './llm'
 import { problem } from './problem'
 import { access, forbidden, llmDto, ownerMutation, projectsDb, record, type StoredProject } from './projects'
 
@@ -114,7 +115,8 @@ export const connectionHandlers = [
     }
     return HttpResponse.json<Schemas['LlmConnectionsDto']>({
       credentials: connectionsDb.credentials.filter((c) => c.userId === user.id).map(toDto),
-      keylessProviders: ['ollama', 'fake'],
+      // FR-157: only providers enabled on this server.
+      keylessProviders: (['ollama', 'fake'] as const).filter(isLlmProviderEnabled),
     })
   }),
 
@@ -231,6 +233,10 @@ export const connectionHandlers = [
     const provider = body.provider ?? llm.provider
     if (body.credentialId !== undefined && a.level !== 'owner') {
       return forbidden()
+    }
+    // FR-157: a provider turned off on this server can't be chosen (keeping a disabled one is refused too).
+    if (!isLlmProviderEnabled(provider)) {
+      return llmProviderUnavailable()
     }
     let binding = llm.binding
     if (body.credentialId === null) {

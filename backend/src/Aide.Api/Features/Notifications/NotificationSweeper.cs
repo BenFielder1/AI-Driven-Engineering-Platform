@@ -99,8 +99,9 @@ public sealed partial class GateTimerService(AideDbContext db, JobEnqueuer jobs,
 
 /// <summary>
 /// The notification background loop: every <see cref="NotificationOptions.DeliverySweepInterval"/> it retries due channel
-/// deliveries (FR-49), and every <see cref="NotificationOptions.GateSweepInterval"/> it runs the gate timers (FR-15).
-/// Tests turn the loop off (<c>Notifications:SweepEnabled=false</c>) and call the two steps directly.
+/// deliveries (FR-49), every <see cref="NotificationOptions.GateSweepInterval"/> it runs the gate timers (FR-15), and every
+/// <see cref="NotificationOptions.DatabaseExpirySweepInterval"/> it queues the database expiry sweep job (FR-155).
+/// Tests turn the loop off (<c>Notifications:SweepEnabled=false</c>) and call the steps directly.
 /// </summary>
 public sealed partial class NotificationSweeper(
     IServiceScopeFactory scopes,
@@ -125,6 +126,24 @@ public sealed partial class NotificationSweeper(
         return await scope.ServiceProvider.GetRequiredService<GateTimerService>().RunAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// FR-155: queues the <c>database_expiry_sweep</c> job unless one is already waiting or running. Provider calls happen in
+    /// the job, on the worker's queue, so a slow platform never holds up this loop. Returns whether one was queued.
+    /// </summary>
+    public async Task<bool> QueueDatabaseExpirySweepAsync(CancellationToken cancellationToken)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
+        if (await db.Jobs.AsNoTracking().AnyAsync(j => j.Type == JobTypes.DatabaseExpirySweep && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running), cancellationToken))
+        {
+            return false;
+        }
+
+        scope.ServiceProvider.GetRequiredService<JobEnqueuer>().Enqueue(JobTypes.DatabaseExpirySweep, new { }, null, time.GetUtcNow());
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_options.SweepEnabled)
@@ -134,6 +153,7 @@ public sealed partial class NotificationSweeper(
         }
 
         DateTimeOffset? lastGateSweep = null;
+        DateTimeOffset? lastDatabaseSweep = null;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -144,6 +164,12 @@ public sealed partial class NotificationSweeper(
                 {
                     await RunGateTimersAsync(stoppingToken);
                     lastGateSweep = now;
+                }
+
+                if (lastDatabaseSweep is null || now - lastDatabaseSweep >= _options.DatabaseExpirySweepInterval)
+                {
+                    await QueueDatabaseExpirySweepAsync(stoppingToken);
+                    lastDatabaseSweep = now;
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

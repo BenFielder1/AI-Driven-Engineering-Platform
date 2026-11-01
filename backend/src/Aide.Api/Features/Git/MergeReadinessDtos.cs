@@ -22,7 +22,10 @@ public sealed record CheckRunDto(string Name, CheckRunStatus Status, CheckRunCon
 /// ("AIDE will merge automatically"); otherwise "A merge on GitHub will be needed" with <c>reasons</c> (empty when
 /// <c>canMerge</c>, except <c>manual_strategy</c>). <c>checks</c> are the PR head's check runs and commit statuses.
 /// <c>mergeStateStatus</c> and <c>reviewDecision</c> are GitHub's GraphQL values verbatim (e.g. <c>CLEAN</c>,
-/// <c>BLOCKED</c>; <c>APPROVED</c>, <c>REVIEW_REQUIRED</c>), <c>null</c> when unknown. For a Local project
+/// <c>BLOCKED</c>; <c>APPROVED</c>, <c>REVIEW_REQUIRED</c>), <c>null</c> when unknown. For a GitLab project (FR-138)
+/// <c>mergeStateStatus</c> is the merge request's <c>detailed_merge_status</c> verbatim (e.g. <c>mergeable</c>,
+/// <c>not_approved</c>), <c>reviewDecision</c> is <c>null</c> and <c>checks</c> are the head's pipeline jobs and commit
+/// statuses (FR-139). For a Local project
 /// <c>canMerge</c> is true with no checks. The merge itself stays authoritative (FR-65).
 /// </summary>
 public sealed record MergeReadinessDto(

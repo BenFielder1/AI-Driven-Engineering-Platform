@@ -5,6 +5,7 @@ import { expect, test as setup } from '@playwright/test'
 
 import { A11Y_FIXTURE, type A11yFixture } from './support/a11y-fixture.ts'
 import { api, apiJson, createProjectViaApi, driveProject, registerViaApi, waitForDraft } from './support/api.ts'
+import { NETLIFY_RENDER_STACK, setUpNetlifyRenderHosts } from './support/hosted-stack.ts'
 import { createLocalProject, createVercelConnection } from './support/v2.ts'
 
 /**
@@ -13,7 +14,7 @@ import { createLocalProject, createVercelConnection } from './support/v2.ts'
  * request has two versions (for the diff view). Runs once per test run, before the a11y project.
  */
 setup('a11y fixture: a released project and a two-version project request', async ({ browser }) => {
-  setup.setTimeout(5 * 60_000)
+  setup.setTimeout(8 * 60_000)
   const context = await browser.newContext()
   await registerViaApi(context, 'a11y', 'Accessibility Tester')
   const vercelConnectionId = await createVercelConnection(context, 'A11y Fake Vercel')
@@ -35,7 +36,17 @@ setup('a11y fixture: a released project and a two-version project request', asyn
     )
     .toBe(2)
 
-  const fixture: A11yFixture = { storageState: await context.storageState(), projectId: project.id, diffProjectId: diffProject.id }
+  // SPEC §8 v4: Settings → Stack and Settings → Deployment with real target and database cards.
+  const stamp = String(Date.now())
+  const stackProject = await createLocalProject(context, { name: `E2E Accessibility stack ${stamp}`, stack: NETLIFY_RENDER_STACK })
+  await setUpNetlifyRenderHosts(context, stackProject.id, `a11y-${stamp}`)
+
+  const fixture: A11yFixture = {
+    storageState: await context.storageState(),
+    projectId: project.id,
+    diffProjectId: diffProject.id,
+    stackProjectId: stackProject.id,
+  }
   mkdirSync(dirname(A11Y_FIXTURE), { recursive: true })
   writeFileSync(A11Y_FIXTURE, JSON.stringify(fixture))
   await context.close()

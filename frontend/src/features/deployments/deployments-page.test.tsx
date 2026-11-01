@@ -70,7 +70,7 @@ describe('/projects/:id/deployments (FR-91)', () => {
     expect(building).toHaveTextContent('Grace Hopper (Manual)')
     expect(within(failed).getByTestId('deployment-status')).toHaveTextContent('Error')
     expect(live).toHaveTextContent('1.2.0')
-    expect(within(live).getByTestId('deployment-live')).toHaveTextContent('Live')
+    expect(within(live).getByTestId('deployment-current')).toHaveTextContent('Current')
     expect(within(live).getByRole('link', { name: /shop\.vercel\.app/ })).toHaveAttribute('href', 'https://shop.vercel.app')
     expect(old).toHaveTextContent('AIDE')
   })
@@ -93,7 +93,9 @@ describe('/projects/:id/deployments (FR-91)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Promote to production' }))
 
     expect(await screen.findByText('Promoting 1.1.0 (1111111) to production.')).toBeInTheDocument()
-    expect(requestsTo('POST', '/promote')).toHaveLength(1)
+    // FR-150: the UI uses /rollback (`/promote` is the API's v2 alias).
+    expect(requestsTo('POST', '/rollback')).toHaveLength(1)
+    expect(requestsTo('POST', '/promote')).toHaveLength(0)
     await waitFor(async () => {
       const [first] = await rows()
       expect(first).toHaveTextContent('Ada Lovelace (Promote)')
@@ -112,7 +114,7 @@ describe('/projects/:id/deployments (FR-91)', () => {
     await user.click(within(old).getByRole('button', { name: 'Promote 1.1.0 (1111111)' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Promote 1.1.0 to production?' })
     await user.click(within(dialog).getByRole('button', { name: 'Promote to production' }))
-    expect(await within(dialog).findByText(/only a ready production deployment can/)).toBeInTheDocument()
+    expect(await within(dialog).findByText(/only a ready production deployment that isn't live can/)).toBeInTheDocument()
   })
 
   it('FR91_contributor: no Promote and no production Redeploy, but previews can be redeployed and deployed', async () => {
@@ -138,7 +140,7 @@ describe('/projects/:id/deployments (FR-91)', () => {
     const project = seedWithDeployments('owner')
     const { user } = await openDeployments(project)
     await rows()
-    await user.selectOptions(screen.getByLabelText('Target'), 'production')
+    await user.selectOptions(screen.getByLabelText('Environment'), 'production')
     await waitFor(async () => {
       expect(await rows()).toHaveLength(2)
     })

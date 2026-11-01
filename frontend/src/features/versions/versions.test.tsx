@@ -260,6 +260,22 @@ describe('Version badges, switcher and read-only past versions (FR-62)', () => {
     expect(screen.queryByTestId('read-only-banner')).not.toBeInTheDocument()
   })
 
+  it('FR129_a_version_migrated_from_a_retired_preset_shows_its_legacy_label_and_no_preset_chip', async () => {
+    owner()
+    const p = seedProject({ name: 'Shop' })
+    seedReleaseVersions(p, { released: '1.1.0', development: '1.2.0' })
+    const migrated = p.releaseVersions.find((v) => v.version === '1.1.0')
+    if (!migrated) {
+      throw new Error('seed')
+    }
+    Object.assign(migrated, { presetId: 'nextjs-supabase', presetVersion: '1.0.1', presetName: 'nextjs-supabase' })
+    await renderRoute(`/projects/${p.id}?release=1.1.0`)
+
+    expect(await screen.findByTestId('version-legacy-preset')).toHaveTextContent('Preset nextjs-supabase@1.0.1 (retired, migrated)')
+    // FR-129: the v2 preset chip is gone from the header.
+    expect(within(projectHeader('Shop')).queryByTestId('preset-chip')).not.toBeInTheDocument()
+  })
+
   it('FR62_execution_of_a_past_version_hides_the_controls', async () => {
     owner()
     const p = seedProject({ name: 'Shop', currentPhase: 'execution', status: 'building' })

@@ -1,4 +1,5 @@
 import type { Schemas } from '../../api/client'
+import { withGitHost, type GitHostTerms } from '../../lib/git-host'
 import type { ProjectRole } from '../../lib/permissions'
 
 /** User-facing names for the contract's enums used by the projects feature. */
@@ -226,6 +227,8 @@ export const guardianCheckLabels: Record<Schemas['GuardianCheck'], string> = {
 export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {
   github_app: 'GitHub App',
   github_pat: 'Personal access token',
+  gitlab: 'GitLab',
+  bitbucket: 'Bitbucket Cloud',
   local: 'Local repository',
 }
 
@@ -233,6 +236,8 @@ export const gitProviderLabels: Record<Schemas['GitProvider'], string> = {
 export const gitHostLabels: Record<Schemas['GitProvider'], string> = {
   github_app: 'GitHub',
   github_pat: 'GitHub',
+  gitlab: 'GitLab',
+  bitbucket: 'Bitbucket Cloud',
   local: 'Local repository',
 }
 
@@ -312,6 +317,11 @@ export const notificationEvents = [
   'deployment_failed',
   'preview_ready',
   'llm_binding_cleared',
+  'git_binding_cleared',
+  'database_provisioning_failed',
+  'database_expiring',
+  'migration_failed',
+  'deployment_target_attention',
 ] as const satisfies readonly Schemas['NotificationEvent'][]
 
 export const notificationEventLabels: Record<Schemas['NotificationEvent'], string> = {
@@ -324,11 +334,17 @@ export const notificationEventLabels: Record<Schemas['NotificationEvent'], strin
   review_completed: 'Review completed',
   release_completed: 'Release completed',
   release_failed: 'Release failed',
-  release_awaiting_merge: 'Release awaiting a merge on GitHub',
+  // FR-140: the type label has no project host (notifications carry no provider), so it doesn't name one.
+  release_awaiting_merge: 'Release awaiting a merge on the Git host',
   rollback: 'Rollback',
   deployment_failed: 'Deployment failed',
   preview_ready: 'Preview ready',
   llm_binding_cleared: 'LLM connection unbound',
+  git_binding_cleared: 'Git connection unbound',
+  database_provisioning_failed: 'Database setup failed',
+  database_expiring: 'Database expiring',
+  migration_failed: 'Migration failed',
+  deployment_target_attention: 'Deployment target needs attention',
 }
 
 /**
@@ -351,6 +367,11 @@ export const notificationTypes = [
   'deployment_failed',
   'preview_ready',
   'llm_binding_cleared',
+  'git_binding_cleared',
+  'database_provisioning_failed',
+  'database_expiring',
+  'migration_failed',
+  'deployment_target_attention',
   'connection_invalid',
 ] as const satisfies readonly Schemas['NotificationType'][]
 
@@ -550,18 +571,43 @@ export const stepAttemptOutcomeLabels: Record<Schemas['StepAttemptOutcome'], str
 
 // ---- Merge readiness and checks (FR-64, FR-65, FR-84, FR-85) -----------------------------------------------------
 
-/** FR-65: the project's merge strategy, as Settings → Git and the Release page name it. */
-export const mergeStrategyLabels: Record<Schemas['MergeStrategy'], string> = {
-  aide_merges: 'AIDE merges the pull request',
-  manual: 'Merge manually on GitHub — AIDE waits and tags the merge',
+/** FR-65, FR-140: the project's merge strategy, as Settings → Git and the Release page name it (`{…}`: see withGitHost). */
+const mergeStrategyCopy: Record<Schemas['MergeStrategy'], { label: string; description: string }> = {
+  aide_merges: {
+    label: 'AIDE merges the {pr}',
+    description:
+      'When the release is approved, AIDE merges the {pr}. If {host} refuses (required reviews or checks, branch protection), the release waits for a merge on {host}.',
+  },
+  manual: {
+    label: 'Merge manually on {host} — AIDE waits and tags the merge',
+    description:
+      'AIDE never merges. It marks the {pr} ready for review and waits; once someone merges it on {host}, AIDE tags the merge commit and creates the {release}.',
+  },
+  // FR-140: Bitbucket only (its `merge_strategy`); `aide_merges` sends `merge_commit`.
+  fast_forward: {
+    label: 'AIDE merges (fast-forward)',
+    description:
+      'When the release is approved, AIDE fast-forwards the default branch to the {pr} without a merge commit. If {host} refuses (the branch has moved on, required approvals or builds), the release waits for a merge on {host}.',
+  },
+  squash: {
+    label: 'AIDE merges (squash)',
+    description:
+      "When the release is approved, AIDE squashes the {pr}'s commits into one commit on the default branch. If {host} refuses (required approvals or builds, branch restrictions), the release waits for a merge on {host}.",
+  },
 }
 
-export const mergeStrategyDescriptions: Record<Schemas['MergeStrategy'], string> = {
-  aide_merges:
-    'When the release is approved, AIDE merges the pull request. If GitHub refuses (required reviews or checks, branch protection), the release waits for a merge on GitHub.',
-  manual:
-    'AIDE never merges. It marks the pull request ready for review and waits; once someone merges it on GitHub, AIDE tags the merge commit and creates the GitHub Release.',
+/** FR-65, FR-140: the merge strategies a project on this Git host can use (`fast_forward` and `squash` on Bitbucket only). */
+export function mergeStrategiesFor(provider: Schemas['GitProvider'] | null | undefined): readonly Schemas['MergeStrategy'][] {
+  return provider === 'bitbucket' ? ['aide_merges', 'fast_forward', 'squash', 'manual'] : ['aide_merges', 'manual']
 }
+
+/** The merge strategy's label, naming the project's Git host (default GitHub). */
+export const mergeStrategyLabel = (strategy: Schemas['MergeStrategy'], host?: GitHostTerms) =>
+  withGitHost(mergeStrategyCopy[strategy].label, host)
+
+/** The merge strategy's description, naming the project's Git host (default GitHub). */
+export const mergeStrategyDescription = (strategy: Schemas['MergeStrategy'], host?: GitHostTerms) =>
+  withGitHost(mergeStrategyCopy[strategy].description, host)
 
 /** FR-84: why AIDE can't merge the version's PR itself (fallback when a reason has no message). */
 export const mergeReasonLabels: Record<Schemas['MergeReadinessReasonCode'], string> = {
@@ -575,6 +621,9 @@ export const mergeReasonLabels: Record<Schemas['MergeReadinessReasonCode'], stri
   merge_method_not_allowed: "The repository doesn't allow AIDE's merge method",
   pr_not_open: "The pull request isn't open",
   manual_strategy: 'The project merges manually',
+  draft: 'The merge request is still a draft',
+  discussions_unresolved: 'Unresolved discussions block the merge',
+  rebase_required: 'The branch must be rebased before it can merge',
 }
 
 /** FR-84, FR-85: a check run's state while it hasn't completed. */

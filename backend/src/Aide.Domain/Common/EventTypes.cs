@@ -60,12 +60,23 @@ public static class EventTypes
     /// </summary>
     public const string LlmBindingCleared = "LLM_BINDING_CLEARED";
 
+    /// <summary>
+    /// FR-136: the project's Git binding (a GitLab or Bitbucket connection) was cleared because the binding Owner lost the
+    /// Owner role, left or was removed, or deleted the connection, or the host rejected it (marked <c>invalid</c>):
+    /// <c>{projectId, gitConnectionId, boundByUserId, provider, reason}</c> (<see cref="GitHosts.GitBindingClearedReason"/>).
+    /// Git jobs then fail with <c>GIT_NOT_CONNECTED</c> until an Owner re-binds; Owners are notified (<c>git_binding_cleared</c>).
+    /// </summary>
+    public const string GitBindingCleared = "GIT_BINDING_CLEARED";
+
     /// <summary>DEP-2 seed marker: the dev seed created its demo project. Written with <c>project_id</c> null (so it
     /// survives deleting the project) and the project id in the payload; the seed never creates the demo again.</summary>
     public const string DemoProjectSeeded = "DEMO_PROJECT_SEEDED";
 
     /// <summary>§9 seed marker: the dev seed created its preset demo project (<c>{projectId, presetId}</c>, project_id null).</summary>
     public const string DemoPresetProjectSeeded = "DEMO_PRESET_PROJECT_SEEDED";
+
+    /// <summary>§9 (v4) seed marker: the dev seed created its BaaS stack demo project (<c>{projectId, packs}</c>, project_id null).</summary>
+    public const string DemoStackProjectSeeded = "DEMO_STACK_PROJECT_SEEDED";
 
     /// <summary>
     /// DEP-V2 (§9) seed marker: the one-off upgrade of a v1-seeded demo project to released 0.1.0 ran
@@ -188,15 +199,37 @@ public static class EventTypes
 
     /// <summary>
     /// FR-60: an Owner started a new release version: <c>{releaseVersionId, version, baseTag, baseCommitSha, branchName,
-    /// presetId, request}</c> (the request is truncated). The project is then in refinement at checkpoint 1.
+    /// stackPacks, catalogVersion, request}</c> (<c>presetId</c> in events before FR-129) (the request is truncated). The project is then in refinement at checkpoint 1.
     /// </summary>
     public const string VersionStarted = "VERSION_STARTED";
 
     /// <summary>
-    /// FR-74, FR-92: an Owner changed the preset of the version in development: <c>{releaseVersionId, version,
-    /// fromPresetId, fromPresetVersion, presetId, presetVersion, presetHash}</c> (ids <c>null</c> = no preset).
+    /// FR-74, FR-92 (history only): an Owner changed the preset of the version in development: <c>{releaseVersionId, version,
+    /// fromPresetId, fromPresetVersion, presetId, presetVersion, presetHash}</c> (ids <c>null</c> = no preset). FR-129: no
+    /// longer written (presets were retired); events recorded before the upgrade stay readable.
     /// </summary>
     public const string PresetChanged = "PRESET_CHANGED";
+
+    /// <summary>
+    /// FR-117, FR-155: an Owner changed the stack composition of the version in development: <c>{releaseVersionId, version,
+    /// from, to, layersChanged, catalogVersion, catalogHash, fromPresetId}</c>. <c>from</c>/<c>to</c> are the normalised
+    /// compositions (§4.18; <c>from</c> <c>null</c>: no stack before, or the legacy preset <c>fromPresetId</c>);
+    /// <c>layersChanged</c> lists the catalog layers that differ. Replaces <see cref="PresetChanged"/>.
+    /// </summary>
+    public const string StackChanged = "STACK_CHANGED";
+
+    /// <summary>
+    /// FR-118, FR-128, FR-155: the stack detector's report of a version's base commit was used by the Repository Analyst (the
+    /// first point where detection has a project: <c>POST /api/stack/detect</c> runs before one exists):
+    /// <c>{releaseVersionId, version, baseCommitSha, suggestions[{choice, option, path, mode}], conflicts[choice], mismatches}</c>.
+    /// </summary>
+    public const string StackDetected = "STACK_DETECTED";
+
+    /// <summary>
+    /// FR-130, FR-133, FR-155: an Admin changed a Git host instance: <c>{instanceId, kind, change, name, baseUrl, enabled}</c>
+    /// (<c>change</c>: <c>created</c>, <c>updated</c> or <c>removed</c>; never a secret). Written with <c>project_id</c> null.
+    /// </summary>
+    public const string GitHostInstanceChanged = "GIT_HOST_INSTANCE_CHANGED";
 
     /// <summary>
     /// FR-70: the Repository Analyst stored a locked <c>codebase_summary</c>: <c>{artifactId, type, version,
@@ -231,6 +264,68 @@ public static class EventTypes
     /// </summary>
     public const string DeploymentPreviewReady = "DEPLOYMENT_PREVIEW_READY";
 
+    /// <summary>
+    /// FR-147, FR-155: a preview rollout finished: <c>{rolloutId, releaseVersionId, gitSha, state, components[{component,
+    /// status, url}], migrationRunId}</c>.
+    /// </summary>
+    public const string PreviewRolloutCompleted = "PREVIEW_ROLLOUT_COMPLETED";
+
+    /// <summary>
+    /// FR-144, FR-155: a deployment target's setup finished: <c>{targetId, component, provider, resourceId, status}</c>.
+    /// </summary>
+    public const string DeploymentTargetConfigured = "DEPLOYMENT_TARGET_CONFIGURED";
+
+    /// <summary>
+    /// FR-144, FR-155: a deployment target failed or needs attention: <c>{targetId, component, provider, reason, errorCode}</c>
+    /// (<see cref="Deployments.DeploymentTargetFailureReasons"/>). Owners get <c>deployment_target_attention</c> only when
+    /// the platform lost Git access or the token is invalid (<see cref="Notifications.NotificationRules.Notifies"/>).
+    /// </summary>
+    public const string DeploymentTargetFailed = "DEPLOYMENT_TARGET_FAILED";
+
+    /// <summary>
+    /// FR-152, FR-155: a database became available through its provisioning job (created, linked, External or restored):
+    /// <c>{databaseId, environment, provider, mode, status, expiresAt}</c>.
+    /// </summary>
+    public const string DatabaseProvisioned = "DATABASE_PROVISIONED";
+
+    /// <summary>
+    /// FR-152, FR-155: provisioning a database failed: <c>{databaseId, environment, provider, errorCode}</c>. Owners get
+    /// <c>database_provisioning_failed</c>.
+    /// </summary>
+    public const string DatabaseProvisioningFailed = "DATABASE_PROVISIONING_FAILED";
+
+    /// <summary>
+    /// §4.21, FR-155: a database is about to go away: a Render free database within 7 days of its expiry, or a paused
+    /// Supabase project: <c>{databaseId, environment, provider, reason, expiresAt}</c> (<c>reason</c>:
+    /// <see cref="Databases.ManagedDatabaseRules.ExpiringReasonExpiry"/> or <see cref="Databases.ManagedDatabaseRules.ExpiringReasonPaused"/>).
+    /// Owners get <c>database_expiring</c>.
+    /// </summary>
+    public const string DatabaseExpiring = "DATABASE_EXPIRING";
+
+    /// <summary>FR-148, FR-155: an Owner reset the preview database: <c>{databaseId, provider, method, migrationRunId}</c>.</summary>
+    public const string DatabaseReset = "DATABASE_RESET";
+
+    /// <summary>FR-153, FR-155: a Supabase BaaS migration run started: <c>{runId, environment, releaseId, gitSha}</c>.</summary>
+    public const string MigrationRunStarted = "MIGRATION_RUN_STARTED";
+
+    /// <summary>FR-153, FR-155: a Supabase BaaS migration run succeeded: <c>{runId, environment, releaseId, gitSha, applied}</c> (<c>applied</c>: how many files).</summary>
+    public const string MigrationRunCompleted = "MIGRATION_RUN_COMPLETED";
+
+    /// <summary>
+    /// FR-153, FR-154, FR-155: a migration failed: a Supabase BaaS run (<c>{runId, environment, releaseId, gitSha, errorCode}</c>)
+    /// or a host-mode platform pre-deploy (<c>runId</c> null, with <c>deploymentId</c>); never SQL or row data. Owners get
+    /// <c>migration_failed</c>.
+    /// </summary>
+    public const string MigrationRunFailed = "MIGRATION_RUN_FAILED";
+
+    /// <summary>
+    /// FR-153, §4.21: a pull request head was merged other than the commit the pre-merge production migrations ran on
+    /// (Bitbucket can't pin its merge; a person merged on the host before AIDE migrated that head):
+    /// <c>{releaseId, expectedHeadSha, mergedHeadSha, mergeCommitSha}</c>, <c>expectedHeadSha</c> <c>null</c> when no pre-merge
+    /// run succeeded. The production rollout's post-merge run on the merge commit applies whatever the merged head added.
+    /// </summary>
+    public const string MergedHeadMismatch = "MERGED_HEAD_MISMATCH";
+
     // Rollback (FR-44, FR-45)
     public const string RollbackCompleted = "ROLLBACK_COMPLETED";
 
@@ -256,9 +351,9 @@ public static class EventTypes
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
-        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady],
+        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady, PreviewRolloutCompleted, DatabaseReset, MigrationRunStarted, MigrationRunCompleted, MigrationRunFailed, MergedHeadMismatch, DeploymentTargetConfigured, DeploymentTargetFailed, DatabaseProvisioned, DatabaseProvisioningFailed, DatabaseExpiring],
         [EventCategory.Rollback] = [RollbackCompleted],
-        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, PresetChanged],
+        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, GitBindingCleared, GitHostInstanceChanged, PresetChanged, StackChanged, StackDetected],
         [EventCategory.Integrity] = [IntegrityAlert],
     };
 
@@ -268,6 +363,7 @@ public static class EventTypes
         BudgetExceeded,
         ConnectionInvalid,
         LlmBindingCleared,
+        GitBindingCleared,
         StepRejected,
         StepBlocked,
         GitPushFailed,
@@ -275,6 +371,10 @@ public static class EventTypes
         ReviewFailed,
         ReleaseFailed,
         DeploymentFailed,
+        MigrationRunFailed,
+        DeploymentTargetFailed,
+        DatabaseProvisioningFailed,
+        DatabaseExpiring,
         ArtifactCorrupted,
         IntegrityAlert,
     };

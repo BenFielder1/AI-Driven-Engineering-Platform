@@ -2,6 +2,7 @@ using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Projects;
 using Aide.Domain.Access;
+using Aide.Domain.Common;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -22,14 +23,14 @@ public static class VersionEndpoints
 
         group.MapGet("/versions", ListReleaseVersions)
             .WithName("ListReleaseVersions")
-            .WithSummary("The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, preset and dates.")
+            .WithSummary("The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, the retired preset of a migrated version (history, FR-129) and dates.")
             .Produces<IReadOnlyList<ReleaseVersionDto>>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project."));
 
         group.MapPost("/versions", StartReleaseVersion)
             .WithName("StartReleaseVersion")
-            .WithSummary("Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued.")
+            .WithSummary("Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. stack (FR-117, optional) is the new version's stack composition (validated like project create); omitted, the base version's composition is kept, re-pinned to the current catalog.")
             .Produces<StartReleaseVersionResultDto>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -38,7 +39,7 @@ public static class VersionEndpoints
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithResponseDescriptions(
                 (StatusCodes.Status201Created, "The release version (in_development) and the project state."),
-                (StatusCodes.Status400BadRequest, "VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]) or PRESET_NOT_FOUND."),
+                (StatusCodes.Status400BadRequest, "VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension) or VCS_MISMATCH."),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN: only Owners start versions."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project."),
                 (StatusCodes.Status409Conflict, "VERSION_IN_PROGRESS, RELEASE_NOT_MERGED (the latest release is awaiting merge), NOT_RELEASED, VERSION_NOT_GREATER (not above the released version), TAG_EXISTS (the tag is already in the repository) or CONFLICT."),
@@ -94,7 +95,7 @@ public static class VersionEndpoints
         var started = await versions.StartAsync(id, request, currentUser.RequiredUserId, currentUser.Actor, cancellationToken);
         if (started.IsFailure)
         {
-            return ApiProblems.FromError(started.Error!);
+            return started.Error!.Code == ErrorCodes.Validation ? ApiProblems.Validation(started.Error!) : ApiProblems.FromError(started.Error!);
         }
 
         var dto = await versions.GetAsync(id, started.Value.Id, cancellationToken);

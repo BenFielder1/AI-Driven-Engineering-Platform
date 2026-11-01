@@ -138,16 +138,40 @@ public class ErrorCodesTests
             ["GITHUB_APP_NOT_INSTALLED"] = 409,
             ["REPO_NAME_TAKEN"] = 409,
             ["GITHUB_RATE_LIMITED"] = 429,
-            ["VERCEL_GIT_NOT_CONNECTED"] = 409,
-            ["VERCEL_PLAN_LIMIT"] = 409,
+            ["PLATFORM_GIT_NOT_CONNECTED"] = 409,
+            ["PLATFORM_PLAN_LIMIT"] = 409,
+            ["PLATFORM_PERMISSION_MISSING"] = 409,
+            ["PLATFORM_ERROR"] = 502,
+            ["DEPLOYMENT_ACTION_UNSUPPORTED"] = 409,
             ["DEPLOYMENT_NOT_CONFIGURED"] = 409,
             ["INVALID_DEPLOYMENT"] = 409,
+            ["STACK_INCOMPATIBLE"] = 400,
+            ["STACK_LOCKED"] = 409,
+            ["VCS_MISMATCH"] = 400,
+            ["GIT_NOT_CONNECTED"] = 409,
+            ["GIT_HOST_NOT_ALLOWED"] = 400,
+            ["GIT_AUTH_FAILED"] = 400,
+            ["CONNECTION_SCOPE_INSUFFICIENT"] = 400,
+            ["UPSTREAM_RATE_LIMITED"] = 429,
+            ["PREVIEW_DATABASE_DIVERGED"] = 409,
+            ["INVALID_STATE"] = 409,
         };
 
         foreach (var (code, status) in expected)
         {
             Assert.Equal(status, ErrorCodes.StatusCodeFor(code));
         }
+    }
+
+    [Fact]
+    public void FR152_FR153_Database_and_migration_failures_are_job_codes_not_http_errors()
+    {
+        Assert.Equal(
+            ("DATABASE_PROVISIONING_FAILED", "DATABASE_PROVISIONING_TIMEOUT", "MIGRATION_FAILED", "MIGRATION_HISTORY_DIVERGED"),
+            (ErrorCodes.DatabaseProvisioningFailed, ErrorCodes.DatabaseProvisioningTimeout, ErrorCodes.MigrationFailed, ErrorCodes.MigrationHistoryDiverged));
+        Assert.All(
+            new[] { ErrorCodes.DatabaseProvisioningFailed, ErrorCodes.DatabaseProvisioningTimeout, ErrorCodes.MigrationFailed, ErrorCodes.MigrationHistoryDiverged },
+            c => Assert.Null(ErrorCodes.StatusCodeFor(c)));
     }
 
     [Fact]

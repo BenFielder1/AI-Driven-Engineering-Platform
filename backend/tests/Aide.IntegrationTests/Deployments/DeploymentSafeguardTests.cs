@@ -28,33 +28,41 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task FR88_A_co_Owner_cant_relink_with_the_binding_Owners_connection_but_can_with_their_own()
+    public async Task FR144_A_co_Owner_cant_set_up_a_target_with_the_binding_Owners_connection_but_can_with_their_own()
     {
         var vercel = new FakeGitHubApi()
             .On(HttpMethod.Get, "/v9/projects/prj_other", HttpStatusCode.OK, """{"id":"prj_other","name":"other","link":{"type":"github","org":"acme","repo":"todo"}}""");
         var app = DeploymentHarness.Vercel(factory, vercel);
         using var fixture = await ProjectApi.FixtureAsync(app, git: PatGit);
         var id = fixture.Project.Id;
+        await DeploymentHarness.SetStackAsync(fixture.Owner.Client, id, DeploymentHarness.VercelStack);
         var ana = fixture.Owner.User!.Id;
-        await DeploymentHarness.BindAsync(app, id, await DeploymentHarness.SeedConnectionAsync(app, ana), ana);
+        var anas = await DeploymentHarness.SeedConnectionAsync(app, ana);
+        await DeploymentHarness.BindAsync(app, id, anas, ana);
         var ben = fixture.Outsider;
         await ProjectApi.AddMemberInDbAsync(app, id, ben.User!.Id, ProjectRole.Owner);
-        var path = $"{fixture.Path}/settings/deployment";
 
-        // With Ana's bound connection: refused, and Vercel is never called with her token.
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(ben.Client, path, new { provider = "vercel", vercelProjectId = "prj_other" }), HttpStatusCode.Forbidden, ErrorCodes.CredentialNotOwner);
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(ben.Client, path, new { provider = "vercel", create = new { name = "todo2" } }), HttpStatusCode.Forbidden, ErrorCodes.CredentialNotOwner);
+        // With Ana's connection: refused, nothing queued, and Vercel is never called with her token.
+        await Problems.AssertAsync(
+            await DeploymentHarness.PutTargetAsync(ben.Client, id, "frontend", new { provider = "vercel", connectionId = anas, link = new { resourceId = "prj_other" } }),
+            HttpStatusCode.Forbidden,
+            ErrorCodes.CredentialNotOwner);
+        Assert.False(await ProjectApi.WithDbAsync(app, db => db.Jobs.AnyAsync(j => j.ProjectId == id && j.Type == JobTypes.DeploymentSetup, Ct)));
         Assert.Empty(vercel.Requests);
 
         // With his own connection: allowed, and the binding becomes his.
         var bens = await DeploymentHarness.SeedConnectionAsync(app, ben.User!.Id, token: "vcp_bensOwnToken0123");
-        var saved = await ProjectApi.ReadAsync<DeploymentSettingsDto>(await ProjectApi.PatchAsync(ben.Client, path, new { provider = "vercel", connectionId = bens, vercelProjectId = "prj_other" }));
-        Assert.Equal((bens, ben.User!.Id, "prj_other"), (saved.Binding!.ConnectionId, saved.Binding.BoundBy.Id, saved.VercelProject!.Id));
+        await DeploymentHarness.SetUpTargetAsync(app, ben.Client, id, "frontend", new { provider = "vercel", connectionId = bens, link = new { resourceId = "prj_other" } });
+        var target = Assert.Single((await DeploymentHarness.SettingsAsync(ben.Client, id)).Targets);
+        Assert.Equal((bens, ben.User!.Id, "prj_other"), (target.Binding!.ConnectionId, target.Binding.BoundBy.Id, target.ResourceId));
         Assert.All(vercel.Requests, r => Assert.Equal("Bearer vcp_bensOwnToken0123", r.Authorization));
 
-        // Ana (no longer the binder) is now refused in turn; either Owner may still turn deployment off.
-        await Problems.AssertAsync(await ProjectApi.PatchAsync(fixture.Owner.Client, path, new { provider = "vercel", vercelProjectId = "prj_todo" }), HttpStatusCode.Forbidden, ErrorCodes.CredentialNotOwner);
-        Assert.Equal(HttpStatusCode.OK, (await ProjectApi.PatchAsync(fixture.Owner.Client, path, new { provider = (string?)null })).StatusCode);
+        // Ana (no longer the binder) can't reuse Ben's connection; either Owner may clear the target.
+        await Problems.AssertAsync(
+            await DeploymentHarness.PutTargetAsync(fixture.Owner.Client, id, "frontend", new { provider = "vercel", connectionId = bens, link = new { resourceId = "prj_todo" } }),
+            HttpStatusCode.Forbidden,
+            ErrorCodes.CredentialNotOwner);
+        Assert.Equal(HttpStatusCode.NoContent, (await fixture.Owner.Client.DeleteAsync(new Uri(DeploymentHarness.TargetPath(id, "frontend"), UriKind.Relative), Ct)).StatusCode);
     }
 
     [Fact]
@@ -62,7 +70,7 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory, git: PatGit);
         var production = await DeploymentHarness.ScheduleAsync(
-            factory, new Api.Features.Deployments.NewDeployment(fixture.Project.Id, fixture.Project.ReleaseVersionId!.Value, null, DeploymentTarget.Production, "main", new string('9', 40), DeploymentTrigger.Auto, null));
+            factory, new Api.Features.Deployments.NewDeployment(fixture.Project.Id, fixture.Project.ReleaseVersionId!.Value, null, DeploymentEnvironment.Production, "main", new string('9', 40), DeploymentTrigger.Auto, null));
 
         await Problems.AssertAsync(
             await fixture.Contributor.Client.PutAsync(new Uri($"{fixture.Path}/settings/deployment/env/KEY", UriKind.Relative), Json("""{"value":"v","targets":["preview"]}"""), Ct),
@@ -97,7 +105,7 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
             .On(HttpMethod.Get, "/v13/deployments/dpl_made", HttpStatusCode.OK, """{"id":"dpl_made","readyState":"READY","url":"todo-made.vercel.app"}""");
         var (app, owner, id, versionId) = await BoundAsync(vercel);
         using var _ = owner;
-        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(id, versionId, null, DeploymentTarget.Preview, "aide/x", new string('6', 40), DeploymentTrigger.Auto, null));
+        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(id, versionId, null, DeploymentEnvironment.Preview, "aide/x", new string('6', 40), DeploymentTrigger.Auto, null));
 
         await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, id, deployment.Id)).Id);
 
@@ -124,7 +132,7 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
         var (app, owner, id, versionId) = await BoundAsync(vercel);
         appRef = app;
         using var _ = owner;
-        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(id, versionId, null, DeploymentTarget.Preview, "aide/x", new string('7', 40), DeploymentTrigger.Auto, null));
+        var deployment = await DeploymentHarness.ScheduleAsync(app, new NewDeployment(id, versionId, null, DeploymentEnvironment.Preview, "aide/x", new string('7', 40), DeploymentTrigger.Auto, null));
         deploymentId = deployment.Id;
         var job = await DeploymentHarness.JobOfAsync(app, id, deployment.Id);
 
@@ -141,14 +149,19 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
     }
 
     [Theory]
-    [InlineData("Production", false, true, false)]
-    [InlineData("Production", true, false, true)]
-    [InlineData("Development", false, false, false)]
-    public async Task S9_The_Fake_provider_guard_refuses_or_warns_outside_Development(string environment, bool allowFake, bool refuses, bool warns)
+    [InlineData("Fake", "Platform", "Production", false, true, false)]
+    [InlineData("Fake", "Platform", "Production", true, false, true)]
+    [InlineData("Fake", "Platform", "Development", false, false, false)]
+    [InlineData("Vercel", "Fake", "Production", false, true, false)]
+    [InlineData("Vercel", "Fake", "Production", true, false, true)]
+    [InlineData("Vercel", "Fake", "Development", false, false, false)]
+    [InlineData("Vercel", "Platform", "Production", false, false, false)]
+    public async Task S9_The_Fake_provider_guard_refuses_or_warns_outside_Development(string deployments, string databases, string environment, bool allowFake, bool refuses, bool warns)
     {
         var logs = new LogSink();
         var guard = new FakeDeploymentProviderGuard(
-            Options.Create(new DeploymentOptions { Provider = "Fake", AllowFake = allowFake }),
+            Options.Create(new DeploymentOptions { Provider = deployments, AllowFake = allowFake }),
+            Options.Create(new Aide.Infrastructure.Databases.DatabaseOptions { Provider = databases }),
             new Env(environment),
             new CapturingLoggerProvider(logs).CreateLogger(nameof(FakeDeploymentProviderGuard)) is var logger ? new Logger(logger) : NullLogger<FakeDeploymentProviderGuard>.Instance);
 

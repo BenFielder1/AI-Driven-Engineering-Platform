@@ -426,7 +426,12 @@ public sealed partial class GitHubRepoService(
     private string Jwt(GitHubAppCredentials app) => GitHubAppJwt.Create(app.AppId, app.PrivateKeyPem, time.GetUtcNow());
 
     private static GitHubInstallationDto ToDto(GitHubInstallation i) =>
-        new(i.Id, new GitHubAccountDto(i.AccountLogin, i.AccountType), i.RepositorySelection, GitHubRules.ManageInstallationUrl(i.Id, i.AccountLogin, i.AccountType));
+        new(
+            i.Id,
+            new GitHubAccountDto(i.AccountLogin, i.AccountType),
+            i.RepositorySelection,
+            GitHubRules.ManageInstallationUrl(i.Id, i.AccountLogin, i.AccountType),
+            GitHubRules.PagesPermission(i.Permissions));
 
     private static GitHubRepoDto ToDto(GitHubRepository r, long installationId, bool? empty) =>
         new(r.Id, r.FullName, r.Owner, r.Name, r.Private, r.DefaultBranch, installationId, empty, r.HtmlUrl, r.CanPush);

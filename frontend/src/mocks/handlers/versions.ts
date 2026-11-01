@@ -4,7 +4,6 @@ import type { Schemas } from '../../api/client'
 import { checkNewVersion, normalizeVersion } from '../../features/versions/semver'
 import { authDb } from './auth'
 import { addEvent } from './lifecycle'
-import { findPreset } from './preset-catalog'
 import { problem } from './problem'
 import {
   access,
@@ -69,11 +68,6 @@ export const versionHandlers = [
         errors: { request: ['The request is required.'] },
       })
     }
-    // FR-74: omitted keeps the base version's preset, null is no preset, an unknown id is PRESET_NOT_FOUND.
-    const pickedPreset = body?.presetId ? findPreset(body.presetId) : undefined
-    if (body?.presetId && !pickedPreset) {
-      return problem(400, 'PRESET_NOT_FOUND', 'The preset was not found.')
-    }
     const version = normalizeVersion(body?.version)
     if (!version) {
       return problem(400, 'VERSION_INVALID', `'${body?.version ?? ''}' is not a valid version.`)
@@ -99,11 +93,9 @@ export const versionHandlers = [
     }
 
     const user = authDb.users.find((u) => u.id === a.userId)
-    const keep = body?.presetId === undefined
     const started = makeReleaseVersion({
       version,
-      presetId: keep ? (released?.presetId ?? null) : (pickedPreset?.id ?? null),
-      presetVersion: keep ? (released?.presetVersion ?? null) : (pickedPreset?.version ?? null),
+      // FR-129: no preset is ever pinned on a new version (a migrated one keeps its retired preset as history).
       status: 'in_development',
       baseTag: released?.tag ?? null,
       baseCommitSha: released?.mergeCommitSha ?? null,

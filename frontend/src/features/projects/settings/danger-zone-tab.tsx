@@ -7,12 +7,18 @@ import { Button } from '../../../components/ui/button'
 import { ConfirmDialog } from '../../../components/ui/confirm-dialog'
 import { TextField } from '../../../components/ui/text-field'
 import { errorMessage } from '../../../lib/errors'
+import { gitHostTerms, unknownGitHost } from '../../../lib/git-host'
 import { RollbackSection } from '../../release/rollback-section'
-import { projectKeys, useDeleteProject, type Project } from '../projects-api'
+import { projectKeys, useDeleteProject, useProjectSettings, useProjectState, type Project } from '../projects-api'
 
 /** Settings → Danger zone: roll back (FR-44, FR-45) and delete with typed-name confirmation (FR-7, SPEC §7). */
 export function DangerZoneTab({ project }: { project: Project }) {
   const del = useDeleteProject(project.id)
+  // FR-140: the Git host named in the awaiting-merge reason comes from the recorded PR/MR, then the project's settings
+  // (this tab is Owner-only); neutral wording until one loads, or if neither can.
+  const state = useProjectState(project.id)
+  const settings = useProjectSettings(project.id, true)
+  const provider = state.data?.pullRequest?.provider ?? settings.data?.git.mode
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -52,6 +58,7 @@ export function DangerZoneTab({ project }: { project: Project }) {
         releasedVersion={project.releasedVersion}
         currentCheckpoint={project.checkpoint}
         awaitingMerge={project.status === 'awaiting_merge'}
+        host={provider ? gitHostTerms(provider) : unknownGitHost}
       />
 
       <section aria-labelledby="delete-title" className="rounded-lg border border-destructive p-4">

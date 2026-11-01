@@ -16,7 +16,7 @@ import {
   phaseLabels,
 } from '../projects/labels'
 import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
-import { presetRef } from '../presets/presets-api'
+import { legacyPresetLabel, specialistText } from '../stack/legacy-preset'
 import { RunStatusBadge } from './run-badges'
 import { describeRunError, formatPromptVersion, isUnfinished, runWarningText } from './run-format'
 import { useRun, type AgentRun } from './runs-api'
@@ -53,16 +53,14 @@ function RunFields({ projectId, run }: { projectId: string; run: AgentRun }) {
           <RunStatusBadge status={run.status} />
         </Row>
         <Row term="Agent">{agentKindLabels[run.agent]}</Row>
-        {run.agentKey && <Row term="Specialist">{run.agentKey}</Row>}
+        {run.agentKey && <Row term="Specialist">{specialistText(run.agentKey, run.legacyAgentKey)}</Row>}
         <Row term="Phase">{phaseLabels[run.phase]}</Row>
         {run.checkpoint !== null ? (
           <Row term="Release version">{checkpointLabel(versionName, run.checkpoint)}</Row>
         ) : (
           versionName && <Row term="Release version">{versionName}</Row>
         )}
-        {run.presetId && (
-          <Row term="Preset">{presetRef(run.presetId, run.presetVersion)}</Row>
-        )}
+        {run.presetId && <Row term="Preset">{legacyPresetLabel(run.presetId, run.presetVersion)}</Row>}
         {run.stepId && (
           <Row term="Execution step">
             <code className="text-xs">{run.stepId}</code>
@@ -154,10 +152,19 @@ function RunError({ error, attempts, retrying }: { error: string; attempts: numb
   )
 }
 
-/** FR-70, FR-71: the run's recorded warnings and its repository tool log (from the detail response). */
+/**
+ * FR-70, FR-71: the run's recorded warnings and its repository tool log (from the detail response). FR-160, FR-162:
+ * the output token limit its calls used and how many continuations the answer took (null before v4 or until it succeeds).
+ */
 function RunToolLog({ run }: { run: AgentRunDetail }) {
   return (
     <>
+      {(run.maxOutputTokens !== null || run.continuations !== null) && (
+        <dl className="mt-1" aria-label="Output limits">
+          {run.maxOutputTokens !== null && <Row term="Max output tokens">{formatNumber(run.maxOutputTokens)}</Row>}
+          {run.continuations !== null && <Row term="Continuations">{formatNumber(run.continuations)}</Row>}
+        </dl>
+      )}
       {run.warnings.length > 0 && (
         <Section title="Warnings">
           <Alert tone="warning">

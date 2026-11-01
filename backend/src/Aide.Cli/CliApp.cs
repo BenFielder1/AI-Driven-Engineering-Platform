@@ -9,7 +9,7 @@ namespace Aide.Cli;
 internal static class CliApp
 {
     private const string Description = """
-        Command-line client for the AIDE Platform (SPEC FR-52, FR-93).
+        Command-line client for the AIDE Platform (SPEC FR-52, FR-93, FR-156).
 
         Authenticate once with a personal API token (create one on the Account page):
           aide login --token aide_pat_...
@@ -24,7 +24,8 @@ internal static class CliApp
         Output is human-readable; add --json for the API's JSON.
         Exit codes: 0 success, 1 error, 2 usage, 3 auth (401/403), 4 conflict (409).
         The release-version errors VERSION_INVALID, VERSION_NOT_GREATER, VERSION_IN_PROGRESS, TAG_EXISTS,
-        RELEASE_NOT_MERGED and NOT_RELEASED also exit 4.
+        RELEASE_NOT_MERGED and NOT_RELEASED also exit 4, as do STACK_INCOMPATIBLE, STACK_LOCKED and
+        LLM_PROVIDER_UNAVAILABLE.
         """;
 
     public static async Task<int> RunAsync(string[] args, CliHost host, CancellationToken cancellationToken = default)
@@ -66,6 +67,9 @@ internal static class CliApp
         root.Subcommands.Add(VersionCommands.BuildVersion(factory));
         root.Subcommands.Add(VersionCommands.BuildVersions(factory));
         root.Subcommands.Add(VersionCommands.BuildDeployments(factory));
+        root.Subcommands.Add(StackCommands.Build(factory));
+        root.Subcommands.Add(DatabaseCommands.BuildDatabases(factory));
+        root.Subcommands.Add(DatabaseCommands.BuildMigrations(factory));
         root.Subcommands.Add(ArtifactCommands.Build(factory));
         root.Subcommands.Add(LifecycleCommands.BuildExecute(factory));
         root.Subcommands.Add(LifecycleCommands.BuildReview(factory));

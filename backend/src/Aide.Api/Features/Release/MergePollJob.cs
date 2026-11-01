@@ -24,22 +24,30 @@ namespace Aide.Api.Features.Release;
 /// <item>GitHub: <c>GET /pulls/{n}</c> with the last ETag (<c>If-None-Match</c>; a 304 is "no change"). <c>merged</c> →
 /// the PR's <c>merge_commit_sha</c> is the tag target (authoritative even for squash or rebase merges); closed without merging
 /// → <c>PR_CLOSED</c>.</item>
+/// <item>GitLab (FR-140): <c>GET …/merge_requests/:iid</c>: <c>merged</c> → the merged commit is tagged with the GitLab
+/// Release; <c>closed</c> → <c>PR_CLOSED</c>. Under 10 % of the rate limit left pushes the next poll to the reset
+/// (§4.19).</item>
 /// <item>Local: the version branch head is in the default branch (<c>merge-base --is-ancestor</c>) → the merge commit is the
 /// oldest first-parent commit of the default branch that contains it (the head itself after a fast-forward).</item>
 /// </list>
 /// Then, per <see cref="MergePollRules"/>: wait (2 minutes for the first hour, then 10), complete (tag, GitHub Release,
 /// released — <c>RELEASE_MERGED_EXTERNALLY</c>), or fail after 14 days (<c>MERGE_TIMEOUT</c>); after a failure the project
 /// is back to <c>releasing</c> for a retry. A GitHub rate limit defers to the reset without counting an attempt; GitHub
-/// failing is a poll without news.
+/// failing is a poll without news. §4.21, FR-153: while the PR stays open, a Supabase BaaS release's production migrations
+/// run on its head once merge readiness passes (<see cref="MigrateWhileAwaitingAsync"/>), and a merge of a head they didn't
+/// run on is recorded (<c>MERGED_HEAD_MISMATCH</c>).
 /// </summary>
 public sealed partial class MergePollJobHandler(
     AideDbContext db,
     GitHubRepoAccess access,
+    GitHostTargets hosts,
     GitHubApi api,
     WorkingCopyPreparer preparer,
     IWorkingCopies workingCopies,
     ReleaseCompletion completion,
     GitHubReleasePublisher publisher,
+    Databases.MigrationRunService migrations,
+    ProductionMigrationGate gate,
     TimeProvider time,
     ILogger<MergePollJobHandler> logger) : IJobHandler
 {
@@ -64,10 +72,18 @@ public sealed partial class MergePollJobHandler(
             .FirstOrDefaultAsync(cancellationToken);
 
         MergePollObservation observation;
+        DateTimeOffset? notBefore = null;
         var etag = payload.ETag;
         try
         {
-            (observation, etag) = await ObserveAsync(project, version?.PullRequestNumber, version?.BranchName, etag, cancellationToken);
+            if (await hosts.ResolveAsync(project.Id, cancellationToken) is { } host)
+            {
+                (observation, notBefore) = await ObserveHostAsync(project, host, version?.PullRequestNumber, cancellationToken);
+            }
+            else
+            {
+                (observation, etag) = await ObserveAsync(project, version?.PullRequestNumber, version?.BranchName, etag, cancellationToken);
+            }
         }
         catch (GitHubRateLimitedException ex)
         {
@@ -81,9 +97,13 @@ public sealed partial class MergePollJobHandler(
         switch (decision.Kind)
         {
             case MergePollDecisionKind.Wait:
+                await MigrateWhileAwaitingAsync(release, cancellationToken);
+
+                // §4.19: a GitLab rate limit running low pushes the next poll to its reset.
+                var next = Domain.GitHosts.GitHostPollBudget.Later(decision.NextPollAt!.Value, notBefore);
                 throw new JobDeferredException(
-                    $"Waiting for the pull request to be merged (next poll {decision.NextPollAt:u}).",
-                    decision.NextPollAt!.Value,
+                    $"Waiting for the pull request to be merged (next poll {next:u}).",
+                    next,
                     AideJson.Serialize(payload with { ETag = etag }));
             case MergePollDecisionKind.Fail:
                 await completion.AbandonAsync(release.Id, decision.ErrorCode!, decision.Message!, cancellationToken);
@@ -92,6 +112,96 @@ public sealed partial class MergePollJobHandler(
                 await CompleteAsync(release, cancellationToken);
                 return;
         }
+    }
+
+    /// <summary>
+    /// §4.21, FR-153: a Supabase BaaS release waiting for its merge keeps production ahead of the code: its migrations run on
+    /// the PR's current head once merge readiness passes, and again when the head moves (the runner is idempotent). Unknown
+    /// readiness waits for the next poll here: unlike the release job's merge, nothing is about to happen. A failed run tells
+    /// Owners (<c>migration_failed</c>) and is recorded on the attempt, which keeps waiting; the human merge isn't AIDE's to
+    /// block. Nothing here may end the poll: any other failure is a poll without news.
+    /// </summary>
+    private async Task MigrateWhileAwaitingAsync(Domain.Entities.Release release, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (release.MergeCommitSha is not null || release.MergeSubmittedAt is not null
+                || !await migrations.HasMigrationStepAsync(release.ProjectId, DeploymentEnvironment.Production, cancellationToken))
+            {
+                return;
+            }
+
+            var preparation = await preparer.TryPrepareAsync(release.ProjectId, cancellationToken);
+            if (preparation.Result.IsFailure
+                || await gate.HeadAsync(release.ProjectId, preparation.Result.Value.Branch, cancellationToken) is not { } head)
+            {
+                LogMigrationHeadUnread(logger, release.ProjectId);
+                return;
+            }
+
+            var now = time.GetUtcNow();
+            var last = await db.DatabaseMigrationRuns.AsNoTracking()
+                .Where(r => r.ReleaseId == release.Id && r.Environment == DeploymentEnvironment.Production)
+                .OrderByDescending(r => r.StartedAt)
+                .Select(r => new { r.Id, r.GitSha, r.Status, r.StartedAt, r.FinishedAt })
+                .FirstOrDefaultAsync(cancellationToken);
+            var usableSinceFailure = last is { Status: MigrationRunStatus.Failed, FinishedAt: { } failedAt }
+                && await migrations.UsableSinceAsync(release.ProjectId, DeploymentEnvironment.Production, failedAt, cancellationToken);
+            var step = ProductionMigrationRules.NextStep(
+                last is null ? null : new PreMergeRun(last.GitSha, last.Status, last.StartedAt, last.FinishedAt), head, usableSinceFailure, now);
+            if (step == PreMergeMigrationStep.None)
+            {
+                return;
+            }
+
+            var ready = await gate.ReadinessAsync(release.ProjectId, cancellationToken);
+            if (!ready.Known || ready.Blocked is not null)
+            {
+                return;
+            }
+
+            if (step == PreMergeMigrationStep.RunAfterInterruption)
+            {
+                await db.DatabaseMigrationRuns
+                    .Where(r => r.Id == last!.Id && r.Status == MigrationRunStatus.Running)
+                    .ExecuteUpdateAsync(
+                        s => s.SetProperty(r => r.Status, MigrationRunStatus.Failed)
+                            .SetProperty(r => r.ErrorCode, ErrorCodes.MigrationFailed)
+                            .SetProperty(r => r.ErrorMessage, "The migration run was interrupted; AIDE runs it again.")
+                            .SetProperty(r => r.FinishedAt, now),
+                        cancellationToken);
+            }
+
+            await gate.RunAsync(release, head, cancellationToken);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            LogMigrationStepFailed(logger, ex, release.ProjectId);
+            db.ChangeTracker.Clear();
+        }
+    }
+
+    /// <summary>
+    /// FR-140, §4.19: what the GitLab merge request shows now (<c>merged</c>, <c>closed</c> or still open), and the
+    /// rate-limit back-off for the next poll. GitLab failing is a poll without news; a 429 waits for the reset (the job
+    /// worker re-queues it without counting an attempt).
+    /// </summary>
+    private async Task<(MergePollObservation Observation, DateTimeOffset? NotBefore)> ObserveHostAsync(
+        Project project, GitHostTarget host, int? pullRequestNumber, CancellationToken cancellationToken)
+    {
+        if (pullRequestNumber is not { } number)
+        {
+            return (MergePollObservation.Open, null);
+        }
+
+        var observed = await host.Provider.ObserveMergeRequestAsync(host.Connection, number, cancellationToken);
+        if (observed.IsFailure)
+        {
+            LogNoAccess(logger, project.Id, observed.Error!.Message);
+            return (MergePollObservation.Open, null);
+        }
+
+        return (observed.Value.Observation, observed.Value.NotBefore);
     }
 
     /// <summary>What the PR (GitHub) or the version branch (Local) shows now, and the PR's ETag for the next poll.</summary>
@@ -188,13 +298,22 @@ public sealed partial class MergePollJobHandler(
             (sha, ct) => RecordMergeAsync(release.Id, sha, ct))
         {
             Merge = false,
+            Notes = await publisher.HostNotesAsync(release, working.Provider.Kind, working.Connection.RepoUrl, cancellationToken),
+
+            // FR-140: an attempt whose merge AIDE submitted (and that waited past the release job's ceiling) merged by AIDE.
+            RecordedMergeCommitSha = release.MergeCommitSha,
+            MergeSubmitted = release.MergeSubmittedAt is not null,
         };
         var outcome = await working.Provider.ReleaseAsync(working.Connection, request, working.Token, cancellationToken);
         switch (outcome.Kind)
         {
             case ReleaseOutcomeKind.Released:
-                var url = await publisher.PublishAsync(release, outcome.Tag ?? release.Tag, cancellationToken);
-                await completion.SucceedAsync(release.Id, outcome, url, mergedExternally: true, cancellationToken);
+                var url = outcome.ReleaseUrl ?? await publisher.PublishAsync(release, outcome.Tag ?? release.Tag, cancellationToken);
+                // §4.21: a merge of a head the production migrations didn't run on is on record, with the release.
+                var unmigrated = await gate.UnmigratedMergeAsync(release, outcome.MergedHead, working.Branch, cancellationToken);
+
+                // FR-140: a merge AIDE submitted (a Bitbucket merge task past the release job's ceiling) isn't an external one.
+                await completion.SucceedAsync(release.Id, outcome, url, mergedExternally: release.MergeSubmittedAt is null || outcome.MergedExternally, cancellationToken, unmigrated);
                 return;
             case ReleaseOutcomeKind.AwaitingMerge:
                 // The merge isn't visible yet (e.g. GitHub's PR read raced the merge): poll again shortly.
@@ -224,6 +343,12 @@ public sealed partial class MergePollJobHandler(
             throw new JobFailedException($"The merge poll payload can't be read: {ex.Message}", transient: false, ErrorCodes.Validation);
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Merge poll of project {ProjectId} couldn't read the head to migrate; it looks again at the next poll")]
+    private static partial void LogMigrationHeadUnread(ILogger logger, Guid projectId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Merge poll of project {ProjectId}: the production migration step failed; it looks again at the next poll")]
+    private static partial void LogMigrationStepFailed(ILogger logger, Exception exception, Guid projectId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Merge poll did nothing: {Reason}")]
     private static partial void LogSkipped(ILogger logger, string reason);
@@ -263,9 +388,10 @@ public sealed class MergePollJobEndedHook(TimeProvider time) : IJobEndedHook
             return;
         }
 
+        var provider = await ReleaseRecords.ProviderAsync(db, projectId, cancellationToken);
         foreach (var release in awaiting)
         {
-            ReleaseRecords.Fail(db, release, ErrorCodes.GitError, job.Error ?? "The merge poll failed.", [], SystemActor.Name, now, job.DeadLettered);
+            ReleaseRecords.Fail(db, release, ErrorCodes.GitError, job.Error ?? "The merge poll failed.", [], SystemActor.Name, now, job.DeadLettered, provider);
         }
 
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);

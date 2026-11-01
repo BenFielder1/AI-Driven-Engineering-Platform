@@ -1,10 +1,13 @@
 using Aide.Api.Features.Artifacts;
+using Aide.Api.Features.Stack;
 using Aide.Api.Features.Versions;
 using Aide.Api.Jobs;
+using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Releases;
+using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
@@ -23,12 +26,19 @@ namespace Aide.Api.Agents;
 /// already has a summary. Redelivery is idempotent like the other agent jobs (run ids from the job id; the writer returns
 /// the summary a run already stored).
 /// </para>
+/// <para>
+/// FR-128: with a stack composition the analyst gets its summary and the stack detector's evidence at the base commit
+/// (<see cref="StackGuidance.Analysis"/>, <see cref="StackGuidance.DetectionInput"/>), and "Stack &amp; Dependencies" must name the
+/// detected packs and any mismatch with the composition (<see cref="StackAnalysis.Check"/>, validated and re-run like the
+/// sections).
+/// </para>
 /// </summary>
 public sealed partial class RepositoryAnalysisJobHandler(
     AgentRunner runner,
     AgentDraftWriter writer,
     AgentJobInputs inputs,
     AideDbContext db,
+    VersionStackLoader stacks,
     ILogger<RepositoryAnalysisJobHandler> logger) : IJobHandler
 {
     public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
@@ -69,6 +79,9 @@ public sealed partial class RepositoryAnalysisJobHandler(
         }
 
         var baseText = version.BaseTag is { } tag ? $"{tag} ({version.BaseCommitSha})" : $"commit {version.BaseCommitSha}";
+        var stack = (await stacks.ForVersionAsync(version, cancellationToken, detect: true)).ThrowIfUnresolvable();
+        var expectation = stack.Stack is { } composed && stack.Detection is { } detection ? StackAnalysis.Expectation(detection, composed.Composition) : null;
+        Result<string> Check(string text) => StackAnalysis.Check(AgentOutput.UnwrapFence(text), expectation);
         AgentRunRequest Request(string? feedback) => new()
         {
             ProjectId = project.Id,
@@ -79,26 +92,29 @@ public sealed partial class RepositoryAnalysisJobHandler(
                 ["PROJECT_NAME"] = project.Name,
                 ["VERSION_REQUEST"] = version.Request,
                 ["BASE"] = baseText,
+                ["STACK_GUIDANCE"] = stack.Stack is { } resolution ? StackGuidance.Analysis(resolution, stack.Detection) : null,
+                ["STACK_DETECTION"] = StackGuidance.DetectionInput(stack.Detection),
                 [AgentRunner.FeedbackInput] = feedback,
             },
+            Stack = stack.Stack,
             UserFeedback = feedback,
             Repo = RepoScope.BaseCommit,
         };
 
         var first = await runner.RunAsync(Request(null), cancellationToken);
-        var content = CodebaseSummaryRules.Check(AgentOutput.UnwrapFence(first.Text));
+        var content = Check(first.Text);
         var produced = first;
         if (content.IsFailure)
         {
             LogRejected(logger, content.Error!.Code, content.Error.Message);
             produced = await runner.RunAsync(
-                Request(CodebaseSummaryRules.CorrectiveFeedback(content.Error.Details)) with
+                Request(StackAnalysis.CorrectiveFeedback(content.Error)) with
                 {
                     RunKey = AgentOutput.CorrectiveRunKey,
-                    Check = text => CodebaseSummaryRules.Check(AgentOutput.UnwrapFence(text)) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
+                    Check = text => Check(text) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
                 },
                 cancellationToken);
-            content = CodebaseSummaryRules.Check(AgentOutput.UnwrapFence(produced.Text));
+            content = Check(produced.Text);
             if (content.IsFailure)
             {
                 throw new JobFailedException(content.Error!.Message, transient: false, content.Error.Code);
@@ -110,6 +126,25 @@ public sealed partial class RepositoryAnalysisJobHandler(
         {
             LogSkipped(logger, "the version stopped being the project's version in development while the analyst ran");
             return;
+        }
+
+        // FR-155: saved with the summary it informed; a redelivery that finds its own stored summary doesn't repeat it.
+        if (stack.Detection is { } report && db.Entry(summary).State == EntityState.Added)
+        {
+            db.AddEvent(
+                EventTypes.StackDetected,
+                project.Id,
+                new
+                {
+                    releaseVersionId = version.Id,
+                    version = version.Version,
+                    baseCommitSha = version.BaseCommitSha,
+                    suggestions = report.Suggestions.Select(s => new { choice = s.Choice, option = s.Option, path = s.Path, mode = s.Mode }),
+                    conflicts = report.Conflicts.Select(c => c.Choice),
+                    mismatches = report.Mismatches,
+                },
+                SystemActor.Name,
+                produced.CompletedAt);
         }
 
         try

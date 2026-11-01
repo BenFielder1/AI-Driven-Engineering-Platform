@@ -11,12 +11,13 @@ import { fieldErrorSummary } from '../../../components/ui/form-errors'
 import { RadioGroup } from '../../../components/ui/radio-group'
 import { TextField } from '../../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, isApiError } from '../../../lib/errors'
-import { mergeStrategyDescriptions, mergeStrategyLabels } from '../labels'
+import { gitHostTerms } from '../../../lib/git-host'
+import { mergeStrategiesFor, mergeStrategyDescription, mergeStrategyLabel } from '../labels'
 import { useProjectState, useUpdateGitSettings, type GitSettings } from '../projects-api'
 import { checkTagPrefix, TAG_PREFIX_MAX, tagPrefixLockReason } from './release-settings-rules'
 
 const releaseSchema = z
-  .object({ mergeStrategy: z.enum(['aide_merges', 'manual']), tagPrefix: z.string().optional() })
+  .object({ mergeStrategy: z.enum(['aide_merges', 'manual', 'fast_forward', 'squash']), tagPrefix: z.string().optional() })
   .superRefine((v, ctx) => {
     // A disabled (locked) field may read as undefined.
     const problem = checkTagPrefix(v.tagPrefix ?? '')
@@ -29,13 +30,23 @@ type ReleaseValues = z.infer<typeof releaseSchema>
 
 const fieldIds = { mergeStrategy: 'release-merge-strategy', tagPrefix: 'release-tag-prefix' } as const
 
-const strategyOptions = (['aide_merges', 'manual'] as const).map((value) => ({
-  value,
-  label: mergeStrategyLabels[value],
-  description: mergeStrategyDescriptions[value],
-}))
+/** FR-65, FR-140: the strategies the project's Git host offers (Bitbucket adds fast-forward and squash), worded for it. */
+const strategyOptions = (git: GitSettings) => {
+  const host = gitHostTerms(git.mode)
+  return mergeStrategiesFor(git.mode).map((value) => ({
+    value,
+    label: mergeStrategyLabel(value, host),
+    description: mergeStrategyDescription(value, host),
+  }))
+}
 
-const toValues = (g: GitSettings): ReleaseValues => ({ mergeStrategy: g.mergeStrategy, tagPrefix: g.tagPrefix })
+/** M28: a strategy this host doesn't offer (Bitbucket's squash or fast-forward held after a host change) can't be sent back. */
+const heldUnavailable = (g: GitSettings) => !mergeStrategiesFor(g.mode).includes(g.mergeStrategy)
+
+const toValues = (g: GitSettings): ReleaseValues => ({
+  mergeStrategy: heldUnavailable(g) ? 'aide_merges' : g.mergeStrategy,
+  tagPrefix: g.tagPrefix,
+})
 
 /**
  * Settings → Git → Release (FR-64, FR-65, §4.10; Owner): the merge strategy and the tag prefix, with a live preview of
@@ -55,7 +66,7 @@ export function ReleaseSettingsForm({ projectId, git }: { projectId: string; git
   } = useForm<ReleaseValues>({ resolver: zodResolver(releaseSchema), defaultValues: toValues(git), mode: 'onChange' })
 
   const tagPrefix = useWatch({ control, name: 'tagPrefix' })
-  const lockReason = tagPrefixLockReason(state.data)
+  const lockReason = tagPrefixLockReason(state.data, gitHostTerms(git.mode))
   const sampleVersion = state.data?.developmentVersion ?? state.data?.suggestedNextVersion ?? '1.2.0'
 
   const onSubmit = handleSubmit((v) => {
@@ -92,10 +103,16 @@ export function ReleaseSettingsForm({ projectId, git }: { projectId: string; git
         errors={[...serverErrors.map((message) => ({ message })), ...(isSubmitted ? fieldErrorSummary(errors, fieldIds) : [])]}
       />
       <div className="mt-2 flex flex-col gap-5">
+        {heldUnavailable(git) && (
+          <p data-testid="merge-strategy-unavailable" className="text-sm text-muted-foreground">
+            This project is set to &ldquo;{mergeStrategyLabel(git.mergeStrategy, gitHostTerms(git.mode))}&rdquo;, which{' '}
+            {gitHostTerms(git.mode).host} doesn&apos;t offer. Pick a strategy below and save to replace it.
+          </p>
+        )}
         <RadioGroup
           legend="Merge strategy"
           id={fieldIds.mergeStrategy}
-          options={strategyOptions}
+          options={strategyOptions(git)}
           inputProps={register('mergeStrategy')}
           error={errors.mergeStrategy?.message}
         />

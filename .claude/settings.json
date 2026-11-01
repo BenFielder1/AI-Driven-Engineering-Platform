@@ -7,5 +7,13 @@
     "vcs-github@bens-claude-kits": true,
     "deploy-railway@bens-claude-kits": true,
     "local-docker-desktop-k8s@bens-claude-kits": true
+  },
+  "permissions": {
+    "additionalDirectories": [
+      "../stack-packs"
+    ],
+    "deny": [
+      "Edit(//**/stack-packs/**)"
+    ]
   }
 }

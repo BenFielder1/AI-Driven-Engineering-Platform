@@ -607,7 +607,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
     private static Task SeedDeploymentSettingsAsync(WebApplicationFactory<Program> app, Guid projectId, DeploymentProvider provider, string rootDirectory = ".") =>
         ProjectApi.WithDbAsync(app, async db =>
         {
-            db.ProjectDeploymentSettings.Add(new ProjectDeploymentSettings { ProjectId = projectId, Provider = provider, RootDirectory = rootDirectory, UpdatedAt = DateTimeOffset.UtcNow });
+            db.DeploymentTargets.Add(DeploymentHarness.Target(projectId, null, null, null, provider, rootDirectory));
             await db.SaveChangesAsync(Ct);
         });
 

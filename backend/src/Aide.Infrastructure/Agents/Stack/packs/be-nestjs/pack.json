@@ -1,0 +1,188 @@
+{
+  "id": "be-nestjs",
+  "layer": "backend",
+  "name": "NestJS",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "be-nestjs",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Node.js",
+    "NestJS",
+    "TypeScript"
+  ],
+  "description": "A TypeScript NestJS API with feature modules, guards and an @nestjs/swagger contract export.",
+  "defaultPath": "backend",
+  "publicEnvPrefix": null,
+  "runtime": "node",
+  "modes": [],
+  "specSections": [
+    {
+      "title": "API Contract & Error Codes",
+      "guidance": "List every endpoint under /api with its method, route, operation ID (the @ApiOperation operationId, which becomes the client method name), request and response DTO classes, the guards (AuthGuard, PermissionsGuard with @RequirePermission) and ownership rule, and the status codes it returns. Give the error table: each UPPER_SNAKE errorCode, its HTTP status and when it applies; errors are application/problem+json with errorCode from the global ProblemDetailsFilter, and ValidationPipe errors are 400 with an errors map. Name the auth scheme (session cookie for same-origin, JWT for cross-origin) and the Terminus health endpoints /api/health/live and /api/health/ready."
+    }
+  ],
+  "ownership": {
+    "backend-engineer": [
+      "{be}/**",
+      "{be}/openapi/api.json",
+      "!{be}/prisma/**",
+      "!{be}/src/db/**",
+      "!{be}/drizzle/**",
+      "!{be}/**/Dockerfile",
+      "!{be}/**/.dockerignore",
+      "!{be}/**/.env.example",
+      "!{be}/**/vercel.json"
+    ],
+    "test-engineer": [
+      "{be}/test/**"
+    ]
+  },
+  "agentSections": {
+    "scaffolder": [
+      "Detect",
+      "Scaffold",
+      "Conventions",
+      "Config and database URL"
+    ],
+    "backend-engineer": [
+      "*"
+    ],
+    "test-engineer": [
+      "Testing",
+      "Gate"
+    ],
+    "ci-engineer": [
+      "Gate"
+    ],
+    "deploy-engineer": [
+      "Containerise",
+      "Deploy notes"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{be}/openapi/api.json"
+        ],
+        "after": [
+          "{fe}/src/api/generated/**",
+          "{fe}/src/app/api/generated/**"
+        ],
+        "soft": true,
+        "reason": "Change the contract (backend/openapi/api.json) before regenerating the frontend client from it."
+      }
+    ],
+    "exclusive": [
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "{be}/prisma/migrations/**",
+          "{be}/drizzle/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      }
+    ],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [
+    {
+      "glob": "{be}/openapi/api.json",
+      "handling": "hand_written",
+      "ciCheck": "cd {be} && npm run openapi:export && git diff --exit-code openapi/api.json"
+    },
+    {
+      "glob": "{be}/package-lock.json",
+      "handling": "ci_generated",
+      "ciCheck": null
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "DATABASE_URL",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": true,
+      "public": false,
+      "description": "The database URI (postgresql://…), validated by the ConfigModule schema and used by the data provider; sslmode=require for managed hosts.",
+      "when": "data != none"
+    },
+    {
+      "key": "CORS_ALLOWED_ORIGINS",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": false,
+      "description": "Comma-separated frontend origins passed to app.enableCors (cross-origin model only).",
+      "when": "originModel == cross-origin"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Feature modules with thin controllers and orchestrating services; domain rules are pure and unit-tested by FR.",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Controllers return DTOs (documented with @ApiOkResponse/@ApiResponse), never ORM entities.",
+        "category": "api_contracts",
+        "severity": "major"
+      },
+      {
+        "item": "A global ValidationPipe (whitelist, forbidNonWhitelisted, transform) and ProblemDetailsFilter return application/problem+json with the spec's errorCodes.",
+        "category": "api_contracts",
+        "severity": "major"
+      },
+      {
+        "item": "AuthGuard and PermissionsGuard plus ownership checks protect every protected route; Throttler on auth routes; CORS only for cross-origin with explicit origins.",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "Config is validated at boot (ConfigModule validate) and no secrets are committed.",
+        "category": "security",
+        "severity": "major"
+      },
+      {
+        "item": "Health uses Terminus with /api/health/live (no checks) and /api/health/ready (DB ping).",
+        "category": "feature_coverage",
+        "severity": "minor"
+      },
+      {
+        "item": "e2e tests cover success, 400, 401, 403, 404, each errorCode and 409 per FR, against a Testcontainers Postgres.",
+        "category": "testing",
+        "severity": "major"
+      },
+      {
+        "item": "Operation IDs are stable, the export runs without a DB, openapi/api.json is fresh (CI check), and the gate passes.",
+        "category": "api_contracts",
+        "severity": "major"
+      }
+    ],
+    "deterministic": [
+      "container_non_root",
+      "health_endpoints"
+    ]
+  },
+  "gate": [
+    "cd {be} && npm ci && npm run lint && npm run build && npm test && npm run test:e2e",
+    "cd {be} && npm run openapi:export && git diff --exit-code openapi/api.json"
+  ],
+  "migrate": null,
+  "deploy": null
+}

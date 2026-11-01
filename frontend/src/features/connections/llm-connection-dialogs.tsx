@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
@@ -11,7 +11,13 @@ import { SelectField } from '../../components/ui/select-field'
 import { TextField } from '../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, isApiError } from '../../lib/errors'
 import { llmProviderLabels } from '../projects/labels'
-import { keyedProviders, useCreateLlmConnection, useRenameLlmConnection, type LlmCredential } from './connections-api'
+import {
+  keyedProviders,
+  useCreateLlmConnection,
+  useLlmProviders,
+  useRenameLlmConnection,
+  type LlmCredential,
+} from './connections-api'
 
 /** Mirrors LlmConnectionRules (MaxLabelLength, MaxApiKeyLength). */
 const LABEL_MAX = 100
@@ -50,12 +56,25 @@ export function AddLlmKeyDialog({ open, onClose, onAdded }: { open: boolean; onC
     handleSubmit,
     setError,
     setValue,
+    getValues,
     reset,
     formState: { errors, isSubmitted },
   } = useForm<AddKeyValues>({
     resolver: zodResolver(addKeySchema),
     defaultValues: { provider: 'anthropic', label: '', apiKey: '' },
   })
+
+  // FR-157: only the keyed providers enabled on this server are offered.
+  const llmProviders = useLlmProviders(open)
+  const offered: readonly (typeof keyedProviders)[number][] = llmProviders.data
+    ? keyedProviders.filter((p) => llmProviders.data.some((o) => o.provider === p))
+    : keyedProviders
+  const firstOffered = offered[0]
+  useEffect(() => {
+    if (firstOffered && !offered.some((p) => p === getValues('provider'))) {
+      setValue('provider', firstOffered)
+    }
+  }, [firstOffered, offered, getValues, setValue])
 
   const close = () => {
     reset()
@@ -106,7 +125,7 @@ export function AddLlmKeyDialog({ open, onClose, onAdded }: { open: boolean; onC
           errors={[...serverErrors.map((message) => ({ message })), ...(isSubmitted ? fieldErrorSummary(errors, addIds) : [])]}
         />
         <SelectField id={addIds.provider} label="Provider" error={errors.provider?.message} {...register('provider')}>
-          {keyedProviders.map((p) => (
+          {offered.map((p) => (
             <option key={p} value={p}>
               {llmProviderLabels[p]}
             </option>

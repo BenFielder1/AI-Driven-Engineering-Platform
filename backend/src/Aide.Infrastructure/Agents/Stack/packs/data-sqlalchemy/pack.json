@@ -1,0 +1,192 @@
+{
+  "id": "data-sqlalchemy",
+  "layer": "data",
+  "name": "SQLAlchemy",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "data-sqlalchemy",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "SQLAlchemy",
+    "Alembic",
+    "PostgreSQL"
+  ],
+  "description": "Typed SQLAlchemy 2.0 with Alembic migrations on PostgreSQL, for FastAPI.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Data Model & Migrations",
+      "guidance": "For each entity/table: columns with types, lengths and numeric precision, nullability and defaults; the primary key (UUIDv7 or identity); foreign keys with an explicit on-delete behaviour; unique indexes from business rules (say which are case-insensitive); check constraints; indexes for foreign keys and query predicates; enums stored as strings; UTC timestamps; and which aggregates are edited concurrently and need a concurrency token (409 CONFLICT). Then the migration plan: one migration per change, named, in order, with which steps are expand/contract (add, backfill, switch code, drop later) so the previous version keeps working during rollout; any data backfill; the reference/seed data (dev-only seed per role and state); and how migrations run in each environment (alembic upgrade head in the API image as the platform's pre-deploy step, or the build step gated by AIDE_RUN_MIGRATIONS on Vercel)."
+    }
+  ],
+  "ownership": {
+    "data-engineer": [
+      "{be}/alembic/**",
+      "{be}/app/models/**"
+    ]
+  },
+  "agentSections": {
+    "data-engineer": [
+      "*"
+    ],
+    "backend-engineer": [
+      "Setup",
+      "Modelling"
+    ],
+    "scaffolder": [
+      "Setup"
+    ],
+    "test-engineer": [
+      "Testing"
+    ],
+    "ci-engineer": [
+      "Migrations"
+    ],
+    "deploy-engineer": [
+      "Migrations",
+      "Production notes"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{be}/alembic/versions/**"
+        ],
+        "after": [
+          "{be}/app/api/**",
+          "{be}/app/services/**"
+        ],
+        "soft": false,
+        "reason": "Migrations come before the services and routers that use their tables."
+      }
+    ],
+    "exclusive": [
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          "{be}/app/api/**",
+          "{be}/app/schemas/**"
+        ],
+        "reason": "The data engineer owns models and migrations, not routers or Pydantic DTOs."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "{be}/alembic/versions/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      }
+    ],
+    "maxFilesPerStep": [
+      {
+        "glob": "{be}/alembic/versions/*.py",
+        "max": 1
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "glob": "{be}/alembic/versions/**",
+      "existingOnBase": true,
+      "reason": "Alembic revisions on the base commit are immutable (FR-125); a schema change is a new revision."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "glob": "{be}/alembic/versions/*.py",
+      "handling": "hand_written",
+      "ciCheck": "uv run alembic upgrade head && uv run alembic check && test \"$(uv run alembic heads | wc -l)\" -eq 1 (against the CI Postgres service)"
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "DATABASE_URL",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview",
+        "development"
+      ],
+      "sensitive": true,
+      "public": false,
+      "description": "PostgreSQL connection for the API and Alembic. Settings normalises postgres:// and postgresql:// to postgresql+asyncpg:// and adds ssl=require for managed hosts. On Vercel use the Supabase transaction pooler (:6543) with NullPool and statement_cache_size=0."
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Exactly one new migration per schema change, never an edit to a migration that exists on the base commit.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Breaking changes (rename, drop, type change) use expand/contract so the previous version runs against the new schema during preview and production rollout.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Columns are explicit (lengths, precision, nullability), foreign keys have a deliberate on-delete, and every foreign key and query predicate is indexed.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Uniqueness rules from the spec are unique indexes or constraints (case-insensitive where the spec says so), and concurrently edited aggregates have a concurrency token mapped to 409 CONFLICT.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Timestamps are UTC (timestamptz/datetimeoffset) from an injected clock, and enums are stored as strings.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "Integration tests run against the real engine in a container with every migration applied; no in-memory or SQLite substitute.",
+        "category": "testing",
+        "severity": "major"
+      },
+      {
+        "item": "Queries are parameterised, project only the needed columns, paginate lists and avoid N+1.",
+        "category": "architecture",
+        "severity": "minor"
+      },
+      {
+        "item": "The seed is idempotent, dev-only and gated; reference data is part of the migrations.",
+        "category": "data_model",
+        "severity": "minor"
+      },
+      {
+        "item": "No Base.metadata.create_all() in app code; alembic upgrade head is the one-off pre-start migrate step.",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Revisions chain from the single current head (down_revision), have a working downgrade where practical, and renames are alter_column, not drop plus add.",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "Models are typed 2.0 (Mapped/mapped_column) on a Base with a constraint naming convention; relationships use lazy=\"raise\" with explicit loaders in async code.",
+        "category": "data_model",
+        "severity": "minor"
+      }
+    ],
+    "deterministic": [
+      "no_create_all",
+      "migration_backward_compatible"
+    ]
+  },
+  "gate": null,
+  "migrate": {
+    "command": "uv run --no-sync alembic upgrade head",
+    "needsDirectUrl": false
+  },
+  "deploy": null
+}

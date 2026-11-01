@@ -96,4 +96,14 @@ public class ReleaseRulesTests
         var again = LifecycleStateMachine.Apply(completed.Value.NewState, TransitionRequest.ReleaseCompleted(), LifecycleSnapshot.Empty);
         Assert.Equal(ErrorCodes.NotReleasing, again.Error!.Code);
     }
+
+    [Fact]
+    public void FR140_A_submitted_merge_still_pending_is_waited_for_up_to_an_hour_then_handed_to_the_merge_poll()
+    {
+        var submitted = new DateTimeOffset(2026, 10, 29, 9, 0, 0, TimeSpan.Zero);
+        Assert.True(ReleaseRules.KeepWaitingForSubmittedMerge(null, submitted));
+        Assert.True(ReleaseRules.KeepWaitingForSubmittedMerge(submitted, submitted.AddMinutes(59)));
+        Assert.False(ReleaseRules.KeepWaitingForSubmittedMerge(submitted, submitted.AddHours(1)));
+        Assert.False(ReleaseRules.KeepWaitingForSubmittedMerge(submitted, submitted.AddHours(3)));
+    }
 }

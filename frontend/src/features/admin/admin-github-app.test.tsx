@@ -120,3 +120,31 @@ describe('Admin → Integrations → GitHub App (FR-80)', () => {
     })
   })
 })
+
+describe('Admin → Integrations → GitHub App: Pages permission (FR-143)', () => {
+  it('FR143_pages_permission_missing: an App without Pages says what to do, with the App link', async () => {
+    signInAdmin()
+    configureGitHubApp({ pagesPermission: 'missing', permissions: { contents: 'write', metadata: 'read' } })
+    const { panel } = await openPanel()
+
+    const note = await within(panel).findByTestId('github-app-pages-permission-missing')
+    expect(note).toHaveTextContent(
+      "Pages permission missing: update the App's permissions in GitHub, then accept them on each installation.",
+    )
+    expect(within(panel).getByRole('link', { name: /Open the App on GitHub/ })).toHaveAttribute(
+      'href',
+      'https://github.com/apps/aide-localhost',
+    )
+  })
+
+  it('FR143_pages_permission_granted: no note when the App has Pages (or it is unknown)', async () => {
+    signInAdmin()
+    configureGitHubApp({ pagesPermission: 'granted' })
+    const { panel } = await openPanel()
+
+    expect(await within(panel).findByTestId('github-app-status')).toHaveTextContent('Configured')
+    expect(within(panel).queryByTestId('github-app-pages-permission-missing')).not.toBeInTheDocument()
+    const list = within(panel).getByRole('list', { name: 'GitHub App permissions' })
+    expect(within(list).getByText('Pages').closest('li')).toHaveTextContent('Read and write')
+  })
+})

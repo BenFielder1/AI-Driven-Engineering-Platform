@@ -7,14 +7,14 @@ import { SelectField } from '../../components/ui/select-field'
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import { TextField } from '../../components/ui/text-field'
 import { connectionLabel, credentialStatusLabels } from '../connections/connection-format'
-import { useVercelConnections } from '../connections/vercel-connections-api'
-import { usePresets } from '../presets/presets-api'
+import { usePlatformConnections } from '../connections/platform-connections-api'
 import type { WizardValues } from './schemas'
 import { deploymentFieldIds } from './wizard-deployment-ids'
 
 /**
- * FR-88 wizard step "Deployment" (optional): skip, or Vercel with one of the caller's own connections and a new
- * (name, root directory) or existing Vercel project. Whether a Local repository can deploy is the server's call.
+ * FR-88 wizard step "Deployment" (optional) for "No stack (general)", which chose no hosts: skip, or Vercel with one of the
+ * caller's own connections and a new (name, root directory) or existing Vercel project (`deployment` on create). Whether a
+ * Local repository can deploy is the server's call. A composed stack sets up its hosts in `WizardHostsStep`.
  */
 export function WizardDeploymentStep({
   register,
@@ -23,13 +23,10 @@ export function WizardDeploymentStep({
 }: {
   register: UseFormRegister<WizardValues>
   errors: FieldErrors<WizardValues>
-  values: Pick<WizardValues, 'gitMode' | 'presetId' | 'deploymentMode' | 'vercelProjectMode' | 'vercelConnectionId'>
+  values: Pick<WizardValues, 'gitMode' | 'deploymentMode' | 'vercelProjectMode' | 'vercelConnectionId'>
 }) {
   const vercel = values.deploymentMode === 'vercel'
-  const connections = useVercelConnections(vercel)
-  const presets = usePresets(Boolean(values.presetId))
-  const preset = presets.data?.find((p) => p.id === values.presetId)
-  const deployingPreset = preset?.deployTargets.includes('vercel') ? preset : undefined
+  const connections = usePlatformConnections({ enabled: vercel, provider: 'vercel' })
 
   const own = connections.data ?? []
   const selected = own.find((c) => c.id === values.vercelConnectionId)
@@ -45,9 +42,7 @@ export function WizardDeploymentStep({
           {
             value: 'vercel',
             label: 'Vercel',
-            description: deployingPreset
-              ? `The ${deployingPreset.name} preset deploys to Vercel: a preview of every run and production on every release.`
-              : 'A preview of every run and production on every release (for a Next.js app).',
+            description: 'A preview of every run and production on every release (for a Next.js app).',
           },
         ]}
       />
@@ -70,7 +65,7 @@ export function WizardDeploymentStep({
               <p>
                 You have no Vercel connections yet. Add a token under{' '}
                 <Link to="/connections" className="font-medium text-primary underline underline-offset-2">
-                  Connections → Vercel
+                  Connections
                 </Link>{' '}
                 (what you entered here isn&apos;t kept), or skip deployment and set it up later in Settings → Deployment.
               </p>
@@ -89,7 +84,7 @@ export function WizardDeploymentStep({
                 {own.map((c) => (
                   <option key={c.id} value={c.id}>
                     {connectionLabel(c)}
-                    {c.teamSlug ? ` · team ${c.teamSlug}` : ''}
+                    {c.metadata.teamSlug ? ` · team ${c.metadata.teamSlug}` : ''}
                     {c.status === 'valid' ? '' : ` (${credentialStatusLabels[c.status].toLowerCase()})`}
                   </option>
                 ))}

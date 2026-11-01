@@ -1,0 +1,217 @@
+{
+  "id": "deploy-netlify",
+  "layer": "deploy",
+  "name": "Netlify",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "deploy-netlify",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Static",
+    "Next.js"
+  ],
+  "description": "Static SPAs and Next.js through Netlify's adapter, with an /api proxy in netlify.toml or _redirects.",
+  "defaultPath": null,
+  "publicEnvPrefix": null,
+  "runtime": null,
+  "modes": [],
+  "specSections": [
+    {
+      "title": "Environments & Configuration",
+      "guidance": "Per environment (production; preview = the version branch built as a branch deploy): the Netlify site URL, every env var per context (production, deploy-preview, branch-deploy) with build-time public values marked, the origin model (proxy via API_ORIGIN and the generated _redirects, or cross-origin with API_BASE_URL and CORS_ALLOWED_ORIGINS) and the backend URL each environment targets."
+    }
+  ],
+  "ownership": {
+    "deploy-engineer": [
+      "**/Dockerfile",
+      "**/.dockerignore",
+      "compose.yaml",
+      "**/nginx.conf",
+      "vercel.json",
+      "netlify.toml",
+      "**/_redirects",
+      "**/wrangler.jsonc",
+      ".github/workflows/pages.yml",
+      "render.yaml",
+      ".railway/**",
+      ".env.example"
+    ]
+  },
+  "agentSections": {
+    "deploy-engineer": [
+      "Supports",
+      "Prerequisites and auth",
+      "Config as code",
+      "Environment variables",
+      "Database",
+      "Deploy commands",
+      "Previews and promotion",
+      "Troubleshooting",
+      "Checklist"
+    ]
+  },
+  "planRules": {
+    "order": [],
+    "exclusive": [
+      {
+        "agent": "scaffolder",
+        "notWithGlobs": [
+          "netlify.toml",
+          "**/_redirects"
+        ],
+        "reason": "The deploy-engineer is the only agent for Netlify config (netlify.toml, _redirects) (§4.18)."
+      },
+      {
+        "agent": "data-engineer",
+        "notWithGlobs": [
+          "netlify.toml",
+          "**/_redirects"
+        ],
+        "reason": "The deploy-engineer is the only agent for Netlify config (netlify.toml, _redirects) (§4.18)."
+      },
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "netlify.toml",
+          "**/_redirects"
+        ],
+        "reason": "The deploy-engineer is the only agent for Netlify config (netlify.toml, _redirects) (§4.18)."
+      },
+      {
+        "agent": "frontend-engineer",
+        "notWithGlobs": [
+          "netlify.toml",
+          "**/_redirects"
+        ],
+        "reason": "The deploy-engineer is the only agent for Netlify config (netlify.toml, _redirects) (§4.18)."
+      },
+      {
+        "agent": "test-engineer",
+        "notWithGlobs": [
+          "netlify.toml",
+          "**/_redirects"
+        ],
+        "reason": "The deploy-engineer is the only agent for Netlify config (netlify.toml, _redirects) (§4.18)."
+      },
+      {
+        "agent": "ci-engineer",
+        "notWithGlobs": [
+          "netlify.toml",
+          "**/_redirects"
+        ],
+        "reason": "The deploy-engineer is the only agent for Netlify config (netlify.toml, _redirects) (§4.18)."
+      },
+      {
+        "agent": "docs-writer",
+        "notWithGlobs": [
+          "netlify.toml",
+          "**/_redirects"
+        ],
+        "reason": "The deploy-engineer is the only agent for Netlify config (netlify.toml, _redirects) (§4.18)."
+      }
+    ],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [],
+  "requiredEnv": [
+    {
+      "key": "API_ORIGIN",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": false,
+      "description": "The backend target URL for this environment; the frontend platform proxies /api/* to it (FR-146). Derived by AIDE.",
+      "when": "originModel == proxy"
+    },
+    {
+      "key": "AIDE_RUN_MIGRATIONS",
+      "appliesTo": [
+        "frontend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": false,
+      "description": "true where the environment has its own database (production; preview when a preview database exists), else false. The build runs the data pack's migrate command only when true (FR-154, D-V4-13). Derived by AIDE.",
+      "when": "nextjsMode == full-stack && data != none && data != data-supabase && databaseHost != none"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "netlify.toml has [build] ignore that exits 0 for aide/* branches",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Proxy origin model: _redirects is generated at build from API_ORIGIN; no backend host is hard-coded in netlify.toml or a committed _redirects",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "The SPA fallback is the last rule and no committed _redirects has a catch-all that shadows /api/*",
+        "category": "feature_coverage",
+        "severity": "minor"
+      },
+      {
+        "item": "netlify.toml command and publish directory match the frontend pack's build output",
+        "category": "architecture",
+        "severity": "minor"
+      },
+      {
+        "item": "Next.js full-stack migrations run only in the build gated by AIDE_RUN_MIGRATIONS",
+        "category": "data_model",
+        "severity": "major"
+      },
+      {
+        "item": "No tokens, site ids or .netlify/ in the repo",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "No CI job, script or package script deploys with the Netlify CLI; AIDE triggers every deploy",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": ".env.example lists every variable the app needs, with placeholders only",
+        "category": "feature_coverage",
+        "severity": "minor"
+      }
+    ],
+    "deterministic": [
+      "deploy_branch_control"
+    ]
+  },
+  "gate": null,
+  "migrate": null,
+  "deploy": {
+    "provider": "netlify",
+    "shapes": [
+      {
+        "id": "static",
+        "component": "frontend",
+        "runtimes": [
+          "static"
+        ]
+      },
+      {
+        "id": "nextjs",
+        "component": "frontend",
+        "runtimes": [
+          "node"
+        ]
+      }
+    ]
+  }
+}

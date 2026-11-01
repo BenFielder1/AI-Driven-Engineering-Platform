@@ -49,6 +49,7 @@ describe('/connections → GitHub (FR-81)', () => {
       account: { login: 'acme', type: 'organization' },
       repositorySelection: 'all',
       manageUrl: 'https://github.com/organizations/acme/settings/installations/9002',
+      pagesPermission: 'granted',
     })
     const { section } = await openConnections()
 
@@ -117,5 +118,27 @@ describe('/connections → GitHub (FR-81)', () => {
     configureGitHubApp()
     const { section } = await openConnections('/connections?error=GITHUB_AUTH_FAILED&reason=access_denied')
     expect(await within(section).findByText('GitHub authorization was cancelled.')).toBeInTheDocument()
+  })
+})
+
+describe('/connections → GitHub installations: Pages permission (FR-143)', () => {
+  it('FR143_installation_pages_missing: an installation without Pages says to update and accept the permissions', async () => {
+    const me = signInAs({ systemRole: 'user' })
+    connectGitHub(me.id, { login: 'ada' })
+    githubDb.installations.push({
+      id: 9002,
+      account: { login: 'acme', type: 'organization' },
+      repositorySelection: 'all',
+      manageUrl: 'https://github.com/organizations/acme/settings/installations/9002',
+      pagesPermission: 'missing',
+    })
+    const { section } = await openConnections()
+
+    const list = await within(section).findByRole('list', { name: 'GitHub App installations' })
+    const acme = within(list).getByRole('listitem', { name: 'acme' })
+    expect(within(acme).getByTestId('github-pages-permission-missing')).toHaveTextContent(
+      "Pages permission missing: update the App's permissions in GitHub, then accept them on each installation.",
+    )
+    expect(within(list).getByRole('listitem', { name: 'ada' })).not.toHaveTextContent('Pages permission missing')
   })
 })

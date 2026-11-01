@@ -18,6 +18,13 @@ public sealed class Release
 
     public string? MergeCommitSha { get; set; }
 
+    /// <summary>
+    /// FR-140: when AIDE sent the merge call of this attempt (Bitbucket merges can finish asynchronously, 202, or time out,
+    /// 555); <c>null</c> before. A rollback treats it like a recorded merge, and a retry that finds the pull request merged
+    /// knows the merge was AIDE's own.
+    /// </summary>
+    public DateTimeOffset? MergeSubmittedAt { get; set; }
+
     public string? PrUrl { get; set; }
 
     /// <summary>The GitHub Release created for the tag (FR-64); null for Local or before it exists.</summary>
@@ -42,6 +49,12 @@ public sealed class Release
 
     /// <summary>FR-65/FR-84: merge-readiness reasons the merge was refused, as raw JSON; null when not refused.</summary>
     public string? MergeReasons { get; set; }
+
+    /// <summary>FR-154, §4.21: the Supabase BaaS migration run of this release's production rollout; <c>null</c> when none ran.</summary>
+    public Guid? MigrationRunId { get; set; }
+
+    /// <summary>The release notes (always stored; the Bitbucket notes surface); <c>null</c> for releases before M30.</summary>
+    public string? ReleaseNotes { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 

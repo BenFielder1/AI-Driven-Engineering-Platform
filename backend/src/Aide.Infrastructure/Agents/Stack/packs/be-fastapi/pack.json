@@ -1,0 +1,181 @@
+{
+  "id": "be-fastapi",
+  "layer": "backend",
+  "name": "FastAPI",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "be-fastapi",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Python",
+    "FastAPI",
+    "Pydantic"
+  ],
+  "description": "A Python FastAPI service managed with uv, with Pydantic models and an OpenAPI export.",
+  "defaultPath": "backend",
+  "publicEnvPrefix": null,
+  "runtime": "python",
+  "modes": [],
+  "specSections": [
+    {
+      "title": "API Contract & Error Codes",
+      "guidance": "List every endpoint under /api with its method, route, operation ID (the route function name, which becomes the client method name), Pydantic request and response models, the auth dependency and ownership rule, and the status codes it returns. Give the error table: each UPPER_SNAKE errorCode, its HTTP status and when it applies; errors are application/problem+json {type, title, status, detail, errorCode}, and say whether validation errors are 400 or 422 (with an errors map). Name the auth scheme (signed session cookie for same-origin, OAuth2 bearer JWT for cross-origin) and the health endpoints /api/health/live and /api/health/ready."
+    }
+  ],
+  "ownership": {
+    "backend-engineer": [
+      "{be}/**",
+      "{be}/openapi/api.json",
+      "!{be}/alembic/**",
+      "!{be}/app/models/**",
+      "!{be}/**/Dockerfile",
+      "!{be}/**/.dockerignore",
+      "!{be}/**/.env.example",
+      "!{be}/**/vercel.json"
+    ],
+    "test-engineer": [
+      "{be}/tests/**"
+    ]
+  },
+  "agentSections": {
+    "scaffolder": [
+      "Detect",
+      "Scaffold",
+      "Conventions",
+      "Config and database URL"
+    ],
+    "backend-engineer": [
+      "*"
+    ],
+    "test-engineer": [
+      "Testing",
+      "Gate"
+    ],
+    "ci-engineer": [
+      "Gate"
+    ],
+    "deploy-engineer": [
+      "Containerise",
+      "Deploy notes"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{be}/openapi/api.json"
+        ],
+        "after": [
+          "{fe}/src/api/generated/**",
+          "{fe}/src/app/api/generated/**"
+        ],
+        "soft": true,
+        "reason": "Change the contract (backend/openapi/api.json) before regenerating the frontend client from it."
+      }
+    ],
+    "exclusive": [
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "{be}/alembic/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      }
+    ],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [
+    {
+      "glob": "{be}/openapi/api.json",
+      "handling": "hand_written",
+      "ciCheck": "cd {be} && uv run python scripts/export_openapi.py && git diff --exit-code openapi/api.json"
+    },
+    {
+      "glob": "{be}/uv.lock",
+      "handling": "ci_generated",
+      "ciCheck": null
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "DATABASE_URL",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": true,
+      "public": false,
+      "description": "The database URI; Settings normalises a postgres:// or postgresql:// scheme to postgresql+asyncpg:// and adds SSL for managed hosts.",
+      "when": "data != none"
+    },
+    {
+      "key": "CORS_ALLOWED_ORIGINS",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": false,
+      "description": "Comma-separated frontend origins CORSMiddleware allows (cross-origin model only).",
+      "when": "originModel == cross-origin"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Routers are thin and domain rules are pure Python in app/domain, unit-tested by FR.",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "Pydantic models are on every request and response (response_model); ORM objects are never returned directly.",
+        "category": "api_contracts",
+        "severity": "major"
+      },
+      {
+        "item": "Errors are application/problem+json carrying the spec's errorCode, with validation errors mapped as the spec says.",
+        "category": "api_contracts",
+        "severity": "major"
+      },
+      {
+        "item": "Auth dependencies plus ownership checks protect every protected route; CORSMiddleware is only used for cross-origin with explicit origins.",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "Settings are validated and the DATABASE_URL scheme is normalised; no secrets are committed.",
+        "category": "security",
+        "severity": "major"
+      },
+      {
+        "item": "Tests cover success, 400/422, 401, 403, 404, each errorCode and 409 per FR, against a testcontainers Postgres.",
+        "category": "testing",
+        "severity": "major"
+      },
+      {
+        "item": "Operation IDs are stable, openapi/api.json matches the export (CI freshness check), and ruff, mypy and pytest are green.",
+        "category": "api_contracts",
+        "severity": "major"
+      }
+    ],
+    "deterministic": [
+      "container_non_root",
+      "health_endpoints"
+    ]
+  },
+  "gate": [
+    "cd {be} && uv sync --frozen && uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest",
+    "cd {be} && uv run python scripts/export_openapi.py && git diff --exit-code openapi/api.json"
+  ],
+  "migrate": null,
+  "deploy": null
+}

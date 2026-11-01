@@ -37,7 +37,7 @@ test('NFR-TEST2, FR-55–FR-66, FR-90, FR-91: 0.1.0 is released live on Vercel, 
   await registerViaApi(context, 'versions', 'Versions Owner')
   await createVercelConnection(context, 'Fake Vercel')
 
-  // FR-5/FR-66/FR-88: the eight-step wizard, from scratch, Local, 0.1.0, no preset, strict, Vercel (Fake) deployment.
+  // FR-5/FR-66/FR-88: the eight-step wizard, from scratch, Local, 0.1.0, no stack (general), strict, Vercel (Fake) deployment.
   await page.goto('/projects/new')
   await expect(page.getByRole('heading', { name: 'Step 1 of 8: Source' })).toBeVisible()
   await page.getByRole('button', { name: 'Next' }).click()
@@ -49,7 +49,7 @@ test('NFR-TEST2, FR-55–FR-66, FR-90, FR-91: 0.1.0 is released live on Vercel, 
   await page.getByRole('button', { name: 'Next' }).click()
   await expect(page.getByLabel('Initial version')).toHaveValue('0.1.0')
   await page.getByRole('button', { name: 'Next' }).click()
-  await expect(page.getByRole('radio', { name: /^No preset \(general\)/ })).toBeChecked()
+  await expect(page.getByRole('radio', { name: /^No stack \(general\)/ })).toBeChecked()
   await page.getByRole('button', { name: 'Next' }).click()
   await page.getByRole('radio', { name: /^Strict/ }).check()
   await page.getByRole('button', { name: 'Next' }).click()
@@ -182,9 +182,9 @@ test('NFR-TEST2, FR-55–FR-66, FR-90, FR-91: 0.1.0 is released live on Vercel, 
   await page.getByRole('button', { name: 'Roll back…' }).click()
   const rollback = page.getByRole('alertdialog', { name: 'Roll back the project' })
   const targetSelect = rollback.getByLabel('Checkpoint to restore')
-  await expect(targetSelect.locator('option')).not.toHaveCount(1)
+  // The placeholder plus at least two checkpoints; 0 options means the list hasn't rendered yet.
+  await expect.poll(() => targetSelect.locator('option').count()).toBeGreaterThan(2)
   const optionTexts = (await targetSelect.locator('option').allTextContents()).slice(1)
-  expect(optionTexts.length).toBeGreaterThan(1)
   for (const text of optionTexts) {
     expect(text).toMatch(/^0\.2\.0 · checkpoint \d+ · /)
   }
@@ -259,12 +259,13 @@ test('NFR-TEST2, FR-55–FR-66, FR-90, FR-91: 0.1.0 is released live on Vercel, 
   expect(problem.errorCode).toBe('ROLLBACK_BLOCKED')
   expect(problem.details).toContain('reason: version_released')
 
-  // FR-91: the Deployments page lists both production deployments; 0.2.0's is live; an earlier one can be promoted.
+  // FR-91, FR-151: the Deployments page lists both production deployments; 0.2.0's is current; an earlier one can be
+  // promoted (Vercel's and the Fake's wording, FR-150).
   await page.goto(`/projects/${projectId}/deployments`)
-  await page.getByLabel('Target').selectOption('production')
+  await page.getByLabel('Environment').selectOption('production')
   const table = page.getByRole('table', { name: /^Deployments, newest first/ })
   await expect(table.getByRole('row')).toHaveCount(3)
-  const liveRow = table.getByRole('row').filter({ has: page.getByTestId('deployment-live') })
+  const liveRow = table.getByRole('row').filter({ has: page.getByTestId('deployment-current') })
   await expect(liveRow).toHaveCount(1)
   await expect(liveRow).toContainText('0.2.0')
   await table.getByRole('button', { name: /^Promote 0\.1\.0 / }).click()

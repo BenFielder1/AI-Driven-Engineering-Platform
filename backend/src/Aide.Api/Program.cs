@@ -7,22 +7,26 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Approvals;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
+using Aide.Api.Features.Bitbucket;
 using Aide.Api.Features.Connections;
+using Aide.Api.Features.Databases;
 using Aide.Api.Features.Deployments;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Git;
 using Aide.Api.Features.GitHub;
+using Aide.Api.Features.GitLab;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Live;
+using Aide.Api.Features.Llm;
 using Aide.Api.Features.Notifications;
-using Aide.Api.Features.Presets;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Refinement;
 using Aide.Api.Features.Release;
 using Aide.Api.Features.Review;
 using Aide.Api.Features.Rollback;
 using Aide.Api.Features.Runs;
+using Aide.Api.Features.Stack;
 using Aide.Api.Features.Tokens;
 using Aide.Api.Features.Versions;
 using Aide.Api.Health;
@@ -133,6 +137,12 @@ builder.Services.AddSingleton<GitHubManifestStates>();
 builder.Services.AddScoped<GitHubAppAdmin>();
 builder.Services.AddScoped<DeadLetterService>();
 
+// GitLab instances, sign-in and connect, connections and the repo picker (FR-130–FR-132).
+builder.Services.AddGitLab();
+
+// Bitbucket consumer, sign-in and connect, connections and the repo picker (FR-133–FR-135).
+builder.Services.AddBitbucket();
+
 // Lifecycle, gates and background work (FR-11–FR-14, §4.9).
 builder.Services.AddScoped<LifecycleSnapshotLoader>();
 builder.Services.AddScoped<LifecycleWriter>();
@@ -171,8 +181,12 @@ builder.Services.AddReleaseVersions();
 // Vercel deployments (FR-87–FR-91, §4.15): settings, env sync, previews, production and the poll job.
 builder.Services.AddDeployments();
 
-// Tech stack presets (FR-74): pinning and the preset API; the catalogue is loaded by the infrastructure.
-builder.Services.AddPresets();
+// Platform connections (FR-142): Vercel, Netlify, Cloudflare, Render, Railway and Supabase tokens and picker data.
+builder.Services.AddScoped<PlatformConnectionService>();
+
+
+// Stack compositions on projects and versions, Settings → Stack and import detection (FR-114–FR-119).
+builder.Services.AddProjectStacks();
 
 // Notifications (FR-47–FR-49, FR-15): fan-out job, channels, delivery retries, gate reminders, one-click approval links.
 builder.Services.AddNotifications();
@@ -184,7 +198,7 @@ builder.Services.AddOptions<SeedOptions>().BindConfiguration(SeedOptions.Section
 builder.Services.AddHostedService<DevSeeder>();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseReadyHealthCheck>("database", tags: [HealthEndpoints.ReadyTag])
-    .AddCheck<PresetsHealthCheck>("presets", tags: [HealthEndpoints.ReadyTag]);
+    .AddCheck<StackCatalogHealthCheck>("stack-catalog", tags: [HealthEndpoints.ReadyTag]);
 
 var app = builder.Build();
 
@@ -204,8 +218,11 @@ app.MapHealthEndpoints();
 app.MapAuthEndpoints();
 app.MapApiTokenEndpoints();
 app.MapLlmConnectionEndpoints();
-app.MapVercelConnectionEndpoints();
+app.MapLlmProviderEndpoints();
+app.MapPlatformConnectionEndpoints();
 app.MapGitHubEndpoints();
+app.MapGitLabEndpoints();
+app.MapBitbucketEndpoints();
 app.MapAdminUserEndpoints();
 app.MapAdminOperationsEndpoints();
 app.MapAdminIntegrationEndpoints();
@@ -213,6 +230,7 @@ app.MapProjectEndpoints();
 app.MapProjectMemberEndpoints();
 app.MapProjectSettingsEndpoints();
 app.MapDeploymentEndpoints();
+app.MapDatabaseEndpoints();
 app.MapLifecycleEndpoints();
 app.MapGateEndpoints();
 app.MapActivityEndpoints();
@@ -225,7 +243,7 @@ app.MapReviewEndpoints();
 app.MapReleaseEndpoints();
 app.MapRollbackEndpoints();
 app.MapVersionEndpoints();
-app.MapPresetEndpoints();
+app.MapStackEndpoints();
 app.MapNotificationEndpoints();
 app.MapApprovalEndpoints();
 app.MapLiveEndpoints();

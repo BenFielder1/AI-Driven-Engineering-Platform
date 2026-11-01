@@ -113,7 +113,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Which sign-in providers are configured, and how GitHub sign-in works (githubMode: app, oauth or none; D-V2-7). */
+        /** Which sign-in providers are configured, how GitHub sign-in works (githubMode: app, oauth or none; D-V2-7), and the GitLab instances offering "Continue with GitLab" (FR-131). */
         get: operations["GetAuthProviders"];
         put?: never;
         post?: never;
@@ -279,25 +279,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/connections/vercel": {
+    "/api/llm/providers": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The caller's Vercel connections, newest first (no tokens: label, last 4, account, team, scope, expiry, status, bound projects). */
-        get: operations["ListVercelConnections"];
+        /** FR-158: the LLM providers enabled on this server (disabled ones are never listed, FR-157), in the order anthropic, openai, ollama, fake, each with whether the caller can use it and why, the caller's connections for it (no keys), its model catalog (max output tokens, context window, recommended), its default model, and whether it is the provider a new project would default to for the caller (isDefault, FR-159). */
+        get: operations["ListLlmProviders"];
         put?: never;
-        /** Add a Vercel access token. It is checked with Vercel first (GET /v2/user, and the team for a team-scoped token): 400 CREDENTIAL_INVALID if rejected (nothing saved), 502 UPSTREAM_ERROR if Vercel can't be reached. Browser session only. */
-        post: operations["CreateVercelConnection"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/me/connections/vercel/{id}": {
+    "/api/me/connections/platforms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-142: the caller's platform connections (Vercel, Netlify, Cloudflare, Render, Railway, Supabase), newest first: label, last 4, account, metadata (teams, workspaces, orgs, policies, missing permissions), scopes, expiry, status and bound projects. Never the token. */
+        get: operations["ListPlatformConnections"];
+        put?: never;
+        /** FR-142: add a pasted platform token. It is checked with the platform first (§4.20 / §4.21): rejected → 400 CREDENTIAL_INVALID (nothing saved); a 403 for missing permissions saves it with status insufficient_scope and the missing names; a Cloudflare cfat_ token → 400 CONNECTION_SCOPE_INSUFFICIENT. Browser session only. */
+        post: operations["CreatePlatformConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/platforms/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -307,15 +324,15 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete one of the caller's Vercel connections. Projects it was bound to lose their binding (their deployment settings and history stay); new deployments then fail with DEPLOYMENT_NOT_CONFIGURED until an Owner binds another. Browser session only. */
-        delete: operations["DeleteVercelConnection"];
+        /** FR-142, FR-144: delete one of the caller's platform connections. Deployment targets bound to it lose their binding (targets and history stay); deployments then fail with DEPLOYMENT_NOT_CONFIGURED until an Owner binds another. Browser session only. */
+        delete: operations["DeletePlatformConnection"];
         options?: never;
         head?: never;
-        /** Rename one of the caller's Vercel connections. Browser session only. */
-        patch: operations["RenameVercelConnection"];
+        /** FR-142: rename one of the caller's platform connections. Browser session only. */
+        patch: operations["RenamePlatformConnection"];
         trace?: never;
     };
-    "/api/me/connections/vercel/{id}/test": {
+    "/api/me/connections/platforms/{id}/test": {
         parameters: {
             query?: never;
             header?: never;
@@ -324,8 +341,42 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Check the token with Vercel again and record the result (status valid or invalid, lastValidatedAt; account and team refreshed). 502 UPSTREAM_ERROR if Vercel can't be reached (status unchanged). Browser session only. */
-        post: operations["TestVercelConnection"];
+        /** FR-142: check the token with the platform again and record the result (valid, insufficient_scope with the missing names, or invalid — then its owner is notified; lastValidatedAt; account and metadata refreshed). 429 UPSTREAM_RATE_LIMITED or 502 UPSTREAM_ERROR leave the status unchanged. Browser session only. */
+        post: operations["TestPlatformConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/platforms/{id}/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-142 picker: the teams (Vercel), accounts (Netlify, Cloudflare), workspaces (Render, Railway) or organisations (Supabase) the connection's token reaches. A rejected token marks the connection invalid (its owner is notified). */
+        get: operations["ListPlatformConnectionAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/platforms/{id}/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-142 picker: the connection's resources of a type (default: the provider's first): Vercel projects; Netlify sites; Cloudflare workers or projects (Pages); Render services, regions or databases (Render Postgres); Railway projects, regions or databases (Postgres services); Supabase projects, orgs or regions. accountId scopes the list (default: the connection's account). A type the provider doesn't list → 400 VALIDATION. */
+        get: operations["ListPlatformConnectionResources"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -411,6 +462,410 @@ export interface paths {
         };
         /** FR-73, FR-86: a picked repository's default branch, whether it is empty, its releases and its tags (with their semantic versions). */
         get: operations["GetGitHubRepoRefs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/gitlab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-130: the GitLab instances (gitlab.com first; secrets as flags), the callback URL and scopes to register on each OAuth application, the minimum version and GitLab:AllowPrivateNetworks. Admins only. */
+        get: operations["GetAdminGitLabIntegration"];
+        put?: never;
+        /** FR-130: add a self-managed GitLab instance. The base URL is normalised and checked by the SSRF guard (§8: https only unless allowInsecureHttp; loopback, link-local, metadata and 0.0.0.0 always refused; private ranges only with GitLab:AllowPrivateNetworks) and GET /api/v4/version must answer like GitLab (401 counts as reachable; a version below 17.11 warns). Admins with a browser session only. */
+        post: operations["CreateAdminGitLabInstance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/gitlab/{instanceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-130: one GitLab instance. Admins only. */
+        get: operations["GetAdminGitLabInstance"];
+        put?: never;
+        post?: never;
+        /** FR-130: remove a GitLab instance no project uses, with its users' connections and sign-in links. gitlab.com and configured instances can't be removed (disable them). Admins with a browser session only. */
+        delete: operations["DeleteAdminGitLabInstance"];
+        options?: never;
+        head?: never;
+        /** FR-130: change a GitLab instance (name, base URL, OAuth application, allowInsecureHttp, enabled). A new base URL runs the SSRF guard and the reachability check. Configured instances only accept enabled. Admins with a browser session only. */
+        patch: operations["UpdateAdminGitLabInstance"];
+        trace?: never;
+    };
+    "/api/admin/integrations/gitlab/{instanceId}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-130: run the SSRF guard and the reachability check again and record the GitLab version. Admins with a browser session only. */
+        post: operations["CheckAdminGitLabInstance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/gitlab/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-131: redirects to the GitLab instance's OAuth authorize page (code + PKCE S256, scopes api write_repository openid profile email, signed single-use state bound to this browser). mode=signin ("Continue with GitLab", anonymous) or connect (Account → Connections; signed-in browser session). instanceId omitted = gitlab.com. returnUrl is a same-origin path. 404 when the instance doesn't exist, is disabled, or has no OAuth application. */
+        get: operations["StartGitLabOAuth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/gitlab/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-131: GitLab's redirect: checks the state, exchanges the code (with the PKCE verifier), reads the identity, then signs in (account matched by gitlab + instance + user id, or created for a new verified email; the first account becomes Admin), or links to the signed-in user, and stores the connection. Redirects to returnUrl; on failure to /login (sign-in) or returnUrl (connect) with error=GIT_AUTH_FAILED&reason=…&provider=gitlab; when the verified email belongs to an existing unlinked account, to /login?link=gitlab&returnUrl=… (confirm with POST /api/auth/gitlab/link). */
+        get: operations["GitLabOAuthCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/gitlab/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-131: the GitLab sign-in waiting in this browser to be linked to the existing account with the same verified email (10 minutes). 404 when there is none. */
+        get: operations["GetGitLabPendingLink"];
+        put?: never;
+        /** FR-131: the signed-in owner of the matching account confirms: the GitLab identity is linked (later sign-ins match it) and connected. Never done silently. Browser session only. */
+        post: operations["ConfirmGitLabLink"];
+        /** FR-131: discard this browser's pending GitLab link. */
+        delete: operations["CancelGitLabLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/gitlab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-131: the caller's GitLab connections, newest first (login, instance, auth kind, scopes, expiry and its 14-day warning, status; never a token). */
+        get: operations["ListGitLabConnections"];
+        put?: never;
+        /** FR-131 token fallback: save a personal, project or group access token with api and write_repository. Checked with GET /api/v4/user and GET /api/v4/personal_access_tokens/self first; nothing is saved on failure. instanceId omitted = gitlab.com. Browser session only. */
+        post: operations["CreateGitLabTokenConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/gitlab/instances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-131: the enabled GitLab instances the caller can connect to (oauthConfigured: OAuth connect offered; otherwise the token fallback only). */
+        get: operations["ListGitLabInstances"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/gitlab/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** FR-131, FR-136: delete one of the caller's GitLab connections (its tokens). Projects bound to it lose the binding until an Owner re-binds. Sign-in with GitLab keeps working and reconnects. Browser session only. */
+        delete: operations["DeleteGitLabConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/gitlab/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-131: check the connection with GitLab again (refreshing an OAuth token first when due) and record valid, invalid or insufficient_scope, scopes and expiry. Browser session only. */
+        post: operations["TestGitLabConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/git/gitlab/repos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-132: the GitLab projects the caller can develop in (membership, Developer or above), searchable by name, 30 per page newest first; pass nextCursor as cursor for the next page. */
+        get: operations["ListGitLabRepos"];
+        put?: never;
+        /** FR-132: create a GitLab project in the personal namespace or a group (owner = its full path), with initialize_with_readme and default_branch main, so main exists with a README. */
+        post: operations["CreateGitLabRepo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/git/gitlab/repos/{repoId}/refs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-141, FR-86: a GitLab repository's default branch, whether it is empty, its Releases and semver tags, with the released version to preselect and the version to develop (next minor) for the import. repoId is GitLab's project id; connectionId one of the caller's GitLab connections. */
+        get: operations["GetGitLabRepoRefs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/git/gitlab/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-132: where the caller can create a project: their personal namespace and the groups where they are Developer or above, with whether the group's project_creation_level allows them. */
+        get: operations["ListGitLabOwners"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/bitbucket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-133: the Bitbucket OAuth consumer (secret as a flag), where it comes from (database or Bitbucket__OAuth__* configuration), the callback URL and the consumer permissions to tick, and the number of Bitbucket connections. Admins only. */
+        get: operations["GetAdminBitbucketIntegration"];
+        /** FR-133: save the Bitbucket OAuth consumer's key and secret (encrypted; an omitted secret keeps the saved one). Admins with a browser session only. */
+        put: operations["UpdateAdminBitbucketIntegration"];
+        post?: never;
+        /** FR-133: remove the saved Bitbucket OAuth consumer. Sign-in and OAuth connect stop being offered and OAuth connections become invalid at their next refresh; API-token connections keep working. Admins with a browser session only. */
+        delete: operations["DeleteAdminBitbucketIntegration"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/bitbucket/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-134: redirects to Bitbucket's OAuth authorize page (authorization code; scopes fixed on the consumer; signed single-use state bound to this browser). mode=signin ("Continue with Bitbucket", anonymous) or connect (Account → Connections; signed-in browser session). returnUrl is a same-origin path. 404 when no consumer is configured. */
+        get: operations["StartBitbucketOAuth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/bitbucket/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-134: Bitbucket's redirect: checks the state, exchanges the code (client Basic auth), reads the identity (GET /2.0/user) and confirmed email (GET /2.0/user/emails), then signs in (account matched by bitbucket + account uuid, or created for a new confirmed email; the first account becomes Admin), or links to the signed-in user, and stores the connection. Redirects to returnUrl; on failure to /login (sign-in) or returnUrl (connect) with error=GIT_AUTH_FAILED&reason=…&provider=bitbucket; when the confirmed email belongs to an existing unlinked account, to /login?link=bitbucket&returnUrl=… (confirm with POST /api/auth/bitbucket/link). */
+        get: operations["BitbucketOAuthCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/bitbucket/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-134: the Bitbucket sign-in waiting in this browser to be linked to the existing account with the same confirmed email (10 minutes). 404 when there is none. */
+        get: operations["GetBitbucketPendingLink"];
+        put?: never;
+        /** FR-134, D-V4-18: the signed-in owner of the matching account confirms: the Bitbucket identity is linked (later sign-ins match it) and connected. Never done silently. Browser session only. */
+        post: operations["ConfirmBitbucketLink"];
+        /** FR-134: discard this browser's pending Bitbucket link. */
+        delete: operations["CancelBitbucketLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/bitbucket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-134: the caller's Bitbucket connections, newest first (login, account uuid, auth kind, scopes, status; never a token or an API token's email). */
+        get: operations["ListBitbucketConnections"];
+        put?: never;
+        /** FR-134 token fallback: save an Atlassian API token with the Bitbucket scopes read:user, read:workspace, read:project, read:repository, write:repository, admin:repository, read:pullrequest, write:pullrequest and read:pipeline, with its account email (Basic email:token). Checked with GET /2.0/user and a harmless call per scope first; nothing is saved on failure. App passwords aren't supported. Browser session only. */
+        post: operations["CreateBitbucketTokenConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/bitbucket/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** FR-134, FR-136: delete one of the caller's Bitbucket connections (its tokens). Projects bound to it lose the binding until an Owner re-binds. Sign-in with Bitbucket keeps working and reconnects. Browser session only. */
+        delete: operations["DeleteBitbucketConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/connections/bitbucket/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-134: check the connection with Bitbucket again (refreshing an OAuth token first when due; re-checking an API token's scopes) and record valid, invalid or insufficient_scope. Browser session only. */
+        post: operations["TestBitbucketConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/git/bitbucket/repos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-135: the Bitbucket repositories the caller can write to (role=contributor), across their workspaces one workspace at a time, searchable by name, 30 per page most recently updated first; pass nextCursor (workspace:page) as cursor for the next page. The workspace list is reused for five minutes. */
+        get: operations["ListBitbucketRepos"];
+        put?: never;
+        /** FR-135: create a Bitbucket repository in a workspace (owner = its slug) and project (its key), then push an initial commit with a README to main, so the default branch exists. The slug is Bitbucket's slug of the name. A retry after the README push failed finds the repository still empty and pushes the README instead of answering REPO_NAME_TAKEN. */
+        post: operations["CreateBitbucketRepo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/git/bitbucket/repos/{repoId}/refs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-141, FR-86: a Bitbucket repository's default branch (mainbranch.name), whether it is empty, its semver tags (refs/tags; Bitbucket has no Releases), with the released version to preselect (the highest semver tag) and the version to develop (next minor) for the import. repoId is the repository UUID ({…}); connectionId one of the caller's Bitbucket connections. */
+        get: operations["GetBitbucketRepoRefs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/git/bitbucket/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-135: where the caller can create a repository: their first 50 workspaces, each with its first 100 projects (Bitbucket requires a project); truncated and projectsTruncated say more exist. */
+        get: operations["ListBitbucketOwners"];
         put?: never;
         post?: never;
         delete?: never;
@@ -596,10 +1051,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and preset (FR-74: the current version's preset id, or none for projects without a preset) filters and sorting. Rows carry the released and in-development version badges (FR-62) and the preset chip. */
+        /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and, as history, the retired preset a migrated version was pinned to (FR-129). */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). presetId (FR-74, optional) is pinned on the version to develop; unknown: 400 PRESET_NOT_FOUND. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 VERCEL_GIT_NOT_CONNECTED, VERCEL_PLAN_LIMIT. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -614,7 +1069,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** §7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion and preset filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released). */
+        /** §7.2: the projects-list KPI row over the caller's projects (every project for Admins) matching the same search, phase, status, hasDevelopmentVersion and pack filters as ListProjects: total, active (not released), inReview (status reviewing), awaitingGates (pending gates across those projects) and released (status released). */
         get: operations["GetProjectKpis"];
         put?: never;
         post?: never;
@@ -726,7 +1181,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). */
+        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). */
         patch: operations["UpdateGitSettings"];
         trace?: never;
     };
@@ -761,7 +1216,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the LLM provider and models, and bind one of the caller's own connections (credentialId; null unbinds) (Owner). 403 CREDENTIAL_NOT_OWNER for another user's connection, 404 NOT_FOUND for an unknown one. */
+        /** Update the LLM provider and models, and bind one of the caller's own connections (credentialId; null unbinds) (Owner). 403 CREDENTIAL_NOT_OWNER for another user's connection, 404 NOT_FOUND for an unknown one, 400 LLM_PROVIDER_UNAVAILABLE when the provider (sent or kept) is disabled on this server (FR-157). */
         patch: operations["UpdateLlmSettings"];
         trace?: never;
     };
@@ -806,15 +1261,49 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Settings → Deployment for any member (FR-88): provider, supported, the binding ("connected by <name>", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the preset's required env vars with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not). */
+        /** Settings → Deployment for any member (FR-144–FR-146; D-V4-4 reshaped it): one target card per component the composition hosts (provider, binding with "connected by", resource, root directory, derived build config, URLs, status, setup job progress, capabilities, readiness), database cards (not_configured until M30), the environment inventory (keys only) and the origin model. */
         get: operations["GetDeploymentSettings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Set the deployment provider (vercel, or null to turn deployment off), bind one of the caller's own Vercel connections (connectionId), and link an existing Vercel project (vercelProjectId) or create one linked to the GitHub repo (create {name, rootDirectory}) (Owner, FR-88). A Local Git project can't deploy (400 VALIDATION). */
-        patch: operations["UpdateDeploymentSettings"];
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/targets/{component}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set up the component's target (Owner, FR-143, FR-144): bind one of the caller's own connections of the composition's host and create (create {name, region?, plan?}) or link (link {resourceId}) the platform resource. Answers 202 with the target (configuring); a deployment_setup job does the platform work and its progress is on the target. GitHub Pages needs no connection and enables Pages on the GitHub repository. */
+        put: operations["PutDeploymentTarget"];
+        post?: never;
+        /** Unbind and clear the component's target (Owner, FR-144). The platform resource is never deleted; deployments and env vars stay as history; derived env vars are recomputed. */
+        delete: operations["DeleteDeploymentTarget"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/targets/{component}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run the readiness checklist of the component's target with the platform (Owner, FR-144): connection, git_access, required_env, branch_control, preview_environment, plan_notes; each ok, warning, error or na with a message and an optional fix link. A ready target with an error item becomes attention. */
+        post: operations["VerifyDeploymentTarget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/projects/{id}/settings/deployment/env": {
@@ -824,7 +1313,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's environment variables (Owner, FR-88): key, targets, sensitive, hasValue (always true), updatedAt and the Vercel sync state. Values are never returned. */
+        /** The environment inventory (Owner, FR-145): user, derived and required variables with appliesTo, environments, sensitive, public, source, derivedFrom, hasValue and the sync state. Values are never returned. */
         get: operations["ListDeploymentEnv"];
         put?: never;
         post?: never;
@@ -842,10 +1331,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Create or replace an environment variable (Owner, FR-88): key ^[A-Za-z_][A-Za-z0-9_]*$ (up to 256), value up to 64 KB, targets preview and/or production, sensitive. The value is encrypted and pushed to Vercel (upsert by key and target). If the push fails the value is still saved, with syncError set, and the response is 502 UPSTREAM_ERROR; the next save or deployment pushes it again. */
+        /** Create or replace a user environment variable (Owner, FR-145): key ^[A-Za-z_][A-Za-z0-9_]*$ (up to 256), value up to 64 KB, targets preview and/or production, sensitive, appliesTo (frontend, backend; default frontend) and public (default: the key has the frontend's public prefix). VALIDATION for a derived key or a public value that looks secret ("secret values can't be public"). The value is encrypted and synced to the targets of its components; a failed sync keeps the value with syncError and answers 502 UPSTREAM_ERROR. */
         put: operations["PutDeploymentEnv"];
         post?: never;
-        /** Delete an environment variable in AIDE and in Vercel (Owner, FR-88). If Vercel can't delete it, nothing is deleted (502 UPSTREAM_ERROR) so it can be retried. */
+        /** Delete a user environment variable in AIDE and on its targets (Owner, FR-145). If a platform can't delete it, nothing is deleted (502 UPSTREAM_ERROR). Derived variables can't be deleted (VALIDATION). */
         delete: operations["DeleteDeploymentEnv"];
         options?: never;
         head?: never;
@@ -859,7 +1348,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's deployments, newest first (members, FR-91): target, version, SHA, state, URL, time and who triggered it. Filter by target (preview, production) and releaseVersionId. */
+        /** The project's deployments, newest first (members, FR-151): component, environment, provider, version, SHA, state, URL, time, who triggered it, and whether each can be rolled back to. Filter by component (frontend, backend), environment (preview, production; `target` is the v2 name) and releaseVersionId. */
         get: operations["ListDeployments"];
         put?: never;
         post?: never;
@@ -876,10 +1365,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** The project's persistent preview environment (members, FR-147, FR-148): the current preview rollout with each step (Supabase BaaS migrations → backend → frontend: state, URL, log tail, redeploy), notes (hosts without previews, preview using the production database) and whether the preview database diverged from the version branch (reset it to continue). */
+        get: operations["GetPreviewEnvironment"];
+        put?: never;
+        /** Roll the head of the version branch out to the preview environment now (writer, FR-147): a preview_rollout job deploys Supabase BaaS migrations, then the backend, then the frontend, each waiting for ready. Answers 202 with the queued rollout. */
+        post: operations["CreatePreviewDeployment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/deployments/{deploymentId}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get?: never;
         put?: never;
-        /** Deploy the head of the version branch as a preview now (writer, FR-90); AIDE polls it (§4.15). 409 DEPLOYMENT_NOT_CONFIGURED without deployment settings. */
-        post: operations["CreatePreviewDeployment"];
+        /** Make an earlier ready production deployment current again (Owner, FR-150), per the provider: Vercel promote, Netlify restore, Cloudflare Workers version at 100 %, Cloudflare Pages rollback. Git and the database are left alone. Records a rollback row (promote on Vercel). */
+        post: operations["RollbackDeployment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -895,7 +1402,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Promote an earlier ready production deployment (Owner, FR-91): a production rollback that leaves Git alone. Records a new promote row. 409 INVALID_DEPLOYMENT when the deployment isn't a ready production deployment. */
+        /** v2 name of rollback, kept as an alias for Vercel (FR-91, FR-150): the same action as POST …/rollback. */
         post: operations["PromoteDeployment"];
         delete?: never;
         options?: never;
@@ -914,6 +1421,92 @@ export interface paths {
         put?: never;
         /** Deploy the same commit again as a new row (FR-90, FR-91): a preview needs a writer, production an Owner. AIDE polls it (§4.15). */
         post: operations["RedeployDeployment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/databases/{environment}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the environment's database (Owner, FR-152): provider (the composition's database host; fake in Fake mode), one of the caller's own connections, and one of create {region, plan, name?}, link {resourceId} or external {connectionString} (External only, stored encrypted). Answers 202 with the database card (provisioning); a database_provisioning job creates or links it and polls until available (10 s, 10-minute ceiling), then derived env vars are synced. Job failures (DATABASE_PROVISIONING_FAILED, DATABASE_PROVISIONING_TIMEOUT, PLATFORM_PLAN_LIMIT, CREDENTIAL_INVALID, CONNECTION_SCOPE_INSUFFICIENT, UPSTREAM_ERROR) are on the card's provisioning. */
+        put: operations["PutManagedDatabase"];
+        post?: never;
+        /** Unlink the environment's database (Owner, FR-152). The platform resource is never deleted; migration runs stay; derived env vars are recomputed and synced. */
+        delete: operations["DeleteManagedDatabase"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/databases/{environment}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore a paused Supabase project (Owner, FR-152, §4.21 "Paused"): POST /projects/{ref}/restore, then a database_provisioning job polls until it is available. Answers 202 with the card (provisioning). */
+        post: operations["RestoreManagedDatabase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/databases/preview/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset the preview database (Owner, FR-148): a preview_database_reset job empties its schema (Supabase, External: AIDE connects; Render: over its external URL; Railway: the Owner empties it in Railway and AIDE records the reset) and, for Supabase BaaS, re-applies the base commit's migrations. Clears PREVIEW_DATABASE_DIVERGED; the next backend preview's pre-deploy re-applies every migration. Answers 202 with the job and method. */
+        post: operations["ResetPreviewDatabase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's Supabase BaaS migration runs, newest first (any member, FR-153, §7 Migrations): environment, commit, files with durations, status, error and advisor findings; ?releaseVersionId filters to one version. */
+        get: operations["ListMigrationRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/migrations/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One migration run (any member, FR-153). */
+        get: operations["GetMigrationRun"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1353,7 +1946,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: "AIDE will merge automatically", else "A merge on GitHub will be needed" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. The merge itself stays authoritative (FR-65). */
+        /** Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: "AIDE will merge automatically", else "A merge on GitHub will be needed" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65). */
         get: operations["GetMergeReadiness"];
         put?: never;
         post?: never;
@@ -1516,6 +2109,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/releases/{releaseId}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-140, D-V4-7: AIDE's full release notes of one release attempt (members): a succeeded Bitbucket release's (Bitbucket has no Releases; the annotated tag's message holds them); notes is null for other Git hosts or an attempt that hasn't succeeded. */
+        get: operations["GetReleaseNotes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/rollback": {
         parameters: {
             query?: never;
@@ -1557,10 +2167,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, preset and dates. */
+        /** The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, the retired preset of a migrated version (history, FR-129) and dates. */
         get: operations["ListReleaseVersions"];
         put?: never;
-        /** Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. */
+        /** Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. stack (FR-117, optional) is the new version's stack composition (validated like project create); omitted, the base version's composition is kept, re-pinned to the current catalog. */
         post: operations["StartReleaseVersion"];
         delete?: never;
         options?: never;
@@ -1585,15 +2195,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/presets": {
+    "/api/stack/catalog": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The tech stack presets (FR-74), ordered by id: name, version, description, stack chips, deployment targets and content hash. For the wizard's Stack step and the admin presets list. No preset (general) is the absence of one. */
-        get: operations["ListPresets"];
+        /** The stack catalog (FR-113): layers, choices in evaluation order with their options (chips, description, pack, pack version, stack-packs source, modes), the compatibility rule statements and the recommended combinations, plus the catalog version and content hash. */
+        get: operations["GetStackCatalog"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1602,24 +2212,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/presets/{presetId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** A preset in full (FR-74): specialist agents (owned paths, skills), extra spec sections with guidance, required environment variables, review checklist and deterministic rules, protected paths. */
-        get: operations["GetPreset"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{id}/preset": {
+    "/api/stack/options": {
         parameters: {
             query?: never;
             header?: never;
@@ -1628,12 +2221,81 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Option states for a partial composition (FR-114, FR-115, §4.17): every choice with each option's state (allowed, caveat, forbidden, or invalidated for a selection that earlier choices now forbid), the reasons (rule id and text), whether a recommended combination includes it, and the default to preselect. */
+        post: operations["GetStackOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stack/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate a composition (FR-116): the normalised composition with its derived fields (Next.js mode, specialists, origin model options, spec sections, env names, gates) and caveats. Left-out layers are None; the local dev loop and origin model take their defaults; vcs is required. */
+        post: operations["ValidateStack"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stack/detect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import detection (FR-118): reads the repository's file list and manifests at ref (default: the default branch) through the Git provider (github_app with the caller's GitHub connection, github_pat with an optional token, gitlab with the caller's GitLab connection on instanceId (FR-141), local under Git:Local:ImportRoot) and returns the suggested choices with their layer paths and evidence, and the conflicting ones (left empty, every candidate shown). The VCS layer is fixed to the repository's host. Nothing is stored. */
+        post: operations["DetectStack"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/stack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the retired v2 preset of a migrated version (legacyPreset, history: Preset <id>@<version> (retired, migrated)), and the VCS option fixed by the repository host (repoVcs). */
+        get: operations["GetProjectStack"];
+        /** Change the stack of the version in development (Owner, FR-117): validates the composition like POST /api/stack/validate plus R5 (the VCS layer is the repository's host; omitted, it is set from it), pins it with the current catalog version and hash (a migrated version keeps its retired preset as history), updates the project's stack packs and records STACK_CHANGED {from, to, layersChanged}. The pinned composition again changes nothing. Allowed until the version's first implementation plan is locked. */
+        put: operations["UpdateProjectStack"];
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Change the preset of the version in development (Owner, FR-74): pins the preset id, version and content hash on it and records PRESET_CHANGED. presetId null means no preset. Allowed until the version's first implementation plan is locked; a new version can pick another preset. */
-        patch: operations["UpdateProjectPreset"];
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/stack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin → Stack catalog (§6): the catalog version, content hash and load status, every load error, and each pack with its stack-packs source, version, content hash and load status. */
+        get: operations["GetAdminStackCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/me/notifications": {
@@ -1813,6 +2475,27 @@ export interface components {
             completedAt: null | string;
         };
         /**
+         * @description Admin → Integrations → Bitbucket (FR-133): the OAuth consumer and its registration help. `callbackUrl` is the exact
+         *     callback to enter on the consumer (`App:PublicBaseUrl` + `/api/auth/bitbucket/callback`); `permissions` are
+         *     the consumer permissions to tick (`account email repository:write repository:admin pullrequest:write project
+         *     webhook`; Bitbucket fixes scopes on the consumer). `source` is `configuration` when
+         *     `Bitbucket__OAuth__*` sets the consumer (then it can't be changed or removed here). The secret is a flag only
+         *     (`hasClientSecret`). `oauthConfigured`: key and secret are set, so "Continue with Bitbucket" and OAuth
+         *     connections work (API-token connections work without). `connectionCount` counts users' Bitbucket connections.
+         */
+        AdminBitbucketIntegrationDto: {
+            callbackUrl: string;
+            permissions: string[];
+            source: components["schemas"]["GitHostInstanceSource"];
+            clientId: null | string;
+            hasClientSecret: boolean;
+            oauthConfigured: boolean;
+            /** Format: int32 */
+            connectionCount: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /**
          * @description One entry of the cross-project admin event log (FR-51). `projectId`/`projectName` are `null` for events
          *     without a project (e.g. `PROJECT_DELETED`, whose project id is in the payload). `type` is the stored event
          *     type, `category` its activity-feed category (`null` for operations markers such as
@@ -1841,6 +2524,9 @@ export interface components {
          *     App field is `null` and `permissions` is empty). `installUrl` is
          *     `https://github.com/apps/{slug}/installations/new`; `permissions` are the App's granted permissions
          *     (e.g. `contents: write`); `canCreateRepositories` is true when `administration: write` is granted (§4.14).
+         *     `pagesPermission` (FR-143) is `granted` when the App has `pages: write`, `missing` for an App registered
+         *     before v4 ("Pages permission missing: update the App's permissions in GitHub, then accept them on each installation"),
+         *     and `unknown` when the App isn't configured or GitHub couldn't be asked.
          */
         AdminGitHubAppDto: {
             status: components["schemas"]["GitHubAppStatus"];
@@ -1856,16 +2542,88 @@ export interface components {
                 [key: string]: string;
             };
             canCreateRepositories: boolean;
+            pagesPermission: components["schemas"]["GitHubPagesAccess"];
+        };
+        /**
+         * @description A GitLab instance for Admins (FR-130). Secrets are flags only (`hasClientSecret`). `baseUrl` is the effective
+         *     base URL (`https://gitlab.com` for gitlab.com). `source` is `configuration` when
+         *     `GitLab__Instances__&lt;n&gt;__*` sets it (then only `enabled` can be changed here, and it can't be removed).
+         *     `oauthConfigured`: client id and secret are set, so "Continue with GitLab" and OAuth connections work (token connections
+         *     work without). `version` is from the last reachability check (`null` when GitLab answered 401 unauthenticated);
+         *     `versionStatus` is `supported` (17.11+), `old` (with `versionWarning`) or `unknown`.
+         *     `connectionCount`/`projectCount` are the users' connections and the projects using it (removal is refused
+         *     while `projectCount` &gt; 0).
+         */
+        AdminGitLabInstanceDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            baseUrl: string;
+            isGitLabCom: boolean;
+            source: components["schemas"]["GitHostInstanceSource"];
+            clientId: null | string;
+            hasClientSecret: boolean;
+            oauthConfigured: boolean;
+            allowInsecureHttp: boolean;
+            enabled: boolean;
+            version: null | string;
+            versionStatus: components["schemas"]["GitLabVersionVerdict"];
+            versionWarning: null | string;
+            /** Format: int32 */
+            connectionCount: number;
+            /** Format: int32 */
+            projectCount: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /**
+         * @description Admin → Integrations → GitLab (FR-130): the registration help and the instances. `callbackUrl` is the exact redirect
+         *     URI to register on every GitLab OAuth application (`App:PublicBaseUrl` + `/api/auth/gitlab/callback`);
+         *     `scopes` are the scopes to tick (`api write_repository openid profile email`); `minimumVersion` is
+         *     `17.11`; `allowPrivateNetworks` is `GitLab:AllowPrivateNetworks` (read-only configuration). gitlab.com is
+         *     always listed first.
+         */
+        AdminGitLabIntegrationDto: {
+            callbackUrl: string;
+            scopes: string[];
+            minimumVersion: string;
+            allowPrivateNetworks: boolean;
+            instances: components["schemas"]["AdminGitLabInstanceDto"][];
         };
         /**
          * @description §2 Admin: the system LLM key policy (D-V2-5). `allowSystemKeys` is `Llm:AllowSystemKeys` (configuration,
          *     read-only here: set `Llm__AllowSystemKeys` in `secrets.env` / user-secrets and restart). When it is on,
          *     projects with no bound connection use the system key of their provider; `systemKeyProviders` lists the
-         *     providers that have one configured (allowed or not). Keys are never returned.
+         *     providers that have one configured (allowed or not). Keys are never returned. Providers disabled on this deployment
+         *     (FR-157) are never listed.
          */
         AdminLlmPolicyDto: {
             allowSystemKeys: boolean;
             systemKeyProviders: components["schemas"]["LlmProvider"][];
+        };
+        /**
+         * @description Admin → Stack catalog (§6 `GET /api/admin/stack`): the catalog version and hash, whether it loaded (`loaded`
+         *     or `failed`), every load error, and each pack with its source, version, hash and load status.
+         */
+        AdminStackCatalogDto: {
+            version: null | string;
+            contentHash: string;
+            status: string;
+            errors: string[];
+            packs: components["schemas"]["AdminStackPackDto"][];
+        };
+        /** @description A pack folder: what its `pack.json` says (when readable), the SHA-256 of its files, and `loaded`/`failed` with the reasons. */
+        AdminStackPackDto: {
+            id: string;
+            layer: null | string;
+            name: null | string;
+            version: null | string;
+            source: null | components["schemas"]["StackPackSourceDto"];
+            contentHash: string;
+            status: string;
+            errors: string[];
         };
         /** @description A user as shown on the admin users page. */
         AdminUserDto: {
@@ -1892,6 +2650,14 @@ export interface components {
             state: components["schemas"]["ProjectStateDto"];
             gate: null | components["schemas"]["GateDto"];
         };
+        /** @description A Supabase security advisor finding recorded on a run (FR-153). */
+        AdvisorFindingDto: {
+            name: string;
+            level: string;
+            title: string;
+            detail: null | string;
+            remediation: null | string;
+        };
         /** @enum {unknown} */
         AgentJobTrigger: "user_requested" | "phase_entered" | "gate_rejected" | "artifact_rejected" | "artifact_corrupted" | null;
         /**
@@ -1912,7 +2678,9 @@ export interface components {
          *     to the first 200,000 characters (`outputTruncated`). The v2 fields are as on AgentRunDto.
          *     `toolCalls` is the run's repo tool log (FR-71: tool, arguments, bytes, truncated, error code) and `warnings`
          *     what was recorded on it (FR-70, FR-71): `tools_unsupported`, `snapshot_unavailable`,
-         *     `summary_wait_timeout`, `summary_unavailable`.
+         *     `summary_wait_timeout`, `summary_unavailable`, and `output_truncated` (FR-162). `continuations` is how
+         *     many continuations the answer took (0–5, FR-162) and `maxOutputTokens` the output token limit its calls used
+         *     (FR-160); both are `null` for runs stored before v4 and for runs that haven't succeeded.
          */
         AgentRunDetailDto: {
             /** Format: uuid */
@@ -1956,13 +2724,21 @@ export interface components {
             credentialLabel: null | string;
             toolCalls: components["schemas"]["ToolCallDto"][];
             warnings: string[];
+            /** Format: int32 */
+            continuations: null | number;
+            /** Format: int32 */
+            maxOutputTokens: null | number;
+            legacyAgentKey?: null | string;
         };
         /**
          * @description An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt
          *     template version and input artifact versions; its status, provider attempts (FR-25), token counts, estimated cost in
          *     USD, duration and error. `userFeedback` is the feedback or answers given to the agent. `releaseVersionId` is the
-         *     release version it ran for (§4.10). `checkpoint` is the checkpoint it ran at (null until recorded). `agentKey`,
-         *     `presetId` and `presetVersion` name the preset specialist (FR-76; null for base agents). `toolCallCount` is
+         *     release version it ran for (§4.10). `checkpoint` is the checkpoint it ran at (null until recorded). `agentKey`
+         *     is the specialist that ran a plan step (FR-121; `generalist` for a generalist step of a composed project; null for
+         *     base agents); `presetId`/`presetVersion` are history (FR-129: the retired preset of runs before the upgrade).
+         *     `legacyAgentKey` (§4.23) is the v2 agent key the run's step was planned with when it ran as its mapped v4
+         *     specialist (e.g. `db-engineer` for `data-engineer`); null otherwise. `toolCallCount` is
          *     the number of repo tool calls (FR-71). `credentialLabel` names the LLM connection that paid for the run,
          *     `Label (••••a1b2)` (FR-79, D-V2-5; null for a system key, a provider without a key, or a deleted connection).
          */
@@ -2004,6 +2780,7 @@ export interface components {
             /** Format: int32 */
             toolCallCount: number;
             credentialLabel: null | string;
+            legacyAgentKey?: null | string;
         };
         /**
          * @description Status of an agent run (FR-23, FR-25).
@@ -2180,11 +2957,119 @@ export interface components {
          * @description Which sign-in providers are available (the frontend hides "Continue with GitHub" when `github` is false).
          *     `githubMode` (D-V2-7) says how GitHub sign-in works: `app` (the AIDE GitHub App's user authorization flow
          *     with PKCE), `oauth` (the v1 OAuth App, only while no App is registered) or `none`; `github` is
-         *     `githubMode != none`.
+         *     `githubMode != none`. `gitlab` (FR-131) lists the enabled GitLab instances with an OAuth application: one
+         *     "Continue with GitLab" button each (`GET /api/auth/gitlab/start` with `instanceId` and `mode=signin`).
+         *     `bitbucket` (FR-134) is true when a Bitbucket OAuth consumer is configured: "Continue with Bitbucket"
+         *     (`GET /api/auth/bitbucket/start?mode=signin`) and OAuth connect are offered.
          */
         AuthProvidersDto: {
             github: boolean;
             githubMode: components["schemas"]["GitHubSignInMode"];
+            gitlab: components["schemas"]["GitLabInstanceSummaryDto"][];
+            bitbucket: boolean;
+        };
+        /**
+         * @description A Bitbucket connection of the caller (FR-134); never a token or the API token's email. `externalUserId` is the
+         *     Bitbucket account UUID. `authKind` is `oauth` or `token` (Atlassian API token); `scopes` as granted
+         *     (OAuth) or as checked (API token). `status`: `valid`, `invalid` (Bitbucket rejected it; reconnect) or
+         *     `insufficient_scope`.
+         */
+        BitbucketConnectionDto: {
+            /** Format: uuid */
+            id: string;
+            login: string;
+            externalUserId: string;
+            authKind: components["schemas"]["GitConnectionAuthKind"];
+            scopes: string[];
+            status: components["schemas"]["GitConnectionStatus"];
+            /** Format: date-time */
+            lastValidatedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /**
+         * @description Where the caller can create a Bitbucket repository (FR-135): their first 50 workspaces with their projects;
+         *     `truncated` says the caller has more workspaces than are listed.
+         */
+        BitbucketOwnersDto: {
+            workspaces: components["schemas"]["BitbucketWorkspaceDto"][];
+            truncated: boolean;
+        };
+        /**
+         * @description FR-134 sign-in: Bitbucket's verified email belongs to an existing AIDE account that isn't linked to this Bitbucket
+         *     identity. AIDE never links silently (D-V4-18): the user signs in to that account (any method) and confirms with
+         *     `POST /api/auth/bitbucket/link`, or cancels with `DELETE /api/auth/bitbucket/link`. Expires after 10 minutes.
+         */
+        BitbucketPendingLinkDto: {
+            login: string;
+            email: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        /** @description A project in a workspace (FR-135); pass `key` as `project` when creating a repository. */
+        BitbucketProjectDto: {
+            key: string;
+            name: string;
+            isPrivate: null | boolean;
+        };
+        /**
+         * @description A Bitbucket repository for the repo picker (FR-135). `id` is Bitbucket's repository UUID; `fullName` is
+         *     `workspace/slug`; `mainBranch` is `null` for an empty repository.
+         */
+        BitbucketRepoDto: {
+            id: string;
+            fullName: string;
+            name: string;
+            slug: string;
+            workspace: null | string;
+            projectKey: null | string;
+            mainBranch: null | string;
+            isPrivate: boolean;
+            webUrl: null | string;
+            /** Format: date-time */
+            updatedOn: null | string;
+        };
+        /**
+         * @description One page of repositories (one workspace at a time, most recently updated first); pass `nextCursor` as
+         *         `cursor` for the next (`null` = last page).
+         */
+        BitbucketRepoPageDto: {
+            items: components["schemas"]["BitbucketRepoDto"][];
+            nextCursor: null | string;
+        };
+        /**
+         * @description What the wizard needs about a picked Bitbucket repository (FR-141, FR-86): its `workspace/slug`, default branch
+         *     (`mainbranch.name`), whether it is `empty` (no commits, or only starter files), its tags (Bitbucket has no
+         *     Releases, D-V4-7), and the import's suggestion: the released version to preselect (the highest semver tag; `null` =
+         *     "Never released") and the version to develop it prefills (its next minor, else `0.1.0`).
+         */
+        BitbucketRepoRefsDto: {
+            fullName: string;
+            defaultBranch: string;
+            empty: boolean;
+            tags: components["schemas"]["BitbucketTagDto"][];
+            preselectedTag: null | string;
+            suggestedDevelopmentVersion: string;
+        };
+        /** @description A semver-or-other tag of a Bitbucket repository; `semver` is its version (the `v` prefix stripped), or `null`. */
+        BitbucketTagDto: {
+            name: string;
+            sha: string;
+            semver: null | string;
+        };
+        /**
+         * @description A workspace the caller can access (FR-135) with the first 100 of its projects (`projectsTruncated`: it has more).
+         *     Pass `slug` as `owner` when creating. `isAdmin` is whether the caller administers the workspace, when
+         *     Bitbucket says.
+         */
+        BitbucketWorkspaceDto: {
+            slug: string;
+            name: string;
+            isAdmin: null | boolean;
+            projects: components["schemas"]["BitbucketProjectDto"][];
+            projectsTruncated: boolean;
         };
         /**
          * @description One compliance category (§4.7): its weight, the agent's score (0–1), the deterministic penalty (sum of the fixed
@@ -2392,6 +3277,17 @@ export interface components {
             /** Format: double */
             threshold: number;
         };
+        /**
+         * @description FR-151: the production URL of one component on the project overview: its platform, the URL (`null` until known)
+         *     and the deployment production serves now (`null` before the first ready production deployment).
+         */
+        ComponentProductionUrlDto: {
+            component: components["schemas"]["DeploymentComponent"];
+            provider: components["schemas"]["DeploymentProvider"];
+            url: null | string;
+            /** Format: uuid */
+            deploymentId: null | string;
+        };
         /** @description Confirms the decision of a one-click approval link; `comment` is optional (feedback on reject). */
         ConfirmApprovalLinkRequest: {
             comment?: null | string;
@@ -2416,6 +3312,36 @@ export interface components {
             baseVersion?: null | number;
         };
         /**
+         * @description Create a Bitbucket repository (FR-135) with the caller's connection `connectionId` in workspace `owner` and
+         *     project `project` (its key; Bitbucket requires one). The slug is Bitbucket's slug of `name`. AIDE then pushes an
+         *     initial commit with a README to `main`, so the default branch exists. `private` defaults to true.
+         */
+        CreateBitbucketRepoRequest: {
+            /** Format: uuid */
+            connectionId: string;
+            owner: string;
+            project: string;
+            name: string;
+            description?: null | string;
+            private?: boolean;
+        };
+        /**
+         * @description FR-134 token fallback: an Atlassian API token with the scopes `read:user`, `read:workspace`,
+         *     `read:project`, `read:repository`, `write:repository`, `admin:repository`, `read:pullrequest`,
+         *     `write:pullrequest` and `read:pipeline` (all `:bitbucket`), and the Atlassian account `email` it
+         *     belongs to. App passwords aren't supported. Nothing is saved unless the token passes the checks.
+         */
+        CreateBitbucketTokenConnectionRequest: {
+            token: string;
+            email: string;
+        };
+        /** @description FR-144: create a platform resource: its name (letters, digits, `.`, `_`, `-`), and region and plan where the platform has them. */
+        CreateDeploymentResourceRequest: {
+            name: string;
+            region?: null | string;
+            plan?: null | string;
+        };
+        /**
          * @description Start the GitHub App manifest flow (FR-80): the App is owned by the Admin's personal account (`user`) or by the
          *     organisation `org` (required for `organization`, ignored for `user`).
          */
@@ -2435,6 +3361,44 @@ export interface components {
             private: boolean;
         };
         /**
+         * @description Add a self-managed GitLab instance (FR-130). `baseUrl` must be `https://` (or `http://` with
+         *     `allowInsecureHttp`); it is normalised, checked by the SSRF guard (§8) and probed with `GET /api/v4/version`.
+         *     gitlab.com is always listed already (edit it to add its OAuth application). `clientId`/`clientSecret` are the
+         *     GitLab OAuth application's id and secret (optional: token connections work without).
+         */
+        CreateGitLabInstanceRequest: {
+            name: string;
+            baseUrl: string;
+            clientId?: null | string;
+            clientSecret?: null | string;
+            allowInsecureHttp?: boolean;
+            enabled?: boolean;
+        };
+        /**
+         * @description Create a GitLab project (FR-132) with the caller's connection `connectionId`, in namespace `owner` (a
+         *     `fullPath` from the owners list), initialised with a README so `main` exists and is the default branch.
+         *     `path` defaults to GitLab's slug of `name`. `private` (default true) sets visibility private, else public.
+         */
+        CreateGitLabRepoRequest: {
+            /** Format: uuid */
+            connectionId: string;
+            owner: string;
+            name: string;
+            path?: null | string;
+            description?: null | string;
+            private?: boolean;
+        };
+        /**
+         * @description FR-131 token fallback: a personal, project or group access token with `api` and `write_repository` for the
+         *     instance (`instanceId` omitted = gitlab.com). Validated with `GET /api/v4/user` and
+         *     `GET /api/v4/personal_access_tokens/self`; nothing is saved unless it passes.
+         */
+        CreateGitLabTokenConnectionRequest: {
+            /** Format: uuid */
+            instanceId?: null | string;
+            token: string;
+        };
+        /**
          * @description Add an LLM connection (FR-78): `anthropic` or `openai`, a label and the key. The key is checked with
          *         the provider before anything is saved.
          */
@@ -2442,6 +3406,25 @@ export interface components {
             provider: components["schemas"]["LlmProvider"];
             label: string;
             apiKey: string;
+        };
+        /** @description FR-152: provision a database: region (Supabase: a region code or americas/emea/apac; Render: defaults to the backend's), plan, and an optional name. */
+        CreateManagedDatabaseRequest: {
+            region?: null | string;
+            plan?: null | string;
+            /** @description The resource name; defaults to the project's name (Render preview: `&lt;name&gt;-preview`). */
+            name?: null | string;
+        };
+        /**
+         * @description Add a platform connection (FR-142, §4.20): the provider, a label and the pasted token, plus optionally the account it
+         *     is for (`accountId`: a team, account, workspace or organisation id the token reaches; required for a Railway
+         *     workspace token, which can't name its workspace itself). The token is checked with the platform before anything is
+         *     saved.
+         */
+        CreatePlatformConnectionRequest: {
+            provider: components["schemas"]["PlatformProvider"];
+            label: string;
+            token: string;
+            accountId?: null | string;
         };
         /**
          * @description Deployment step of the new-project wizard (FR-88): `provider` `vercel`, one of the caller's own Vercel
@@ -2464,7 +3447,10 @@ export interface components {
          *     when both are sent they must be equal (else 400 `VALIDATION` on `git.mode`).
          */
         CreateProjectGitRequest: {
-            /** @description The Git provider (FR-82): `github_app`, `github_pat` or `local`. */
+            /**
+             * @description The Git provider (FR-82, FR-136): `github_app`, `github_pat`, `gitlab`, `bitbucket` or
+             *         `local`.
+             */
             mode?: components["schemas"]["GitProvider"];
             /** @description v1 alias of `mode` (deprecated; send `mode`). */
             provider?: components["schemas"]["GitProvider"];
@@ -2473,8 +3459,32 @@ export interface components {
              * @description `github_app`: the App installation that grants access to the repo (from the repo picker).
              */
             installationId?: null | number;
-            /** @description `github_app`: the repository as `owner/name`. */
+            /**
+             * @description `github_app`: the repository as `owner/name`. `gitlab`: its `group/sub/project` path (the
+             *         stored path is the one GitLab reports for `repoId`). `bitbucket`: its `workspace/slug` (the stored one
+             *         is what Bitbucket reports for `repoId`).
+             */
             repoFullName?: null | string;
+            /**
+             * Format: uuid
+             * @description `gitlab` (FR-132, FR-136): the GitLab instance of the repository (from the repo picker). Required with gitlab and
+             *     not used otherwise (400 `VALIDATION`).
+             */
+            instanceId?: null | string;
+            /**
+             * Format: uuid
+             * @description `gitlab`, `bitbucket` (FR-136): one of the caller's own valid GitLab connections on `instanceId`, or
+             *     Bitbucket connections, bound to the project: all background Git work uses it. Another user's connection is 403
+             *     `CREDENTIAL_NOT_OWNER`; a missing one 404 `NOT_FOUND`; an invalid one or a disabled instance 409
+             *     `GIT_NOT_CONNECTED`; a connection on another instance 400 `VALIDATION`. Not used with other modes.
+             */
+            connectionId?: null | string;
+            /**
+             * @description `gitlab` (FR-132): GitLab's project id; `bitbucket` (FR-135): the repository UUID (`{…}`); both from
+             *     the repo picker. The caller needs GitLab Developer access or higher, or Bitbucket `write`/`admin`, on it
+             *     (403 `FORBIDDEN`; 404 `NOT_FOUND` when the connection can't see it). Not used with other modes.
+             */
+            repoId?: null | string;
             /** @description Required for `github_pat`: `https://github.com/OWNER/REPO`, optionally ending in `.git`. */
             repoUrl?: null | string;
             defaultBranch?: string;
@@ -2497,6 +3507,22 @@ export interface components {
         CreateProjectImportRequest: {
             releasedTag?: null | string;
             developmentVersion: string;
+        };
+        /**
+         * @description FR-159: the LLM choice of a new project. `provider` must be enabled and usable by the caller (else 400
+         *     `LLM_PROVIDER_UNAVAILABLE`). `credentialId` binds one of the caller's own connections for that provider, as
+         *     `PATCH …/settings/llm` does (FR-79: 403 `CREDENTIAL_NOT_OWNER` for another user's, 404 `NOT_FOUND` for an
+         *     unknown one, 400 `VALIDATION` for one of another provider); omitted, a provider that needs a key and has no usable
+         *     system key is bound to the caller's newest connection for it. `defaultModel` is required (400 `VALIDATION`
+         *     when blank) and need not be in the catalog. `modelsByAgent` overrides models per agent; omitted, the provider's
+         *     configured per-agent defaults apply.
+         */
+        CreateProjectLlmRequest: {
+            provider: components["schemas"]["LlmProvider"];
+            /** Format: uuid */
+            credentialId?: null | string;
+            defaultModel: string;
+            modelsByAgent?: null | components["schemas"]["AgentModelsDto"];
         };
         /** @description The new-project wizard (FR-5). Omitted settings take the FR-5 defaults. */
         CreateProjectRequest: {
@@ -2526,20 +3552,9 @@ export interface components {
              */
             source?: components["schemas"]["ProjectSource"];
             import?: null | components["schemas"]["CreateProjectImportRequest"];
-            /**
-             * @description FR-74 (wizard Stack step): a preset id from `GET /api/presets`, pinned (with its version and content hash) on
-             *     the version to develop; omitted or `null` = no preset (general). Unknown: 400 `PRESET_NOT_FOUND`.
-             */
-            presetId?: null | string;
+            stack?: null | components["schemas"]["StackCompositionRequest"];
             deployment?: null | components["schemas"]["CreateProjectDeploymentRequest"];
-        };
-        /**
-         * @description Add a Vercel connection (FR-87): a label and an access token (team- or account-scoped, ideally with an expiry).
-         *         The token is checked with Vercel before anything is saved.
-         */
-        CreateVercelConnectionRequest: {
-            label: string;
-            token: string;
+            llm?: null | components["schemas"]["CreateProjectLlmRequest"];
         };
         /** @description FR-88: create a new Vercel project linked to the GitHub repo (framework `nextjs`). */
         CreateVercelProjectRequest: {
@@ -2556,6 +3571,25 @@ export interface components {
             token: string;
             /** Format: date-time */
             expiresAt: null | string;
+        };
+        /**
+         * @description FR-152: the `database_provisioning` job of a database card: `state` (`queued`, `running`,
+         *     `succeeded`, `failed`), the current `step` (`queued`, `creating`, `linking`,
+         *     `waiting`, `syncing_env`), and on failure the error code (`DATABASE_PROVISIONING_FAILED`,
+         *     `DATABASE_PROVISIONING_TIMEOUT`, `PLATFORM_PLAN_LIMIT`, `CREDENTIAL_INVALID`,
+         *     `CONNECTION_SCOPE_INSUFFICIENT`, `UPSTREAM_ERROR`, `VALIDATION`) and message.
+         */
+        DatabaseProvisioningDto: {
+            /** Format: uuid */
+            jobId: null | string;
+            state: string;
+            step: null | string;
+            errorCode: null | string;
+            errorMessage: null | string;
+            /** Format: date-time */
+            startedAt: null | string;
+            /** Format: date-time */
+            finishedAt: null | string;
         };
         /**
          * @description A dead-lettered job (FR-51, §4.9): its type, project, status (`dead`, or `retried` once an Admin retried
@@ -2602,33 +3636,90 @@ export interface components {
             action: components["schemas"]["FileAction"];
             protected: boolean;
         };
+        /** @description The build configuration AIDE derived from the composition (§4.20); each field is `null` when it doesn't apply. */
+        DeploymentBuildConfigDto: {
+            framework: null | string;
+            buildCommand: null | string;
+            outputDirectory: null | string;
+            startCommand: null | string;
+            dockerfilePath: null | string;
+            healthCheckPath: null | string;
+            preDeployCommand: null | string;
+        };
+        /** @description §4.20 capabilities of the target's provider. */
+        DeploymentCapabilitiesDto: {
+            shaPinned: boolean;
+            previews: boolean;
+            rollback: boolean;
+            perEnvironmentVariables: boolean;
+            runtimeSecrets: boolean;
+        };
         /**
-         * @description The project's Vercel binding (FR-88): which connection, "connected by &lt;name&gt;", and the connection's status.
-         *         Never the token.
+         * @description A deployable component of a project (FR-144). Wire values: `frontend`, `backend`.
+         * @enum {unknown}
          */
-        DeploymentBindingDto: {
-            /** Format: uuid */
-            connectionId: string;
-            label: string;
-            last4: string;
-            teamSlug: null | string;
-            boundBy: components["schemas"]["DeploymentUserDto"];
-            status: components["schemas"]["VercelConnectionStatus"];
+        DeploymentComponent: "frontend" | "backend";
+        /**
+         * @description FR-152 database card (Settings → Deployment `databases[]`, one per environment when the composition has a
+         *     database host or a database is set): `provider` (`supabase`, `render`, `railway`, `external`,
+         *     `fake`), `status` (`not_configured`, `provisioning`, `available`, `error`, `paused`,
+         *     `expiring`, `removed`), the composition's `hostOption`, the binding ("connected by"), the resource, region,
+         *     plan, expiry, the dashboard link (`resourceUrl`), a connection summary without secrets (host, port, database), the
+         *     Supabase permissions the connection lacks (e.g. "API Key Secrets: Read"), the provisioning job, and `warnings`
+         *     (`render_free_expiry`, `supabase_free_pausing`, `supabase_free_project_limit`,
+         *     `preview_uses_production_database`). Secrets are never returned. FR-148: on the preview card,
+         *     `resetRecommended` is true when the preview database has migrations the version branch no longer has (e.g. after a
+         *     rollback that removed migrations): offer "Reset preview database" (`POST …/databases/preview/reset`).
+         */
+        DeploymentDatabaseDto: {
+            environment: components["schemas"]["DeploymentEnvironment"];
+            provider: string;
+            status: string;
+            hostOption: null | string;
+            inComposition: boolean;
+            needsConnection: boolean;
+            binding: null | components["schemas"]["DeploymentTargetBindingDto"];
+            canBind: boolean;
+            resourceId: null | string;
+            name: null | string;
+            region: null | string;
+            plan: null | string;
+            /** Format: date-time */
+            expiresAt: null | string;
+            paused: boolean;
+            canRestore: boolean;
+            resourceUrl: null | string;
+            connectionSummary: null | string;
+            missingPermissions: string[];
+            provisioning: null | components["schemas"]["DatabaseProvisioningDto"];
+            warnings: string[];
+            /** Format: date-time */
+            updatedAt: null | string;
+            /** @default false */
+            resetRecommended: boolean;
         };
         /**
          * @description A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |
          *     canceled`. `url` is the deployment URL once known, `inspectorUrl` Vercel's inspector page. `gitRef`
          *     and `gitSha` are what was deployed; `releaseVersion` is the version (e.g. `1.2.0`) of
          *     `releaseVersionId`; `releaseId` is the release attempt of a production deployment (`null` for previews).
-         *     A failed deployment carries `errorCode` (`VERCEL_ERROR`, `DEPLOYMENT_TIMEOUT`), `errorMessage` and
+         *     A failed deployment carries `errorCode` (`PLATFORM_ERROR`, formerly `VERCEL_ERROR`; `DEPLOYMENT_TIMEOUT`), `errorMessage` and
          *     `buildLogTail` (the end of the build log). `trigger` is `auto` (AIDE, after execution or the release
          *     merge), `manual`, `promote` or `redeploy`; `triggeredBy` is `null` for `auto` (or a
-         *     deleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` row promoted.
+         *     deleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` (or
+         *     `rollback`) row made current again.
+         *     FR-150, FR-151: `component` (`frontend`, `backend`), `kind` (`deploy`, `rollback`,
+         *     `promote`), `platform` (the target's host; `provider` is `fake` in Fake mode), `current` (the
+         *     deployment production serves now, per component), `canRollback` with `rollbackBlockedReason` when false
+         *     (`unsupported`, `not_production`, `not_ready`, `unknown_at_platform`, `current`), and
+         *     `olderThanLatestMigration` (FR-150, the rollback dialog's database warning: the production deployment was created
+         *     before the latest migration reached production — the latest Supabase BaaS production run that applied files, or in host
+         *     mode the latest ready production backend deploy whose pre-deploy ran; `null` = no migration known, or a preview).
          */
         DeploymentDto: {
             /** Format: uuid */
             id: string;
-            target: components["schemas"]["DeploymentTarget"];
+            target: components["schemas"]["DeploymentEnvironment"];
             provider: components["schemas"]["DeploymentProvider"];
             status: components["schemas"]["DeploymentStatus"];
             url: null | string;
@@ -2651,48 +3742,109 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             readyAt: null | string;
+            component: components["schemas"]["DeploymentComponent"];
+            kind: components["schemas"]["DeploymentKind"];
+            platform: components["schemas"]["DeploymentProvider"];
+            current: boolean;
+            canRollback: boolean;
+            rollbackBlockedReason: null | string;
+            olderThanLatestMigration: null | boolean;
+        };
+        /** @description The environment inventory (FR-145): the frontend pack's public prefix (`NEXT_PUBLIC_`, `VITE_`, or `null`) and the rows. */
+        DeploymentEnvInventoryDto: {
+            publicPrefix: null | string;
+            variables: components["schemas"]["DeploymentEnvVarDto"][];
         };
         /**
-         * @description A project environment variable (FR-88, Owner only). The value is never returned: `hasValue` is always `true`.
-         *     `syncedAt` is when the current value was pushed to Vercel (`null`: not yet); `syncError` is the last push
-         *     failure (`null` after a successful push).
+         * @description Who wrote an environment variable (FR-145). Wire values: `user`, `derived`; `required` is an
+         *                 inventory row only (a pack's required variable without a value), never stored.
+         * @enum {unknown}
+         */
+        DeploymentEnvSource: "user" | "derived" | "required";
+        /**
+         * @description One row of the environment inventory (FR-145): `key`, the components it applies to, its environments, whether it is
+         *     sensitive or public, its `source` (`user`, `derived`, `required`), what a derived one comes from
+         *     (`derivedFrom`), a required one's `description`, `hasValue` (required rows and derived rows without a
+         *     source URL yet: `false`; values are never returned), and the sync state (`syncedAt`, `syncError`).
          */
         DeploymentEnvVarDto: {
             key: string;
-            targets: components["schemas"]["DeploymentTarget"][];
+            appliesTo: components["schemas"]["DeploymentComponent"][];
+            environments: components["schemas"]["DeploymentEnvironment"][];
             sensitive: boolean;
+            public: boolean;
+            source: components["schemas"]["DeploymentEnvSource"];
+            derivedFrom: null | string;
+            description: null | string;
             hasValue: boolean;
             /** Format: date-time */
-            updatedAt: string;
+            updatedAt: null | string;
             /** Format: date-time */
             syncedAt: null | string;
             syncError: null | string;
         };
         /**
-         * @description Deployment provider (§4.15). Wire values: `vercel`, `fake` (deterministic, tests and E2E).
+         * @description Deployment environment (FR-147, FR-149), also a Vercel env target (FR-88). Wire values: `preview`,
+         *                 `production`.
          * @enum {unknown}
          */
-        DeploymentProvider: "vercel" | "fake";
+        DeploymentEnvironment: "preview" | "production";
         /**
-         * @description Settings → Deployment (FR-88), for any member. `provider` is `vercel` (or `fake` in test environments)
-         *     once deployment is set, else `null`. `supported`: the preset supports Vercel, or an Owner opted in by setting
-         *     a provider. `binding` is the bound connection ("connected by &lt;name&gt;"; `null`: none) and `canBind`
-         *     whether the caller may bind one of their own (Owners). `vercelProject` is the linked Vercel project (`null`:
-         *     none yet). `rootDirectory` and `framework` are what the Vercel project builds. `requiredEnv` lists the
-         *     preset's required env vars with `present`. `gitConnected` is whether Vercel's GitHub App can access the repo
-         *     (`null`: not checked), with Vercel's `installUrl` when it can't.
+         * @description What a deployment row does (FR-150, §5). Wire values: `deploy`, `rollback`, `promote`.
+         * @enum {unknown}
+         */
+        DeploymentKind: "deploy" | "rollback" | "promote";
+        /**
+         * @description FR-146: the composition's origin model (`same-origin`, `proxy`, `cross-origin`; `null` API only), the
+         *     stack-packs vocabulary's (`packModel`: `same-origin` or `cross-origin`), the models the Owner may switch
+         *     between (Settings → Stack) and the one-line explanation.
+         */
+        DeploymentOriginModelDto: {
+            model: null | string;
+            packModel: null | string;
+            options: string[];
+            explanation: null | string;
+        };
+        /**
+         * @description Deployment provider (§4.15, §4.20): a target's platform, from the composition's host (`deploy-vercel` → `vercel`).
+         *     Wire values: `vercel`, `fake` (v2's explicit Fake provider; deployments made under
+         *     `Deployments:Provider=Fake` are recorded as `fake`), `netlify`, `cloudflare`, `render`,
+         *     `railway`, `github_pages`.
+         * @enum {unknown}
+         */
+        DeploymentProvider: "vercel" | "fake" | "netlify" | "cloudflare" | "render" | "railway" | "github_pages";
+        /**
+         * @description Settings → Deployment (FR-144, any member; D-V4-4 replaced v2's single Vercel shape): `targets`, `databases`,
+         *     the environment inventory (`env`; keys only) and the `originModel`. `canManage`: the caller is an Owner.
+         *     `fakeMode`: `Deployments:Provider=Fake`.
          */
         DeploymentSettingsDto: {
-            provider: null | components["schemas"]["DeploymentProvider"];
-            supported: boolean;
-            binding: null | components["schemas"]["DeploymentBindingDto"];
-            canBind: boolean;
-            vercelProject: null | components["schemas"]["VercelProjectDto"];
-            rootDirectory: string;
-            framework: string;
-            requiredEnv: components["schemas"]["RequiredEnvVarDto"][];
-            gitConnected: null | boolean;
-            installUrl: null | string;
+            targets: components["schemas"]["DeploymentTargetDto"][];
+            databases: components["schemas"]["DeploymentDatabaseDto"][];
+            env: components["schemas"]["DeploymentEnvInventoryDto"];
+            originModel: components["schemas"]["DeploymentOriginModelDto"];
+            canManage: boolean;
+            fakeMode: boolean;
+        };
+        /**
+         * @description The `deployment_setup` job of a target (FR-144): `state` `queued`, `running`, `succeeded` or
+         *     `failed`; `step` while it runs (`queued`, `creating`, `linking`, `syncing_env`); when it
+         *     failed, `errorCode` (`PLATFORM_GIT_NOT_CONNECTED`, `PLATFORM_PLAN_LIMIT`, `PLATFORM_PERMISSION_MISSING`,
+         *     `CREDENTIAL_INVALID`, `NOT_FOUND`, `VALIDATION`, `PLATFORM_ERROR`, `UPSTREAM_ERROR`), the
+         *     `message` and a `fixUrl` (the platform's install or connect link, or the GitHub App settings).
+         */
+        DeploymentSetupDto: {
+            /** Format: uuid */
+            jobId: null | string;
+            state: string;
+            step: null | string;
+            errorCode: null | string;
+            message: null | string;
+            fixUrl: null | string;
+            /** Format: date-time */
+            startedAt: null | string;
+            /** Format: date-time */
+            completedAt: null | string;
         };
         /**
          * @description §4.15 deployment states: `queued → building → ready | error | canceled`.
@@ -2700,21 +3852,102 @@ export interface components {
          */
         DeploymentStatus: "queued" | "building" | "ready" | "error" | "canceled";
         /**
-         * @description Deployment target, also a Vercel env target (FR-88). Wire values: `preview`, `production`.
+         * @description A target's bound connection (FR-144): which of the binder's platform connections, "connected by &lt;name&gt;", the
+         *     account it reaches and its status. Never the token.
+         */
+        DeploymentTargetBindingDto: {
+            /** Format: uuid */
+            connectionId: string;
+            label: string;
+            last4: string;
+            accountName: null | string;
+            boundBy: components["schemas"]["DeploymentUserDto"];
+            status: components["schemas"]["PlatformConnectionStatus"];
+        };
+        /**
+         * @description One target card of Settings → Deployment (FR-144): one per component whose host the composition names (plus a target
+         *     set up before the composition dropped its host, `inComposition: false`). `provider` is the composition's host
+         *     (`hostOption` is its catalog id). `binding` is the bound connection (`null` for GitHub Pages, which uses
+         *     the project's GitHub App or PAT) and `needsConnection` whether one is needed; `canBind` whether the caller may
+         *     bind one of their own. `resourceId`/`name` the platform resource (`null` until set up),
+         *     `rootDirectory` and `buildConfig` what it builds, the production and preview URLs once known, `status`
+         *     (`not_configured`, `configuring`, `ready`, `attention`, `error`) with `statusReason`, the
+         *     setup job (`setup`, `null` before the first), the provider's capabilities and the readiness checklist
+         *     (platform items say "not checked yet" until `verify`). `fakeMode`: deployments run on the Fake provider.
+         */
+        DeploymentTargetDto: {
+            component: components["schemas"]["DeploymentComponent"];
+            provider: components["schemas"]["DeploymentProvider"];
+            hostOption: null | string;
+            inComposition: boolean;
+            needsConnection: boolean;
+            binding: null | components["schemas"]["DeploymentTargetBindingDto"];
+            canBind: boolean;
+            resourceId: null | string;
+            name: null | string;
+            rootDirectory: string;
+            buildConfig: components["schemas"]["DeploymentBuildConfigDto"];
+            productionUrl: null | string;
+            previewUrl: null | string;
+            status: components["schemas"]["DeploymentTargetStatus"];
+            statusReason: null | string;
+            setup: null | components["schemas"]["DeploymentSetupDto"];
+            capabilities: components["schemas"]["DeploymentCapabilitiesDto"];
+            readiness: components["schemas"]["ReadinessItemDto"][];
+            implementedForReal: boolean;
+            fakeMode: boolean;
+        };
+        /**
+         * @description State of a deployment target (FR-144). Wire values: `not_configured`, `configuring`, `ready`,
+         *                 `attention`, `error`.
          * @enum {unknown}
          */
-        DeploymentTarget: "preview" | "production";
+        DeploymentTargetStatus: "not_configured" | "configuring" | "ready" | "attention" | "error";
         /**
          * @description Why a deployment row exists (FR-90, FR-91). Wire values: `auto` (AIDE after execution or release),
          *                 `manual`, `promote`, `redeploy`.
          * @enum {unknown}
          */
-        DeploymentTrigger: "auto" | "manual" | "promote" | "redeploy";
+        DeploymentTrigger: "auto" | "manual" | "promote" | "redeploy" | "rollback";
         /** @description A user named on a deployment or binding: "connected by &lt;name&gt;", "triggered by &lt;name&gt;". */
         DeploymentUserDto: {
             /** Format: uuid */
             id: string;
             name: string;
+        };
+        /** @description FR-144: the readiness checklist of `POST …/targets/:component/verify`, with the target after the check. */
+        DeploymentVerifyDto: {
+            target: components["schemas"]["DeploymentTargetDto"];
+            items: components["schemas"]["ReadinessItemDto"][];
+        };
+        /**
+         * @description FR-118: where the repository is. `provider`: `github_app` (`repo` = `owner/name`, read with the
+         *     caller's GitHub connection: 409 `GIT_NOT_CONNECTED` without one), `github_pat` (`repo` = `owner/name`
+         *     or `https://github.com/owner/name`, with the optional `token`; public repositories need none) or `local`
+         *     (`repo` = the directory under `Git:Local:ImportRoot`, Development and E2E only). `ref` is the branch, tag
+         *     or commit to read (default: the default branch). FR-141: `gitlab` (`repo` = GitLab's project id or its
+         *     `group/sub/project` path) on `instanceId` (omitted: gitlab.com), read with the caller's `connectionId` or,
+         *     omitted, their newest valid GitLab connection on that instance (409 `GIT_NOT_CONNECTED` without one).
+         *     `instanceId` and `connectionId` are only for gitlab (400 `VALIDATION` otherwise).
+         */
+        DetectStackGitRequest: {
+            provider: components["schemas"]["GitProvider"];
+            /** Format: uuid */
+            instanceId?: null | string;
+            repo: string;
+            ref?: null | string;
+            /** @description `github_pat` only: the GitHub token to read a private repository. Used for this request only, never stored. */
+            token?: null | string;
+            /**
+             * Format: uuid
+             * @description `gitlab` or `bitbucket` (FR-141): one of the caller's connections for that host (GitLab: on the instance;
+             *     404 `NOT_FOUND` otherwise). Omitted: the caller's newest valid one. Not used with other providers (400).
+             */
+            connectionId?: null | string;
+        };
+        /** @description FR-118: the repository to detect the stack of. */
+        DetectStackRequest: {
+            git: components["schemas"]["DetectStackGitRequest"];
         };
         /**
          * @description One line of a diff between two versions (FR-21). `oldLine` is the 1-based line number in the `from` version
@@ -2872,9 +4105,10 @@ export interface components {
             commitUrl: null | string;
         };
         /**
-         * @description One step of an execution run (FR-57): number, title, the preset specialist that runs it (`agentKey`, null for the
+         * @description One step of an execution run (FR-57): number, title, the specialist that runs it (`agentKey`, FR-121; null for the
          *     base Code Generator), status, attempt count, declared vs produced files, and the commit once accepted
-         *     (`commitUrl` is null for the Local provider).
+         *     (`commitUrl` is null for the Local provider). `legacyAgentKey` (§4.23): the v2 agent key a plan locked before
+         *     the upgrade named, which now runs as `agentKey`; null otherwise.
          */
         ExecutionStepSummaryDto: {
             /** Format: uuid */
@@ -2890,6 +4124,7 @@ export interface components {
             producedFiles: components["schemas"]["FileManifestEntryDto"][];
             commitSha: null | string;
             commitUrl: null | string;
+            legacyAgentKey?: null | string;
         };
         /** @description A plan version's execution steps in step order (FR-30); `plan` is `null` (and no steps) before any plan is approved. */
         ExecutionStepsDto: {
@@ -2918,6 +4153,10 @@ export interface components {
             checksWaitedSeconds: null | number;
             checksTimedOut: boolean;
             preview: null | components["schemas"]["PreviewCheckDto"];
+        };
+        /** @description FR-152: an External database's connection string (`postgres://`, `postgresql://` or ADO.NET), stored encrypted and never returned. */
+        ExternalDatabaseRequest: {
+            connectionString: string;
         };
         /**
          * @description Declared action for a file in a plan step (FR-29).
@@ -2988,6 +4227,47 @@ export interface components {
         };
         /** @enum {unknown} */
         GateType: "spec_approval" | "plan_approval" | "pre_release" | "escalation";
+        /**
+         * @description The Git connection bound to a GitLab or Bitbucket project (FR-136), shown to Owners as e.g. "GitLab · connected by Ana
+         *     (@ana)". Never contains a token. `connectionId` only lets the binding Owner recognise their own connection.
+         */
+        GitBindingDto: {
+            /** Format: uuid */
+            connectionId: string;
+            login: string;
+            status: components["schemas"]["GitConnectionStatus"];
+            boundBy: components["schemas"]["GitBindingUserDto"];
+        };
+        /** @description The Owner who bound a project's Git connection (FR-136). */
+        GitBindingUserDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /**
+         * @description How a GitConnection authenticates (FR-131, FR-134). Wire values: `oauth`, `token`.
+         * @enum {unknown}
+         */
+        GitConnectionAuthKind: "oauth" | "token";
+        /**
+         * @description State of a GitConnection (FR-131, FR-134). Wire values: `valid`, `invalid`,
+         *                 `insufficient_scope`.
+         * @enum {unknown}
+         */
+        GitConnectionStatus: "valid" | "invalid" | "insufficient_scope";
+        /** @description A Git host instance as project settings show it (FR-136). */
+        GitHostInstanceRefDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            baseUrl: string;
+            enabled: boolean;
+        };
+        /**
+         * @description Where a GitLab instance's settings come from (FR-130). Wire values: `database`, `configuration`.
+         * @enum {unknown}
+         */
+        GitHostInstanceSource: "database" | "configuration";
         /** @description A GitHub user or organisation (FR-81). */
         GitHubAccountDto: {
             login: string;
@@ -2999,7 +4279,7 @@ export interface components {
          *     `App:PublicBaseUrl`; `redirect_url` the manifest callback (`/api/admin/integrations/github/callback`);
          *     `callback_urls` the sign-in callback (`/api/auth/github/callback`); no `hook_attributes` (GitHub rejects a
          *     localhost webhook URL even when inactive, and needs a URL whenever the object is present), so the App has no webhook; private; and
-         *     `default_permissions` contents, pull_requests, workflows and administration `write`, metadata, checks and
+         *     `default_permissions` contents, pull_requests, workflows, administration and pages (FR-143) `write`, metadata, checks and
          *     statuses `read` (the Admin may drop `administration`, which disables "Create repository"); no events.
          */
         GitHubAppManifestDto: {
@@ -3057,6 +4337,8 @@ export interface components {
         /**
          * @description An installation of the AIDE GitHub App that the caller can access (FR-81, `GET /user/installations`):
          *     `repositorySelection` is `all` or `selected`; `manageUrl` is where the user adds repositories to it.
+         *     `pagesPermission` (FR-143) is whether the installation grants the App's Pages write permission (`granted`,
+         *     `missing`: the Owner has to accept the updated permissions on the installation, or `unknown`).
          */
         GitHubInstallationDto: {
             /** Format: int64 */
@@ -3064,6 +4346,7 @@ export interface components {
             account: components["schemas"]["GitHubAccountDto"];
             repositorySelection: components["schemas"]["GitHubRepositorySelection"];
             manageUrl: string;
+            pagesPermission: components["schemas"]["GitHubPagesAccess"];
         };
         /**
          * @description A possible owner for "Create repository" (FR-81): the caller (`user`) or an organisation they belong to.
@@ -3084,6 +4367,12 @@ export interface components {
          * @enum {unknown}
          */
         GitHubOwnerType: "user" | "organization";
+        /**
+         * @description FR-143: whether GitHub reports the AIDE App's Pages permission. Wire values: `granted`, `missing`,
+         *                 `unknown`.
+         * @enum {unknown}
+         */
+        GitHubPagesAccess: "granted" | "missing" | "unknown";
         /** @description A GitHub release (FR-73 import, FR-86): `isLatest` marks GitHub's latest release. */
         GitHubReleaseDto: {
             tagName: string;
@@ -3150,10 +4439,140 @@ export interface components {
             semver: null | string;
         };
         /**
-         * @description Git provider of a project (FR-35, FR-82). Wire values: `github_pat` (v1 `github`), `local`, `github_app`.
+         * @description A GitLab connection of the caller (FR-131); never a token. `authKind` is `oauth` or `token` (access token
+         *     fallback); `scopes` as granted or validated; `expiresAt` is an access token's own expiry, and
+         *     `expiryWarning` is true from 14 days before it. `status`: `valid`, `invalid` (GitLab rejected it; reconnect)
+         *     or `insufficient_scope`. `instanceEnabled: false` means an Admin disabled the instance ("GitLab instance disabled").
+         */
+        GitLabConnectionDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            instanceId: string;
+            instanceName: string;
+            instanceBaseUrl: string;
+            instanceEnabled: boolean;
+            login: string;
+            externalUserId: string;
+            authKind: components["schemas"]["GitConnectionAuthKind"];
+            scopes: string[];
+            /** Format: date-time */
+            expiresAt: null | string;
+            expiryWarning: boolean;
+            status: components["schemas"]["GitConnectionStatus"];
+            /** Format: date-time */
+            lastValidatedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /**
+         * @description An enabled GitLab instance for users (sign-in, connections). `oauthConfigured`: "Continue with GitLab" and
+         *         "Connect with GitLab" are offered; otherwise only the token fallback.
+         */
+        GitLabInstanceSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            baseUrl: string;
+            isGitLabCom: boolean;
+            oauthConfigured: boolean;
+        };
+        /**
+         * @description Where the caller can create a GitLab project (FR-132): their personal namespace (`kind: user`) and the groups where
+         *     they are at least Developer (`kind: group`). `canCreateProjects` follows the group's
+         *     `project_creation_level`; `reason` says why not. Pass `fullPath` as `owner` when creating.
+         */
+        GitLabOwnerDto: {
+            /** Format: int64 */
+            id: number;
+            kind: components["schemas"]["GitLabOwnerKind"];
+            fullPath: string;
+            name: string;
+            canCreateProjects: boolean;
+            reason: null | string;
+        };
+        /**
+         * @description A place a GitLab project can be created (FR-132). Wire values: `user`, `group`.
          * @enum {unknown}
          */
-        GitProvider: "github_pat" | "local" | "github_app";
+        GitLabOwnerKind: "user" | "group";
+        /**
+         * @description FR-131 sign-in: GitLab's verified email belongs to an existing AIDE account that isn't linked to this GitLab identity.
+         *     AIDE never links silently: the user signs in to that account (any method) and confirms with
+         *     `POST /api/auth/gitlab/link`, or cancels with `DELETE /api/auth/gitlab/link`. Expires after 10 minutes.
+         */
+        GitLabPendingLinkDto: {
+            /** Format: uuid */
+            instanceId: string;
+            instanceName: string;
+            login: string;
+            email: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        /** @description A GitLab Release (FR-141): `isLatest` marks the newest released one (upcoming releases aren't listed). */
+        GitLabReleaseDto: {
+            tagName: string;
+            name: null | string;
+            /** Format: date-time */
+            publishedAt: null | string;
+            isLatest: boolean;
+        };
+        /**
+         * @description A GitLab project for the repo picker (FR-132). `id` is GitLab's numeric project id as text; `fullPath`
+         *         is `group/sub/project`.
+         */
+        GitLabRepoDto: {
+            id: string;
+            fullPath: string;
+            name: string;
+            path: string;
+            defaultBranch: null | string;
+            webUrl: null | string;
+            namespaceFullPath: null | string;
+            visibility: null | string;
+            /** Format: date-time */
+            lastActivityAt: null | string;
+        };
+        /** @description One page of projects (30, newest first); pass `nextCursor` as `cursor` for the next (`null` = last page). */
+        GitLabRepoPageDto: {
+            items: components["schemas"]["GitLabRepoDto"][];
+            nextCursor: null | string;
+        };
+        /**
+         * @description What the wizard needs about a picked GitLab repository (FR-141, FR-86): its canonical path, default branch, whether it
+         *     is `empty` (no commits, or only starter files), its Releases and tags, and the import's suggestion: the released
+         *     version to preselect (the latest release, else the highest release, else the highest semver tag; `null` = "Never
+         *     released") and the version to develop it prefills (its next minor, else `0.1.0`).
+         */
+        GitLabRepoRefsDto: {
+            fullPath: string;
+            defaultBranch: string;
+            empty: boolean;
+            releases: components["schemas"]["GitLabReleaseDto"][];
+            tags: components["schemas"]["GitLabTagDto"][];
+            preselectedTag: null | string;
+            suggestedDevelopmentVersion: string;
+        };
+        /** @description A tag; `semver` is its version (the `v` prefix stripped), or `null` when it isn't a semantic version. */
+        GitLabTagDto: {
+            name: string;
+            sha: string;
+            semver: null | string;
+        };
+        /**
+         * @description The outcome of a GitLab `GET /api/v4/version` reachability check (FR-130).
+         * @enum {unknown}
+         */
+        GitLabVersionVerdict: "supported" | "old" | "unknown";
+        /**
+         * @description Git provider of a project (FR-35, FR-82, FR-136). Wire values: `github_pat` (v1 `github`), `local`,
+         *                 `github_app`, `gitlab`, `bitbucket`.
+         * @enum {unknown}
+         */
+        GitProvider: "github_pat" | "local" | "github_app" | "gitlab" | "bitbucket";
         /**
          * @description Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the
          *     project branch, once the working copy has been prepared. `mode` is the v2 name of `provider` (always equal).
@@ -3179,6 +4598,14 @@ export interface components {
             canSwitchToApp: boolean;
             mergeStrategy: components["schemas"]["MergeStrategy"];
             tagPrefix: string;
+            instance?: null | components["schemas"]["GitHostInstanceRefDto"];
+            /** @description FR-136: the host's repo id (GitLab project id, Bitbucket repository UUID). */
+            externalRepoId?: null | string;
+            /** @description The repository's web URL (GitHub, GitLab or Bitbucket), `null` for Local. */
+            repoWebUrl?: null | string;
+            binding?: null | components["schemas"]["GitBindingDto"];
+            /** @description FR-136: the caller may re-bind their own connection (`connectionId`): an Owner of a GitLab or Bitbucket project. */
+            canRebind?: boolean;
         };
         /** @description Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false. */
         GitTestResultDto: {
@@ -3222,8 +4649,21 @@ export interface components {
             details?: string[];
             /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
             reason?: string;
-            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88). */
+            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
+            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
+            platform?: string;
+            /** @description STACK_INCOMPATIBLE: each broken compatibility rule (FR-116). */
+            violations?: {
+                /** @description The choice: frontend, backend, data, vcs, frontendHost, backendHost, databaseHost, local or originModel. */
+                layer: string;
+                /** @description The option id that breaks the rule. */
+                option: string;
+                /** @description The rule id (R1…R12, SPEC §4.17). */
+                rule: string;
+                /** @description The rule's reason text. */
+                reason: string;
+            }[];
         };
         /** @description A background job (§4.9): the job queued by a dead-letter retry (FR-51). */
         JobDto: {
@@ -3245,6 +4685,30 @@ export interface components {
         JsonElement: unknown;
         JsonObject: {
             [key: string]: unknown;
+        };
+        /**
+         * @description FR-129: the retired v2 preset a migrated version was pinned to, kept as history: its id, name (the id when unknown),
+         *     version and `label`, "Preset nextjs-supabase@1.0.1 (retired, migrated)".
+         */
+        LegacyPresetDto: {
+            presetId: string;
+            presetName: string;
+            presetVersion: null | string;
+            label: string;
+        };
+        /** @description FR-144: link an existing platform resource (from `GET /api/me/connections/platforms/:id/resources`). */
+        LinkDeploymentResourceRequest: {
+            resourceId: string;
+        };
+        /**
+         * @description FR-149: where a released version is live: the component, the host (`provider` and its `providerName`, e.g.
+         *     "Netlify") and the production `url` — for "Released 0.1.0 · live on Netlify and Render".
+         */
+        LiveTargetDto: {
+            component: components["schemas"]["DeploymentComponent"];
+            provider: components["schemas"]["DeploymentProvider"];
+            providerName: string;
+            url: null | string;
         };
         /**
          * @description The connection bound to a project (FR-79), shown to every member as e.g. "Anthropic · connected by Ana (••••a1b2)".
@@ -3274,7 +4738,7 @@ export interface components {
         };
         /**
          * @description The caller's LLM connections, newest first (FR-78), and `keylessProviders`: the providers that need no key and
-         *     are always available (Ollama at the system base URL, and Fake).
+         *     are always available (Ollama at the system base URL, and Fake), when enabled on this deployment (FR-157).
          */
         LlmConnectionsDto: {
             credentials: components["schemas"]["LlmCredentialDto"][];
@@ -3304,10 +4768,53 @@ export interface components {
          */
         LlmCredentialStatus: "valid" | "invalid" | "unchecked";
         /**
+         * @description A model of a provider's catalog (FR-158, §4.24): id, display name, max output tokens per call, context window and
+         *         whether it's recommended.
+         */
+        LlmModelDto: {
+            id: string;
+            name: string;
+            /** Format: int32 */
+            maxOutputTokens: number;
+            /** Format: int32 */
+            contextTokens: number;
+            recommended: boolean;
+        };
+        /**
          * @description LLM provider (FR-22). Wire values: `anthropic`, `openai`, `ollama`, `fake`.
          * @enum {unknown}
          */
         LlmProvider: "anthropic" | "openai" | "ollama" | "fake";
+        /** @description One of the caller's LLM connections for a provider (FR-78, FR-158): never the key, only its last 4 characters. */
+        LlmProviderConnectionDto: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+            last4: string;
+        };
+        /**
+         * @description An LLM provider enabled on this deployment, as seen by the caller (FR-158). `usable` and `reason`
+         *     (`system_key`, `own_connection`, `keyless`, `needs_connection`) say whether the caller can choose it
+         *     now; `connections` are the caller's own connections for it (newest first); `catalog` is its model catalog and
+         *     `defaultModel` the system default model (`Llm:Providers:&lt;P&gt;:DefaultModel`). `isDefault` (FR-159) is true
+         *     on the one provider a project created now by the caller without an LLM choice would get (§4.24
+         *     `DefaultForNewProject`), false on all others (all false when that rule yields `LLM_PROVIDER_UNAVAILABLE`).
+         */
+        LlmProviderDto: {
+            provider: components["schemas"]["LlmProvider"];
+            usable: boolean;
+            reason: components["schemas"]["LlmProviderReason"];
+            defaultModel: string;
+            connections: components["schemas"]["LlmProviderConnectionDto"][];
+            catalog: components["schemas"]["LlmModelDto"][];
+            isDefault: boolean;
+        };
+        /**
+         * @description Why an enabled LLM provider is or isn't usable by a user (FR-158, §4.24). Wire values: `system_key`,
+         *     `own_connection`, `keyless`, `needs_connection`.
+         * @enum {unknown}
+         */
+        LlmProviderReason: "system_key" | "own_connection" | "keyless" | "needs_connection";
         /** @description Whether a provider can be used: an allowed system key is configured or the project has a bound connection for it (Ollama and Fake are always configured). */
         LlmProviderStatusDto: {
             provider: components["schemas"]["LlmProvider"];
@@ -3318,7 +4825,7 @@ export interface components {
          * @description LLM settings (FR-9, FR-22, FR-79). Keys are never returned. `hasApiKey` is true while a connection is bound
          *     (kept from v1); `binding` describes it (`null` when nothing is bound). `canBind` is true when the caller
          *     is a project Owner and so may bind one of their own connections or unbind. `providers` lists every provider with
-         *     whether it's usable and its system default model.
+         *     whether it's usable and its system default model; only providers enabled on this deployment are listed (FR-157).
          */
         LlmSettingsDto: {
             provider: components["schemas"]["LlmProvider"];
@@ -3334,6 +4841,11 @@ export interface components {
             email: string;
             password: string;
         };
+        /**
+         * @description Where a managed database lives (§5). Wire values: `supabase`, `render`, `railway`, `external`, `fake`.
+         * @enum {unknown}
+         */
+        ManagedDatabaseProvider: "supabase" | "render" | "railway" | "external" | "fake";
         /** @description A project member (FR-8). */
         MemberDto: {
             /** Format: uuid */
@@ -3352,7 +4864,10 @@ export interface components {
          *     ("AIDE will merge automatically"); otherwise "A merge on GitHub will be needed" with `reasons` (empty when
          *     `canMerge`, except `manual_strategy`). `checks` are the PR head's check runs and commit statuses.
          *     `mergeStateStatus` and `reviewDecision` are GitHub's GraphQL values verbatim (e.g. `CLEAN`,
-         *     `BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a Local project
+         *     `BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a GitLab project (FR-138)
+         *     `mergeStateStatus` is the merge request's `detailed_merge_status` verbatim (e.g. `mergeable`,
+         *     `not_approved`), `reviewDecision` is `null` and `checks` are the head's pipeline jobs and commit
+         *     statuses (FR-139). For a Local project
          *     `canMerge` is true with no checks. The merge itself stays authoritative (FR-65).
          */
         MergeReadinessDto: {
@@ -3369,21 +4884,65 @@ export interface components {
         /**
          * @description FR-84: why AIDE can't merge the version's PR itself (wire values `review_required`, `changes_requested`,
          *     `checks_failing`, `checks_pending`, `branch_protected`, `merge_conflict`, `no_permission`,
-         *     `merge_method_not_allowed`, `pr_not_open`, `manual_strategy`). Also recorded on an `awaiting_merge`
+         *     `merge_method_not_allowed`, `pr_not_open`, `manual_strategy`), plus FR-138's GitLab/Bitbucket reasons
+         *     `draft`, `discussions_unresolved` and `rebase_required`. Also recorded on an `awaiting_merge`
          *     release attempt (FR-65).
          * @enum {unknown}
          */
-        MergeReadinessReasonCode: "review_required" | "changes_requested" | "checks_failing" | "checks_pending" | "branch_protected" | "merge_conflict" | "no_permission" | "merge_method_not_allowed" | "pr_not_open" | "manual_strategy";
+        MergeReadinessReasonCode: "review_required" | "changes_requested" | "checks_failing" | "checks_pending" | "branch_protected" | "merge_conflict" | "no_permission" | "merge_method_not_allowed" | "pr_not_open" | "manual_strategy" | "draft" | "discussions_unresolved" | "rebase_required";
         /** @description FR-84: one reason AIDE can't merge the version's PR itself, with copy for the Release page and the gate. */
         MergeReadinessReasonDto: {
             code: components["schemas"]["MergeReadinessReasonCode"];
             message: string;
         };
         /**
-         * @description FR-65 merge strategy. Wire values: `aide_merges`, `manual`.
+         * @description FR-65 merge strategy. Wire values: `aide_merges`, `manual`; FR-140 (Bitbucket only): `fast_forward` and
+         *     `squash`, which are `aide_merges` with Bitbucket's `merge_strategy` of that name (`aide_merges` sends
+         *     `merge_commit`).
          * @enum {unknown}
          */
-        MergeStrategy: "aide_merges" | "manual";
+        MergeStrategy: "aide_merges" | "manual" | "fast_forward" | "squash";
+        /** @description One file a migration run applied: version, name and duration (ms). */
+        MigrationFileDto: {
+            version: string;
+            name: string;
+            /** Format: int64 */
+            ms: number;
+        };
+        /**
+         * @description FR-153, §7 Migrations page: one Supabase BaaS migration run: environment, database, release and version, commit, status
+         *     (`running`, `succeeded`, `failed`), the files applied with durations, the total duration, the error
+         *     (`MIGRATION_FAILED`, `MIGRATION_HISTORY_DIVERGED`) and the advisor findings.
+         */
+        MigrationRunDto: {
+            /** Format: uuid */
+            id: string;
+            environment: components["schemas"]["DeploymentEnvironment"];
+            /** Format: uuid */
+            managedDatabaseId: string;
+            provider: null | components["schemas"]["ManagedDatabaseProvider"];
+            /** Format: uuid */
+            releaseId: null | string;
+            /** Format: uuid */
+            releaseVersionId: string;
+            gitSha: string;
+            status: components["schemas"]["MigrationRunStatus"];
+            files: components["schemas"]["MigrationFileDto"][];
+            /** Format: int64 */
+            totalMs: number;
+            errorCode: null | string;
+            errorMessage: null | string;
+            advisorFindings: components["schemas"]["AdvisorFindingDto"][];
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            finishedAt: null | string;
+        };
+        /**
+         * @description A migration run's state (§5). Wire values: `running`, `succeeded`, `failed`.
+         * @enum {unknown}
+         */
+        MigrationRunStatus: "running" | "succeeded" | "failed";
         /**
          * @description A notification channel (FR-47). Secrets are never returned, only `hasSecret`. For `email` and
          *     `webhook`, `target` is the saved address or URL and the secret is a webhook's HMAC signing key. For
@@ -3454,7 +5013,7 @@ export interface components {
          *     types (`NotificationRules.ChannelTypes`); the personal `connection_invalid` never goes to project channels.
          * @enum {unknown}
          */
-        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "llm_binding_cleared";
+        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention";
         /**
          * @description A page of the caller's notifications, newest first. `unreadCount` counts all the caller's unread notifications
          *     (not just this page). Load more with `before` = `nextBefore`; `null` on the last page.
@@ -3481,7 +5040,7 @@ export interface components {
          *     Wire values are snake_case.
          * @enum {unknown}
          */
-        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared";
+        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention";
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfAdminAgentRunDto: {
             items: components["schemas"]["AdminAgentRunDto"][];
@@ -3554,80 +5113,94 @@ export interface components {
          * @enum {unknown}
          */
         PlanRunStatus: "pending" | "running" | "paused" | "completed" | "blocked" | "superseded";
-        /** @description A specialist agent of a preset (FR-76): the paths it owns (globs; `!` excludes) and its skills. */
-        PresetAgentDto: {
-            key: string;
-            name: string;
-            description: string;
-            owns: string[];
-            skills: string[];
-        };
-        /** @description A review checklist item (FR-77), mapped to a v1 compliance category. */
-        PresetChecklistItemDto: {
-            category: components["schemas"]["ReviewCategory"];
-            item: string;
-            severity: components["schemas"]["Severity"];
-        };
-        /** @description A preset in full (FR-74): the summary plus agents, spec sections, environment, review and protected paths. No prompt bodies. */
-        PresetDetailDto: {
+        /**
+         * @description A team, account, workspace or organisation a platform token reaches (FR-142): its id (send it as `accountId`),
+         *     name, slug (Vercel teams, Netlify accounts, Supabase organisations) and kind (e.g. `team`, `user`,
+         *     `workspace`, `organization`; `null` when the platform doesn't say).
+         */
+        PlatformAccountDto: {
             id: string;
             name: string;
-            version: string;
-            description: string;
-            stack: string[];
-            deployTargets: string[];
-            contentHash: string;
-            agents: components["schemas"]["PresetAgentDto"][];
-            specSections: components["schemas"]["PresetSpecSectionDto"][];
-            requiredEnv: components["schemas"]["PresetEnvVarDto"][];
-            review: components["schemas"]["PresetReviewDto"];
-            protectedPaths: components["schemas"]["PresetProtectedPathDto"][];
+            slug: null | string;
+            kind: null | string;
         };
-        /** @description A required environment variable (FR-88): `targets` ⊆ production/preview/development. */
-        PresetEnvVarDto: {
-            key: string;
-            targets: string[];
-            sensitive: boolean;
-            description: string;
-        };
-        /**
-         * @description A protected path (§4.11): `existingOnBase` protects only files already on the version's base commit;
-         *     `except` globs stay writable.
-         */
-        PresetProtectedPathDto: {
-            glob: string;
-            existingOnBase: boolean;
-            except: string[];
-            reason: null | string;
-        };
-        /** @description The preset's review additions (FR-77): its checklist and deterministic rule ids. */
-        PresetReviewDto: {
-            checklist: components["schemas"]["PresetChecklistItemDto"][];
-            deterministic: string[];
-        };
-        /** @description An extra spec section the preset requires (FR-75) with its guidance. */
-        PresetSpecSectionDto: {
-            title: string;
-            guidance: string;
-        };
-        /**
-         * @description A tech stack preset card (FR-74, §7.2 wizard Stack step and admin presets list): `stack` are the chips,
-         *     `deployTargets` the supported deployment targets (`vercel`). `contentHash` is the SHA-256 of the
-         *     preset's files (D-V2-12).
-         */
-        PresetSummaryDto: {
+        /** @description A project whose deployment target is bound to a platform connection (FR-144). */
+        PlatformBoundProjectDto: {
+            /** Format: uuid */
             id: string;
             name: string;
-            version: string;
-            description: string;
-            stack: string[];
-            deployTargets: string[];
-            contentHash: string;
         };
         /**
-         * @description FR-90: the preview deployment a review cycle waited for (`compliance_report.external_checks.preview`): its id, final
-         *     (or last seen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 20
-         *     minutes; `null` when it didn't wait) and whether it gave up waiting (`timedOut`).
+         * @description One of the caller's platform connections (FR-142). The token is never returned: only the label and its last 4
+         *     characters. `accountId`/`accountName` are the account it is for (the Vercel or Netlify user or team, Cloudflare
+         *     account, Render workspace, Railway workspace, Supabase organisation; `null` when not chosen or unknown),
+         *     `metadata` what else the token reaches, `scopes` its scopes where the platform reports them, `expiresAt`
+         *     its expiry (`null`: none or unknown), `status` (`valid`, `invalid`, `insufficient_scope`,
+         *     `unchecked`) and when it was last checked, plus the projects whose deployment targets are bound to it.
+         */
+        PlatformConnectionDto: {
+            /** Format: uuid */
+            id: string;
+            provider: components["schemas"]["PlatformProvider"];
+            label: string;
+            last4: string;
+            accountId: null | string;
+            accountName: null | string;
+            metadata: components["schemas"]["PlatformConnectionMetadataDto"];
+            scopes: string[];
+            /** Format: date-time */
+            expiresAt: null | string;
+            status: components["schemas"]["PlatformConnectionStatus"];
+            /** Format: date-time */
+            lastValidatedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            boundProjects: components["schemas"]["PlatformBoundProjectDto"][];
+        };
+        /**
+         * @description What the platform says about a token (FR-142). `teamId`/`teamSlug`: a team-scoped Vercel token's team.
+         *     `accounts`: the teams, accounts, workspaces or organisations it reaches. `policies`: a Cloudflare token's
+         *     permission groups (empty when the token can't read them). `missingPermissions`: what the platform said is missing
+         *     (Supabase `missing_permissions`; non-empty with status `insufficient_scope`). `tokenKind`: e.g. Railway
+         *     `workspace` or `account`, Cloudflare `user` (`null` when it doesn't matter).
+         */
+        PlatformConnectionMetadataDto: {
+            teamId: null | string;
+            teamSlug: null | string;
+            accounts: components["schemas"]["PlatformAccountDto"][];
+            policies: string[];
+            missingPermissions: string[];
+            tokenKind: null | string;
+        };
+        /**
+         * @description Validation state of a platform connection (FR-142). Wire values: `valid`, `invalid` (rejected),
+         *                 `insufficient_scope` (missing permissions), `unchecked`.
+         * @enum {unknown}
+         */
+        PlatformConnectionStatus: "valid" | "invalid" | "insufficient_scope" | "unchecked";
+        /**
+         * @description Deployment platforms and databases with pasted-token connections (FR-142, §4.20, §4.21). Wire values:
+         *                 `vercel`, `netlify`, `cloudflare`, `render`, `railway`, `supabase`.
+         * @enum {unknown}
+         */
+        PlatformProvider: "vercel" | "netlify" | "cloudflare" | "render" | "railway" | "supabase";
+        /**
+         * @description An entry of a platform picker (FR-142 `GET …/resources`): the platform's id (send it as the resource to link), its
+         *     name, URL when there is one, and a short detail (e.g. the linked repository, the service type, a project's region and
+         *     status).
+         */
+        PlatformResourceDto: {
+            id: string;
+            name: string;
+            url: null | string;
+            detail: null | string;
+        };
+        /**
+         * @description FR-90, FR-147: the preview a review cycle waited for (`compliance_report.external_checks.preview`): the frontend (else
+         *     backend) preview deployment's id (the rollout id when nothing deployed, e.g. a blocked rollout), its final (or last
+         *     seen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 30 minutes;
+         *     `null` when it didn't wait) and whether it gave up waiting (`timedOut`). FR-147: `rollout` is the whole
+         *     preview rollout review waited for (every component and the migration run; `null` for v2 reports).
          */
         PreviewCheckDto: {
             /** Format: uuid */
@@ -3638,7 +5211,36 @@ export interface components {
             /** Format: int32 */
             waitedSeconds: null | number;
             timedOut: boolean;
+            rollout?: null | components["schemas"]["RolloutDto"];
         };
+        /**
+         * @description FR-148: the queued reset: its `jobId` and `method` (`reset_schema`: AIDE empties the schema, Supabase BaaS
+         *     then re-applies the base commit's migrations; `reset_schema_external`: Render, over its external URL;
+         *     `manual`: Railway — empty the preview Postgres in Railway, AIDE records the reset). The next backend preview's
+         *     pre-deploy re-applies every migration. Progress: `GET …/deployments/preview` (`databaseDiverged`).
+         */
+        PreviewDatabaseResetDto: {
+            /** Format: uuid */
+            jobId: string;
+            method: components["schemas"]["PreviewResetMethod"];
+        };
+        /**
+         * @description FR-147 Review page: the project's persistent preview environment: the `current` (newest) preview rollout, or
+         *     `null` before the first; `notes` for the page (e.g. "Preview uses the production database without this
+         *     version's migrations", FR-154); and `databaseDiverged` with its `divergedMessage` when the preview database has
+         *     migrations the version branch no longer has (FR-148: the Owner sees "Reset preview database").
+         */
+        PreviewEnvironmentDto: {
+            current: null | components["schemas"]["RolloutDto"];
+            notes: string[];
+            databaseDiverged: boolean;
+            divergedMessage: null | string;
+        };
+        /**
+         * @description How AIDE resets a preview database (FR-148).
+         * @enum {unknown}
+         */
+        PreviewResetMethod: "none" | "reset_schema" | "reset_schema_external" | "manual";
         ProblemDetails: {
             type?: null | string;
             title?: null | string;
@@ -3654,8 +5256,21 @@ export interface components {
             details?: string[];
             /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
             reason?: string;
-            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). VERCEL_GIT_NOT_CONNECTED: Vercel's GitHub App install link (FR-88). */
+            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
+            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
+            platform?: string;
+            /** @description STACK_INCOMPATIBLE: each broken compatibility rule (FR-116). */
+            violations?: {
+                /** @description The choice: frontend, backend, data, vcs, frontendHost, backendHost, databaseHost, local or originModel. */
+                layer: string;
+                /** @description The option id that breaks the rule. */
+                option: string;
+                /** @description The rule id (R1…R12, SPEC §4.17). */
+                rule: string;
+                /** @description The rule's reason text. */
+                reason: string;
+            }[];
         };
         /**
          * @description A project as shown on its overview and settings pages (FR-5, FR-7). `myRole` is the caller's project role (`null`
@@ -3663,9 +5278,10 @@ export interface components {
          *     checkpoint within the current release version `releaseVersionId` (§4.10, D-V2-11: was `projectVersion`);
          *     `releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the
          *     version in development (`null`: none) (FR-62). `idea` is the request of the version in development.
-         *     `presetId`, `presetName` and `presetVersion` are the tech stack preset pinned on the current release
-         *     version (FR-74; all `null`: no preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so
-         *     the Deployments page is in its navigation (§7.2).
+         *     `presetId`, `presetName` and `presetVersion` are history (FR-129): the retired v2 preset the current release
+         *     version was pinned to before it was migrated to a composition (all `null`: never pinned to a preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so
+         *     the Deployments page is in its navigation (§7.2). `stackPacks` are the pack ids of the current release version's
+         *     stack composition (FR-117, §5; empty: no stack), e.g. `["fe-react-vite", "be-aspnet", "vcs-github"]`.
          */
         ProjectDto: {
             /** Format: uuid */
@@ -3702,6 +5318,9 @@ export interface components {
             presetName: null | string;
             presetVersion: null | string;
             deploymentsEnabled: boolean;
+            stackPacks: string[];
+            /** @default false */
+            previewMigrationsEnabled: boolean;
         };
         /**
          * @description A project event pushed live to everyone viewing the project (FR-46): the SignalR `projectEvent` message.
@@ -3757,6 +5376,35 @@ export interface components {
          */
         ProjectSource: "scratch" | "import";
         /**
+         * @description Settings → Stack (FR-117, FR-119): the stack of the project's current release version.
+         *         * composition: the pinned normalised composition with its derived fields (§4.18), null for "No stack
+         *         (general)" and, for a version migrated from a retired v2 preset, that preset as history (legacyPreset). catalogVersion/catalogHash are
+         *         what it was pinned against; currentCatalogVersion/currentCatalogHash the catalog shipped now (a new
+         *         version re-pins to it).
+         *     * locked with lockedReason (plan_locked, not_in_development): PUT is
+         *         STACK_LOCKED then.
+         *     * stackChange: the layers that differ from the stack the version's base code was built with, and whether
+         *         that is a stack change (the base commit has code: an iteration or an import), for the stack-change warning.
+         *     * repoVcs: the VCS option fixed by the project's repository host (R5; null: a Local repository, any
+         *         VCS).
+         */
+        ProjectStackDto: {
+            /** Format: uuid */
+            releaseVersionId: string;
+            version: string;
+            versionStatus: components["schemas"]["ReleaseVersionStatus"];
+            composition: null | components["schemas"]["StackCompositionDto"];
+            catalogVersion: null | string;
+            catalogHash: null | string;
+            currentCatalogVersion: string;
+            currentCatalogHash: string;
+            locked: boolean;
+            lockedReason: null | components["schemas"]["StackLockReason"];
+            stackChange: components["schemas"]["StackChangeDto"];
+            legacyPreset: null | components["schemas"]["LegacyPresetDto"];
+            repoVcs: null | string;
+        };
+        /**
          * @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`
          *     counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the
          *     execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened
@@ -3765,7 +5413,8 @@ export interface components {
          *     `releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was
          *     `projectVersion` (D-V2-11). `suggestedNextVersion` prefills "Start new version" (FR-60: the next minor of the
          *     released version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:
-         *     none), for the overview and `aide status`.
+         *     none), for the overview and `aide status`. `productionUrls` (FR-151) is the production URL of each component
+         *     with a deployment target: the target's production URL (its stable domain), else the URL of the deployment production serves now.
          */
         ProjectStateDto: {
             /** Format: uuid */
@@ -3792,6 +5441,7 @@ export interface components {
             pullRequest: null | components["schemas"]["PullRequestSummaryDto"];
             latestRelease: null | components["schemas"]["ReleaseSummaryDto"];
             latestDeployment: null | components["schemas"]["DeploymentDto"];
+            productionUrls: components["schemas"]["ComponentProductionUrlDto"][];
         };
         /**
          * @description Project status (§4.1: status follows phase; `released`, `rolled_back` and `awaiting_merge` are special).
@@ -3802,7 +5452,8 @@ export interface components {
          * @description A row of the projects list (FR-6, FR-62). `myRole` is `null` for an Admin who isn't a member;
          *     `releasedVersion` / `developmentVersion` are the two version badges (`null` when not released / nothing in
          *     development); `checkpoint` was `projectVersion` (D-V2-11); `presetId`/`presetName`/`presetVersion`
-         *     are the preset chip (FR-74, §7.2; `null`: no preset).
+         *     are history (FR-129: the retired preset the current version was migrated from; `null`: none); `stackPacks` the pack ids of the current version's
+         *     stack composition (FR-117, the `pack` filter; empty: no stack).
          */
         ProjectSummaryDto: {
             /** Format: uuid */
@@ -3824,6 +5475,7 @@ export interface components {
             presetId: null | string;
             presetName: null | string;
             presetVersion: null | string;
+            stackPacks: string[];
         };
         /** @description A commit on the project branch that isn't on the default branch; `url` links it on GitHub (`null` for Local). */
         PullRequestCommitDto: {
@@ -3878,14 +5530,56 @@ export interface components {
             openedAt: string;
         };
         /**
-         * @description Create or replace an environment variable (FR-88): the value (up to 64 KB; encrypted in AIDE and never returned), its
-         *     targets (`preview`, `production`, at least one) and whether Vercel stores it as sensitive.
+         * @description Create or replace a user environment variable (FR-88, FR-145): the value (up to 64 KB; encrypted, never returned), its
+         *     environments (`targets`: `preview`, `production`), whether it is sensitive, the components it applies to
+         *     (`appliesTo`, default `["frontend"]`) and whether it is public (default: the key has the frontend pack's public
+         *     prefix; a prefixed key is always public). A public variable that looks secret, or a key AIDE derives, is
+         *     `VALIDATION`.
          */
         PutDeploymentEnvRequest: {
             value: string;
-            targets: components["schemas"]["DeploymentTarget"][];
+            targets: components["schemas"]["DeploymentEnvironment"][];
             sensitive?: boolean;
+            appliesTo?: null | components["schemas"]["DeploymentComponent"][];
+            public?: null | boolean;
         };
+        /**
+         * @description FR-144 (Owner): set up a target. `provider` must be the composition's host for the component (`fake` also in
+         *     Fake mode); `connectionId` one of the caller's own connections of that platform (not used by GitHub Pages);
+         *     `create` or `link`, not both (GitHub Pages: neither; setup enables Pages on the repository).
+         */
+        PutDeploymentTargetRequest: {
+            provider: components["schemas"]["DeploymentProvider"];
+            /** Format: uuid */
+            connectionId?: null | string;
+            create?: null | components["schemas"]["CreateDeploymentResourceRequest"];
+            link?: null | components["schemas"]["LinkDeploymentResourceRequest"];
+        };
+        /**
+         * @description FR-152 (Owner): set the environment's database. `provider` must be the composition's database host (`fake`
+         *     also in Fake mode); exactly one of `create`, `link` (a resource id from the connection's picker) or
+         *     `external` (External only). `connectionId` is one of the caller's own platform connections (not for External).
+         */
+        PutManagedDatabaseRequest: {
+            provider: components["schemas"]["ManagedDatabaseProvider"];
+            /** Format: uuid */
+            connectionId?: null | string;
+            create?: null | components["schemas"]["CreateManagedDatabaseRequest"];
+            link?: null | components["schemas"]["LinkDeploymentResourceRequest"];
+            external?: null | components["schemas"]["ExternalDatabaseRequest"];
+        };
+        /** @description One readiness checklist item (FR-144): a stable `id`, `state` (`ok`, `warning`, `error`, `na`), a message and an optional fix link. */
+        ReadinessItemDto: {
+            id: string;
+            state: components["schemas"]["ReadinessState"];
+            message: string;
+            fixUrl: null | string;
+        };
+        /**
+         * @description State of a readiness item (FR-144). Wire values: `ok`, `warning`, `error`, `na`.
+         * @enum {unknown}
+         */
+        ReadinessState: "ok" | "warning" | "error" | "na";
         /** @description An answer given to the agent: `questionId` when it answered a question of a round, and the question text. */
         RefinementAnswerDto: {
             questionId: null | string;
@@ -4017,10 +5711,18 @@ export interface components {
          *     Failure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,
          *     `GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and
          *     `MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can
-         *     retry with `POST /release`. `githubReleaseUrl` is the GitHub Release created for the tag (FR-64; `null`
-         *     for Local or before it exists). `mergeStrategy` is the project's current merge strategy (FR-65).
+         *     retry with `POST /release`. `githubReleaseUrl` is the host release created for the tag: the GitHub Release
+         *     (FR-64), the GitLab Release, or the Bitbucket annotated tag's page (FR-140; Bitbucket has no Releases); `null` for
+         *     Local or before it exists. AIDE's full release notes of a succeeded Bitbucket release (the tag's message, FR-140,
+         *     D-V4-7) are read with `GET …/releases/{releaseId}/notes`. A GitLab merge refused because the
+         *     merge request's head moved since review (409) fails with `GIT_ERROR`. `mergeStrategy` is the project's current merge strategy (FR-65).
          *     `productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including
          *     redeploys; `null` when deployment isn't configured or not created yet). A failed one doesn't undo the release.
+         *     FR-149: `rollout` is the release's production rollout timeline (migration run → backend → frontend with states and
+         *     URLs; `null` before it is queued) and `liveOn` where it is live (ready components with their host and URL, for
+         *     "Released 0.1.0 · live on Netlify and Render"). §4.21: `migrationRunId` is the Supabase BaaS production migration
+         *     run (before the merge); `migrationsAppliedNotMerged` is true when it applied migrations but the release failed
+         *     without merging (e.g. the PR was closed): the next version must keep those migration files.
          */
         ReleaseDto: {
             /** Format: uuid */
@@ -4048,6 +5750,22 @@ export interface components {
             mergeReasons: null | components["schemas"]["MergeReadinessReasonDto"][];
             mergeStrategy: components["schemas"]["MergeStrategy"];
             productionDeployment: null | components["schemas"]["DeploymentDto"];
+            /** Format: uuid */
+            migrationRunId?: null | string;
+            /** @default false */
+            migrationsAppliedNotMerged: boolean;
+            rollout?: null | components["schemas"]["RolloutDto"];
+            liveOn?: null | components["schemas"]["LiveTargetDto"][];
+        };
+        /**
+         * @description FR-140, D-V4-7: AIDE's full release notes of a release attempt, for a host without Releases (Bitbucket: the annotated
+         *     tag's message), rebuilt from the version's locked spec, completed steps and latest review; `null` for other hosts
+         *     or an attempt that hasn't succeeded.
+         */
+        ReleaseNotesDto: {
+            /** Format: uuid */
+            releaseId: string;
+            notes: null | string;
         };
         /**
          * @description Outcome of a release attempt (FR-42, FR-43).
@@ -4093,8 +5811,9 @@ export interface components {
          *     `baseCommitSha` are the released tag and merge commit the version started from (null for a first version);
          *     `branchName` and `pullRequestUrl` are the version's working branch and PR once they exist; `request` is
          *     what the version was started with (the project idea for a first version); `startedBy` is null for versions created
-         *     by migration or import. `presetId`/`presetVersion` are the pinned preset (FR-74) and `presetName` its
-         *     name (the id when the preset is no longer shipped); all `null` without a preset.
+         *     by migration or import. `presetId`/`presetVersion`/`presetName` are history (FR-129): the retired v2 preset
+         *     the version was pinned to before its migration to a composition, shown as "Preset &lt;id&gt;@&lt;version&gt; (retired,
+         *     migrated)"; all `null` for versions never pinned to a preset.
          */
         ReleaseVersionDto: {
             /** Format: uuid */
@@ -4131,17 +5850,6 @@ export interface components {
             /** Format: int32 */
             version: number;
             status: components["schemas"]["ArtifactStatus"];
-        };
-        /**
-         * @description An environment variable the project's preset requires (FR-88, §4.11 preset env): its key, targets, whether it is
-         *     sensitive, what it is for, and whether the project has it (`present`; missing ones are flagged).
-         */
-        RequiredEnvVarDto: {
-            key: string;
-            targets: components["schemas"]["DeploymentTarget"][];
-            sensitive: boolean;
-            description: string;
-            present: boolean;
         };
         /**
          * @description Compliance categories (§4.7).
@@ -4211,6 +5919,68 @@ export interface components {
             targetCheckpoint: number;
             reason: string;
         };
+        /**
+         * @description A preview or production rollout (FR-147, FR-149): `rolloutId` (the job id, = `deployments.rolloutId`), the
+         *     commit, its overall `state` (`running`, `succeeded`, `failed`, `blocked` — FR-148
+         *     `PREVIEW_DATABASE_DIVERGED`, reset the preview database —, `canceled` when a newer preview replaced it), the
+         *     error when it stopped, and its `steps` in order (migrations → backend → frontend).
+         */
+        RolloutDto: {
+            /** Format: uuid */
+            rolloutId: null | string;
+            environment: components["schemas"]["DeploymentEnvironment"];
+            state: components["schemas"]["RolloutState"];
+            /** Format: uuid */
+            releaseVersionId: string;
+            /** Format: uuid */
+            releaseId: null | string;
+            gitRef: string;
+            gitSha: string;
+            errorCode: null | string;
+            errorMessage: null | string;
+            steps: components["schemas"]["RolloutStepDto"][];
+            /** Format: date-time */
+            requestedAt: string;
+        };
+        /**
+         * @description A rollout's overall state. Wire values: `running`, `succeeded`, `failed`, `blocked`, `canceled`.
+         * @enum {unknown}
+         */
+        RolloutState: "running" | "succeeded" | "failed" | "blocked" | "canceled";
+        /**
+         * @description One step of a rollout (FR-147, FR-149): `step` (`migrations`, `backend`, `frontend`) and its
+         *     `state`. A deployment step names its `deploymentId`, `provider` (the host), `status`, `url`,
+         *     `inspectorUrl`, `buildLogTail` (masked) and error; `canRedeploy` is true when it finished (redeploy with
+         *     `POST …/deployments/{deploymentId}/redeploy`). The migrations step names its `migrationRunId` (details at
+         *     `GET …/migrations/{runId}`). `note` explains a skipped step (e.g. GitHub Pages has no previews).
+         */
+        RolloutStepDto: {
+            step: components["schemas"]["RolloutStepKind"];
+            state: components["schemas"]["RolloutStepState"];
+            provider: null | components["schemas"]["DeploymentProvider"];
+            /** Format: uuid */
+            deploymentId: null | string;
+            status: null | components["schemas"]["DeploymentStatus"];
+            url: null | string;
+            inspectorUrl: null | string;
+            buildLogTail: null | string;
+            errorCode: null | string;
+            errorMessage: null | string;
+            /** Format: uuid */
+            migrationRunId: null | string;
+            note: null | string;
+            canRedeploy: boolean;
+        };
+        /**
+         * @description A step of a preview or production rollout (FR-147, FR-149), in dependency order. Wire values: `migrations`, `backend`, `frontend`.
+         * @enum {unknown}
+         */
+        RolloutStepKind: "migrations" | "backend" | "frontend";
+        /**
+         * @description The state of a rollout step. Wire values: `pending`, `running`, `succeeded`, `failed`, `skipped`.
+         * @enum {unknown}
+         */
+        RolloutStepState: "pending" | "running" | "succeeded" | "failed" | "skipped";
         /** @description An artifact version a run used as input (FR-23). */
         RunInputArtifactDto: {
             type: components["schemas"]["ArtifactType"];
@@ -4222,6 +5992,250 @@ export interface components {
          * @enum {unknown}
          */
         Severity: "minor" | "major" | "critical";
+        /**
+         * @description The stack catalog (FR-113, §4.16) for the wizard's Stack step, Settings → Stack and Admin → Stack catalog: the five
+         *     layers, the choices in evaluation order (frontend, backend, data, vcs, then the deployment choices frontendHost,
+         *     backendHost, databaseHost, local and originModel) with their options, the rule statements and the recommended
+         *     combinations. `version` and `contentHash` are what release versions pin.
+         */
+        StackCatalogDto: {
+            version: string;
+            contentHash: string;
+            layers: components["schemas"]["StackLayerDto"][];
+            choices: components["schemas"]["StackChoiceDto"][];
+            rules: components["schemas"]["StackRuleDto"][];
+            recommendations: components["schemas"]["StackRecommendationDto"][];
+        };
+        /** @description A caveat of a chosen option: the choice (`layer`), the option, the rule and its text. */
+        StackCaveatDto: {
+            layer: string;
+            option: string;
+            rule: string;
+            text: string;
+        };
+        /**
+         * @description FR-117: `layersChanged` (catalog layers: `frontend`, `backend`, `data`, `vcs`, `deploy`)
+         *     against the stack the version's base code was built with; `isStackChange` when `baseHasCode` and a layer
+         *     changed (the spec then needs a "Stack Migration" section).
+         */
+        StackChangeDto: {
+            baseHasCode: boolean;
+            layersChanged: string[];
+            isStackChange: boolean;
+        };
+        /** @description A choice of the Stack step; `layer` is the layer it belongs to (the deployment choices share `deploy`). */
+        StackChoiceDto: {
+            id: string;
+            layer: string;
+            name: string;
+            options: components["schemas"]["StackOptionDto"][];
+        };
+        /**
+         * @description A choice's options for the choices made so far: `selected` is the current selection, `default` the option to
+         *     preselect (R12 Compose, "same as frontend" for the backend host, the R10 origin model).
+         */
+        StackChoiceStateDto: {
+            choice: string;
+            layer: string;
+            selected: null | string;
+            default: null | string;
+            options: components["schemas"]["StackOptionStateDto"][];
+        };
+        StackComponentDto: {
+            pack: string;
+            path: string;
+        };
+        /** @description A frontend or backend: the pack id (or `none`) and its path in the repo (FR-119; default `frontend`/`backend`). */
+        StackComponentSelection: {
+            pack: string;
+            path?: null | string;
+        };
+        /**
+         * @description The normalised composition (§4.18) returned by `POST /api/stack/validate`: None is `null`;
+         *     `originModel` is `null` without a frontend (API only). `catalogHash` is `null` for a composition
+         *     written by the FR-129 preset migration until it is re-pinned.
+         */
+        StackCompositionDto: {
+            catalogVersion: string;
+            catalogHash: null | string;
+            frontend: null | components["schemas"]["StackComponentDto"];
+            backend: null | components["schemas"]["StackComponentDto"];
+            data: null | components["schemas"]["StackDataDto"];
+            vcs: components["schemas"]["StackVcsDto"];
+            deploy: components["schemas"]["StackDeployDto"];
+            originModel: null | string;
+            derived: components["schemas"]["StackDerivedDto"];
+            caveats: components["schemas"]["StackCaveatDto"][];
+        };
+        /**
+         * @description A (partial) composition (§4.17, §4.18). For `/options` a missing layer is "not chosen yet"; for `/validate` it
+         *     is None, except `vcs` (required), `deploy.local` (default: Compose when there's a backend or a database, R12)
+         *     and `originModel` (the default of R10). `"none"` as a pack or host is an explicit None.
+         */
+        StackCompositionRequest: {
+            frontend?: null | components["schemas"]["StackComponentSelection"];
+            backend?: null | components["schemas"]["StackComponentSelection"];
+            data?: null | components["schemas"]["StackDataSelection"];
+            vcs?: null | components["schemas"]["StackVcsSelection"];
+            deploy?: null | components["schemas"]["StackDeploySelection"];
+            /** @description `same-origin`, `proxy` or `cross-origin`. */
+            originModel?: null | string;
+        };
+        StackDataDto: {
+            pack: string;
+            mode: null | string;
+        };
+        /** @description The data layer: the pack id (or `none`); `mode` defaults to the option's (Supabase: `baas`). */
+        StackDataSelection: {
+            pack: string;
+            mode?: null | string;
+        };
+        /** @description Host option ids (`null` = None) and the local dev loop (`compose` or `none`). */
+        StackDeployDto: {
+            frontendHost: null | string;
+            backendHost: null | string;
+            databaseHost: null | string;
+            local: string;
+        };
+        /** @description The Deployment layer: option ids of the frontend, backend and database hosts (or `none`) and the local dev loop (`compose`/`none`). */
+        StackDeploySelection: {
+            frontendHost?: null | string;
+            backendHost?: null | string;
+            databaseHost?: null | string;
+            local?: null | string;
+        };
+        /**
+         * @description Derived facts (§4.18): the Next.js mode (R2), the specialists in play (FR-120), the origin models the Owner can switch
+         *     between (R10), and the selected packs' spec sections, env names and gate commands.
+         */
+        StackDerivedDto: {
+            nextjsMode: null | string;
+            agents: string[];
+            originModelOptions: string[];
+            specSections: string[];
+            envNames: string[];
+            gates: string[];
+        };
+        /** @description A detected choice: the option id, the layer path (frontend, backend), the data mode and the evidence (e.g. "`next` 16.1 in `package.json`"). */
+        StackDetectedChoiceDto: {
+            choice: string;
+            option: string;
+            path: null | string;
+            mode: null | string;
+            evidence: string[];
+        };
+        StackDetectionCandidateDto: {
+            option: string;
+            path: null | string;
+            evidence: string[];
+        };
+        /** @description A choice whose matches disagree: left empty, with each candidate. */
+        StackDetectionConflictDto: {
+            choice: string;
+            candidates: components["schemas"]["StackDetectionCandidateDto"][];
+        };
+        /**
+         * @description FR-118: the detected stack, to pre-fill the wizard's Stack step. `suggestions` are the detected choices (one per
+         *     choice id: `frontend`, `backend`, `data`, `vcs` — fixed to the repo's host —, `frontendHost`,
+         *     `backendHost`, `databaseHost`) with the layer path, the data mode and the evidence; `conflicts` are
+         *     choices left empty because matches disagree, with every candidate. Choices in neither list weren't detected.
+         *     `ref` and `commit` are what was read; `truncated`: the repository has more files than were listed.
+         */
+        StackDetectionDto: {
+            ref: string;
+            commit: string;
+            suggestions: components["schemas"]["StackDetectedChoiceDto"][];
+            conflicts: components["schemas"]["StackDetectionConflictDto"][];
+            truncated: boolean;
+        };
+        /** @description One of the five layers (Frontend, Backend, Data, VCS, Deployment). */
+        StackLayerDto: {
+            id: string;
+            name: string;
+            description: string;
+        };
+        /** @enum {unknown} */
+        StackLockReason: "plan_locked" | "not_in_development" | null;
+        StackModeDto: {
+            id: string;
+            name: string;
+            description: string;
+        };
+        /**
+         * @description An option card: name, one-line description, chips, and for pack options the pack id, its version
+         *     (`&lt;plugin version&gt;+aide.&lt;n&gt;`), its stack-packs source and its modes. `mode` is the pack mode the option
+         *     selects (Supabase: `baas`). Plain options (None, External, origin models) have no pack.
+         */
+        StackOptionDto: {
+            id: string;
+            name: string;
+            description: string;
+            chips: string[];
+            pack: null | string;
+            packVersion: null | string;
+            source: null | components["schemas"]["StackPackSourceDto"];
+            modes: components["schemas"]["StackModeDto"][];
+            mode: null | string;
+        };
+        /**
+         * @description §4.17: the state of an option for the choices made so far.
+         * @enum {unknown}
+         */
+        StackOptionState: "allowed" | "caveat" | "forbidden" | "invalidated";
+        /** @description An option's state (`allowed`, `caveat`, `forbidden`, `invalidated`) with its reasons, and whether a recommended combination includes it. */
+        StackOptionStateDto: {
+            id: string;
+            state: components["schemas"]["StackOptionState"];
+            reasons: components["schemas"]["StackReasonDto"][];
+            recommended: boolean;
+        };
+        /**
+         * @description `POST /api/stack/options` (§4.17): every choice in evaluation order with every option's state. A selection that
+         *     earlier choices now forbid is `invalidated` (the wizard clears it and names the reason); later choices are
+         *     evaluated without it. `nextjsMode` is R2's derived mode once known.
+         */
+        StackOptionsDto: {
+            catalogVersion: string;
+            choices: components["schemas"]["StackChoiceStateDto"][];
+            nextjsMode: null | string;
+        };
+        /** @description Where a pack was adapted from (FR-122): the stack-packs plugin, its version and the snapshot date. */
+        StackPackSourceDto: {
+            plugin: string;
+            version: string;
+            snapshot: string;
+        };
+        /** @description A rule id (`R1`…) and its text, e.g. `R3` "Prisma needs Express, NestJS or Next.js full-stack". */
+        StackReasonDto: {
+            rule: string;
+            text: string;
+        };
+        /** @description A recommended combination (stack-packs `compose-stack`): option ids per choice id. */
+        StackRecommendationDto: {
+            id: string;
+            name: string;
+            choices: {
+                [key: string]: string[];
+            };
+        };
+        /** @description A compatibility rule (§4.17): its stable id (`R1`…) and statement. */
+        StackRuleDto: {
+            id: string;
+            statement: string;
+        };
+        StackVcsDto: {
+            pack: string;
+            /** Format: uuid */
+            instanceId: null | string;
+            selfManaged: boolean;
+        };
+        /** @description The VCS layer: the pack id, the GitLab host instance, and whether it is self-managed (R9). */
+        StackVcsSelection: {
+            pack: string;
+            /** Format: uuid */
+            instanceId?: null | string;
+            selfManaged?: boolean;
+        };
         /** @description Start a refinement round (FR-27), optionally answering some or all clarifying questions of the latest round. */
         StartRefinementRequest: {
             answers?: null | components["schemas"]["RefinementAnswerRequest"][];
@@ -4229,13 +6243,16 @@ export interface components {
         /**
          * @description FR-60: start a new release version. `version` is semver (a leading `v` is stripped, e.g. `v1.2.0` →
          *     `1.2.0`); `request` describes the new features, improvements or fixes and becomes the project idea for this
-         *     version; `presetId` picks the tech stack preset of the new version (FR-74): omit it to keep the preset of the
-         *     version it builds on, send `null` for no preset; an unknown id is `PRESET_NOT_FOUND`.
+         *     version. `stack` (FR-117,
+         *     "Change stack") is the new version's stack composition, validated like project create (`STACK_INCOMPATIBLE`,
+         *     `VCS_MISMATCH`, `VALIDATION` on `stack.*`); omitted or `null`, the base version's composition is kept,
+         *     re-pinned to the current catalog (`STACK_INCOMPATIBLE` if the catalog no longer allows it). FR-129: the v2
+         *     `presetId` was removed (D-V4-4).
          */
         StartReleaseVersionRequest: {
             version: string;
             request: string;
-            presetId?: null | string;
+            stack?: null | components["schemas"]["StackCompositionRequest"];
         };
         /** @description FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1). */
         StartReleaseVersionResultDto: {
@@ -4309,17 +6326,25 @@ export interface components {
             unreadCount: number;
         };
         /**
-         * @description Settings → Deployment (FR-88, Owner). `provider` (required) is `vercel`, or `null` to turn deployment
-         *     off (other fields not allowed then; history is kept). `connectionId` binds one of the caller's own Vercel
-         *     connections (omitted: keep the bound one). Send `vercelProjectId` to link an existing Vercel project or
-         *     `create` to create one, not both (omitted: keep the linked one).
+         * @description Save the Bitbucket OAuth consumer (FR-133): its key (`clientId`) and secret. An omitted `clientSecret` keeps the
+         *     stored one (so the key can be corrected without re-entering the secret).
          */
-        UpdateDeploymentSettingsRequest: {
-            provider: null | components["schemas"]["DeploymentProvider"];
-            /** Format: uuid */
-            connectionId?: null | string;
-            vercelProjectId?: null | string;
-            create?: null | components["schemas"]["CreateVercelProjectRequest"];
+        UpdateBitbucketConsumerRequest: {
+            clientId: string;
+            clientSecret?: null | string;
+        };
+        /**
+         * @description Change a GitLab instance (FR-130); omitted fields are unchanged. An empty `clientId` or `clientSecret` clears it.
+         *     Changing `baseUrl` or `allowInsecureHttp` runs the SSRF guard and the reachability check again. gitlab.com's
+         *     base URL can't change. `enabled: false` disables the instance: its connections stop working and sign-in hides it.
+         */
+        UpdateGitLabInstanceRequest: {
+            name?: null | string;
+            baseUrl?: null | string;
+            clientId?: null | string;
+            clientSecret?: null | string;
+            allowInsecureHttp?: null | boolean;
+            enabled?: null | boolean;
         };
         /** @description Partial update of the Git settings. Omitted fields are unchanged. */
         UpdateGitSettingsRequest: {
@@ -4330,6 +6355,15 @@ export interface components {
             /** @description Sets the access token. To remove it, send `clearToken: true`. */
             token?: null | string;
             clearToken?: boolean;
+            /**
+             * Format: uuid
+             * @description FR-136: re-binds a GitLab or Bitbucket project to one of the caller's own connections on the project's instance
+             *     (Owner). AIDE first checks the connection's access to the repository: GitLab Developer or higher, Bitbucket
+             *     `write` or `admin` (else 403 `FORBIDDEN`). Another user's connection is 403 `CREDENTIAL_NOT_OWNER`;
+             *     an invalid one 409 `GIT_NOT_CONNECTED`; one on another instance, or `connectionId` on a project that isn't
+             *     on GitLab or Bitbucket, 400 `VALIDATION`.
+             */
+            connectionId?: null | string;
             mergeStrategy?: null | components["schemas"]["MergeStrategy"];
             /**
              * @description §4.10, FR-64: the tag prefix (`^[A-Za-z0-9._/-]{0,20}$`, not starting with `.`, `/` or
@@ -4369,12 +6403,9 @@ export interface components {
         UpdateNotificationSettingsRequest: {
             channels: components["schemas"]["NotificationChannelInput"][];
         };
-        /**
-         * @description FR-74: change the preset of the version in development (Owner), until its first implementation plan is locked.
-         *     `presetId` is a preset id from `GET /api/presets`, or `null` for no preset (general).
-         */
-        UpdateProjectPresetRequest: {
-            presetId?: null | string;
+        /** @description Rename a platform connection (FR-142). */
+        UpdatePlatformConnectionRequest: {
+            label: string;
         };
         /** @description Partial update of a project (FR-7). Omitted fields are unchanged. */
         UpdateProjectRequest: {
@@ -4394,10 +6425,6 @@ export interface components {
             /** @description `true` removes the token budget (unlimited). Can't be combined with `tokenBudget`. */
             clearTokenBudget?: boolean;
         };
-        /** @description Rename a Vercel connection (FR-87). */
-        UpdateVercelConnectionRequest: {
-            label: string;
-        };
         /** @description The signed-in user (or a user, for admins). */
         UserDto: {
             /** Format: uuid */
@@ -4408,55 +6435,6 @@ export interface components {
             avatarUrl: null | string;
             githubLinked: boolean;
         };
-        /** @description A project that has a Vercel connection bound for deployment (FR-88). */
-        VercelBoundProjectDto: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-        };
-        /**
-         * @description One of the caller's Vercel connections (FR-87). The token is never returned: only the label, its last 4 characters,
-         *     the Vercel account (`accountName`, the Vercel username; `null` when unknown) and, for a team-scoped token,
-         *     `teamId`/`teamSlug`, the `scope` (`account` or `team`), the token's expiry (`null`: none),
-         *     the validation status (`valid`, `invalid`, `unchecked`) and when it was last checked, plus the projects
-         *     it is bound to.
-         */
-        VercelConnectionDto: {
-            /** Format: uuid */
-            id: string;
-            label: string;
-            last4: string;
-            accountName: null | string;
-            teamId: null | string;
-            teamSlug: null | string;
-            scope: components["schemas"]["VercelTokenScope"];
-            /** Format: date-time */
-            expiresAt: null | string;
-            status: components["schemas"]["VercelConnectionStatus"];
-            /** Format: date-time */
-            lastValidatedAt: null | string;
-            /** Format: date-time */
-            createdAt: string;
-            boundProjects: components["schemas"]["VercelBoundProjectDto"][];
-        };
-        /**
-         * @description Validation state of a Vercel connection (FR-87: a token Vercel rejects marks it invalid). Wire values:
-         *                 `valid`, `invalid`, `unchecked`.
-         * @enum {unknown}
-         */
-        VercelConnectionStatus: "valid" | "invalid" | "unchecked";
-        /** @description The linked Vercel project (FR-88): id (`prj_…`), name, its Vercel URL and the production URL once known. */
-        VercelProjectDto: {
-            id: string;
-            name: string;
-            url: null | string;
-            productionUrl: null | string;
-        };
-        /**
-         * @description Scope of a Vercel token (FR-87). Wire values: `account`, `team`.
-         * @enum {unknown}
-         */
-        VercelTokenScope: "account" | "team";
         /** @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known. */
         ViolationDto: {
             category: components["schemas"]["ReviewCategory"];
@@ -5206,7 +7184,7 @@ export interface operations {
             };
         };
     };
-    ListVercelConnections: {
+    ListLlmProviders: {
         parameters: {
             query?: never;
             header?: never;
@@ -5221,7 +7199,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VercelConnectionDto"][];
+                    "application/json": components["schemas"]["LlmProviderDto"][];
                 };
             };
             /** @description Unauthorized */
@@ -5235,7 +7213,36 @@ export interface operations {
             };
         };
     };
-    CreateVercelConnection: {
+    ListPlatformConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformConnectionDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreatePlatformConnection: {
         parameters: {
             query?: never;
             header?: never;
@@ -5244,7 +7251,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateVercelConnectionRequest"];
+                "application/json": components["schemas"]["CreatePlatformConnectionRequest"];
             };
         };
         responses: {
@@ -5254,10 +7261,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VercelConnectionDto"];
+                    "application/json": components["schemas"]["PlatformConnectionDto"];
                 };
             };
-            /** @description VALIDATION, or CREDENTIAL_INVALID (Vercel rejected the token; nothing is saved) */
+            /** @description VALIDATION, CREDENTIAL_INVALID (the platform rejected the token; nothing is saved) or CONNECTION_SCOPE_INSUFFICIENT (a Cloudflare account-owned cfat_ token: Workers Builds needs a user token) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5284,7 +7291,18 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached; nothing is saved) */
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -5295,7 +7313,7 @@ export interface operations {
             };
         };
     };
-    DeleteVercelConnection: {
+    DeletePlatformConnection: {
         parameters: {
             query?: never;
             header?: never;
@@ -5342,7 +7360,7 @@ export interface operations {
             };
         };
     };
-    RenameVercelConnection: {
+    RenamePlatformConnection: {
         parameters: {
             query?: never;
             header?: never;
@@ -5353,7 +7371,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateVercelConnectionRequest"];
+                "application/json": components["schemas"]["UpdatePlatformConnectionRequest"];
             };
         };
         responses: {
@@ -5363,7 +7381,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VercelConnectionDto"];
+                    "application/json": components["schemas"]["PlatformConnectionDto"];
                 };
             };
             /** @description Bad Request */
@@ -5404,7 +7422,7 @@ export interface operations {
             };
         };
     };
-    TestVercelConnection: {
+    TestPlatformConnection: {
         parameters: {
             query?: never;
             header?: never;
@@ -5421,7 +7439,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VercelConnectionDto"];
+                    "application/json": components["schemas"]["PlatformConnectionDto"];
                 };
             };
             /** @description Unauthorized */
@@ -5451,7 +7469,159 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Bad Gateway */
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPlatformConnectionAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAccountDto"][];
+                };
+            };
+            /** @description VALIDATION (a type the provider doesn't list, or a malformed accountId), CREDENTIAL_INVALID (the token is invalid or was just rejected; the connection is now invalid) or CONNECTION_SCOPE_INSUFFICIENT (the token lacks a permission for this request; the connection's status is unchanged) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPlatformConnectionResources: {
+        parameters: {
+            query?: {
+                type?: "sites" | "services" | "projects" | "workers" | "orgs" | "regions" | "databases";
+                accountId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformResourceDto"][];
+                };
+            };
+            /** @description VALIDATION (a type the provider doesn't list, or a malformed accountId), CREDENTIAL_INVALID (the token is invalid or was just rejected; the connection is now invalid) or CONNECTION_SCOPE_INSUFFICIENT (the token lacks a permission for this request; the connection's status is unchanged) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -5851,6 +8021,2011 @@ export interface operations {
                 };
             };
             /** @description UPSTREAM_ERROR (GitHub failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAdminGitLabIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitLabIntegrationDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateAdminGitLabInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGitLabInstanceRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitLabInstanceDto"];
+                };
+            };
+            /** @description VALIDATION, or GIT_HOST_NOT_ALLOWED (the base URL fails the SSRF guard) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (the base URL is gitlab.com, already registered, or configured in the environment) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the host didn't resolve, couldn't be reached, or didn't answer like GitLab) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAdminGitLabInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitLabInstanceDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteAdminGitLabInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (projects use it, or it is gitlab.com or configured) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateAdminGitLabInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGitLabInstanceRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitLabInstanceDto"];
+                };
+            };
+            /** @description VALIDATION, or GIT_HOST_NOT_ALLOWED (the base URL fails the SSRF guard) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (configured instance, duplicate base URL, or a base URL change while connections or projects use it) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the new base URL didn't answer like GitLab) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CheckAdminGitLabInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGitLabInstanceDto"];
+                };
+            };
+            /** @description GIT_HOST_NOT_ALLOWED (the host now resolves to a refused address) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StartGitLabOAuth: {
+        parameters: {
+            query?: {
+                instanceId?: string;
+                mode?: "signin" | "connect";
+                returnUrl?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description UNAUTHENTICATED (mode=connect without a session) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (mode=connect with an API token) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GitLabOAuthCallback: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetGitLabPendingLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabPendingLinkDto"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ConfirmGitLabLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (signed in as a different account than the one with that email) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (no pending link, or it expired) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (the GitLab identity was linked to another account meanwhile) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CancelGitLabLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListGitLabConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabConnectionDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateGitLabTokenConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGitLabTokenConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabConnectionDto"];
+                };
+            };
+            /** @description VALIDATION; CREDENTIAL_INVALID (GitLab rejected the token, or it is expired or revoked); CONNECTION_SCOPE_INSUFFICIENT (missing scopes in details and the title); GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (no such enabled instance) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (connected concurrently; retry) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Retry-After when GitLab sent one) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListGitLabInstances: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabInstanceSummaryDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteGitLabConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestGitLabConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabConnectionDto"];
+                };
+            };
+            /** @description GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Retry-After when GitLab sent one) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached); the status is unchanged */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListGitLabRepos: {
+        parameters: {
+            query: {
+                connectionId: string;
+                search?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabRepoPageDto"];
+                };
+            };
+            /** @description VALIDATION or GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's GitLab connections) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid, or its instance is disabled) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Retry-After when GitLab sent one) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateGitLabRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGitLabRepoRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabRepoDto"];
+                };
+            };
+            /** @description VALIDATION or GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (GitLab doesn't let the caller create projects there) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's connections, or no such group) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description REPO_NAME_TAKEN, or GIT_NOT_CONNECTED (the connection is invalid, or its instance is disabled) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (the GitLab.com project-creation limit; Retry-After when sent) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetGitLabRepoRefs: {
+        parameters: {
+            query: {
+                connectionId: string;
+            };
+            header?: never;
+            path: {
+                repoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabRepoRefsDto"];
+                };
+            };
+            /** @description VALIDATION or GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's GitLab connections, or no such repository visible to it) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid, or its instance is disabled) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Retry-After when GitLab sent one) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListGitLabOwners: {
+        parameters: {
+            query: {
+                connectionId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitLabOwnerDto"][];
+                };
+            };
+            /** @description GIT_HOST_NOT_ALLOWED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's GitLab connections) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid, or its instance is disabled) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Retry-After when GitLab sent one) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAdminBitbucketIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBitbucketIntegrationDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateAdminBitbucketIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBitbucketConsumerRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBitbucketIntegrationDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (the consumer is configured in the environment, Bitbucket__OAuth__*) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteAdminBitbucketIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (the consumer is configured in the environment, Bitbucket__OAuth__*) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StartBitbucketOAuth: {
+        parameters: {
+            query?: {
+                mode?: "signin" | "connect";
+                returnUrl?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description UNAUTHENTICATED (mode=connect without a session) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (mode=connect with an API token) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    BitbucketOAuthCallback: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Found */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetBitbucketPendingLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketPendingLinkDto"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ConfirmBitbucketLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (signed in as a different account than the one with that email) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (no pending link, or it expired) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (the Bitbucket identity was linked to another account meanwhile) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CancelBitbucketLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListBitbucketConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketConnectionDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateBitbucketTokenConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBitbucketTokenConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketConnectionDto"];
+                };
+            };
+            /** @description VALIDATION; CREDENTIAL_INVALID (Bitbucket rejected the token and email); CONNECTION_SCOPE_INSUFFICIENT (missing scopes in details, scopes AIDE couldn't confirm in unverifiableScopes; both in the title). A token is saved only when all nine scopes are verified */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (connected concurrently; retry) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the caller's budget of 900 Bitbucket requests an hour for token checks; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteBitbucketConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestBitbucketConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketConnectionDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the connection's budget of 900 requests an hour; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached); the status is unchanged */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListBitbucketRepos: {
+        parameters: {
+            query: {
+                connectionId: string;
+                search?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketRepoPageDto"];
+                };
+            };
+            /** @description VALIDATION */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's Bitbucket connections) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the connection's budget of 900 requests an hour; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateBitbucketRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBitbucketRepoRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketRepoDto"];
+                };
+            };
+            /** @description VALIDATION */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (Bitbucket doesn't let the caller create repositories there) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's connections, or no such workspace or project) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description REPO_NAME_TAKEN, or GIT_NOT_CONNECTED (the connection is invalid) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the connection's budget of 900 requests an hour; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached), or UPSTREAM_ERROR after the repository was created: its README commit couldn't be made or pushed (git failed or is missing, or the server couldn't write the temp folder); the empty repository stays */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetBitbucketRepoRefs: {
+        parameters: {
+            query: {
+                connectionId: string;
+            };
+            header?: never;
+            path: {
+                repoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketRepoRefsDto"];
+                };
+            };
+            /** @description VALIDATION */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's Bitbucket connections, or no such repository visible to it) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the connection's budget of 900 requests an hour; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListBitbucketOwners: {
+        parameters: {
+            query: {
+                connectionId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitbucketOwnersDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (not one of the caller's Bitbucket connections) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED (the connection is invalid) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the connection's budget of 900 requests an hour; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (Bitbucket failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -6398,7 +10573,7 @@ export interface operations {
                 phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
-                preset?: string;
+                pack?: string;
                 sortBy?: "created" | "updated" | "name";
                 sortOrder?: "asc" | "desc";
             };
@@ -6459,7 +10634,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectDto"];
                 };
             };
-            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository) or PRESET_NOT_FOUND */
+            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH or LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6477,7 +10652,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) or CREDENTIAL_NOT_OWNER (deployment: another user's Vercel connection) */
+            /** @description FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) or CREDENTIAL_NOT_OWNER (deployment: another user's Vercel connection; llm: another user's LLM connection) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6486,7 +10661,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it; deployment: unknown Vercel connection or project) */
+            /** @description NOT_FOUND (import with github_pat: the repository doesn't exist or the token can't see it; deployment: unknown Vercel connection or project; llm: unknown LLM connection) */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6495,7 +10670,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists); deployment: VERCEL_GIT_NOT_CONNECTED (extension installUrl) or VERCEL_PLAN_LIMIT */
+            /** @description GITHUB_APP_NOT_INSTALLED (extension installUrl) or GITHUB_NOT_CONNECTED (github_app); import: VERSION_NOT_GREATER (developmentVersion not above the released tag) or TAG_EXISTS (the development version's tag exists); deployment: PLATFORM_GIT_NOT_CONNECTED (extensions platform, installUrl) or PLATFORM_PLAN_LIMIT */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6533,7 +10708,7 @@ export interface operations {
                 phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
-                preset?: string;
+                pack?: string;
             };
             header?: never;
             path?: never;
@@ -7081,7 +11256,7 @@ export interface operations {
                     "application/json": components["schemas"]["GitSettingsDto"];
                 };
             };
-            /** @description VALIDATION: invalid Git settings or tag prefix. */
+            /** @description VALIDATION: invalid Git settings or tag prefix, a provider change onto gitlab/bitbucket, or connectionId on a project that isn't on GitLab or for another instance; GIT_HOST_NOT_ALLOWED. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7099,7 +11274,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Forbidden */
+            /** @description FORBIDDEN (not an Owner, or the connection lacks Developer access to the repository); CREDENTIAL_NOT_OWNER (another user's connection) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7117,8 +11292,28 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description CONFLICT: the tag prefix can't change while a release is in progress or awaiting its merge, or a concurrent change. */
+            /** @description CONFLICT: the tag prefix can't change while a release is in progress or awaiting its merge, or a concurrent change; GIT_NOT_CONNECTED (the connection is invalid or its instance disabled). */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (GitLab; Retry-After when sent) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (GitLab failed or couldn't be reached) */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7477,31 +11672,32 @@ export interface operations {
             };
         };
     };
-    UpdateDeploymentSettings: {
+    PutDeploymentTarget: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 id: string;
+                component: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateDeploymentSettingsRequest"];
+                "application/json": components["schemas"]["PutDeploymentTargetRequest"];
             };
         };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeploymentSettingsDto"];
+                    "application/json": components["schemas"]["DeploymentTargetDto"];
                 };
             };
-            /** @description VALIDATION (including a Local Git project, or both vercelProjectId and create) */
+            /** @description VALIDATION (body, component, or a Local Git project outside Fake mode) or STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7519,7 +11715,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection, or changing the deployment with another Owner's bound connection without sending your own connectionId) */
+            /** @description FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7528,7 +11724,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description NOT_FOUND (project, connection or Vercel project) */
+            /** @description NOT_FOUND (project or connection) */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7537,7 +11733,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description VERCEL_GIT_NOT_CONNECTED (extension installUrl: Vercel's GitHub App install link), VERCEL_PLAN_LIMIT (Hobby plan with an organisation-owned repo) or CONFLICT (concurrent change) */
+            /** @description PLATFORM_PERMISSION_MISSING (GitHub Pages: the AIDE GitHub App lacks Pages; extensions platform, installUrl = the App's page), PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT (extension platform; also reported by the setup job on the target) or CONFLICT */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7546,8 +11742,124 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            /** @description PLATFORM_ERROR (the provider isn't supported for real yet; extension platform) or UPSTREAM_ERROR (GitHub couldn't mint a token) */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteDeploymentTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                component: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    VerifyDeploymentTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                component: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentVerifyDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7631,7 +11943,7 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentEnvVarDto"];
                 };
             };
-            /** @description Bad Request */
+            /** @description VALIDATION (including a derived key, or secret values can't be public) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7667,7 +11979,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR (saved in AIDE with syncError; Vercel failed or couldn't be reached) */
+            /** @description UPSTREAM_ERROR (saved in AIDE with syncError; a platform failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -7749,6 +12061,8 @@ export interface operations {
             query?: {
                 target?: "preview" | "production";
                 releaseVersionId?: string;
+                component?: "frontend" | "backend";
+                environment?: "preview" | "production";
             };
             header?: never;
             path: {
@@ -7796,12 +12110,120 @@ export interface operations {
             };
         };
     };
+    GetPreviewEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewEnvironmentDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     CreatePreviewDeployment: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolloutDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description DEPLOYMENT_NOT_CONFIGURED (no deployment target with a resource and bound connection), PREVIEW_DATABASE_DIVERGED (the preview database has migrations the branch no longer has: reset it first), DEPLOYMENT_ACTION_UNSUPPORTED (no target has previews, e.g. only GitHub Pages), INVALID_STATE (a preview database reset is queued or running) or CONFLICT (no version branch yet) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RollbackDeployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                deploymentId: string;
             };
             cookie?: never;
         };
@@ -7843,7 +12265,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description DEPLOYMENT_NOT_CONFIGURED (no deployment settings or no bound connection) */
+            /** @description INVALID_DEPLOYMENT (not a ready production deployment, unknown at the platform, or already current), DEPLOYMENT_ACTION_UNSUPPORTED (the provider has no rollback, e.g. GitHub Pages; extension platform) or DEPLOYMENT_NOT_CONFIGURED */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7852,7 +12274,18 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -7911,7 +12344,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description INVALID_DEPLOYMENT (not a ready production deployment) or DEPLOYMENT_NOT_CONFIGURED */
+            /** @description INVALID_DEPLOYMENT (not a ready production deployment), DEPLOYMENT_ACTION_UNSUPPORTED (the provider has no rollback, e.g. GitHub Pages; extension platform) or DEPLOYMENT_NOT_CONFIGURED */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7920,7 +12353,18 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
+            /** @description UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -7990,6 +12434,380 @@ export interface operations {
             };
             /** @description UPSTREAM_ERROR (Vercel failed or couldn't be reached) */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PutManagedDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutManagedDatabaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDatabaseDto"];
+                };
+            };
+            /** @description VALIDATION (body, environment; link.resourceId or external.connectionString when it is the other environment's database: the preview database must be separate from production) or STACK_INCOMPATIBLE (the composition's database host doesn't allow this provider) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project or connection) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (changed concurrently) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteManagedDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project, or no database for the environment) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CONFLICT (changed concurrently, e.g. by the provisioning job) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RestoreManagedDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDatabaseDto"];
+                };
+            };
+            /** @description VALIDATION (environment) or CREDENTIAL_INVALID (the bound token was rejected) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description DEPLOYMENT_ACTION_UNSUPPORTED (not Supabase), CONFLICT (not paused, or changed concurrently) or DEPLOYMENT_NOT_CONFIGURED (the connection is gone) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (Supabase's 429; Retry-After) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ResetPreviewDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewDatabaseResetDto"];
+                };
+            };
+            /** @description VALIDATION (the preview database isn't separate from production: AIDE never resets it) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project, or no preview database) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description INVALID_STATE (a preview rollout or reset is running, or the preview database isn't available yet) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListMigrationRuns: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MigrationRunDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetMigrationRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MigrationRunDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9539,7 +14357,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description WRONG_PHASE: not in the review or release phase. */
+            /** @description WRONG_PHASE: not in the review or release phase. GIT_NOT_CONNECTED: the GitLab project's binding was cleared. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9548,7 +14366,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset). */
+            /** @description GITHUB_RATE_LIMITED, or UPSTREAM_RATE_LIMITED for GitLab (Retry-After: seconds until the rate-limit reset). */
             429: {
                 headers: {
                     /** @description Seconds until the action is allowed again. */
@@ -9559,7 +14377,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR: GitHub failed or couldn't be reached. */
+            /** @description UPSTREAM_ERROR: GitHub or GitLab failed or couldn't be reached. */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -9989,6 +14807,47 @@ export interface operations {
             };
         };
     };
+    GetReleaseNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseNotesDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or no such release attempt in it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     RollbackProject: {
         parameters: {
             query?: never;
@@ -10175,7 +15034,7 @@ export interface operations {
                     "application/json": components["schemas"]["StartReleaseVersionResultDto"];
                 };
             };
-            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]) or PRESET_NOT_FOUND. */
+            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension) or VCS_MISMATCH. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10273,7 +15132,7 @@ export interface operations {
             };
         };
     };
-    ListPresets: {
+    GetStackCatalog: {
         parameters: {
             query?: never;
             header?: never;
@@ -10288,7 +15147,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PresetSummaryDto"][];
+                    "application/json": components["schemas"]["StackCatalogDto"];
                 };
             };
             /** @description Unauthorized */
@@ -10302,58 +15161,16 @@ export interface operations {
             };
         };
     };
-    GetPreset: {
+    GetStackOptions: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                presetId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresetDetailDto"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description NOT_FOUND: no preset with that id. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    UpdateProjectPreset: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateProjectPresetRequest"];
+                "application/json": components["schemas"]["StackCompositionRequest"];
             };
         };
         responses: {
@@ -10363,10 +15180,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectDto"];
+                    "application/json": components["schemas"]["StackOptionsDto"];
                 };
             };
-            /** @description PRESET_NOT_FOUND: no preset with that id. */
+            /** @description VALIDATION: an unknown pack or option id, or a malformed layer path. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10384,7 +15201,222 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description FORBIDDEN: only Owners change the preset. */
+        };
+    };
+    ValidateStack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StackCompositionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StackCompositionDto"];
+                };
+            };
+            /** @description STACK_INCOMPATIBLE: the composition breaks a compatibility rule (the violations extension lists {layer, option, rule, reason}); VALIDATION: an unknown id, a missing vcs or a malformed path. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DetectStack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DetectStackRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StackDetectionDto"];
+                };
+            };
+            /** @description VALIDATION: a malformed repo, ref or token, an instanceId or connectionId for a provider other than gitlab, or (local) a directory outside the import root or local import not enabled. GIT_HOST_NOT_ALLOWED (gitlab). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: GitHub refused the request. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: no such repository or ref, or the caller can't see it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GIT_NOT_CONNECTED: github_app without a valid GitHub connection, or gitlab without a valid GitLab connection on the instance. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description GITHUB_RATE_LIMITED (Retry-After: seconds until GitHub's rate-limit reset) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR: GitHub failed or couldn't be reached, or the local repository couldn't be read. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetProjectStack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectStackDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateProjectStack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StackCompositionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectStackDto"];
+                };
+            };
+            /** @description STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH (vcs isn't the repository's host) or VALIDATION (an unknown id or a malformed or overlapping path). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: only Owners change the stack. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10402,8 +15434,46 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description PRESET_LOCKED (the version's implementation plan is locked, or no version is in development) or CONFLICT (a concurrent edit). */
+            /** @description STACK_LOCKED (the version's implementation plan is locked, or no version is in development) or CONFLICT (a concurrent edit). */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAdminStackCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStackCatalogDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

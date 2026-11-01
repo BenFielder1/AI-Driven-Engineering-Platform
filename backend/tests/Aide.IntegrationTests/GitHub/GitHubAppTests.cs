@@ -86,7 +86,7 @@ public sealed class GitHubAppTests(AideApiFactory factory)
         Assert.Equal("http://localhost:8080/api/admin/integrations/github/callback", manifest.RedirectUrl);
         Assert.False(manifest.Public);
         Assert.Equal(
-            ["administration=write", "checks=read", "contents=write", "emails=read", "metadata=read", "pull_requests=write", "statuses=read", "workflows=write"],
+            ["actions=write", "actions_variables=write", "administration=write", "checks=read", "contents=write", "emails=read", "metadata=read", "pages=write", "pull_requests=write", "statuses=read", "workflows=write"],
             manifest.DefaultPermissions.Select(p => $"{p.Key}={p.Value}").Order(StringComparer.Ordinal));
         Assert.Equal($"https://github.com/settings/apps/new?state={Uri.EscapeDataString(started.State)}", started.PostUrl);
         Assert.True(started.State.Length <= AdminGitHubLimits.StateMaxLength);
@@ -244,8 +244,8 @@ public sealed class GitHubAppTests(AideApiFactory factory)
         Assert.Equal("https://github.com/apps/aide-test/installations/new", connection.InstallUrl);
         Assert.Equal(
             [
-                new GitHubInstallationDto(UserInstallation, new GitHubAccountDto("octo", GitHubOwnerType.User), GitHubRepositorySelection.Selected, "https://github.com/settings/installations/2001"),
-                new GitHubInstallationDto(OrgInstallation, new GitHubAccountDto("acme", GitHubOwnerType.Organization), GitHubRepositorySelection.All, "https://github.com/organizations/acme/settings/installations/2002"),
+                new GitHubInstallationDto(UserInstallation, new GitHubAccountDto("octo", GitHubOwnerType.User), GitHubRepositorySelection.Selected, "https://github.com/settings/installations/2001", GitHubPagesAccess.Missing),
+                new GitHubInstallationDto(OrgInstallation, new GitHubAccountDto("acme", GitHubOwnerType.Organization), GitHubRepositorySelection.All, "https://github.com/organizations/acme/settings/installations/2002", GitHubPagesAccess.Missing),
             ],
             connection.Installations);
         Assert.DoesNotContain(GitHubAppHarness.UserToken, text, StringComparison.Ordinal);

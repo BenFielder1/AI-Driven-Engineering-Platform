@@ -14,6 +14,8 @@ import {
 } from '../projects/labels'
 import { BuildLogTail, DeploymentLink, DeploymentStatusPill } from '../deployments/deployment-parts'
 import type { PreviewCheck } from '../deployments/deployments-api'
+import { previewBuildFailureTitles } from '../deployments/rollout-format'
+import { RolloutStateBadge, RolloutSteps } from '../deployments/rollout-parts'
 import { CategoryBarsChart } from './category-bars-chart'
 import type { CategoryScore, ComplianceReportDetail, FindingSeverity } from './review-api'
 
@@ -235,14 +237,15 @@ function waitedCopy(seconds: number): string {
 /**
  * FR-90: the preview deployment the cycle waited for: its final state, URL, how long review waited and whether it gave
  * up, and the build-log tail. An `error` preview is a critical architecture finding in the report ("Vercel preview
- * build failed"), listed under Violations.
+ * build failed"), listed under Violations. FR-147: a v4 report holds the whole preview rollout it waited for, shown as
+ * its steps (migrations, backend, frontend) read-only.
  */
 function PreviewCheckBlock({ preview }: { preview: PreviewCheck | null }) {
   return (
     <section aria-labelledby="report-preview-title" data-testid="report-preview" className="flex flex-col gap-2 border-t border-border/60 pt-3">
       <h4 id="report-preview-title" className="flex flex-wrap items-center gap-2 font-semibold">
         Preview deployment
-        {preview && <DeploymentStatusPill status={preview.status} />}
+        {preview?.rollout ? <RolloutStateBadge state={preview.rollout.state} /> : preview && <DeploymentStatusPill status={preview.status} />}
       </h4>
       {preview === null ? (
         <p className="text-sm text-muted-foreground">
@@ -251,9 +254,11 @@ function PreviewCheckBlock({ preview }: { preview: PreviewCheck | null }) {
         </p>
       ) : (
         <>
-          <p className="text-sm">
-            <DeploymentLink url={preview.url} />
-          </p>
+          {!preview.rollout && (
+            <p className="text-sm">
+              <DeploymentLink url={preview.url} />
+            </p>
+          )}
           {preview.timedOut ? (
             <Alert tone="warning" title="Review stopped waiting for the preview">
               <p>
@@ -268,12 +273,33 @@ function PreviewCheckBlock({ preview }: { preview: PreviewCheck | null }) {
               <p className="text-sm text-muted-foreground">{`Waited ${waitedCopy(preview.waitedSeconds)} for the preview`}</p>
             )
           )}
-          {preview.status === 'error' && (
-            <Alert tone="error" title="Vercel preview build failed">
-              <p>This is a critical architecture finding in this report: the optimisation plan has to fix the build.</p>
-            </Alert>
+          {preview.rollout ? (
+            <>
+              {previewBuildFailureTitles(preview.rollout.steps).map((title) => (
+                <Alert key={title} tone="error" title={title}>
+                  <p>This is a critical architecture finding in this report: the optimisation plan has to fix it.</p>
+                </Alert>
+              ))}
+              {preview.rollout.state === 'failed' && previewBuildFailureTitles(preview.rollout.steps).length === 0 && (
+                <Alert tone="error" title="The preview failed">
+                  <p>
+                    A failed preview migration is a critical data model finding in this report: the optimisation plan has
+                    to fix it.
+                  </p>
+                </Alert>
+              )}
+              <RolloutSteps rollout={preview.rollout} />
+            </>
+          ) : (
+            <>
+              {preview.status === 'error' && (
+                <Alert tone="error" title="Vercel preview build failed">
+                  <p>This is a critical architecture finding in this report: the optimisation plan has to fix the build.</p>
+                </Alert>
+              )}
+              <BuildLogTail log={preview.buildLogTail} defaultOpen={preview.status === 'error'} />
+            </>
           )}
-          <BuildLogTail log={preview.buildLogTail} defaultOpen={preview.status === 'error'} />
         </>
       )}
     </section>

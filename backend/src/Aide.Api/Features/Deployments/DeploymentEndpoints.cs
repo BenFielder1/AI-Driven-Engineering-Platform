@@ -15,7 +15,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Aide.Api.Features.Deployments;
 
 /// <summary>
-/// FR-88, FR-90, FR-91, §4.15: a project's Deployment settings and env vars (§6 <c>/api/projects/:id/settings/deployment</c>)
+/// FR-88, FR-90, FR-91, FR-143–FR-146, §4.15, §4.20: a project's Deployment settings — targets, readiness, env inventory
+/// (§6 <c>/api/projects/:id/settings/deployment</c>)
 /// and its deployments (<c>/api/projects/:id/deployments</c>). Members read settings and deployments; writers trigger a
 /// preview (and redeploy one); Owners edit settings and env vars, promote and redeploy production. Env values and tokens
 /// are never returned or logged. Builds and polls run in the <c>deployment</c> job (§4.15); settings, env writes and
@@ -23,6 +24,8 @@ namespace Aide.Api.Features.Deployments;
 /// </summary>
 public static class DeploymentEndpoints
 {
+    private const string RollbackRateLimited429 = "UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known)";
+
     public static IEndpointRouteBuilder MapDeploymentEndpoints(this IEndpointRouteBuilder app)
     {
         var settings = app.MapGroup("/api/projects/{id:guid}/settings/deployment")
@@ -34,41 +37,55 @@ public static class DeploymentEndpoints
 
         settings.MapGet("/", GetDeploymentSettings)
             .WithName("GetDeploymentSettings")
-            .WithSummary("Settings → Deployment for any member (FR-88): provider, supported, the binding (\"connected by <name>\", no token) with canBind for the caller, the linked Vercel project, root directory, framework, the preset's required env vars with present flags, and whether Vercel's GitHub App can access the repo (installUrl when not).")
+            .WithSummary("Settings → Deployment for any member (FR-144–FR-146; D-V4-4 reshaped it): one target card per component the composition hosts (provider, binding with \"connected by\", resource, root directory, derived build config, URLs, status, setup job progress, capabilities, readiness), database cards (not_configured until M30), the environment inventory (keys only) and the origin model.")
             .Produces<DeploymentSettingsDto>();
 
-        settings.MapPatch("/", UpdateDeploymentSettings)
-            .WithName("UpdateDeploymentSettings")
-            .WithSummary("Set the deployment provider (vercel, or null to turn deployment off), bind one of the caller's own Vercel connections (connectionId), and link an existing Vercel project (vercelProjectId) or create one linked to the GitHub repo (create {name, rootDirectory}) (Owner, FR-88). A Local Git project can't deploy (400 VALIDATION).")
-            .Produces<DeploymentSettingsDto>()
+        settings.MapPut("/targets/{component}", PutDeploymentTarget)
+            .WithName("PutDeploymentTarget")
+            .WithSummary("Set up the component's target (Owner, FR-143, FR-144): bind one of the caller's own connections of the composition's host and create (create {name, region?, plan?}) or link (link {resourceId}) the platform resource. Answers 202 with the target (configuring); a deployment_setup job does the platform work and its progress is on the target. GitHub Pages needs no connection and enables Pages on the GitHub repository.")
+            .Produces<DeploymentTargetDto>(StatusCodes.Status202Accepted)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION (including a Local Git project, or both vercelProjectId and create)"),
-                (StatusCodes.Status403Forbidden, "FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection, or changing the deployment with another Owner's bound connection without sending your own connectionId)"),
-                (StatusCodes.Status404NotFound, "NOT_FOUND (project, connection or Vercel project)"),
-                (StatusCodes.Status409Conflict, "VERCEL_GIT_NOT_CONNECTED (extension installUrl: Vercel's GitHub App install link), VERCEL_PLAN_LIMIT (Hobby plan with an organisation-owned repo) or CONFLICT (concurrent change)"),
-                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (Vercel failed or couldn't be reached)"));
+                (StatusCodes.Status400BadRequest, "VALIDATION (body, component, or a Local Git project outside Fake mode) or STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository)"),
+                (StatusCodes.Status403Forbidden, "FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection)"),
+                (StatusCodes.Status404NotFound, "NOT_FOUND (project or connection)"),
+                (StatusCodes.Status409Conflict, "PLATFORM_PERMISSION_MISSING (GitHub Pages: the AIDE GitHub App lacks Pages; extensions platform, installUrl = the App's page), PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT (extension platform; also reported by the setup job on the target) or CONFLICT"),
+                (StatusCodes.Status502BadGateway, "PLATFORM_ERROR (the provider isn't supported for real yet; extension platform) or UPSTREAM_ERROR (GitHub couldn't mint a token)"));
+
+        settings.MapDelete("/targets/{component}", DeleteDeploymentTarget)
+            .WithName("DeleteDeploymentTarget")
+            .WithSummary("Unbind and clear the component's target (Owner, FR-144). The platform resource is never deleted; deployments and env vars stay as history; derived env vars are recomputed.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesValidationProblem();
+
+        settings.MapPost("/targets/{component}/verify", VerifyDeploymentTarget)
+            .WithName("VerifyDeploymentTarget")
+            .WithSummary("Run the readiness checklist of the component's target with the platform (Owner, FR-144): connection, git_access, required_env, branch_control, preview_environment, plan_notes; each ok, warning, error or na with a message and an optional fix link. A ready target with an error item becomes attention.")
+            .Produces<DeploymentVerifyDto>()
+            .ProducesValidationProblem();
 
         settings.MapGet("/env", ListDeploymentEnv)
             .WithName("ListDeploymentEnv")
-            .WithSummary("The project's environment variables (Owner, FR-88): key, targets, sensitive, hasValue (always true), updatedAt and the Vercel sync state. Values are never returned.")
+            .WithSummary("The environment inventory (Owner, FR-145): user, derived and required variables with appliesTo, environments, sensitive, public, source, derivedFrom, hasValue and the sync state. Values are never returned.")
             .Produces<IReadOnlyList<DeploymentEnvVarDto>>();
 
         settings.MapPut("/env/{key}", PutDeploymentEnv)
             .WithName("PutDeploymentEnv")
-            .WithSummary("Create or replace an environment variable (Owner, FR-88): key ^[A-Za-z_][A-Za-z0-9_]*$ (up to 256), value up to 64 KB, targets preview and/or production, sensitive. The value is encrypted and pushed to Vercel (upsert by key and target). If the push fails the value is still saved, with syncError set, and the response is 502 UPSTREAM_ERROR; the next save or deployment pushes it again.")
+            .WithSummary("Create or replace a user environment variable (Owner, FR-145): key ^[A-Za-z_][A-Za-z0-9_]*$ (up to 256), value up to 64 KB, targets preview and/or production, sensitive, appliesTo (frontend, backend; default frontend) and public (default: the key has the frontend's public prefix). VALIDATION for a derived key or a public value that looks secret (\"secret values can't be public\"). The value is encrypted and synced to the targets of its components; a failed sync keeps the value with syncError and answers 502 UPSTREAM_ERROR.")
             .Produces<DeploymentEnvVarDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithResponseDescriptions(
-                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (saved in AIDE with syncError; Vercel failed or couldn't be reached)"));
+                (StatusCodes.Status400BadRequest, "VALIDATION (including a derived key, or secret values can't be public)"),
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (saved in AIDE with syncError; a platform failed or couldn't be reached)"));
 
         settings.MapDelete("/env/{key}", DeleteDeploymentEnv)
             .WithName("DeleteDeploymentEnv")
-            .WithSummary("Delete an environment variable in AIDE and in Vercel (Owner, FR-88). If Vercel can't delete it, nothing is deleted (502 UPSTREAM_ERROR) so it can be retried.")
+            .WithSummary("Delete a user environment variable in AIDE and on its targets (Owner, FR-145). If a platform can't delete it, nothing is deleted (502 UPSTREAM_ERROR). Derived variables can't be deleted (VALIDATION).")
             .Produces(StatusCodes.Status204NoContent)
+            .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status502BadGateway);
 
         var deployments = app.MapGroup("/api/projects/{id:guid}/deployments")
@@ -79,31 +96,53 @@ public static class DeploymentEndpoints
 
         deployments.MapGet("/", ListDeployments)
             .WithName("ListDeployments")
-            .WithSummary("The project's deployments, newest first (members, FR-91): target, version, SHA, state, URL, time and who triggered it. Filter by target (preview, production) and releaseVersionId.")
+            .WithSummary("The project's deployments, newest first (members, FR-151): component, environment, provider, version, SHA, state, URL, time, who triggered it, and whether each can be rolled back to. Filter by component (frontend, backend), environment (preview, production; `target` is the v2 name) and releaseVersionId.")
             .Produces<IReadOnlyList<DeploymentDto>>()
             .ProducesValidationProblem();
 
+        deployments.MapGet("/preview", GetPreviewEnvironment)
+            .WithName("GetPreviewEnvironment")
+            .WithSummary("The project's persistent preview environment (members, FR-147, FR-148): the current preview rollout with each step (Supabase BaaS migrations → backend → frontend: state, URL, log tail, redeploy), notes (hosts without previews, preview using the production database) and whether the preview database diverged from the version branch (reset it to continue).")
+            .Produces<PreviewEnvironmentDto>();
+
         deployments.MapPost("/preview", CreatePreviewDeployment)
             .WithName("CreatePreviewDeployment")
-            .WithSummary("Deploy the head of the version branch as a preview now (writer, FR-90); AIDE polls it (§4.15). 409 DEPLOYMENT_NOT_CONFIGURED without deployment settings.")
-            .Produces<DeploymentDto>(StatusCodes.Status202Accepted)
+            .WithSummary("Roll the head of the version branch out to the preview environment now (writer, FR-147): a preview_rollout job deploys Supabase BaaS migrations, then the backend, then the frontend, each waiting for ready. Answers 202 with the queued rollout.")
+            .Produces<RolloutDto>(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithResponseDescriptions(
-                (StatusCodes.Status409Conflict, "DEPLOYMENT_NOT_CONFIGURED (no deployment settings or no bound connection)"),
-                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (Vercel failed or couldn't be reached)"));
+                (StatusCodes.Status409Conflict, "DEPLOYMENT_NOT_CONFIGURED (no deployment target with a resource and bound connection), PREVIEW_DATABASE_DIVERGED (the preview database has migrations the branch no longer has: reset it first), DEPLOYMENT_ACTION_UNSUPPORTED (no target has previews, e.g. only GitHub Pages), INVALID_STATE (a preview database reset is queued or running) or CONFLICT (no version branch yet)"),
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR"));
 
-        deployments.MapPost("/{deploymentId:guid}/promote", PromoteDeployment)
-            .WithName("PromoteDeployment")
-            .WithSummary("Promote an earlier ready production deployment (Owner, FR-91): a production rollback that leaves Git alone. Records a new promote row. 409 INVALID_DEPLOYMENT when the deployment isn't a ready production deployment.")
+        deployments.MapPost("/{deploymentId:guid}/rollback", RollbackDeployment)
+            .WithName("RollbackDeployment")
+            .WithSummary("Make an earlier ready production deployment current again (Owner, FR-150), per the provider: Vercel promote, Netlify restore, Cloudflare Workers version at 100 %, Cloudflare Pages rollback. Git and the database are left alone. Records a rollback row (promote on Vercel).")
             .Produces<DeploymentDto>(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
             .ProducesProblem(StatusCodes.Status502BadGateway)
+            .WithRetryAfterOn429()
             .WithResponseDescriptions(
-                (StatusCodes.Status409Conflict, "INVALID_DEPLOYMENT (not a ready production deployment) or DEPLOYMENT_NOT_CONFIGURED"),
-                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (Vercel failed or couldn't be reached)"));
+                (StatusCodes.Status409Conflict, "INVALID_DEPLOYMENT (not a ready production deployment, unknown at the platform, or already current), DEPLOYMENT_ACTION_UNSUPPORTED (the provider has no rollback, e.g. GitHub Pages; extension platform) or DEPLOYMENT_NOT_CONFIGURED"),
+                (StatusCodes.Status429TooManyRequests, RollbackRateLimited429),
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (the platform failed or couldn't be reached)"));
+
+        deployments.MapPost("/{deploymentId:guid}/promote", RollbackDeployment)
+            .WithName("PromoteDeployment")
+            .WithSummary("v2 name of rollback, kept as an alias for Vercel (FR-91, FR-150): the same action as POST …/rollback.")
+            .Produces<DeploymentDto>(StatusCodes.Status202Accepted)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ProducesProblem(StatusCodes.Status502BadGateway)
+            .WithRetryAfterOn429()
+            .WithResponseDescriptions(
+                (StatusCodes.Status409Conflict, "INVALID_DEPLOYMENT (not a ready production deployment), DEPLOYMENT_ACTION_UNSUPPORTED (the provider has no rollback, e.g. GitHub Pages; extension platform) or DEPLOYMENT_NOT_CONFIGURED"),
+                (StatusCodes.Status429TooManyRequests, RollbackRateLimited429),
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (the platform failed or couldn't be reached)"));
 
         deployments.MapPost("/{deploymentId:guid}/redeploy", RedeployDeployment)
             .WithName("RedeployDeployment")
@@ -121,20 +160,19 @@ public static class DeploymentEndpoints
     }
 
     private static async Task<Results<Ok<DeploymentSettingsDto>, ProblemHttpResult>> GetDeploymentSettings(
-        Guid id, IProjectAccess access, DeploymentSettingsService settings, CancellationToken cancellationToken)
+        Guid id, IProjectAccess access, DeploymentTargetService targets, CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
-        return grant.IsFailure ? ApiProblems.FromError(grant.Error!) : TypedResults.Ok(await settings.GetAsync(id, grant.Value.ProjectRole, cancellationToken));
+        return grant.IsFailure ? ApiProblems.FromError(grant.Error!) : TypedResults.Ok(await targets.GetAsync(id, grant.Value.ProjectRole, cancellationToken));
     }
 
-    private static async Task<Results<Ok<DeploymentSettingsDto>, ValidationProblem, ProblemHttpResult>> UpdateDeploymentSettings(
+    private static async Task<Results<Accepted<DeploymentTargetDto>, ValidationProblem, ProblemHttpResult>> PutDeploymentTarget(
         Guid id,
-        UpdateDeploymentSettingsRequest request,
+        string component,
+        PutDeploymentTargetRequest request,
         IProjectAccess access,
         ICurrentUser currentUser,
-        AideDbContext db,
-        DeploymentAccess deployments,
-        DeploymentSettingsService settings,
+        DeploymentTargetService targets,
         CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(id, ProjectAction.ManageDeployments, cancellationToken);
@@ -143,93 +181,25 @@ public static class DeploymentEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        var validation = DeploymentSettingsRules.Validate(
-            request.Provider,
-            request.ConnectionId,
-            request.VercelProjectId,
-            request.Create is not null,
-            request.Create?.Name,
-            request.Create?.RootDirectory,
-            await GitProviderAsync(db, id, cancellationToken),
-            allowFake: deployments.UsesFake,
-            requireConnection: false);
-        if (validation.IsFailure)
+        if (!DeploymentPlatforms.TryParseComponent(component, out var parsed))
         {
-            return ApiProblems.Validation(validation.Error!);
+            return InvalidComponent();
         }
 
-        var callerId = grant.Value.UserId;
-        if (request.ConnectionId is { } connectionId
-            && await CanBindAsync(db, callerId, connectionId, cancellationToken) is { } bindProblem)
+        var (target, failure) = await targets.PutAsync(id, parsed, request, grant.Value.UserId, grant.Value.SystemRole == SystemRole.Admin, currentUser.Actor, cancellationToken);
+        if (failure is not null)
         {
-            return bindProblem;
+            // PLATFORM_* problems carry the platform (and install link); STACK_INCOMPATIBLE keeps its violations.
+            return failure.Error.Code == ErrorCodes.Validation ? ApiProblems.Validation(failure.Error)
+                : failure.Error.Code.StartsWith("PLATFORM_", StringComparison.Ordinal) ? ApiProblems.Platform(failure.Error, failure.Platform)
+                : ApiProblems.FromError(failure.Error);
         }
 
-        PreparedDeployment? prepared = null;
-        if (request.Provider is { } provider)
-        {
-            var existing = await db.ProjectDeploymentSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ProjectId == id, cancellationToken);
-            if ((request.ConnectionId ?? existing?.ConnectionId) is not { } effective)
-            {
-                return ApiProblems.Validation(new Dictionary<string, string[]> { ["connectionId"] = ["Choose one of your Vercel connections."] });
-            }
-
-            // §2: connections are personal. Without their own connectionId, only the Owner whose connection is bound may
-            // change what the project deploys to (another Owner would act with that Owner's token).
-            var boundOwner = request.ConnectionId is null
-                ? await db.VercelConnections.AsNoTracking().Where(c => c.Id == effective).Select(c => (Guid?)c.UserId).FirstOrDefaultAsync(cancellationToken)
-                : null;
-            var mayUse = DeploymentSettingsRules.CanUseBinding(callerId, boundOwner, request.ConnectionId, turningOff: false);
-            if (mayUse.IsFailure)
-            {
-                return ApiProblems.FromError(mayUse.Error!);
-            }
-
-            var repo = await deployments.RepoAsync(id, cancellationToken);
-            var checkedWithVercel = await settings.PrepareAsync(provider, effective, request.VercelProjectId, request.Create, repo.FullName, string.Empty, cancellationToken);
-            if (checkedWithVercel.IsFailure)
-            {
-                return checkedWithVercel.Error!.Code == ErrorCodes.Validation
-                    ? ApiProblems.Validation(checkedWithVercel.Error!)
-                    : DeploymentSettingsService.Problem(checkedWithVercel.Error!);
-            }
-
-            prepared = checkedWithVercel.Value;
-        }
-
-        // FR-88 (as FR-79): the binding and a membership change of the same Owner can't interleave.
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await ProjectLocks.LockProjectAsync(db, id, cancellationToken);
-        var still = await access.CheckAsync(id, ProjectAction.ManageDeployments, cancellationToken);
-        if (still.IsFailure)
-        {
-            return ApiProblems.FromError(still.Error!);
-        }
-
-        if (prepared is null)
-        {
-            await settings.TurnOffAsync(id, currentUser.Actor, cancellationToken);
-        }
-        else
-        {
-            await settings.ApplyAsync(id, callerId, prepared, bindConnection: request.ConnectionId is not null, currentUser.Actor, cancellationToken);
-        }
-
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return ProjectEndpoints.ConcurrentEdit();
-        }
-
-        await transaction.CommitAsync(cancellationToken);
-        return TypedResults.Ok(await settings.GetAsync(id, grant.Value.ProjectRole, cancellationToken));
+        return TypedResults.Accepted($"/api/projects/{id}/settings/deployment", target!);
     }
 
-    private static async Task<Results<Ok<IReadOnlyList<DeploymentEnvVarDto>>, ProblemHttpResult>> ListDeploymentEnv(
-        Guid id, IProjectAccess access, AideDbContext db, CancellationToken cancellationToken)
+    private static async Task<Results<NoContent, ValidationProblem, ProblemHttpResult>> DeleteDeploymentTarget(
+        Guid id, string component, IProjectAccess access, ICurrentUser currentUser, DeploymentTargetService targets, CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(id, ProjectAction.ManageDeployments, cancellationToken);
         if (grant.IsFailure)
@@ -237,9 +207,47 @@ public static class DeploymentEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        var vars = await db.DeploymentEnvVars.AsNoTracking().Where(v => v.ProjectId == id).OrderBy(v => v.Key).ToListAsync(cancellationToken);
-        return TypedResults.Ok<IReadOnlyList<DeploymentEnvVarDto>>([.. vars.Select(ToDto)]);
+        if (!DeploymentPlatforms.TryParseComponent(component, out var parsed))
+        {
+            return InvalidComponent();
+        }
+
+        return await targets.DeleteAsync(id, parsed, currentUser.Actor, cancellationToken) is { } error ? ApiProblems.FromError(error) : TypedResults.NoContent();
     }
+
+    private static async Task<Results<Ok<DeploymentVerifyDto>, ValidationProblem, ProblemHttpResult>> VerifyDeploymentTarget(
+        Guid id, string component, IProjectAccess access, ICurrentUser currentUser, DeploymentTargetService targets, CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.ManageDeployments, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        if (!DeploymentPlatforms.TryParseComponent(component, out var parsed))
+        {
+            return InvalidComponent();
+        }
+
+        var (result, error) = await targets.VerifyAsync(id, parsed, grant.Value.ProjectRole, currentUser.Actor, cancellationToken);
+        return error is not null ? ApiProblems.FromError(error) : TypedResults.Ok(result!);
+    }
+
+    private static async Task<Results<Ok<IReadOnlyList<DeploymentEnvVarDto>>, ProblemHttpResult>> ListDeploymentEnv(
+        Guid id, IProjectAccess access, DeploymentInventoryService inventory, CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.ManageDeployments, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        var rows = await inventory.RowsAsync(id, await inventory.FactsAsync(id, cancellationToken), cancellationToken);
+        return TypedResults.Ok<IReadOnlyList<DeploymentEnvVarDto>>([.. rows.Select(DeploymentInventoryService.ToDto)]);
+    }
+
+    private static ValidationProblem InvalidComponent() =>
+        ApiProblems.Validation(new Dictionary<string, string[]> { ["component"] = ["The component is frontend or backend."] });
 
     private static async Task<Results<Ok<DeploymentEnvVarDto>, ValidationProblem, ProblemHttpResult>> PutDeploymentEnv(
         Guid id,
@@ -249,6 +257,7 @@ public static class DeploymentEndpoints
         ICurrentUser currentUser,
         AideDbContext db,
         DeploymentAccess deployments,
+        DeploymentInventoryService inventory,
         DeploymentEnvSync envSync,
         TimeProvider time,
         CancellationToken cancellationToken)
@@ -259,10 +268,24 @@ public static class DeploymentEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        var validation = DeploymentEnvRules.Validate(key, request.Value, request.Targets);
+        var facts = await inventory.FactsAsync(id, cancellationToken);
+        var isPublic = EnvInventoryRules.IsPublic(key, request.Public, facts.PublicPrefix);
+        var validation = EnvInventoryRules.ValidateUser(key, request.Value, request.Targets, request.AppliesTo, isPublic, DerivedEnvRules.DerivedKeys(facts.DerivedInput));
         if (validation.IsFailure)
         {
             return ApiProblems.Validation(validation.Error!);
+        }
+
+        // §4.20: a Cloudflare Workers target shares runtime secrets between preview and production.
+        List<DeploymentComponent> components = request.AppliesTo is { Count: > 0 } applies ? [.. applies] : [DeploymentComponent.Frontend];
+        var workers = await db.DeploymentTargets.AsNoTracking()
+            .Where(t => t.ProjectId == id && t.Provider == DeploymentProvider.Cloudflare && components.Contains(t.Component))
+            .Select(t => t.ResourceId)
+            .ToListAsync(cancellationToken);
+        if (workers.Any(r => !DeploymentRollbackRules.IsCloudflarePages(r))
+            && CloudflareRules.ValidateRuntimeSecret(request.Sensitive, [.. request.Targets]) is { IsFailure: true } secretRule)
+        {
+            return ApiProblems.Validation(secretRule.Error!);
         }
 
         var now = Now(time);
@@ -274,6 +297,10 @@ public static class DeploymentEndpoints
         }
 
         variable.Targets = [.. request.Targets.Distinct().OrderBy(t => t).Select(t => t.ToWire())];
+        variable.AppliesTo = [.. (request.AppliesTo ?? [DeploymentComponent.Frontend]).Distinct().Order().Select(c => c.ToWire())];
+        variable.Public = isPublic;
+        variable.Source = DeploymentEnvSource.User;
+        variable.DerivedFrom = null;
         variable.ValueEncrypted = deployments.Values.Protect(request.Value);
         variable.Sensitive = request.Sensitive;
         variable.UpdatedAt = now;
@@ -282,7 +309,7 @@ public static class DeploymentEndpoints
         db.AddEvent(
             EventTypes.SettingsUpdated,
             id,
-            new { projectId = id, section = "deployment_env", changes = new[] { key }, targets = variable.Targets, sensitive = variable.Sensitive },
+            new { projectId = id, section = "deployment_env", changes = new[] { key }, targets = variable.Targets, appliesTo = variable.AppliesTo, sensitive = variable.Sensitive, @public = variable.Public },
             currentUser.Actor,
             now);
         try
@@ -294,30 +321,12 @@ public static class DeploymentEndpoints
             return ApiProblems.Of(ErrorCodes.Conflict, "The variable was changed by someone else. Reload and try again.");
         }
 
-        // FR-88: pushed to Vercel on save (when deployment is set up); a failed push keeps the value with syncError.
-        var context = await deployments.ResolveAsync(id, cancellationToken);
-        if (context.IsFailure)
-        {
-            return TypedResults.Ok(ToDto(variable));
-        }
-
-        try
-        {
-            await envSync.PushAsync(context.Value, [variable], cancellationToken);
-            await db.SaveChangesAsync(cancellationToken);
-            return TypedResults.Ok(ToDto(variable));
-        }
-        catch (DeploymentProviderException ex)
-        {
-            if (ex.Failure == VercelFailure.CredentialRejected)
-            {
-                await deployments.MarkInvalidAsync(context.Value.Connection.Id, id, currentUser.Actor, now, cancellationToken);
-            }
-
-            variable.SyncError = DeploymentSettingsService.Message(ex);
-            await db.SaveChangesAsync(cancellationToken);
-            return ApiProblems.Of(ErrorCodes.UpstreamError, $"Saved in AIDE, but Vercel wasn't updated: {variable.SyncError} It is pushed again on the next save or deployment.");
-        }
+        // FR-145: synced to the targets of its components on save; a failed sync keeps the value with syncError.
+        var failure = await envSync.PushToTargetsAsync(id, [variable], currentUser.Actor, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        return failure is null
+            ? TypedResults.Ok(DeploymentInventoryService.ToDto(variable))
+            : ApiProblems.Of(ErrorCodes.UpstreamError, $"Saved in AIDE, but a deployment platform wasn't updated: {failure} It is pushed again on the next save or deployment.");
     }
 
     private static async Task<Results<NoContent, ValidationProblem, ProblemHttpResult>> DeleteDeploymentEnv(
@@ -347,28 +356,35 @@ public static class DeploymentEndpoints
             return ApiProblems.NotFound("The environment variable was not found.");
         }
 
-        // FR-88, §4.15: deleting in AIDE deletes in Vercel; if Vercel can't, nothing is deleted (all or nothing).
-        var vercelIds = EnvSyncRules.AllIds(variable.VercelEnvIds);
-        if (vercelIds.Count > 0)
+        if (variable.Source == DeploymentEnvSource.Derived)
         {
-            var context = await deployments.ResolveAsync(id, cancellationToken);
+            return ApiProblems.Validation(new Dictionary<string, string[]> { ["key"] = [$"AIDE derives {key}; it changes with the deployment targets."] });
+        }
+
+        // FR-88, FR-145: deleting in AIDE deletes on every target; if a platform can't, nothing is deleted (all or nothing).
+        foreach (var component in new[] { DeploymentComponent.Frontend, DeploymentComponent.Backend })
+        {
+            var ids = EnvSyncRules.AllIds(DeploymentEnvSync.ScopedIds(variable.VercelEnvIds, component));
+            if (ids.Count == 0)
+            {
+                continue;
+            }
+
+            var context = await deployments.ResolveAsync(id, cancellationToken, component: component);
             if (context.IsFailure)
             {
-                return ApiProblems.Of(ErrorCodes.UpstreamError, $"The variable is in Vercel and can't be deleted there: {context.Error!.Message}");
+                return ApiProblems.Of(ErrorCodes.UpstreamError, $"The variable is on the {component.ToWire()} target and can't be deleted there: {context.Error!.Message}");
             }
 
             try
             {
-                foreach (var vercelId in vercelIds)
-                {
-                    await context.Value.Provider.DeleteEnvAsync(context.Value.Auth, context.Value.Settings.VercelProjectId!, vercelId, cancellationToken);
-                }
+                await context.Value.Provider.SyncEnvAsync(context.Value.Auth, context.Value.TargetRef, new DeploymentEnvSyncRequest([], ids), cancellationToken);
             }
             catch (DeploymentProviderException ex)
             {
-                if (ex.Failure == VercelFailure.CredentialRejected)
+                if (ex.Failure == DeploymentFailure.CredentialRejected)
                 {
-                    await deployments.MarkInvalidAsync(context.Value.Connection.Id, id, currentUser.Actor, Now(time), cancellationToken);
+                    await deployments.MarkInvalidAsync(context.Value.Connection?.Id, id, currentUser.Actor, Now(time), cancellationToken);
                     await db.SaveChangesAsync(cancellationToken);
                 }
 
@@ -387,8 +403,10 @@ public static class DeploymentEndpoints
         IProjectAccess access,
         AideDbContext db,
         CancellationToken cancellationToken,
-        [WireEnum(typeof(DeploymentTarget))] string? target = null,
-        Guid? releaseVersionId = null)
+        [WireEnum(typeof(DeploymentEnvironment))] string? target = null,
+        Guid? releaseVersionId = null,
+        [WireEnum(typeof(DeploymentComponent))] string? component = null,
+        [WireEnum(typeof(DeploymentEnvironment))] string? environment = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -396,18 +414,34 @@ public static class DeploymentEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        DeploymentTarget? filter = target is not null && EnumStrings.TryParse<DeploymentTarget>(target, out var parsed) ? parsed : null;
-        return TypedResults.Ok(await DeploymentReader.ListAsync(db, id, filter, releaseVersionId, cancellationToken));
+        // FR-151: `environment` (v4) wins over the v2 name `target`.
+        var environmentText = environment ?? target;
+        DeploymentEnvironment? filter = environmentText is not null && EnumStrings.TryParse<DeploymentEnvironment>(environmentText, out var parsed) ? parsed : null;
+        DeploymentComponent? componentFilter = component is not null && EnumStrings.TryParse<DeploymentComponent>(component, out var c) ? c : null;
+        return TypedResults.Ok(await DeploymentReader.ListAsync(db, id, filter, releaseVersionId, cancellationToken, component: componentFilter));
     }
 
-    private static async Task<Results<Accepted<DeploymentDto>, ProblemHttpResult>> CreatePreviewDeployment(
+    private static async Task<Results<Ok<PreviewEnvironmentDto>, ProblemHttpResult>> GetPreviewEnvironment(
+        Guid id, IProjectAccess access, RolloutReader reader, CancellationToken cancellationToken)
+    {
+        var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
+        if (grant.IsFailure)
+        {
+            return ApiProblems.FromError(grant.Error!);
+        }
+
+        return TypedResults.Ok(await reader.PreviewAsync(id, cancellationToken));
+    }
+
+    private static async Task<Results<Accepted<RolloutDto>, ProblemHttpResult>> CreatePreviewDeployment(
         Guid id,
         IProjectAccess access,
-        ICurrentUser currentUser,
         AideDbContext db,
-        DeploymentScheduler scheduler,
+        RolloutScheduler rollouts,
+        RolloutReader reader,
         WorkingCopyPreparer preparer,
         IWorkingCopies workingCopies,
+        Databases.MigrationRunService migrations,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -417,9 +451,22 @@ public static class DeploymentEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        if (!await DeploymentScheduler.ConfiguredAsync(db, id, cancellationToken))
+        // §4.21: a preview database's migrations are something to roll out, even with no target set up.
+        if (!await rollouts.HasStepsAsync(id, DeploymentEnvironment.Preview, cancellationToken))
         {
             return NotConfigured();
+        }
+
+        // §4.20: when no target has previews (only GitHub Pages) and no migrations run, there is nothing to roll out.
+        var providers = await db.DeploymentTargets.AsNoTracking()
+            .Where(t => t.ProjectId == id && t.ResourceId != null)
+            .Select(t => t.Provider)
+            .ToListAsync(cancellationToken);
+        if (providers.Count > 0 && providers.All(p => !DeploymentPlatforms.Capabilities(p).Previews)
+            && !await migrations.HasMigrationStepAsync(id, DeploymentEnvironment.Preview, cancellationToken))
+        {
+            return ApiProblems.Platform(
+                new DomainError(ErrorCodes.DeploymentActionUnsupported, $"{DeploymentPlatforms.DisplayName(providers[0])} doesn't support this action."), providers[0]);
         }
 
         var version = await db.CurrentReleaseVersionAsync(id, cancellationToken);
@@ -439,15 +486,47 @@ public static class DeploymentEndpoints
             return ApiProblems.Of(ErrorCodes.Conflict, "The version branch can't be read yet; try again once execution has committed a step.");
         }
 
-        var deployment = await scheduler.AddAsync(
-            new NewDeployment(id, version.Id, null, DeploymentTarget.Preview, branch, sha, DeploymentTrigger.Manual, grant.Value.UserId),
-            currentUser.Actor,
-            Now(time),
-            cancellationToken);
-        return await AcceptedAsync(db, id, deployment, cancellationToken);
+        // FR-148: a reset in progress answers first (the database may still look diverged until it runs; checked again below
+        // under the lock), then a preview database with migrations this branch no longer has must be reset first.
+        if (await rollouts.PreviewResetPendingAsync(id, cancellationToken))
+        {
+            return ResetPending();
+        }
+
+        var missing = await rollouts.DivergedAsync(id, sha, cancellationToken);
+        if (missing.Count > 0)
+        {
+            return ApiProblems.Of(ErrorCodes.PreviewDatabaseDiverged, PreviewDatabaseRules.Describe(missing));
+        }
+
+        // FR-148: under the project lock (as the preview reset), so a rollout is never queued beside a pending reset.
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await Projects.ProjectLocks.LockProjectAsync(db, id, cancellationToken);
+        if (await rollouts.PreviewResetPendingAsync(id, cancellationToken))
+        {
+            return ResetPending();
+        }
+
+        var job = await rollouts.EnqueuePreviewAsync(id, version.Id, branch, sha, DeploymentTrigger.Manual, grant.Value.UserId, Now(time), cancellationToken);
+        if (job is null)
+        {
+            return NotConfigured();
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return TypedResults.Accepted($"/api/projects/{id}/deployments/preview", await reader.ForJobAsync(job, cancellationToken));
     }
 
-    private static async Task<Results<Accepted<DeploymentDto>, ProblemHttpResult>> PromoteDeployment(
+    private static ProblemHttpResult ResetPending() =>
+        ApiProblems.Of(ErrorCodes.InvalidState, "The preview database is being reset. Wait for it to finish, then deploy the preview.");
+
+    /// <summary>
+    /// FR-150 (and v2 FR-91 promote, its alias): makes an earlier ready production deployment current by the provider's
+    /// rollback (<see cref="DeploymentRollbackRules.MethodFor"/>) and records a <c>rollback</c> row (<c>promote</c> on
+    /// Vercel) pointing at the same platform deployment, which the Deployments page then shows as current.
+    /// </summary>
+    private static async Task<Results<Accepted<DeploymentDto>, ProblemHttpResult>> RollbackDeployment(
         Guid id,
         Guid deploymentId,
         IProjectAccess access,
@@ -455,6 +534,7 @@ public static class DeploymentEndpoints
         AideDbContext db,
         DeploymentAccess deployments,
         TimeProvider time,
+        HttpContext httpContext,
         CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(id, ProjectAction.ManageDeployments, cancellationToken);
@@ -469,13 +549,17 @@ public static class DeploymentEndpoints
             return DeploymentNotFound();
         }
 
-        var promotable = DeploymentActionRules.CanPromote(source.Target, source.Status);
-        if (promotable.IsFailure)
+        // FR-150: a valid rollback target first (409), then the target's configuration.
+        var platform = (await DeploymentAccess.TargetAsync(db, id, source.Component, cancellationToken))?.Provider ?? source.Provider;
+        var current = await DeploymentReader.CurrentProductionAsync(db, id, cancellationToken);
+        var isCurrent = DeploymentReader.ServesProduction(source, current.GetValueOrDefault(source.Component));
+        var allowed = DeploymentRollbackRules.CanRollback(platform, source.Environment, source.Status, source.ProviderDeploymentId, isCurrent);
+        if (allowed.IsFailure)
         {
-            return ApiProblems.FromError(promotable.Error!);
+            return allowed.Error!.Code == ErrorCodes.DeploymentActionUnsupported ? ApiProblems.Platform(allowed.Error!, platform) : ApiProblems.FromError(allowed.Error!);
         }
 
-        var context = await deployments.ResolveAsync(id, cancellationToken);
+        var context = await deployments.ResolveAsync(id, cancellationToken, component: source.Component);
         if (context.IsFailure)
         {
             return context.Error!.Code == ErrorCodes.DeploymentNotConfigured ? ApiProblems.FromError(context.Error!) : ApiProblems.Of(ErrorCodes.UpstreamError, context.Error!.Message);
@@ -484,45 +568,62 @@ public static class DeploymentEndpoints
         var now = Now(time);
         try
         {
-            // FR-91: Vercel re-points production at the earlier build (no rebuild); Git is left alone.
-            await context.Value.Provider.PromoteAsync(context.Value.Auth, context.Value.Settings.VercelProjectId!, source.ProviderDeploymentId, cancellationToken);
+            // FR-150: the platform re-points production at the earlier build (no rebuild); Git and the database are left alone.
+            await context.Value.Provider.RollbackAsync(context.Value.Auth, context.Value.TargetRef, source.ProviderDeploymentId, cancellationToken);
         }
         catch (DeploymentProviderException ex)
         {
-            if (ex.Failure == VercelFailure.CredentialRejected)
+            if (ex.Failure == DeploymentFailure.CredentialRejected)
             {
-                await deployments.MarkInvalidAsync(context.Value.Connection.Id, id, currentUser.Actor, now, cancellationToken);
+                await deployments.MarkInvalidAsync(context.Value.Connection?.Id, id, currentUser.Actor, now, cancellationToken);
                 await db.SaveChangesAsync(cancellationToken);
             }
 
-            return ex.Failure == VercelFailure.NotFound
-                ? ApiProblems.Of(ErrorCodes.InvalidDeployment, "Vercel no longer has this deployment, so it can't be promoted.")
-                : ApiProblems.Of(ErrorCodes.UpstreamError, DeploymentSettingsService.Message(ex));
+            if (ex.Failure == DeploymentFailure.RateLimited)
+            {
+                // FR-150: the platform's 429 is passed on with its wait, not as a 502.
+                ResponseDocs.SetRetryAfter(httpContext, ex.RetryAt is { } at && at > now ? at - now : null);
+                return ApiProblems.Of(
+                    ErrorCodes.UpstreamRateLimited, $"{DeploymentPlatforms.DisplayName(platform)} is rate limiting requests. Try the rollback again in a few minutes.");
+            }
+
+            return ex.Failure switch
+            {
+                DeploymentFailure.NotSupported => ApiProblems.Platform(
+                    new DomainError(ErrorCodes.DeploymentActionUnsupported, $"{DeploymentPlatforms.DisplayName(platform)} doesn't support this action."), platform),
+                DeploymentFailure.NotFound or DeploymentFailure.Rejected => ApiProblems.Of(
+                    ErrorCodes.InvalidDeployment, $"{DeploymentPlatforms.DisplayName(platform)} can't roll back to this deployment: {DeploymentSettingsService.Message(ex)}"),
+                _ => ApiProblems.Of(ErrorCodes.UpstreamError, DeploymentSettingsService.Message(ex)),
+            };
         }
 
-        var promoted = new Deployment
+        var trigger = DeploymentRollbackRules.TriggerFor(platform);
+        var rolledBack = new Deployment
         {
             ProjectId = id,
             ReleaseVersionId = source.ReleaseVersionId,
             ReleaseId = source.ReleaseId,
             Provider = source.Provider,
-            Target = DeploymentTarget.Production,
+            TargetId = source.TargetId ?? context.Value.Target.Id,
+            Component = source.Component,
+            Kind = DeploymentTargetRules.KindOf(trigger),
+            Environment = DeploymentEnvironment.Production,
             ProviderDeploymentId = source.ProviderDeploymentId,
             Url = source.Url,
             InspectorUrl = source.InspectorUrl,
             GitRef = source.GitRef,
             GitSha = source.GitSha,
             Status = DeploymentStatus.Ready,
-            Trigger = DeploymentTrigger.Promote,
+            Trigger = trigger,
             TriggeredBy = grant.Value.UserId,
             PromotedFromDeploymentId = source.Id,
             CreatedAt = now,
             ReadyAt = now,
             UpdatedAt = now,
         };
-        db.Deployments.Add(promoted);
-        DeploymentEvents.Created(db, promoted, await DeploymentScheduler.VersionTextAsync(db, source.ReleaseVersionId, cancellationToken), currentUser.Actor, now);
-        return await AcceptedAsync(db, id, promoted, cancellationToken);
+        db.Deployments.Add(rolledBack);
+        DeploymentEvents.Created(db, rolledBack, await DeploymentScheduler.VersionTextAsync(db, source.ReleaseVersionId, cancellationToken), currentUser.Actor, now);
+        return await AcceptedAsync(db, id, rolledBack, cancellationToken);
     }
 
     private static async Task<Results<Accepted<DeploymentDto>, ProblemHttpResult>> RedeployDeployment(
@@ -548,7 +649,7 @@ public static class DeploymentEndpoints
             return DeploymentNotFound();
         }
 
-        var action = DeploymentActionRules.RedeployAction(deployment.Target);
+        var action = DeploymentActionRules.RedeployAction(deployment.Environment);
         if (action != ProjectAction.TriggerDeployment)
         {
             var owner = await access.CheckAsync(id, action, cancellationToken);
@@ -564,7 +665,9 @@ public static class DeploymentEndpoints
         }
 
         var redeploy = await scheduler.AddAsync(
-            new NewDeployment(id, deployment.ReleaseVersionId, deployment.ReleaseId, deployment.Target, deployment.GitRef, deployment.GitSha, DeploymentTrigger.Redeploy, grant.Value.UserId),
+            new NewDeployment(
+                id, deployment.ReleaseVersionId, deployment.ReleaseId, deployment.Environment, deployment.GitRef, deployment.GitSha, DeploymentTrigger.Redeploy, grant.Value.UserId,
+                deployment.Component, deployment.RolloutId),
             currentUser.Actor,
             Now(time),
             cancellationToken);
@@ -573,21 +676,19 @@ public static class DeploymentEndpoints
 
     /// <summary>
     /// FR-88: whether the caller (who passed the Owner check: an Owner or an Admin) may bind <paramref name="connectionId"/>,
-    /// their own Vercel connection; <c>null</c> when allowed, else the problem (<c>NOT_FOUND</c>, <c>CREDENTIAL_NOT_OWNER</c>).
+    /// their own Vercel platform connection; <c>null</c> when allowed, else the problem (<c>NOT_FOUND</c> — also for a
+    /// connection of another provider —, <c>CREDENTIAL_NOT_OWNER</c>).
     /// </summary>
-    internal static async Task<ProblemHttpResult?> CanBindAsync(AideDbContext db, Guid callerId, Guid connectionId, CancellationToken cancellationToken)
+    internal static async Task<ProblemHttpResult?> CanBindAsync(AideDbContext db, Guid callerId, Guid connectionId, CancellationToken cancellationToken, string field = "connectionId")
     {
         ArgumentNullException.ThrowIfNull(db);
-        var ownerId = await db.VercelConnections.AsNoTracking()
-            .Where(c => c.Id == connectionId)
+        var ownerId = await db.PlatformConnections.AsNoTracking()
+            .Where(c => c.Id == connectionId && c.Provider == PlatformProvider.Vercel)
             .Select(c => (Guid?)c.UserId)
             .FirstOrDefaultAsync(cancellationToken);
         var allowed = DeploymentSettingsRules.CanBind(callerId, ProjectRole.Owner, ownerId);
-        return allowed.IsFailure ? ApiProblems.FromError(allowed.Error!) : null;
+        return allowed.IsFailure ? ApiProblems.FromError(allowed.Error! with { Field = field }) : null;
     }
-
-    internal static DeploymentEnvVarDto ToDto(DeploymentEnvVar v) =>
-        new(v.Key, [.. DeploymentSettingsService.Targets(v.Targets)], v.Sensitive, true, v.UpdatedAt, v.SyncedAt, v.SyncError);
 
     /// <summary>Saves the new deployment row (with its job and event) and answers 202 with it.</summary>
     private static async Task<Results<Accepted<DeploymentDto>, ProblemHttpResult>> AcceptedAsync(AideDbContext db, Guid projectId, Deployment deployment, CancellationToken cancellationToken)
@@ -616,17 +717,11 @@ public static class DeploymentEndpoints
         return now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
     }
 
-    private static async Task<GitProvider> GitProviderAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken) =>
-        await db.ProjectGitSettings.AsNoTracking()
-            .Where(s => s.ProjectId == projectId)
-            .Select(s => (GitProvider?)s.Provider)
-            .FirstOrDefaultAsync(cancellationToken) ?? GitProvider.Local;
-
     private static Task<Deployment?> FindAsync(AideDbContext db, Guid projectId, Guid deploymentId, CancellationToken cancellationToken) =>
         db.Deployments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == deploymentId && d.ProjectId == projectId, cancellationToken);
 
     private static ProblemHttpResult DeploymentNotFound() => ApiProblems.NotFound("The deployment was not found.");
 
     private static ProblemHttpResult NotConfigured() =>
-        ApiProblems.Of(ErrorCodes.DeploymentNotConfigured, "Deployment isn't set up for this project: bind a Vercel connection and link a Vercel project in Settings → Deployment.");
+        ApiProblems.Of(ErrorCodes.DeploymentNotConfigured, "Deployment isn't set up for this project: set up the frontend target in Settings → Deployment.");
 }

@@ -1,0 +1,175 @@
+{
+  "id": "be-spring-boot",
+  "layer": "backend",
+  "name": "Spring Boot",
+  "version": "1.0.0+aide.1",
+  "source": {
+    "plugin": "be-spring-boot",
+    "version": "1.0.0",
+    "snapshot": "2026-10-25"
+  },
+  "chips": [
+    "Java",
+    "Spring Boot",
+    "Maven"
+  ],
+  "description": "A Java Spring Boot REST API with Bean Validation, ProblemDetail errors and springdoc-openapi.",
+  "defaultPath": "backend",
+  "publicEnvPrefix": null,
+  "runtime": "java",
+  "modes": [],
+  "specSections": [
+    {
+      "title": "API Contract & Error Codes",
+      "guidance": "List every endpoint under /api with its method, route, operation ID (the @Operation operationId, which becomes the client method name), request and response DTO records, the security rule (@PreAuthorize role plus ownership check) and the status codes it returns. Give the error table: each UPPER_SNAKE errorCode, its HTTP status and when it applies; errors are RFC 9457 ProblemDetail with an errorCode property, validation errors are 400 with an errors map, and optimistic-lock failures are 409 CONFLICT. Name the auth scheme (session cookies with CSRF for same-origin, OAuth2 resource server JWT for cross-origin) and the Actuator probes /api/health/liveness and /api/health/readiness."
+    }
+  ],
+  "ownership": {
+    "backend-engineer": [
+      "{be}/**",
+      "{be}/openapi/api.json",
+      "!{be}/src/main/resources/db/migration/**",
+      "!{be}/src/main/java/**/domain/**/*Entity.java",
+      "!{be}/**/Dockerfile",
+      "!{be}/**/.dockerignore",
+      "!{be}/**/.env.example"
+    ],
+    "test-engineer": [
+      "{be}/src/test/**"
+    ]
+  },
+  "agentSections": {
+    "scaffolder": [
+      "Detect",
+      "Scaffold",
+      "Conventions",
+      "Config and database URL"
+    ],
+    "backend-engineer": [
+      "*"
+    ],
+    "test-engineer": [
+      "Testing",
+      "Gate"
+    ],
+    "ci-engineer": [
+      "Gate"
+    ],
+    "deploy-engineer": [
+      "Containerise",
+      "Deploy notes"
+    ]
+  },
+  "planRules": {
+    "order": [
+      {
+        "before": [
+          "{be}/openapi/api.json"
+        ],
+        "after": [
+          "{fe}/src/api/generated/**",
+          "{fe}/src/app/api/generated/**"
+        ],
+        "soft": true,
+        "reason": "Change the contract (backend/openapi/api.json) before regenerating the frontend client from it."
+      }
+    ],
+    "exclusive": [
+      {
+        "agent": "backend-engineer",
+        "notWithGlobs": [
+          "{be}/src/main/resources/db/migration/**"
+        ],
+        "reason": "Migrations belong to data-engineer."
+      }
+    ],
+    "maxFilesPerStep": []
+  },
+  "protectedPaths": [],
+  "generatedFiles": [
+    {
+      "glob": "{be}/openapi/api.json",
+      "handling": "hand_written",
+      "ciCheck": "cd {be} && mvn -B -Dtest=OpenApiExportIT test && git diff --exit-code openapi/api.json"
+    }
+  ],
+  "requiredEnv": [
+    {
+      "key": "DATABASE_URL",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": true,
+      "public": false,
+      "description": "The platform database URI (postgres://…), converted at startup by an EnvironmentPostProcessor into SPRING_DATASOURCE_URL, _USERNAME and _PASSWORD.",
+      "when": "data != none"
+    },
+    {
+      "key": "CORS_ALLOWED_ORIGINS",
+      "appliesTo": [
+        "backend"
+      ],
+      "targets": [
+        "production",
+        "preview"
+      ],
+      "sensitive": false,
+      "public": false,
+      "description": "Comma-separated frontend origins the CORS configuration allows (cross-origin model only).",
+      "when": "originModel == cross-origin"
+    }
+  ],
+  "review": {
+    "checklist": [
+      {
+        "item": "Domain logic is testable without Spring and unit-tested by FR; controllers are thin and services orchestrate.",
+        "category": "architecture",
+        "severity": "major"
+      },
+      {
+        "item": "DTOs are validated records (Bean Validation, @Valid), never entities.",
+        "category": "api_contracts",
+        "severity": "major"
+      },
+      {
+        "item": "Errors are RFC 9457 ProblemDetail carrying the spec's errorCode, with 400 validation maps and 409 CONFLICT on optimistic-lock failures.",
+        "category": "api_contracts",
+        "severity": "major"
+      },
+      {
+        "item": "The SecurityFilterChain matches the origin model, protected operations have @PreAuthorize plus ownership checks, and CORS is only enabled for cross-origin with explicit origins.",
+        "category": "security",
+        "severity": "critical"
+      },
+      {
+        "item": "DATABASE_URL conversion is handled, config is typed @ConfigurationProperties with @Validated, and no secrets are in YAML.",
+        "category": "security",
+        "severity": "major"
+      },
+      {
+        "item": "Integration tests (Testcontainers, @ServiceConnection) cover success, 400, 401, 403, 404, each errorCode and 409.",
+        "category": "testing",
+        "severity": "major"
+      },
+      {
+        "item": "Operation IDs are stable, openapi/api.json matches the export (CI freshness check), and the gate passes.",
+        "category": "api_contracts",
+        "severity": "major"
+      }
+    ],
+    "deterministic": [
+      "container_non_root",
+      "health_endpoints"
+    ]
+  },
+  "gate": [
+    "cd {be} && mvn -B spotless:check verify",
+    "cd {be} && mvn -B -Dtest=OpenApiExportIT test && git diff --exit-code openapi/api.json"
+  ],
+  "migrate": null,
+  "deploy": null
+}

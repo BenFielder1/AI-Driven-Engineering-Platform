@@ -64,7 +64,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
         // untagged release behind (the merge can't be undone), so the rollback waits for the release instead.
         var releasePartiallyApplied = activeJobs.Any(j => j.Type == JobTypes.Release && j.Status == JobStatus.Queued)
             && await db.Releases.AsNoTracking().AnyAsync(
-                r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress && r.MergeCommitSha != null, cancellationToken);
+                r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress && (r.MergeCommitSha != null || r.MergeSubmittedAt != null), cancellationToken);
 
         // §4.10: the rollback works on the release version in development only; a released (closed) version or one awaiting
         // its merge can't be rolled back at all.
@@ -158,10 +158,11 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
 
         // A release whose job was still queued (now cancelled) will never run: its attempt fails as cancelled (FR-43, FR-44).
         var releases = await db.Releases.Where(r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress).ToListAsync(cancellationToken);
+        var gitProvider = releases.Count == 0 ? null : await Release.ReleaseRecords.ProviderAsync(db, id, cancellationToken);
         foreach (var release in releases)
         {
             Release.ReleaseRecords.Fail(
-                db, release, ErrorCodes.ReleaseCancelled, $"Cancelled by the rollback to checkpoint {targetVersion}.", [], actor, now);
+                db, release, ErrorCodes.ReleaseCancelled, $"Cancelled by the rollback to checkpoint {targetVersion}.", [], actor, now, provider: gitProvider);
         }
 
         var record = new RollbackEvent

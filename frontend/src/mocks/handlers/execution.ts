@@ -550,6 +550,7 @@ export function executionRuns(project: StoredProject, releaseVersionId: string):
         number: s.number,
         title: s.title,
         agentKey: s.agentKey ?? null,
+        legacyAgentKey: s.legacyAgentKey ?? null,
         status: s.status,
         attempt: s.attempt,
         declaredFiles: s.declaredFiles,

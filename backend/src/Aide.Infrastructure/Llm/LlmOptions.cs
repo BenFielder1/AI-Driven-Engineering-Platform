@@ -18,7 +18,13 @@ namespace Aide.Infrastructure.Llm;
 /// Ollama http://localhost:11434 in the dev loop or http://host.docker.internal:11434 in a container);</item>
 /// <item><c>Llm:Pricing:{model-id}:InputPerMTok</c> / <c>OutputPerMTok</c> (USD per million tokens; unpriced models cost 0);</item>
 /// <item><c>Llm:KeyCheckTimeout</c> (per key check, FR-78, default 00:00:15);</item>
-/// <item><c>Llm:RequestTimeout</c> (per provider call, default 00:05:00) and <c>Llm:MaxOutputTokens</c> (default 16000).</item>
+/// <item>FR-161: <c>Llm:RequestTimeout</c> (the whole of one streamed provider call, default 00:30:00) and
+/// <c>Llm:StreamIdleTimeout</c> (no stream data for this long fails the call, default 00:02:00);</item>
+/// <item>FR-157: <c>Llm:Providers:{Provider}:Enabled</c> (default <c>true</c>): a disabled provider is absent from every list,
+/// can't be chosen and fails the runs of projects still set to it;</item>
+/// <item>FR-158, FR-160: <c>Llm:Providers:{Provider}:Catalog:{n}:{Id, Name, MaxOutputTokens, ContextTokens, Recommended}</c>
+/// (the model catalog), <c>Llm:MaxOutputTokens</c> (default 16000: the output limit of models not in the catalog) and the
+/// optional <c>Llm:MaxOutputTokensCeiling</c> (caps every call's limit).</item>
 /// </list>
 /// Environment variables use <c>__</c>, e.g. <c>Llm__Providers__Anthropic__ApiKey</c>.
 /// </summary>
@@ -37,14 +43,22 @@ public sealed class LlmOptions
     /// <summary>Price per model id (case-insensitive), for run cost estimates (FR-23, D15).</summary>
     public Dictionary<string, LlmPriceOptions> Pricing { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>How long one provider call may take before it counts as a (transient) timeout.</summary>
-    public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromMinutes(5);
+    /// <summary>FR-161: how long one (streamed) provider call may take in all before it counts as a (transient) timeout.</summary>
+    public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>FR-161: how long a streamed provider call may go without receiving any data before it counts as a
+    /// (transient) timeout.</summary>
+    public TimeSpan StreamIdleTimeout { get; set; } = TimeSpan.FromMinutes(2);
 
     /// <summary>FR-78: how long a key check (list models) may take before it counts as <c>UPSTREAM_ERROR</c>.</summary>
     public TimeSpan KeyCheckTimeout { get; set; } = TimeSpan.FromSeconds(15);
 
-    /// <summary>Default output token cap per call.</summary>
+    /// <summary>FR-160: the output token limit of a model that isn't in its provider's catalog (and, for Anthropic, whose
+    /// limit couldn't be discovered).</summary>
     public int MaxOutputTokens { get; set; } = 16_000;
+
+    /// <summary>FR-160: optional operator ceiling (at least 1) on every call's output token limit.</summary>
+    public int? MaxOutputTokensCeiling { get; set; }
 
     /// <summary>The Ollama endpoint: <c>Llm:Providers:Ollama:BaseUrl</c>, else host.docker.internal in a container or
     /// localhost for the dev loop.</summary>
@@ -85,6 +99,12 @@ public sealed class LlmProvidersOptions
 
 public sealed class LlmProviderOptions
 {
+    /// <summary>FR-157: whether the provider is offered and can be used on this deployment (default <c>true</c>).</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>FR-158, FR-160: the provider's model catalog (§4.24), shipped in <c>appsettings.json</c>.</summary>
+    public List<LlmCatalogModelOptions> Catalog { get; set; } = [];
+
     /// <summary>System API key (Anthropic, OpenAI). Never logged or returned.</summary>
     public string? ApiKey { get; set; }
 
@@ -97,15 +117,48 @@ public sealed class LlmProviderOptions
     public Dictionary<string, string> Models { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
-/// <summary>Validates <see cref="LlmOptions"/> at start-up: a known default provider and a default model for every provider.</summary>
+/// <summary>One model catalog entry (§4.24): <c>Llm:Providers:&lt;P&gt;:Catalog:&lt;n&gt;</c>.</summary>
+public sealed class LlmCatalogModelOptions
+{
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Display name (defaults to the id).</summary>
+    public string? Name { get; set; }
+
+    public int MaxOutputTokens { get; set; }
+
+    public int ContextTokens { get; set; }
+
+    public bool Recommended { get; set; }
+}
+
+/// <summary>
+/// Validates <see cref="LlmOptions"/> at start-up: a known, enabled default provider and at least one enabled provider
+/// (FR-157), a default model for every provider, and catalog entries with unique ids per provider and a positive output
+/// limit (FR-158, FR-160).
+/// </summary>
 internal sealed class LlmOptionsValidator : IValidateOptions<LlmOptions>
 {
     public ValidateOptionsResult Validate(string? name, LlmOptions options)
     {
         var failures = new List<string>();
-        if (!LlmProviderCatalog.TryParseProvider(options.DefaultProvider, out _))
+        if (!LlmProviderCatalog.TryParseProvider(options.DefaultProvider, out var defaultProvider))
         {
             failures.Add($"Llm:DefaultProvider must be one of: {string.Join(", ", EnumStrings.Values<LlmProvider>())}.");
+        }
+        else if (!options.Providers.For(defaultProvider).Enabled)
+        {
+            failures.Add($"Llm:DefaultProvider ({defaultProvider.ToWire()}) must be an enabled provider (Llm:Providers:{defaultProvider}:Enabled is false).");
+        }
+
+        if (!Enum.GetValues<LlmProvider>().Any(p => options.Providers.For(p).Enabled))
+        {
+            failures.Add("At least one LLM provider must be enabled (Llm:Providers:<Provider>:Enabled).");
+        }
+
+        foreach (var provider in Enum.GetValues<LlmProvider>())
+        {
+            ValidateCatalog(provider, options.Providers.For(provider).Catalog, failures);
         }
 
         foreach (var provider in Enum.GetValues<LlmProvider>())
@@ -148,6 +201,11 @@ internal sealed class LlmOptionsValidator : IValidateOptions<LlmOptions>
             failures.Add("Llm:RequestTimeout must be positive.");
         }
 
+        if (options.StreamIdleTimeout <= TimeSpan.Zero)
+        {
+            failures.Add("Llm:StreamIdleTimeout must be positive.");
+        }
+
         if (options.KeyCheckTimeout <= TimeSpan.Zero)
         {
             failures.Add("Llm:KeyCheckTimeout must be positive.");
@@ -158,7 +216,44 @@ internal sealed class LlmOptionsValidator : IValidateOptions<LlmOptions>
             failures.Add("Llm:MaxOutputTokens must be at least 1.");
         }
 
+        if (options.MaxOutputTokensCeiling is < 1)
+        {
+            failures.Add("Llm:MaxOutputTokensCeiling must be at least 1 when set.");
+        }
+
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
+    }
+
+    /// <summary>FR-158: every entry has an id and a positive output limit, and ids are unique per provider.</summary>
+    private static void ValidateCatalog(LlmProvider provider, List<LlmCatalogModelOptions> catalog, List<string> failures)
+    {
+        for (var i = 0; i < catalog.Count; i++)
+        {
+            var entry = catalog[i];
+            if (entry is null || string.IsNullOrWhiteSpace(entry.Id))
+            {
+                failures.Add($"Llm:Providers:{provider}:Catalog:{i}:Id is required.");
+                continue;
+            }
+
+            if (entry.MaxOutputTokens < 1)
+            {
+                failures.Add($"Llm:Providers:{provider}:Catalog:{i}:MaxOutputTokens must be at least 1.");
+            }
+
+            if (entry.ContextTokens < 0)
+            {
+                failures.Add($"Llm:Providers:{provider}:Catalog:{i}:ContextTokens can't be negative.");
+            }
+        }
+
+        foreach (var duplicate in catalog
+            .Where(e => e is not null && !string.IsNullOrWhiteSpace(e.Id))
+            .GroupBy(e => e.Id.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1))
+        {
+            failures.Add($"Llm:Providers:{provider}:Catalog lists the model id '{duplicate.Key}' more than once.");
+        }
     }
 }
 
@@ -184,8 +279,31 @@ public interface ILlmProviderCatalog
     /// <summary>Default models per agent for a provider, keyed by the agent's wire name (<c>idea_refinement</c>).</summary>
     IReadOnlyDictionary<string, string> DefaultAgentModels(LlmProvider provider);
 
-    /// <summary>The provider a new project gets: the configured default if usable, else Fake (FR-5).</summary>
-    LlmProvider DefaultForNewProject { get; }
+    /// <summary>
+    /// The provider of a project without saved LLM settings: the new-project default for a user with no connections
+    /// (<see cref="DefaultForNewProject"/>), else the configured default (validated to be enabled).
+    /// </summary>
+    LlmProvider FallbackProvider { get; }
+
+    /// <summary>FR-157: whether <c>Llm:Providers:&lt;P&gt;:Enabled</c> is on.</summary>
+    bool IsEnabled(LlmProvider provider);
+
+    /// <summary>FR-157: the enabled providers, in declaration order (Anthropic, OpenAI, Ollama, Fake).</summary>
+    IReadOnlyList<LlmProvider> EnabledProviders { get; }
+
+    /// <summary>FR-158, §4.24: the provider's model catalog, in configuration order.</summary>
+    IReadOnlyList<LlmCatalogModel> Catalog(LlmProvider provider);
+
+    /// <summary>FR-158, §4.24: whether a user with <paramref name="userConnections"/> connections for the provider can use
+    /// it (<see cref="LlmProviderRules.Available"/>); <c>null</c> when the provider is disabled.</summary>
+    LlmProviderAvailability? Availability(LlmProvider provider, int userConnections);
+
+    /// <summary>
+    /// §4.24 (amends FR-5): the provider of a project created by a user who has a connection for each entry of
+    /// <paramref name="connectionProviders"/> (<see cref="ProjectSettingsRules.DefaultForNewProject"/>), or
+    /// <c>LLM_PROVIDER_UNAVAILABLE</c>.
+    /// </summary>
+    Result<LlmProvider> DefaultForNewProject(IReadOnlyCollection<LlmProvider> connectionProviders);
 
     /// <summary>The Ollama endpoint: <c>Llm:Providers:Ollama:BaseUrl</c>, else host.docker.internal in a container
     /// or localhost for the dev loop.</summary>
@@ -209,8 +327,34 @@ internal sealed class LlmProviderCatalog(IOptions<LlmOptions> options) : ILlmPro
     public LlmProvider ConfiguredDefault =>
         TryParseProvider(_options.DefaultProvider, out var provider) ? provider : LlmProvider.Fake;
 
-    public LlmProvider DefaultForNewProject =>
-        ProjectSettingsRules.DefaultProviderForNewProject(ConfiguredDefault, HasSystemKey(ConfiguredDefault));
+    public LlmProvider FallbackProvider =>
+        DefaultForNewProject([]) is { IsSuccess: true } chosen ? chosen.Value : ConfiguredDefault;
+
+    public bool IsEnabled(LlmProvider provider) => _options.Providers.For(provider).Enabled;
+
+    public IReadOnlyList<LlmProvider> EnabledProviders => [.. Enum.GetValues<LlmProvider>().Where(IsEnabled)];
+
+    public IReadOnlyList<LlmCatalogModel> Catalog(LlmProvider provider) =>
+        [.. _options.Providers.For(provider).Catalog
+            .Where(e => e is not null && !string.IsNullOrWhiteSpace(e.Id))
+            .Select(e => new LlmCatalogModel(
+                e.Id.Trim(),
+                string.IsNullOrWhiteSpace(e.Name) ? e.Id.Trim() : e.Name.Trim(),
+                e.MaxOutputTokens,
+                e.ContextTokens,
+                e.Recommended))];
+
+    public LlmProviderAvailability? Availability(LlmProvider provider, int userConnections) =>
+        LlmProviderRules.Available(provider, IsEnabled(provider), IsSystemKeySet(provider), userConnections, AllowSystemKeys);
+
+    public Result<LlmProvider> DefaultForNewProject(IReadOnlyCollection<LlmProvider> connectionProviders)
+    {
+        ArgumentNullException.ThrowIfNull(connectionProviders);
+        var availability = Enum.GetValues<LlmProvider>().ToDictionary(
+            p => p,
+            p => Availability(p, connectionProviders.Count(c => c == p)));
+        return ProjectSettingsRules.DefaultForNewProject(ConfiguredDefault, availability);
+    }
 
     public Uri OllamaBaseUrl => _options.ResolveOllamaBaseUrl();
 

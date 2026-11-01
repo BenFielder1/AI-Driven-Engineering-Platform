@@ -4,7 +4,8 @@ import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
 
 import { A11Y_FIXTURE, type A11yFixture } from './support/a11y-fixture.ts'
-import { v2Targets } from './support/a11y-v2-targets.ts'
+import { v2Targets, wizardTo } from './support/a11y-v2-targets.ts'
+import { v4Targets } from './support/a11y-v4-targets.ts'
 
 /**
  * NFR-A11Y: automated WCAG 2.2 AA checks (axe-core) on the core flows, in the light and the dark theme (the app
@@ -129,6 +130,7 @@ const targets: Target[] = [
     ready: (p) => p.getByRole('table', { name: /^Agent runs, newest first/ }),
   },
   ...v2Targets(fixture),
+  ...v4Targets(fixture),
 ]
 
 /**
@@ -310,6 +312,85 @@ test('FR-54: stepper ArrowLeft moves back, Home goes to the first stage and arro
     await page.keyboard.press('End')
     await page.keyboard.press('ArrowRight')
     await expect(links.nth(5)).toBeFocused()
+  } finally {
+    await context.close()
+  }
+})
+
+/**
+ * SPEC §8 v4: from the layer heading (FR-114 moves focus there on every sub-step), Tab reaches the choice's radios, the
+ * arrow keys move through them and Space chooses one.
+ */
+async function pickWithKeyboard(page: Page, choice: string, option: string) {
+  const group = page.getByRole('group', { name: choice, exact: true })
+  const target = group.getByRole('radio', { name: option, exact: true })
+  await target.waitFor()
+  const onAvailableRadio = () =>
+    group.evaluate((el) => {
+      const active = document.activeElement
+      return active instanceof HTMLInputElement && active.type === 'radio' && el.contains(active) && !active.hasAttribute('aria-disabled')
+    })
+  for (let i = 0; i < 30 && !(await onAvailableRadio()); i++) {
+    await page.keyboard.press('Tab')
+  }
+  expect(await onAvailableRadio(), `Tab reaches the ${choice} radios`).toBe(true)
+  for (let i = 0; i < 8 && !(await target.evaluate((el) => el === document.activeElement)); i++) {
+    await page.keyboard.press('ArrowDown')
+  }
+  await expect(target).toBeFocused()
+  await page.keyboard.press('Space')
+  await expect(target).toBeChecked()
+}
+
+/** Tab to Next and press Enter, then the next layer's heading is on screen. */
+async function nextLayerWithKeyboard(page: Page, layer: string) {
+  expect(await tabTo(page, page.getByRole('button', { name: 'Next', exact: true }))).toBe(true)
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', { level: 3, name: layer, exact: true })).toBeVisible()
+}
+
+test('S8_FR114: the Stack step works by keyboard, and a disabled option stays focusable with its reason as its description', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: fixture().storageState })
+  try {
+    const page = await context.newPage()
+    await page.goto('/projects/new')
+    await wizardTo(page, 5)
+
+    // The kind of stack, then each layer, without the mouse.
+    await page.getByRole('radio', { name: /^No stack \(general\)/ }).focus()
+    await page.keyboard.press('ArrowDown')
+    await expect(page.getByRole('radio', { name: /^Choose the stack/ })).toBeChecked()
+    await expect(page.getByRole('heading', { level: 3, name: 'Frontend', exact: true })).toBeVisible()
+    await pickWithKeyboard(page, 'Frontend', 'React + Vite')
+    await nextLayerWithKeyboard(page, 'Backend')
+    await pickWithKeyboard(page, 'Backend', 'ASP.NET Core')
+    await nextLayerWithKeyboard(page, 'Data')
+
+    // The option cards are named radio groups, and each card's text describes its radio.
+    const data = page.getByRole('group', { name: 'Data', exact: true })
+    await expect(data.getByRole('radio', { name: 'EF Core + PostgreSQL', exact: true })).toHaveAttribute('aria-describedby', /.+/)
+
+    // The forbidden options: the disclosure opens by keyboard, and Tab goes on into them.
+    const disclosure = data.locator('summary')
+    await disclosure.focus()
+    await page.keyboard.press('Enter')
+    const prisma = data.getByRole('radio', { name: 'Prisma', exact: true })
+    await expect(prisma).toBeVisible()
+    await page.keyboard.press('Tab')
+    const forbidden = data.locator('details input[type="radio"]').first()
+    await expect(forbidden).toBeFocused()
+    await expect(forbidden).toHaveAttribute('aria-disabled', 'true')
+
+    // Prisma is reached with the arrow keys, its reason is its description, and Space doesn't choose it.
+    for (let i = 0; i < 8 && !(await prisma.evaluate((el) => el === document.activeElement)); i++) {
+      await page.keyboard.press('ArrowDown')
+    }
+    await expect(prisma).toBeFocused()
+    await expect(prisma).toHaveAttribute('aria-disabled', 'true')
+    await expect(prisma).toHaveAccessibleDescription(/Prisma needs Express, NestJS or Next\.js full-stack/)
+    await page.keyboard.press('Space')
+    await expect(prisma).not.toBeChecked()
+    await expect(data.locator('input[type="radio"]:checked')).toHaveCount(0)
   } finally {
     await context.close()
   }

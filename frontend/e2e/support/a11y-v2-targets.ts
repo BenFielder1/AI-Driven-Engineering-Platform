@@ -16,14 +16,14 @@ const STAGES = ['Refinement', 'Specification', 'Planning', 'Execution', 'Review'
 
 const WIZARD_STEPS = ['Source', 'Project idea', 'Repository', 'Version', 'Stack', 'Configuration', 'Deployment', 'Review & create'] as const
 
-const stepHeading = (page: Page, n: number) =>
+export const stepHeading = (page: Page, n: number) =>
   page.getByRole('heading', { name: `Step ${String(n)} of 8: ${WIZARD_STEPS[n - 1] ?? ''}` })
 
 /**
  * FR-5, FR-66, FR-74, FR-88 (§7.2): walks the eight-step wizard from scratch up to `step`, with valid input on every
  * step before it (Local repository; Vercel with the fixture user's Fake connection on the Deployment step).
  */
-async function wizardTo(page: Page, step: number) {
+export async function wizardTo(page: Page, step: number) {
   for (let n = 1; n < step; n++) {
     await expect(stepHeading(page, n)).toBeVisible()
     if (n === 2) {

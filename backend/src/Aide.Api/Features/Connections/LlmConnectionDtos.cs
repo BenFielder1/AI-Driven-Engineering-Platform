@@ -24,7 +24,7 @@ public sealed record LlmCredentialDto(
 
 /// <summary>
 /// The caller's LLM connections, newest first (FR-78), and <c>keylessProviders</c>: the providers that need no key and
-/// are always available (Ollama at the system base URL, and Fake).
+/// are always available (Ollama at the system base URL, and Fake), when enabled on this deployment (FR-157).
 /// </summary>
 public sealed record LlmConnectionsDto(IReadOnlyList<LlmCredentialDto> Credentials, IReadOnlyList<LlmProvider> KeylessProviders);
 

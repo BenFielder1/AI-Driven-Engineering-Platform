@@ -59,7 +59,7 @@ describe('Settings → Danger zone (FR-7)', () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe(`/projects/${project.id}/settings/general`)
     })
-    expect(settingsSectionLinks().map((l) => l.textContent)).toEqual(['General', 'Members', 'LLM', 'Deployment'])
+    expect(settingsSectionLinks().map((l) => l.textContent)).toEqual(['General', 'Members', 'Stack', 'LLM', 'Deployment'])
     expect(screen.getByRole('link', { name: 'General', current: 'page' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete project' })).not.toBeInTheDocument()
     expect(await screen.findByText('Only project Owners can change these settings.')).toBeInTheDocument()

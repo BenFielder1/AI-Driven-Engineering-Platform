@@ -31,6 +31,7 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(p => p.DevelopmentVersion).HasColumnType("text");
         builder.Property(p => p.MergeStrategy).HasDefaultValue(MergeStrategy.AideMerges).IsRequired();
         builder.Property(p => p.TagPrefix).HasColumnType("text").HasDefaultValue(ReleaseVersion.DefaultTagPrefix).IsRequired();
+        builder.PrimitiveCollection(p => p.StackPacks).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]").IsRequired();
         builder.Property(p => p.RowVersion).IsXminRowVersion();
 
         // current_release_version_id points at the version the lifecycle state belongs to. Its FK (ON DELETE SET NULL) is
@@ -39,6 +40,9 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 
         builder.HasIndex(p => new { p.Status, p.CurrentPhase });
         builder.HasIndex(p => p.CurrentReleaseVersionId);
+
+        // §5: the project list filter ?pack= (stack_packs @> ARRAY[pack]).
+        builder.HasIndex(p => p.StackPacks).HasMethod("gin").HasDatabaseName("ix_projects_stack_packs");
     }
 }
 
@@ -58,6 +62,9 @@ internal sealed class ReleaseVersionConfiguration : IEntityTypeConfiguration<Rel
         builder.Property(v => v.BranchName).HasMaxLength(255);
         builder.Property(v => v.PullRequestUrl).HasMaxLength(500);
         builder.Property(v => v.Request).HasColumnType("text").IsRequired();
+        builder.Property(v => v.StackComposition).HasColumnType("jsonb");
+        builder.Property(v => v.CatalogVersion).HasColumnType("text");
+        builder.Property(v => v.CatalogHash).HasColumnType("text");
         builder.Property(v => v.PresetId).HasMaxLength(100);
         builder.Property(v => v.PresetVersion).HasMaxLength(50);
         builder.Property(v => v.PresetHash).HasMaxLength(64);
@@ -92,10 +99,17 @@ internal sealed class ProjectGitSettingsConfiguration : IEntityTypeConfiguration
 {
     public void Configure(EntityTypeBuilder<ProjectGitSettings> builder)
     {
-        // FR-82: a github_app project always names its installation and repo.
-        builder.ToTable("project_git_settings", t => t.HasCheckConstraint(
-            "ck_project_git_settings_github_app_repo",
-            "provider <> 'github_app' OR (installation_id IS NOT NULL AND repo_id IS NOT NULL AND repo_full_name IS NOT NULL)"));
+        // FR-82: a github_app project always names its installation and repo. FR-136: a GitLab or Bitbucket project
+        // always names its instance and repo.
+        builder.ToTable("project_git_settings", t =>
+        {
+            t.HasCheckConstraint(
+                "ck_project_git_settings_github_app_repo",
+                "provider <> 'github_app' OR (installation_id IS NOT NULL AND repo_id IS NOT NULL AND repo_full_name IS NOT NULL)");
+            t.HasCheckConstraint(
+                "ck_project_git_settings_git_host_repo",
+                "provider NOT IN ('gitlab', 'bitbucket') OR (instance_id IS NOT NULL AND external_repo_id IS NOT NULL AND repo_full_name IS NOT NULL)");
+        });
         builder.HasKey(s => s.ProjectId);
         builder.Property(s => s.RepoUrl).HasMaxLength(500);
         builder.Property(s => s.DefaultBranch).HasMaxLength(255).IsRequired();
@@ -104,6 +118,16 @@ internal sealed class ProjectGitSettingsConfiguration : IEntityTypeConfiguration
 
         // Lookups by installation (installation removed / repositories changed).
         builder.HasIndex(s => s.InstallationId);
+
+        // FR-136: the instance (an instance in use can't be removed, FR-130), the binding Owner's connection and the Owner
+        // who bound it; deleting the connection or the user clears the binding (the lost-binding flow takes over).
+        builder.Property(s => s.ExternalRepoId).HasMaxLength(100);
+        builder.HasOne<GitHostInstance>().WithMany().HasForeignKey(s => s.InstanceId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<GitConnection>().WithMany().HasForeignKey(s => s.GitConnectionId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(s => s.BoundByUserId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(s => s.InstanceId);
+        builder.HasIndex(s => s.GitConnectionId);
+        builder.HasIndex(s => s.BoundByUserId);
     }
 }
 
@@ -257,8 +281,13 @@ internal sealed class ReleaseConfiguration : IEntityTypeConfiguration<Release>
         builder.Property(r => r.ErrorCode).HasMaxLength(32);
         builder.Property(r => r.ErrorMessage).HasColumnName("error_message");
         builder.PrimitiveCollection(r => r.ConflictingFiles).HasColumnType("text[]").IsRequired();
+        builder.Property(r => r.ReleaseNotes).HasColumnType("text");
         builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(r => r.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
+
+        // FR-154: the release's Supabase migration run (§5); the run outlives nothing, so deleting it clears the link.
+        builder.HasOne<DatabaseMigrationRun>().WithMany().HasForeignKey(r => r.MigrationRunId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(r => r.MigrationRunId);
 
         // One row per attempt, numbered per (release version, checkpoint): checkpoints restart in every release version,
         // and v1 data may hold several succeeded attempts of one checkpoint (re-release after a rollback).

@@ -78,6 +78,8 @@ export function seedRun(project: StoredProject, overrides: Partial<Run> = {}): R
     credentialLabel: null,
     toolCalls: [],
     warnings: [],
+    continuations: status === 'succeeded' ? 0 : null,
+    maxOutputTokens: status === 'succeeded' ? 128_000 : null,
     ...overrides,
   }
   project.runs.push(run)
@@ -87,7 +89,7 @@ export function seedRun(project: StoredProject, overrides: Partial<Run> = {}): R
 /** The list item omits the output (RunEndpoints.ListRuns doesn't load it). */
 function toListDto(run: Run): Schemas['AgentRunDto'] {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { output, outputTruncated, toolCalls, warnings, ...dto } = run
+  const { output, outputTruncated, toolCalls, warnings, continuations, maxOutputTokens, ...dto } = run
   return dto
 }
 

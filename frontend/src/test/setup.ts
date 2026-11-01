@@ -4,12 +4,16 @@ import { afterAll, afterEach, beforeAll, vi } from 'vitest'
 
 import { resetAdminDb } from '../mocks/handlers/admin'
 import { resetAuthDb } from '../mocks/handlers/auth'
+import { resetBitbucketDb } from '../mocks/handlers/bitbucket'
 import { resetConnectionsDb } from '../mocks/handlers/connections'
-import { resetVercelDb } from '../mocks/handlers/deployments'
+import { resetDeploymentDb } from '../mocks/handlers/deployments'
+import { resetPlatformDb } from '../mocks/handlers/platform-connections'
 import { resetGitHubDb } from '../mocks/handlers/github'
+import { resetGitLabDb } from '../mocks/handlers/gitlab'
+import { resetLlmDb } from '../mocks/handlers/llm'
 import { resetNotificationsDb } from '../mocks/handlers/notifications'
-import { resetPresetCatalog } from '../mocks/handlers/preset-catalog'
 import { resetProjectsDb } from '../mocks/handlers/projects'
+import { resetStackDb } from '../mocks/handlers/stack'
 import { server } from '../mocks/server'
 import { router } from './memory-router'
 
@@ -72,10 +76,15 @@ afterEach(() => {
   resetNotificationsDb()
   resetAdminDb()
   resetConnectionsDb()
-  resetVercelDb()
+  resetLlmDb()
+  resetDeploymentDb()
+  resetPlatformDb()
   resetGitHubDb()
-  resetPresetCatalog()
+  resetGitLabDb()
+  resetBitbucketDb()
+  resetStackDb()
   localStorage.clear()
+  sessionStorage.clear()
   router.reset('/')
 })
 afterAll(() => {
