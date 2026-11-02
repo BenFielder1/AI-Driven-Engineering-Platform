@@ -82,6 +82,12 @@ public static class EventTypes
     public const string DemoStackProjectSeeded = "DEMO_STACK_PROJECT_SEEDED";
 
     /// <summary>
+    /// §9 (v5) seed marker: the dev seed created its stack inference demo project, in <c>analysis</c> with a draft profile and a
+    /// Fake tracker import (<c>{projectId, importId}</c>, project_id null).
+    /// </summary>
+    public const string DemoAnalysisProjectSeeded = "DEMO_ANALYSIS_PROJECT_SEEDED";
+
+    /// <summary>
     /// DEP-V2 (§9) seed marker: the one-off upgrade of a v1-seeded demo project to released 0.1.0 ran
     /// (<c>{projectId, outcome}</c>, project_id null; <c>outcome</c> <c>released</c>, or why it was skipped).
     /// </summary>
@@ -131,6 +137,13 @@ public static class EventTypes
     /// (<c>userId</c>) gets the personal <c>connection_invalid</c> notification (in-app and email).
     /// </summary>
     public const string ConnectionInvalid = "CONNECTION_INVALID";
+
+    /// <summary>
+    /// FR-165, FR-193: a Jira or Linear connection's user-entered expiry is 14 days away or less: <c>{connectionId, userId, provider,
+    /// expiresAt}</c> (project_id null; no token, label or email). Recorded once per connection and expiry date by the expiry sweep.
+    /// The connection's owner gets the personal <c>connection_invalid</c> notification, worded as a warning.
+    /// </summary>
+    public const string ConnectionExpiring = "CONNECTION_EXPIRING";
 
     /// <summary>FR-26: a run was refused because the project's token budget is used up (Owners are notified, phase 12).</summary>
     public const string BudgetExceeded = "BUDGET_EXCEEDED";
@@ -246,7 +259,10 @@ public static class EventTypes
     /// </summary>
     public const string TrackerImportCompleted = "TRACKER_IMPORT_COMPLETED";
 
-    /// <summary>FR-170, FR-193: an import ended without a snapshot: <c>{importId, provider, errorCode, releaseVersionId}</c>.</summary>
+    /// <summary>
+    /// FR-170, FR-193: an import ended without a snapshot: <c>{importId, provider, errorCode, releaseVersionId, importedBy}</c>
+    /// (<c>importedBy</c>: the importer's user id, who gets <c>tracker_import_failed</c> with the Owners).
+    /// </summary>
     public const string TrackerImportFailed = "TRACKER_IMPORT_FAILED";
 
     /// <summary>FR-173, FR-193: a person removed an import: <c>{importId, provider, itemCount, releaseVersionId, artifactId, version}</c>; the last two are null when no snapshot changed.</summary>
@@ -384,7 +400,7 @@ public static class EventTypes
         [EventCategory.Transition] = [PhaseChanged],
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
         [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored, CodebaseSummaryCreated, TrackerImportCompleted, TrackerImportFailed, SourceItemsRemoved, StackProfileCreated, StackProfileApproved, StackProfileRejected],
-        [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
+        [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid, ConnectionExpiring],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady, PreviewRolloutCompleted, DatabaseReset, MigrationRunStarted, MigrationRunCompleted, MigrationRunFailed, MergedHeadMismatch, DeploymentTargetConfigured, DeploymentTargetFailed, DeploymentGroupConfigured, DeploymentGroupFailed, DatabaseProvisioned, DatabaseProvisioningFailed, DatabaseExpiring],
@@ -398,6 +414,7 @@ public static class EventTypes
         RunFailed,
         BudgetExceeded,
         ConnectionInvalid,
+        ConnectionExpiring,
         LlmBindingCleared,
         GitBindingCleared,
         StepRejected,

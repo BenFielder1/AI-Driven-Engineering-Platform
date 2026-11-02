@@ -216,6 +216,7 @@ internal static class ActivitySummary
                 "bitbucket" => "Bitbucket rejected the user's connection; it is marked invalid",
                 var provider => $"{provider ?? "LLM"} rejected the bound connection's key; it is marked invalid",
             },
+            EventTypes.ConnectionExpiring => $"The {Get("provider") ?? "tracker"} connection's token expires at {Get("expiresAt") ?? "?"}",
             EventTypes.LlmBindingCleared => $"LLM binding cleared ({Get("reason") ?? "?"})",
             EventTypes.GitBindingCleared => $"Git binding cleared ({Get("reason") ?? "?"})",
             EventTypes.GitHostInstanceChanged => $"{Domain.GitHosts.GitHostNames.Display(Get("kind"))} instance {Get("change") ?? "changed"}",
@@ -255,6 +256,8 @@ internal static class ActivitySummary
             EventTypes.DatabaseReset => $"Preview database reset ({Get("method") ?? "reset_schema"})",
             EventTypes.DeploymentTargetConfigured => $"{Get("component") ?? "Deployment"} target configured on {Get("provider") ?? "?"}",
             EventTypes.DeploymentTargetFailed => $"{Get("component") ?? "Deployment"} target needs attention ({Get("reason") ?? "?"})",
+            EventTypes.DeploymentGroupConfigured => $"{Get("provider") ?? "Deployment"} group is ready",
+            EventTypes.DeploymentGroupFailed => $"{Get("provider") ?? "Deployment"} group setup failed: {Get("errorCode") ?? "error"}",
             EventTypes.DatabaseProvisioned => $"{Get("environment") ?? "Database"} database available on {Get("provider") ?? "?"}",
             EventTypes.DatabaseProvisioningFailed => $"{Get("environment") ?? "Database"} database setup failed: {Get("errorCode") ?? "error"}",
             EventTypes.DatabaseExpiring => Get("reason") == Domain.Databases.ManagedDatabaseRules.ExpiringReasonPaused

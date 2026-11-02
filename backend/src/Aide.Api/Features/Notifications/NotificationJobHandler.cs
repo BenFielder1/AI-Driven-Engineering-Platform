@@ -17,7 +17,8 @@ namespace Aide.Api.Features.Notifications;
 /// <list type="number">
 /// <item>gate notifications of a gate that is no longer pending are dropped (it was decided before the job ran);</item>
 /// <item>a <c>gate_required</c> spec, plan or pre-release gate gets its one-click link pair (FR-48);</item>
-/// <item>each recipient (<see cref="NotificationRules.Recipients"/>) who hasn't muted the type (§2) gets one in-app
+/// <item>each recipient (<see cref="NotificationRules.Recipients"/>: Owners, members, or Owners plus the importer of a failed
+/// tracker import, FR-193) who hasn't muted the type (§2) gets one in-app
 /// notification — unique per (user, key), so a redelivered job adds nothing;</item>
 /// <item>each project channel subscribed to the type gets one delivery row — unique per (key, channel);</item>
 /// <item>a personal notification (FR-92 <c>connection_invalid</c>) goes to its one user instead: in-app, plus one email
@@ -159,9 +160,12 @@ public sealed partial class NotificationJobHandler(
                 : [];
         }
 
+        // FR-193: OwnersAndUser adds the user the event names (the importer) while they are still a member, whatever their role.
+        var extra = scope == RecipientScope.OwnersAndUser ? composed.RecipientUserId : null;
         return await db.ProjectMembers.AsNoTracking()
-            .Where(m => m.ProjectId == composed.ProjectId && (scope == RecipientScope.AllMembers || m.Role == ProjectRole.Owner))
+            .Where(m => m.ProjectId == composed.ProjectId && (scope == RecipientScope.AllMembers || m.Role == ProjectRole.Owner || m.UserId == extra))
             .Select(m => m.UserId)
+            .Distinct()
             .ToListAsync(cancellationToken);
     }
 

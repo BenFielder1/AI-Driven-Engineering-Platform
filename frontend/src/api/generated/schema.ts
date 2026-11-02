@@ -5338,7 +5338,7 @@ export interface components {
          *     types (`NotificationRules.ChannelTypes`); the personal `connection_invalid` never goes to project channels.
          * @enum {unknown}
          */
-        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention";
+        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention" | "stack_profile_ready" | "tracker_import_failed";
         /**
          * @description A page of the caller's notifications, newest first. `unreadCount` counts all the caller's unread notifications
          *     (not just this page). Load more with `before` = `nextBefore`; `null` on the last page.
@@ -5361,11 +5361,12 @@ export interface components {
         };
         /**
          * @description The kind of an in-app notification (FR-47, FR-15). The project channel events (`NotificationEvent`) plus
-         *     `gate_reminder`, the 24-hour reminder of a pending gate, and the personal `connection_invalid` (FR-92).
+         *     `gate_reminder`, the 24-hour reminder of a pending gate, and the personal `connection_invalid` (FR-92; also the
+         *     FR-165 warning that a Jira or Linear token expires within 14 days).
          *     Wire values are snake_case.
          * @enum {unknown}
          */
-        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention";
+        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention" | "stack_profile_ready" | "tracker_import_failed";
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfAdminAgentRunDto: {
             items: components["schemas"]["AdminAgentRunDto"][];

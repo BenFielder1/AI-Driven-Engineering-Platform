@@ -84,7 +84,33 @@ internal sealed class AideApiClient : IDisposable
     public Task<ApiResult<T>> PostAsync<T>(string path, object? body, CancellationToken cancellationToken) =>
         SendAsync<T>(HttpMethod.Post, path, body, cancellationToken);
 
+    /// <summary>A request whose success has no body to read (204), such as <c>DELETE</c>; failures throw as for <see cref="SendAsync{T}"/>.</summary>
+    public async Task SendNoContentAsync(HttpMethod method, string path, CancellationToken cancellationToken) =>
+        await ReadAsync(method, path, body: null, cancellationToken).ConfigureAwait(false);
+
     public async Task<ApiResult<T>> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken cancellationToken)
+    {
+        var raw = await ReadAsync(method, path, body, cancellationToken).ConfigureAwait(false);
+        T? value;
+        try
+        {
+            value = string.IsNullOrWhiteSpace(raw) ? default : JsonSerializer.Deserialize<T>(raw, ApiJson.Options);
+        }
+        catch (JsonException ex)
+        {
+            throw new CliException($"The API returned a response the CLI could not read ({ex.Message}). Is {BaseUri} an AIDE API?");
+        }
+
+        if (value is null)
+        {
+            throw new CliException($"The API returned an empty response for {method} {path}.");
+        }
+
+        return new ApiResult<T>(value, raw);
+    }
+
+    /// <summary>Sends the request and returns the body of a success; a failure throws <see cref="ApiException"/>.</summary>
+    private async Task<string> ReadAsync(HttpMethod method, string path, object? body, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(method, path.TrimStart('/'));
         if (body is not null)
@@ -114,22 +140,7 @@ internal sealed class AideApiClient : IDisposable
                 throw new ApiException(response.StatusCode, response.ReasonPhrase, TryReadProblem(raw), ReadRetryAfter(response));
             }
 
-            T? value;
-            try
-            {
-                value = string.IsNullOrWhiteSpace(raw) ? default : JsonSerializer.Deserialize<T>(raw, ApiJson.Options);
-            }
-            catch (JsonException ex)
-            {
-                throw new CliException($"The API returned a response the CLI could not read ({ex.Message}). Is {BaseUri} an AIDE API?");
-            }
-
-            if (value is null)
-            {
-                throw new CliException($"The API returned an empty response for {method} {path}.");
-            }
-
-            return new ApiResult<T>(value, raw);
+            return raw;
         }
     }
 

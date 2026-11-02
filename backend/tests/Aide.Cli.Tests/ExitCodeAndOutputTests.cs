@@ -72,6 +72,7 @@ public sealed class ExitCodeAndOutputTests : IDisposable
         Assert.Equal(ExitCodes.Success, run.ExitCode);
         var output = JsonNode.Parse(run.Out)!.AsObject();
         Assert.True(output.Remove("stack") && output.Remove("latestMigrationRun"), run.Out); // FR-156 adds these two
+        Assert.True(output.Remove("sources"), run.Out); // FR-194 adds the imports
         Assert.True(JsonNode.DeepEquals(JsonNode.Parse(Samples.State), output), run.Out);
         Assert.Empty(run.Error);
         var request = _cli.Requests[0];

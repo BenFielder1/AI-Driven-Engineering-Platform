@@ -202,7 +202,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
             Assert.All(artifacts, a => Assert.Equal(Domain.Artifacts.ArtifactStatus.Locked, a.Status));
             Assert.Contains("## Routes & Rendering Strategy", artifacts.Single(a => a.Type == Domain.Artifacts.ArtifactType.TechnicalSpecification).Content, StringComparison.Ordinal);
             Assert.Single(await db.Events.Where(e => e.Type == EventTypes.DemoPresetProjectSeeded).ToListAsync(Ct));
-            Assert.Equal(3, await db.Projects.CountAsync(Ct));
+            Assert.Equal(4, await db.Projects.CountAsync(Ct));
         });
 
         var jobs = await Support.AgentJobs.RunQueuedAsync(app, projectId);
@@ -240,6 +240,51 @@ public sealed class DevSeederTests(AideApiFactory factory)
         var jobs = await Support.AgentJobs.RunQueuedAsync(app, projectId);
 
         Assert.Equal((Domain.Jobs.JobTypes.SpecGeneration, Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
+    }
+
+    [Fact]
+    public async Task S9_FR179_FR193_A_fourth_demo_is_seeded_once_in_analysis_with_one_unknown_layer_and_a_Fake_tracker_import()
+    {
+        await using var app = await AppAsync();
+        await SeedAsync(app);
+        await SeedAsync(app);
+
+        await WithDbAsync(app, async db =>
+        {
+            var project = await db.Projects.SingleAsync(p => p.Name == DevSeeder.DemoAnalysisProjectName, Ct);
+            Assert.Equal((Phase.Analysis, ProjectStatus.Active, 1), (project.CurrentPhase, project.Status, project.Checkpoint));
+            Assert.Equal(LlmProvider.Fake, (await db.ProjectLlmSettings.SingleAsync(s => s.ProjectId == project.Id, Ct)).Provider);
+            var version = await db.ReleaseVersions.SingleAsync(v => v.ProjectId == project.Id, Ct);
+            Assert.Equal(StackSource.Infer, version.StackSource);
+            Assert.Null(version.StackComposition);
+            Assert.False(string.IsNullOrWhiteSpace(version.BaseCommitSha));
+
+            // FR-178: the base commit holds the Vite + React skeleton the profile describes.
+            var files = await app.Services.GetRequiredService<IWorkingCopies>().ListPathsAtCommitAsync(project.Id, version.BaseCommitSha!, 100, Ct);
+            Assert.NotNull(files);
+            Assert.Subset(files.ToHashSet(), new HashSet<string> { "package.json", "index.html", "src/main.tsx" });
+
+            // Rule 8: only the creation transition, straight into analysis (no refinement → analysis).
+            var transition = await db.StateTransitions.SingleAsync(t => t.ProjectId == project.Id, Ct);
+            Assert.Equal(((Phase?)null, Phase.Analysis), (transition.FromPhase, transition.ToPhase));
+
+            var profile = await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id && a.Type == Domain.Artifacts.ArtifactType.StackProfile, Ct);
+            Assert.Equal((1, Domain.Artifacts.ArtifactStatus.Draft), (profile.Version, profile.Status));
+            var parsed = Domain.Stack.StackProfile.Parse(profile.Content);
+            Assert.True(parsed.IsSuccess);
+            Assert.Equal(["backend"], Domain.Stack.StackProfile.Unresolved(parsed.Value.Document));
+
+            var import = await db.TrackerImports.SingleAsync(i => i.ProjectId == project.Id, Ct);
+            Assert.Equal((Domain.Trackers.TrackerProvider.Jira, Domain.Trackers.TrackerImportStatus.Completed, DevSeeder.DemoImportKeys.Count), (import.Provider, import.Status, import.ItemCount));
+            var snapshot = await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id && a.Type == Domain.Artifacts.ArtifactType.SourceItems, Ct);
+            Assert.Equal((import.SourceArtifactId, 1, Domain.Artifacts.ArtifactStatus.Locked), ((Guid?)snapshot.Id, snapshot.Version, snapshot.Status));
+            Assert.Contains("FAKE-1", snapshot.Content, StringComparison.Ordinal);
+
+            // Seeded quietly: no agent job and no notification.
+            Assert.False(await db.Jobs.AnyAsync(j => j.ProjectId == project.Id && j.Type != Domain.Jobs.JobTypes.Notification, Ct));
+            Assert.False(await db.Notifications.AnyAsync(n => n.ProjectId == project.Id, Ct));
+            Assert.Single(await db.Events.Where(e => e.Type == EventTypes.DemoAnalysisProjectSeeded).ToListAsync(Ct));
+        });
     }
 
     [Fact]
@@ -288,7 +333,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
         await using var app = await AppAsync();
         await SeedAsync(app);
 
-        await WithDbAsync(app, async db => Assert.Equal(3, await db.Projects.ExecuteDeleteAsync(Ct)));
+        await WithDbAsync(app, async db => Assert.Equal(4, await db.Projects.ExecuteDeleteAsync(Ct)));
         await SeedAsync(app);
 
         await WithDbAsync(app, async db =>
@@ -297,6 +342,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
             Assert.Equal(1, await db.Events.CountAsync(e => e.Type == EventTypes.DemoProjectSeeded, Ct));
             Assert.Equal(1, await db.Events.CountAsync(e => e.Type == EventTypes.DemoPresetProjectSeeded, Ct));
             Assert.Equal(1, await db.Events.CountAsync(e => e.Type == EventTypes.DemoStackProjectSeeded, Ct));
+            Assert.Equal(1, await db.Events.CountAsync(e => e.Type == EventTypes.DemoAnalysisProjectSeeded, Ct));
         });
     }
 
@@ -344,7 +390,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
         await WithDbAsync(app, async db =>
         {
             Assert.True(await db.Users.AnyAsync(u => u.Email == DevSeeder.AdminEmail, Ct));
-            Assert.Equal([DevSeeder.DemoPresetProjectName, DevSeeder.DemoProjectName, DevSeeder.DemoBaasProjectName], await db.Projects.OrderBy(p => p.Name).Select(p => p.Name).ToListAsync(Ct));
+            Assert.Equal([DevSeeder.DemoPresetProjectName, DevSeeder.DemoProjectName, DevSeeder.DemoBaasProjectName, DevSeeder.DemoAnalysisProjectName], await db.Projects.OrderBy(p => p.Name).Select(p => p.Name).ToListAsync(Ct));
         });
     }
 

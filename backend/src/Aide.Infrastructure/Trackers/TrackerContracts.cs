@@ -14,13 +14,23 @@ public sealed class TrackerOptions
 {
     public const string SectionName = "Trackers";
 
-    /// <summary><c>Fake</c>: the deterministic Fake for every tracker (Development, Testing and opted-in E2E; else <c>Deployments:AllowFake=true</c>).</summary>
+    /// <summary>The longest <see cref="SearchTimeout"/> accepted at startup.</summary>
+    public static readonly TimeSpan MaxSearchTimeout = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// <c>Fake</c>: the deterministic Fake for every tracker (Development, Testing and opted-in E2E; else <c>Deployments:AllowFake=true</c>).
+    /// Unset or <c>Real</c>: the real adapters. Anything else fails startup.
+    /// </summary>
     public string? Provider { get; set; }
 
-    /// <summary>§8: tracker search and browse proxy a provider with this timeout.</summary>
+    /// <summary>§8: tracker search and browse proxy a provider with this timeout (default 15 s; at most 2 minutes).</summary>
     public TimeSpan SearchTimeout { get; set; } = TimeSpan.FromSeconds(15);
 
     public bool UseFake => string.Equals(Provider?.Trim(), "Fake", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Whether <see cref="Provider"/> is unset, <c>Real</c> or <c>Fake</c> (any case).</summary>
+    public bool HasKnownProvider =>
+        string.IsNullOrWhiteSpace(Provider) || UseFake || string.Equals(Provider.Trim(), "Real", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>

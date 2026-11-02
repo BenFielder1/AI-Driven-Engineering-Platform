@@ -402,7 +402,7 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Llm:Providers:OpenAI:ApiKey` | OpenAI system key (used only with `Llm:AllowSystemKeys=true`) | none | yes |
 | `Llm:Providers:<Name>:BaseUrl` | Endpoint override (`Anthropic`, `OpenAI`, `Ollama`, `Fake`). Ollama: `Llm__Providers__Ollama__BaseUrl` | Ollama: `http://localhost:11434` (Development, no container) or `http://host.docker.internal:11434` (container) | no |
 | `Llm:Providers:<Name>:DefaultModel` | Model when an agent has no own entry | see section below | no |
-| `Llm:Providers:<Name>:Models:<Agent>` | Model per agent | see section below | no |
+| `Llm:Providers:<Name>:Models:<Agent>` | Model per agent, e.g. `Llm__Providers__Anthropic__Models__StackAnalyst` for the v5 Stack Analyst (FR-180) | see section below | no |
 | `Llm:Pricing:<model>:InputPerMTok`, `OutputPerMTok` | USD per million tokens, for cost estimates | see appsettings; unpriced = 0 | no |
 | `GitHub:App:AppId` | AIDE GitHub App id (FR-80). All five `GitHub:App:*` values together override the App registered from Admin → Integrations → GitHub; set none or all | none: the registered App, if any | no |
 | `GitHub:App:ClientId` | The App's client id (sign-in and connections) | none | no |
@@ -423,7 +423,7 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Bitbucket:RequestTimeout` | One Bitbucket API request | `00:00:20` | no |
 | `Git:Local:ImportRoot` | Folder under which a Local import (`git.localSourcePath`) must live. Empty disables Local import. E2E and dev only | unset (`/data/import` in the E2E overlay) | no |
 | `Deployments:Provider` | `Vercel` (the real platform APIs of every deployment provider; the name is historical) or `Fake`. Fake makes every deployment check deterministic and lets Local Git projects use deployments | `Vercel` (`Fake` in the E2E overlay) | no |
-| `Deployments:AllowFake` | Allows `Fake` (for deployments and databases) outside Development and Testing. Without it the API refuses to start with Fake | `false` (`true` in the E2E overlay) | no |
+| `Deployments:AllowFake` | Allows `Fake` (for deployments, databases and trackers) outside Development and Testing. Without it the API refuses to start with Fake | `false` (`true` in the E2E overlay) | no |
 | `Databases:Provider` | `Platform` or `Fake`. Fake makes database provisioning and the migration runner deterministic, with no network and no real database. Set it with `Deployments:Provider`: each is read on its own | `Platform` (`Fake` in Development and the E2E overlay) | no |
 | `Notifications:AllowPrivateTargets` | Let Slack, Teams, webhooks reach private addresses (local testing only) | `false` | no |
 | `Notifications:RequestTimeout` | One webhook request, at most 60 s | `00:00:10` | no |
@@ -431,6 +431,9 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Notifications:DeliverySweepInterval` | How often due retries run | `00:01:00` | no |
 | `Notifications:GateSweepInterval` | How often gates are checked for reminders | `01:00:00` | no |
 | `Notifications:DatabaseExpirySweepInterval` | How often the `database_expiry_sweep` job is queued: it reads each database's state to raise "database expiring" and mark `expiring`/`paused` (FR-155). Positive | `01:00:00` | no |
+| `Notifications:ConnectionExpirySweepInterval` | How often Jira and Linear connections are checked for a user-entered expiry within 14 days, raising "connection expiring" (FR-165). No provider calls. Positive | `01:00:00` | no |
+| `Trackers:Provider` | Issue trackers for imports (Jira, Linear, GitHub, GitLab; FR-165..FR-169): unset or `Real` = the real APIs with each user's own connection, `Fake` = recorded fixtures with no network. Any other value stops the API at start-up. `Fake` outside Development and Testing also needs `Deployments:AllowFake=true`. Never set on Railway | unset (real; `Fake` in CI E2E and the E2E overlay) | no |
+| `Trackers:SearchTimeout` | One tracker search or fetch; over it the call fails with `UPSTREAM_ERROR`. Greater than zero and at most `00:02:00` | `00:00:15` | no |
 | `Notifications:SweepBatchSize` | Deliveries retried per sweep | `50` | no |
 | `Smtp:Host` | SMTP server. Blank: email skipped, other channels still send | blank | no |
 | `Smtp:Port` | SMTP port | `587` | no |
@@ -448,13 +451,15 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 
 `GitHub:AllowInsecureGitBaseUrl` exists for tests only. Do not set it.
 
+**Egress (v5 issue imports):** with real trackers the API calls `*.atlassian.net` (only `https://<site>/_edge/tenant_info`, to resolve a Jira site), `api.atlassian.com` (Jira REST) and `api.linear.app` (Linear GraphQL). GitHub and GitLab issues use the hosts AIDE already reaches (`api.github.com`, registered GitLab instances). Allow these if outbound traffic is filtered. `Trackers:Provider=Fake` makes no tracker calls.
+
 Where each value lives:
 
 | Kind | Dev loop | Kubernetes |
 | --- | --- | --- |
 | Secrets (marked "yes") | `dotnet user-secrets set "<Key>" "<value>" --project backend/src/Aide.Api` | `deploy/k8s/overlays/local/secrets.env`, as `Key__Sub=value` |
 | `App:PublicBaseUrl` | `appsettings.Development.json` (`http://localhost:3000`) | `app-config-local.yaml` |
-| `Deployments:*`, `Git:Local:ImportRoot`, `Llm:DefaultProvider` for E2E | environment variables | `deploy/k8s/overlays/local-e2e/app-config-e2e.yaml` (`--e2e` only) |
+| `Deployments:*`, `Databases:Provider`, `Trackers:Provider`, `Git:Local:ImportRoot`, `Llm:DefaultProvider` for E2E | environment variables | `deploy/k8s/overlays/local-e2e/app-config-e2e.yaml` (`--e2e` only) |
 | Other non-secrets | `appsettings*.json` or environment variables | `deploy/k8s/base/configmap.yaml` |
 
 Platform tokens (Vercel, Netlify, Cloudflare, Render, Railway, Supabase), database connection strings, user LLM keys, GitHub, GitLab and Bitbucket user tokens, registered GitLab instances and the Bitbucket consumer, the registered GitHub App and deployment env values are not configuration. They are stored encrypted in the database and are never shown.

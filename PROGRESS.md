@@ -29,15 +29,15 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-175 | Who is credited | 3.3 | backend | M33 | done | CI 41326693467 |
 | FR-176 | Which email per host | 3.3 | backend + data | M33 | done | CI 41326693467 |
 | FR-177 | Project and personal credit settings | 3.3 | frontend + backend + data | M33 | done | CI 41326693467 |
-| FR-178 | Stack step: Infer option | 3.4 | frontend + backend | M36 | todo | — |
-| FR-179 | Analysis phase | 3.4 | backend | M36 | todo | — |
-| FR-180 | Stack Analyst agent | 3.4 | backend | M36 | todo | — |
-| FR-181 | Blanks, unsupported stacks | 3.4 | backend + frontend | M36 | todo | — |
-| FR-182 | Analysis page | 3.4 | frontend + backend | M36 | todo | — |
-| FR-183 | Edit, approve, reject the profile | 3.4 | frontend + backend | M36 | todo | — |
-| FR-184 | Hosts and deployment setup on the page | 3.4 | frontend + backend | M36 | todo | — |
-| FR-185 | Continue to Refinement | 3.4 | frontend + backend | M36 | todo | — |
-| FR-186 | Inference for new versions | 3.4 | frontend + backend | M36 | todo | — |
+| FR-178 | Stack step: Infer option | 3.4 | frontend + backend | M36 | done | CI 41526801694 |
+| FR-179 | Analysis phase | 3.4 | backend | M36 | done | CI 41526801694 |
+| FR-180 | Stack Analyst agent | 3.4 | backend | M36 | done | CI 41526801694 |
+| FR-181 | Blanks, unsupported stacks | 3.4 | backend + frontend | M36 | done | CI 41526801694 |
+| FR-182 | Analysis page | 3.4 | frontend + backend | M36 | done | CI 41526801694 |
+| FR-183 | Edit, approve, reject the profile | 3.4 | frontend + backend | M36 | done | CI 41526801694 |
+| FR-184 | Hosts and deployment setup on the page | 3.4 | frontend + backend | M36 | done | CI 41526801694 |
+| FR-185 | Continue to Refinement | 3.4 | frontend + backend | M36 | done | CI 41526801694 |
+| FR-186 | Inference for new versions | 3.4 | frontend + backend | M36 | done | CI 41526801694 |
 | FR-187 | Deployment groups | 3.5 | backend + data | M34 | done | CI 41342366096 |
 | FR-188 | Wizard group windows | 3.5 | frontend | M34 | done | CI 41342366096 |
 | FR-189 | Separate projects option | 3.5 | frontend + backend | M34 | done | CI 41342366096 |
@@ -53,7 +53,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M33 Commit co-authorship: FR-174–FR-177 ([CI 41326693467](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41326693467), head f6b74f1)
 - [x] M34 Deployment groups: FR-187–FR-192 ([CI 41342366096](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41342366096), head b2dfe44)
 - [x] M35 Tracker connections and imports: FR-165–FR-173 ([CI 41402440433](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41402440433), head 65ff4ee)
-- [ ] M36 Stack inference and the Analysis phase: FR-178–FR-186
+- [x] M36 Stack inference and the Analysis phase: FR-178–FR-186 ([CI 41526801694](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41526801694), head 01bce28)
 - [ ] M37 Integrate and harden: FR-193, FR-194, E2E, axe, perf, docs, verifier over v1–v5
 
 ## Decisions
@@ -71,12 +71,16 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 - 2026-11-02 (M36): FR-183 wins over FR-17: rejecting a `stack_profile` always re-runs the Stack Analyst, with the rejected draft as context, even when a person edited it. PUT /stack stays allowed during analysis, because entering refinement still needs the locked profile. `Phase.Analysis` is first in the enum; phases are stored as strings everywhere, which was checked. Profile drafts and approval are allowed only in analysis. Unknown or conflict layers block approval even with `generalist`. Infer stays offered for URL and Local imports the wizard can't see into; `STACK_INFER_NO_CODE` covers empty repos at create. Detection pre-fills layers whichever stack kind is chosen.
 
+- 2026-11-02 (M37, spec sync): new event `CONNECTION_EXPIRING` sent through the personal `connection_invalid` rules; `TRACKER_IMPORT_FAILED` gains `importedBy`. The seed's Fake tracker import sits on the new analysis demo ("Demo: Weather Board", Vite + React skeleton), as no seeded demo is in refinement. `aide project create` also gains `--import-version`, `--released-tag` and `--local-path`, because inference needs an imported repository. Channels can subscribe to every selectable event (21; the old cap of 14 is lifted). New config: `Trackers__Provider` (unset = real; Fake only in Development/Testing or with `Deployments__AllowFake`), `Trackers__SearchTimeout` (15 s), `Notifications__ConnectionExpirySweepInterval` (1 h), optional `Llm__Providers__<P>__Models__StackAnalyst`.
+
 ## Known issues
+- README line ~368 says Railway optional values are "declared `preserve()`", but `.railway/railway.ts` uses `variables.ignore` (docs sync in M37).
 - M36 (minor): `GET /analysis` takes no `releaseVersionId`, so a past version's Analysis page shows only the profile history.
 - M35 (open, M37): FR-165's 14-day expiry notification exists only as the DTO's `expiryWarning`; the notification is built with FR-193. `Trackers__*` config isn't yet in CI, `.railway` or the docs. E2E and axe for the tracker dialog are M37.
 - M34 (minor): the Railway public-versus-private `DATABASE_URL` is chosen when the database is set up, so changing the stack afterwards needs that database set up again.
 
 ## Manual checks (Ben)
+- **Railway (M37):** in each environment run `railway config plan` (preview first) and expect only `variables.ignore` updates, with no variable changes or destroys; warnings that new ignore names match no variable are expected. Then `railway config apply` (production only when you decide). `Trackers__Provider` must stay unset there. No secrets to set.
 - **M35 trackers against real accounts (CI uses stubs):** update the GitHub App to add `issues: read` and accept on each installation. Connect a Jira site with a scoped read-only token (check the scope names in the dialog are right) and a Linear key. Import from each of Jira, Linear, GitHub and GitLab, check ADF renders, re-import, remove, and the drift check. Eyeball the Jira and Linear logos.
 - **M34 groups against real APIs (CI uses stubs):** on Railway, create a group for all three parts and check one project with a preview environment; split the database and check the TCP-proxy `DATABASE_URL` works; link an existing project with Postgres and check the preview database comes up. On Render, create a group and check services and Postgres are placed in the project's environments. On Vercel, check `<name>-web` and `<name>-api`.
 - **M33 co-authorship:** on real GitHub, confirm a step commit shows both avatars and counts on the contributions graph once on the default branch. Check the GitLab noreply address credits the user on gitlab.com and self-managed, and how Bitbucket displays the line (SPEC Q5).

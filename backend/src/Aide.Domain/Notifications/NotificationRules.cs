@@ -18,6 +18,12 @@ public enum RecipientScope
     /// email to the user's account address only, never a project channel.
     /// </summary>
     ConnectionOwner = 2,
+
+    /// <summary>
+    /// FR-193: the project's Owners and the user the event names (the importer of a failed tracker import), if they are still a
+    /// member. Project channels receive it as for <see cref="Owners"/>.
+    /// </summary>
+    OwnersAndUser = 3,
 }
 
 /// <summary>
@@ -34,9 +40,30 @@ public static class NotificationRules
     /// <summary>The <c>component</c> of a <c>DEPLOYMENT_FAILED</c> event about production migrations, which have no deployment row.</summary>
     public const string MigrationsComponent = "migrations";
 
+    /// <summary>FR-165: the <see cref="NotificationFacts.Reason"/> of a <c>connection_invalid</c> that warns of an expiry (<c>CONNECTION_EXPIRING</c>).</summary>
+    public const string ConnectionExpiringReason = "expiring";
+
+    /// <summary>FR-193: the <see cref="NotificationFacts.Reason"/> of a <c>stack_profile_ready</c> raised by a failed Stack Analyst run.</summary>
+    public const string StackProfileRunFailedReason = "run_failed";
+
+    private static readonly string StackProfileArtifact = Artifacts.ArtifactType.StackProfile.ToWire();
+    private static readonly string StackAnalystAgent = Agents.AgentKind.StackAnalyst.ToWire();
+
     /// <summary>The notification an audit event raises, or <c>null</c> when it raises none.</summary>
-    public static NotificationType? ForEvent(string eventType) => eventType switch
+    public static NotificationType? ForEvent(string eventType) => ForEvent(eventType, agent: null, artifactType: null);
+
+    /// <summary>
+    /// The notification an audit event raises, given the <c>agent</c> and artifact <c>type</c> its payload names (both wire values,
+    /// <c>null</c> when absent). FR-193: a <c>stack_profile</c> draft (agent-written or a person's edit, so one per draft) and a failed
+    /// Stack Analyst run raise <c>stack_profile_ready</c> in place of <c>artifact_ready</c> and <c>run_failed</c>; the
+    /// <c>STACK_PROFILE_CREATED</c> written with the agent's draft raises nothing more.
+    /// </summary>
+    public static NotificationType? ForEvent(string eventType, string? agent, string? artifactType) => eventType switch
     {
+        EventTypes.ArtifactCreated or EventTypes.ArtifactRestored when artifactType == StackProfileArtifact => NotificationType.StackProfileReady,
+        EventTypes.RunFailed when agent == StackAnalystAgent => NotificationType.StackProfileReady,
+        EventTypes.TrackerImportFailed => NotificationType.TrackerImportFailed,
+        EventTypes.ConnectionExpiring => NotificationType.ConnectionInvalid,
         EventTypes.GateCreated => NotificationType.GateRequired,
         EventTypes.GateOverdue => NotificationType.GateOverdue,
         EventTypes.ArtifactCreated or EventTypes.ArtifactRestored => NotificationType.ArtifactReady,
@@ -61,7 +88,7 @@ public static class NotificationRules
     };
 
     /// <summary>
-    /// FR-155: whether an event that maps to a type (<see cref="ForEvent"/>) really notifies. A failed target only tells
+    /// FR-155: whether an event that maps to a type (<see cref="ForEvent(string, string, string)"/>) really notifies. A failed target only tells
     /// Owners when the platform lost Git access or the token is invalid (a refused setup shows on the card its Owner is
     /// looking at). A failed migration tells them once, as <c>migration_failed</c>: the <c>DEPLOYMENT_FAILED</c> written for
     /// the same failure stays in the audit trail without a second notification.
@@ -92,7 +119,19 @@ public static class NotificationRules
         NotificationType.ReviewCompleted or NotificationType.ReleaseCompleted or NotificationType.Rollback
             or NotificationType.PreviewReady => RecipientScope.AllMembers,
         NotificationType.ConnectionInvalid => RecipientScope.ConnectionOwner,
+        NotificationType.TrackerImportFailed => RecipientScope.OwnersAndUser,
         _ => RecipientScope.Owners,
+    };
+
+    /// <summary>
+    /// The payload field naming the one extra recipient (<see cref="RecipientScope.ConnectionOwner"/>: <c>userId</c>;
+    /// <see cref="RecipientScope.OwnersAndUser"/>: <c>importedBy</c>), or <c>null</c> when the type has none.
+    /// </summary>
+    public static string? RecipientField(NotificationType type) => Recipients(type) switch
+    {
+        RecipientScope.ConnectionOwner => "userId",
+        RecipientScope.OwnersAndUser => "importedBy",
+        _ => null,
     };
 
     /// <summary>FR-92: personal notifications go to one user (in-app and their account email), never to project channels.</summary>
@@ -185,6 +224,8 @@ public static class NotificationRules
             NotificationType.ReleaseAwaitingMerge or NotificationType.DeploymentFailed => $"/projects/{id:D}/release",
             NotificationType.LlmBindingCleared => $"/projects/{id:D}/settings/llm",
             NotificationType.GitBindingCleared => $"/projects/{id:D}/settings/git",
+            NotificationType.StackProfileReady => $"/projects/{id:D}/analysis",
+            NotificationType.TrackerImportFailed => $"/projects/{id:D}/refinement",
             _ => $"/projects/{id:D}",
         };
     }

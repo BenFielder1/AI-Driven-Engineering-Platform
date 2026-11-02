@@ -272,7 +272,11 @@ public static class DependencyInjection
 
         // Issue trackers (FR-165–FR-173, §8): fixed hosts or Admin-registered GitLab instances, read-only, with every header value
         // redacted from HTTP logs (Jira's Authorization, the raw Linear key). Jira's site client follows no redirects.
-        services.AddOptions<TrackerOptions>().BindConfiguration(TrackerOptions.SectionName);
+        services.AddOptions<TrackerOptions>()
+            .BindConfiguration(TrackerOptions.SectionName)
+            .Validate(o => o.HasKnownProvider, "Trackers:Provider must be unset (the real trackers), 'Real' or 'Fake'.")
+            .Validate(o => o.SearchTimeout > TimeSpan.Zero && o.SearchTimeout <= TrackerOptions.MaxSearchTimeout, "Trackers:SearchTimeout must be positive and at most 2 minutes.")
+            .ValidateOnStart();
         services.AddHttpClient(TrackerHosts.JiraGatewayClient, client =>
             {
                 client.BaseAddress = new Uri(TrackerHosts.JiraGatewayBaseUrl);

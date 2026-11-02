@@ -261,7 +261,8 @@ internal static class TrackerImportFailure
         db.AddEvent(
             EventTypes.TrackerImportFailed,
             import.ProjectId,
-            new { importId = import.Id, provider = import.Provider.ToWire(), errorCode = code, releaseVersionId = import.ReleaseVersionId },
+            // FR-193: importedBy (a user id, never an email) is who gets tracker_import_failed besides the Owners.
+            new { importId = import.Id, provider = import.Provider.ToWire(), errorCode = code, releaseVersionId = import.ReleaseVersionId, importedBy = import.CreatedBy },
             SystemActor.Name,
             now);
     }

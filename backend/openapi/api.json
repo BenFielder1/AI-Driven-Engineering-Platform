@@ -21514,7 +21514,7 @@
             "type": "boolean"
           },
           "events": {
-            "maxItems": 14,
+            "maxItems": 21,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NotificationEvent"
@@ -21609,7 +21609,9 @@
           "database_provisioning_failed",
           "database_expiring",
           "migration_failed",
-          "deployment_target_attention"
+          "deployment_target_attention",
+          "stack_profile_ready",
+          "tracker_import_failed"
         ],
         "description": "Events a notification channel can subscribe to (FR-47, FR-92). Wire values are snake_case and equal the notification\ntypes (`NotificationRules.ChannelTypes`); the personal `connection_invalid` never goes to project channels."
       },
@@ -21691,9 +21693,11 @@
           "database_provisioning_failed",
           "database_expiring",
           "migration_failed",
-          "deployment_target_attention"
+          "deployment_target_attention",
+          "stack_profile_ready",
+          "tracker_import_failed"
         ],
-        "description": "The kind of an in-app notification (FR-47, FR-15). The project channel events (`NotificationEvent`) plus\n`gate_reminder`, the 24-hour reminder of a pending gate, and the personal `connection_invalid` (FR-92).\nWire values are snake_case."
+        "description": "The kind of an in-app notification (FR-47, FR-15). The project channel events (`NotificationEvent`) plus\n`gate_reminder`, the 24-hour reminder of a pending gate, and the personal `connection_invalid` (FR-92; also the\nFR-165 warning that a Jira or Linear token expires within 14 days).\nWire values are snake_case."
       },
       "PagedResultOfAdminAgentRunDto": {
         "required": [

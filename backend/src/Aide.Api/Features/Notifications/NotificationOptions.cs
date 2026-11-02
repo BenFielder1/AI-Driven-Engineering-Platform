@@ -29,6 +29,9 @@ public sealed class NotificationOptions
     /// <summary>How often the database expiry sweep job is queued (FR-155: hourly; each run reads each Supabase project once).</summary>
     public TimeSpan DatabaseExpirySweepInterval { get; set; } = TimeSpan.FromHours(1);
 
+    /// <summary>How often Jira and Linear connections are checked for a user-entered expiry within 14 days (FR-165: hourly; no provider calls).</summary>
+    public TimeSpan ConnectionExpirySweepInterval { get; set; } = TimeSpan.FromHours(1);
+
     /// <summary>Timeout of one Slack, Teams or webhook request (at most <see cref="DeliveryPolicy.MaxSendTimeout"/>).</summary>
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
@@ -67,7 +70,9 @@ public static class NotificationServiceCollectionExtensions
     {
         services.AddOptions<NotificationOptions>()
             .BindConfiguration(NotificationOptions.SectionName)
-            .Validate(o => o.DeliverySweepInterval > TimeSpan.Zero && o.GateSweepInterval > TimeSpan.Zero && o.DatabaseExpirySweepInterval > TimeSpan.Zero, "Notifications sweep intervals must be positive.")
+            .Validate(
+                o => o.DeliverySweepInterval > TimeSpan.Zero && o.GateSweepInterval > TimeSpan.Zero && o.DatabaseExpirySweepInterval > TimeSpan.Zero && o.ConnectionExpirySweepInterval > TimeSpan.Zero,
+                "Notifications sweep intervals must be positive.")
             .Validate(o => DeliveryPolicy.IsValidSendTimeout(o.RequestTimeout), "Notifications:RequestTimeout must be positive and at most 60 seconds (well inside the delivery claim lease).")
             .Validate(o => o.SweepBatchSize >= 1, "Notifications:SweepBatchSize must be at least 1.")
             .ValidateOnStart();
@@ -92,6 +97,7 @@ public static class NotificationServiceCollectionExtensions
         services.AddScoped<NotificationComposer>();
         services.AddScoped<NotificationDispatcher>();
         services.AddScoped<GateTimerService>();
+        services.AddScoped<Trackers.TrackerConnectionExpirySweepService>();
         services.AddJobHandler<NotificationJobHandler>(JobTypes.Notification);
         services.AddSingleton<NotificationSweeper>();
         services.AddHostedService(sp => sp.GetRequiredService<NotificationSweeper>());

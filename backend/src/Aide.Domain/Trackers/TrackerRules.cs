@@ -49,6 +49,30 @@ public static partial class TrackerRules
     /// <summary>The phases where items can be imported or removed (D-V5-10, FR-171): <c>analysis</c> and <c>refinement</c>.</summary>
     public static IReadOnlyList<Phase> ImportPhases { get; } = [Phase.Analysis, Phase.Refinement];
 
+    /// <summary>FR-165: AIDE warns this long before a Jira or Linear connection's user-entered expiry.</summary>
+    public static readonly TimeSpan ExpiryWarningWindow = TimeSpan.FromDays(14);
+
+    /// <summary>The platform connection providers that are issue trackers (FR-165, FR-166), whose expiry the user enters.</summary>
+    public static IReadOnlyList<Entities.PlatformProvider> ConnectionProviders { get; } = [Entities.PlatformProvider.Jira, Entities.PlatformProvider.Linear];
+
+    /// <summary>
+    /// FR-165: whether the expiry sweep warns the owner of a connection now: a Jira or Linear connection that isn't <c>invalid</c>
+    /// (a rejected token already told them), whose expiry is still ahead and at most 14 days away, and whose owner wasn't warned of
+    /// that same date before. A changed expiry date warns again; a date further away than 14 days, or none, never does.
+    /// </summary>
+    public static bool WarnsOfExpiry(
+        Entities.PlatformProvider provider,
+        Entities.PlatformConnectionStatus status,
+        DateTimeOffset? expiresAt,
+        DateTimeOffset now,
+        bool warnedOfThisDate) =>
+        ConnectionProviders.Contains(provider)
+        && status != Entities.PlatformConnectionStatus.Invalid
+        && expiresAt is { } expires
+        && expires > now
+        && expires - now <= ExpiryWarningWindow
+        && !warnedOfThisDate;
+
     /// <summary>The tracker's name in messages.</summary>
     public static string DisplayName(TrackerProvider provider) => provider switch
     {

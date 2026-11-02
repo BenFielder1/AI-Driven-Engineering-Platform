@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Domain.Notifications;
@@ -9,7 +10,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 namespace Aide.Infrastructure.Persistence;
 
 /// <summary>
-/// FR-47, §4.9 outbox: whoever writes a notification-worthy project event (<see cref="NotificationRules.ForEvent"/>), the
+/// FR-47, §4.9 outbox: whoever writes a notification-worthy project event (<see cref="NotificationRules.ForEvent(string, string, string)"/>), the
 /// same <c>SaveChanges</c> — the same transaction — also queues one <c>notification</c> job for it. Nothing is queued for a
 /// save that fails or a transaction that rolls back, and a retried save doesn't queue a second job for the same event.
 /// Delivery itself happens in the job, so a channel failure never fails the transaction that recorded the event.
@@ -56,7 +57,8 @@ public sealed class NotificationOutboxInterceptor(TimeProvider time) : SaveChang
         {
             // Project events notify their project; an event outside any project only notifies personally (FR-92: a GitHub
             // connection marked invalid tells its owner).
-            if (NotificationRules.ForEvent(entry.Type) is not { } type || (entry.ProjectId is null && !NotificationRules.IsPersonal(type)))
+            var (agent, artifactType) = Subject(entry);
+            if (NotificationRules.ForEvent(entry.Type, agent, artifactType) is not { } type || (entry.ProjectId is null && !NotificationRules.IsPersonal(type)))
             {
                 continue;
             }
@@ -83,6 +85,35 @@ public sealed class NotificationOutboxInterceptor(TimeProvider time) : SaveChang
                 RunAfter = now,
                 CreatedAt = now,
             });
+        }
+    }
+
+    /// <summary>
+    /// FR-193: the <c>agent</c> of a <c>RUN_FAILED</c> and the artifact <c>type</c> of an <c>ARTIFACT_CREATED</c> or
+    /// <c>ARTIFACT_RESTORED</c>, which pick the notification type; other payloads aren't read.
+    /// </summary>
+    private static (string? Agent, string? ArtifactType) Subject(AuditEvent entry)
+    {
+        if (entry.Type is not (EventTypes.RunFailed or EventTypes.ArtifactCreated or EventTypes.ArtifactRestored))
+        {
+            return (null, null);
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(entry.Payload);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return (null, null);
+            }
+
+            string? Text(string name) => root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+            return (Text("agent"), Text("type"));
+        }
+        catch (JsonException)
+        {
+            return (null, null);
         }
     }
 

@@ -339,6 +339,8 @@ export const notificationEvents = [
   'database_expiring',
   'migration_failed',
   'deployment_target_attention',
+  'stack_profile_ready',
+  'tracker_import_failed',
 ] as const satisfies readonly Schemas['NotificationEvent'][]
 
 export const notificationEventLabels: Record<Schemas['NotificationEvent'], string> = {
@@ -362,6 +364,8 @@ export const notificationEventLabels: Record<Schemas['NotificationEvent'], strin
   database_expiring: 'Database expiring',
   migration_failed: 'Migration failed',
   deployment_target_attention: 'Deployment target needs attention',
+  stack_profile_ready: 'Stack profile ready for review',
+  tracker_import_failed: 'Tracker import failed',
 }
 
 /**
@@ -389,6 +393,8 @@ export const notificationTypes = [
   'database_expiring',
   'migration_failed',
   'deployment_target_attention',
+  'stack_profile_ready',
+  'tracker_import_failed',
   'connection_invalid',
 ] as const satisfies readonly Schemas['NotificationType'][]
 

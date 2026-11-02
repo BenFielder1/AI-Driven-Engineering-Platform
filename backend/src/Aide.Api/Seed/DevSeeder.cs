@@ -7,23 +7,27 @@ using Aide.Api.Features.Execution;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Release;
 using Aide.Api.Features.Stack;
+using Aide.Api.Features.Trackers;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Aide.Domain.Execution;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Stack;
+using Aide.Domain.Trackers;
 using Aide.Infrastructure.Databases;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Identity;
 using Aide.Infrastructure.Stack;
+using Aide.Infrastructure.Trackers;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -59,6 +63,11 @@ public sealed class SeedOptions
 /// §9 (v4): a third demo project, <see cref="DemoBaasProjectName"/>, on <c>fe-vue</c> + <c>data-supabase</c> (BaaS), starts in
 /// <b>specification</b>: its project request is locked and the spec generation job is queued. Marker:
 /// <see cref="EventTypes.DemoStackProjectSeeded"/>.
+/// </para>
+/// <para>
+/// §9 (v5): a fourth demo project, <see cref="DemoAnalysisProjectName"/>, infers its stack: it is in <b>analysis</b> with a
+/// <c>stack_profile</c> draft holding one <c>unknown</c> layer, and a completed Fake tracker import (the version's
+/// <c>source_items</c> v1). Marker: <see cref="EventTypes.DemoAnalysisProjectSeeded"/>.
 /// </para>
 /// <para>
 /// §9 (v4), only where deployments and databases are both Fake (<see cref="SeedFakeHostsAsync"/>): the released demo is
@@ -109,6 +118,15 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
 
     /// <summary>The reason recorded on the BaaS demo's seeded transition into specification.</summary>
     public const string DemoBaasReason = "Demo project seeded in specification on fe-vue + data-supabase (BaaS)";
+
+    /// <summary>§9 (v5): the fourth demo project, inferring its stack, in analysis with a draft profile and a Fake tracker import.</summary>
+    public const string DemoAnalysisProjectName = "Demo: Weather Board";
+
+    public const string DemoAnalysisIdea =
+        "A small weather dashboard: people save a few cities and see the current conditions and a five-day forecast for each, from a public weather API. Units switch between metric and imperial.";
+
+    /// <summary>§9 (v5): the Fake Jira items the analysis demo's import holds (an epic and four stories).</summary>
+    public static IReadOnlyList<string> DemoImportKeys { get; } = ["FAKE-1", "FAKE-2", "FAKE-3", "FAKE-4", "FAKE-5"];
 
     public const string DemoBaasIdea =
         "A Vue single-page app for personal notes backed by Supabase: users sign in with email, create, edit, tag and delete their own notes, and search them. Row level security keeps every user's notes private.";
@@ -163,6 +181,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         Guid? demoProjectId = null;
         Guid? presetProjectId = null;
         Guid? baasProjectId = null;
+        Guid? analysisProjectId = null;
         Guid? upgradedProjectId = null;
         AppUser? admin;
         var usesFakeHosts = UsesFakeHosts(services);
@@ -201,6 +220,11 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
                 baasProjectId = await CreateBaasDemoProjectAsync(services, db, admin, cancellationToken);
             }
 
+            if (!await db.Events.AnyAsync(e => e.Type == EventTypes.DemoAnalysisProjectSeeded, cancellationToken))
+            {
+                analysisProjectId = await CreateAnalysisDemoProjectAsync(services, db, admin, cancellationToken);
+            }
+
             await transaction.CommitAsync(cancellationToken);
         }
 
@@ -228,6 +252,11 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         if (baasProjectId is { } baasProject)
         {
             LogDemoProject(logger, baasProject);
+        }
+
+        if (analysisProjectId is { } analysisProject)
+        {
+            LogDemoProject(logger, analysisProject);
         }
 
         if (upgradedProjectId is { } upgraded)
@@ -618,6 +647,216 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         return projectId;
     }
 
+    /// <summary>
+    /// §9 (v5): the stack inference demo, created once on Local Git with the Fake LLM: its version infers its stack
+    /// (<c>stack_source = infer</c>) from a small Vite + React skeleton committed to the Local repository, and is in <b>analysis</b>
+    /// at checkpoint 1 with only its creation transition (into analysis), as a project created with "Infer" is. A
+    /// <c>stack_profile</c> v1 draft holds one <c>unknown</c> layer (the backend, with the agent's question), so the Analysis page shows "Needs your input" and Approve is refused until it is answered. A completed Fake
+    /// Jira import of <see cref="DemoImportKeys"/> (read from the Fake tracker in-process, whatever <c>Trackers:Provider</c> is) has
+    /// written the locked <c>source_items</c> v1. No agent job is queued and no event but the marker is written, so nothing
+    /// notifies. The marker is written even when the catalog didn't load.
+    /// </summary>
+    private static async Task<Guid?> CreateAnalysisDemoProjectAsync(IServiceProvider services, AideDbContext db, AppUser admin, CancellationToken cancellationToken)
+    {
+        var now = services.GetRequiredService<TimeProvider>().GetUtcNow();
+        if (services.GetRequiredService<IStackCatalog>().Catalog is null)
+        {
+            db.AddEvent(EventTypes.DemoAnalysisProjectSeeded, projectId: null, new { projectId = (Guid?)null, skipped = "stack catalog not loaded" }, SystemActor.Name, now);
+            await db.SaveChangesAsync(cancellationToken);
+            return null;
+        }
+
+        var created = await services.GetRequiredService<ProjectCreator>().CreateAsync(
+            new CreateProjectRequest
+            {
+                Name = DemoAnalysisProjectName,
+                Idea = DemoAnalysisIdea,
+                ApprovalMode = ApprovalMode.Advisory,
+                Git = new CreateProjectGitRequest { Provider = GitProvider.Local },
+            },
+            admin.Id,
+            SystemActor.Name,
+            cancellationToken);
+        if (created.IsFailure)
+        {
+            throw new InvalidOperationException($"The analysis demo project is invalid: {created.Error!.Message}");
+        }
+
+        var projectId = created.Value.Id;
+        await UseFakeLlmAsync(services, db, projectId, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        var baseCommit = await SkeletonCommitAsync(services, db, projectId, cancellationToken);
+
+        var project = await db.Projects.FirstAsync(p => p.Id == projectId, cancellationToken);
+        var versionId = project.CurrentReleaseVersionId!.Value;
+        var version = await db.ReleaseVersions.FirstAsync(v => v.Id == versionId, cancellationToken);
+        version.StackSource = StackSource.Infer;
+        version.BaseCommitSha = baseCommit;
+        var checkpoint = LifecycleState.Initial.Version;
+
+        // Rule 8, FR-178: like a project created with "Infer", the version starts in analysis: its creation transition (from no
+        // phase) goes into analysis, and no refinement → analysis transition is recorded.
+        project.CurrentPhase = Phase.Analysis;
+        project.Status = PhaseOrder.StatusFor(Phase.Analysis);
+        project.UpdatedAt = now;
+        var creation = await db.StateTransitions.SingleAsync(t => t.ProjectId == projectId && t.ReleaseVersionId == versionId && t.FromPhase == null, cancellationToken);
+        creation.ToPhase = Phase.Analysis;
+
+        var profile = StackProfile.Render(AnalysisDemoNarrative, AnalysisDemoProfile(baseCommit));
+        db.Artifacts.Add(new Artifact
+        {
+            ProjectId = projectId,
+            ReleaseVersionId = versionId,
+            Type = ArtifactType.StackProfile,
+            Version = 1,
+            Content = profile,
+            ContentHash = ContentHash.Compute(profile),
+            Status = ArtifactStatus.Draft,
+            CheckpointAtCreation = checkpoint,
+            CreatedByUserId = admin.Id,
+            CreatedAt = now,
+        });
+
+        var importId = await AddDemoImportAsync(services, db, project, versionId, admin.Id, now, cancellationToken);
+        db.AddEvent(EventTypes.DemoAnalysisProjectSeeded, projectId: null, new { projectId, importId }, SystemActor.Name, now);
+        await db.SaveChangesAsync(cancellationToken);
+        return projectId;
+    }
+
+    private const string AnalysisDemoNarrative =
+        "## Findings\n\nSeeded for the demo: the frontend is React with Vite at the repository root (`package.json`, `index.html`, `src/main.tsx`). No server code was found, so the backend is left for you to answer.";
+
+    /// <summary>The fixed id in the skeleton commit's <c>AIDE-Step-Id</c> trailer, so a second seed run finds the commit instead of adding one.</summary>
+    private static readonly Guid DemoSkeletonCommitId = Guid.Parse("0199a5ee-d000-7000-8000-00000000c0de");
+
+    /// <summary>§9 (v5): the analysis demo's code: a minimal Vite + React app at the root, matching the draft profile.</summary>
+    internal static IReadOnlyList<ProducedFile> DemoSkeletonFiles { get; } =
+    [
+        new("package.json", """
+            {
+              "name": "weather-board",
+              "private": true,
+              "version": "0.1.0",
+              "type": "module",
+              "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
+              "dependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" },
+              "devDependencies": { "@vitejs/plugin-react": "^5.0.0", "vite": "^7.0.0" }
+            }
+
+            """),
+        new("index.html", """
+            <!doctype html>
+            <html lang="en">
+              <head>
+                <meta charset="UTF-8" />
+                <title>Weather Board</title>
+              </head>
+              <body>
+                <div id="root"></div>
+                <script type="module" src="/src/main.tsx"></script>
+              </body>
+            </html>
+
+            """),
+        new("src/main.tsx", """
+            import { StrictMode } from 'react'
+            import { createRoot } from 'react-dom/client'
+
+            function App() {
+              return <h1>Weather Board</h1>
+            }
+
+            createRoot(document.getElementById('root')!).render(
+              <StrictMode>
+                <App />
+              </StrictMode>,
+            )
+
+            """),
+    ];
+
+    /// <summary>§9 (v5): the analysis demo's profile: React with Vite at the root, the backend <c>unknown</c> with a question, no data layer, GitHub VCS.</summary>
+    internal static StackProfileDocument AnalysisDemoProfile(string? baseCommitSha) => new()
+    {
+        BaseCommitSha = baseCommitSha,
+        Layers = new StackProfileLayers(
+            new StackProfileLayer
+            {
+                Option = "fe-react-vite",
+                Path = StackPaths.Root,
+                Status = StackProfileLayerStatus.Inferred,
+                Confidence = StackProfileConfidence.High,
+                Evidence = [new StackProfileEvidence("package.json", "react and vite"), new StackProfileEvidence("src/main.tsx", "the React root")],
+            },
+            StackProfileLayer.Unknown,
+            new StackProfileLayer { Status = StackProfileLayerStatus.None, Confidence = StackProfileConfidence.Medium },
+            new StackProfileLayer { Option = StackPinning.GitHubVcs, Status = StackProfileLayerStatus.Fixed, Confidence = StackProfileConfidence.High }),
+        Questions = [new StackProfileQuestion(StackLayers.Backend, "No server code was found. Does the dashboard need a backend of its own (for example to keep the weather API key secret), or does it call the API directly?")],
+    };
+
+    /// <summary>
+    /// §9 (v5): a completed Fake Jira import of <see cref="DemoImportKeys"/> and the locked <c>source_items</c> version it wrote, as the
+    /// import job would (normalised, children linked, rendered), but read from the Fake in-process, with no connection.
+    /// </summary>
+    private static async Task<Guid> AddDemoImportAsync(IServiceProvider services, AideDbContext db, Project project, Guid versionId, Guid adminId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var selection = new TrackerSelection { Keys = DemoImportKeys, ContainerId = FakeIssueTrackerProvider.DefaultContainer };
+        var options = new TrackerImportOptions();
+        var fake = new FakeIssueTrackerProvider(TrackerProvider.Jira, new FakeTrackerScript());
+        var fetched = await fake.GetItemsAsync(new TrackerCredential("fake_seed"), selection, options, cancellationToken);
+        var items = SourceItemLimits.LinkChildren([.. fetched.Select(i => SourceItemLimits.Normalize(i, options))]);
+        var import = new TrackerImport
+        {
+            ProjectId = project.Id,
+            ReleaseVersionId = versionId,
+            Provider = TrackerProvider.Jira,
+            Query = selection,
+            Options = options,
+            Status = TrackerImportStatus.Completed,
+            Items = items,
+            ItemCount = items.Count,
+            CreatedBy = adminId,
+            CreatedAt = now,
+            CompletedAt = now,
+        };
+        var rendered = SourceItemsRenderer.Render([new SourceImportSnapshot(import.Id, import.Provider, import.CreatedAt, items)]);
+        var snapshot = await services.GetRequiredService<SourceSnapshotWriter>().AddAsync(project, versionId, rendered.Markdown, adminId, now, cancellationToken);
+        import.RenderedBytes = rendered.ByteCount;
+        import.SourceArtifactId = snapshot.Id;
+        db.TrackerImports.Add(import);
+        return import.Id;
+    }
+
+    /// <summary>
+    /// §9 (v5): commits <see cref="DemoSkeletonFiles"/> on the Local repository's default branch (created now if absent) and returns
+    /// that commit, the version's base: the Stack Analyst (Retry, Reject) then analyses real code. Idempotent: the commit carries a
+    /// fixed step trailer, so a repeated run returns it. <c>null</c> when the repository can't be created (no git CLI).
+    /// </summary>
+    private static async Task<string?> SkeletonCommitAsync(IServiceProvider services, AideDbContext db, Guid projectId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var prepared = await services.GetRequiredService<WorkingCopyPreparer>().PrepareAsync(projectId, cancellationToken);
+            if (prepared.IsFailure)
+            {
+                return null;
+            }
+
+            var settings = await db.ProjectGitSettings.AsNoTracking().FirstAsync(s => s.ProjectId == projectId, cancellationToken);
+            var message = new StepCommitMessage(
+                "Add the Weather Board skeleton (Vite + React)",
+                $"Seeded by the AIDE dev seed for the stack inference demo.\n\n{CodeGeneration.StepTrailerLine(DemoSkeletonCommitId)}");
+            var committed = await services.GetRequiredService<IWorkingCopies>()
+                .CommitStepAsync(projectId, settings.DefaultBranch, DemoSkeletonCommitId, DemoSkeletonFiles, message, cancellationToken);
+            return committed.Sha;
+        }
+        catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException or UnauthorizedAccessException)
+        {
+            LogAnalysisRepositoryFailed(services.GetRequiredService<ILogger<DevSeeder>>(), ex, projectId);
+            return null;
+        }
+    }
+
     /// <summary>The seed shortcut into <paramref name="phase"/> at <paramref name="checkpoint"/>: one seeded transition from refinement.</summary>
     private static void EnterPhase(AideDbContext db, Project project, Guid versionId, Phase phase, int checkpoint, string reason, DateTimeOffset now)
     {
@@ -825,6 +1064,9 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Dev seed could not create the Local repository of demo project {ProjectId}; it is released without a tagged commit")]
     private static partial void LogDemoRepositoryFailed(ILogger logger, Exception exception, Guid projectId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Dev seed could not commit the skeleton of demo project {ProjectId}; it is in analysis with no code to analyse")]
+    private static partial void LogAnalysisRepositoryFailed(ILogger logger, Exception exception, Guid projectId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Dev seed couldn't set up a Fake host for {Id}: {Code}")]
     private static partial void LogFakeHostRefused(ILogger logger, Guid id, string code);

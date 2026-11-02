@@ -97,6 +97,13 @@ internal static class ProjectCommands
         llmProvider.AcceptOnlyFromAmong("anthropic", "openai", "ollama", "fake");
         var llmModel = new Option<string?>("--llm-model") { Description = "Default model id for --llm-provider (e.g. claude-opus-5-5); required with it." };
         var llmConnection = new Option<Guid?>("--llm-connection") { Description = "Id of your LLM connection to bind (Account > Connections). Default: your newest one for the provider, when it needs a key." };
+        var inferStack = new Option<bool>("--infer-stack")
+        {
+            Description = "Infer the stack from the repository's code (FR-178): the project starts in analysis, and an Owner approves the Stack Analyst's profile with 'aide analysis approve'. Needs an imported repository with code (else exit 4, STACK_INFER_NO_CODE).",
+        };
+        var importVersion = new Option<string?>("--import-version") { Description = "Import the existing repository (FR-73) and develop this version of it (semver), with the idea as its request." };
+        var releasedTag = new Option<string?>("--released-tag") { Description = "With --import-version: the tag of the released version (omit for never released)." };
+        var localPath = new Option<string?>("--local-path") { Description = "With --import-version and --git-provider local: the repository directory under the server's import root." };
 
         var command = new Command(
             "init",
@@ -104,7 +111,7 @@ internal static class ProjectCommands
             "For GitHub, the access token is read from AIDE_GIT_TOKEN (or prompted for), never from a flag.")
         {
             name, idea, ideaFile, approvalMode, compliance, maxFiles, maxCycles, tokenBudget, gitProvider, repoUrl, defaultBranch, noInput,
-            llmProvider, llmModel, llmConnection,
+            llmProvider, llmModel, llmConnection, inferStack, importVersion, releasedTag, localPath,
         };
 
         // FR-156: `aide project create` is the v4 name of the same command.
@@ -201,6 +208,18 @@ internal static class ProjectCommands
                 throw new UsageException("--llm-model and --llm-connection need --llm-provider.");
             }
 
+            // FR-73, FR-194: an import names the version to develop; --infer-stack needs one (a scratch project has no code).
+            var developVersion = context.Get(importVersion)?.Trim();
+            if (developVersion is null && (context.Get(releasedTag) is not null || context.Get(localPath) is not null))
+            {
+                throw new UsageException("--released-tag and --local-path need --import-version.");
+            }
+
+            if (context.Get(localPath) is not null && provider != "local")
+            {
+                throw new UsageException("--local-path is only used with --git-provider local.");
+            }
+
             var request = new CreateProjectRequest(
                 projectName,
                 ideaText,
@@ -209,8 +228,11 @@ internal static class ProjectCommands
                 context.Get(maxFiles),
                 context.Get(maxCycles),
                 context.Get(tokenBudget),
-                new CreateProjectGitRequest(provider == "github" ? GitProvider.GithubPat : GitProvider.Local, repo, context.Get(defaultBranch), gitToken),
-                llm);
+                new CreateProjectGitRequest(provider == "github" ? GitProvider.GithubPat : GitProvider.Local, repo, context.Get(defaultBranch), gitToken, context.Get(localPath)),
+                llm,
+                context.Get(inferStack) ? "infer" : null,
+                developVersion is null ? null : "import",
+                developVersion is null ? null : new CreateProjectImportRequest(developVersion, context.Get(releasedTag)?.Trim()));
 
             var created = await context.Api().PostAsync<ProjectDto>("api/projects", request, cancellationToken).ConfigureAwait(false);
             if (context.Json)
@@ -222,7 +244,7 @@ internal static class ProjectCommands
             var project = created.Value;
             await context.Out.WriteLineAsync(
                 $"Created project {project.Name} ({project.Id}): phase {project.CurrentPhase}, status {project.Status}, approval mode {project.ApprovalMode}.").ConfigureAwait(false);
-            await context.Out.WriteLineAsync($"Next: aide status {project.Id}").ConfigureAwait(false);
+            await context.Out.WriteLineAsync(project.CurrentPhase == "analysis" ? $"Next: aide analysis show {project.Id}" : $"Next: aide status {project.Id}").ConfigureAwait(false);
             return ExitCodes.Success;
         });
         return command;
@@ -231,7 +253,7 @@ internal static class ProjectCommands
     public static Command BuildStatus(CommandFactory factory)
     {
         var id = ProjectIdArgument();
-        var command = new Command("status", "Show a project's lifecycle state: phase, status, released and in-development versions, checkpoint, preset, stack composition, production URLs, artifacts, execution, review, gates, the latest deployment and the latest migration run. With --json: the API's project state plus stack and latestMigrationRun.") { id };
+        var command = new Command("status", "Show a project's lifecycle state: phase (including analysis), status, released and in-development versions, checkpoint, preset, stack composition, imported source items, production URLs, artifacts, execution, review, gates, the latest deployment and the latest migration run. With --json: the API's project state plus stack, latestMigrationRun and sources.") { id };
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
             var projectId = context.Get(id);
@@ -241,9 +263,11 @@ internal static class ProjectCommands
                 // FR-156: the API's state, plus what status adds to it for people.
                 var stackJson = await context.Api().GetAsync<JsonNode>($"api/projects/{projectId}/stack", cancellationToken).ConfigureAwait(false);
                 var runsJson = await context.Api().GetAsync<JsonNode>($"api/projects/{projectId}/migrations", cancellationToken).ConfigureAwait(false);
+                var sourcesJson = await context.Api().GetAsync<JsonNode>($"api/projects/{projectId}/sources", cancellationToken).ConfigureAwait(false);
                 var combined = JsonNode.Parse(state.Raw)!.AsObject();
                 combined["stack"] = stackJson.Value.DeepClone();
                 combined["latestMigrationRun"] = (runsJson.Value as JsonArray)?.FirstOrDefault()?.DeepClone();
+                combined["sources"] = sourcesJson.Value.DeepClone();
                 await context.Out.WriteLineAsync(ApiJson.ToIndentedJson(combined)).ConfigureAwait(false);
                 return ExitCodes.Success;
             }
@@ -251,13 +275,14 @@ internal static class ProjectCommands
             var project = await context.Api().GetAsync<ProjectDto>($"api/projects/{projectId}", cancellationToken).ConfigureAwait(false);
             var stack = await context.Api().GetAsync<ProjectStackDto>($"api/projects/{projectId}/stack", cancellationToken).ConfigureAwait(false);
             var runs = await context.Api().GetAsync<List<MigrationRunDto>>($"api/projects/{projectId}/migrations", cancellationToken).ConfigureAwait(false);
-            await context.Out.WriteLineAsync(FormatState(project.Value, state.Value, stack.Value, runs.Value.FirstOrDefault())).ConfigureAwait(false);
+            var sources = await context.Api().GetAsync<ProjectSourcesDto>($"api/projects/{projectId}/sources", cancellationToken).ConfigureAwait(false);
+            await context.Out.WriteLineAsync(FormatState(project.Value, state.Value, stack.Value, runs.Value.FirstOrDefault(), sources.Value)).ConfigureAwait(false);
             return ExitCodes.Success;
         });
         return command;
     }
 
-    internal static string FormatState(ProjectDto project, ProjectStateDto s, ProjectStackDto stack, MigrationRunDto? latestMigration)
+    internal static string FormatState(ProjectDto project, ProjectStateDto s, ProjectStackDto stack, MigrationRunDto? latestMigration, ProjectSourcesDto? sources = null)
     {
         var lines = new List<string>
         {
@@ -271,7 +296,8 @@ internal static class ProjectCommands
                 ("In development", s.DevelopmentVersion is { } development ? $"{development} (checkpoint {Output.Num(s.Checkpoint)})" : "-"),
                 ("Checkpoint", Output.Num(s.Checkpoint)),
                 ("Preset", VersionCommands.PresetText(project.PresetName ?? project.PresetId, project.PresetVersion)),
-                ("Stack", StackCommands.Summary(stack.Composition)),
+                ("Stack", s.Phase == "analysis" && stack.Composition is null ? "being inferred: see 'aide analysis show'" : StackCommands.Summary(stack.Composition)),
+                ("Source items", SourcesCommands.Summary(sources)),
                 .. ProductionUrlRows(s),
                 ("Approval mode", project.ApprovalMode),
                 ("Execution", s.ExecutionPaused ? $"{s.ExecutionStatus} (paused)" : s.ExecutionStatus),

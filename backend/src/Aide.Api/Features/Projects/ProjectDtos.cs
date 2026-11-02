@@ -699,7 +699,8 @@ public static class ProjectLimits
     public const int ModelMaxLength = 200;
     public const int EmailMaxLength = 256;
     public const int MaxNotificationChannels = 20;
-    public const int MaxNotificationEvents = 14;
+    /// <summary>A channel may subscribe to every selectable event (FR-47, FR-193): the size of <see cref="NotificationEvent"/>.</summary>
+    public const int MaxNotificationEvents = NotificationEvents.Count;
     public const int MaxPageLimit = 100;
     public const int SearchMaxLength = 200;
 }

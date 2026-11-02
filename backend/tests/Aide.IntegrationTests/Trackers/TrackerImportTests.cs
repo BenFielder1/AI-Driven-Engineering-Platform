@@ -300,6 +300,23 @@ public sealed class TrackerImportTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task FR193_A_failed_import_records_the_importer_with_no_token_email_or_body_and_notifies_tracker_import_failed()
+    {
+        using var fixture = await ProjectApi.FixtureAsync(_app);
+        var connection = await JiraAsync(fixture.Owner);
+        await ImportAsync(fixture.Owner, fixture.Project.Id, new { provider = "jira", connectionId = connection.Id, selection = new { containerId = FakeIssueTrackerProvider.HugeContainer } });
+
+        await AgentJobs.RunQueuedAsync(_app, fixture.Project.Id);
+
+        var failed = Assert.Single(await LifecycleSeed.EventsAsync(_app, fixture.Project.Id, EventTypes.TrackerImportFailed));
+        Assert.Equal(fixture.Owner.User!.Id, LifecycleSeed.Payload(failed.Payload).GetProperty("importedBy").GetGuid());
+        Assert.DoesNotContain(fixture.Owner.User!.Email, failed.Payload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fake_", failed.Payload, StringComparison.Ordinal);
+        Assert.DoesNotContain("description", failed.Payload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(await LifecycleSeed.NotificationJobsAsync(_app, fixture.Project.Id), j => j.Payload.Contains("tracker_import_failed", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task FR170_A_second_import_writes_a_version_holding_both_and_a_rejected_token_marks_the_connection_invalid()
     {
         using var fixture = await ProjectApi.FixtureAsync(_app);
