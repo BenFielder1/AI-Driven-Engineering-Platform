@@ -31,6 +31,9 @@ public static class ArtifactRules
         ArtifactType.TechnicalSpecification => AgentKind.SpecGenerator,
         ArtifactType.ImplementationPlan => AgentKind.PlanGenerator,
         ArtifactType.OptimizationPlan => AgentKind.CodeReview,
+
+        // FR-180: the Stack Analyst (re-run on rejection, FR-183, and on corruption, FR-20).
+        ArtifactType.StackProfile => AgentKind.StackAnalyst,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
@@ -47,6 +50,9 @@ public static class ArtifactRules
 
         // FR-170: imported at the start of the work, while the project is in refinement (D-V5-10).
         ArtifactType.SourceItems => Phase.Refinement,
+
+        // FR-179, §4.27: produced and approved in analysis, the first phase of a version that infers its stack.
+        ArtifactType.StackProfile => Phase.Analysis,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
@@ -112,14 +118,15 @@ public static class ArtifactRules
 
     /// <summary>
     /// FR-17: reject a draft → rejected. The producing agent re-runs with the comment unless the draft
-    /// was a human edit (FR-18).
+    /// was a human edit (FR-18). FR-183 (amends FR-17 for <c>stack_profile</c>): the Stack Analyst always re-runs, a human
+    /// edit included; it gets the rejected draft, so it can keep the user's corrections that agree with the comment.
     /// </summary>
     public static Result<ArtifactStatusChange> Reject(ArtifactType type, ArtifactStatus status, bool authoredByAgent) => status switch
     {
         ArtifactStatus.Draft => Result.Success(new ArtifactStatusChange(
             ArtifactStatus.Rejected,
             Changed: true,
-            authoredByAgent ? RerunAgent(type) : null)),
+            authoredByAgent || type == ArtifactType.StackProfile ? RerunAgent(type) : null)),
         ArtifactStatus.Locked => Result.Failure<ArtifactStatusChange>(Locked()),
         _ => NotDraft(status),
     };
@@ -229,6 +236,12 @@ public static class ArtifactRules
         if (type == ArtifactType.OptimizationPlan && phase != Phase.Review)
         {
             return WrongPhase($"The optimization plan can only be edited during review, not in {phase.ToWire()}.");
+        }
+
+        // FR-183, §4.27: the profile belongs to analysis; once approved, Settings → Stack changes the pinned composition (FR-117).
+        if (type == ArtifactType.StackProfile && phase != Phase.Analysis)
+        {
+            return WrongPhase($"The stack profile can only be edited during analysis, not in {phase.ToWire()}. Change the stack in Settings → Stack instead.");
         }
 
         return phase.IsBefore(producing)

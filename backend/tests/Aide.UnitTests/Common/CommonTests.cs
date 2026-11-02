@@ -17,8 +17,8 @@ namespace Aide.UnitTests.Common;
 public class EnumStringsTests
 {
     [Fact]
-    public void S5_Phase_values() =>
-        Assert.Equal(["refinement", "specification", "planning", "execution", "review", "release"], EnumStrings.Values<Phase>());
+    public void S5_FR179_Phase_values_start_with_analysis() =>
+        Assert.Equal(["analysis", "refinement", "specification", "planning", "execution", "review", "release"], EnumStrings.Values<Phase>());
 
     [Fact]
     public void S5_FR65_Project_status_values() =>
@@ -37,7 +37,8 @@ public class EnumStringsTests
     public void S5_Artifact_values()
     {
         // v2 SPEC §5 amends the type list: + codebase_summary (FR-70).
-        Assert.Equal(["project_request", "technical_specification", "implementation_plan", "optimization_plan", "codebase_summary", "source_items"], EnumStrings.Values<ArtifactType>());
+        // v5 §5: + source_items (FR-170) and stack_profile (FR-180).
+        Assert.Equal(["project_request", "technical_specification", "implementation_plan", "optimization_plan", "codebase_summary", "source_items", "stack_profile"], EnumStrings.Values<ArtifactType>());
         Assert.Equal(["draft", "locked", "rejected", "superseded", "invalidated", "corrupted"], EnumStrings.Values<ArtifactStatus>());
     }
 
@@ -52,7 +53,7 @@ public class EnumStringsTests
         Assert.Equal(["feature_coverage", "api_contracts", "data_model", "architecture", "security", "testing"], EnumStrings.Values<ReviewCategory>());
         Assert.Equal(["viewer", "contributor", "owner"], EnumStrings.Values<ProjectRole>());
         Assert.Equal(["user", "admin"], EnumStrings.Values<SystemRole>());
-        Assert.Equal(["idea_refinement", "spec_generator", "plan_generator", "code_generator", "code_review", "repository_analyst"], EnumStrings.Values<AgentKind>());
+        Assert.Equal(["idea_refinement", "spec_generator", "plan_generator", "code_generator", "code_review", "repository_analyst", "stack_analyst"], EnumStrings.Values<AgentKind>());
         Assert.Equal(["create", "modify"], EnumStrings.Values<FileAction>());
     }
 

@@ -21,6 +21,7 @@ const producedIn: Record<ArtifactType, string> = {
   optimization_plan: 'A review cycle that needs more work produces an optimisation plan.',
   codebase_summary: 'The Repository Analyst produces a codebase summary when a new version starts.',
   source_items: 'Importing from an issue tracker produces the source items.',
+  stack_profile: 'The Stack Analyst produces the stack profile when a version infers its stack.',
 }
 
 /**

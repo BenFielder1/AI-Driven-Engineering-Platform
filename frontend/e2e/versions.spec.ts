@@ -130,12 +130,19 @@ test('NFR-TEST2, FR-55–FR-66, FR-90, FR-91: 0.1.0 is released live on Vercel, 
   await expect(headerBadges(page, projectName)).toContainText('Released 0.1.0')
   await expect(headerBadges(page, projectName)).toContainText('In development 0.2.0')
 
-  // FR-55, FR-70: Refinement shows the request and the Repository Analyst's locked codebase summary.
-  await openStage(page, 'Refinement')
-  await expect(page.getByRole('region', { name: 'Request', exact: true })).toContainText(request)
+  // FR-70, FR-182: the Repository Analyst's locked codebase summary is on the Analysis page.
+  await page.goto(`/projects/${projectId}/analysis`)
+  await expect(page.getByRole('heading', { level: 2, name: 'Analysis', exact: true })).toBeVisible()
   const summary = page.getByRole('region', { name: 'Codebase summary', exact: true })
   await expect(summary.getByText('Locked', { exact: true })).toBeVisible({ timeout: 2 * AGENT_TIMEOUT })
   await expect(summary.getByRole('heading', { name: 'Overview' })).toBeVisible()
+
+  // FR-55, FR-182: Refinement shows the request and only a link to the summary.
+  await openStage(page, 'Refinement')
+  await expect(page.getByRole('region', { name: 'Request', exact: true })).toContainText(request)
+  await expect(
+    page.getByRole('region', { name: 'Codebase summary', exact: true }).getByRole('link', { name: 'Open the codebase summary on the Analysis page' }),
+  ).toBeVisible()
   await page.getByRole('button', { name: 'Start refinement' }).click()
   await approveInPlace(page, 'Project request')
   await advanceFromHeader(page, 'Specification')

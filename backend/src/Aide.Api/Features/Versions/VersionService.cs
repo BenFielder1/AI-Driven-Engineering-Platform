@@ -57,6 +57,14 @@ public sealed partial class VersionService(
             return Fail(ErrorCodes.NotFound, "The project was not found.");
         }
 
+        // FR-186: inference chooses the stack on the Analysis page, so no stack is sent with it.
+        var infer = request.StackSource == StackSource.Infer;
+        var stackSource = Domain.Projects.ProjectRules.ValidateStackSource(infer, request.Stack is not null, deploymentSent: false);
+        if (stackSource.IsFailure)
+        {
+            return Result.Failure<ReleaseVersion>(stackSource.Error!);
+        }
+
         // FR-117: a sent stack is validated (R5 against the repository's host) before anything else about the version.
         var repoVcs = await stacks.RepoVcsAsync(projectId, cancellationToken);
         var repoHost = await stacks.RepoHostAsync(projectId, cancellationToken);
@@ -88,10 +96,23 @@ public sealed partial class VersionService(
         }
 
         var version = allowed.Value;
+
+        // The base is the released version the new one builds on: the highest released (or imported) version.
+        var released = ReleaseVersionRules.ReleasedVersion(rows);
+        var baseVersion = released is null
+            ? null
+            : versions.FirstOrDefault(v => ReleaseVersionRules.IsReleased(v.Status) && SemVer.TryParse(v.Version, out var parsed) && parsed == released);
+
+        // FR-186, §4.27: an inference version starts in analysis at the new base commit (STACK_INFER_NO_CODE without one).
         var transition = LifecycleStateMachine.Apply(
             new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint),
-            TransitionRequest.NewVersion($"Started version {version}"),
-            new LifecycleSnapshot { DevelopmentVersionExists = ReleaseVersionRules.DevelopmentVersion(rows) is not null });
+            TransitionRequest.NewVersionInto(infer ? Phase.Analysis : Phase.Refinement, $"Started version {version}"),
+            new LifecycleSnapshot
+            {
+                DevelopmentVersionExists = ReleaseVersionRules.DevelopmentVersion(rows) is not null,
+                InfersStack = infer,
+                BaseHasCode = !string.IsNullOrWhiteSpace(baseVersion?.MergeCommitSha),
+            });
         if (transition.IsFailure)
         {
             return Result.Failure<ReleaseVersion>(transition.Error!);
@@ -109,12 +130,6 @@ public sealed partial class VersionService(
             return Fail(ErrorCodes.TagExists, $"The tag {tag} already exists in the repository. Choose another version.");
         }
 
-        // The base is the released version the new one builds on: the highest released (or imported) version.
-        var released = ReleaseVersionRules.ReleasedVersion(rows);
-        var baseVersion = released is null
-            ? null
-            : versions.FirstOrDefault(v => ReleaseVersionRules.IsReleased(v.Status) && SemVer.TryParse(v.Version, out var parsed) && parsed == released);
-
         var now = time.GetUtcNow();
         var cleanRequest = request.Request.Trim();
         var started = new ReleaseVersion
@@ -130,11 +145,13 @@ public sealed partial class VersionService(
             Request = cleanRequest,
             StartedBy = userId,
             CreatedAt = now,
+            StackSource = infer ? StackSource.Infer : StackSource.Manual,
         };
         // FR-117: the sent stack, else the base version's composition re-pinned to the current catalog (FR-129: a version
-        // migrated from a preset has its equivalent composition, so it is inherited like any other).
+        // migrated from a preset has its equivalent composition, so it is inherited like any other). FR-186: an inference
+        // version has none until its stack_profile is approved (the base version's is shown as the comparison).
         var stack = sentStack;
-        if (stack is null && StackCompositionJson.Deserialize(baseVersion?.StackComposition) is { } inheritedStack)
+        if (!infer && stack is null && StackCompositionJson.Deserialize(baseVersion?.StackComposition) is { } inheritedStack)
         {
             var repinned = stacks.Repin(inheritedStack, repoVcs);
             if (repinned.IsFailure)
@@ -332,7 +349,10 @@ public sealed partial class VersionService(
         v.Request,
         v.StartedBy is { } startedBy ? actors(startedBy.ToString()) : null,
         v.CreatedAt,
-        v.ReleasedAt);
+        v.ReleasedAt)
+    {
+        StackSource = v.StackSource,
+    };
 
     private static Result<ReleaseVersion> Fail(string code, string message) => Result.Failure<ReleaseVersion>(new DomainError(code, message));
 

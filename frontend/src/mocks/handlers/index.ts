@@ -1,4 +1,5 @@
 import { adminHandlers } from './admin'
+import { analysisHandlers } from './analysis'
 import { artifactHandlers } from './artifacts'
 import { authHandlers } from './auth'
 import { bitbucketHandlers } from './bitbucket'
@@ -37,6 +38,8 @@ export const handlers = [
   ...gitlabHandlers,
   ...bitbucketHandlers,
   ...lifecycleHandlers,
+  // Before artifactHandlers: the stack_profile cases of the generic artifact routes (FR-183).
+  ...analysisHandlers,
   ...artifactHandlers,
   ...runHandlers,
   ...refinementHandlers,

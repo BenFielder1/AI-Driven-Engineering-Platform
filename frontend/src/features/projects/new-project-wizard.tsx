@@ -151,7 +151,7 @@ const stepFields: Record<StepKey, readonly Field[]> = {
   review: [],
 }
 
-function stepTitle(key: StepKey, source: Source): string {
+function stepTitle(key: StepKey, source: Source, stackKind?: WizardValues['stackKind']): string {
   switch (key) {
     case 'source':
       return 'Source'
@@ -166,7 +166,8 @@ function stepTitle(key: StepKey, source: Source): string {
     case 'configuration':
       return 'Configuration'
     case 'deployment':
-      return 'Deployment'
+      // FR-178: with Infer, deployment is set up on the Analysis page.
+      return stackKind === 'infer' ? 'Deployment (on the Analysis page)' : 'Deployment'
     case 'review':
       return 'Review & create'
   }
@@ -347,6 +348,8 @@ function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
   const picks = parsePicks(v.sourceImports)
   const base = {
     ...(v.stackKind === 'compose' ? { stack: toWizardStackRequest(v) } : {}),
+    // FR-178: the Stack Analyst infers the stack; no stack and no host setup are sent.
+    ...(v.stackKind === 'infer' ? { stackSource: 'infer' as const } : {}),
     name: v.name.trim(),
     idea: v.idea.trim(),
     approvalMode: v.approvalMode,
@@ -863,6 +866,29 @@ export function NewProjectWizard() {
     }
   }
 
+  // FR-178: an import of a repository with code can infer its stack (the default). Empty repositories and scratch
+  // projects don't see the option. URL + token and Local imports have code unless the server says otherwise
+  // (STACK_INFER_NO_CODE).
+  const inferAvailable = importing && (gitMode === 'github_pat' || gitMode === 'local' || repoHasCode)
+  const inferDefaulted = useRef(draft !== null)
+  useEffect(() => {
+    if (key !== 'stack') {
+      return
+    }
+    if (!inferAvailable) {
+      if (getValues('stackKind') === 'infer') {
+        setValue('stackKind', 'general')
+      }
+      return
+    }
+    if (!inferDefaulted.current) {
+      inferDefaulted.current = true
+      if (!getFieldState('stackKind').isDirty) {
+        setValue('stackKind', 'infer')
+      }
+    }
+  }, [key, inferAvailable, getValues, setValue, getFieldState])
+
   // FR-118: an import pre-fills the Stack step from the repository's files (never blocking). Detection runs only while
   // the Stack step is shown, and a result is applied only while the stack is untouched since the last applied one, so
   // a late answer or a new repository never overwrites the user's own choices.
@@ -882,7 +908,11 @@ export function NewProjectWizard() {
     }
     const found = detectedAnything(detection.data)
     setStack(found ? selectionFromDetection(detection.data, emptyStackSelection) : emptyStackSelection)
-    setValue('stackKind', found ? 'compose' : 'general', { shouldDirty: true })
+    // FR-178: Infer (or Choose manually) stays the choice; detection pre-fills the layers (FR-118). Without one,
+    // finding a stack switches to composing it.
+    if (values.stackKind === 'general' && found) {
+      setValue('stackKind', 'compose', { shouldDirty: true })
+    }
     setValue('stackDetection', detectionKey)
     lastApplied.current = stackSnapshot(getValues())
   }, [key, detection.data, detectionKey, draft, getValues, setStack, setValue])
@@ -905,7 +935,8 @@ export function NewProjectWizard() {
     }
     const valid = await trigger(stepFields[key], { shouldFocus: true })
     if (valid) {
-      goTo(step + 1)
+      // FR-178: with Infer, the Deployment step happens on the Analysis page.
+      goTo(key === 'configuration' && getValues('stackKind') === 'infer' ? stepIndex('review') : step + 1)
     }
   }
 
@@ -915,7 +946,7 @@ export function NewProjectWizard() {
       setStackSubStep(stackSubStep - 1)
       return
     }
-    goTo(step - 1)
+    goTo(key === 'review' && stackKind === 'infer' ? stepIndex('configuration') : step - 1)
   }
 
   /** The sub-step of the first stack field with a server error (create's VALIDATION on `stack.*`). */
@@ -1025,6 +1056,10 @@ export function NewProjectWizard() {
               message: errorMessage(error, bitbucket ? 'createProjectBitbucket' : 'createProjectGitLab'),
             })
             goTo(stepIndex('repository'))
+          } else if (isApiError(error, 'STACK_INFER_NO_CODE')) {
+            // FR-178: the repository has no code to analyse; choose a stack instead.
+            goTo(stepIndex('stack'))
+            setServerError({ message: errorMessage(error, 'createProject'), error })
           } else if (isApiError(error, 'STACK_INCOMPATIBLE') || isApiError(error, 'VCS_MISMATCH')) {
             // FR-116, FR-117: the composition breaks a rule (the reasons are listed), or the VCS isn't the repo's host.
             goTo(stepIndex('stack'))
@@ -1094,7 +1129,7 @@ export function NewProjectWizard() {
     errors,
     Object.fromEntries(stepFields[key].map((f) => [f, fieldIds[f]])) as Partial<Record<Field, string>>,
   )
-  const titles = stepKeys.map((k) => stepTitle(k, source))
+  const titles = stepKeys.map((k) => stepTitle(k, source, stackKind))
 
   if (hostOutcome) {
     return (
@@ -1445,22 +1480,54 @@ export function NewProjectWizard() {
                 legend="How should the agents build it?"
                 inputProps={register('stackKind')}
                 error={errors.stackKind?.message}
-                options={[
-                  {
-                    value: 'general',
-                    label: 'No stack (general)',
-                    description:
-                      'Any stack: the generalist agent writes every plan step, and the specification has the standard sections.',
-                  },
-                  {
-                    value: 'compose',
-                    label: 'Choose the stack',
-                    description:
-                      'Pick the frontend, backend, data, version control and deployment layers. A specialist agent works on each layer.',
-                  },
-                ]}
+                options={
+                  inferAvailable
+                    ? [
+                        {
+                          value: 'infer',
+                          label: 'Infer from the repository (recommended)',
+                          description:
+                            'The Stack Analyst reads the code and proposes each layer, with its evidence. You review it, fill any blanks and choose the hosts on the Analysis page.',
+                        },
+                        {
+                          value: 'compose',
+                          label: 'Choose manually',
+                          description:
+                            'Pick the frontend, backend, data, version control and deployment layers yourself, pre-filled from the repository.',
+                        },
+                        {
+                          value: 'general',
+                          label: 'No stack (general)',
+                          description:
+                            'Any stack: the generalist agent writes every plan step, and the specification has the standard sections.',
+                        },
+                      ]
+                    : [
+                        {
+                          value: 'general',
+                          label: 'No stack (general)',
+                          description:
+                            'Any stack: the generalist agent writes every plan step, and the specification has the standard sections.',
+                        },
+                        {
+                          value: 'compose',
+                          label: 'Choose the stack',
+                          description:
+                            'Pick the frontend, backend, data, version control and deployment layers. A specialist agent works on each layer.',
+                        },
+                      ]
+                }
               />
-              {importing && <DetectionNotice detection={detection} gitMode={gitMode} />}
+              {stackKind === 'infer' && (
+                <Alert tone="info" title="The stack is inferred after the project is created">
+                  <p>
+                    The layer choices and the Deployment step are skipped here. Once the project exists, the Stack Analyst
+                    reads the repository. On the Analysis page you review its findings, answer anything it couldn&apos;t
+                    decide, choose the hosts and set up deployment. The version control layer comes from the repository.
+                  </p>
+                </Alert>
+              )}
+              {importing && stackKind !== 'infer' && <DetectionNotice detection={detection} gitMode={gitMode} />}
               {stackKind === 'compose' &&
                 (stackCatalog.isPending ? (
                   <LoadingState label="Loading the stack catalog…" />
@@ -1583,7 +1650,14 @@ export function NewProjectWizard() {
                 onRetry={windows.retry}
               />
             ) : (
-              <WizardDeploymentStep register={register} errors={errors} values={{ gitMode, deploymentMode, vercelProjectMode, vercelConnectionId }} />
+              stackKind === 'infer' ? (
+                <p className="text-sm text-muted-foreground">
+                  The stack is inferred from the repository, so its hosts aren&apos;t known yet. Set up deployment on the
+                  Analysis page once the stack is approved, or later in Settings → Deployment.
+                </p>
+              ) : (
+                <WizardDeploymentStep register={register} errors={errors} values={{ gitMode, deploymentMode, vercelProjectMode, vercelConnectionId }} />
+              )
             ))}
 
           {key === 'review' && <ReviewSummary values={getValues()} llmOptions={llmOptions} onEdit={goTo} />}
@@ -1837,6 +1911,9 @@ function HostSummary({ host, values }: { host: WizardHost; values: WizardValues 
  * new or existing Vercel project (FR-88).
  */
 function DeploymentSummary({ values }: { values: WizardValues }) {
+  if (values.stackKind === 'infer') {
+    return <SummaryRow term="Deployment">Set up on the Analysis page, once the stack is approved</SummaryRow>
+  }
   if (values.stackKind === 'compose') {
     const hosts = wizardHosts(values)
     const separate = hosts.filter((h) => h.kind !== 'group' && separatePartsOf(values.stackSeparateParts).includes(partsOfHost(h)[0] ?? ''))
@@ -1965,6 +2042,8 @@ function ReviewSummary({
       <SummarySection title="Stack" step="stack" onEdit={onEdit}>
         {values.stackKind === 'compose' ? (
           <StackReview values={values} />
+        ) : values.stackKind === 'infer' ? (
+          <SummaryRow term="Stack">Infer from the repository (reviewed on the Analysis page)</SummaryRow>
         ) : (
           <SummaryRow term="Stack">No stack (general)</SummaryRow>
         )}

@@ -58,10 +58,15 @@ async function wizardToVersion(page: Page, name: string, request: string, releas
   await expect(page.getByRole('heading', { name: 'Step 4 of 8: Version' })).toBeVisible()
 }
 
-/** Version → Stack → Configuration → Deployment → Review & create, with the defaults. */
+/**
+ * Version → Stack → Configuration → Deployment → Review & create. FR-178: an import preselects Infer; these tests choose
+ * No stack (general) explicitly, so the version starts in Refinement as they expect.
+ */
 async function wizardToReview(page: Page) {
   await page.getByRole('button', { name: 'Next' }).click()
   await expect(page.getByRole('heading', { name: 'Step 5 of 8: Stack' })).toBeVisible()
+  await expect(page.getByRole('radio', { name: /^Infer from the repository/ })).toBeChecked()
+  await page.getByRole('radio', { name: /^No stack \(general\)/ }).check()
   await page.getByRole('button', { name: 'Next' }).click()
   await expect(page.getByRole('heading', { name: 'Step 6 of 8: Configuration' })).toBeVisible()
   await page.getByRole('radio', { name: /^Strict/ }).check()
@@ -142,12 +147,19 @@ test('NFR-TEST2, FR-70–FR-73, §4.13: a Local repo is imported at v0.2.0 and 0
   expect(versions.find((v) => v.version === '0.2.0')).toMatchObject({ status: 'imported', tag: 'v0.2.0' })
   expect(versions.find((v) => v.version === '0.3.0')).toMatchObject({ status: 'in_development', baseTag: 'v0.2.0' })
 
-  // FR-70: the Repository Analyst's summary is locked (no gate) and shown on Refinement before the first round.
-  await openStage(page, 'Refinement')
-  await expect(page.getByRole('region', { name: 'Request', exact: true })).toContainText(request)
+  // FR-70, FR-182: the Repository Analyst's summary is locked (no gate) and shown on the Analysis page; Refinement links to it.
+  await page.goto(`/projects/${projectId}/analysis`)
+  await expect(page.getByRole('heading', { level: 2, name: 'Analysis', exact: true })).toBeVisible()
   const summary = page.getByRole('region', { name: 'Codebase summary', exact: true })
   await expect(summary.getByText('Locked', { exact: true })).toBeVisible({ timeout: 2 * AGENT_TIMEOUT })
   await expect(summary.getByRole('heading', { name: 'Overview' })).toBeVisible()
+  // A version whose stack wasn't inferred has nothing to approve here.
+  await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0)
+  await openStage(page, 'Refinement')
+  await expect(page.getByRole('region', { name: 'Request', exact: true })).toContainText(request)
+  await expect(
+    page.getByRole('region', { name: 'Codebase summary', exact: true }).getByRole('link', { name: 'Open the codebase summary on the Analysis page' }),
+  ).toBeVisible()
   const codebaseSummary = await apiJson<{ version: number; status: string }>(
     context,
     'GET',
@@ -203,4 +215,71 @@ test('NFR-TEST2, FR-70–FR-73, §4.13: a Local repo is imported at v0.2.0 and 0
       { timeout: 2 * AGENT_TIMEOUT, intervals: [500, 1000] },
     )
     .toBe(`aide/${project.slug}/v0.3.0`)
+})
+
+/**
+ * FR-178–FR-185 on the E2E deployment: a Local import with Infer (preselected) starts in Analysis. The Fake Stack Analyst's
+ * `[fake-stack:unknown]` marker in the version request leaves the backend `unknown`; the Owner answers Needs your input
+ * (the layers the detector couldn't decide too), approves the profile and continues to Refinement.
+ */
+test('FR-178, FR-181, FR-183, FR-185: infer the stack, fill the blank, approve and continue to Refinement', async ({ page }) => {
+  test.setTimeout(8 * 60_000)
+  const context = page.context()
+  await registerViaApi(context, 'import-infer', 'Infer Owner')
+  const projectName = `E2E Infer ${String(Date.now())}`
+
+  await wizardToVersion(page, projectName, 'Add CSV export [fake-stack:unknown]', 'v0.2.0')
+  await page.getByRole('button', { name: 'Next' }).click()
+  await expect(page.getByRole('heading', { name: 'Step 5 of 8: Stack' })).toBeVisible()
+  await expect(page.getByRole('radio', { name: /^Infer from the repository/ })).toBeChecked()
+  await page.getByRole('button', { name: 'Next' }).click()
+  await expect(page.getByRole('heading', { name: 'Step 6 of 8: Configuration' })).toBeVisible()
+  await page.getByRole('button', { name: 'Next' }).click()
+  // FR-178: the Deployment step is skipped.
+  await expect(page.getByRole('heading', { name: 'Step 8 of 8: Review & create' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Stack', exact: true })).toContainText('Infer from the repository')
+  await page.getByRole('button', { name: 'Create project' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: projectName })).toBeVisible()
+  const projectId = /\/projects\/([^/?#]+)/.exec(page.url())?.[1] ?? ''
+  expect(projectId).not.toBe('')
+  expect(await projectState(context, projectId)).toMatchObject({ phase: 'analysis' })
+
+  // FR-182: Analysis is in the project nav and the tracker.
+  await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Analysis' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Analysis', exact: true })).toBeVisible()
+
+  // FR-181: the backend (and anything the detector couldn't decide) is listed first, with a picker per layer.
+  const needs = page.getByRole('region', { name: 'Needs your input', exact: true })
+  await expect(needs).toBeVisible({ timeout: 3 * AGENT_TIMEOUT })
+  const approve = page.getByRole('button', { name: 'Approve', exact: true })
+  await expect(approve).toBeDisabled()
+  await expect(page.getByTestId('approve-reason')).toContainText('Answer these before approving')
+
+  const backend = needs.getByTestId('needs-input-backend')
+  await expect(backend).toContainText('Which backend serves')
+  await backend.getByLabel('Backend option').selectOption({ label: 'Express' })
+  await backend.getByLabel('Backend folder').fill('.')
+  for (const layer of ['frontend', 'data'] as const) {
+    const item = needs.getByTestId(`needs-input-${layer}`)
+    if ((await item.count()) > 0) {
+      await item.getByLabel(layer === 'frontend' ? 'Frontend option' : 'Data option').selectOption('none')
+    }
+  }
+  await needs.getByRole('button', { name: 'Save answers as a new draft' }).click()
+  await expect(needs).toBeHidden({ timeout: AGENT_TIMEOUT })
+  await expect(page.getByTestId('finding-backend')).toContainText('Express')
+
+  // FR-183: Approve pins the stack.
+  await expect(approve).toBeEnabled()
+  await approve.click()
+  const dialog = page.getByRole('dialog', { name: /^Approve stack profile v\d+\?$/ })
+  await dialog.getByRole('button', { name: /^Approve v\d+$/ }).click()
+  await expect(dialog).toBeHidden()
+  const stack = await apiJson<{ composition: { backend: { pack: string } | null } | null }>(context, 'GET', `/api/projects/${projectId}/stack`)
+  expect(stack.composition?.backend?.pack).toBe('be-express')
+
+  // FR-185: Continue to Refinement.
+  await page.getByRole('button', { name: 'Continue to Refinement' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Refinement', exact: true })).toBeVisible()
+  expect(await projectState(context, projectId)).toMatchObject({ phase: 'refinement' })
 })

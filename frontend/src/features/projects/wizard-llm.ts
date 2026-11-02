@@ -13,6 +13,7 @@ export const llmFieldIds = {
   llmModelPlanGenerator: 'project-llm-model-planGenerator',
   llmModelCodeGenerator: 'project-llm-model-codeGenerator',
   llmModelCodeReview: 'project-llm-model-codeReview',
+  llmModelStackAnalyst: 'project-llm-model-stackAnalyst',
 } as const
 
 type LlmField = keyof typeof llmFieldIds
@@ -48,6 +49,7 @@ export function llmValuesFor(p: LlmProviderOption): Pick<WizardValues, LlmField>
     llmModelPlanGenerator: '',
     llmModelCodeGenerator: '',
     llmModelCodeReview: '',
+    llmModelStackAnalyst: '',
   }
 }
 

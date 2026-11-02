@@ -26,6 +26,8 @@ public class LifecycleStateMachineTests
         OptimizationPlanLocked = true,
         OptimizationPlanStepCount = 2,
         EntryGateApproved = true,
+        StackProfileLocked = true,
+        StackCompositionPinned = true,
     };
 
     public static TheoryData<Phase, Phase> AllPhasePairs()
@@ -99,6 +101,7 @@ public class LifecycleStateMachineTests
     }
 
     [Theory]
+    [InlineData(Phase.Analysis, ProjectStatus.Active)]
     [InlineData(Phase.Refinement, ProjectStatus.Active)]
     [InlineData(Phase.Specification, ProjectStatus.Active)]
     [InlineData(Phase.Planning, ProjectStatus.Active)]

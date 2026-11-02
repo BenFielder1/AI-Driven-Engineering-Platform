@@ -97,12 +97,12 @@ public class TrackerDomainTests
     // ---------------------------------------------------------------- D-V5-10 phases
 
     [Fact]
-    public void FR171_D_V5_10_Items_change_only_in_an_import_phase()
+    public void FR171_D_V5_10_Items_change_only_in_analysis_or_refinement()
     {
         foreach (var phase in Enum.GetValues<Phase>())
         {
             var result = TrackerRules.CanChangeImports(phase);
-            if (phase == Phase.Refinement)
+            if (phase is Phase.Analysis or Phase.Refinement)
             {
                 Assert.True(result.IsSuccess);
             }
@@ -262,7 +262,7 @@ public class TrackerDomainTests
         Guid a = Guid.NewGuid(), b = Guid.NewGuid(), c = Guid.NewGuid();
         TrackerImportLink[] rows = [new(a, null, TrackerImportStatus.Completed), new(b, a, TrackerImportStatus.Failed), new(c, b, TrackerImportStatus.Queued)];
 
-        Assert.Equal([b, c], TrackerImportChain.AlsoRemoved(rows, a).Order());
+        Assert.Equal(new[] { b, c }.Order(), TrackerImportChain.AlsoRemoved(rows, a).Order());
         Assert.Equal([b], TrackerImportChain.AlsoRemoved(rows, c));
     }
 

@@ -96,6 +96,7 @@ public class PromptTemplateTests
     [InlineData(AgentKind.CodeGenerator, "4", new[] { "MAX_FILES_PER_STEP", "STEP_NUMBER", "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "STEP_TITLE", "STEP_TASK", "DECLARED_FILES" })]
     [InlineData(AgentKind.CodeReview, "7", new[] { "REVIEW_CYCLE", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "CODE", "MAX_FILES_PER_STEP" })]
     [InlineData(AgentKind.RepositoryAnalyst, "2", new[] { "PROJECT_NAME" })]
+    [InlineData(AgentKind.StackAnalyst, "2", new[] { "PROJECT_NAME", "CATALOG_OPTIONS" })]
     public void FR24_Every_agent_has_a_versioned_embedded_template_with_its_required_inputs(AgentKind agent, string version, string[] required)
     {
         var template = new EmbeddedPromptLibrary().Template(agent);

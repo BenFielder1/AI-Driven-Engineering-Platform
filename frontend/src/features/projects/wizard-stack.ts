@@ -134,10 +134,11 @@ export function detectionIdOf(request: DetectStackRequest, detection: StackDetec
 }
 
 /**
- * FR-118: the stack fields a user edits (kind, frontend, backend, data, paths), to tell whether the stack is untouched
- * since the last applied detection. Fields the step sets itself (the VCS fixed by the repo, deployment defaults) are
- * left out.
+ * FR-118: the stack fields a user edits (frontend, backend, data, paths), to tell whether the layers are untouched since
+ * the last applied detection. The kind isn't part of it (FR-178): picking Infer, Choose manually or No stack doesn't
+ * stop detection from pre-filling the layers. Fields the step sets itself (the VCS fixed by the repo, deployment
+ * defaults) are left out.
  */
-export function stackSnapshot(v: Pick<WizardValues, 'stackKind' | WizardStackField>): string {
-  return JSON.stringify([v.stackKind, v.stackFrontend, v.stackBackend, v.stackData, v.stackFrontendPath, v.stackBackendPath])
+export function stackSnapshot(v: Pick<WizardValues, WizardStackField>): string {
+  return JSON.stringify([v.stackFrontend, v.stackBackend, v.stackData, v.stackFrontendPath, v.stackBackendPath])
 }

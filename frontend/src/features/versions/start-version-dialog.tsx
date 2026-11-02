@@ -45,7 +45,8 @@ const versionCodes = ['VERSION_INVALID', 'VERSION_NOT_GREATER', 'TAG_EXISTS'] as
  * validated live: semver with a leading `v` stripped, greater than the released version), the request, and a summary
  * of what happens. Server errors go through the one error map; version errors land on the version field. FR-117:
  * "Change stack" opens the same five sub-steps, pre-filled with the current composition, and the new version is
- * started with that `stack` (omitted: the base version's composition is kept).
+ * started with that `stack` (omitted: the base version's composition is kept). FR-186: "Infer from the repository" starts
+ * it in Analysis with `stackSource: infer`.
  */
 export function StartVersionDialog({
   projectId,
@@ -89,6 +90,8 @@ export function StartVersionDialog({
   const [editingStack, setEditingStack] = useState(false)
   const catalog = useStackCatalog(editingStack || projectStack.data?.composition != null)
   const [stackChange, setStackChange] = useState<StackSelection | null>(null)
+  /** FR-186: the new version infers its stack from the code (it starts in Analysis). */
+  const [infer, setInfer] = useState(false)
   const stackLabel = (sel: StackSelection) =>
     [
       ['frontend', sel.frontend],
@@ -106,7 +109,8 @@ export function StartVersionDialog({
         version: normalizeVersion(values.version) ?? values.version.trim(),
         request: values.request.trim(),
         ...(hasItems ? { sourceImports: picks.map(toSourceImportRequest) } : {}),
-        ...(stackChange ? { stack: toStackRequest(stackChange, { omitVcs: (projectStack.data?.repoVcs ?? null) !== null, separateParts: projectStack.data?.composition?.deploy.separateParts ?? [] }) } : {}),
+        ...(infer ? { stackSource: 'infer' as const } : {}),
+        ...(stackChange && !infer ? { stack: toStackRequest(stackChange, { omitVcs: (projectStack.data?.repoVcs ?? null) !== null, separateParts: projectStack.data?.composition?.deploy.separateParts ?? [] }) } : {}),
       },
       {
         onSuccess: (result) => {
@@ -185,7 +189,9 @@ export function StartVersionDialog({
           <div className="flex flex-col gap-1 text-sm" data-testid="start-version-stack">
             <p>
               <span className="font-medium">Stack: </span>
-              {stackChange
+              {infer
+                ? 'Inferred from the repository on the Analysis page'
+                : stackChange
                 ? `${stackLabel(stackChange)} (changed)`
                 : projectStack.data.composition
                   ? `${stackLabel(selectionFromComposition(projectStack.data.composition))} (kept)`
@@ -195,16 +201,29 @@ export function StartVersionDialog({
               <Button
                 variant="secondary"
                 onClick={() => {
+                  setInfer(false)
                   setEditingStack(true)
                 }}
               >
                 Change stack
               </Button>
-              {stackChange && (
+              {!infer && (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setStackChange(null)
+                    setInfer(true)
+                  }}
+                >
+                  Infer from the repository
+                </Button>
+              )}
+              {(stackChange !== null || infer) && (
                 <Button
                   variant="ghost"
                   onClick={() => {
                     setStackChange(null)
+                    setInfer(false)
                   }}
                 >
                   Keep the current stack
@@ -223,7 +242,14 @@ export function StartVersionDialog({
               {released ? `, based on the released ${released}` : ''}. Its release will be tagged{' '}
               <code className="font-mono">{`${tagPrefix}${normalised ?? '…'}`}</code>.
             </li>
-            <li>The project goes back to Refinement at checkpoint 1, with your request as its idea.</li>
+            {infer ? (
+              <li>
+                The project goes to Analysis at checkpoint 1: the Stack Analyst infers the stack from the code, with the current
+                stack as the comparison. Approving different layers is a stack change.
+              </li>
+            ) : (
+              <li>The project goes back to Refinement at checkpoint 1, with your request as its idea.</li>
+            )}
             {hasItems && (
               <li>
                 {pickedItemCount(picks) === 1 ? '1 tracker item is' : `${String(pickedItemCount(picks))} tracker items are`} imported as a

@@ -394,6 +394,8 @@ export const projectsDb = {
   providers: defaultProviders(),
   gitTestResult: { ok: true, reachable: true, writable: true, defaultBranchExists: true, reason: null } as Schemas['GitTestResultDto'],
   requests: [] as RecordedRequest[],
+  /** FR-178 test knob: `false` makes `stackSource: infer` answer STACK_INFER_NO_CODE. */
+  inferHasCode: true as boolean,
 }
 
 export function resetProjectsDb() {
@@ -401,6 +403,7 @@ export function resetProjectsDb() {
   projectsDb.providers = defaultProviders()
   projectsDb.gitTestResult = { ok: true, reachable: true, writable: true, defaultBranchExists: true, reason: null }
   projectsDb.requests = []
+  projectsDb.inferHasCode = true
 }
 
 const emptyState = (): StoredProject['state'] => ({
@@ -1080,6 +1083,14 @@ export const projectHandlers = [
     if (versions instanceof Response) {
       return versions
     }
+    // FR-178: inference takes no stack and no deployment, and needs a repository with code (an import here).
+    const inferring = body.stackSource === 'infer'
+    if (inferring && (body.stack || body.deployment)) {
+      return validation({ stack: ["A stack or deployment can't be sent with stackSource infer."] })
+    }
+    if (inferring && (!importing || !projectsDb.inferHasCode)) {
+      return problem(400, 'STACK_INFER_NO_CODE', 'The repository has no code to analyse.')
+    }
     // FR-114–FR-117: the stack composition, validated (STACK_INCOMPATIBLE, VCS_MISMATCH, paths).
     let composition: Schemas['StackCompositionDto'] | null = null
     if (body.stack) {
@@ -1153,6 +1164,12 @@ export const projectHandlers = [
     const development = developmentVersionOf(project)
     if (importing && development) {
       project.analyst = { [development.id]: { status: 'queued', runId: null, artifactId: null, artifactVersion: null } }
+    }
+    // FR-178: the version infers its stack and starts in analysis.
+    if (inferring && development) {
+      development.stackSource = 'infer'
+      development.baseCommitSha ??= 'c0ffee1234567'
+      project.currentPhase = 'analysis'
     }
     return HttpResponse.json<Project>(projectDto(project, user.id), { status: 201 })
   }),

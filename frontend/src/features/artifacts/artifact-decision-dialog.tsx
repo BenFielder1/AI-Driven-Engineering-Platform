@@ -25,6 +25,7 @@ const approveEffect: Record<ArtifactType, string> = {
   optimization_plan: 'Nothing else is invalidated.',
   codebase_summary: 'Nothing else is invalidated.',
   source_items: 'Nothing else is invalidated.',
+  stack_profile: 'It pins the stack; any existing project request, specification, plans and execution steps are invalidated.',
 }
 
 export type ArtifactDecision = 'approve' | 'reject'

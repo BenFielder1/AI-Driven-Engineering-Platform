@@ -160,6 +160,18 @@ describe('Settings → LLM (FR-9, FR-22, FR-79)', () => {
     expect(requestsTo('PATCH', '/settings/llm').at(-1)?.body).not.toHaveProperty('credentialId')
   })
 
+  it('FR180_the_stack_analyst_has_its_own_model_setting', async () => {
+    const { user, project } = await openLlmAsOwner()
+
+    await user.selectOptions(await screen.findByLabelText('Stack analyst'), 'Other model id…')
+    await user.type(screen.getByLabelText('Stack analyst: model id'), 'claude-haiku-4-5')
+    await user.click(screen.getByRole('button', { name: 'Save LLM settings' }))
+
+    expect(await screen.findByText('LLM settings saved.')).toBeInTheDocument()
+    expect(requestsTo('PATCH', '/settings/llm').at(-1)?.body).toMatchObject({ modelsByAgent: { stackAnalyst: 'claude-haiku-4-5' } })
+    expect(project.llm.modelsByAgent).toMatchObject({ stackAnalyst: 'claude-haiku-4-5' })
+  })
+
   it('FR159_settings_default_model_uses_the_catalog_picker_with_max_output_tokens', async () => {
     const { user, project } = await openLlmAsOwner()
 

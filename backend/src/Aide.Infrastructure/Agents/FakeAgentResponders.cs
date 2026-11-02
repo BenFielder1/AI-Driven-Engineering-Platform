@@ -556,3 +556,84 @@ public sealed class FakeRepositoryAnalystResponder : IFakeAgentResponder
             """;
     }
 }
+
+/// <summary>
+/// Fake Stack Analyst (FR-180, D13): the profile the deterministic detector produced (<c>&lt;detector_profile&gt;</c>), as the
+/// agent's findings, with a short narrative. Scripted profiles for tests and E2E are picked by a marker in the version request
+/// (or project name):
+/// <list type="bullet">
+/// <item><see cref="UnknownMarker"/>: the backend is <c>unknown</c>, with a question;</item>
+/// <item><see cref="UnsupportedMarker"/>: the backend is <c>unsupported</c> (Django);</item>
+/// <item><see cref="DjangoMarker"/>: the first reply names <c>be-django</c> (not a catalog option); the corrective re-run marks it <c>unsupported</c>;</item>
+/// <item><see cref="InvalidMarker"/>: every reply names <c>be-django</c>, so the run fails with <c>STACK_PROFILE_INVALID</c>.</item>
+/// </list>
+/// </summary>
+public sealed class FakeStackAnalystResponder : IFakeAgentResponder
+{
+    public const string UnknownMarker = "[fake-stack:unknown]";
+    public const string UnsupportedMarker = "[fake-stack:unsupported]";
+    public const string DjangoMarker = "[fake-stack:django]";
+    public const string InvalidMarker = "[fake-stack:invalid]";
+
+    public AgentKind Agent => AgentKind.StackAnalyst;
+
+    public string Respond(LlmRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var name = FakePrompt.Tag(request, "project_name") is { Length: > 0 } n ? n : "the project";
+        var markers = $"{FakePrompt.Tag(request, "version_request")}\n{name}";
+        var feedback = FakePrompt.Tag(request, "feedback");
+        var corrective = feedback.StartsWith("Your previous stack profile was rejected", StringComparison.Ordinal);
+        var parsed = Domain.Stack.StackProfile.FromJson(FakePrompt.Tag(request, "detector_profile"));
+        var profile = parsed.IsSuccess
+            ? parsed.Value
+            : Domain.Stack.StackProfile.FromDetection(null, null, null);
+
+        var narrative = $"{name}: the stack read from the repository's manifests and folders.";
+        var layers = profile.Layers;
+        var questions = profile.Questions.Where(q => q.Layer != Domain.Stack.StackLayers.Backend).ToList();
+        if (markers.Contains(UnknownMarker, StringComparison.Ordinal))
+        {
+            layers = layers with { Backend = Domain.Stack.StackProfileLayer.Unknown };
+            questions.Add(new Domain.Stack.StackProfileQuestion(Domain.Stack.StackLayers.Backend, "Which backend serves this frontend's API? No backend manifest was found."));
+            narrative += " The backend couldn't be determined.";
+        }
+        else if (markers.Contains(UnsupportedMarker, StringComparison.Ordinal) || (markers.Contains(DjangoMarker, StringComparison.Ordinal) && corrective))
+        {
+            layers = layers with
+            {
+                Backend = new Domain.Stack.StackProfileLayer
+                {
+                    Status = Domain.Stack.StackProfileLayerStatus.Unsupported,
+                    Technology = "Django",
+                    Confidence = Domain.Stack.StackProfileConfidence.Medium,
+                },
+            };
+            narrative += " The backend uses Django, which the catalog doesn't support.";
+        }
+        else if (markers.Contains(DjangoMarker, StringComparison.Ordinal) || markers.Contains(InvalidMarker, StringComparison.Ordinal))
+        {
+            layers = layers with
+            {
+                Backend = new Domain.Stack.StackProfileLayer
+                {
+                    Option = "be-django",
+                    Path = ".",
+                    Status = Domain.Stack.StackProfileLayerStatus.Inferred,
+                    Confidence = Domain.Stack.StackProfileConfidence.High,
+                },
+            };
+        }
+        else
+        {
+            questions = [.. profile.Questions];
+        }
+
+        if (feedback.Length > 0 && !corrective)
+        {
+            narrative += $" Revised after review feedback: {FakePrompt.FirstSentence(feedback)}";
+        }
+
+        return Domain.Stack.StackProfile.Render(narrative, profile with { Layers = layers, Questions = questions });
+    }
+}

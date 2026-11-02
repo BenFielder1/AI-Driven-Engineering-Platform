@@ -1175,7 +1175,7 @@ export interface paths {
         /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and, as history, the retired preset a migrated version was pinned to (FR-129). */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. sourceImports (FR-171, optional) queues a tracker_import job per entry with the project; a failed import never blocks creation. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. sourceImports (FR-171, optional) queues a tracker_import job per entry with the project; a failed import never blocks creation. stackSource infer (FR-178) starts the version in the analysis phase with no stack: the Stack Analyst writes a stack_profile after the Repository Analyst (400 STACK_INFER_NO_CODE when the repository has no code; stack or deployment alongside: 400 VALIDATION). */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -1882,7 +1882,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve a draft (Owner): records approver and time, sets locked and applies the invalidation cascade (§4.4). Approving an already locked artifact is a no-op. 409 ARTIFACT_NOT_DRAFT. */
+        /** Approve a draft (Owner): records approver and time, sets locked and applies the invalidation cascade (§4.4). Approving an already locked artifact is a no-op. 409 ARTIFACT_NOT_DRAFT. A stack_profile (FR-183) also pins its composition (with catalog version and hash) and stack packs in the same transaction; with generalist: true it is locked with no composition (FR-181). */
         post: operations["ApproveArtifact"];
         delete?: never;
         options?: never;
@@ -1899,7 +1899,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reject a draft (Owner): records the comment and re-runs the producing agent with it (not for human-edited drafts). 409 ARTIFACT_NOT_DRAFT, ARTIFACT_LOCKED. */
+        /** Reject a draft (Owner): records the comment and re-runs the producing agent with it (not for human-edited drafts; FR-183: a stack_profile always re-runs the Stack Analyst, a human edit included, with the rejected draft as context). 409 ARTIFACT_NOT_DRAFT, ARTIFACT_LOCKED. */
         post: operations["RejectArtifact"];
         delete?: never;
         options?: never;
@@ -1969,6 +1969,40 @@ export interface paths {
         put?: never;
         /** Run a refinement round (Contributor or Owner): queues the Idea Refinement agent on the idea, the current draft and the answers given (questionId of a question from the latest round, or the question text). Returns 202 with the queued round; the new draft and questions arrive with the run. 409 WRONG_PHASE, BUDGET_EXCEEDED, REFINEMENT_IN_PROGRESS. */
         post: operations["StartRefinement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Analysis page of the current release version (members, FR-182): the Repository Analyst's summary state and, for a version that infers its stack, the Stack Analyst's run, the latest stack_profile parsed, the layers that need input, whether it can be approved (and why not), whether the project can continue to refinement, the detector's profile for "Fill in manually", the profile as a /api/stack/options selection, the pinned and previous compositions and the deployment state. */
+        get: operations["GetAnalysis"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/analysis/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run the Stack Analyst again (Contributor or Owner, FR-180 Retry or re-run): queues it on the version's base commit; the new stack_profile draft arrives with the run. 409 WRONG_PHASE, BUDGET_EXCEEDED, INVALID_STATE. */
+        post: operations["RunStackAnalysis"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2817,10 +2851,10 @@ export interface components {
         /** @enum {unknown} */
         AgentJobTrigger: "user_requested" | "phase_entered" | "gate_rejected" | "artifact_rejected" | "artifact_corrupted" | null;
         /**
-         * @description The cognitive agents (§1, FR-23), plus the Repository Analyst (FR-70).
+         * @description The cognitive agents (§1, FR-23), plus the Repository Analyst (FR-70) and the Stack Analyst (FR-180).
          * @enum {unknown}
          */
-        AgentKind: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
+        AgentKind: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst";
         /** @description Model id per agent; an omitted or `null` agent uses the default model. */
         AgentModelsDto: {
             ideaRefinement?: null | string;
@@ -2828,6 +2862,8 @@ export interface components {
             planGenerator?: null | string;
             codeGenerator?: null | string;
             codeReview?: null | string;
+            /** @description FR-180: the Stack Analyst's model (D-V5-7: its own setting). */
+            stackAnalyst?: null | string;
         };
         /**
          * @description An agent run with the provider's output text (FR-23). `output` is `null` until the run succeeds and is cut
@@ -2943,6 +2979,48 @@ export interface components {
          * @enum {unknown}
          */
         AgentRunStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+        /**
+         * @description FR-184: `available` once the profile is locked with a composition that has a host (the page then shows the Deployment
+         *     setup windows, from `GET …/settings/deployment` and the `windows` of `POST /api/stack/options`); else
+         *     `reason` says why not.
+         */
+        AnalysisDeploymentDto: {
+            available: boolean;
+            reason: null | string;
+        };
+        /**
+         * @description `GET /api/projects/:id/analysis` (FR-182): the Analysis page of the project's current release version.
+         *         * summary: the Repository Analyst's state and the locked codebase_summary (every version with code).
+         *     * stackSource infer only: run (the Stack Analyst's latest run), profile (the latest
+         *         stack_profile version, parsed), needsInput (FR-181 "Needs your input", in layer order),
+         *         unresolvedLayers and canApprove/approveBlockedReason (the reason as text), canContinue
+         *         (FR-185: a locked profile while in analysis), suggested (FR-180 "Fill in manually": the detector's profile with no
+         *         agent findings), selection (the profile as a POST /api/stack/options body, for the editor's option states and
+         *         the Hosts section; FR-184), composition (pinned once approved), previousComposition (FR-186: the base
+         *         version's, as the comparison) and deployment (FR-184: whether deployment setup can be offered).
+         */
+        AnalysisDto: {
+            /** Format: uuid */
+            releaseVersionId: string;
+            releaseVersion: string;
+            phase: components["schemas"]["Phase"];
+            stackSource: components["schemas"]["StackSource"];
+            hasExistingCode: boolean;
+            baseCommitSha: null | string;
+            summary: components["schemas"]["CodebaseSummaryStatusDto"];
+            run: null | components["schemas"]["StackAnalysisRunDto"];
+            profile: null | components["schemas"]["StackProfileViewDto"];
+            needsInput: components["schemas"]["StackProfileBlankDto"][];
+            unresolvedLayers: string[];
+            canApprove: boolean;
+            approveBlockedReason: null | string;
+            canContinue: boolean;
+            suggested: null | components["schemas"]["StackProfileDocumentDto"];
+            selection: null | components["schemas"]["StackCompositionRequest"];
+            composition: null | components["schemas"]["StackCompositionDto"];
+            previousComposition: null | components["schemas"]["StackCompositionDto"];
+            deployment: components["schemas"]["AnalysisDeploymentDto"];
+        };
         /** @description A personal API token as listed (never includes the token or its hash). */
         ApiTokenDto: {
             /** Format: uuid */
@@ -3102,7 +3180,7 @@ export interface components {
             restoredFromVersion: null | number;
         };
         /** @enum {unknown} */
-        ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items";
+        ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
         /** @description A non-blocking finding about an artifact version (FR-76, §4.13): its code, a message and the ids it is about. */
         ArtifactWarningDto: {
             code: string;
@@ -3720,6 +3798,7 @@ export interface components {
             source?: components["schemas"]["ProjectSource"];
             import?: null | components["schemas"]["CreateProjectImportRequest"];
             stack?: null | components["schemas"]["StackCompositionRequest"];
+            stackSource?: null | components["schemas"]["StackSource"];
             /**
              * @description FR-171 (wizard Idea step): tracker items to import, each a `tracker_import` job queued with the project. The idea stays required (D-V5-6).
              *     A failed import never blocks creation. `VALIDATION` on `sourceImports[i].selection.*`; another user's connection is
@@ -3785,9 +3864,14 @@ export interface components {
             /** Format: date-time */
             deadLetteredAt: null | string;
         };
-        /** @description Approve or reject a draft (FR-17). On reject, `comment` is recorded and fed to the re-run agent. */
+        /**
+         * @description Approve or reject a draft (FR-17). On reject, `comment` is recorded and fed to the re-run agent. FR-181: approving a
+         *     `stack_profile` with `generalist: true` is "Continue with No stack (general)": the choice is recorded on a new
+         *     version of the profile (the draft is superseded), which is locked with no composition. Only for `stack_profile`.
+         */
         DecideArtifactRequest: {
             comment?: null | string;
+            generalist?: null | boolean;
         };
         /**
          * @description Approve or reject a pending gate (FR-13, FR-14). `comment` is optional (on reject it is the feedback for the
@@ -5343,10 +5427,11 @@ export interface components {
             total: number;
         };
         /**
-         * @description The six lifecycle phases, in order (§4.1). Stored as snake_case strings.
+         * @description The lifecycle phases, in order (§4.1; v5 §4.27 adds Phase.Analysis first). Stored as snake_case strings, so the
+         *     numeric values only give the order (PhaseOrder) and may be renumbered.
          * @enum {unknown}
          */
-        Phase: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+        Phase: "analysis" | "refinement" | "specification" | "planning" | "execution" | "review" | "release";
         /**
          * @description The state of one execution run (FR-57): the steps of one plan version. `pending` (no step started),
          *     `running`, `paused`, `completed` (every step completed), `blocked` (a step awaits an escalation
@@ -6121,6 +6206,8 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             releasedAt: null | string;
+            /** @description FR-178, FR-186: `infer` when the version's stack comes from a stack_profile approved in `analysis` (the lifecycle tracker then shows Analysis), else `manual`. */
+            stackSource?: components["schemas"]["StackSource"];
         };
         /**
          * @description Status of a release version (§4.10). Wire values: `in_development`, `awaiting_merge`, `released`, `imported`.
@@ -6381,6 +6468,43 @@ export interface components {
             /** Format: date-time */
             checkedAt: string;
         };
+        /** @description `POST /api/projects/:id/analysis/run`: the queued Stack Analyst job. */
+        StackAnalysisQueuedDto: {
+            /** Format: uuid */
+            jobId: string;
+            trigger: string;
+            /** Format: date-time */
+            queuedAt: string;
+        };
+        /**
+         * @description FR-180, FR-182: the latest Stack Analyst job of the version and its run (the corrective re-run's when there was one).
+         *     `errorCode` is set when it failed (e.g. `STACK_PROFILE_INVALID`, `BUDGET_EXCEEDED`); `warnings` are the run's
+         *     (e.g. `summary_unavailable`). `artifactId`/`artifactVersion` is the draft the run wrote, if any.
+         */
+        StackAnalysisRunDto: {
+            /** Format: uuid */
+            jobId: string;
+            /** Format: uuid */
+            runId: null | string;
+            status: components["schemas"]["StackAnalysisRunState"];
+            trigger: string;
+            errorCode: null | string;
+            error: null | string;
+            warnings: string[];
+            /** Format: uuid */
+            artifactId: null | string;
+            /** Format: int32 */
+            artifactVersion: null | number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+        };
+        /**
+         * @description Where the Stack Analyst is: `queued`, `running`, `succeeded` or `failed`.
+         * @enum {unknown}
+         */
+        StackAnalysisRunState: "queued" | "running" | "succeeded" | "failed";
         /**
          * @description The stack catalog (FR-113, §4.16) for the wizard's Stack step, Settings → Stack and Admin → Stack catalog: the five
          *     layers, the choices in evaluation order (frontend, backend, data, vcs, then the deployment choices frontendHost,
@@ -6618,6 +6742,99 @@ export interface components {
             version: string;
             snapshot: string;
         };
+        /** @description FR-181: one "Needs your input" entry: the layer, why (status), the agent's question, the unsupported technology and a conflict's candidates. */
+        StackProfileBlankDto: {
+            layer: string;
+            status: components["schemas"]["StackProfileLayerStatus"];
+            question: null | string;
+            technology: null | string;
+            candidates: components["schemas"]["StackProfileCandidateDto"][];
+        };
+        /** @description A candidate of a `conflict` layer; `source` is `agent` or `detector`; `option` may be `none`. */
+        StackProfileCandidateDto: {
+            option: string;
+            path: null | string;
+            source: string;
+            evidence: components["schemas"]["StackProfileEvidenceDto"][];
+        };
+        /** @enum {unknown} */
+        StackProfileConfidence: "high" | "medium" | "low" | null;
+        /** @description §4.27: the structured profile, as in the `aide-stack-profile` block (the editor posts it back inside that block). */
+        StackProfileDocumentDto: {
+            /** Format: int32 */
+            schemaVersion: number;
+            baseCommitSha: null | string;
+            generalist: boolean;
+            layers: components["schemas"]["StackProfileLayersDto"];
+            hosts: components["schemas"]["StackProfileHostsDto"];
+            structure: components["schemas"]["StackProfileStructureDto"][];
+            questions: components["schemas"]["StackProfileQuestionDto"][];
+        };
+        StackProfileEvidenceDto: {
+            file: string;
+            text: string;
+        };
+        /** @description FR-184: hosts (option ids, `null` = None), local dev loop, origin model, separate parts and the host choices the detector found. */
+        StackProfileHostsDto: {
+            frontendHost: null | string;
+            backendHost: null | string;
+            databaseHost: null | string;
+            local: null | string;
+            originModel: null | string;
+            separateParts: string[];
+            detected: string[];
+        };
+        /** @description A layer: catalog option (or `null`), path (frontend, backend), mode (data), status, confidence, the technology of an `unsupported` layer, evidence and a conflict's candidates. */
+        StackProfileLayerDto: {
+            option: null | string;
+            path: null | string;
+            mode: null | string;
+            status: components["schemas"]["StackProfileLayerStatus"];
+            confidence: null | components["schemas"]["StackProfileConfidence"];
+            technology: null | string;
+            evidence: components["schemas"]["StackProfileEvidenceDto"][];
+            candidates: components["schemas"]["StackProfileCandidateDto"][];
+        };
+        /**
+         * @description §4.27 layer status. Wire values: `inferred`, `user`, `none`, `fixed`, `unknown`, `conflict`, `unsupported`.
+         * @enum {unknown}
+         */
+        StackProfileLayerStatus: "inferred" | "user" | "none" | "fixed" | "unknown" | "conflict" | "unsupported";
+        StackProfileLayersDto: {
+            frontend: components["schemas"]["StackProfileLayerDto"];
+            backend: components["schemas"]["StackProfileLayerDto"];
+            data: components["schemas"]["StackProfileLayerDto"];
+            vcs: components["schemas"]["StackProfileLayerDto"];
+        };
+        StackProfileQuestionDto: {
+            layer: string;
+            text: string;
+        };
+        StackProfileStructureDto: {
+            path: string;
+            role: string;
+            note: string;
+        };
+        /**
+         * @description The latest `stack_profile` version (FR-182): its status, author, narrative and parsed document. `document` is
+         *     `null` (with `errors`) when the content can't be read as a profile, e.g. a corrupted version.
+         */
+        StackProfileViewDto: {
+            /** Format: uuid */
+            artifactId: string;
+            /** Format: int32 */
+            version: number;
+            status: components["schemas"]["ArtifactStatus"];
+            integrity: components["schemas"]["ArtifactIntegrity"];
+            authoredByAgent: boolean;
+            /** Format: uuid */
+            agentRunId: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            narrative: string;
+            document: null | components["schemas"]["StackProfileDocumentDto"];
+            errors: string[];
+        };
         /** @description A rule id (`R1`…) and its text, e.g. `R3` "Prisma needs Express, NestJS or Next.js full-stack". */
         StackReasonDto: {
             rule: string;
@@ -6636,6 +6853,8 @@ export interface components {
             id: string;
             statement: string;
         };
+        /** @enum {unknown} */
+        StackSource: "manual" | "infer" | null;
         StackVcsDto: {
             pack: string;
             /** Format: uuid */
@@ -6668,8 +6887,9 @@ export interface components {
             stack?: null | components["schemas"]["StackCompositionRequest"];
             /** @description FR-171: tracker items to import into the new version, as on project create. The request stays required (D-V5-6). */
             sourceImports?: null | components["schemas"]["SourceImportRequest"][];
+            stackSource?: null | components["schemas"]["StackSource"];
         };
-        /** @description FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1). */
+        /** @description FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1; FR-186: analysis for `stackSource: infer`). */
         StartReleaseVersionResultDto: {
             releaseVersion: components["schemas"]["ReleaseVersionDto"];
             state: components["schemas"]["ProjectStateDto"];
@@ -11274,7 +11494,7 @@ export interface operations {
         parameters: {
             query?: {
                 projectId?: string;
-                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst";
                 status?: "queued" | "running" | "succeeded" | "failed" | "cancelled";
                 provider?: "anthropic" | "openai" | "ollama" | "fake";
                 model?: string;
@@ -11626,7 +11846,7 @@ export interface operations {
                 page?: number;
                 limit?: number;
                 search?: string;
-                phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+                phase?: "analysis" | "refinement" | "specification" | "planning" | "execution" | "review" | "release";
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
                 pack?: string;
@@ -11690,7 +11910,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectDto"];
                 };
             };
-            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH, LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller) or SOURCE_ITEMS_TOO_LARGE (sourceImports: over 200 ticked keys) */
+            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH, LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller) SOURCE_ITEMS_TOO_LARGE (sourceImports: over 200 ticked keys) or STACK_INFER_NO_CODE (stackSource infer on a repository with no code) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11761,7 +11981,7 @@ export interface operations {
         parameters: {
             query?: {
                 search?: string;
-                phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+                phase?: "analysis" | "refinement" | "specification" | "planning" | "execution" | "review" | "release";
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
                 pack?: string;
@@ -14479,7 +14699,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
             };
             cookie?: never;
         };
@@ -14532,7 +14752,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
             };
             cookie?: never;
         };
@@ -14582,7 +14802,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
                 version: number;
             };
             cookie?: never;
@@ -14636,7 +14856,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
             };
             cookie?: never;
         };
@@ -14686,7 +14906,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
             };
             cookie?: never;
         };
@@ -14705,7 +14925,7 @@ export interface operations {
                     "application/json": components["schemas"]["ArtifactDto"];
                 };
             };
-            /** @description VALIDATION: unknown artifact type, or empty or too long content. INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason). */
+            /** @description VALIDATION: unknown artifact type, or empty or too long content; for a stack_profile (FR-183), an unreadable aide-stack-profile block, options outside the catalog, FR-119 paths, or layer paths and cited files missing at the base commit (errors: field → messages). INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -14758,7 +14978,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
                 version: number;
             };
             cookie?: never;
@@ -14846,7 +15066,7 @@ export interface operations {
                     "application/json": components["schemas"]["ArtifactDto"];
                 };
             };
-            /** @description VALIDATION. INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). */
+            /** @description VALIDATION (generalist on another type; a stack_profile that can't be read). INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). STACK_INCOMPATIBLE (violations) or VCS_MISMATCH: a stack_profile whose layers and hosts fail the PUT /stack rules (FR-183). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -14882,7 +15102,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted, or created after the version the project was rolled back to), ARTIFACT_LOCKED or CONFLICT. */
+            /** @description ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted, or created after the version the project was rolled back to), ARTIFACT_LOCKED or CONFLICT. STACK_PROFILE_INCOMPLETE: a stack_profile with unresolved layers (details: the layers); WRONG_PHASE: a stack_profile outside analysis. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -14968,7 +15188,7 @@ export interface operations {
     ListRuns: {
         parameters: {
             query?: {
-                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst";
                 page?: number;
                 limit?: number;
                 releaseVersionId?: string;
@@ -15182,11 +15402,109 @@ export interface operations {
             };
         };
     };
+    GetAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RunStackAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StackAnalysisQueuedDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't run agents. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description WRONG_PHASE (not in analysis, or the version doesn't infer its stack), BUDGET_EXCEEDED (token budget used up), INVALID_STATE (the Stack Analyst is queued or running) or CONFLICT (a concurrent start). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListExecutionSteps: {
         parameters: {
             query?: {
                 planVersion?: number;
-                planType?: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items";
+                planType?: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
                 releaseVersionId?: string;
             };
             header?: never;
@@ -16305,7 +16623,7 @@ export interface operations {
                     "application/json": components["schemas"]["StartReleaseVersionResultDto"];
                 };
             };
-            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH or SOURCE_ITEMS_TOO_LARGE (sourceImports: over 200 ticked keys). */
+            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH, SOURCE_ITEMS_TOO_LARGE (sourceImports: over 200 ticked keys) or STACK_INFER_NO_CODE (stackSource infer with no released base commit; FR-186: an inference version starts in analysis; stack alongside it is VALIDATION). */
             400: {
                 headers: {
                     [name: string]: unknown;

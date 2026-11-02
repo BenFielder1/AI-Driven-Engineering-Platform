@@ -44,6 +44,7 @@ const llmSchema = z.object({
   planGenerator: model,
   codeGenerator: model,
   codeReview: model,
+  stackAnalyst: model,
   /** The bound connection's id, or '' for none. */
   credentialId: z.string(),
 })
@@ -58,6 +59,7 @@ const fieldIds = {
   planGenerator: 'llm-model-planGenerator',
   codeGenerator: 'llm-model-codeGenerator',
   codeReview: 'llm-model-codeReview',
+  stackAnalyst: 'llm-model-stackAnalyst',
   credentialId: 'llm-connection',
 } as const
 
@@ -69,6 +71,7 @@ const toValues = (s: LlmSettings): LlmValues => ({
   planGenerator: s.modelsByAgent.planGenerator ?? '',
   codeGenerator: s.modelsByAgent.codeGenerator ?? '',
   codeReview: s.modelsByAgent.codeReview ?? '',
+  stackAnalyst: s.modelsByAgent.stackAnalyst ?? '',
   credentialId: s.binding?.credentialId ?? '',
 })
 

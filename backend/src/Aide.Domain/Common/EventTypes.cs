@@ -252,6 +252,21 @@ public static class EventTypes
     /// <summary>FR-173, FR-193: a person removed an import: <c>{importId, provider, itemCount, releaseVersionId, artifactId, version}</c>; the last two are null when no snapshot changed.</summary>
     public const string SourceItemsRemoved = "SOURCE_ITEMS_REMOVED";
 
+    /// <summary>
+    /// FR-180, FR-193: the Stack Analyst wrote a <c>stack_profile</c> draft: <c>{artifactId, version, releaseVersionId, agentRunId,
+    /// unresolvedLayers}</c>. No repository content.
+    /// </summary>
+    public const string StackProfileCreated = "STACK_PROFILE_CREATED";
+
+    /// <summary>
+    /// FR-183, FR-193: an Owner approved a <c>stack_profile</c>, locking it and pinning its composition (or none, with
+    /// <c>generalist</c>): <c>{artifactId, version, releaseVersionId, generalist, catalogVersion, catalogHash, stackPacks, layersChanged}</c>.
+    /// </summary>
+    public const string StackProfileApproved = "STACK_PROFILE_APPROVED";
+
+    /// <summary>FR-183, FR-193: an Owner rejected a <c>stack_profile</c> draft: <c>{artifactId, version, releaseVersionId, rerun, jobId}</c> (no comment text).</summary>
+    public const string StackProfileRejected = "STACK_PROFILE_REJECTED";
+
     // Deployments (FR-90, FR-91, §4.15): category release.
 
     /// <summary>
@@ -368,7 +383,7 @@ public static class EventTypes
     {
         [EventCategory.Transition] = [PhaseChanged],
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
-        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored, CodebaseSummaryCreated, TrackerImportCompleted, TrackerImportFailed, SourceItemsRemoved],
+        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored, CodebaseSummaryCreated, TrackerImportCompleted, TrackerImportFailed, SourceItemsRemoved, StackProfileCreated, StackProfileApproved, StackProfileRejected],
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],

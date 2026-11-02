@@ -168,6 +168,15 @@ public static class ErrorCodes
     /// <summary>FR-172 (spec warning, never a failure): imported, not-done items that no requirement cites.</summary>
     public const string UncoveredSourceItems = "UNCOVERED_SOURCE_ITEMS";
 
+    /// <summary>FR-178 (400): stack inference was asked for on a repository (or version base) with no code.</summary>
+    public const string StackInferNoCode = "STACK_INFER_NO_CODE";
+
+    /// <summary>FR-180 (run code): the Stack Analyst's profile failed validation twice (the reply and its corrective re-run).</summary>
+    public const string StackProfileInvalid = "STACK_PROFILE_INVALID";
+
+    /// <summary>FR-181 (409): a <c>stack_profile</c> with unresolved layers (unknown, conflict, or unsupported without "No stack") can't be approved; details list the layers.</summary>
+    public const string StackProfileIncomplete = "STACK_PROFILE_INCOMPLETE";
+
     /// <summary>FR-187, FR-191 (400): the parts or provider don't form this deployment group.</summary>
     public const string DeploymentGroupInvalid = "DEPLOYMENT_GROUP_INVALID";
 
@@ -446,6 +455,8 @@ public static class ErrorCodes
         [PlatformPlanLimit] = 409,
         [PlatformError] = 502,
         [DeploymentGroupInvalid] = 400,
+        [StackInferNoCode] = 400,
+        [StackProfileIncomplete] = 409,
         [TrackerSiteNotAllowed] = 400,
         [TrackerNotConnected] = 409,
         [TrackerPermissionMissing] = 409,

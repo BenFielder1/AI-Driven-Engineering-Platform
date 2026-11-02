@@ -9,7 +9,7 @@ namespace Aide.Cli.Commands;
 /// <summary>`aide projects list`, `aide project init` (alias `aide project create`, FR-156), `aide status &lt;id&gt;`.</summary>
 internal static class ProjectCommands
 {
-    private static readonly string[] Phases = ["refinement", "specification", "planning", "execution", "review", "release"];
+    private static readonly string[] Phases = ["analysis", "refinement", "specification", "planning", "execution", "review", "release"];
     private static readonly string[] Statuses = ["active", "building", "reviewing", "releasing", "released", "rolled_back"];
 
     public static Argument<Guid> ProjectIdArgument() => new("id") { Description = "Project id (a GUID, shown by 'aide projects list')." };

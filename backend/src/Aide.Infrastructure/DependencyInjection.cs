@@ -93,6 +93,7 @@ public static class DependencyInjection
         services.AddSingleton<IFakeAgentResponder, FakePlanGeneratorResponder>();
         services.AddSingleton<IFakeAgentResponder, FakeCodeGeneratorResponder>();
         services.AddSingleton<IFakeAgentResponder, FakeRepositoryAnalystResponder>();
+        services.AddSingleton<IFakeAgentResponder, FakeStackAnalystResponder>();
         services.AddSingleton<IFakeAgentResponder>(_ => new FakeCodeReviewResponder(FakeCodeReviewScript.Default));
         // FR-71: the Fake provider's scripted repo tool calls (last registered per agent wins; tests override them).
         foreach (var script in FakeToolScripts.Defaults())

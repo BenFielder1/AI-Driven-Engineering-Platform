@@ -10,6 +10,8 @@ export const appPaths = [
   '/projects/new',
   '/projects/$projectId',
   '/projects/$projectId/activity',
+  // v5 FR-182: the Analysis page.
+  '/projects/$projectId/analysis',
   '/projects/$projectId/artifacts',
   '/projects/$projectId/artifacts/$type',
   '/projects/$projectId/deployments',

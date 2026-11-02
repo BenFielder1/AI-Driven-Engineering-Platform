@@ -266,6 +266,14 @@ public sealed record CreateProjectRequest
     public Stack.StackCompositionRequest? Stack { get; init; }
 
     /// <summary>
+    /// FR-178 (wizard Stack step, "Infer from the repository"): <c>infer</c> starts the version in the <c>analysis</c> phase
+    /// with no composition; the Stack Analyst writes a <c>stack_profile</c> to approve on the Analysis page, where hosts and
+    /// deployment are chosen. Needs a repository with code (400 <c>STACK_INFER_NO_CODE</c>); <c>stack</c> or
+    /// <c>deployment</c> alongside it is 400 <c>VALIDATION</c>. Omitted or <c>manual</c>: as before.
+    /// </summary>
+    public StackSource? StackSource { get; init; }
+
+    /// <summary>
     /// FR-171 (wizard Idea step): tracker items to import, each a <c>tracker_import</c> job queued with the project. The idea stays required (D-V5-6).
     /// A failed import never blocks creation. <c>VALIDATION</c> on <c>sourceImports[i].selection.*</c>; another user's connection is
     /// 403 <c>CREDENTIAL_NOT_OWNER</c>.
@@ -484,6 +492,10 @@ public sealed record AgentModelsDto
 
     [MaxLength(ProjectLimits.ModelMaxLength)]
     public string? CodeReview { get; init; }
+
+    /// <summary>FR-180: the Stack Analyst's model (D-V5-7: its own setting).</summary>
+    [MaxLength(ProjectLimits.ModelMaxLength)]
+    public string? StackAnalyst { get; init; }
 }
 
 /// <summary>Whether a provider can be used: an allowed system key is configured or the project has a bound connection for it (Ollama and Fake are always configured).</summary>

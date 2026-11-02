@@ -184,6 +184,9 @@ export function nextAction(
 
   // 3. The phase's own next step.
   switch (state.phase) {
+    case 'analysis':
+      // FR-179, FR-185: the stack profile is decided on the Analysis page (its draft shows above as pending work).
+      return null
     case 'refinement':
       return locked('project_request')
         ? advance()

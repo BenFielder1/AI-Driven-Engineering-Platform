@@ -39,7 +39,7 @@ public static class VersionEndpoints
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithResponseDescriptions(
                 (StatusCodes.Status201Created, "The release version (in_development) and the project state."),
-                (StatusCodes.Status400BadRequest, "VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH or SOURCE_ITEMS_TOO_LARGE (sourceImports: over 200 ticked keys)."),
+                (StatusCodes.Status400BadRequest, "VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH, SOURCE_ITEMS_TOO_LARGE (sourceImports: over 200 ticked keys) or STACK_INFER_NO_CODE (stackSource infer with no released base commit; FR-186: an inference version starts in analysis; stack alongside it is VALIDATION)."),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN (only Owners start versions) or CREDENTIAL_NOT_OWNER (FR-171: a source import with another user's connection)."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project."),
                 (StatusCodes.Status409Conflict, "VERSION_IN_PROGRESS, RELEASE_NOT_MERGED (the latest release is awaiting merge), NOT_RELEASED, VERSION_NOT_GREATER (not above the released version), TAG_EXISTS (the tag is already in the repository) or CONFLICT."),

@@ -1,6 +1,6 @@
 import type { Schemas } from '../../api/client'
 import type { RestoreReason } from '../../lib/errors'
-import { phaseLabels, phases } from '../projects/labels'
+import { phaseIndex, phaseLabels } from '../projects/labels'
 
 type Phase = Schemas['Phase']
 type ArtifactSummary = Schemas['ArtifactSummaryDto']
@@ -23,8 +23,8 @@ export function stageProgress(
   if (readOnly || project.status === 'released') {
     return 'done'
   }
-  const at = phases.indexOf(project.currentPhase)
-  const index = phases.indexOf(stage)
+  const at = phaseIndex(project.currentPhase)
+  const index = phaseIndex(stage)
   return index < at ? 'done' : index === at ? 'current' : 'not_started'
 }
 
@@ -32,6 +32,7 @@ export function stageProgress(
 export const producingPhase: Record<ArtifactType, Phase> = {
   codebase_summary: 'refinement',
   source_items: 'refinement',
+  stack_profile: 'analysis',
   project_request: 'refinement',
   technical_specification: 'specification',
   implementation_plan: 'planning',
@@ -48,6 +49,7 @@ export const stageArtifact: Partial<Record<Phase, ArtifactType>> = {
 
 /** The base agent whose runs each stage page lists (SPEC §4.1); Release runs no agent. */
 export const stageAgent: Record<Phase, AgentKind | null> = {
+  analysis: 'stack_analyst',
   refinement: 'idea_refinement',
   specification: 'spec_generator',
   planning: 'plan_generator',
@@ -58,6 +60,7 @@ export const stageAgent: Record<Phase, AgentKind | null> = {
 
 /** The gates each stage page shows and decides in place (FR-12–FR-15). */
 export const stageGates: Record<Phase, readonly GateType[]> = {
+  analysis: [],
   refinement: [],
   specification: ['spec_approval'],
   planning: ['plan_approval'],
@@ -97,8 +100,8 @@ export function restoreBlockReason(input: {
   if (project.status === 'releasing' || project.status === 'awaiting_merge') {
     return 'releasing'
   }
-  const at = phases.indexOf(project.currentPhase)
-  const producing = phases.indexOf(producingPhase[type])
+  const at = phaseIndex(project.currentPhase)
+  const producing = phaseIndex(producingPhase[type])
   if (at < producing) {
     return 'stage_not_reached'
   }

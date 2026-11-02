@@ -142,6 +142,7 @@ export const wizardAgentModelFields = {
   planGenerator: 'llmModelPlanGenerator',
   codeGenerator: 'llmModelCodeGenerator',
   codeReview: 'llmModelCodeReview',
+  stackAnalyst: 'llmModelStackAnalyst',
 } as const satisfies Record<(typeof agentKeys)[number], string>
 
 const modelTooLong = `Model ids are at most ${String(limits.modelMax)} characters.`
@@ -196,9 +197,10 @@ export const wizardShape = z.object({
   localSourcePath: str,
   /**
    * FR-114 Stack step: "No stack (general)" or a composition from the five sub-steps (FR-129: presets are retired).
-   * The composition is one option id per choice ('' = not chosen yet) and the layer paths (FR-119).
+   * The composition is one option id per choice ('' = not chosen yet) and the layer paths (FR-119). FR-178: `infer`
+   * (an import with code) leaves the stack and hosts to the Analysis page.
    */
-  stackKind: z.enum(['general', 'compose']),
+  stackKind: z.enum(['general', 'compose', 'infer']),
   stackFrontend: str,
   stackBackend: str,
   stackData: str,
@@ -239,6 +241,7 @@ export const wizardShape = z.object({
   llmModelPlanGenerator: str,
   llmModelCodeGenerator: str,
   llmModelCodeReview: str,
+  llmModelStackAnalyst: str,
 })
 
 /** One loose object plus one refinement, so every field is checked together (per-step checks use RHF `trigger`). */
@@ -412,6 +415,7 @@ export const wizardDefaults: WizardValues = {
   llmModelPlanGenerator: '',
   llmModelCodeGenerator: '',
   llmModelCodeReview: '',
+  llmModelStackAnalyst: '',
 }
 
 // ---- Settings → General (FR-7) ---------------------------------------------------------------------------------

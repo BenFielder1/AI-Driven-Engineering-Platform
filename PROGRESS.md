@@ -16,15 +16,15 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | --- | --- | --- | --- | --- | --- | --- |
 | FR-163 | AIDE's own Postgres on 18 outside Railway | 3.1 | deploy + data | M32 | done | CI 41323663409 |
 | FR-164 | Existing local data survives the upgrade | 3.1 | deploy | M32 | done (upgrade path: manual check) | CI 41323663409 |
-| FR-165 | Issue trackers section; Jira connection | 3.2 | backend + frontend + data | M35 | todo | — |
-| FR-166 | Linear connection | 3.2 | backend + frontend | M35 | todo | — |
-| FR-167 | GitHub Issues via App (`issues: read`) | 3.2 | backend + frontend | M35 | todo | — |
-| FR-168 | GitLab Issues | 3.2 | backend + frontend | M35 | todo | — |
-| FR-169 | Browse and select dialog | 3.2 | backend + frontend | M35 | todo | — |
-| FR-170 | Imports are snapshots (`source_items`) | 3.2 | backend + data | M35 | todo | — |
-| FR-171 | Import entry points (wizard, new version, Refinement) | 3.2 | frontend + backend | M35 | todo | — |
-| FR-172 | Agents use the snapshot; traceability | 3.2 | backend | M35 | todo | — |
-| FR-173 | Re-import, remove, drift check | 3.2 | backend + frontend | M35 | todo | — |
+| FR-165 | Issue trackers section; Jira connection | 3.2 | backend + frontend + data | M35 | done | CI 41402440433 |
+| FR-166 | Linear connection | 3.2 | backend + frontend | M35 | done | CI 41402440433 |
+| FR-167 | GitHub Issues via App (`issues: read`) | 3.2 | backend + frontend | M35 | done | CI 41402440433 |
+| FR-168 | GitLab Issues | 3.2 | backend + frontend | M35 | done | CI 41402440433 |
+| FR-169 | Browse and select dialog | 3.2 | backend + frontend | M35 | done | CI 41402440433 |
+| FR-170 | Imports are snapshots (`source_items`) | 3.2 | backend + data | M35 | done | CI 41402440433 |
+| FR-171 | Import entry points (wizard, new version, Refinement) | 3.2 | frontend + backend | M35 | done | CI 41402440433 |
+| FR-172 | Agents use the snapshot; traceability | 3.2 | backend | M35 | done | CI 41402440433 |
+| FR-173 | Re-import, remove, drift check | 3.2 | backend + frontend | M35 | done | CI 41402440433 |
 | FR-174 | Co-author trailer on every commit, merge, tag | 3.3 | backend | M33 | done | CI 41326693467 |
 | FR-175 | Who is credited | 3.3 | backend | M33 | done | CI 41326693467 |
 | FR-176 | Which email per host | 3.3 | backend + data | M33 | done | CI 41326693467 |
@@ -52,7 +52,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M32 PostgreSQL 18: FR-163, FR-164 ([CI 41323663409](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41323663409), head c4710e8)
 - [x] M33 Commit co-authorship: FR-174–FR-177 ([CI 41326693467](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41326693467), head f6b74f1)
 - [x] M34 Deployment groups: FR-187–FR-192 ([CI 41342366096](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41342366096), head b2dfe44)
-- [ ] M35 Tracker connections and imports: FR-165–FR-173
+- [x] M35 Tracker connections and imports: FR-165–FR-173 ([CI 41402440433](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41402440433), head 65ff4ee)
 - [ ] M36 Stack inference and the Analysis phase: FR-178–FR-186
 - [ ] M37 Integrate and harden: FR-193, FR-194, E2E, axe, perf, docs, verifier over v1–v5
 
@@ -69,7 +69,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - 2026-11-01 (M35, spec sync in M37): `tracker_import.supersedes_import_id` is added to §5 (the retry chain). Re-import while a retry is pending returns that retry. Removing an import also removes its unfinished and failed retries. A Jira token without read access saves as `insufficient_scope` per the v4 rule, and browsing gives `CONNECTION_SCOPE_INSUFFICIENT`. The prompts use the optional `{{SOURCE_ITEMS?}}` syntax so projects with no imports render. `POST /sources` also returns `TRACKER_NOT_CONNECTED` and 404. Item fetch time isn't rendered, so an unchanged re-import keeps its hash. A failed import counts toward `source_items_unavailable`. PATCH on a non-tracker with tracker-only fields is `VALIDATION`.
 - 2026-11-01 (M35, Q5): no live accounts, so Jira's granular scope names (`read:jira-work`, `read:jira-user` in the UI are inferred), the `_edge/tenant_info` shape, JRACLOUD-94547 and Linear Free-plan limits are all unverified. The Jira and Linear logos were drawn from memory.
 
+- 2026-11-02 (M36): FR-183 wins over FR-17: rejecting a `stack_profile` always re-runs the Stack Analyst, with the rejected draft as context, even when a person edited it. PUT /stack stays allowed during analysis, because entering refinement still needs the locked profile. `Phase.Analysis` is first in the enum; phases are stored as strings everywhere, which was checked. Profile drafts and approval are allowed only in analysis. Unknown or conflict layers block approval even with `generalist`. Infer stays offered for URL and Local imports the wizard can't see into; `STACK_INFER_NO_CODE` covers empty repos at create. Detection pre-fills layers whichever stack kind is chosen.
+
 ## Known issues
+- M36 (minor): `GET /analysis` takes no `releaseVersionId`, so a past version's Analysis page shows only the profile history.
 - M35 (open, M37): FR-165's 14-day expiry notification exists only as the DTO's `expiryWarning`; the notification is built with FR-193. `Trackers__*` config isn't yet in CI, `.railway` or the docs. E2E and axe for the tracker dialog are M37.
 - M34 (minor): the Railway public-versus-private `DATABASE_URL` is chosen when the database is set up, so changing the stack afterwards needs that database set up again.
 

@@ -1,4 +1,4 @@
-import { phases, statuses } from './labels'
+import { allPhases, statuses } from './labels'
 import type { Phase, ProjectSortBy, ProjectStatus, SortOrder } from './projects-api'
 
 /** /projects search params (FR-6). Defaults are omitted from the URL. */
@@ -27,7 +27,7 @@ export function parseProjectsSearch(search: Record<string, unknown>): ProjectsSe
   const page = typeof search.page === 'number' ? search.page : Number(search.page)
   return {
     search: text || undefined,
-    phase: oneOf(phases, search.phase),
+    phase: oneOf(allPhases, search.phase),
     status: oneOf(statuses, search.status),
     hasDevelopmentVersion:
       search.hasDevelopmentVersion === true || search.hasDevelopmentVersion === 'true'

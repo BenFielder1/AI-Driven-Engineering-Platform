@@ -13,10 +13,12 @@ type Actor = Schemas['ActorDto']
 type ActivityItem = Schemas['ActivityItemDto']
 type EventCategory = NonNullable<Schemas['EventCategory']>
 
-const phases: readonly Phase[] = ['refinement', 'specification', 'planning', 'execution', 'review', 'release']
+/** §4.27: `analysis` comes first; only versions that infer their stack are in it. */
+const phases: readonly Phase[] = ['analysis', 'refinement', 'specification', 'planning', 'execution', 'review', 'release']
 
 /** SPEC §4.1: status follows phase. */
 const statusFor: Record<Phase, ProjectStatus> = {
+  analysis: 'active',
   refinement: 'active',
   specification: 'active',
   planning: 'active',
@@ -132,6 +134,12 @@ const lockedVersion = (p: StoredProject, type: Schemas['ArtifactType']) =>
 function unmetConditions(p: StoredProject, entering: Phase): string[] {
   const unmet: string[] = []
   switch (entering) {
+    case 'refinement':
+      // FR-179: from analysis, a locked stack profile and a pinned composition (or a generalist profile).
+      if (p.currentPhase === 'analysis' && lockedVersion(p, 'stack_profile') === null) {
+        unmet.push('The stack profile must be approved.')
+      }
+      break
     case 'specification':
       if (lockedVersion(p, 'project_request') === null) {
         unmet.push('The project request must be approved.')
@@ -162,8 +170,6 @@ function unmetConditions(p: StoredProject, entering: Phase): string[] {
       if (p.state.review.latestDecision !== 'release_eligible') {
         unmet.push('The latest review decision must be release eligible.')
       }
-      break
-    case 'refinement':
       break
   }
   return unmet

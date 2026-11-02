@@ -46,8 +46,8 @@ public static partial class TrackerRules
 
     public const int MaxFieldIdLength = 100;
 
-    /// <summary>The phases where items can be imported or removed. D-V5-10: M36 adds <c>analysis</c> here, the only place that needs to change.</summary>
-    public static IReadOnlyList<Phase> ImportPhases { get; } = [Phase.Refinement];
+    /// <summary>The phases where items can be imported or removed (D-V5-10, FR-171): <c>analysis</c> and <c>refinement</c>.</summary>
+    public static IReadOnlyList<Phase> ImportPhases { get; } = [Phase.Analysis, Phase.Refinement];
 
     /// <summary>The tracker's name in messages.</summary>
     public static string DisplayName(TrackerProvider provider) => provider switch

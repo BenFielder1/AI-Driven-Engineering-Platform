@@ -13,7 +13,7 @@ import {
   gateTypes,
   llmProviderLabels,
   phaseLabels,
-  phases,
+  allPhases,
   reviewDecisions,
 } from "../projects/labels";
 import { jobDetailCodes, platformCopy } from "../../lib/errors";
@@ -85,8 +85,8 @@ function checkpointAt(
 }
 
 function describePhaseChange(payload: Payload, names: VersionNameLookup | undefined): string | null {
-  const from = oneOf(payload, "from", phases);
-  const to = oneOf(payload, "to", phases);
+  const from = oneOf(payload, "from", allPhases);
+  const to = oneOf(payload, "to", allPhases);
   if (!from || !to) {
     return null;
   }
@@ -606,6 +606,28 @@ function describeTrackerEvent(type: string, payload: Record<string, unknown>): s
   }
 }
 
+const profileLayerWords: Readonly<Record<string, string>> = { frontend: "Frontend", backend: "Backend", data: "Data", vcs: "Version control" };
+
+/** FR-180, FR-183, FR-193: the stack profile events (ids, versions and layer names; never repository content). */
+function describeStackProfile(type: string, payload: Payload): string {
+  const v = version(payload, "version");
+  const label = v === null ? "Stack profile" : `Stack profile v${String(v)}`;
+  switch (type) {
+    case "STACK_PROFILE_CREATED": {
+      const layers = Array.isArray(payload.unresolvedLayers)
+        ? (payload.unresolvedLayers as unknown[]).filter((l): l is string => typeof l === "string").map((l) => profileLayerWords[l] ?? l)
+        : [];
+      return layers.length > 0
+        ? `${label} drafted by the Stack Analyst; needs input on ${layers.join(", ")}`
+        : `${label} drafted by the Stack Analyst`;
+    }
+    case "STACK_PROFILE_APPROVED":
+      return payload.generalist === true ? `${label} approved with No stack (general)` : `${label} approved; the stack is pinned`;
+    default:
+      return payload.rerun === true ? `${label} rejected; the Stack Analyst runs again` : `${label} rejected`;
+  }
+}
+
 /** FR-155: the v4 events the admin log words like the activity feed; older events keep the server's summary there. */
 export const fr155EventTypes: ReadonlySet<string> = new Set([
   "STACK_CHANGED",
@@ -616,6 +638,9 @@ export const fr155EventTypes: ReadonlySet<string> = new Set([
   "TRACKER_IMPORT_COMPLETED",
   "TRACKER_IMPORT_FAILED",
   "SOURCE_ITEMS_REMOVED",
+  "STACK_PROFILE_CREATED",
+  "STACK_PROFILE_APPROVED",
+  "STACK_PROFILE_REJECTED",
   "DEPLOYMENT_TARGET_CONFIGURED",
   "DEPLOYMENT_TARGET_FAILED",
   "DATABASE_PROVISIONED",
@@ -939,6 +964,11 @@ export function describeActivity(
     case "TRACKER_IMPORT_FAILED":
     case "SOURCE_ITEMS_REMOVED":
       text = describeTrackerEvent(type, payload);
+      break;
+    case "STACK_PROFILE_CREATED":
+    case "STACK_PROFILE_APPROVED":
+    case "STACK_PROFILE_REJECTED":
+      text = describeStackProfile(type, payload);
       break;
     case "DEPLOYMENT_TARGET_CONFIGURED":
       text = describeTargetConfigured(payload);

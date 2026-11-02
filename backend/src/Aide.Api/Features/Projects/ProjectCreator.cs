@@ -95,7 +95,8 @@ public sealed partial class ProjectCreator(
                 GitProvider.Bitbucket => BitbucketProjectRules.ValidateCreate(git.InstanceId, git.ConnectionId, git.RepoId, git.RepoFullName, git.RepoUrl, git.Token, git.InstallationId, prefix: "git."),
                 _ => BitbucketProjectRules.ValidateNotSent(gitProvider, git.InstanceId, git.ConnectionId, git.RepoId, prefix: "git."),
             },
-            ImportRules.ValidateSource(request.Source, request.Import is not null, request.InitialVersion is not null, git.LocalSourcePath is not null, gitProvider));
+            ImportRules.ValidateSource(request.Source, request.Import is not null, request.InitialVersion is not null, git.LocalSourcePath is not null, gitProvider),
+            ProjectRules.ValidateStackSource(request.StackSource == StackSource.Infer, request.Stack is not null, request.Deployment is not null));
         if (validation.IsFailure)
         {
             return Result.Failure<Project>(validation.Error!);
@@ -155,6 +156,21 @@ public sealed partial class ProjectCreator(
         {
             return Result.Failure<Project>(start.Error!);
         }
+
+        // FR-178, §4.27: a version that infers its stack starts in analysis, and needs a base commit with code.
+        var initial = LifecycleStateMachine.Start(request.StackSource == StackSource.Infer, (start.Value.ReleasedCommit ?? start.Value.HeadCommit) is not null);
+        if (initial.IsFailure)
+        {
+            if (start.Value.LocalCopy)
+            {
+                workspaces.TryDelete(project.Id);
+            }
+
+            return Result.Failure<Project>(initial.Error!);
+        }
+
+        project.CurrentPhase = initial.Value.Phase;
+        project.Status = initial.Value.Status;
 
         try
         {
@@ -602,6 +618,9 @@ public sealed partial class ProjectCreator(
             // so does a scratch project on a repository with code. The Repository Analyst reads the repo at this commit.
             BaseTag = start.ReleasedTag,
             BaseCommitSha = start.ReleasedCommit ?? start.HeadCommit,
+
+            // FR-178: the composition stays null until the stack_profile is approved in analysis.
+            StackSource = request.StackSource ?? StackSource.Manual,
         };
         ProjectStackService.Pin(version, stack);
         stacks.SyncPacks(project, stack);

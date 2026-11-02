@@ -7,7 +7,19 @@ import type { ProjectRole } from '../../lib/permissions'
 export const phases = ['refinement', 'specification', 'planning', 'execution', 'review', 'release'] as const satisfies
   readonly Schemas['Phase'][]
 
+/** A stage page of the lifecycle (FR-54); Analysis (FR-182) has its own page and shows only for versions that infer their stack. */
+export type StagePhase = (typeof phases)[number]
+
+/** SPEC §4.27: every phase in order. `analysis` comes first, and only versions that infer their stack enter it. */
+export const allPhases = ['analysis', ...phases] as const satisfies readonly Schemas['Phase'][]
+
+/** The position of `phase` in {@link allPhases}, for ordering comparisons (analysis before refinement). */
+export function phaseIndex(phase: Schemas['Phase']): number {
+  return (allPhases as readonly Schemas['Phase'][]).indexOf(phase)
+}
+
 export const phaseLabels: Record<Schemas['Phase'], string> = {
+  analysis: 'Analysis',
   refinement: 'Refinement',
   specification: 'Specification',
   planning: 'Planning',
@@ -165,7 +177,7 @@ export const eventCategoryLabels: Record<NonNullable<Schemas['EventCategory']>, 
 
 /** SPEC §4.1: the next phase forward, or null in the last phase. */
 export function nextPhase(phase: Schemas['Phase']): Schemas['Phase'] | null {
-  return phases[phases.indexOf(phase) + 1] ?? null
+  return allPhases[phaseIndex(phase) + 1] ?? null
 }
 
 export const artifactTypes = [
@@ -184,6 +196,7 @@ export const artifactTypeLabels: Record<Schemas['ArtifactType'], string> = {
   optimization_plan: 'Optimisation plan',
   codebase_summary: 'Codebase summary',
   source_items: 'Source items',
+  stack_profile: 'Stack profile',
 }
 
 /** SPEC §4.3: artifact statuses. `locked` is what an approved version is stored as. */
@@ -283,7 +296,7 @@ export const llmProviderLabels: Record<Schemas['LlmProvider'], string> = {
   fake: 'Fake (testing)',
 }
 
-export const agentKeys = ['ideaRefinement', 'specGenerator', 'planGenerator', 'codeGenerator', 'codeReview'] as const satisfies
+export const agentKeys = ['ideaRefinement', 'specGenerator', 'planGenerator', 'codeGenerator', 'codeReview', 'stackAnalyst'] as const satisfies
   readonly (keyof Schemas['AgentModelsDto'])[]
 
 export const agentLabels: Record<(typeof agentKeys)[number], string> = {
@@ -292,6 +305,8 @@ export const agentLabels: Record<(typeof agentKeys)[number], string> = {
   planGenerator: 'Plan generator',
   codeGenerator: 'Code generator',
   codeReview: 'Code review',
+  // FR-180: the Stack Analyst's own model (D-V5-7).
+  stackAnalyst: 'Stack analyst',
 }
 
 export const channelTypes = ['email', 'slack', 'teams', 'webhook'] as const satisfies
@@ -436,6 +451,7 @@ export const agentKindLabels: Record<Schemas['AgentKind'], string> = {
   code_generator: 'Code generator',
   code_review: 'Code review',
   repository_analyst: 'Repository Analyst',
+  stack_analyst: 'Stack Analyst',
 }
 
 /** FR-23, FR-25: agent run statuses. Running runs stream nothing in v1 (SPEC §8, §11 Q3). */

@@ -112,6 +112,7 @@ internal static class ProjectMapping
             PlanGenerator = Get(AgentKind.PlanGenerator),
             CodeGenerator = Get(AgentKind.CodeGenerator),
             CodeReview = Get(AgentKind.CodeReview),
+            StackAnalyst = Get(AgentKind.StackAnalyst),
         };
     }
 
@@ -123,6 +124,7 @@ internal static class ProjectMapping
         (AgentKind.PlanGenerator, "planGenerator", dto.PlanGenerator),
         (AgentKind.CodeGenerator, "codeGenerator", dto.CodeGenerator),
         (AgentKind.CodeReview, "codeReview", dto.CodeReview),
+        (AgentKind.StackAnalyst, "stackAnalyst", dto.StackAnalyst),
     ];
 }
 

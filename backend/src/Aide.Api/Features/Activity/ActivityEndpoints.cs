@@ -192,6 +192,11 @@ internal static class ActivitySummary
             EventTypes.TrackerImportCompleted => $"Imported {Get("itemCount") ?? "?"} items from {Get("provider") ?? "a tracker"} (source items v{Get("version") ?? "?"})",
             EventTypes.TrackerImportFailed => $"The import from {Get("provider") ?? "a tracker"} failed ({Get("errorCode") ?? "?"})",
             EventTypes.SourceItemsRemoved => $"Removed {Get("itemCount") ?? "?"} imported items from {Get("provider") ?? "a tracker"}",
+            EventTypes.StackProfileCreated => $"Stack profile v{Get("version") ?? "?"} drafted by the Stack Analyst",
+            EventTypes.StackProfileApproved => Get("generalist") == "true"
+                ? $"Stack profile v{Get("version") ?? "?"} approved with No stack (general)"
+                : $"Stack profile v{Get("version") ?? "?"} approved; the stack is pinned",
+            EventTypes.StackProfileRejected => $"Stack profile v{Get("version") ?? "?"} rejected",
             EventTypes.ReleaseAwaitingMerge => $"Release {Get("tag") ?? Get("version") ?? "?"} awaits a merge on {Domain.GitHosts.GitHostNames.Display(Get("provider"))}",
             EventTypes.ReleaseMergedExternally => $"Release {Get("tag") ?? Get("version") ?? "?"} merged on {Domain.GitHosts.GitHostNames.Display(Get("provider"))}",
             EventTypes.RunStarted => $"{Get("agent") ?? "Agent"} run started on {Get("model") ?? "?"}",

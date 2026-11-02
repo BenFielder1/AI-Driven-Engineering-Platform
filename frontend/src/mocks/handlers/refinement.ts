@@ -177,7 +177,7 @@ function refinementDto(project: StoredProject, releaseVersionId: string): Schema
 }
 
 /** FR-70: `completed` once the version has a summary, else the seeded analyst state, else `not_needed`. */
-function codebaseSummaryOf(project: StoredProject, releaseVersionId: string): Schemas['CodebaseSummaryStatusDto'] {
+export function codebaseSummaryOf(project: StoredProject, releaseVersionId: string): Schemas['CodebaseSummaryStatusDto'] {
   const summary = project.artifacts
     .filter((a) => a.type === 'codebase_summary' && a.releaseVersionId === releaseVersionId)
     .sort((a, b) => b.version - a.version)[0]

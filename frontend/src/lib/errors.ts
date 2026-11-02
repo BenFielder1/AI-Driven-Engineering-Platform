@@ -189,6 +189,11 @@ export const errorMessages = {
   // FR-172: a spec warning, never a failure (D-V5-6).
   UNCOVERED_SOURCE_ITEMS:
     "Some imported items aren't cited by any requirement. This is a warning: the specification can still be approved.",
+  // Stack inference (FR-178–FR-183, §6). STACK_PROFILE_INCOMPLETE's `{layers}` is completed by errorMessage() from the
+  // ProblemDetails `details` (stackProfileIncompleteMessage).
+  STACK_INFER_NO_CODE: "This repository has no code to analyse. Choose a stack instead.",
+  STACK_PROFILE_INVALID: "The Stack Analyst couldn't produce valid findings. Retry, or fill them in yourself.",
+  STACK_PROFILE_INCOMPLETE: "Answer these before approving: {layers}.",
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;
@@ -233,6 +238,18 @@ export const contextualErrorMessages = {
   artifactDiff: {
     VALIDATION:
       "These versions are too large to compare here: together they have more than 100,000 lines.",
+  },
+  /** POST /api/projects/:id/analysis/run (FR-180 Retry). INVALID_STATE adds the server's reason (errorMessage). */
+  runStackAnalysis: {
+    WRONG_PHASE: "The Stack Analyst runs only while the project is in the Analysis phase of a version that infers its stack.",
+    CONFLICT: "Someone else started the Stack Analyst at the same time. The page now shows it.",
+  },
+  /** POST /api/projects/:id/artifacts/:artifactId/approve · /reject of a stack_profile (FR-181, FR-183). */
+  decideStackProfile: {
+    WRONG_PHASE: "The stack profile is decided only while the project is in the Analysis phase.",
+    ARTIFACT_NOT_DRAFT:
+      "This profile can no longer be decided: it was already decided or replaced by a newer draft. The page now shows the latest state.",
+    VALIDATION: "This profile can't be read, so it can't be approved. Edit it, or run the analysis again.",
   },
   /** POST /api/projects/:id/artifacts/:artifactId/approve · /reject (FR-17). */
   decideArtifact: {
@@ -1173,6 +1190,23 @@ export function stackIncompatibleMessage(violations: readonly StackViolation[]):
     : `These stack choices don't work together: ${reasons.join("; ")}.`;
 }
 
+const profileLayerWords: Readonly<Record<string, string>> = {
+  frontend: "Frontend",
+  backend: "Backend",
+  data: "Data",
+  vcs: "Version control",
+  hosts: "Hosts",
+};
+
+/**
+ * SPEC §6 STACK_PROFILE_INCOMPLETE: "Answer these before approving: {layers}." The layers are the ProblemDetails
+ * `details` (`backend`, …), named as the Analysis page names them.
+ */
+export function stackProfileIncompleteMessage(layers: readonly string[]): string {
+  const names = layers.map((l) => profileLayerWords[l.trim().toLowerCase()] ?? l.trim()).filter(Boolean);
+  return errorMessages.STACK_PROFILE_INCOMPLETE.replace("{layers}", names.length > 0 ? names.join(", ") : "the layers that need your input");
+}
+
 /** The value of a `key: value` entry in ProblemDetails `details` (e.g. `latestVersion: 5`), if present. */
 export function detailValue(error: ApiError, key: string): string | null {
   const prefix = `${key}:`;
@@ -1313,6 +1347,9 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
     }
     if (error.errorCode === "DEPLOYMENT_GROUP_INVALID") {
       return deploymentGroupInvalidMessage(error);
+    }
+    if (error.errorCode === "STACK_PROFILE_INCOMPLETE") {
+      return stackProfileIncompleteMessage(error.details);
     }
     if (error.errorCode && composedTrackerCodes.has(error.errorCode)) {
       return error.message.startsWith("Request failed with HTTP")

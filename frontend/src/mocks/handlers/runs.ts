@@ -8,7 +8,7 @@ import { access, currentVersionId, type StoredProject } from './projects'
 type Run = Schemas['AgentRunDetailDto']
 type AgentKind = Schemas['AgentKind']
 
-const agents: readonly AgentKind[] = ['idea_refinement', 'spec_generator', 'plan_generator', 'code_generator', 'code_review']
+const agents: readonly AgentKind[] = ['idea_refinement', 'spec_generator', 'plan_generator', 'code_generator', 'code_review', 'stack_analyst']
 
 /** Mirrors RunEndpoints.MaxOutputLength. */
 export const maxRunOutputLength = 200_000
@@ -24,6 +24,7 @@ const promptVersions: Record<AgentKind, string> = {
   code_generator: '1',
   code_review: '1',
   repository_analyst: '1',
+  stack_analyst: '1',
 }
 
 /** Which phase each agent runs in (SPEC §4.1). */
@@ -34,6 +35,7 @@ const phaseOf: Record<AgentKind, Schemas['Phase']> = {
   code_generator: 'execution',
   code_review: 'review',
   repository_analyst: 'refinement',
+  stack_analyst: 'analysis',
 }
 
 let runClock = Date.parse('2026-09-01T10:00:00Z')

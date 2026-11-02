@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { usePathname } from '../../lib/navigation'
 import { canViewAdmin } from '../../lib/permissions'
+import { useCurrentVersionFlags } from '../analysis/version-flags'
 import type { User } from '../auth/auth-api'
 import { useDeploymentSettings } from '../deployments/deployments-api'
 import { projectQueryOptions, projectStateQueryOptions } from '../projects/projects-api'
@@ -23,6 +24,8 @@ export interface ShellNav {
   deploymentsEnabled: boolean
   /** FR-153: the project has a Supabase BaaS database, so the Migrations item shows (`hasSupabaseBaasDatabase`). */
   migrationsEnabled: boolean
+  /** FR-182: the current version has existing code, so the Analysis item shows. */
+  analysisEnabled: boolean
   /** Lifecycle stage states once /state has loaded. */
   stages: StageStatus[] | undefined
 }
@@ -37,6 +40,7 @@ export function useShellNav(user: User): ShellNav {
   // FR-153: only a data-supabase project reads the deployment settings (shared cache with Settings → Deployment).
   const supabase = projectId !== undefined && project.data?.stackPacks.includes('data-supabase') === true
   const settings = useDeploymentSettings(projectId ?? '', supabase)
+  const flags = useCurrentVersionFlags(projectId, project.data?.releaseVersionId)
   return {
     pathname,
     viewer: { isAdmin: canViewAdmin(user) },
@@ -46,6 +50,7 @@ export function useShellNav(user: User): ShellNav {
     developmentVersion: projectId ? project.data?.developmentVersion : undefined,
     deploymentsEnabled: projectId ? project.data?.deploymentsEnabled === true : false,
     migrationsEnabled: supabase && hasSupabaseBaasDatabase(project.data?.stackPacks, settings.data?.databases),
-    stages: projectId && state.data ? stageStatuses(state.data) : undefined,
+    analysisEnabled: projectId !== undefined && flags.hasCode,
+    stages: projectId && state.data ? stageStatuses(state.data, { analysis: flags.infers }) : undefined,
   }
 }

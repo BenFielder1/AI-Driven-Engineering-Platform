@@ -118,6 +118,7 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<LlmProvider>(configurationBuilder);
         MapEnum<LlmCredentialStatus>(configurationBuilder);
         MapEnum<GitProvider>(configurationBuilder);
+        MapEnum<StackSource>(configurationBuilder);
         MapEnum<DeploymentGroupStatus>(configurationBuilder);
         MapEnum<GitHubOwnerType>(configurationBuilder);
         MapEnum<GitHubConnectionStatus>(configurationBuilder);

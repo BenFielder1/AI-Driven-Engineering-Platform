@@ -2619,6 +2619,14 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("stack_composition");
 
+                    b.Property<string>("StackSource")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("manual")
+                        .HasColumnName("stack_source");
+
                     b.Property<Guid?>("StartedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("started_by");

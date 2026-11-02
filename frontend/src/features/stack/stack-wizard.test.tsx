@@ -326,9 +326,10 @@ describe('Wizard → import detection (FR-118)', () => {
     }
     const user = await importToStack()
 
-    // Pre-filled: the step switches to composing, and says so.
+    // FR-178: Infer is preselected for an import with code; Choose manually is pre-filled from detection, and says so.
+    expect(screen.getByRole('radio', { name: 'Infer from the repository (recommended)' })).toBeChecked()
+    await user.click(screen.getByRole('radio', { name: 'Choose manually' }))
     expect(await screen.findByText('Stack detected')).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Choose the stack' })).toBeChecked()
     expect(bodiesOf('POST', '/api/stack/detect')[0]).toEqual({ git: { provider: 'local', repo: '/data/import/shop', ref: 'main' } })
     const vue = await screen.findByRole('radio', { name: 'Vue' })
     expect(vue).toBeChecked()
@@ -357,8 +358,8 @@ describe('Wizard → import detection (FR-118)', () => {
     stackDb.detectError = () => problem(409, 'GIT_NOT_CONNECTED', 'No GitHub connection.')
     const user = await importToStack()
 
+    await user.click(screen.getByRole('radio', { name: 'No stack (general)' }))
     expect(await screen.findByText(contextualErrorMessages.detectStack.GIT_NOT_CONNECTED)).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'No stack (general)' })).toBeChecked()
     await next(user)
     await stepHeading(/Step 6 of 8: Configuration/)
   })
@@ -381,20 +382,20 @@ describe('Wizard → import detection (FR-118)', () => {
       }),
     )
     const user = await importToStack()
-    expect(await screen.findByText(/Detecting the repository/)).toBeInTheDocument()
+    // Infer (the default) hides the detection notice; the detection still runs, and answers late.
     await next(user)
     await stepHeading(/Step 6 of 8: Configuration/)
     release()
     await new Promise((resolve) => setTimeout(resolve, 50))
 
-    await next(user)
-    await stepHeading(/Step 7 of 8: Deployment/)
+    // FR-178: Infer (the default) skips the Deployment step.
     await next(user)
     await stepHeading(/Step 8 of 8: Review & create/)
-    expect(screen.getByRole('region', { name: 'Stack' })).toHaveTextContent('No stack (general)')
+    expect(screen.getByRole('region', { name: 'Stack' })).toHaveTextContent('Infer from the repository')
     await user.click(screen.getByRole('button', { name: 'Create project' }))
     await screen.findByRole('heading', { level: 1, name: 'Shop' })
     expect(bodiesOf('POST', '/api/projects')[0]).not.toHaveProperty('stack')
+    expect(bodiesOf('POST', '/api/projects')[0]).toMatchObject({ stackSource: 'infer' })
   })
 
   it('FR118_a_new_repository_re_applies_detection_while_the_stack_is_untouched_and_badges_follow_it', async () => {
@@ -417,6 +418,7 @@ describe('Wizard → import detection (FR-118)', () => {
       }),
     )
     const user = await importToStack()
+    await user.click(screen.getByRole('radio', { name: 'Choose manually' }))
     expect(await screen.findByRole('radio', { name: 'Vue' })).toBeChecked()
 
     // Back to the repository (Stack → Version → Repository), point at another one, and return.

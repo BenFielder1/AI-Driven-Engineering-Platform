@@ -4,6 +4,7 @@ using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Admin;
+using Aide.Api.Features.Analysis;
 using Aide.Api.Features.Approvals;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
@@ -179,6 +180,9 @@ builder.Services.AddMergeReadiness();
 builder.Services.AddScoped<RollbackService>();
 builder.Services.AddReleaseVersions();
 
+// FR-180–FR-185: the Stack Analyst, its trigger after the Repository Analyst, and the Analysis page.
+builder.Services.AddStackAnalysis();
+
 // Vercel deployments (FR-87–FR-91, §4.15): settings, env sync, previews, production and the poll job.
 builder.Services.AddDeployments();
 
@@ -242,6 +246,7 @@ app.MapActivityEndpoints();
 app.MapArtifactEndpoints();
 app.MapRunEndpoints();
 app.MapRefinementEndpoints();
+app.MapAnalysisEndpoints();
 app.MapExecutionEndpoints();
 app.MapGitEndpoints();
 app.MapReviewEndpoints();

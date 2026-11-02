@@ -3,6 +3,7 @@ import { phaseLabels } from '../../features/projects/labels'
 import { StatusBadge, type StatusTone } from './status-badge'
 
 const phaseTone: Record<Schemas['Phase'], StatusTone> = {
+  analysis: 'neutral',
   refinement: 'neutral',
   specification: 'info',
   planning: 'info',

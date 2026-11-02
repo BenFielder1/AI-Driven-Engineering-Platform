@@ -14,6 +14,7 @@ export function CommandPalette({ open, onOpenChange, nav }: { open: boolean; onO
           name: nav.projectName ?? 'Project',
           deploymentsEnabled: nav.deploymentsEnabled,
           migrationsEnabled: nav.migrationsEnabled,
+          analysisEnabled: nav.analysisEnabled,
         } : undefined,
   )
   const groups = [...new Set(entries.map((e) => e.group))]

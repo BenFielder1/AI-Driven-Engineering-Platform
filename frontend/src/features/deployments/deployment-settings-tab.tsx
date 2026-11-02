@@ -74,7 +74,7 @@ const setUp = (row: { resourceId: string | null; binding: unknown }) => row.reso
  * and aren't set up (which can rejoin). A part set up on its own stays outside. A group with no row yet whose parts were
  * set up alone in v4 isn't shown at all: those rows look as they did, since AIDE never moves platform resources (D-V5-9).
  */
-function layoutOf(s: DeploymentSettings) {
+export function layoutOf(s: DeploymentSettings) {
   const inGroup = (group: DeploymentGroup) => ({
     targets: s.targets.filter((t) => t.groupId === group.id || (!t.groupId && group.parts.includes(partOfTarget(t)) && !setUp(t))),
     databases: s.databases.filter((d) => d.groupId === group.id || (!d.groupId && group.parts.includes('database') && !setUp(d))),
