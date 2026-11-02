@@ -9,4 +9,8 @@ export interface A11yFixture {
   diffProjectId: string
   /** SPEC §8 v4: a composed project with Netlify and Render targets and two Render Postgres databases, for Settings → Stack and Deployment. */
   stackProjectId: string
+  /** SPEC v5 §7: an inferring import in Analysis whose draft profile has a blank (Needs your input). */
+  analysisInputProjectId: string
+  /** SPEC v5 §7: an inferring import whose profile is approved (Express, Prisma, backend and database on Railway): Deployment setup's group window. */
+  analysisApprovedProjectId: string
 }

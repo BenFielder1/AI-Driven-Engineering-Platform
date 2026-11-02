@@ -7,6 +7,15 @@ import { A11Y_FIXTURE, type A11yFixture } from './support/a11y-fixture.ts'
 import { api, apiJson, createProjectViaApi, driveProject, registerViaApi, waitForDraft } from './support/api.ts'
 import { NETLIFY_RENDER_STACK, setUpNetlifyRenderHosts } from './support/hosted-stack.ts'
 import { createLocalProject, createVercelConnection } from './support/v2.ts'
+import {
+  approveProfileViaApi,
+  createInferProjectViaApi,
+  createLinearConnection,
+  createRailwayConnection,
+  saveRailwayProfileViaApi,
+  UNKNOWN_BACKEND_MARKER,
+  waitForProfileDraft,
+} from './support/v5.ts'
 
 /**
  * NFR-A11Y fixture: one user with a Fake Vercel connection and a released strict-mode project (Fake + Local + Fake
@@ -14,7 +23,7 @@ import { createLocalProject, createVercelConnection } from './support/v2.ts'
  * request has two versions (for the diff view). Runs once per test run, before the a11y project.
  */
 setup('a11y fixture: a released project and a two-version project request', async ({ browser }) => {
-  setup.setTimeout(8 * 60_000)
+  setup.setTimeout(14 * 60_000)
   const context = await browser.newContext()
   await registerViaApi(context, 'a11y', 'Accessibility Tester')
   const vercelConnectionId = await createVercelConnection(context, 'A11y Fake Vercel')
@@ -41,11 +50,24 @@ setup('a11y fixture: a released project and a two-version project request', asyn
   const stackProject = await createLocalProject(context, { name: `E2E Accessibility stack ${stamp}`, stack: NETLIFY_RENDER_STACK })
   await setUpNetlifyRenderHosts(context, stackProject.id, `a11y-${stamp}`)
 
+  // SPEC v5 §7 (axe on the Analysis page, the tracker dialog and the group windows): a Linear and a Railway connection,
+  // one inferring import left with a blank, and one approved with a Railway group to set up.
+  await createLinearConnection(context, 'A11y Fake Linear')
+  await createRailwayConnection(context, 'A11y Fake Railway')
+  const request = `Add CSV export ${UNKNOWN_BACKEND_MARKER}`
+  const inputProject = await createInferProjectViaApi(context, `E2E Accessibility analysis ${stamp}`, request)
+  const approvedProject = await createInferProjectViaApi(context, `E2E Accessibility analysis approved ${stamp}`, request)
+  await waitForProfileDraft(context, inputProject.id)
+  const draft = await saveRailwayProfileViaApi(context, approvedProject.id, await waitForProfileDraft(context, approvedProject.id))
+  await approveProfileViaApi(context, approvedProject.id, draft)
+
   const fixture: A11yFixture = {
     storageState: await context.storageState(),
     projectId: project.id,
     diffProjectId: diffProject.id,
     stackProjectId: stackProject.id,
+    analysisInputProjectId: inputProject.id,
+    analysisApprovedProjectId: approvedProject.id,
   }
   mkdirSync(dirname(A11Y_FIXTURE), { recursive: true })
   writeFileSync(A11Y_FIXTURE, JSON.stringify(fixture))

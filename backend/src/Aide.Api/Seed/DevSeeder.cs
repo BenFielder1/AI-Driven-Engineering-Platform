@@ -685,11 +685,15 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         var projectId = created.Value.Id;
         await UseFakeLlmAsync(services, db, projectId, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
-        var baseCommit = await SkeletonCommitAsync(services, db, projectId, cancellationToken);
+        var baseCommit = await SkeletonCommitAsync(services, projectId, cancellationToken);
 
         var project = await db.Projects.FirstAsync(p => p.Id == projectId, cancellationToken);
         var versionId = project.CurrentReleaseVersionId!.Value;
         var version = await db.ReleaseVersions.FirstAsync(v => v.Id == versionId, cancellationToken);
+
+        // Preparing the working copy records the version's branch with a direct UPDATE, which moves its xmin: reload the
+        // tracked version (from ProjectCreator) before changing it, or the save is refused as a concurrency conflict.
+        await db.Entry(version).ReloadAsync(cancellationToken);
         version.StackSource = StackSource.Infer;
         version.BaseCommitSha = baseCommit;
         var checkpoint = LifecycleState.Initial.Version;
@@ -828,11 +832,12 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     }
 
     /// <summary>
-    /// §9 (v5): commits <see cref="DemoSkeletonFiles"/> on the Local repository's default branch (created now if absent) and returns
+    /// §9 (v5): commits <see cref="DemoSkeletonFiles"/> on the version's branch of the Local repository (both created now if absent,
+    /// so the work of the version builds on it) and returns
     /// that commit, the version's base: the Stack Analyst (Retry, Reject) then analyses real code. Idempotent: the commit carries a
     /// fixed step trailer, so a repeated run returns it. <c>null</c> when the repository can't be created (no git CLI).
     /// </summary>
-    private static async Task<string?> SkeletonCommitAsync(IServiceProvider services, AideDbContext db, Guid projectId, CancellationToken cancellationToken)
+    private static async Task<string?> SkeletonCommitAsync(IServiceProvider services, Guid projectId, CancellationToken cancellationToken)
     {
         try
         {
@@ -842,12 +847,11 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
                 return null;
             }
 
-            var settings = await db.ProjectGitSettings.AsNoTracking().FirstAsync(s => s.ProjectId == projectId, cancellationToken);
             var message = new StepCommitMessage(
                 "Add the Weather Board skeleton (Vite + React)",
                 $"Seeded by the AIDE dev seed for the stack inference demo.\n\n{CodeGeneration.StepTrailerLine(DemoSkeletonCommitId)}");
             var committed = await services.GetRequiredService<IWorkingCopies>()
-                .CommitStepAsync(projectId, settings.DefaultBranch, DemoSkeletonCommitId, DemoSkeletonFiles, message, cancellationToken);
+                .CommitStepAsync(projectId, prepared.Value.Branch, DemoSkeletonCommitId, DemoSkeletonFiles, message, cancellationToken);
             return committed.Sha;
         }
         catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException or UnauthorizedAccessException)

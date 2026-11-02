@@ -13,6 +13,7 @@ import {
   openStage,
   waitForPhase,
 } from './support/v2.ts'
+import { createRailwayConnection, deploymentGroups } from './support/v5.ts'
 
 /**
  * NFR-TEST2 (SPEC §8 "E2E imports a Local 'existing' repo") on the E2E deployment (Fake LLM, Local Git, seeded
@@ -218,14 +219,20 @@ test('NFR-TEST2, FR-70–FR-73, §4.13: a Local repo is imported at v0.2.0 and 0
 })
 
 /**
- * FR-178–FR-185 on the E2E deployment: a Local import with Infer (preselected) starts in Analysis. The Fake Stack Analyst's
- * `[fake-stack:unknown]` marker in the version request leaves the backend `unknown`; the Owner answers Needs your input
- * (the layers the detector couldn't decide too), approves the profile and continues to Refinement.
+ * FR-178–FR-185 on the E2E deployment (SPEC v5 §8 "infer a stack, fill a blank, edit a finding, pick one Railway group,
+ * approve, continue to Refinement" and "reject a profile and see a re-run"): a Local import with Infer (preselected) starts
+ * in Analysis. The Fake Stack Analyst's `[fake-stack:unknown]` marker in the version request leaves the backend `unknown`.
+ * The Owner rejects the first draft (the analyst re-runs with the feedback), answers Needs your input (the layers the
+ * detector couldn't decide too), edits a finding and the hosts (Prisma; backend and database on Railway: a Local repository's
+ * VCS is GitHub, so R9 allows Railway), approves, sets up the one Railway group window and continues to Refinement.
  */
-test('FR-178, FR-181, FR-183, FR-185: infer the stack, fill the blank, approve and continue to Refinement', async ({ page }) => {
-  test.setTimeout(8 * 60_000)
+test('FR-178, FR-181, FR-183, FR-184, FR-185, FR-188: infer the stack, reject and re-run, fill the blank, edit, approve, set up the Railway group and continue to Refinement', async ({
+  page,
+}) => {
+  test.setTimeout(12 * 60_000)
   const context = page.context()
   await registerViaApi(context, 'import-infer', 'Infer Owner')
+  const railwayConnectionId = await createRailwayConnection(context)
   const projectName = `E2E Infer ${String(Date.now())}`
 
   await wizardToVersion(page, projectName, 'Add CSV export [fake-stack:unknown]', 'v0.2.0')
@@ -255,6 +262,26 @@ test('FR-178, FR-181, FR-183, FR-185: infer the stack, fill the blank, approve a
   await expect(approve).toBeDisabled()
   await expect(page.getByTestId('approve-reason')).toContainText('Answer these before approving')
 
+  // FR-183: Reject needs feedback; with it, the Stack Analyst runs again (a run triggered by the rejection, a new draft).
+  await page.getByRole('button', { name: 'Reject', exact: true }).click()
+  const reject = page.getByRole('alertdialog', { name: /^Reject stack profile v\d+\?$/ })
+  await reject.getByRole('button', { name: /^Reject v\d+$/ }).click()
+  await expect(reject.getByText('Tell the Stack Analyst what to change.').first()).toBeVisible()
+  await reject.getByLabel('Feedback for the Stack Analyst').fill('The backend is an Express app at the repository root.')
+  await reject.getByRole('button', { name: /^Reject v\d+$/ }).click()
+  await expect(reject).toBeHidden()
+  await expect(page.getByRole('region', { name: 'Stack Analyst', exact: true })).toContainText('Started after the profile was rejected', {
+    timeout: AGENT_TIMEOUT,
+  })
+  await expect(page.getByRole('region', { name: 'Findings', exact: true })).toContainText('Revised after review feedback', {
+    timeout: 3 * AGENT_TIMEOUT,
+  })
+  const analystRuns = await apiJson<{ items: RunDto[] }>(context, 'GET', `/api/projects/${projectId}/runs?limit=50`)
+  expect(analystRuns.items.filter((r) => r.agent === 'stack_analyst')).toHaveLength(2)
+  // The re-run keeps the marker's blank: it is asked again.
+  await expect(needs).toBeVisible({ timeout: AGENT_TIMEOUT })
+  await expect(approve).toBeDisabled()
+
   const backend = needs.getByTestId('needs-input-backend')
   await expect(backend).toContainText('Which backend serves')
   await backend.getByLabel('Backend option').selectOption({ label: 'Express' })
@@ -269,16 +296,55 @@ test('FR-178, FR-181, FR-183, FR-185: infer the stack, fill the blank, approve a
   await expect(needs).toBeHidden({ timeout: AGENT_TIMEOUT })
   await expect(page.getByTestId('finding-backend')).toContainText('Express')
 
+  // FR-183: Edit is a form over the profile, saved as a new draft by the user: Data becomes Prisma (allowed with Express,
+  // R3), and FR-184's hosts put the backend and database on Railway.
+  await page.getByRole('region', { name: 'Decide', exact: true }).getByRole('button', { name: 'Edit', exact: true }).click()
+  const editor = page.getByRole('form', { name: 'Edit the stack profile' })
+  await expect(editor).toBeVisible()
+  await editor.getByLabel('Frontend option').selectOption('none')
+  await editor.getByLabel('Data option').selectOption('data-prisma')
+  await editor.getByLabel('Backend host', { exact: true }).selectOption('deploy-railway')
+  await editor.getByLabel('Database host', { exact: true }).selectOption('railway-postgres')
+  await editor.getByRole('button', { name: 'Save as new draft' }).click()
+  await expect(editor).toBeHidden({ timeout: AGENT_TIMEOUT })
+  await expect(page.getByTestId('finding-data')).toContainText('Prisma')
+  await expect(page.getByTestId('finding-data')).toContainText('Set by a person')
+
   // FR-183: Approve pins the stack.
   await expect(approve).toBeEnabled()
   await approve.click()
   const dialog = page.getByRole('dialog', { name: /^Approve stack profile v\d+\?$/ })
   await dialog.getByRole('button', { name: /^Approve v\d+$/ }).click()
   await expect(dialog).toBeHidden()
-  const stack = await apiJson<{ composition: { backend: { pack: string } | null } | null }>(context, 'GET', `/api/projects/${projectId}/stack`)
+  const stack = await apiJson<{
+    composition: {
+      backend: { pack: string } | null
+      data: { pack: string } | null
+      deploy: { backendHost: string | null; databaseHost: string | null }
+    } | null
+  }>(context, 'GET', `/api/projects/${projectId}/stack`)
   expect(stack.composition?.backend?.pack).toBe('be-express')
+  expect(stack.composition?.data?.pack).toBe('data-prisma')
+  expect(stack.composition?.deploy).toMatchObject({ backendHost: 'deploy-railway', databaseHost: 'railway-postgres' })
 
-  // FR-185: Continue to Refinement.
+  // FR-184, FR-188: Deployment setup shows the backend and database as one Railway group window; the Owner creates it.
+  const setup = page.getByRole('region', { name: 'Deployment setup', exact: true })
+  await expect(setup).toBeVisible()
+  await expect(setup.getByRole('list', { name: 'Deployment setup windows' }).locator(':scope > li')).toHaveCount(1)
+  const group = setup.getByRole('region', { name: /Backend and database on Railway$/ })
+  const groupForm = group.getByRole('form', { name: 'Set up the Railway group' })
+  await groupForm.getByLabel('Railway connection').selectOption(railwayConnectionId)
+  await expect(groupForm.getByRole('radio', { name: /^Create a new project/ })).toBeChecked()
+  await groupForm.getByRole('button', { name: 'Set up the group' }).click()
+  await expect
+    .poll(async () => (await deploymentGroups(context, projectId)).find((g) => g.provider === 'railway')?.id ?? null, {
+      timeout: AGENT_TIMEOUT,
+    })
+    .not.toBeNull()
+  const railway = (await deploymentGroups(context, projectId)).find((g) => g.provider === 'railway')
+  expect([...(railway?.parts ?? [])].sort()).toEqual(['backend', 'database'])
+
+  // FR-185: Continue to Refinement (setup still running doesn't block it).
   await page.getByRole('button', { name: 'Continue to Refinement' }).click()
   await expect(page.getByRole('heading', { level: 2, name: 'Refinement', exact: true })).toBeVisible()
   expect(await projectState(context, projectId)).toMatchObject({ phase: 'refinement' })

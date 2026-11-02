@@ -6,6 +6,7 @@ import { expect, test, type Browser, type Locator, type Page } from '@playwright
 import { A11Y_FIXTURE, type A11yFixture } from './support/a11y-fixture.ts'
 import { v2Targets, wizardTo } from './support/a11y-v2-targets.ts'
 import { v4Targets } from './support/a11y-v4-targets.ts'
+import { v5Targets } from './support/a11y-v5-targets.ts'
 
 /**
  * NFR-A11Y: automated WCAG 2.2 AA checks (axe-core) on the core flows, in the light and the dark theme (the app
@@ -131,6 +132,7 @@ const targets: Target[] = [
   },
   ...v2Targets(fixture),
   ...v4Targets(fixture),
+  ...v5Targets(fixture),
 ]
 
 /**
