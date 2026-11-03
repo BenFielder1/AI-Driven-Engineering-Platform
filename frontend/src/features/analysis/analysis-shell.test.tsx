@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { signInAs } from '../../mocks/handlers/auth'
 import { seedInference } from '../../mocks/handlers/analysis'
 import { makeReleaseVersion, projectsDb, seedProject } from '../../mocks/handlers/projects'
+import { sampleComposition } from '../../mocks/handlers/stack-catalog'
 import { seedReleaseVersions } from '../../mocks/handlers/versions'
 import { seedProjectAs } from '../../test/artifacts'
 import { renderRoute } from '../../test/render'
@@ -87,7 +88,7 @@ describe('Shell: Analysis in the nav and the lifecycle tracker (FR-182, §4.27)'
 describe('Start new version → Infer (FR-186)', () => {
   it('FR186_infer_from_the_repository_starts_the_version_in_analysis', async () => {
     signInAs({ email: 'ada@example.com', name: 'Ada Lovelace', systemRole: 'user' })
-    const p = seedProject({ name: 'Shop' })
+    const p = seedProject({ name: 'Shop', stack: { composition: sampleComposition() } })
     seedReleaseVersions(p, { released: '1.1.0', history: ['1.0.0'] })
     await renderRoute(`/projects/${p.id}/release`)
     await screen.findAllByRole('heading', { level: 2, name: 'Release' })
@@ -107,6 +108,11 @@ describe('Start new version → Infer (FR-186)', () => {
     const body = projectsDb.requests.find((r) => r.method === 'POST' && r.path.endsWith('/versions'))?.body
     expect(body).toEqual({ version: '1.2.0', request: 'Move to React', stackSource: 'infer' })
     expect(p.currentPhase).toBe('analysis')
+
+    // The previous version's composition is shown as the comparison on the Analysis page.
+    await user.click(await within(screen.getByRole('navigation', { name: 'Project sections' })).findByRole('link', { name: 'Analysis' }))
+    await screen.findByRole('heading', { level: 2, name: 'Analysis' })
+    expect(await screen.findByTestId('previous-stack')).toHaveTextContent('React + Vite · ASP.NET Core · EF Core + PostgreSQL')
   })
 })
 

@@ -22,10 +22,10 @@ public static class AnalysisEndpoints
 
         group.MapGet("/", GetAnalysis)
             .WithName("GetAnalysis")
-            .WithSummary("The Analysis page of the current release version (members, FR-182): the Repository Analyst's summary state and, for a version that infers its stack, the Stack Analyst's run, the latest stack_profile parsed, the layers that need input, whether it can be approved (and why not), whether the project can continue to refinement, the detector's profile for \"Fill in manually\", the profile as a /api/stack/options selection, the pinned and previous compositions and the deployment state.")
+            .WithSummary("The Analysis page of a release version (default: the project's current release version; a past version's page shows that version's summary, run and profile, read-only), members (FR-182): the Repository Analyst's summary state and, for a version that infers its stack, the Stack Analyst's run, the latest stack_profile parsed, the layers that need input, whether it can be approved (and why not), whether the project can continue to refinement, the detector's profile for \"Fill in manually\", the profile as a /api/stack/options selection, the pinned and previous compositions and the deployment state.")
             .Produces<AnalysisDto>()
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project."));
+            .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or the release version in this project."));
 
         group.MapPost("/run", RunStackAnalysis)
             .WithName("RunStackAnalysis")
@@ -46,7 +46,8 @@ public static class AnalysisEndpoints
         Guid id,
         IProjectAccess access,
         AnalysisService analysis,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
         if (grant.IsFailure)
@@ -54,7 +55,7 @@ public static class AnalysisEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        var result = await analysis.GetAsync(id, cancellationToken);
+        var result = await analysis.GetAsync(id, cancellationToken, releaseVersionId);
         return result.IsSuccess ? TypedResults.Ok(result.Value) : ApiProblems.FromError(result.Error!);
     }
 

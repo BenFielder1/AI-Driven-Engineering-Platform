@@ -556,7 +556,7 @@ v2 §7, the v3 Next.js mapping and v4 §7 apply. Changes:
   - Tests are named after requirement IDs. §4.25–§4.28 worked examples are unit tests verbatim, including an exhaustive test that `Groups` and `/options` agree over the enumerated composition space.
   - Every Analysis transition, allowed and forbidden, has a unit test (rule 8).
   - The ADF converter, renderer, `StackProfile` round trip and trailer sanitiser have unit tests. Tracker adapters use recorded JSON fixtures, with 401, 403, 429 and pagination.
-  - **E2E** (Fake LLM, Local Git, Fake tracker and deployments): import items in the wizard, then see them as refinement inputs · infer a stack, fill a blank, edit a finding, pick one Railway group, approve, continue to Refinement · reject a profile and see a re-run · a step commit's message holds the trailer when a Fake identity exists · Railway ×3 wizard shows one window, then separating the database shows two.
+  - **E2E** (Fake LLM, Local Git, Fake tracker and deployments): import items in the wizard, then see them as refinement inputs · infer a stack, fill a blank, edit a finding, pick one Railway group, approve, continue to Refinement · reject a profile and see a re-run · Railway ×3 wizard shows one window, then separating the database shows two. *(build, 2026-11-03)*: the co-author trailer isn't an E2E: E2E uses Local Git, which gets no trailer by rule (§4.25 #7). Integration tests cover it on the wire for GitHub, GitLab and Bitbucket (FR-174).
   - CI runs all of this (CLAUDE.md "Commit gate"). Nothing runs locally that CLAUDE.md forbids.
 
 ## 9. Environments

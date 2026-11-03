@@ -349,26 +349,16 @@ function HostsSection({
  * approval (FR-184) and Continue to Refinement (FR-185); then the profile's versions (history and compare).
  */
 export function AnalysisPage() {
-  const { project, can, readOnly } = useProjectAccess()
+  const { project, can, readOnly, releaseVersionId } = useProjectAccess()
   useDocumentTitle(`Analysis · ${project.name}`)
-  const analysis = useAnalysis(project.id, !readOnly)
+  // FR-62, FR-182: a past release version shows its own summary, run and profile, read-only.
+  const analysis = useAnalysis(project.id, releaseVersionId)
   const catalog = useStackCatalog()
   const advance = useAdvancePhase(project.id)
   const navigate = useNavigate()
   const [editor, setEditor] = useState<'edit' | 'fill' | null>(null)
   const [decision, setDecision] = useState<ProfileDecision | null>(null)
   const actionsRef = useRef<HTMLHeadingElement>(null)
-
-  if (readOnly) {
-    return (
-      <section aria-labelledby="analysis-title">
-        <StageHeader stage="analysis" />
-        <div className="flex flex-col gap-5">
-          <StageArtifact stage="analysis" type="stack_profile" actions={false} notStarted="This release version didn't infer its stack." />
-        </div>
-      </section>
-    )
-  }
 
   let body: ReactNode
   if (analysis.isPending) {
@@ -380,13 +370,15 @@ export function AnalysisPage() {
     const inference = a.stackSource === 'infer'
     const profile = a.profile
     const doc = profile?.document ?? null
-    const inAnalysis = a.phase === 'analysis'
+    const inAnalysis = a.phase === 'analysis' && !readOnly
     const writer = can('createDraft')
     const owner = can('approveArtifacts')
     const draft = profile?.status === 'draft'
     const locked = profile?.status === 'locked'
     const editable = writer && inAnalysis && !locked
-    const lockedReason = !inAnalysis
+    const lockedReason = readOnly
+      ? `Release version ${a.releaseVersion} is a past version, so its profile is read-only.`
+      : !inAnalysis
       ? `The project is in ${phaseLabels[a.phase]}, so the profile can't change here. Change the stack in Settings → Stack.`
       : locked
         ? 'The profile is approved. Change the stack in Settings → Stack until the plan is locked.'
@@ -411,7 +403,7 @@ export function AnalysisPage() {
       const rejectReason = !owner ? 'Only project Owners can approve or reject the stack profile.' : !draft || !inAnalysis ? 'Only a draft can be rejected.' : null
       body = (
         <>
-          {!inAnalysis && locked && (
+          {!readOnly && !inAnalysis && locked && (
             <Alert tone="info" title="The stack profile is locked">
               <p>
                 v{profile.version} was approved and the project moved on to {phaseLabels[a.phase]}. This page is read-only; the
@@ -430,6 +422,24 @@ export function AnalysisPage() {
                 : null
             }
           />
+
+          {a.previousComposition && (
+            <StageSection id="previous-stack" title="Previous version's stack">
+              <p className="text-sm" data-testid="previous-stack">
+                {[
+                  ['frontend', a.previousComposition.frontend?.pack],
+                  ['backend', a.previousComposition.backend?.pack],
+                  ['data', a.previousComposition.data?.pack],
+                ]
+                  .flatMap(([choice = '', pack]) => (pack ? [optionName(catalog.data, choice, pack)] : []))
+                  .join(' · ') || 'No frontend, backend or data layer'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                The comparison for this version. Approving different layers is a stack change, and the specification gets a
+                Stack Migration section.
+              </p>
+            </StageSection>
+          )}
 
           {doc && a.needsInput.length > 0 && catalog.data && (
             <NeedsInputSection
@@ -558,15 +568,6 @@ export function AnalysisPage() {
                         )}
                         {!writer && <p className="text-sm text-muted-foreground">Only Contributors and Owners can edit the profile.</p>}
                       </>
-                    )}
-                    {a.previousComposition && (
-                      <p className="text-sm text-muted-foreground">
-                        Previous version&apos;s stack:{' '}
-                        {[a.previousComposition.frontend?.pack, a.previousComposition.backend?.pack, a.previousComposition.data?.pack]
-                          .flatMap((p, i) => (p ? [optionName(catalog.data, ['frontend', 'backend', 'data'][i] ?? '', p)] : []))
-                          .join(' · ') || 'no frontend, backend or data layer'}
-                        . Approving different layers is a stack change.
-                      </p>
                     )}
                   </div>
                 )

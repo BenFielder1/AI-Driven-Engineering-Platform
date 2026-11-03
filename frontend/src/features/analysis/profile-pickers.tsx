@@ -97,6 +97,27 @@ export function LayerOptionSelect({
   )
 }
 
+/**
+ * FR-184, SPEC §7 UI rules: the hosts the other choices rule out, each with the server's reason as visible text (not only
+ * inside the closed picker), e.g. "Railway: Railway only builds from GitHub (R9)".
+ */
+function UnavailableHosts({ catalog, choice, label, state }: { catalog: StackCatalog; choice: string; label: string; state: StackChoiceState | undefined }) {
+  const unavailable = (state?.options ?? []).filter((o) => o.id !== NONE && (o.state === 'forbidden' || o.state === 'invalidated') && o.id !== state?.selected)
+  if (unavailable.length === 0) {
+    return null
+  }
+  return (
+    <ul aria-label={`${label}: not available`} className="text-xs text-muted-foreground">
+      {unavailable.map((o) => (
+        <li key={o.id}>
+          <span className="font-medium">{optionName(catalog, choice, o.id)}</span> isn&apos;t available:{' '}
+          {o.reasons.map((r) => `${r.text.replace(/\.$/, '')} (${r.rule})`).join('; ') || 'a compatibility rule forbids it'}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 /** The host choices with their wording in the Hosts section (FR-184). */
 export const hostPickerChoices = ['frontendHost', 'backendHost', 'databaseHost', 'local', 'originModel'] as const
 export type HostPickerChoice = (typeof hostPickerChoices)[number]
@@ -171,6 +192,7 @@ export function HostPickers({
                 }}
               />
             )}
+            {choice !== 'local' && choice !== 'originModel' && <UnavailableHosts catalog={catalog} choice={choice} label={label} state={state} />}
           </div>
         )
       })}

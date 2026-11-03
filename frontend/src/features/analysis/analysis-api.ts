@@ -21,14 +21,22 @@ const PENDING_REFETCH_MS = 15_000
 
 const summaryPending = (a: Analysis | undefined) => a?.summary.status === 'queued' || a?.summary.status === 'running'
 
-/** FR-182: the Analysis page of the project's current release version (members). */
-export function useAnalysis(id: string, enabled = true) {
+/**
+ * FR-182: the Analysis page of a release version (members): the current one by default, or a past one (`releaseVersionId`,
+ * FR-62), which the server answers read-only.
+ */
+export function useAnalysis(id: string, releaseVersionId?: string) {
   return useQuery({
-    queryKey: projectKeys.analysis(id),
-    queryFn: async ({ signal }) => unwrap(await api.GET('/api/projects/{id}/analysis', { params: { path: { id } }, signal })),
+    queryKey: releaseVersionId ? [...projectKeys.analysis(id), releaseVersionId] : projectKeys.analysis(id),
+    queryFn: async ({ signal }) =>
+      unwrap(
+        await api.GET('/api/projects/{id}/analysis', {
+          params: { path: { id }, query: releaseVersionId ? { releaseVersionId } : {} },
+          signal,
+        }),
+      ),
     refetchInterval: (query) =>
       isAnalysisRunPending(query.state.data?.run) || summaryPending(query.state.data) ? PENDING_REFETCH_MS : false,
-    enabled,
   })
 }
 

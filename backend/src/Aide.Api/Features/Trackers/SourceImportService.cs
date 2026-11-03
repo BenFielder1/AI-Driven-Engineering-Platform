@@ -11,6 +11,7 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Configurations;
 using Aide.Infrastructure.Trackers;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace Aide.Api.Features.Trackers;
@@ -31,6 +32,7 @@ public sealed partial class SourceImportService(
     SourceSnapshotWriter snapshots,
     JobEnqueuer jobs,
     IIssueTrackers trackers,
+    IOptions<TrackerOptions> options,
     TimeProvider time,
     ILogger<SourceImportService> logger)
 {
@@ -276,8 +278,8 @@ public sealed partial class SourceImportService(
 
     /// <summary>
     /// FR-173: per-item drift, comparing <c>updatedAt</c>, using the importer's connection, else the caller's own on that tracker, else
-    /// <c>unknown</c>. Results of a full check are cached for 5 minutes; the whole check is capped at 10 seconds, with <c>unknown</c> for what
-    /// remains (§8). Never changes a snapshot.
+    /// <c>unknown</c>. Results of a full check are cached for 5 minutes; the whole check is capped at 10 seconds (<c>Trackers:CheckTimeout</c>),
+    /// with <c>unknown</c> for what remains (§8). Never changes a snapshot.
     /// </summary>
     public async Task<Result<SourcesCheckDto>> CheckAsync(Guid projectId, Guid callerId, CancellationToken cancellationToken)
     {
@@ -289,7 +291,7 @@ public sealed partial class SourceImportService(
         var now = time.GetUtcNow();
         var items = new List<SourceDriftItemDto>();
         using var cap = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cap.CancelAfter(SourceItemDriftRules.CheckTimeout);
+        cap.CancelAfter(options.Value.CheckTimeout);
         foreach (var import in active)
         {
             IReadOnlyList<SourceItemDriftResult> drift;

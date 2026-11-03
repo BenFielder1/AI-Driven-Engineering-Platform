@@ -1982,7 +1982,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The Analysis page of the current release version (members, FR-182): the Repository Analyst's summary state and, for a version that infers its stack, the Stack Analyst's run, the latest stack_profile parsed, the layers that need input, whether it can be approved (and why not), whether the project can continue to refinement, the detector's profile for "Fill in manually", the profile as a /api/stack/options selection, the pinned and previous compositions and the deployment state. */
+        /** The Analysis page of a release version (default: the project's current release version; a past version's page shows that version's summary, run and profile, read-only), members (FR-182): the Repository Analyst's summary state and, for a version that infers its stack, the Stack Analyst's run, the latest stack_profile parsed, the layers that need input, whether it can be approved (and why not), whether the project can continue to refinement, the detector's profile for "Fill in manually", the profile as a /api/stack/options selection, the pinned and previous compositions and the deployment state. */
         get: operations["GetAnalysis"];
         put?: never;
         post?: never;
@@ -15405,7 +15405,9 @@ export interface operations {
     };
     GetAnalysis: {
         parameters: {
-            query?: never;
+            query?: {
+                releaseVersionId?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -15432,7 +15434,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description NOT_FOUND: the project. */
+            /** @description NOT_FOUND: the project, or the release version in this project. */
             404: {
                 headers: {
                     [name: string]: unknown;

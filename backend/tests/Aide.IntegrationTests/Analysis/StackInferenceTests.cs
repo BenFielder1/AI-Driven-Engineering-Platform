@@ -254,6 +254,99 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
         await Problems.AssertAsync(await owner.Client.GetAsync(new Uri($"/api/projects/{Guid.NewGuid()}/analysis", UriKind.Relative), Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
     }
 
+    [Fact]
+    public async Task FR180_Given_the_Repository_Analyst_failed_then_the_Stack_Analyst_still_runs_with_summary_unavailable()
+    {
+        await using var app = App();
+        using var owner = await ApiSession.RegisterAsync(app);
+        var project = await ProjectApi.ReadAsync<ProjectDto>(await CreateAsync(owner.Client), HttpStatusCode.Created);
+        var analyst = Assert.Single(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == JobTypes.RepositoryAnalysis);
+
+        // Like the worker when the Repository Analyst's retries are used up: the job's final status and the ended hooks in one transaction.
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Aide.Infrastructure.Persistence.AideDbContext>();
+            var row = await db.Jobs.SingleAsync(j => j.Id == analyst.Id, Ct);
+            row.Status = JobStatus.Dead;
+            row.LastError = "UPSTREAM_ERROR: the provider failed";
+            row.CompletedAt = DateTimeOffset.UtcNow;
+            foreach (var hook in scope.ServiceProvider.GetServices<Aide.Api.Jobs.IJobEndedHook>())
+            {
+                await hook.OnJobEndedAsync(db, new Aide.Api.Jobs.JobEnded(analyst.Id, analyst.Type, project.Id, DeadLettered: true, row.LastError), Ct);
+            }
+
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var queued = Assert.Single(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == JobTypes.StackAnalysis);
+        Assert.Equal(JobStatus.Queued, queued.Status);
+        await AgentJobs.RunAsync(app, queued);
+
+        Assert.Empty(await AgentJobs.ArtifactsAsync(app, project.Id, ArtifactType.CodebaseSummary));
+        var run = Assert.Single(await AgentJobs.RunsAsync(app, project.Id), r => r.Agent == AgentKind.StackAnalyst);
+        Assert.Equal(AgentRunStatus.Succeeded, run.Status);
+        Assert.DoesNotContain(run.InputArtifacts, a => a.Type == ArtifactType.CodebaseSummary);
+        var analysis = await AnalysisAsync(owner.Client, project.Id);
+        Assert.Equal(StackAnalysisRunState.Succeeded, analysis.Run!.Status);
+        Assert.Contains(AgentRunWarnings.SummaryUnavailable, analysis.Run.Warnings);
+        Assert.Equal(ArtifactStatus.Draft, analysis.Profile!.Status);
+    }
+
+    [Fact]
+    public async Task FR182_A_past_versions_Analysis_page_shows_that_versions_summary_run_and_profile_read_only()
+    {
+        await using var app = App();
+        using var owner = await ApiSession.RegisterAsync(app);
+        var project = await InferredAsync(app, owner);
+        var first = await AnalysisAsync(owner.Client, project.Id);
+        await ReleaseInferredVersionAsync(app, owner, project);
+        var started = await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(await StartVersionAsync(owner.Client, project.Id), HttpStatusCode.Created);
+        await AgentJobs.RunQueuedAsync(app, project.Id);
+
+        var current = await AnalysisAsync(owner.Client, project.Id);
+        var past = await ProjectApi.ReadAsync<AnalysisDto>(await owner.Client.GetAsync(
+            new Uri($"/api/projects/{project.Id}/analysis?releaseVersionId={project.ReleaseVersionId}", UriKind.Relative), Ct));
+
+        // The default is the version in development; the past version keeps its own run and its locked profile.
+        Assert.Equal(started.ReleaseVersion.Id, current.ReleaseVersionId);
+        Assert.Equal(project.ReleaseVersionId, past.ReleaseVersionId);
+        Assert.Equal("0.1.0", past.ReleaseVersion);
+        Assert.NotEqual(current.Run!.JobId, past.Run!.JobId);
+        Assert.Equal(first.Run!.JobId, past.Run.JobId);
+        Assert.Equal(StackAnalysisRunState.Succeeded, past.Run.Status);
+        Assert.Equal(ArtifactStatus.Locked, past.Profile!.Status);
+        Assert.Equal(ArtifactStatus.Draft, current.Profile!.Status);
+        Assert.NotEqual(current.Profile.ArtifactId, past.Profile.ArtifactId);
+        Assert.Equal(Aide.Domain.Artifacts.CodebaseSummaryState.Completed, past.Summary.Status);
+        Assert.Equal("fe-vue", past.Composition!.Frontend!.Pack);
+        Assert.Equal((false, false), (past.CanApprove, past.CanContinue));
+        Assert.False(string.IsNullOrWhiteSpace(past.ApproveBlockedReason));
+        Assert.True(current.CanApprove);
+
+        // The current version asked for by id is the same page as the default.
+        var explicitCurrent = await ProjectApi.ReadAsync<AnalysisDto>(await owner.Client.GetAsync(
+            new Uri($"/api/projects/{project.Id}/analysis?releaseVersionId={started.ReleaseVersion.Id}", UriKind.Relative), Ct));
+        Assert.Equal((current.Run.JobId, current.CanApprove), (explicitCurrent.Run!.JobId, explicitCurrent.CanApprove));
+    }
+
+    [Fact]
+    public async Task FR182_A_release_version_that_is_not_the_projects_is_NOT_FOUND()
+    {
+        await using var app = App();
+        using var owner = await ApiSession.RegisterAsync(app);
+        var project = await InferredAsync(app, owner);
+        var other = await ProjectApi.CreateAsync(owner.Client);
+
+        await Problems.AssertAsync(
+            await owner.Client.GetAsync(new Uri($"/api/projects/{project.Id}/analysis?releaseVersionId={Guid.NewGuid()}", UriKind.Relative), Ct),
+            HttpStatusCode.NotFound,
+            ErrorCodes.NotFound);
+        await Problems.AssertAsync(
+            await owner.Client.GetAsync(new Uri($"/api/projects/{project.Id}/analysis?releaseVersionId={other.ReleaseVersionId}", UriKind.Relative), Ct),
+            HttpStatusCode.NotFound,
+            ErrorCodes.NotFound);
+    }
+
     // ---------------------------------------------------------------- FR-179, FR-181, FR-183, FR-185
 
     [Fact]

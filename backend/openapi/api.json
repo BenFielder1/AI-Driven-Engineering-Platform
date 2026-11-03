@@ -11085,13 +11085,21 @@
         "tags": [
           "Analysis"
         ],
-        "summary": "The Analysis page of the current release version (members, FR-182): the Repository Analyst's summary state and, for a version that infers its stack, the Stack Analyst's run, the latest stack_profile parsed, the layers that need input, whether it can be approved (and why not), whether the project can continue to refinement, the detector's profile for \"Fill in manually\", the profile as a /api/stack/options selection, the pinned and previous compositions and the deployment state.",
+        "summary": "The Analysis page of a release version (default: the project's current release version; a past version's page shows that version's summary, run and profile, read-only), members (FR-182): the Repository Analyst's summary state and, for a version that infers its stack, the Stack Analyst's run, the latest stack_profile parsed, the layers that need input, whether it can be approved (and why not), whether the project can continue to refinement, the detector's profile for \"Fill in manually\", the profile as a /api/stack/options selection, the pinned and previous compositions and the deployment state.",
         "operationId": "GetAnalysis",
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "releaseVersionId",
+            "in": "query",
             "schema": {
               "type": "string",
               "format": "uuid"
@@ -11120,7 +11128,7 @@
             }
           },
           "404": {
-            "description": "NOT_FOUND: the project.",
+            "description": "NOT_FOUND: the project, or the release version in this project.",
             "content": {
               "application/problem+json": {
                 "schema": {

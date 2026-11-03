@@ -30,15 +30,33 @@ public sealed partial class AnalysisService(
     TimeProvider time,
     ILogger<AnalysisService> logger)
 {
-    /// <summary>The Analysis page of the project's current release version (<c>NOT_FOUND</c> without one).</summary>
-    public async Task<Result<AnalysisDto>> GetAsync(Guid projectId, CancellationToken cancellationToken)
+    /// <summary>
+    /// The Analysis page of <paramref name="releaseVersionId"/>, or of the project's current release version when it's
+    /// <c>null</c> (FR-182: a past version's page shows that version's summary, run and profile). <c>NOT_FOUND</c> for an
+    /// unknown project, a project without versions, or a version that isn't the project's. A version other than the current
+    /// one is read-only: it can't be approved or continued.
+    /// </summary>
+    public async Task<Result<AnalysisDto>> GetAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
         var project = await db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
-        var version = project is null ? null : await db.CurrentReleaseVersionAsync(projectId, cancellationToken);
-        if (project is null || version is null)
+        if (project is null)
         {
             return Result.Failure<AnalysisDto>(new DomainError(ErrorCodes.NotFound, "The project was not found."));
         }
+
+        var currentId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
+        var versionId = releaseVersionId ?? currentId;
+        var version = versionId is { } wanted
+            ? await db.ReleaseVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == wanted && v.ProjectId == projectId, cancellationToken)
+            : null;
+        if (version is null)
+        {
+            return Result.Failure<AnalysisDto>(new DomainError(
+                ErrorCodes.NotFound,
+                releaseVersionId is null ? "The project was not found." : "The release version was not found in this project."));
+        }
+
+        var isCurrent = version.Id == currentId;
 
         var summary = await refinement.CodebaseSummaryAsync(projectId, version.Id, cancellationToken);
         var pinned = await compositions.ForVersionAsync(version, cancellationToken);
@@ -89,7 +107,9 @@ public sealed partial class AnalysisService(
                     [.. value.Candidates.Select(StackProfileMapping.ToDto)]);
             }).ToList();
         var unresolved = document is null ? [] : StackProfile.Unresolved(document);
-        var (canApprove, blocked) = ApproveState(project, latest, document, unresolved);
+        var (canApprove, blocked) = isCurrent
+            ? ApproveState(project, latest, document, unresolved)
+            : (false, $"This is version {version.Version}, not the project's current version; its profile is read-only here.");
 
         var repoHost = await stacks.RepoHostAsync(projectId, cancellationToken);
         var selection = document is null ? null : WithRepoHost(StackProfileMapping.ToRequest(document), repoHost);
@@ -108,7 +128,7 @@ public sealed partial class AnalysisService(
             unresolved,
             canApprove,
             blocked,
-            project.CurrentPhase == Phase.Analysis && lockedExists && (pinned.Composition is not null || LockedGeneralist(latest, document)),
+            isCurrent && project.CurrentPhase == Phase.Analysis && lockedExists && (pinned.Composition is not null || LockedGeneralist(latest, document)),
             suggested is null ? null : StackProfileMapping.ToDto(suggested),
             selection,
             pinned.Composition is { } composition ? StackMapping.ToDto(composition) : null,
@@ -240,8 +260,15 @@ public sealed partial class AnalysisService(
     /// <summary>The latest Stack Analyst job of the version and its run.</summary>
     private async Task<StackAnalysisRunDto?> RunAsync(Guid projectId, ReleaseVersion version, CancellationToken cancellationToken)
     {
+        // Jobs carry no version: a version's are those queued from its creation until the project's next version.
+        var next = await db.ReleaseVersions.AsNoTracking()
+            .Where(v => v.ProjectId == projectId && v.Id != version.Id && v.CreatedAt > version.CreatedAt)
+            .OrderBy(v => v.CreatedAt)
+            .Select(v => (DateTimeOffset?)v.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
         var job = await db.Jobs.AsNoTracking()
             .Where(j => j.ProjectId == projectId && j.Type == JobTypes.StackAnalysis && j.CreatedAt >= version.CreatedAt)
+            .Where(j => next == null || j.CreatedAt < next)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
             .FirstOrDefaultAsync(cancellationToken);

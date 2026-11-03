@@ -44,8 +44,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-190 | Group setup job | 3.5 | backend | M34 | done | CI 41342366096 |
 | FR-191 | Settings → Deployment group cards | 3.5 | frontend + backend | M34 | done | CI 41342366096 |
 | FR-192 | Platform mapping | 3.5 | backend | M34 | done | CI 41342366096 |
-| FR-193 | Events and notifications | 3.6 | backend + frontend | M37 | todo | — |
-| FR-194 | CLI additions | 3.6 | cli + backend | M37 | todo | — |
+| FR-193 | Events and notifications | 3.6 | backend + frontend | M37 | done | CI 41592912414 |
+| FR-194 | CLI additions | 3.6 | cli + backend | M37 | done | CI 41592912414 |
 
 ## Phases
 - [x] M0 Baseline (base: 391a81d): CI green on `main` ([run 41312655301](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41312655301)); no re-scaffold
@@ -73,10 +73,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 - 2026-11-02 (M37, spec sync): new event `CONNECTION_EXPIRING` sent through the personal `connection_invalid` rules; `TRACKER_IMPORT_FAILED` gains `importedBy`. The seed's Fake tracker import sits on the new analysis demo ("Demo: Weather Board", Vite + React skeleton), as no seeded demo is in refinement. `aide project create` also gains `--import-version`, `--released-tag` and `--local-path`, because inference needs an imported repository. Channels can subscribe to every selectable event (21; the old cap of 14 is lifted). New config: `Trackers__Provider` (unset = real; Fake only in Development/Testing or with `Deployments__AllowFake`), `Trackers__SearchTimeout` (15 s), `Notifications__ConnectionExpirySweepInterval` (1 h), optional `Llm__Providers__<P>__Models__StackAnalyst`.
 
+- 2026-11-03 (audit gaps): `GET /analysis` takes optional `releaseVersionId` for past versions (read-only). New optional setting `Trackers:CheckTimeout` (default 10 s; startup refuses more than 10 s) so tests can shorten the `sources/check` cap. The §8 co-author trailer check is an integration test, not an E2E, because E2E uses Local Git (SPEC §8 updated).
+
 ## Known issues
+- Test fidelity (minor): the frontend MSW mock returns no pinned composition for a past version's Analysis page (the real API does, and an integration test covers it), so Vitest can't show it.
 - Wizard (found by M37 E2E, minor UX): the form validates on touch, so after fixing a focused field that showed an error, its error box disappears as the field loses focus; the form moves up and the first Next click can miss the button. Possible fix: `reValidateMode: 'onChange'` or an error area of fixed height.
-- M36 (minor): `GET /analysis` takes no `releaseVersionId`, so a past version's Analysis page shows only the profile history.
-- M35 (open, M37): FR-165's 14-day expiry notification exists only as the DTO's `expiryWarning`; the notification is built with FR-193. `Trackers__*` config isn't yet in CI, `.railway` or the docs. E2E and axe for the tracker dialog are M37.
 - M34 (minor): the Railway public-versus-private `DATABASE_URL` is chosen when the database is set up, so changing the stack afterwards needs that database set up again.
 
 ## Manual checks (Ben)

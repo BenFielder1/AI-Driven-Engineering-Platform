@@ -26,6 +26,12 @@ public sealed class TrackerOptions
     /// <summary>§8: tracker search and browse proxy a provider with this timeout (default 15 s; at most 2 minutes).</summary>
     public TimeSpan SearchTimeout { get; set; } = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// §8, FR-173: the cap on a whole <c>sources/check</c>, with <c>unknown</c> for what remains (default and maximum 10 s;
+    /// tests set it lower).
+    /// </summary>
+    public TimeSpan CheckTimeout { get; set; } = SourceItemDriftRules.CheckTimeout;
+
     public bool UseFake => string.Equals(Provider?.Trim(), "Fake", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Whether <see cref="Provider"/> is unset, <c>Real</c> or <c>Fake</c> (any case).</summary>

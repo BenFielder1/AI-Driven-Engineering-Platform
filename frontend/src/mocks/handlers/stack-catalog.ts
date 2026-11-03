@@ -100,6 +100,7 @@ export const stackCatalog: Catalog = {
       options: [
         pack('vcs-github', 'GitHub', 'GitHub with GitHub Actions.'),
         pack('vcs-gitlab', 'GitLab', 'GitLab with GitLab CI.'),
+        pack('vcs-bitbucket', 'Bitbucket', 'Bitbucket with Bitbucket Pipelines.'),
       ],
     },
     {
@@ -243,7 +244,7 @@ function verdict(choice: string, option: string, f: Facts): Verdict {
       if (f.frontend === 'none') {
         return no('R6', "There's no frontend to host")
       }
-      return option === 'deploy-railway' && f.vcs === 'vcs-gitlab' ? no('R9', 'Railway only builds from GitHub') : ok
+      return option === 'deploy-railway' && (f.vcs === 'vcs-gitlab' || f.vcs === 'vcs-bitbucket') ? no('R9', 'Railway only builds from GitHub') : ok
     case 'backendHost':
       if (option === 'none') {
         return ok
@@ -254,7 +255,7 @@ function verdict(choice: string, option: string, f: Facts): Verdict {
       if (option === 'deploy-vercel' && f.backend === 'be-aspnet') {
         return no('R7', "Vercel can't run ASP.NET Core")
       }
-      if (option === 'deploy-railway' && f.vcs === 'vcs-gitlab') {
+      if (option === 'deploy-railway' && (f.vcs === 'vcs-gitlab' || f.vcs === 'vcs-bitbucket')) {
         return no('R9', 'Railway only builds from GitHub')
       }
       return option === 'deploy-vercel' ? warn('R7', 'Serverless functions: no background work, pooled DB connections') : ok

@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw'
 import type { Schemas } from '../../api/client'
 import { checkNewVersion, normalizeVersion } from '../../features/versions/semver'
 import { authDb } from './auth'
+import { setPreviousComposition } from './analysis'
 import { addEvent } from './lifecycle'
 import { problem } from './problem'
 import {
@@ -117,6 +118,11 @@ export const versionHandlers = [
       started.stackSource = 'infer'
     }
     p.releaseVersions.push(started)
+    if (inferring) {
+      // FR-186: the base version's composition is the comparison; the new version's stack comes from its profile.
+      setPreviousComposition(p, p.stack?.composition ?? null)
+      p.stack = { ...p.stack, composition: null }
+    }
     const firstPhase = inferring ? 'analysis' : 'refinement'
     p.currentPhase = firstPhase
     p.status = 'active'

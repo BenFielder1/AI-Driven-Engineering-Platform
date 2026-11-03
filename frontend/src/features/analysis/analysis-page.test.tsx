@@ -425,3 +425,70 @@ describe('Deployment on the page (FR-184, FR-185)', () => {
     expect(screen.getByRole('button', { name: 'Continue to Refinement' })).toBeEnabled()
   })
 })
+
+describe('Past release versions (FR-182, FR-62)', () => {
+  it('FR182_a_past_version_shows_its_own_summary_run_and_profile_read_only', async () => {
+    const project = seedAnalysis('owner', { phase: 'refinement', profileStatus: 'locked' }, (p) => {
+      const inferred = p.releaseVersions.find((v) => v.version === '1.1.0')
+      if (inferred) {
+        inferred.status = 'released'
+        inferred.mergeCommitSha = 'feed5678'
+      }
+      p.releaseVersions.push(makeReleaseVersion({ version: '1.2.0', baseTag: 'v1.1.0' }))
+    })
+    await renderRoute(`/projects/${project.id}/analysis?release=1.1.0`)
+    await screen.findByRole('heading', { level: 2, name: 'Analysis' })
+
+    expect(await screen.findByRole('region', { name: 'Findings' })).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Stack Analyst' })).getByText('Succeeded')).toBeInTheDocument()
+    expect(await within(screen.getByRole('region', { name: 'Codebase summary' })).findByRole('article', { name: 'Codebase summary v1' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Decide' })).toHaveTextContent('Approved and locked')
+    // Read-only: no actions, and the hosts say why.
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Continue to Refinement' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Database host')).toBeDisabled()
+    expect(screen.getByText('Release version 1.1.0 is a past version, so its profile is read-only.')).toBeInTheDocument()
+  })
+})
+
+describe('Hosts (FR-184)', () => {
+  it('FR184_on_a_bitbucket_repo_railway_is_unavailable_with_the_R9_reason_as_text', async () => {
+    const project = seedAnalysis('owner', {
+      profile: sampleProfile({
+        layers: { vcs: { option: 'vcs-bitbucket', path: null, mode: null, status: 'fixed', confidence: null, technology: null, evidence: [], candidates: [] } },
+      }),
+    })
+    await openAnalysis(project)
+
+    const hosts = screen.getByRole('region', { name: 'Hosts' })
+    const frontendHost = within(hosts).getByRole('list', { name: 'Frontend host: not available' })
+    expect(await within(frontendHost).findByText(/Railway only builds from GitHub \(R9\)/)).toBeInTheDocument()
+    expect(within(frontendHost).getByText('Railway')).toBeInTheDocument()
+    expect(within(hosts).getByRole('option', { name: /^Railway: Railway only builds from GitHub/ })).toBeDisabled()
+  })
+
+  it('FR184_FR114_a_layer_change_clears_a_host_it_rules_out_with_a_toast', async () => {
+    const project = seedAnalysis('owner', {
+      profile: sampleProfile({
+        layers: {
+          backend: { option: 'be-express', path: 'api', mode: null, status: 'inferred', confidence: 'high', technology: null, evidence: [], candidates: [] },
+          data: { option: null, path: null, mode: null, status: 'none', confidence: 'high', technology: null, evidence: [], candidates: [] },
+        },
+        hosts: { backendHost: 'deploy-render', databaseHost: null, originModel: null, local: null, detected: [] },
+      }),
+    })
+    const { user } = await openAnalysis(project)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    const form = screen.getByRole('form', { name: 'Edit the stack profile' })
+    expect(within(form).getByLabelText('Backend host')).toHaveValue('deploy-render')
+    await user.selectOptions(within(form).getByLabelText('Backend option'), 'none')
+
+    expect(await screen.findByText("Render was cleared: there's no backend to host")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(within(form).getByLabelText('Backend host')).toHaveValue('none')
+    })
+  })
+})
+

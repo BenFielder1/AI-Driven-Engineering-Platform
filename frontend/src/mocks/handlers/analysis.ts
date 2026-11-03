@@ -41,15 +41,27 @@ interface StoredAnalysis {
   previousComposition: Composition | null
 }
 
-const analysisDb = new WeakMap<StoredProject, StoredAnalysis>()
+/** Per project, per release version id. */
+const analysisDb = new WeakMap<StoredProject, Map<string, StoredAnalysis>>()
 
-function stored(p: StoredProject): StoredAnalysis {
-  let s = analysisDb.get(p)
+/** The Stack Analyst state of a release version (default: the project's current one). */
+function stored(p: StoredProject, releaseVersionId: string = currentVersionOf(p)?.id ?? ''): StoredAnalysis {
+  let versions = analysisDb.get(p)
+  if (!versions) {
+    versions = new Map()
+    analysisDb.set(p, versions)
+  }
+  let s = versions.get(releaseVersionId)
   if (!s) {
     s = { run: null, suggested: null, previousComposition: null }
-    analysisDb.set(p, s)
+    versions.set(releaseVersionId, s)
   }
   return s
+}
+
+/** FR-186: the base version's composition, shown as the comparison of a new version that infers its stack. */
+export function setPreviousComposition(p: StoredProject, composition: Composition | null) {
+  stored(p).previousComposition = composition
 }
 
 // ---- Profiles for seeds (the §4.27 worked examples) ----------------------------------------------------------------
@@ -303,14 +315,17 @@ const profilesOf = (p: StoredProject, releaseVersionId: string) =>
   p.artifacts.filter((a) => a.type === 'stack_profile' && a.releaseVersionId === releaseVersionId).sort((a, b) => b.version - a.version)
 
 /** Mirrors AnalysisService.GetAsync. */
-function analysisDto(p: StoredProject): Analysis | null {
-  const version = currentVersionOf(p)
+function analysisDto(p: StoredProject, releaseVersionId: string | null): Analysis | null {
+  const current = currentVersionOf(p)
+  const version = releaseVersionId === null ? current : p.releaseVersions.find((v) => v.id === releaseVersionId)
   if (!version) {
     return null
   }
-  const s = stored(p)
+  // FR-62: a past release version is read-only.
+  const past = version !== current
+  const s = stored(p, version.id)
   const hasCode = Boolean(version.baseCommitSha)
-  const composition = p.stack?.composition ?? null
+  const composition = past ? null : (p.stack?.composition ?? null)
   const base = {
     releaseVersionId: version.id,
     releaseVersion: version.version,
@@ -344,7 +359,9 @@ function analysisDto(p: StoredProject): Analysis | null {
   const unresolved = doc ? unresolvedLayers(doc) : []
   const lockedExists = versions.some((a) => a.status === 'locked')
   let blocked: string | null = null
-  if (!latest) {
+  if (past) {
+    blocked = `Release version ${version.version} is a past version, so it's read-only.`
+  } else if (!latest) {
     blocked = 'There is no stack profile yet.'
   } else if (latest.status !== 'draft') {
     blocked = `The latest profile (v${String(latest.version)}) is ${latest.status ?? 'unknown'}, not a draft.`
@@ -386,7 +403,7 @@ function analysisDto(p: StoredProject): Analysis | null {
     unresolvedLayers: unresolved,
     canApprove: blocked === null,
     approveBlockedReason: blocked,
-    canContinue: p.currentPhase === 'analysis' && lockedExists && (composition !== null || (latest?.status === 'locked' && doc?.generalist === true)),
+    canContinue: !past && p.currentPhase === 'analysis' && lockedExists && (composition !== null || (latest?.status === 'locked' && doc?.generalist === true)),
     suggested: s.suggested,
     selection: doc ? { ...optionsRequestOfProfile(doc), ...(repoVcsOfProject(p) ? { vcs: { pack: repoVcsOfProject(p) ?? '' } } : {}) } : null,
     deployment: deploymentState(latest ?? null, composition),
@@ -444,13 +461,13 @@ const actorOf = (userId: string): Schemas['ActorDto'] => ({
  * analyst). Other artifact types fall through to mocks/handlers/artifacts.ts, so these are registered before it.
  */
 export const analysisHandlers = [
-  http.get('*/api/projects/:id/analysis', ({ params }) => {
+  http.get('*/api/projects/:id/analysis', ({ request, params }) => {
     const a = access(params.id)
     if (a instanceof Response) {
       return a
     }
-    const dto = analysisDto(a.project)
-    return dto ? HttpResponse.json<Analysis>(dto) : problem(404, 'NOT_FOUND', 'The project was not found.')
+    const dto = analysisDto(a.project, new URL(request.url).searchParams.get('releaseVersionId'))
+    return dto ? HttpResponse.json<Analysis>(dto) : problem(404, 'NOT_FOUND', 'The release version was not found.')
   }),
 
   http.post('*/api/projects/:id/analysis/run', async ({ request, params }) => {
