@@ -46,7 +46,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-192 | Platform mapping | 3.5 | backend | M34 | done | CI 41342366096 |
 | FR-193 | Events and notifications | 3.6 | backend + frontend | M37 | done | CI 41702869067 |
 | FR-194 | CLI additions | 3.6 | cli + backend | M37 | done | CI 41702869067 |
-| FR-195 | Generated apps' Postgres on 18 (Railway, Render, Compose) | 3.1 | backend + deploy | post-M37 | todo | — |
+| FR-195 | Generated apps' Postgres on 18 (Railway, Render, Compose) | 3.1 | backend + deploy | post-M37 | done | CI 41713212094 |
 
 ## Phases
 - [x] M0 Baseline (base: 391a81d): CI green on `main` ([run 41312655301](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41312655301)); no re-scaffold
