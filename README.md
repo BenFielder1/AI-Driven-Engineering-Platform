@@ -35,11 +35,22 @@ Added in v4:
 - **LLM choice.** Providers are enabled per deployment. The wizard chooses provider, connection and model. Calls stream, each model has its own output limit, and a cut-off answer is continued up to 5 times.
 - **Events and CLI.** New events and notifications (binding cleared, database expiring, migration failed, target needs attention). The CLI gains stack, deployment, database and migration commands.
 
+Added in v5:
+
+- **Issue tracker imports.** Connect Jira, Linear, GitHub Issues or GitLab Issues under Account → Connections → Issue trackers. Browse and pick items in the wizard, the new-version dialog or Refinement. Each import is a read-only snapshot (`source_items` artifact) that agents read. Re-import, remove and a drift check keep it honest. Jira and Linear tokens can carry an expiry date, and AIDE warns 14 days before it.
+- **Commit co-authorship.** Commits, merges and tags AIDE makes carry a `Co-authored-by` trailer for the accountable person, using their host noreply address (Bitbucket's primary email). Switch it off per project in Settings → Git, or per person on Account.
+- **Stack inference and the Analysis phase.** For a repo with code, the wizard can infer the stack. The version starts in a new `analysis` phase before Refinement. A Stack Analyst writes a `stack_profile`, and an Owner fills the blanks, edits and approves it, in every approval mode. Hosts and deployment setup live on the Analysis page.
+- **Shared deployment projects.** Parts on one platform (frontend, backend, database) form a deployment group with one platform project, one window in the wizard and one card in Settings. Parts can be split into separate projects. Vercel keeps one project per part.
+- **PostgreSQL 18** for AIDE's own database, with an upgrade procedure for local data (below).
+- **Events and CLI.** New events and notifications (`stack_profile_ready`, `tracker_import_failed`, connection expiring). New `aide analysis`, `aide sources` and `aide deployments groups` commands.
+
+The lifecycle is Refinement, Specification, Planning, Execution, Review, Release. A version that infers its stack starts one step earlier, in **Analysis**.
+
 `SPEC.md` is the source of truth for behaviour. `CLAUDE.md` holds the conventions. `PROGRESS.md` logs build decisions.
 
 ## Stack
 
-AIDE's own stack is unchanged in v4. [`STACK.md`](STACK.md) holds the packs and shared conventions.
+AIDE's own stack is unchanged in v5 except PostgreSQL 18. [`STACK.md`](STACK.md) holds the packs and shared conventions.
 
 | Layer | Summary |
 | --- | --- |
@@ -365,7 +376,7 @@ ASP.NET Core reads `appsettings.json`, `appsettings.Development.json`, user-secr
 
 - **Dev loop:** non-secrets in `backend/src/Aide.Api/appsettings*.json` or environment variables; secrets with `dotnet user-secrets set "<Key>" "<value>" --project backend/src/Aide.Api` (run from the repo root).
 - **Kubernetes:** secrets and any extra key go in `deploy/k8s/overlays/local/secrets.env` (`KEY=value`, no quotes). Non-secrets are in `deploy/k8s/base/configmap.yaml` and `deploy/k8s/overlays/local/app-config-local.yaml`. The API loads both as environment variables. Re-run `deploy-local.sh` after a change.
-- **Railway (FR-112):** every variable per service and environment, and whether it is a literal, a reference, a secret or operator-set, is in [`deploy/railway/variables.md`](deploy/railway/variables.md). Literals and references live in [`.railway/railway.ts`](.railway/railway.ts). Secrets and optional values are set per environment in Railway (`railway variable set <NAME> --stdin ...`) and declared `preserve()` in `railway.ts`.
+- **Railway (FR-112):** every variable per service and environment, and whether it is a literal, a reference, a secret or operator-set, is in [`deploy/railway/variables.md`](deploy/railway/variables.md). Literals and references live in [`.railway/railway.ts`](.railway/railway.ts). Secrets and optional values are set per environment in Railway (`railway variable set <NAME> --stdin ...`) and listed in `variables.ignore` in `railway.ts`, so IaC doesn't plan to delete them.
 
 Values are never shown here. "Secret" means: never commit it, set it only through user-secrets, `secrets.env` or Railway variables.
 
@@ -530,6 +541,7 @@ Override per agent with `Llm__Providers__<Name>__Models__<Agent>`. Agent names: 
 
 ### c2. Deployment platforms and managed databases
 
+- Issue trackers sit in their own Connections section. Jira takes a site (`*.atlassian.net`), account email and scoped read-only token. Linear takes a read-only API key. GitHub Issues uses the GitHub connection and the AIDE App's `issues: read` permission (update the App in GitHub, then accept on each installation). GitLab Issues uses the GitLab connection. AIDE only reads from trackers.
 - Each user adds a token per platform under Account, Connections: Vercel, Netlify, Cloudflare, Render, Railway, and Supabase for databases. The connection dialog lists the token type and permissions to create. AIDE checks the token, stores it encrypted and never shows it again. GitHub Pages uses the GitHub App instead, which needs its Pages permission (update the App in GitHub after upgrading).
 - A project Owner binds connections in Settings, Deployment: one target per component (frontend, backend) and one database per environment. AIDE can create the resource or link an existing one. The page shows readiness checks with fix links, the origin model, and the environment inventory. Derived variables (database URLs, Supabase keys, API origin) are written by AIDE.
 - A platform must build from the repo's Git host, so some combinations are refused (for example Railway needs GitHub). The stack step shows the reason.
@@ -607,6 +619,12 @@ Create the token on the Account page of the app (shown once). Then:
 | `aide status <id>` | Phase, status, released and in-development versions, checkpoint, stack composition, production URLs, latest deployment, latest migration run, artifacts, execution, review, gates. `--json` adds `stack` and `latestMigrationRun` |
 | `aide version start <id> <semver> --request <text\|@file> [stack flags]` | Start a new version of a released project (Owner). `@-` reads stdin. Stack flags are those of `aide stack set`, also as `--stack-frontend` etc. `--preset` exits 2: presets were removed in v4 |
 | `aide versions <id>` | List release versions |
+| `aide project create --infer-stack`, `aide version start --infer-stack` | Start in the Analysis phase and infer the stack from the repository. `project create` also takes `--import-version`, `--released-tag` and `--local-path` for an imported repo |
+| `aide analysis show\|approve\|reject\|retry <id>` | Work with the inferred stack profile. `approve` and `reject` take `--comment`. An unresolved layer exits 4 |
+| `aide sources list\|check <id>` | List tracker imports, or run the drift check |
+| `aide sources import <id> --connection <id> --tracker <p> (--keys <k,…> \| --query <q>) [--comments]` | Import tracker items as a snapshot |
+| `aide sources reimport\|remove <id> <importId>` | Re-run or remove an import |
+| `aide deployments groups <id>` | List deployment groups |
 | `aide stack catalog` | List the catalog's layers and options |
 | `aide stack show <id>` | Show a project's composition and whether it is locked |
 | `aide stack set <id> [--frontend <opt>] [--backend <opt>] [--data <opt>[:baas]] [--vcs <opt>] [--frontend-host <opt>] [--backend-host <opt>] [--database-host <opt>] [--local compose\|none]` | Change the version in development's stack (Owner). Named layers merge into the current composition; `none` clears a layer. Changing frontend, backend or their hosts resets the origin model, with a warning on stderr. Exit 4 prints `STACK_INCOMPATIBLE` violations or `STACK_LOCKED` |

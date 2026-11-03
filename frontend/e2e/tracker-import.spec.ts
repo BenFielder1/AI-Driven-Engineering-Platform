@@ -46,7 +46,12 @@ test('FR-169, FR-170, FR-171, FR-172: tracker items picked in the wizard become 
   await page.getByRole('button', { name: 'Next', exact: true }).click()
   await expect(page.getByText('Say what you want to build. Imported items add to this.').first()).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Step 2 of 8: Project idea' })).toBeVisible()
-  await page.getByLabel('Your idea').fill('A board for small teams to track their work, built from the picked Linear issues.')
+  const idea = page.getByLabel('Your idea')
+  await idea.fill('A board for small teams to track their work, built from the picked Linear issues.')
+  // mode 'onTouched': the focused field's error clears only on blur. Blur first, so the layout shift (the error summary
+  // and field error going away) doesn't happen between the Next click's mousedown and mouseup.
+  await idea.blur()
+  await expect(page.getByText('Say what you want to build. Imported items add to this.')).toHaveCount(0)
   await page.getByRole('button', { name: 'Next', exact: true }).click()
 
   await expect(page.getByRole('heading', { name: 'Step 3 of 8: Repository' })).toBeVisible()

@@ -2,8 +2,8 @@
 
 2026-10-23 · composed with `compose-stack`
 
-This file records the stack of **AIDE itself**. It is unchanged for v4, which is built on the v3 stack (Next.js frontend,
-Railway deploy). v2 used React + Vite with Docker Desktop Kubernetes only. v3 made two stack changes: **deploy to
+This file records the stack of **AIDE itself**. v5 adds no pack and changes only the data engine (PostgreSQL 18). It is
+otherwise the v3 stack (Next.js frontend, Railway deploy). v2 used React + Vite with Docker Desktop Kubernetes only. v3 made two stack changes: **deploy to
 Railway**, and **convert the frontend to Next.js**. v4 adds no pack: its stack catalog describes the stacks of the
 projects AIDE builds, not AIDE's own. `SPEC.md` gives the requirements. This file names the packs and the shared
 conventions.
