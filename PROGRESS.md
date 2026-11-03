@@ -44,8 +44,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-190 | Group setup job | 3.5 | backend | M34 | done | CI 41342366096 |
 | FR-191 | Settings → Deployment group cards | 3.5 | frontend + backend | M34 | done | CI 41342366096 |
 | FR-192 | Platform mapping | 3.5 | backend | M34 | done | CI 41342366096 |
-| FR-193 | Events and notifications | 3.6 | backend + frontend | M37 | done | CI 41592912414 |
-| FR-194 | CLI additions | 3.6 | cli + backend | M37 | done | CI 41592912414 |
+| FR-193 | Events and notifications | 3.6 | backend + frontend | M37 | done | CI 41702869067 |
+| FR-194 | CLI additions | 3.6 | cli + backend | M37 | done | CI 41702869067 |
 
 ## Phases
 - [x] M0 Baseline (base: 391a81d): CI green on `main` ([run 41312655301](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41312655301)); no re-scaffold
@@ -54,7 +54,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M34 Deployment groups: FR-187–FR-192 ([CI 41342366096](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41342366096), head b2dfe44)
 - [x] M35 Tracker connections and imports: FR-165–FR-173 ([CI 41402440433](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41402440433), head 65ff4ee)
 - [x] M36 Stack inference and the Analysis phase: FR-178–FR-186 ([CI 41526801694](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41526801694), head 01bce28)
-- [ ] M37 Integrate and harden: FR-193, FR-194, E2E, axe, perf, docs, verifier over v1–v5
+- [x] M37 Integrate and harden: FR-193, FR-194, E2E, axe, perf, docs, acceptance audit over v1–v5 (74 Done, 11 Partial closed by the audit-gap commit, 0 Missing) ([CI 41702869067](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41702869067), head 06cf591)
 
 ## Decisions
 - 2026-11-01 (M32): FR-163's "v4 §8 test note" stays unchanged because `docs/` is frozen; SPEC §8 for v5 carries the test scope.
