@@ -251,7 +251,7 @@ public static class FakeStackScripts
         switch (fileName)
         {
             case "compose.yaml":
-                return $"# {header}\nservices:\n  db:\n    image: postgres:17\n    env_file: .env\n";
+                return $"# {header}\nservices:\n  db:\n    image: postgres:18\n    env_file: .env\n    volumes: [db-data:/var/lib/postgresql]\nvolumes:\n  db-data: {{}}\n";
             case "vercel.json":
                 return "{\n  \"git\": {\n    \"deploymentEnabled\": {\n      \"aide/**\": false\n    }\n  }\n}\n";
             case "netlify.toml":

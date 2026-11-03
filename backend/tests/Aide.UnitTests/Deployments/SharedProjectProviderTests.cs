@@ -263,6 +263,90 @@ public class SharedProjectProviderTests
         Assert.Empty(Bodies(stub, "serviceInstanceDeployV2"));
     }
 
+    // ── FR-195: Postgres 18 for new databases only ───────────────────────
+
+    private const string BothEnvironments =
+        """{"data":{"project":{"id":"p3","environments":{"edges":[{"node":{"id":"e-prod","name":"production"}},{"node":{"id":"e-prev","name":"aide-preview"}}]}}}}""";
+
+    private const string ProductionVolumeOnly =
+        """{"data":{"project":{"volumes":{"edges":[{"node":{"id":"v1","volumeInstances":{"edges":[{"node":{"serviceId":"svc-pg","environmentId":"e-prod"}}]}}}]}}}}""";
+
+    private static PlatformStub ExistingPostgres() => Graphql(
+        ("environments { edges", BothEnvironments),
+        ("volumes", ProductionVolumeOnly),
+        ("serviceInstanceUpdate", """{"data":{"serviceInstanceUpdate":true}}"""),
+        ("volumeCreate", """{"data":{"volumeCreate":{"id":"v2"}}}"""),
+        ("variableCollectionUpsert", """{"data":{"variableCollectionUpsert":true}}"""),
+        ("serviceInstanceDeployV2", """{"data":{"serviceInstanceDeployV2":"dep"}}"""),
+        ("services { edges", LinkedService));
+
+    [Fact]
+    public async Task FR195_Re_setting_up_a_production_Postgres_created_on_17_never_changes_its_image_or_volume()
+    {
+        var stub = ExistingPostgres();
+
+        var result = await new RailwayPostgresProvider(Http(stub)).SetupAsync(DbRailwayAuth, DbRequest(DatabaseHostContext.None with { SharedProjectId = "p3" }), Ct);
+
+        Assert.Equal("p3:svc-pg:e-prod", result.ResourceId);
+        Assert.Empty(Bodies(stub, "serviceCreate"));
+        Assert.Empty(Bodies(stub, "serviceInstanceUpdate"));
+        Assert.Empty(Bodies(stub, "volumeCreate"));
+        Assert.Empty(Bodies(stub, "postgres-ssl"));
+    }
+
+    [Fact]
+    public async Task FR195_A_new_preview_Postgres_next_to_a_17_production_one_starts_on_18_and_production_is_untouched()
+    {
+        var stub = ExistingPostgres();
+
+        var result = await new RailwayPostgresProvider(Http(stub)).SetupAsync(
+            DbRailwayAuth, DbRequest(DatabaseHostContext.None with { SharedProjectId = "p3" }, DeploymentEnvironment.Preview, "todo-db-preview"), Ct);
+
+        Assert.Equal("p3:svc-pg:e-prev", result.ResourceId);
+        var update = Assert.Single(Bodies(stub, "serviceInstanceUpdate"));
+        Assert.Contains("\"environmentId\":\"e-prev\"", update, StringComparison.Ordinal);
+        Assert.Contains("\"image\":\"ghcr.io/railwayapp-templates/postgres-ssl:18\"", update, StringComparison.Ordinal);
+        Assert.DoesNotContain(Bodies(stub, "postgres-ssl"), b => b.Contains("e-prod", StringComparison.Ordinal));
+        Assert.Contains("\"mountPath\":\"/var/lib/postgresql/data\"", Assert.Single(Bodies(stub, "volumeCreate")), StringComparison.Ordinal);
+        Assert.Empty(Bodies(stub, "serviceCreate"));
+    }
+
+    [Fact]
+    public async Task FR195_Adopting_an_existing_volume_less_production_Postgres_never_changes_its_image()
+    {
+        var stub = Graphql(
+            ("environments { edges", BothEnvironments),
+            ("volumes", """{"data":{"project":{"volumes":{"edges":[]}}}}"""),
+            ("serviceInstanceUpdate", """{"data":{"serviceInstanceUpdate":true}}"""),
+            ("volumeCreate", """{"data":{"volumeCreate":{"id":"v2"}}}"""),
+            ("variableCollectionUpsert", """{"data":{"variableCollectionUpsert":true}}"""),
+            ("serviceInstanceDeployV2", """{"data":{"serviceInstanceDeployV2":"dep"}}"""),
+            ("services { edges", LinkedService));
+
+        var result = await new RailwayPostgresProvider(Http(stub)).SetupAsync(DbRailwayAuth, DbRequest(DatabaseHostContext.None with { SharedProjectId = "p3" }), Ct);
+
+        Assert.Equal("p3:svc-pg:e-prod", result.ResourceId);
+        Assert.Empty(Bodies(stub, "serviceInstanceUpdate"));
+        Assert.Empty(Bodies(stub, "serviceCreate"));
+        Assert.Empty(Bodies(stub, "postgres-ssl"));
+    }
+
+    [Fact]
+    public async Task FR195_A_linked_Postgres_keeps_its_image_in_production_and_preview()
+    {
+        var stub = ExistingPostgres();
+        var provider = new RailwayPostgresProvider(Http(stub));
+
+        await provider.SetupAsync(
+            DbRailwayAuth,
+            new DatabaseSetupRequest(Guid.CreateVersion7(), DeploymentEnvironment.Production, DatabaseSetupMode.Link, "todo-db", null, null, "svc-pg", null, DatabaseHostContext.None with { SharedProjectId = "p3" }),
+            Ct);
+        await provider.SetupAsync(DbRailwayAuth, LinkPreview("pw-preview"), Ct);
+
+        Assert.Empty(Bodies(stub, "serviceInstanceUpdate"));
+        Assert.Empty(Bodies(stub, "postgres-ssl"));
+    }
+
     [Fact]
     public async Task FR192_A_standalone_Railway_database_reaches_its_apps_through_a_TCP_proxy()
     {

@@ -57,7 +57,8 @@ public static partial class ManagedDatabaseRules
     public const string DefaultDatabaseName = "postgres";
     public const string RailwayServiceName = "Postgres";
     public const int PostgresPort = 5432;
-    public const string RenderPostgresVersion = "17";
+    /// <summary>FR-195, D-V5-12: new Render Postgres instances are 18; an existing instance keeps its version.</summary>
+    public const string RenderPostgresVersion = "18";
     public const int ConnectionStringMaxLength = 2000;
     public const int ResourceIdMaxLength = 200;
 

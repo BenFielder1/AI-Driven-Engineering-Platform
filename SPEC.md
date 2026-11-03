@@ -27,7 +27,6 @@ Success means:
 - Tracker access through MCP servers.
 - Option B or C from the co-authorship research: the user as author, or commits through a user token. FR-82 stays: background Git work uses installation tokens.
 - Microsoft Agent Framework (`docs/v5/MICROSOFT_AGENT_FRAMEWORK.md`). The brief didn't ask for it.
-- PostgreSQL versions of **generated apps' databases** (Render and Railway Postgres providers, stack pack skills). See Q3.
 - New stack packs. A repository whose stack isn't in the catalog gets a blank or `unsupported` finding, never a new option.
 
 ## 2. Users and permissions
@@ -74,6 +73,15 @@ The v1–v4 roles are unchanged. v5 adds:
   - **Kubernetes:** `deploy-local.sh` checks the running or stored database version before applying. If it finds a 17 data directory, it stops with instructions and changes nothing. It never wipes data on its own.
   - **Procedure:** the README documents `pg_dumpall` from 17, then restore into 18, for both compose and Kubernetes. Kubernetes scripts still target only `docker-desktop` (rule 7).
   - Given a Docker Desktop cluster with a 17 volume, when `deploy-local.sh` runs, then it exits non-zero, names the upgrade procedure, and the volume is unchanged. *(Manual check for Ben; agents don't run this locally.)*
+
+- **FR-195** *(backend + deploy)* **Generated apps' PostgreSQL on 18** *(added 2026-11-03; amends v4 FR-152, §4.21)*. New managed databases for generated apps use PostgreSQL 18, so every Postgres AIDE creates matches AIDE's own (D-V5-12):
+  - **Railway Postgres:** the image is `ghcr.io/railwayapp-templates/postgres-ssl:18`, with the volume mount and `PGDATA` that image expects.
+  - **Render Postgres:** `POST /v1/postgres` sends `version: "18"`.
+  - **Local dev loop:** the Compose file the deploy engineer writes for a generated app uses `postgres:18`, with the 18 data path. The stack pack skills' examples say 18.
+  - **Existing databases are never changed.** A database provisioned or linked before this change keeps its version: AIDE never changes the image or version of an existing service, instance or volume. A new preview database next to an older production one gets 18, since it has its own data. A **linked** Railway Postgres keeps the Owner's image in production and preview, which may be a custom one such as PostGIS, so its preview can stay on an older version *(build, 2026-11-03)*. On Railway, the 18 template keeps the volume at `/var/lib/postgresql/data` with `PGDATA=/var/lib/postgresql/data/pgdata`, as AIDE's own Railway database does.
+  - Given a new Railway Postgres in a group, then its service uses `postgres-ssl:18`.
+  - Given a new Render Postgres, then the create request has `version: "18"`.
+  - Given a Railway production Postgres created on 17, when the preview database is created or a target is re-set up, then the production service's image is unchanged.
 
 ### 3.2 Issue tracker connections and imports
 
@@ -589,6 +597,7 @@ v1–v4 decisions stand, except where amended.
 | D-V5-9 | **No retrofit of existing deployments.** v4 targets stay ungrouped. AIDE doesn't move platform resources | build | assumed |
 | D-V5-10 | **`source_items` is an auto-locked artifact, importable only in `analysis` and `refinement`.** Later changes go through a new version or rollback, so downstream artifacts never change silently | Research §1; phase limit: build | assumed |
 | D-V5-11 | **Tracker expiry warnings come from the user-entered date.** A sweep warns once per connection and date through `connection_invalid`, because Jira and Linear report no expiry. Fake trackers are refused outside Development and Testing unless `Deployments__AllowFake` is set | build, 2026-11-02 | assumed |
+| D-V5-12 | **Every Postgres AIDE creates is version 18:** AIDE's own (D-V5-1), and generated apps' Railway, Render and local Compose databases. Why: one version everywhere, and v3 found pinning 17 on Railway breaks the data directory. Existing databases keep their version | Ben, 2026-11-03 | agreed |
 
 ## 11. Open questions
 
@@ -596,7 +605,7 @@ v1–v4 decisions stand, except where amended.
 | --- | --- | --- | --- |
 | Q1 | An `AIDE-Run:` trailer linking commits to agent runs (research suggestion)? It exposes AIDE's URL in repo history. Proposed: later | Ben | nothing |
 | Q2 | Vercel Services as a real single project once stable, as an opt-in? Proposed: later | Ben | nothing |
-| Q3 | Generated apps' Railway Postgres still uses `postgres-ssl:17` (`RailwayPostgresProvider.Image`), though D-V3-13 records that pinning 17 broke AIDE's own Railway data directory. Is it a bug? Proposed: check on a live account in M34 and raise the pin separately. Render's version 17 stays | Ben / build check | nothing in v5's scope |
+| Q3 | ~~Generated apps' Railway Postgres pinned to 17~~ **Resolved 2026-11-03:** raised to 18 with Render, by FR-195 and D-V5-12 | Ben | — |
 | Q4 | Tier 2 trackers (Azure DevOps, YouTrack) and write-back. Proposed: later | Ben | nothing |
 | Q5 | Build-time checks. Record the results in PROGRESS.md. See below | build agents | the named FRs |
 
@@ -613,7 +622,7 @@ v1–v4 decisions stand, except where amended.
 
 **M0 Baseline:** the repo, CI and v4 app exist. **Do not re-scaffold.** v4's SPEC and PROGRESS are already moved to `docs/v4/`. Add the v5 row to CLAUDE.md's Versions table, the v5 note on increments and verifier scope, and fix its `SSPEC.md` link. Create a root `PROGRESS.md`. Work on `build/aide-v5`. Confirm CI is green on the baseline.
 
-1. **M32 PostgreSQL 18** (independent; first, because every later CI run depends on it): images, data paths, renamed volume, the `deploy-local.sh` check, docs, D-V3-13 note. FR-163, FR-164.
+1. **M32 PostgreSQL 18** (independent; first, because every later CI run depends on it; FR-195 added after M37): images, data paths, renamed volume, the `deploy-local.sh` check, docs, D-V3-13 note. FR-163, FR-164.
 2. **M33 Commit co-authorship** (independent): `CommitAttribution`, `CommitTrailers`, every commit and merge site, settings, migration. FR-174–FR-177.
 3. **M34 Deployment groups:** `DeploymentGrouping`, R8, R10, R13, `separateParts`, group model and migration, group job, Railway and Render and Vercel and Fake mapping, wizard windows, Settings cards. FR-187–FR-192.
 4. **M35 Tracker connections and imports:** connections, `IIssueTrackerProvider`, the four adapters and ADF converter, browse dialog, `tracker_import`, `source_items`, renderer, limits, wizard and new-version entry points, prompts, traceability, drift. FR-165–FR-173.
@@ -629,3 +638,4 @@ v1–v4 decisions stand, except where amended.
   - **Data:** `deployment_targets.platform_project_id`, `tracker_import.supersedes_import_id`.
   - **API:** `windows[]` and `caveats[]` on `/stack/options`, `?type=` pickers, nullable `link.resourceId`, `POST /sources` errors, `PATCH` connection rules, `PATCH /api/auth/me`.
   - **Behaviour:** FR-165 (`insufficient_scope`), FR-173 (retry chain), FR-174 (host-written commits), FR-183 (reject always re-runs), FR-188 and FR-190 (lone databases, group jobs), FR-193 (`CONNECTION_EXPIRING`, `importedBy`, replacement rules, cap lifted), FR-194 (extra flags), section 9 (seed and config), D-V5-11.
+- 2026-11-03: FR-195 and D-V5-12 added at Ben's request: generated apps' Railway, Render and local Postgres move to 18. Q3 resolved. Generated apps' database versions leave "Out of scope".

@@ -46,6 +46,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-192 | Platform mapping | 3.5 | backend | M34 | done | CI 41342366096 |
 | FR-193 | Events and notifications | 3.6 | backend + frontend | M37 | done | CI 41702869067 |
 | FR-194 | CLI additions | 3.6 | cli + backend | M37 | done | CI 41702869067 |
+| FR-195 | Generated apps' Postgres on 18 (Railway, Render, Compose) | 3.1 | backend + deploy | post-M37 | todo | — |
 
 ## Phases
 - [x] M0 Baseline (base: 391a81d): CI green on `main` ([run 41312655301](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41312655301)); no re-scaffold
@@ -75,12 +76,15 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 - 2026-11-03 (audit gaps): `GET /analysis` takes optional `releaseVersionId` for past versions (read-only). New optional setting `Trackers:CheckTimeout` (default 10 s; startup refuses more than 10 s) so tests can shorten the `sources/check` cap. The §8 co-author trailer check is an integration test, not an E2E, because E2E uses Local Git (SPEC §8 updated).
 
+- 2026-11-03 (FR-195, Ben): generated apps' Railway (`postgres-ssl:18`, volume at `/var/lib/postgresql/data`, `PGDATA=/var/lib/postgresql/data/pgdata`, as AIDE's own Railway database), Render (`version: "18"`) and Compose (`postgres:18`) databases move to 18. Existing databases are never changed. A linked Railway Postgres keeps the Owner's image. Only an `aide-preview` instance with no volume is re-imaged to 18; adopting a production service never changes its image. No catalog bump (skill text only; no hash is pinned).
+
 ## Known issues
 - Test fidelity (minor): the frontend MSW mock returns no pinned composition for a past version's Analysis page (the real API does, and an integration test covers it), so Vitest can't show it.
 - Wizard (found by M37 E2E, minor UX): the form validates on touch, so after fixing a focused field that showed an error, its error box disappears as the field loses focus; the form moves up and the first Next click can miss the button. Possible fix: `reValidateMode: 'onChange'` or an error area of fixed height.
 - M34 (minor): the Railway public-versus-private `DATABASE_URL` is chosen when the database is set up, so changing the stack afterwards needs that database set up again.
 
 ## Manual checks (Ben)
+- **FR-195 on real accounts:** create a Railway Postgres from AIDE and check it starts on 18. Next to a production Postgres on 17, create the preview and check the preview runs 18 while production is untouched; the `serviceInstanceUpdate {source:{image}}` call is unverified against a live account. Create a Render Postgres and check it's version 18.
 - **Railway (M37):** in each environment run `railway config plan` (preview first) and expect only `variables.ignore` updates, with no variable changes or destroys; warnings that new ignore names match no variable are expected. Then `railway config apply` (production only when you decide). `Trackers__Provider` must stay unset there. No secrets to set.
 - **M35 trackers against real accounts (CI uses stubs):** update the GitHub App to add `issues: read` and accept on each installation. Connect a Jira site with a scoped read-only token (check the scope names in the dialog are right) and a Linear key. Import from each of Jira, Linear, GitHub and GitLab, check ADF renders, re-import, remove, and the drift check. Eyeball the Jira and Linear logos.
 - **M34 groups against real APIs (CI uses stubs):** on Railway, create a group for all three parts and check one project with a preview environment; split the database and check the TCP-proxy `DATABASE_URL` works; link an existing project with Postgres and check the preview database comes up. On Render, create a group and check services and Postgres are placed in the project's environments. On Vercel, check `<name>-web` and `<name>-api`.

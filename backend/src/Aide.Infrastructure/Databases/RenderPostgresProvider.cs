@@ -10,7 +10,7 @@ namespace Aide.Infrastructure.Databases;
 /// <summary>
 /// FR-152, §4.21 Render Postgres through an account API key, in the connection's workspace (<c>ownerId</c>):
 /// <list type="bullet">
-/// <item>Create: <c>POST /v1/postgres {name, ownerId, plan, version: "17", region, databaseName}</c>, the region being the
+/// <item>Create: <c>POST /v1/postgres {name, ownerId, plan, version: "18", region, databaseName}</c> (FR-195), the region being the
 /// Owner's choice or the backend service's; an instance of that name is adopted, so a retried job doesn't create two. The
 /// preview is a second instance named <c>&lt;name&gt;-preview</c>. Render's one-free-database limit is <c>PLATFORM_PLAN_LIMIT</c>.</item>
 /// <item>Poll: <c>GET /v1/postgres/{id}</c> until <c>available</c> (<see cref="ManagedDatabaseRules.RenderState"/>; free plans

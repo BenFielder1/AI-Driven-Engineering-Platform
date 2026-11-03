@@ -279,6 +279,17 @@ public sealed class CompositionWiringTests
     }
 
     [Fact]
+    public void FR195_The_Fake_Compose_file_runs_postgres_18_with_its_volume_at_var_lib_postgresql()
+    {
+        var compose = FakeStackScripts.Content(StackAgents.DeployEngineer, "compose.yaml", "Demo", 4, "Dev loop")!;
+
+        Assert.Contains("image: postgres:18\n", compose, StringComparison.Ordinal);
+        Assert.Contains("db-data:/var/lib/postgresql]", compose, StringComparison.Ordinal);
+        Assert.DoesNotContain("postgres:17", compose, StringComparison.Ordinal);
+        Assert.DoesNotContain("/var/lib/postgresql/data", compose, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FR126_FR129_The_Fake_Next_js_full_stack_plan_writes_route_handlers_that_cover_the_specs_endpoints()
     {
         var stack = Of("fe-nextjs", "none", "none", null, null);

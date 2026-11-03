@@ -112,7 +112,8 @@ public class PlatformConnectionRulesTests
         Assert.Equal(PlatformResourceType.Databases, PlatformConnectionRules.ResourceType(PlatformProvider.Railway, "databases").Value);
         Assert.Equal(ErrorCodes.Validation, PlatformConnectionRules.ResourceType(PlatformProvider.Vercel, "databases").Error!.Code);
 
-        Assert.True(PlatformConnectionRules.IsPostgresImage("ghcr.io/railwayapp-templates/postgres-ssl:17"));
+        Assert.True(PlatformConnectionRules.IsPostgresImage("ghcr.io/railwayapp-templates/postgres-ssl:17")); // FR-195: services made before 18 still count
+        Assert.True(PlatformConnectionRules.IsPostgresImage("ghcr.io/railwayapp-templates/postgres-ssl:18"));
         Assert.False(PlatformConnectionRules.IsPostgresImage("redis:7"));
         Assert.False(PlatformConnectionRules.IsPostgresImage(null));
     }
