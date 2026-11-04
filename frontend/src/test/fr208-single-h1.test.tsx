@@ -1,16 +1,17 @@
 import { screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { appPaths } from '../lib/app-paths'
+import { appPaths, publicPaths } from '../lib/app-paths'
 import { signInAs } from '../mocks/handlers/auth'
 import { seedProject } from '../mocks/handlers/projects'
 import { renderRoute } from './render'
 
 /**
  * FR-208: every in-app route renders exactly one h1 (the PageHeader title, or the forbidden / error state's). Public
- * routes (`/`, `/login`, `/register`) are M41's.
+ * routes are covered elsewhere: marketing pages in src/features/marketing/marketing-routes.test.tsx, `/login` and
+ * `/register` in src/features/auth/auth-pages.test.tsx (FR210_single_h1).
  */
-const appRoutes = appPaths.filter((p) => !['/', '/login', '/register'].includes(p))
+const appRoutes = appPaths.filter((p) => !(publicPaths as readonly string[]).includes(p))
 
 function concrete(path: string, projectId: string): string {
   return path

@@ -41,6 +41,34 @@ const targets: Target[] = [
     ready: (p) => p.getByRole('heading', { level: 1, name: 'Sign in to Tevrin' }),
   },
   {
+    // FR-223: the split-screen sign-up page (the intro panel shows from lg up; Desktop Chrome is 1280 px wide).
+    name: 'register',
+    path: () => '/register',
+    signedIn: false,
+    ready: (p) => p.getByRole('heading', { level: 1, name: 'Create your Tevrin account' }),
+  },
+  // FR-210, SPEC §8: every marketing page (shell, header, footer), signed out, in light and dark.
+  ...(
+    [
+      ['marketing home', '/', 'Ship software with AI agents, under human control.'],
+      ['marketing product', '/product', 'Everything Tevrin does, from idea to release'],
+      ['marketing how it works', '/how-it-works', 'How Tevrin takes an idea to a release'],
+      ['marketing integrations', '/integrations', 'Works with the tools you already use'],
+      ['marketing self-host', '/self-host', 'Run Tevrin on your own infrastructure'],
+      ['marketing security', '/security', 'Security at Tevrin'],
+      ['marketing faq', '/faq', 'Frequently asked questions'],
+      ['marketing changelog', '/changelog', 'Changelog'],
+      ['marketing 404', '/no-such-page', 'Page not found'],
+    ] as const
+  ).map(
+    ([name, path, h1]): Target => ({
+      name,
+      path: () => path,
+      signedIn: false,
+      ready: (p) => p.getByRole('heading', { level: 1, name: h1, exact: true }),
+    }),
+  ),
+  {
     // FR-207: Home, the signed-in landing page (the checklist, Recent projects with the fixture's projects, unread
     // notifications). SPEC §8: axe on /home in light and dark.
     name: 'home',

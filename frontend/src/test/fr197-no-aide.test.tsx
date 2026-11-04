@@ -68,6 +68,32 @@ describe('FR-197 no AIDE in the rendered app', () => {
     expectNoOldName()
   })
 
+  it.each(['/product', '/how-it-works', '/integrations', '/self-host', '/security'])('FR197_marketing_page %s has no AIDE', async (path) => {
+    await renderRoute(path)
+    await settle()
+
+    expectNoOldName()
+  })
+
+  /**
+   * FR-218 and FR-219 name the old product on purpose: the FAQ's "Was it called AIDE?" and the Changelog's "(as AIDE)"
+   * on v1–v5 (also on Home's Latest changes, FR-212 §7). Only those phrases are allowed; any other "AIDE" fails.
+   */
+  it.each([
+    ['/faq', [/Was it called AIDE\?/g, /shipped as AIDE \(AI-Driven Engineering\)/g]],
+    ['/changelog', [/\(as AIDE\)/g, /shipped under the name AIDE\./g]],
+    ['/', [/\(as AIDE\)/g]],
+  ] as const)('FR197_FR218_FR219 %s names AIDE only in its history copy', async (path, allowed) => {
+    await renderRoute(path)
+    await settle()
+
+    const offending = visibleCopy()
+      .map((text) => allowed.reduce((t, pattern) => t.replace(pattern, ''), text))
+      .filter((text) => text.includes('AIDE'))
+    expect(offending).toEqual([])
+    expect(document.body.textContent).toMatch(allowed[0])
+  })
+
   it.each([
     '/projects',
     '/projects/new',

@@ -14,14 +14,16 @@ describe('Route guards (FR-1)', () => {
     expect(currentHref(router)).toBe('/login?returnUrl=%2Faccount')
   })
 
-  it('FR-1 / FR-207: / redirects to /home, then to /login when signed out', async () => {
+  it('FR-211: a signed-out visitor to / gets the marketing Home, not the sign-in page (it redirected before v6)', async () => {
     const { router } = await renderRoute('/')
 
-    await screen.findByRole('heading', { level: 1, name: 'Sign in to Tevrin' })
-    expect(currentHref(router)).toBe('/login?returnUrl=%2Fhome')
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Ship software with AI agents, under human control.' }),
+    ).toBeInTheDocument()
+    expect(currentHref(router)).toBe('/')
   })
 
-  it('FR-207: a signed-in user visiting / lands on Home (/home; it was /projects before v6)', async () => {
+  it('FR-207 / FR-211: a signed-in user visiting / lands on Home (/home; it was /projects before v6)', async () => {
     signInAs({ name: 'Ada' })
     const { router } = await renderRoute('/')
 

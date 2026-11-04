@@ -4,6 +4,8 @@
  */
 import { randomBytes } from 'node:crypto'
 
+import { robotsHeaders } from './seo.ts'
+
 /** A fresh CSP nonce per request (128 bits, base64). */
 export function createNonce(): string {
   return randomBytes(16).toString('base64')
@@ -38,7 +40,10 @@ export function cacheControlFor(url: string, dev: boolean): string {
   return !dev && url.startsWith('/_next/static/') ? IMMUTABLE_CACHE_CONTROL : 'no-cache'
 }
 
-/** Headers on every non-/api response the web server sends (the /api pass-through only gets nosniff). */
+/**
+ * Headers on every non-/api response the web server sends (the /api pass-through only gets nosniff). App routes also
+ * get `X-Robots-Tag: noindex` (FR-221); marketing and auth routes don't.
+ */
 export function pageSecurityHeaders(nonce: string, dev: boolean, url = '/'): Record<string, string> {
   return {
     'Content-Security-Policy': contentSecurityPolicy(nonce, dev),
@@ -46,5 +51,6 @@ export function pageSecurityHeaders(nonce: string, dev: boolean, url = '/'): Rec
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'X-Frame-Options': 'DENY',
     'Cache-Control': cacheControlFor(url, dev),
+    ...robotsHeaders(url),
   }
 }

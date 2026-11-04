@@ -7,11 +7,16 @@ test('the API is ready behind the same-origin /api proxy', async ({ request }) =
   expect(await response.json()).toMatchObject({ status: 'Healthy' })
 })
 
-test('a signed-out visitor to / lands on the sign-in page', async ({ page }) => {
+test('FR-211: a signed-out visitor to / gets the marketing Home, with Sign in and Get started', async ({ page }) => {
   await page.goto('/')
 
-  // FR-207: `/` sends people to Home, so a signed-out visitor returns there after sign-in.
-  await expect(page).toHaveURL(/\/login\?returnUrl=%2Fhome$/)
-  await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Tevrin', exact: true })).toBeVisible()
+  // v6: `/` is the marketing Home for visitors (it redirected to /login before v6).
+  await expect(page).toHaveURL(/\/$/)
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Ship software with AI agents, under human control.', exact: true }),
+  ).toBeVisible()
+  const header = page.getByTestId('marketing-header')
+  await expect(header.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible()
+  await expect(header.getByRole('link', { name: 'Get started', exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeAttached()
 })

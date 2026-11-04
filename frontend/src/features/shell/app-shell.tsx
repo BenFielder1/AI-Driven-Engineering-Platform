@@ -2,6 +2,7 @@ import dynamic from 'next/dynamic'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { useLocation } from '../../lib/navigation'
+import { SkipLink } from '../../components/shared/skip-link'
 import { ThemeSelector } from '../../components/ui/theme-selector'
 import { cn } from '../../lib/utils'
 import type { User } from '../auth/auth-api'
@@ -13,16 +14,7 @@ import { Sidebar } from './sidebar'
 import { useShellNav } from './use-shell-nav'
 import { useSidebarPreference, type SidebarMode } from './use-sidebar-preference'
 
-export function SkipLink() {
-  return (
-    <a
-      href="#main"
-      className="sr-only z-50 rounded-lg bg-primary px-4 py-3 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
-    >
-      Skip to content
-    </a>
-  )
-}
+export { SkipLink }
 
 /**
  * SPEC §8 bundle budget: the ⌘K palette (cmdk) is not part of the initial chunks. It is mounted on first open, and its

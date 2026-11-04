@@ -11,7 +11,7 @@ import { RouteErrorView } from '../../features/shell/route-states'
 import { useLocation, useNavigate } from '../../lib/navigation'
 
 /**
- * Layout for /login and /register (v2 `_public`). Signed-in users are sent on (to `returnUrl`, or /projects). Like the
+ * Layout for /login and /register (v2 `_public`). Signed-in users are sent on (to a same-origin `returnUrl`, or /home). Like the
  * v2 guard, the check runs when a URL is entered, not when signing in on the page (the page then navigates itself).
  */
 export default function PublicLayout({ children }: { children: ReactNode }) {

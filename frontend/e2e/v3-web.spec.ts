@@ -82,10 +82,9 @@ test('FR-98, FR-99: a project page runs live updates over a WebSocket through /a
     })
   })
 
-  // Smoke flow: signed out → sign-in page, then signed in → projects → a project.
+  // Smoke flow: signed out → marketing Home (FR-211; no CSP violations there either), then signed in → projects → a project.
   await page.goto('/')
-  // FR-207: `/` sends people to Home, so a signed-out visitor returns there after sign-in.
-  await expect(page).toHaveURL(/\/login\?returnUrl=%2Fhome$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Ship software with AI agents, under human control.', exact: true })).toBeVisible()
   await registerViaApi(context, 'v3web')
   const project = await createProjectViaApi(context, `V3 web ${String(Date.now())}`)
   await page.goto('/projects')

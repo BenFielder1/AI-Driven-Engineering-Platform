@@ -10,16 +10,22 @@ const sources = import.meta.glob<string>(['../features/**/*.tsx', '../components
   eager: true,
 })
 
-function offenders(pattern: RegExp): string[] {
+/** FR-210: the marketing header is sticky and translucent by spec; the app's surfaces stay opaque. */
+const TRANSLUCENT_BY_SPEC = new Set(['../features/marketing/components/marketing-header.tsx'])
+
+function offenders(pattern: RegExp, allowed: ReadonlySet<string> = new Set()): string[] {
   return Object.entries(sources)
-    .filter(([, text]) => pattern.test(text))
+    .filter(([file, text]) => !allowed.has(file) && pattern.test(text))
     .map(([file]) => file)
 }
 
 describe('FR-208: restyled surfaces', () => {
   it('FR208_opaque: no backdrop blur or translucent card, sidebar or popover surfaces', () => {
     expect(Object.keys(sources).length).toBeGreaterThan(100)
-    expect(offenders(/backdrop-blur|\bbg-(card|sidebar|popover)\/\d+|\bbg-background\/\d+/)).toEqual([])
+    for (const file of TRANSLUCENT_BY_SPEC) {
+      expect(sources, file).toHaveProperty([file])
+    }
+    expect(offenders(/backdrop-blur|\bbg-(card|sidebar|popover)\/\d+|\bbg-background\/\d+/, TRANSLUCENT_BY_SPEC)).toEqual([])
   })
 
   it('FR208_type_scale: no text sizes under 12 px', () => {

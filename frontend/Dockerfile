@@ -29,7 +29,7 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/server.ts ./server.ts
 COPY --from=build /app/src/lib/env.ts /app/src/lib/log-redaction.ts ./src/lib/
-COPY --from=build /app/src/server/api-proxy.ts /app/src/server/request-log.ts /app/src/server/security-headers.ts ./src/server/
+COPY --from=build /app/src/server/api-proxy.ts /app/src/server/request-log.ts /app/src/server/security-headers.ts /app/src/server/seo.ts ./src/server/
 COPY --from=build /app/node_modules/zod ./node_modules/zod
 # Read-only root FS: Next's runtime cache lives in /tmp (an emptyDir in Kubernetes).
 RUN rm -rf .next/cache && ln -s /tmp .next/cache
