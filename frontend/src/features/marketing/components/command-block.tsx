@@ -3,12 +3,13 @@ import { CopyButton } from './copy-button'
 
 /**
  * FR-216, FR-212: a terminal-style block of commands (from self-host-commands.ts, the shared source) with each line's
- * note as a `#` comment and one button that copies the commands (without the notes).
+ * note as a `#` comment and one button that copies the commands (without the notes). Long commands scroll inside the
+ * focusable, labelled `pre` (§8: no page scroll at 375 px), which keeps them copyable as typed.
  */
 export function CommandBlock({ title, commands }: { title: string; commands: readonly Command[] }) {
   const text = commands.map((c) => c.command).join('\n')
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-muted" data-testid="command-block">
+    <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-muted" data-testid="command-block">
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-1.5">
         <span className="font-mono text-xs text-muted-foreground">{title}</span>
         <CopyButton text={text} label={`Copy the ${title} commands`} />

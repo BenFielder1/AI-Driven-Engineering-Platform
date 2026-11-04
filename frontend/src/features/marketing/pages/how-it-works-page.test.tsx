@@ -62,6 +62,18 @@ describe('FR-214 How it works', () => {
     ])
   })
 
+  it('FR214_S8_modes_table_375: the table scrolls inside a focusable, labelled region that also contains its sr-only text', async () => {
+    await renderPage()
+    const scroller = screen.getByRole('region', { name: 'Which gates each approval mode adds' })
+
+    expect(scroller).toBe(screen.getByTestId('modes-table-scroller'))
+    expect(scroller).toHaveAttribute('tabindex', '0')
+    // overflow-x-auto scrolls the table; `relative` is the containing block of the absolutely positioned sr-only cells,
+    // which otherwise escape the scroller and widen the page at 375 px.
+    expect(scroller).toHaveClass('overflow-x-auto', 'relative')
+    expect(within(scroller).getByRole('table')).toBeInTheDocument()
+  })
+
   it('FR214_diagram: an aria-hidden SVG with a text equivalent; its animation is motion-safe only', async () => {
     await renderPage()
     const figure = screen.getByTestId('lifecycle-diagram')

@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, configure } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, vi } from 'vitest'
 
 import { resetAdminDb } from '../mocks/handlers/admin'
@@ -22,6 +23,10 @@ import { router } from './memory-router'
 // `next/link` read and drive it. `renderRoute` (src/test/render.tsx) renders the src/app tree for its URL.
 vi.mock('next/navigation', async () => (await import('./next-mocks')).navigationMock)
 vi.mock('next/link', async () => ({ default: (await import('./next-mocks')).LinkMock }))
+// The `(app)` and `(public)` layouts wrap themselves in the app's client providers (src/app/providers.tsx). Tests render
+// those layouts under their own providers instead (a fresh retry-free QueryClient, a fake live hub: src/test/render.tsx),
+// so the layouts' Providers passes its children through.
+vi.mock('../app/providers', () => ({ Providers: ({ children }: { children: ReactNode }) => children }))
 
 // findBy*/waitFor default to 1 s, too short for whole-app renders (MSW round trips, route loaders) when the whole
 // suite runs in parallel on a busy machine (NFR-TEST: no flaky tests).

@@ -13,7 +13,6 @@ import '@fontsource/geist-mono/latin-500.css'
 import '../index.css'
 import { TAGLINE } from '../components/brand-geometry'
 import { themeInitScript } from '../lib/theme-init'
-import { Providers } from './providers'
 
 /**
  * FR-196: favicon (SVG, with a 32 px PNG fallback), the Apple touch icon and the Open Graph image, all from public/.
@@ -53,7 +52,9 @@ export const viewport: Viewport = {
 /**
  * Root layout (SPEC §7): static markup only, no API data (D-V3-2). Reading the request headers makes every page
  * dynamic, which the per-request CSP nonce (FR-99, set by server.ts) needs. The theme-init script runs before first
- * paint (FR-204) and carries the nonce; it changes <html>'s class, hence suppressHydrationWarning.
+ * paint (FR-204) and carries the nonce; it changes <html>'s class, hence suppressHydrationWarning. No client providers
+ * here: the `(app)` and `(public)` layouts render them and the marketing shell sets up its own, which keeps the app's
+ * query layer, toasts and error copy out of `/`'s first-load JS (SPEC §8).
  */
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const nonce = (await headers()).get('x-nonce') ?? undefined
@@ -63,7 +64,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        {children}
       </body>
     </html>
   )

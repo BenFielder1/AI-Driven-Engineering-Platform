@@ -47,9 +47,10 @@ export function SelfHostPage() {
         </div>
       </div>
       <Section id="install" {...selfHostHeadings.install}>
-        <div className="grid gap-6 lg:grid-cols-3">
+        {/* §8: one column that can shrink below the commands' width (they scroll inside their block) at 375 px. */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {selfHostPaths.map((path) => (
-            <article key={path.id} id={path.id} className={cn(panelClass, 'flex flex-col gap-4 p-6')} aria-labelledby={`path-${path.id}`}>
+            <article key={path.id} id={path.id} className={cn(panelClass, 'flex min-w-0 flex-col gap-4 p-6')} aria-labelledby={`path-${path.id}`}>
               <h3 id={`path-${path.id}`} className="text-lg font-semibold">
                 {path.title}
               </h3>

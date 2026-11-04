@@ -2,7 +2,7 @@
 
 import '../lib/zod-config'
 
-import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
 
 import { refreshAntiforgeryToken } from '../api/client'
@@ -16,20 +16,38 @@ let started = false
 const SESSION_ENDED_EVENT = 'aide:session-ended'
 
 /**
- * Client providers for every page (SPEC §7): TanStack Query (with the v2 global 401 handling), the theme, the toast
- * region and navigation settling. Live updates use LiveConnectionContext's default (a real SignalR connection).
+ * The browser keeps one QueryClient for the session, shared by the `(app)` and `(public)` layouts, so the cache (e.g.
+ * `me` after signing in) survives moving between the two groups. Each server render gets its own.
+ */
+let browserQueryClient: QueryClient | undefined
+
+function makeQueryClient(): QueryClient {
+  const client = createQueryClient({
+    onUnauthenticated: () => {
+      client.setQueryData(authKeys.me(), null)
+      window.dispatchEvent(new Event(SESSION_ENDED_EVENT))
+    },
+  })
+  return client
+}
+
+function getQueryClient(): QueryClient {
+  if (typeof window === 'undefined') {
+    return makeQueryClient()
+  }
+  browserQueryClient ??= makeQueryClient()
+  return browserQueryClient
+}
+
+/**
+ * Client providers for the app and auth pages (SPEC §7): TanStack Query (with the v2 global 401 handling), the theme,
+ * the toast region and navigation settling. Live updates use LiveConnectionContext's default (a real SignalR
+ * connection). The `(app)` and `(public)` layouts render it; the root layout doesn't, so marketing routes don't load
+ * any of this (SPEC §8 first-load JS budget for `/`). Tests supply their own (src/test/render.tsx).
  */
 export function Providers({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
-  const [queryClient] = useState(() => {
-    const client = createQueryClient({
-      onUnauthenticated: () => {
-        client.setQueryData(authKeys.me(), null)
-        window.dispatchEvent(new Event(SESSION_ENDED_EVENT))
-      },
-    })
-    return client
-  })
+  const [queryClient] = useState(getQueryClient)
 
   // Any 401 UNAUTHENTICATED (session ended): sign the UI out and go to /login?returnUrl=<here> (v2 main.tsx).
   useEffect(() => {

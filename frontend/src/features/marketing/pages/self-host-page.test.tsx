@@ -54,6 +54,21 @@ describe('FR-216 Self-host', () => {
     expect(selfHostPaths.map((p) => p.id)).toEqual(['railway', 'kubernetes', 'dev-loop'])
   })
 
+  it('FR216_S8_commands_375: commands scroll inside focusable, labelled blocks, in cards that may shrink below them', async () => {
+    await renderPage()
+
+    for (const path of selfHostPaths) {
+      const card = byId(path.id)
+      const scroller = within(card).getByRole('region', { name: `${path.title} commands` })
+      expect(scroller.tagName).toBe('PRE')
+      expect(scroller).toHaveAttribute('tabindex', '0')
+      expect(scroller).toHaveClass('overflow-x-auto')
+      // A grid item's min-width defaults to its content's; the card and its single-column grid must allow shrinking.
+      expect(card).toHaveClass('min-w-0')
+      expect(card.parentElement).toHaveClass('grid-cols-1')
+    }
+  })
+
   it('FR216_configure: Git sign-in, GitHub App, providers and notifications', async () => {
     await renderPage()
     const section = within(byId('configure'))

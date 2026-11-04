@@ -3,7 +3,7 @@ import { Check } from 'lucide-react'
 import { LifecycleStatusBadge, StatusBadge } from '../../../../components/shared/status-badge'
 import { cn } from '../../../../lib/utils'
 import { DiffView } from '../../../artifacts/diff-view'
-import { phaseLabels } from '../../../projects/labels'
+import { phaseLabels } from '../../../projects/phase-labels'
 import { previewArtifactHash, previewDiff, previewGate, previewLabels, previewRail } from '../../content/previews'
 import { FakeButton } from './preview-frame'
 

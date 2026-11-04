@@ -1,5 +1,5 @@
 import type { Schemas } from '../../api/client'
-import { phaseLabels } from '../../features/projects/labels'
+import { phaseLabels } from '../../features/projects/phase-labels'
 import { StatusBadge, type StatusTone } from './status-badge'
 
 const phaseTone: Record<Schemas['Phase'], StatusTone> = {

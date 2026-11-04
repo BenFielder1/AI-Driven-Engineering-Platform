@@ -18,15 +18,7 @@ export function phaseIndex(phase: Schemas['Phase']): number {
   return (allPhases as readonly Schemas['Phase'][]).indexOf(phase)
 }
 
-export const phaseLabels: Record<Schemas['Phase'], string> = {
-  analysis: 'Analysis',
-  refinement: 'Refinement',
-  specification: 'Specification',
-  planning: 'Planning',
-  execution: 'Execution',
-  review: 'Review',
-  release: 'Release',
-}
+export { phaseLabels } from './phase-labels'
 
 export const statuses = ['active', 'building', 'reviewing', 'releasing', 'awaiting_merge', 'released', 'rolled_back'] as const satisfies
   readonly Schemas['ProjectStatus'][]

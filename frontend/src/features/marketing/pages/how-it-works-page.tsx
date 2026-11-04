@@ -60,7 +60,15 @@ function ModesTable() {
     </>
   )
   return (
-    <div className={cn(panelClass, 'overflow-x-auto')}>
+    // §8: at 375 px the table scrolls inside this focusable, labelled region. `relative` keeps the sr-only cell text
+    // (absolutely positioned) inside the scroller; without it, it widened the page.
+    <div
+      className={cn(panelClass, 'relative overflow-x-auto')}
+      tabIndex={0}
+      role="region"
+      aria-label={howItWorksHeadings.modesCaption}
+      data-testid="modes-table-scroller"
+    >
       <table className="w-full min-w-[32rem] text-left text-sm">
         <caption className="sr-only">{howItWorksHeadings.modesCaption}</caption>
         <thead className="border-b border-border text-muted-foreground">
