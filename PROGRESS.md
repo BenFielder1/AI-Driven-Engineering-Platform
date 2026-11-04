@@ -54,7 +54,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M40 App shell and Home: FR-206–FR-209 ([CI 41883105618](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41883105618), head d674af3)
 - [x] M41 Marketing site and auth: FR-210–FR-223 ([CI 41899659376](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41899659376), head bdebfdf)
 - [x] M42 Documentation: FR-224–FR-227 (content in 134f907; `docs.yml` runs first on the PR)
-- [ ] M43 Integrate and harden: E2E, axe both themes, JS budget, audit over v1–v6
+- [x] M43 Integrate and harden: E2E (marketing routing §4.32, above-the-fold on every route, keyboard header/footer/FAQ/mobile menu, reduced motion, same-origin, LCP in HTML, Home), axe in both themes, JS budget 192.6/200 KB, acceptance audit over v1–v6 (29 Done, 3 Partial → closed except FR-225/226's first docs.yml run; 1 v4 toast regression → safeguarded), SPEC synced (D-V6-14–19) ([CI 41905207049](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41905207049), head 08bc7b1)
 
 ## Decisions
 - 2026-11-04 (M38): palette values shifted to pass AA (roles unchanged, §4.31 allows it): light danger rose-700 (rose-600 is 4.49:1 on card), dark primary indigo-300 (indigo-400 fails on its 15% tint), light sidebar-accent slate-100. `text-lg` is 20 px (the FR-203 scale has no 18 px step). `aide.theme` now stores `system` explicitly (v5 deleted the key); stored `light`/`dark` still honoured. Brand assets come from one generator (`npm run brand:assets`, `src/components/brand-geometry.ts`); a test fails on drift. `metadataBase` comes from the validated request Host (switch to a configured public origin if a CDN is added).
@@ -66,6 +66,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - 2026-11-04 (M42): docs link check skips the frozen `docs/v1`–`v5` pages as link *sources* (their repo-root links break on the site; fixing them is allowed later), but checks links into them from `history/`.
 
 ## Known issues
+- FR-225/FR-226: `docs.yml` has never run (it can't be dispatched until it's on `main`); it runs first on the v6 PR. The html-proofer link check may surface broken links then.
+- Cosmetic: a handed-off toast's timer restarts if a Toaster remounts within 4 s (`lib/toast-handoff.ts`).
+- `/` first-load JS is 192.6 KB of the 200 KB budget: little headroom for marketing additions.
+- Home checklist item 3 checks membership only across the 6 most recent projects (Admin edge case, D-V6-16).
 
 ## Manual checks (Ben)
 - Enable GitHub Pages (Settings → Pages → Source "GitHub Actions").
